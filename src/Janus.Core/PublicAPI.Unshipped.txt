@@ -1,0 +1,56 @@
+#nullable enable
+Janus.Core.Error
+Janus.Core.Error.<Clone>$() -> Janus.Core.Error!
+Janus.Core.Error.Code.get -> Janus.Core.ErrorCode
+Janus.Core.Error.Details.get -> System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.JsonElement>!
+Janus.Core.Error.Equals(Janus.Core.Error? other) -> bool
+Janus.Core.Error.Error(Janus.Core.ErrorCode code, System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.JsonElement>! details) -> void
+Janus.Core.ErrorCode
+Janus.Core.ErrorCode.Equals(Janus.Core.ErrorCode other) -> bool
+Janus.Core.ErrorCode.ErrorCode() -> void
+Janus.Core.ErrorCodes
+Janus.Core.NeverLoggedAttribute
+Janus.Core.NeverLoggedAttribute.NeverLoggedAttribute() -> void
+Janus.Core.Result
+Janus.Core.Result.Equals(Janus.Core.Result other) -> bool
+Janus.Core.Result.Match<TOutcome>(System.Func<TOutcome>! onSuccess, System.Func<Janus.Core.Error!, TOutcome>! onFailure) -> TOutcome
+Janus.Core.Result.Result() -> void
+Janus.Core.Result.Switch(System.Action! onSuccess, System.Action<Janus.Core.Error!>! onFailure) -> void
+Janus.Core.Result<TValue>
+Janus.Core.Result<TValue>.Equals(Janus.Core.Result<TValue> other) -> bool
+Janus.Core.Result<TValue>.Match<TOutcome>(System.Func<TValue, TOutcome>! onSuccess, System.Func<Janus.Core.Error!, TOutcome>! onFailure) -> TOutcome
+Janus.Core.Result<TValue>.Result() -> void
+Janus.Core.Result<TValue>.Switch(System.Action<TValue>! onSuccess, System.Action<Janus.Core.Error!>! onFailure) -> void
+override Janus.Core.Error.Equals(object? obj) -> bool
+override Janus.Core.Error.GetHashCode() -> int
+override Janus.Core.Error.ToString() -> string!
+override Janus.Core.ErrorCode.GetHashCode() -> int
+override Janus.Core.ErrorCode.ToString() -> string!
+override Janus.Core.Result.GetHashCode() -> int
+override Janus.Core.Result<TValue>.GetHashCode() -> int
+static Janus.Core.Error.From(Janus.Core.ErrorCode code) -> Janus.Core.Error!
+static Janus.Core.Error.From(Janus.Core.ErrorCode code, string! name, System.Text.Json.JsonElement value) -> Janus.Core.Error!
+static Janus.Core.Error.operator !=(Janus.Core.Error? left, Janus.Core.Error? right) -> bool
+static Janus.Core.Error.operator ==(Janus.Core.Error? left, Janus.Core.Error? right) -> bool
+static Janus.Core.ErrorCode.Parse(string! value) -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCode.operator !=(Janus.Core.ErrorCode left, Janus.Core.ErrorCode right) -> bool
+static Janus.Core.ErrorCode.operator ==(Janus.Core.ErrorCode left, Janus.Core.ErrorCode right) -> bool
+static Janus.Core.ErrorCodes.ConfigurationChangeStepUpRequired.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.ConfigurationKeyProtected.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.ConfigurationPolicyBelowSystem.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.ConfigurationValueAboveCeiling.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.ConfigurationValueBelowFloor.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.StartupGoverningLanguage.get -> Janus.Core.ErrorCode
+static Janus.Core.Result.Failure(Janus.Core.Error! error) -> Janus.Core.Result
+static Janus.Core.Result.Failure<TValue>(Janus.Core.Error! error) -> Janus.Core.Result<TValue>
+static Janus.Core.Result.Success() -> Janus.Core.Result
+static Janus.Core.Result.Success<TValue>(TValue value) -> Janus.Core.Result<TValue>
+static Janus.Core.Result.operator !=(Janus.Core.Result left, Janus.Core.Result right) -> bool
+static Janus.Core.Result.operator ==(Janus.Core.Result left, Janus.Core.Result right) -> bool
+static Janus.Core.Result<TValue>.operator !=(Janus.Core.Result<TValue> left, Janus.Core.Result<TValue> right) -> bool
+static Janus.Core.Result<TValue>.operator ==(Janus.Core.Result<TValue> left, Janus.Core.Result<TValue> right) -> bool
+~override Janus.Core.ErrorCode.Equals(object obj) -> bool
+~override Janus.Core.Result.Equals(object obj) -> bool
+~override Janus.Core.Result.ToString() -> string
+~override Janus.Core.Result<TValue>.Equals(object obj) -> bool
+~override Janus.Core.Result<TValue>.ToString() -> string

@@ -12,3 +12,7 @@ against the public contract of LIB-API-001.
 
 - `JAN0006`: a caught exception that is neither handled nor reported now fails the
   build.
+- `Result`, `Result<T>`, `Error` and `ErrorCode` in `Janus.Core`: an expected outcome
+  is handled through `Match` or `Switch` and carries a code from the catalogue.
+- `NeverLoggedAttribute` in `Janus.Core`: a value marked with it cannot be passed to
+  a logging call.
