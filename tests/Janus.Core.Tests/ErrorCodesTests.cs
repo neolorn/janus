@@ -22,6 +22,7 @@ public sealed class ErrorCodesTests
         "config.policy.belowsystem",
         "config.value.aboveceiling",
         "config.value.belowfloor",
+        "config.value.notallowed",
         "model.startup.governinglanguage",
     ];
 

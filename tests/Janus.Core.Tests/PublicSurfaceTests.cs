@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Xunit;
 
 namespace Janus.Core.Tests;
@@ -27,13 +28,16 @@ public sealed class PublicSurfaceTests
 
     /// <summary>
     /// CONV-CODE-004 AC1: nothing mutable is shared between requests, so every static
-    /// field is fixed once.
+    /// field the library declares is fixed once. The delegate caches the compiler
+    /// emits beside a static lambda are not state the library holds, and no source
+    /// that uses a lambda can be free of them.
     /// </summary>
     [Fact]
     public void CONV_CODE_004_AC1_NoStaticFieldIsWritableAfterConstruction()
     {
         IEnumerable<FieldInfo> writable = typeof(Result).Assembly
             .GetTypes()
+            .Where(type => type.GetCustomAttribute<CompilerGeneratedAttribute>() is null)
             .SelectMany(type => type.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
             .Where(field => !field.IsInitOnly && !field.IsLiteral);
 
