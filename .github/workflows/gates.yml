@@ -136,6 +136,10 @@ jobs:
 
   secret-scanning:
     name: Secret scanning
+    # OPS-DEP-004 defines the scan as the full history on every push. On a pull
+    # request the action scans that request's commits instead, which is the smaller
+    # scan the item does not ask for.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
