@@ -48,7 +48,7 @@ Criteria no test can decide, and how each was verified:
 | CONV-DEP-003 | AC1, AC2 | The `Dependency allow-list` gate and the one-logical-change-per-commit rule of CONV-VCS-003 |
 | CONV-ERR-002 | AC2 | CONV-SETUP-004 AC3: a suppression carries a justification on the same line and an entry in this report |
 | CONV-GATE-001 | AC1, AC2 | Seventeen jobs in `.github/workflows/gates.yml`, all seventeen required by the branch protection of `main` |
-| CONV-GATE-002 | AC1, AC2 | Every job runs on push; `Destructive-operation detection report` and `Dependency vulnerability alerting` run on pull request and on `main` only |
+| CONV-GATE-002 | AC1, AC2 | Every job runs on push; `Destructive-operation detection report` and `Dependency vulnerability alerting` run on pull request and on `main` only, and `Secret scanning` on push only |
 | CONV-TEST-001 | AC1 | `tests/Janus.Core.Tests` and `tests/Janus.Analyzers.Tests`, each mirroring its source project |
 | CONV-TEST-002 | AC1 | The suite runs with no container |
 | CONV-TEST-002 | AC3 | `--filter-trait kind=unit` and `--filter-trait kind=contract`, run separately by the `Unit tests` and `Contract tests` gates |
@@ -106,10 +106,11 @@ Criteria no test can decide, and how each was verified:
 |---|---|---|---|
 | The working tree handed over | The instruction files and the `docs/` tree sat one directory deeper than every path in the specification resolves to | the working guide's section 5, which places `docs/spec/`, `docs/guide/` and `docs/decision-log.md` at the repository root | The wrapper directory was removed and its contents moved up one level; no file content changed |
 | `src/Janus.Analyzers` | CONV-CODE-008 does not state the accessibility of an analyser type, and the usual practice is public | CONV-LAYOUT-002, which permits a public type only in `Janus.Core`, `Janus.Hosting` and `Janus.Conformance` | The six analysers are `internal sealed`, which keeps the analyser project's public surface empty; the compiler still discovers and runs them, which we confirmed by building a deliberately unsealed class and observing JAN0003 fail the build |
-| `.gitignore` | the working guide's section 5 names `.gitignore` only to forbid the instruction files from appearing in it | CONV-VCS-001, and the rule never to commit generated noise | Build output and local editor state are excluded in a committed `.gitignore`; the instruction files and `tmp/` are excluded in `.git/info/exclude` only |
+| `.gitignore` | the working guide's section 5 names `.gitignore` only to forbid the instruction files from appearing in it | CONV-VCS-001, and the rule never to commit generated noise | Build output, test output and local editor state are excluded in a committed `.gitignore`; the instruction files and `tmp/` are excluded in `.git/info/exclude` only |
 | `src/Janus.Core/Error.cs` | No chapter states the type of the structured details a failure carries | CONV-CODE-003 (a contract member exposes a read-only collection), CONV-DESIGN-006 (serialization is `System.Text.Json` source generation) and API-CONV-002, whose `details` example holds nested objects | `IReadOnlyDictionary<string, JsonElement>`, the one shape that satisfies all three |
 | `tests/Janus.Analyzers.Tests` | CONV-TEST-007 names an acceptance-criterion test `ITEM_ACn_Outcome`, and CONV-NAME-001 requires the `Async` suffix on an asynchronous method | CONV-NAME-001, enforced as IDE1006 | An asynchronous test carries the suffix after its outcome, satisfying both |
 | `.github/` | the working guide's section 9 permits files only under the source tree, `docs/` and `tmp/`, and CONV-GATE-001 requires a pipeline, which the platform reads only from `.github/workflows/` | CONV-GATE-001 | The workflow and the six gate scripts live under `.github/`; nothing else does |
+| `.github/workflows/gates.yml`, the secret-scanning job | The job ran on the pull-request event as well, where the action scans that request's commits rather than the history, and asks for a token permission the workflow does not grant | OPS-DEP-004, which defines the scan as the full history on every push | The job runs on the push event, where the full-history scan the item requires is the one that runs; every commit of a pull request is scanned by the push that carried it |
 | `global.json` | CONV-SETUP-001 fixes the framework; the software development kit that builds it is fixed nowhere | CONV-DEP-001 AC2, that a build with no source change produces the same dependency set | `global.json` pins the kit to 10.0.300 with patch roll-forward and selects the test runner CONV-TEST-007 names, which the 10.0 kit otherwise refuses to run from `dotnet test` |
 
 ## 4. Open questions
@@ -254,8 +255,8 @@ Tests: 69, all passing. `tests/Janus.Core.Tests` 54, `tests/Janus.Analyzers.Test
 Repository, per the working guide's section 5: private repository `neolorn/janus`,
 default branch `main`, squash and rebase merges off, merge commits on, delete branch on
 merge on, dependency vulnerability alerting and automated security updates on, platform
-secret scanning refused by the plan as `08` section 10 records and replaced by the
-gitleaks gate of OPS-DEP-004. Branch protection on `main` requires the seventeen status
-checks, applies to administrators, requires no approval, and refuses force pushes and
-deletion. The instruction files and `tmp/` are excluded through
-`.git/info/exclude`.
+secret scanning unavailable on this plan as `08` section 10 records, so the scanning
+OPS-DEP-004 requires is the gitleaks gate (D-150). Branch protection on `main`
+requires the seventeen status checks, applies to administrators, requires no
+approval, and refuses force pushes and deletion. The instruction files
+and `tmp/` are excluded through `.git/info/exclude`.
