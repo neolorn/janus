@@ -207,6 +207,14 @@ public sealed class LibraryStructureTests
         }
     }
 
+    /// <summary>
+    /// The project a reference names. A project file writes its includes with the
+    /// separator of the machine that wrote them, which is not the separator of the
+    /// machine reading them.
+    /// </summary>
+    private static string Referenced(string include) =>
+        Path.GetFileNameWithoutExtension(include.Replace('\\', '/'));
+
     private static bool IsTheAnalyserProject(string project) =>
         string.Equals(Path.GetFileNameWithoutExtension(project), "Janus.Analyzers", StringComparison.Ordinal);
 
@@ -224,7 +232,7 @@ public sealed class LibraryStructureTests
             .Parse(Repository.ReadText(Path.Combine("src", project, project + ".csproj")))
             .Descendants("ProjectReference")
             .Where(reference => reference.Attribute("OutputItemType") is null)
-            .Select(reference => Path.GetFileNameWithoutExtension(reference.Attribute("Include")!.Value))
+            .Select(reference => Referenced(reference.Attribute("Include")!.Value))
             .Order(StringComparer.Ordinal)
             .ToArray();
 
