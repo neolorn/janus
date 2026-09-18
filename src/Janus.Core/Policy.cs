@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 
@@ -43,4 +44,54 @@ public sealed record Policy(
     IReadOnlyDictionary<StepUpAction, Gate> Gates,
     CredentialRedundancy CredentialRedundancy,
     bool SelfServiceRecovery,
-    IReadOnlyList<string> EmailDomains);
+    IReadOnlyList<string> EmailDomains)
+{
+    /// <summary>
+    /// The stated floor.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The level is outside the two chapter 10 section 4.1a states for this field.
+    /// </exception>
+    public AssuranceLevel RequiredAssurance
+    {
+        get;
+        init => field = AStatedFloor(value);
+    } = AStatedFloor(RequiredAssurance);
+
+    /// <summary>
+    /// The catalogue entries a principal may sign in with, primary and second.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">The set is absent.</exception>
+    /// <exception cref="ArgumentException">
+    /// The set holds the emergency credential, which satisfies every gate for the
+    /// session's lifetime, so a policy that admitted it as a login factor would turn
+    /// the emergency path into an ordinary one (AUTH-FACT-002, AUTH-STEP-004).
+    /// </exception>
+    public IReadOnlySet<Factor> LoginFactors
+    {
+        get;
+        init => field = WithoutTheEmergencyCredential(value);
+    } = WithoutTheEmergencyCredential(LoginFactors);
+
+    // Chapter 10 section 4.1a states aal1 or aal2 for this field. A policy asking for
+    // aal3 would state a floor the library cannot reach, and one asking for delegated
+    // would state a floor below a single factor.
+    private static AssuranceLevel AStatedFloor(AssuranceLevel value) =>
+        value is AssuranceLevel.Aal1 or AssuranceLevel.Aal2
+            ? value
+            : throw new ArgumentOutOfRangeException(
+                nameof(value),
+                value,
+                "A policy requires aal1 or aal2.");
+
+    private static IReadOnlySet<Factor> WithoutTheEmergencyCredential(IReadOnlySet<Factor> value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        return value.Contains(Factor.BreakGlass)
+            ? throw new ArgumentException(
+                "The emergency credential is never a login factor.",
+                nameof(value))
+            : value;
+    }
+}

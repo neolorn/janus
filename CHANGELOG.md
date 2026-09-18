@@ -27,6 +27,7 @@ against the public contract of LIB-API-001.
   request that needs the value.
 - `Policy`, `Policies` and the step-up, factor and assurance vocabularies in
   `Janus.Core`: the policy a principal resolves to, with the system and
-  administrative defaults.
+  administrative defaults. A policy refuses an assurance floor outside `aal1` and
+  `aal2`, and refuses the emergency credential as a login factor.
 - `config.value.notallowed`: a configuration value outside its key's set, or of the
   wrong type, is now refused with its own code.
