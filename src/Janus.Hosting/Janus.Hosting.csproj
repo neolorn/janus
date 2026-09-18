@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Janus.Core\Janus.Core.csproj" />
+    <ProjectReference Include="..\Janus.Identity\Janus.Identity.csproj" />
+    <ProjectReference Include="..\Janus.Authentication\Janus.Authentication.csproj" />
+    <ProjectReference Include="..\Janus.Authorization\Janus.Authorization.csproj" />
+    <ProjectReference Include="..\Janus.Privacy\Janus.Privacy.csproj" />
+    <ProjectReference Include="..\Janus.Storage\Janus.Storage.csproj" />
+  </ItemGroup>
+
+  <!-- CONV-CODE-008 AC2: referenced as an analyser, never as a library. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Janus.Analyzers\Janus.Analyzers.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Janus.Hosting.Tests" />
+  </ItemGroup>
+
+</Project>

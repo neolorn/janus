@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Janus.Analyzers/Janus.Analyzers.csproj" />
+    <Project Path="src/Janus.Authentication/Janus.Authentication.csproj" />
+    <Project Path="src/Janus.Authorization/Janus.Authorization.csproj" />
+    <Project Path="src/Janus.Cli/Janus.Cli.csproj" />
+    <Project Path="src/Janus.Conformance/Janus.Conformance.csproj" />
+    <Project Path="src/Janus.Core/Janus.Core.csproj" />
+    <Project Path="src/Janus.Hosting/Janus.Hosting.csproj" />
+    <Project Path="src/Janus.Identity/Janus.Identity.csproj" />
+    <Project Path="src/Janus.Privacy/Janus.Privacy.csproj" />
+    <Project Path="src/Janus.Storage/Janus.Storage.csproj" />
+  </Folder>
+</Solution>

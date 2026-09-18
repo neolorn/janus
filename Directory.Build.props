@@ -1,0 +1,41 @@
+<Project>
+
+  <!-- CONV-SETUP-001: the target framework, its C# version and the compilation
+       settings are set once here and no project overrides them. Janus.Analyzers is
+       the single exemption: a Roslyn analyser must target netstandard2.0. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-all</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <Deterministic>true</Deterministic>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!-- CONV-SETUP-002: a committed lockfile per project, restored in locked mode by
+       the pipeline. -->
+  <PropertyGroup>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+  <!-- CONV-VCS-005 / LIB-VER-001: the version comes from the release tag and appears
+       in no project file. -->
+  <PropertyGroup>
+    <MinVerTagPrefix>v</MinVerTagPrefix>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MinVer" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- CONV-SETUP-003: the public surface is tracked on every project, so a public
+       member outside Janus.Core, Janus.Hosting and Janus.Conformance is a build
+       error. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

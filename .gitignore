@@ -1,0 +1,9 @@
+# Build output.
+[Bb]in/
+[Oo]bj/
+artifacts/
+
+# Local editor and tooling state.
+.vs/
+.idea/
+*.user
