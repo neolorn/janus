@@ -1,0 +1,5 @@
+# OPS-DEP-004: the default rule set, and allow-list entries only. Each entry names the
+# file it exempts and why that file holds what looks like a secret.
+
+[extend]
+useDefault = true
