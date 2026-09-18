@@ -70,4 +70,16 @@ internal static class Rules
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "CONV-DESIGN-005 makes Result the carrier of every expected outcome. Discarding one discards the failure it may hold.");
+
+    /// <summary>
+    /// JAN0006, serving CONV-ERR-003: an exception is never swallowed.
+    /// </summary>
+    internal static readonly DiagnosticDescriptor SwallowedException = new(
+        id: "JAN0006",
+        title: "A catch block swallows the exception",
+        messageFormat: "This catch block neither throws, rethrows, returns a failure result nor logs (CONV-ERR-003)",
+        category: "Reliability",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "CONV-ERR-003 requires a caught exception to be handled meaningfully or rethrown, and forbids an empty catch block.");
 }

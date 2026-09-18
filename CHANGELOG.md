@@ -7,3 +7,8 @@ and the project follows [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0
 against the public contract of LIB-API-001.
 
 ## [Unreleased]
+
+### Added
+
+- `JAN0006`: a caught exception that is neither handled nor reported now fails the
+  build.
