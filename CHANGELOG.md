@@ -17,10 +17,14 @@ against the public contract of LIB-API-001.
 - `NeverLoggedAttribute` in `Janus.Core`: a value marked with it cannot be passed to
   a logging call.
 - `Settings` in `Janus.Core.Configuration`: every configuration key with its type,
-  its default and the floors, ceilings and value sets it admits.
+  its default, the floors, ceilings and value sets it admits, and the two rules that
+  hold over a pair of keys rather than over one.
 - `IConfigurationStore` in `Janus.Core.Configuration`: the keys that change at runtime
   are read through it, so a change made through the management application takes
   effect without a restart.
+- `StartupException` in `Janus.Core`: a deployment that omits a value it has to name,
+  or names one outside its key's bounds, now fails at startup rather than at the first
+  request that needs the value.
 - `Policy`, `Policies` and the step-up, factor and assurance vocabularies in
   `Janus.Core`: the policy a principal resolves to, with the system and
   administrative defaults.

@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Text.Json;
 
 namespace Janus.Core.Configuration;
 
@@ -487,9 +489,12 @@ public static class Settings
     public static DurationSetting BackupRetention { get; } =
         new("backup.retention", SettingScope.Runtime, SettingDirection.AnyChange, TimeSpan.FromDays(35), floor: TimeSpan.FromDays(14));
 
-    /// <summary>Where the deployment is hosted. The deployment names it.</summary>
-    public static TextSetting HostingLocation { get; } =
-        new("hosting.location", SettingScope.Protected, SettingDirection.AnyChange);
+    /// <summary>
+    /// Whether the deployment is hosted inside or outside Egypt. The deployment names
+    /// it, and an outside value makes the cross-border basis required.
+    /// </summary>
+    public static ChoiceSetting<Janus.Core.Configuration.HostingLocation> HostingLocation { get; } =
+        new("hosting.location", SettingScope.Protected, SettingDirection.AnyChange, Enum.GetValues<Janus.Core.Configuration.HostingLocation>().ToFrozenSet());
 
     /// <summary>
     /// The basis for hosting outside Egypt, which the deployment names when it hosts
@@ -682,4 +687,122 @@ public static class Settings
     /// </summary>
     public static IReadOnlyList<Setting> Required { get; } =
         [.. All.Where(setting => setting.IsRequired)];
+
+    /// <summary>
+    /// Checks the two password floors together. Each key carries its own floor; this
+    /// is the rule between them, that the length required when a second factor is
+    /// present never exceeds the length required without one.
+    /// </summary>
+    /// <param name="singleFactor">The value named for <c>password.floor.singlefactor</c>.</param>
+    /// <param name="withMfa">The value named for <c>password.floor.withmfa</c>.</param>
+    /// <returns>Success, or the failure naming the key and the bound it crossed.</returns>
+    /// <remarks>Implements chapter 10 section 4.2, AUTH-PASS-001, D-140, OPS-CFG-003.</remarks>
+    public static Result AcceptPasswordFloorPair(int singleFactor, int withMfa) =>
+        withMfa > singleFactor
+            ? Refuse(
+                ErrorCodes.ConfigurationValueAboveCeiling,
+                PasswordFloorWithMfa.Key,
+                "ceiling",
+                singleFactor.ToString(CultureInfo.InvariantCulture))
+            : Result.Success();
+
+    /// <summary>
+    /// Checks the Argon2id memory and iterations together. Neither key has a floor of
+    /// its own: the floor is that the pair is at or above one of the strength classes,
+    /// which are of equal strength to each other.
+    /// </summary>
+    /// <param name="memory">The value named for <c>password.argon2.memory</c>, in kibibytes.</param>
+    /// <param name="iterations">The value named for <c>password.argon2.iterations</c>.</param>
+    /// <returns>Success, or the failure naming the classes the pair falls under.</returns>
+    /// <remarks>Implements chapter 10 section 4.2, AUTH-PASS-007, D-120, D-135, OPS-CFG-003.</remarks>
+    public static Result AcceptArgon2Cost(int memory, int iterations) =>
+        Argon2StrengthClasses.Any(
+            strength => memory >= strength.Memory && iterations >= strength.Iterations)
+            ? Result.Success()
+            : Refuse(
+                ErrorCodes.ConfigurationValueBelowFloor,
+                PasswordArgon2Memory.Key,
+                "floor",
+                string.Join(
+                    ", ",
+                    Argon2StrengthClasses.Select(strength => string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"({strength.Memory}, {strength.Iterations})"))));
+
+    /// <summary>
+    /// Checks that a deployment named every key it has to name, before the library
+    /// starts rather than at the first request that needs one.
+    /// </summary>
+    /// <param name="named">The keys the deployment named a value for.</param>
+    /// <param name="location">
+    /// Where the deployment holds its data, or <see langword="null"/> where it named
+    /// no value for <c>hosting.location</c>.
+    /// </param>
+    /// <exception cref="ArgumentNullException">The set of named keys is absent.</exception>
+    /// <exception cref="StartupException">
+    /// A key the deployment has to name carries no value. The exception names the key,
+    /// and carries a code where chapter 10 section 1.5 gives the condition one.
+    /// </exception>
+    /// <remarks>
+    /// Implements LIB-HOST-001, INT-HOST-001, CONV-ERR-001. Every other key resolves
+    /// with its default, so a deployment that names these and nothing else starts.
+    /// </remarks>
+    public static void ThrowIfIncomplete(
+        IReadOnlySet<ConfigurationKey> named,
+        Janus.Core.Configuration.HostingLocation? location)
+    {
+        ArgumentNullException.ThrowIfNull(named);
+
+        if (!named.Contains(LegalGoverningLanguage.Key))
+        {
+            throw Unnamed(LegalGoverningLanguage.Key, ErrorCodes.StartupGoverningLanguage);
+        }
+
+        foreach (Setting setting in Required)
+        {
+            // The cross-border basis is the one conditional declaration: a deployment
+            // holding its data inside Egypt has no transfer to state (INT-HOST-001).
+            if (setting.Key == HostingCrossBorderBasis.Key
+                && location != Janus.Core.Configuration.HostingLocation.Outside)
+            {
+                continue;
+            }
+
+            if (!named.Contains(setting.Key))
+            {
+                throw Unnamed(setting.Key, code: null);
+            }
+        }
+    }
+
+    // The fault a missing declaration raises. Chapter 10 section 1.5 names a code for
+    // the governing language and for no other declaration, so the rest carry the key
+    // alone.
+    private static StartupException Unnamed(ConfigurationKey key, ErrorCode? code)
+    {
+        string message = "The deployment names " + key + "; no value was supplied.";
+
+        return code is { } named
+            ? new StartupException(
+                message,
+                new Error(
+                    named,
+                    new Dictionary<string, JsonElement>(capacity: 1, StringComparer.Ordinal)
+                    {
+                        ["key"] = JsonSerializer.SerializeToElement(key.ToString()),
+                    }))
+            : new StartupException(message);
+    }
+
+    // A failure of a rule that holds over two keys rather than one. The failure names
+    // the key chapter 10 section 4 states the rule on, so the management application
+    // shows it against the row the operator is editing.
+    private static Result Refuse(ErrorCode code, ConfigurationKey key, string constraint, string expected) =>
+        Result.Failure(new Error(
+            code,
+            new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
+            {
+                ["key"] = JsonSerializer.SerializeToElement(key.ToString()),
+                [constraint] = JsonSerializer.SerializeToElement(expected),
+            }));
 }

@@ -42,4 +42,19 @@ public abstract class Setting<TValue> : Setting
     /// <param name="value">The value.</param>
     /// <returns>The value, or the failure naming the constraint it missed.</returns>
     public abstract Result<TValue> Accept(TValue value);
+
+    /// <summary>
+    /// Reads a value the deployment named at startup, where a refused value is a fault
+    /// the operator fixes rather than an outcome a caller handles.
+    /// </summary>
+    /// <param name="value">The value.</param>
+    /// <returns>The value.</returns>
+    /// <exception cref="StartupException">The constraints do not admit the value.</exception>
+    /// <remarks>Implements OPS-CFG-003, CONV-ERR-001.</remarks>
+    public TValue AcceptAtStartup(TValue value) =>
+        Accept(value).Match(
+            accepted => accepted,
+            failure => throw new StartupException(
+                "The value named for " + Key + " is outside what the key admits.",
+                failure));
 }
