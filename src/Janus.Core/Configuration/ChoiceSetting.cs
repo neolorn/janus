@@ -1,0 +1,38 @@
+using System.Collections.Generic;
+
+namespace Janus.Core.Configuration;
+
+/// <summary>
+/// A setting whose value is one of a stated set: the enums of chapter 10 section 4.
+/// </summary>
+/// <typeparam name="TValue">The type of the stated values.</typeparam>
+/// <remarks>Implements chapter 10 section 4 value types, OPS-CFG-003.</remarks>
+public sealed class ChoiceSetting<TValue> : Setting<TValue>
+    where TValue : notnull
+{
+    internal ChoiceSetting(
+        string key,
+        SettingScope scope,
+        SettingDirection loosening,
+        TValue fallback,
+        IReadOnlySet<TValue> allowed)
+        : base(key, scope, loosening, required: false, fallback) => Allowed = allowed;
+
+    internal ChoiceSetting(
+        string key,
+        SettingScope scope,
+        SettingDirection loosening,
+        IReadOnlySet<TValue> allowed)
+        : base(key, scope, loosening, required: true, fallback: default!) => Allowed = allowed;
+
+    /// <summary>
+    /// The values the key admits.
+    /// </summary>
+    public IReadOnlySet<TValue> Allowed { get; }
+
+    /// <inheritdoc />
+    public override Result<TValue> Accept(TValue value) => Allowed.Contains(value)
+        ? Result.Success(value)
+        : Result.Failure<TValue>(
+            Refused(ErrorCodes.ConfigurationValueNotAllowed, "allowed", string.Join(", ", Allowed)));
+}

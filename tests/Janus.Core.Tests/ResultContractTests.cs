@@ -107,6 +107,13 @@ public sealed class ResultContractTests
 
     private static IEnumerable<NullabilityInfo> Carried(NullabilityInfo info)
     {
+        // A type parameter the contract leaves open carries whatever nullability the
+        // caller's own type argument has, so it is not the contract returning null.
+        if (info.Type.IsGenericParameter)
+        {
+            return [];
+        }
+
         if (info.Type.IsGenericType)
         {
             return info.GenericTypeArguments.SelectMany(Carried);

@@ -30,6 +30,13 @@ public static class ErrorCodes
     public static ErrorCode ConfigurationValueAboveCeiling { get; } = ErrorCode.Parse("config.value.aboveceiling");
 
     /// <summary>
+    /// The value is outside the key's stated set, or is not of the key's type. Supply
+    /// one of the values the key admits.
+    /// </summary>
+    /// <remarks>Implements chapter 10 section 4 value types, chapter 10 section 1.5.</remarks>
+    public static ErrorCode ConfigurationValueNotAllowed { get; } = ErrorCode.Parse("config.value.notallowed");
+
+    /// <summary>
     /// Loosening a control requires step-up authentication and a written reason.
     /// Present both and repeat the change.
     /// </summary>

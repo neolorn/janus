@@ -1503,8 +1503,9 @@ and recorded in the audit entry (OPS-CFG-005, OPS-CFG-008; D-147).
 
 **200** / **204**
 **403** — `auth.stepup.required`, for a **loosening** change
-**422** — `config.value.belowfloor`, `config.key.protected`,
-`auth.restriction.reasonrequired` where a loosening arrives without a reason
+**422** — `config.value.belowfloor`, `config.value.aboveceiling`,
+`config.value.notallowed`, `config.key.protected`, `auth.restriction.reasonrequired`
+where a loosening arrives without a reason
 
 *Source: OPS-CFG-002, OPS-CFG-003, OPS-CFG-004, D-147*
 

@@ -1,6 +1,7 @@
 # Phase 0: Skeleton
 
-Status: stopped at open questions. The configuration work of the phase is incomplete.
+Status: stopped at open questions. Five keys of `10` section 4 are absent from the
+catalogue and one criterion of OPS-CFG-001 cannot be read as written.
 
 ## 1. Items implemented
 
@@ -12,6 +13,7 @@ Status: stopped at open questions. The configuration work of the phase is incomp
 | CONV-SETUP-001 | AC1 | `LibraryStructureTests.CONV_SETUP_001_AC1_NoProjectOverridesTheInheritedProperties` |
 | CONV-SETUP-002 | AC1 | `LibraryStructureTests.CONV_SETUP_002_AC1_NoProjectFileCarriesAPackageVersion` |
 | CONV-DESIGN-005 | AC1, AC2 | `ResultContractTests.CONV_DESIGN_005_AC1_EveryContractMethodReturnsAnOutcome`, `ResultContractTests.CONV_DESIGN_005_AC2_NoContractReturnsNullForNotFound` |
+| CONV-DESIGN-007 | AC3 | `StartupConfigurationTests.LIB_HOST_001_AC2_AMissingDeclarationNamesTheKey` |
 | CONV-DESIGN-008 | AC1 | `LibraryStructureTests.CONV_DESIGN_008_AC1_ThePackageSetIsExactlyTheAllowList` |
 | CONV-NAME-003 | AC1, AC2 | `ErrorCodesTests.CONV_NAME_003_AC1_EveryCodeCarriesMeaningAndRemediation`, `ErrorCodesTests.CONV_NAME_003_AC2_ChangingACodeFailsTheContractTest` |
 | CONV-CODE-001 | AC1 | `UnsealedTypeAnalyzerTests.CONV_CODE_008_AC1_ReportedOnAnUnsealedClassAsync`, `...SilentOnASealedClassAndAnAbstractBaseAsync` |
@@ -19,12 +21,20 @@ Status: stopped at open questions. The configuration work of the phase is incomp
 | CONV-CODE-003 | AC1 | `PublicSurfaceTests.CONV_CODE_003_AC1_NoContractMemberExposesAMutableCollection` |
 | CONV-CODE-004 | AC1, AC2 | `PublicSurfaceTests.CONV_CODE_004_AC1_NoStaticFieldIsWritableAfterConstruction`, `PublicSurfaceTests.CONV_CODE_004_AC2_NoShippedFileUsesReflection` |
 | CONV-CODE-008 | AC1, AC2 | The fifteen tests of the six analyser test classes; `LibraryStructureTests.CONV_CODE_008_AC2_TheAnalyserProjectIsReferencedAsAnAnalyser` |
-| CONV-ERR-001 | AC2 | `ResultContractTests.CONV_ERR_001_AC2_TheOutcomeIsReachableOnlyByHandlingBothCases`, `ResultContractTests.CONV_ERR_001_AC2_BothBranchesAreRequired` |
+| CONV-ERR-001 | AC2, AC3 | `ResultContractTests.CONV_ERR_001_AC2_TheOutcomeIsReachableOnlyByHandlingBothCases`, `ResultContractTests.CONV_ERR_001_AC2_BothBranchesAreRequired`, `StartupConfigurationTests.OPS_CFG_003_AC3_AValueOutsideItsBoundsStopsStartup` |
 | CONV-ERR-002 | AC1 | `PermittedOutcomeFromCatchAnalyzerTests.CONV_CODE_008_AC1_ReportedOnAPermissionReturnedFromACatchAsync`, `...ReportedOnASuccessfulOutcomeReturnedFromACatchAsync`, `...SilentOnARefusalReturnedFromACatchAsync` |
 | CONV-ERR-003 | AC1 | `SwallowedExceptionAnalyzerTests.CONV_CODE_008_AC1_ReportedOnAnEmptyCatchAsync`, `...ReportedOnACatchThatOnlyCarriesOnAsync`, `...SilentOnACatchThatDealsWithTheExceptionAsync` |
+| LIB-API-001 | AC2 | `SettingsCatalogueTests.LIB_API_001_AC2_TheKeyNamesAreTheContract`, `SettingsCatalogueTests.LIB_API_001_AC2_TheFamiliesAreTheContract`, `VocabularyContractTests.LIB_API_001_AC2_TheStepUpActionNamesAreTheContract`, `VocabularyContractTests.LIB_API_001_AC2_TheFactorIdentifiersAreTheContract`, `VocabularyContractTests.LIB_API_001_AC2_ThePolicyFieldValuesAreTheContract` |
 | LIB-API-003 | AC1, AC2 | `ErrorTests.LIB_API_003_AC1_TheFailureCarriesNoProse`, `ErrorCodesTests.LIB_API_003_AC2_EveryCodeCarriesMeaningAndRemediation` |
+| LIB-HOST-001 | AC1, AC2, AC3, AC4 first sentence | `SettingsCatalogueTests.LIB_HOST_001_AC1_EveryOtherKeyHasADefault`, `SettingsCatalogueTests.LIB_HOST_001_AC3_NoKeyOutsideTheDeclarationsIsRequired`, `StartupConfigurationTests.LIB_HOST_001_AC1_NamingOnlyTheDeclarationsStarts`, `StartupConfigurationTests.LIB_HOST_001_AC2_AMissingDeclarationNamesTheKey`, `StartupConfigurationTests.LIB_HOST_001_AC4_TheGoverningLanguageFailsWithItsNamedError` |
 | LIB-PKG-001 | AC2 | `LibraryStructureTests.LIB_PKG_001_AC2_NoAreaDependsOnAnotherArea` |
 | LIB-PKG-002 | AC1 | `LibraryStructureTests.CONV_LAYOUT_001_AC2_CoreCarriesNoPackage` |
+| OPS-CFG-003 | AC1, AC2, AC3 | `SettingsTests.OPS_CFG_003_AC1_APasswordFloorBelowTheStandardsMinimumIsRejected`, `SettingsTests.OPS_CFG_003_AC2_ASessionAbsoluteTimeoutAboveTheMaximumIsRejected`, `StartupConfigurationTests.OPS_CFG_003_AC3_AValueOutsideItsBoundsStopsStartup` |
+| AUTH-STEP-002a | AC3 | `PolicyTests.AUTH_STEP_002a_AC3_TheSystemPolicyGatesEveryStepUpAction`, `PolicyTests.AUTH_STEP_002a_AC3_TheAdministrativePolicyGatesEveryStepUpAction` |
+| INT-HOST-001 | AC2 | `StartupConfigurationTests.INT_HOST_001_AC2_HostingOutsideEgyptRequiresTheCrossBorderBasis`, `StartupConfigurationTests.INT_HOST_001_AC2_HostingInsideEgyptNeedsNoCrossBorderBasis` |
+| `10` section 4, the key catalogue | Ninety-one keys and three families: every live key of the section less the five of open questions 2 to 4 | `SettingsCatalogueTests.LIB_API_001_AC2_TheKeyNamesAreTheContract`, `SettingsCatalogueTests.LIB_API_001_AC2_TheFamiliesAreTheContract`, `SettingsCatalogueTests.All_TheCatalogue_NamesEveryKeyOnce`, `SettingsCatalogueTests.Scope_TheCatalogue_ProtectsTheKeysSectionFourMarks`, the eleven tests of `SettingsTests` |
+| `10` section 4.1a, the policy object | The six fields, the system defaults and the administrative organization's | `PolicyTests.SystemDefault_EveryField_IsWhatSectionFourOneAStates`, `PolicyTests.AdministrativeOrganization_EveryField_IsWhatSectionFourOneAStates`, `PolicyTests.SystemDefault_EveryGate_IsReachableWithoutPhishingResistance`, `PolicyTests.AdministrativeOrganization_EveryGate_IsAal2AndPhishingResistant`, `PolicyTests.RequiredAssurance_ALevelOutsideTheField_Refused`, `PolicyTests.LoginFactors_TheEmergencyCredential_Refused` |
+| `10` section 4.2, the two cross-key rules | The password floor pair and the Argon2id strength classes | `StartupConfigurationTests.AcceptPasswordFloorPair_WithMfaAboveSingleFactor_Refused`, `...AcceptPasswordFloorPair_EqualFloors_Accepted`, `...AcceptPasswordFloorPair_TheShippedDefaults_Accepted`, `...AcceptArgon2Cost_AStrengthClass_Accepted`, `...AcceptArgon2Cost_BelowEveryStrengthClass_Refused`, `...AcceptArgon2Cost_AboveAStrengthClass_Accepted`, `...AcceptArgon2Cost_TheShippedDefaults_Accepted` |
 
 Criteria no test can decide, and how each was verified:
 
@@ -38,7 +48,7 @@ Criteria no test can decide, and how each was verified:
 | CONV-SETUP-003 | AC2 | A release-time rule; no release has happened |
 | CONV-SETUP-004 | AC1 | The `Format` gate: `dotnet format Janus.slnx --verify-no-changes` |
 | CONV-SETUP-004 | AC2 | `.editorconfig` is the only place a style rule is configured |
-| CONV-SETUP-004 | AC3 | One suppression exists: `src/Janus.Core/Error.cs`, CA1716, justified on the same line, because CONV-DESIGN-005 names the failure an `Error`. No `#pragma warning disable` exists anywhere |
+| CONV-SETUP-004 | AC3 | Two suppressions exist: `src/Janus.Core/Error.cs`, CA1716, because CONV-DESIGN-005 names the failure an `Error`; `src/Janus.Core/Policy.cs`, CA1724, because section 4.1a names the type the policy object. Each carries its justification in the attribute. No `#pragma warning disable` exists anywhere |
 | CONV-DESIGN-002 | AC2 | The `Dependency allow-list` gate: no dispatch, pipeline or mapping package is in `Directory.Packages.props` |
 | CONV-NAME-001 | AC1 | The naming rules of `.editorconfig` at error, enforced by the build and by the `Format` gate |
 | CONV-CODE-005 | AC1 | `GenerateDocumentationFile` with warnings as errors: CS1591 |
@@ -46,7 +56,7 @@ Criteria no test can decide, and how each was verified:
 | CONV-DEP-001 | AC1, AC2 | Twelve committed `packages.lock.json` files and the `Locked restore` gate |
 | CONV-DEP-002 | AC1, AC2 | Dependency vulnerability alerting and automated security updates are on for `neolorn/janus`; the `Dependency vulnerability alerting` gate refuses a resolved package with a known vulnerability |
 | CONV-DEP-003 | AC1, AC2 | The `Dependency allow-list` gate and the one-logical-change-per-commit rule of CONV-VCS-003 |
-| CONV-ERR-002 | AC2 | CONV-SETUP-004 AC3: a suppression carries a justification on the same line and an entry in this report |
+| CONV-ERR-002 | AC2 | CONV-SETUP-004 AC3 above |
 | CONV-GATE-001 | AC1, AC2 | Seventeen jobs in `.github/workflows/gates.yml`, all seventeen required by the branch protection of `main` |
 | CONV-GATE-002 | AC1, AC2 | Every job runs on push; `Destructive-operation detection report` and `Dependency vulnerability alerting` run on pull request and on `main` only, and `Secret scanning` on push only |
 | CONV-TEST-001 | AC1 | `tests/Janus.Core.Tests` and `tests/Janus.Analyzers.Tests`, each mirroring its source project |
@@ -60,6 +70,7 @@ Criteria no test can decide, and how each was verified:
 | CONV-VCS-005 | AC1 | The `Changelog line present` gate |
 | CONV-VCS-005 | AC2 | MinVer derives the version from the tag; no project file carries a version (CONV-SETUP-002 AC1 above) |
 | CONV-DEP-004 | AC1, AC2 | No alert is open; no recurring calendar entry exists |
+| LIB-HOST-001 | AC1, second half | Every key that is not one of the nine declarations hands back a default rather than throwing, which `SettingsCatalogueTests.LIB_HOST_001_AC1_EveryOtherKeyHasADefault` reads for each in turn; that the nine are the right nine is AC3 |
 | OPS-DEP-002 | AC1, AC2 | The `Destructive-operation detection report` gate reports whether or not the gate variable is set |
 | OPS-DEP-004 | AC1, AC2 | The `Secret scanning` gate runs gitleaks over the full history on every push, from its official action pinned to the release commit `e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e`, with a committed `.gitleaks.toml` extending the default rule set and holding no allow-list entry |
 | OPS-DEP-005 | AC1, AC2 | CONV-GATE-002 above |
@@ -69,22 +80,21 @@ Criteria no test can decide, and how each was verified:
 
 | Item | Reason | Waits on |
 |---|---|---|
-| `10` section 4 keys as typed settings with defaults and floors | Eight of the keys have no stated type, two have no stated value vocabulary, and three are families rather than keys | Open questions 3, 4, 6 |
-| `10` section 4.1a policy object | Two of its six fields are keyed by vocabularies the specification does not complete | Open questions 1, 2 |
-| OPS-CFG-001, OPS-CFG-003 | Their criteria are stated over the settings above | Open questions 3, 4, 6 |
+| `10` section 4: `photo.maxbytes`, `preferences.maxsize`, `identifiers.email.max`, `identifiers.phone.max`, `abuse.botdefence.signals` | The chapter states a default the code cannot resolve to a value | Open questions 2, 3, 4 |
+| OPS-CFG-001 | AC1 names two places a redeploy-scoped setting may be listed, and one key is marked protected in neither | Open question 1 |
 | OPS-CFG-002, OPS-CFG-005 | A change needs step-up and an audit record | Phases 1 and 3 |
 | OPS-CFG-004 | AC1 is stated over the runtime configuration endpoint | Phase 5 |
 | OPS-CFG-006, OPS-CFG-007 | System administration is a permission | Phase 2 |
 | OPS-CFG-008 | Settings are stored in the library's own schema | Phase 1 |
-| CONV-DESIGN-007 | `AddJanus` registers services that do not exist, and AC3 is stated over the required keys of LIB-HOST-001, which are settings | Open questions 3, 4, 6 |
-| LIB-HOST-001 | Startup validation over the settings above | Open questions 3, 4, 6 |
+| CONV-DESIGN-007 AC1, AC2 | `AddJanus` registers services that do not exist, and no clock or randomness source is used yet | Phase 1 |
+| LIB-HOST-001 AC4 second sentence, AC5 | The preference declaration and the restriction key suppliers are declarations rather than configuration keys | Phases 1 and 4 |
 | LIB-PKG-001 AC1, CONV-DESIGN-001 | The area projects hold no code | Phases 1 to 8 |
 | CONV-DESIGN-002 AC1, AC3 | No service contract and no operation exist | Phase 1 |
 | CONV-DESIGN-003, CONV-DESIGN-004, CONV-ENUM-001 | Stated over persistence, entities and the schema | Phase 1 |
 | CONV-DESIGN-006, CONV-CODE-006 | Stated over endpoints and their shape validation | Phase 5 |
 | CONV-CODE-007 | Stated over secret material | Phase 3 |
 | CONV-NAME-002 | Stated over permission strings and model validation | Phase 2 |
-| CONV-ERR-001 AC1, AC3 | Stated over authentication and authorization denials, and over startup configuration | Phases 2, 3, and open questions 3, 4, 6 |
+| CONV-ERR-001 AC1 | Stated over authentication and authorization denials | Phases 2 and 3 |
 | CONV-ERR-003 AC2 | No security path exists | Phase 3 |
 | CONV-LOG-001 | Every log call goes through a generated method; no log call exists | Phase 1 |
 | CONV-LOG-002 | A correlation identifier is carried by a request | Phase 5 |
@@ -112,133 +122,156 @@ Criteria no test can decide, and how each was verified:
 | `.github/` | the working guide's section 9 permits files only under the source tree, `docs/` and `tmp/`, and CONV-GATE-001 requires a pipeline, which the platform reads only from `.github/workflows/` | CONV-GATE-001 | The workflow and the six gate scripts live under `.github/`; nothing else does |
 | `.github/workflows/gates.yml`, the secret-scanning job | The job ran on the pull-request event as well, where the action scans that request's commits rather than the history, and asks for a token permission the workflow does not grant | OPS-DEP-004, which defines the scan as the full history on every push | The job runs on the push event, where the full-history scan the item requires is the one that runs; every commit of a pull request is scanned by the push that carried it |
 | `global.json` | CONV-SETUP-001 fixes the framework; the software development kit that builds it is fixed nowhere | CONV-DEP-001 AC2, that a build with no source change produces the same dependency set | `global.json` pins the kit to 10.0.300 with patch roll-forward and selects the test runner CONV-TEST-007 names, which the 10.0 kit otherwise refuses to run from `dotnet test` |
+| `src/Janus.Core/Configuration/` | `10` section 4 is one chapter section and `08` names no folder for it | CONV-DESIGN-001, which places a feature's types in a folder named for the feature | The catalogue, the setting types, the key and the store abstraction sit in one `Configuration` folder inside `Janus.Core`; the vocabularies of section 5 and the policy object stay at the project root, because every area reads them |
+| `src/Janus.Core/Configuration/SettingOfT.cs` | A generic type and its non-generic base cannot share a file name | The file layout already in the repository, where `Result` and `Result<T>` are `Result.cs` and `ResultOfT.cs` | `Setting.cs` and `SettingOfT.cs`, the same way |
+| `10` section 4, every key whose row states no direction | OPS-CFG-002 needs a direction per key; most rows state none | D-079b, which classifies a setting with no direction as loosening | Each such key carries `AnyChange`, so every change to it takes the friction of a loosening |
+| `webauthn.rpid` | The row states no default, and LIB-HOST-001 lists the origins rather than the identifier among the declarations | AUTH-FACT-010, which derives the identifier from the origins and checks it is a registrable suffix of one | The default is the empty string, which means derived at startup from `webauthn.origins` |
+| `abuse.sms.balancefloor` | The row states a prepaid amount and no default | LIB-HOST-001, which lists the SMS balance floor among the declarations because the library cannot guess it | A decimal setting the deployment names, with no default |
+| `alerting.sms.severitythreshold` | The row states a severity, and section 4 names no severity vocabulary | OPS-ALERT-001, which names the two severities | A choice over `High` and `Normal`, defaulting to `High` |
+| `10` section 4, every row whose default is written `on` | The word is not one of the boolean literals the chapter writes elsewhere | The D-151 preamble, which derives a row's type from its default | `on` is the boolean true |
+| `audit.enabled`, `token.signature.verification` | Neither row states a default | P-001, which puts a default at the safe end of its range | Both default to true |
+| `hosting.location` | The row states no value vocabulary | INT-HOST-001, which reflects the value in generated records as inside or outside Egypt | A choice over `inside` and `outside` |
+| `10` section 4.1a, `emailDomains` | The system default is written `off`, and the field is otherwise a list of domains | The field's own description, which reads `off` as the absence of a domain lock | The empty list |
+| `10` section 4.1a, the system default gate | The gate is written `reachable`, floor `aal1`, which is four values where a gate has three | AUTH-STEP-002, which fixes a gate at level, phishing-resistance and maximum age | The floor belongs to the meaning of `reachable`, which resolves to the account's reachable assurance and never below AAL1 |
+| `src/Janus.Core/Policy.cs` | The analyser refuses a type name that matches a namespace | `10` section 4.1a, which names the type the policy object, and the fact that `System.Security.Policy` does not exist on this framework | CA1724 suppressed with that justification on the attribute |
+| `tests/Janus.Core.Tests/PublicSurfaceTests.cs` | CONV-CODE-004 AC1 read every static field, including the delegate caches the compiler emits for a lambda | CONV-CODE-004, which is stated over mutable static state a person writes | The test skips a type the compiler generated |
+| `tests/Janus.Core.Tests/ResultContractTests.cs` | CONV-DESIGN-005 AC2 read an unconstrained type parameter in a contract's return type as a lookup that can return null | CONV-DESIGN-005, whose rule is that a service method never returns null for not found | A type parameter a contract leaves open carries the nullability of the caller's own type argument, so the walk stops there |
+| `Settings.AcceptPasswordFloorPair`, `Settings.AcceptArgon2Cost` | Two rules of section 4.2 hold over a pair of keys, and a setting validates one value | OPS-CFG-003, which requires the rejection and names no place for it | The two rules sit on the catalogue rather than on either setting, and the failure names the key the chapter states the rule on |
 
 ## 4. Open questions
 
-### 1. The step-up actions have no complete set of names (Tier 3)
+### 1. One key is protected where nothing lists it (Tier 3)
 
-**Item.** `10` section 4.1a, the `gates` field, against `10` section 5a.
+**Item.** `10` section 4.5, `alerting.destinationchange.notify`, against OPS-CFG-001
+AC1, OPS-CFG-004 and `10` section 4.8.
 
-Section 4.1a states that `gates` holds, per section 5a action, a level, a
-phishing-resistance flag and a maximum age. Section 5a lists nineteen rows, one of
-them retired. Eight actions carry a name (`identifier:add`, `identifier:remove`,
-`username:change`, `mailcredential:create`, `mailcredential:revoke`,
-`restriction:edit`, `restriction:grant`, `domain:manage`); the rest are described in
-prose ("Set or change a password", "Export personal data", "Request account deletion",
-"Link or unlink a social provider", and so on). Section 5a says `09` marks each; `09`
-marks which endpoints require step-up and names no further action.
+OPS-CFG-001 AC1 reads: a setting is redeploy-scoped only where listed in OPS-CFG-004
+or in the model declaration. Section 4.8 opens with "Every key here is on the
+OPS-CFG-004 list" and holds eight keys. Section 4.5 marks
+`alerting.destinationchange.notify` **P**, and the key is on neither list.
 
-The field cannot be keyed without naming the remaining actions, and those names are
-both part of the public contract and the vocabulary of the gates.
+The two readings contradict each other rather than leave the point open. Under the
+first, the key is protected and OPS-CFG-001 AC1 is false as written, because a key is
+redeploy-scoped where its own row says so. Under the second, the mark is the defect
+and the key is runtime-changeable, which would let an administrator turn off the
+notice that a destination changed before changing one.
 
-### 2. The factor catalogue entries have no complete set of names (Tier 3)
+The catalogue carries the mark each row gives it, and
+`SettingsCatalogueTests.Scope_TheCatalogue_ProtectsTheKeysSectionFourMarks` holds all
+thirteen keys section 4 marks **P**.
 
-**Item.** `10` section 4.1a, the `loginFactors` field, against `02` AUTH-FACT-002.
+### 2. Two size keys have no byte unit (Tier 2)
 
-Section 4.1a states that `loginFactors` holds the catalogue entries of AUTH-FACT-002 a
-principal may sign in with, and AUTH-FACT-002 makes that field the only switch that
-enables a factor. The catalogue has fourteen rows. Four carry a name (`emailLink`,
-`emailCode`, `phoneLink`, `phoneCode`); the other ten are described in prose
-("Password", "Passkey (discoverable credential)", "Cross-device sign-in (hybrid)",
-"Google", "Apple", "TOTP", "Security key as second factor (non-discoverable WebAuthn
-credential)", "Recovery codes", "Verification code (email or SMS)", "Break-glass
-credential").
+**Item.** `10` sections 4.5 and 4.6, `photo.maxbytes` and `preferences.maxsize`.
 
-The field is a set of catalogue entries and cannot be typed without naming them.
+**What the code needs.** An integer default and an integer ceiling for each.
 
-### 3. The password blocklist sources have no stated values (Tier 2)
+**What the specification says.** `photo.maxbytes` is "2 MB" with ceiling "10 MB";
+`preferences.maxsize` is "8 KB" with ceiling "64 KB". `password.argon2.memory` is the
+only other size in section 4 and is written "19456" with the unit "KiB" stated
+separately.
 
-**Item.** `10` section 4.2, `password.blocklist.source` and
+**The readings we see.** MB is 1000000 and KB is 1000, as the prefixes and the key
+names read; or MB is 1048576 and KB is 1024, as the neighbouring KiB suggests.
+
+**The smallest fix.** Section 4 writes the two defaults and the two ceilings as bare
+integers with the unit stated, as it does for the Argon2id memory.
+
+### 3. Two identifier limits have no representation (Tier 2)
+
+**Item.** `10` section 4.6, `identifiers.email.max` and `identifiers.phone.max`.
+
+**What the code needs.** An integer default.
+
+**What the specification says.** The default is "unlimited", with floor 1, and the
+note that 1 is single-address mode.
+
+**The readings we see.** Unlimited is a sentinel the type carries, for example 0 or
+the largest integer; or the key admits no value and absence is the default, which no
+other key in section 4 does.
+
+**The smallest fix for each.** Section 4 writes the value that means unlimited, or
+states that absence is the default and what absence means.
+
+### 4. One signal set has no members (Tier 2)
+
+**Item.** `10` section 4.5, `abuse.botdefence.signals`, against AUTH-ABUSE-008.
+
+**What the code needs.** A value set and a default subset of it.
+
+**What the specification says.** The default is "datacenter ranges, repeated
+attempts". AUTH-ABUSE-008 describes those two signals and names neither, and section 4
+names no other member the set could hold.
+
+**The readings we see.** The set is closed at the two the row writes, which makes it a
+pair of flags rather than a set; or the set is open and section 4 has not yet written
+its members, as it had not for the blocklist sources before D-151.
+
+**The smallest fix.** Section 4 names the members, as it now does for
 `password.blocklist.sources`.
 
-**What the code needs.** A default value, and the set where the key's type is a set.
+### 5. One ceiling is a statutory period with no number (Tier 2)
 
-**What the specification says.** `password.blocklist.source` has the default "range
-API" and the note "where the leaked-password list comes from (range API, offline
-fallback, self-hosted corpus)". `password.blocklist.sources` has the default "leaked
-list only" and the note that it MAY add `dictionary` and `context`. Two values are
-written as names; the other four are written as prose.
+**Item.** `10` section 4.7, `privacy.request.decision`.
 
-**The readings we see.**
+**What the code needs.** An integer ceiling, or none.
 
-1. The prose is the value, so the default of `password.blocklist.source` is the text
-   `range API`. Against this: no other key of section 4 carries a value with a space,
-   and AUTH-PASS-004 describes the three as mechanisms rather than as text.
-2. The prose stands for a name the specification has not yet written, as it does for
-   the ten factors of question 2.
+**What the specification says.** The default is 6 working days from submission and the
+scope reads "ceiling enforced (the statutory period)". The length of the statutory
+period appears nowhere in `docs/spec/`.
 
-**The smallest fix for each.** Under reading 1, nothing changes and the values are
-taken verbatim. Under reading 2, section 4.2 states the names, as it already does for
-`dictionary` and `context`.
+**The readings we see.** The ceiling is a number the chapter has not yet written; or
+the ceiling belongs to the jurisdiction the host declares, the way the lawful-basis
+list does (PRIV-BASIS-001), and is therefore a declaration rather than a library
+constant.
 
-### 4. Eight keys have no stated type (Tier 2)
+**The smallest fix for each.** Section 4.7 writes the number, or LIB-HOST-001 adds the
+statutory decision period to the declarations.
 
-**Item.** `10` section 4, the keys below, against the phase's instruction to hold
-section 4 as typed settings with defaults and floors.
+The key carries its default and no ceiling, so a value above the statutory period is
+accepted today.
 
-| Key | Declared default | What is missing |
-|---|---|---|
-| `privacy.request.decision` | 6 working days from submission | A working day is not a length of time; the value resolves against `privacy.workingdays` and `privacy.holidays` |
-| `privacy.workingdays` | Sunday–Thursday | Whether the value is a set of days of the week, and how a day is named |
-| `retention.consent` | life of the processing + 3 years | Two parts, the first of which is not a length of time |
-| `abuse.throttle.delay.factor` | ×2 per further failure | A multiplier, so not a count; whether it may be fractional |
-| `abuse.throttle.decay` | halves every 10 minutes without failures | A half-life, so one duration with the halving fixed, or two values |
-| `webauthn.algorithms` | `[-8, -7, -257]`, and −7 cannot be removed | A list of signed integers with one member that cannot be removed; that rule is a membership rule, not a bound |
-| `password.argon2.memory` and `password.argon2.iterations` | 19456 KiB and 2 | The floor is "enforced as a (memory, iterations) strength class", which is a rule over two keys and not a bound on either |
+### 6. Five floors are enforced with no number (Tier 2)
 
-**The smallest fix.** Section 4 states the type of each, as it does for the keys whose
-default is a plain duration, count, flag or list.
+**Item.** `10` section 4.6: `organization.deletion.grace`,
+`takedown.grace`, `account.deletion.grace`, `identifier.change.coolingoff` and
+`identifiers.username.changecooloff`.
 
-### 5. A value outside a key's named set has no code (Tier 2)
+**What the code needs.** A floor for each, or none.
 
-**Item.** `10` section 1.5 and `09` `PUT /admin/config/{key}`, against OPS-CFG-003.
+**What the specification says.** Each row's scope reads "R, floor enforced" and states
+no number. IDN-ORG-003 AC4 confirms a minimum exists for the organization deletion
+grace and does not number it either.
 
-**What the code needs.** The code a change carries when the value is well-formed but
-is not one of the key's stated values, for example `registration.phone` set to
-anything other than `required` or `optional`.
+**The readings we see.** The floor is the shipped default, so each value may be raised
+and never lowered; or the floor is a number the chapter has not yet written.
 
-**What the specification says.** Section 1.5 defines `config.value.belowfloor` and
-`config.value.aboveceiling` and no other value code. `09` lists
-`config.value.belowfloor`, `config.key.protected` and
-`auth.restriction.reasonrequired` on 422 for that endpoint, and `10` section 6 makes
-422 "well-formed, semantically rejected". Neither names a code for a value outside a
-named set.
+**The smallest fix for each.** Each row states its floor, or states that the floor is
+the default.
 
-We also note, as part of the same question, that `config.value.aboveceiling` is
-defined in section 1.5 and enforced by the ceilings section 4 declares, but is absent
-from that endpoint's 422 list.
+All five carry their default and no floor, so a deployment can set any of them to zero
+today.
 
-**The readings we see.**
+### 7. Two retention periods are counted in years (Tier 2)
 
-1. The set is shape, so a value outside it is refused by the boundary validation of
-   CONV-CODE-006 and carries whatever code that validation carries.
-2. The set is a bound, so it carries a code of its own.
+**Item.** `10` section 4.7, `retention.audit.security` and `retention.consent`.
 
-**The smallest fix for each.** Under reading 1, `09` names the validation code on that
-endpoint. Under reading 2, section 1.5 gains one code and `09` lists it, in both cases
-alongside `config.value.aboveceiling`.
+**What the code needs.** A duration for each default and each floor.
 
-### 6. Three keys are families, not keys (Tier 2)
+**What the specification says.** `retention.audit.security` is 7 years with a floor of
+5 years; `retention.consent` is `P3Y` with a floor of `P1Y`. The D-151 preamble
+derives a duration from an ISO 8601 value.
 
-**Item.** `10` section 4: `policy.<organization>` (section 4.1),
-`retention.<host-category>` (section 4.7) and `stepup.enforcement.<organization>`
-(section 4.8).
+**What the code does.** The framework's duration type has no calendar, so a year is
+held as 365 days: the security floor is 1825 days rather than five calendar years, and
+falls short by one or two days over any five-year span holding a leap day.
 
-**What the code needs.** The phase gate is that every `10` key resolves with its
-default. A family has no single name, and two of the three have no default of their
-own: `policy.<organization>` holds only what the organization overrides, and
-`stepup.enforcement.<organization>` is a per-organization kill switch.
+**The readings we see.** The drift is immaterial and the value is a duration; or a
+retention floor stated in years is a calendar period, which needs a type `08` does not
+name and for which CONV-DESIGN-008 admits no package.
 
-**The readings we see.**
-
-1. A family is not a key of the catalogue: it is a per-organization or per-category
-   value read through its own operation, and the catalogue holds only the keys with a
-   literal name.
-2. A family is a key whose name takes a parameter, and the catalogue holds it as such.
-
-**The smallest fix for each.** Under reading 1, section 4 marks the three as families
-rather than keys. Under reading 2, section 4 states how a parameterised key is named
-and what it resolves to when the parameter names nothing.
+**The smallest fix for each.** Section 4.7 writes the two defaults and the two floors
+in days, or `08` names how a calendar period is held.
 
 ## 5. Gate result
 
@@ -246,24 +279,25 @@ Fast checks on every commit of the phase: `dotnet build Janus.slnx` with warning
 errors and analysers at latest-all, `dotnet format Janus.slnx --verify-no-changes`,
 `dotnet restore Janus.slnx --locked-mode`, and the test suite. Green on each.
 
-From the last commits of the phase, `dotnet test` on the development machine reports
-that no tests ran: the test host ends during its start-up when the command line drives
-it in server mode. The pipeline runs `dotnet test` unchanged and green, so the suite
-was run locally by executing the test binaries, which runs the same tests.
+`dotnet test` on the development machine reports that no tests ran: the test host ends
+during its start-up when the command line drives it in server mode. The pipeline runs
+`dotnet test` unchanged and green, so the suite was run locally by executing the test
+binaries, which runs the same tests.
 
-Full gate: GitHub Actions runs `35391824706` (push) and `35391830140` (pull request)
-on branch `phase-00-report`, all seventeen jobs green; the commit carrying this
+Full gate: GitHub Actions runs `35396808643` (push) and `35396820403` (pull request)
+on branch `phase-00-configuration`, all seventeen jobs green; the commit carrying this
 sentence re-runs them before the merge. The integration, migration and conformance
 suites do not exist in this phase; the three rows of CONV-GATE-001 that run them are
 listed in section 2.
 
-Tests: 69, all passing. `tests/Janus.Core.Tests` 54, `tests/Janus.Analyzers.Tests` 15.
+Tests: 116, all passing. `tests/Janus.Core.Tests` 101, `tests/Janus.Analyzers.Tests`
+15.
 
 Repository, per the working guide's section 5: private repository `neolorn/janus`,
 default branch `main`, squash and rebase merges off, merge commits on, delete branch on
 merge on, dependency vulnerability alerting and automated security updates on, platform
 secret scanning unavailable on this plan as `08` section 10 records, so the scanning
 OPS-DEP-004 requires is the gitleaks gate (D-150). Branch protection on `main`
-requires the seventeen status checks, applies to administrators, requires no
-approval, and refuses force pushes and deletion. The instruction files
-and `tmp/` are excluded through `.git/info/exclude`.
+requires the seventeen status checks, applies to administrators, requires no approval,
+and refuses force pushes and deletion. The instruction files and `tmp/` are excluded
+through `.git/info/exclude`.
