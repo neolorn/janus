@@ -7938,6 +7938,52 @@ CONV-CODE-008, CONV-VCS-003, CONV-GATE-001).
 
 ---
 
+## D-151 — Phase 0 questions, second stop: names where the reference chapter had prose
+
+**Date:** 2026-09-18 · **Status:** accepted · **Amends:** D-143 (policy object), D-132, D-011 · **Extends:** D-150
+
+**TL;DR.** The reference chapter described six kinds of value in prose where code needs
+a name or a type. Each is now a name.
+
+1. **Step-up actions** (`10` section 5a) each carry a `resource:action` name, which is
+   the key of the policy's `gates` field and the value the endpoint declares:
+   `password:set`, `identifier:add`, `identifier:remove`, `username:change`,
+   `factor:enrol`, `factor:remove`, `recoverycodes:generate`, `mailcredential:create`,
+   `mailcredential:revoke`, `privacy:export`, `account:delete`, `account:deactivate`,
+   `provider:link`, `provider:unlink`, `recovery:approve`, `invitation:issue`,
+   `grant:manage`, `account:suspend`, `account:reactivate`, `account:takedown`,
+   `account:takedownreverse`, `erasure:complete`, `config:loosen`,
+   `alerting:destinations`, `policy:change`, `domain:manage`, `restriction:edit`,
+   `restriction:grant`, `breakglass:replace`.
+2. **Factor identifiers** (AUTH-FACT-002 gains an Identifier column): `password`,
+   `passkey` (the hybrid transport is the same entry), `emailLink`, `emailCode`,
+   `phoneLink`, `google`, `apple`, `totp`, `securityKey`, `phoneCode`, `recoveryCodes`;
+   `breakGlass` exists but never appears in `loginFactors`; the verification code is not
+   an entry. `loginFactors` is a set of these; the system default is the eleven less the
+   four off-by-default ones; the administrative organization's is `passkey` only.
+3. **Blocklist keys**: `password.blocklist.source` is an enum `rangeApi` · `offline` ·
+   `selfHosted`; `password.blocklist.sources` is a set of `leaked` · `dictionary` ·
+   `context` with `leaked` unremovable.
+4. **Value types.** A rule in the section 4 preamble derives every key's type from its
+   default (duration in ISO 8601, integer, decimal, boolean, enum, list or set, string),
+   and the eight rows whose defaults were prose now carry a typed default: the working
+   week as a set of weekday names, the throttle factor as a decimal, the decay as a
+   half-life duration, the WebAuthn algorithm list as COSE integers with −7 required, the
+   Argon2 floor as a stated rule over the two keys, the photo dimension as pixels, the
+   consent retention as a duration from the end of processing, the MFA floor bounded by
+   the single-factor floor.
+5. **Error code** `config.value.notallowed` for a value outside a key's enum or set or of
+   the wrong type; `PUT /admin/config/{key}` lists it and `config.value.aboveceiling`.
+6. **Key families** are one key per organization identifier or declared category:
+   `policy.<organization>` defaults to an empty override set; `retention.<host-category>`
+   defaults to the floor the host declares and startup fails without one;
+   `stepup.enforcement.<organization>` is a boolean defaulting to `true`.
+
+**Propagated to:** `02` AUTH-FACT-002 · `09` `PUT /admin/config/{key}` · `10` (sections
+1.5, 4 preamble, 4.1, 4.1a, 4.2, 4.3, 4.5, 4.7, 4.8, 5a).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -8098,6 +8144,7 @@ CONV-CODE-008, CONV-VCS-003, CONV-GATE-001).
 | Staff accounts carry a verified personal email from day one; review-5 closed | D-148 |
 | Every design and code choice fixed; Conventional Commits 1.0.0; Keep a Changelog 1.1.0; MinVer | D-149 |
 | Phase 0 questions: test projects under the analysers, JAN0006, gitleaks | D-150 |
+| Phase 0 questions, second stop: gate names, factor identifiers, enum values, key types, families | D-151 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

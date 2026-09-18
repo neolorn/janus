@@ -112,24 +112,28 @@ availability SHALL be runtime-configurable per organization through the policy's
 factor for a principal; no configuration key does so (`factor.<name>.enabled` is
 retired, D-148).
 
-| Factor | Primary | Second | Phishing-resistant | Contributes (AUTH-SESS-005a) | Notes |
-|---|---|---|---|---|---|
-| Password | ✓ | — | No | AAL1 alone; AAL2 with a second factor | |
-| Passkey (discoverable credential) | ✓ | — | Yes | AAL2 alone | Signs in; created with `residentKey: required` (AUTH-FACT-002b); conditional UI where supported |
-| Cross-device sign-in (hybrid) | ✓ | — | Yes | AAL2 alone | FIDO2 hybrid transport |
-| Sign-in link by email (`emailLink`) | ✓ | — | No | AAL1 at sign-in only; never a second step (AUTH-FACT-003) | Off by default; mailbox compromise would yield both |
-| Email code (`emailCode`) | ✓ | — | No | AAL1 at sign-in only; never a second step (AUTH-FACT-003) | Off by default, as `emailLink`; mailbox compromise would yield both |
-| Sign-in link by SMS (`phoneLink`) | ✓ | — | No | AAL1 at sign-in only; never a second step (AUTH-FACT-003) | Off by default; restricted factor (AUTH-FACT-002b) |
-| Google | ✓ | — | No | `delegated` — no asserted AAL | Credential only; freshness unverifiable (AUTH-STEP-005) |
-| Apple | ✓ | — | No | Same | Same |
-| TOTP | — | ✓ | No | Nothing alone; AAL2 beside a password | |
-| Security key as second factor (non-discoverable WebAuthn credential) | — | ✓ | Yes | Nothing alone; AAL2 phishing-resistant beside a password | Created with `residentKey: discouraged`; upgradable to a passkey (AUTH-FACT-002b) |
-| SMS code (`phoneCode`) | — | ✓ | No | Nothing alone; AAL2 beside a password, never phishing-resistant | Off by default; flagged less secure wherever listed; restricted factor (AUTH-FACT-002b) |
-| Recovery codes | — | ✓ | No | Nothing alone; AAL2 beside a password | Single-use; not counted in reachable assurance (AUTH-STEP-006) |
-| Verification code (email or SMS) | — | — | — | — | **Verification only** (AUTH-FACT-004) |
-| Break-glass credential | ✓ | — | No | Satisfies every gate for the session's lifetime | Emergency only; AUTH-STEP-004 |
+| Factor | Identifier | Primary | Second | Phishing-resistant | Contributes (AUTH-SESS-005a) | Notes |
+|---|---|---|---|---|---|---|
+| Password | `password` | ✓ | — | No | AAL1 alone; AAL2 with a second factor | |
+| Passkey (discoverable credential) | `passkey` | ✓ | — | Yes | AAL2 alone | Signs in; created with `residentKey: required` (AUTH-FACT-002b); conditional UI where supported |
+| Cross-device sign-in (hybrid) | `passkey` (a transport of the same entry) | ✓ | — | Yes | AAL2 alone | FIDO2 hybrid transport |
+| Sign-in link by email | `emailLink` | ✓ | — | No | AAL1 at sign-in only; never a second step (AUTH-FACT-003) | Off by default; mailbox compromise would yield both |
+| Email code | `emailCode` | ✓ | — | No | AAL1 at sign-in only; never a second step (AUTH-FACT-003) | Off by default, as `emailLink`; mailbox compromise would yield both |
+| Sign-in link by SMS | `phoneLink` | ✓ | — | No | AAL1 at sign-in only; never a second step (AUTH-FACT-003) | Off by default; restricted factor (AUTH-FACT-002b) |
+| Google | `google` | ✓ | — | No | `delegated` — no asserted AAL | Credential only; freshness unverifiable (AUTH-STEP-005) |
+| Apple | `apple` | ✓ | — | No | Same | Same |
+| TOTP | `totp` | — | ✓ | No | Nothing alone; AAL2 beside a password | |
+| Security key as second factor (non-discoverable WebAuthn credential) | `securityKey` | — | ✓ | Yes | Nothing alone; AAL2 phishing-resistant beside a password | Created with `residentKey: discouraged`; upgradable to a passkey (AUTH-FACT-002b) |
+| SMS code | `phoneCode` | — | ✓ | No | Nothing alone; AAL2 beside a password, never phishing-resistant | Off by default; flagged less secure wherever listed; restricted factor (AUTH-FACT-002b) |
+| Recovery codes | `recoveryCodes` | — | ✓ | No | Nothing alone; AAL2 beside a password | Single-use; not counted in reachable assurance (AUTH-STEP-006) |
+| Verification code (email or SMS) | none (not an entry) | — | — | — | — | **Verification only** (AUTH-FACT-004) |
+| Break-glass credential | `breakGlass` (never in `loginFactors`) | ✓ | — | No | Satisfies every gate for the session's lifetime | Emergency only; AUTH-STEP-004 |
 
-*Source: D-148; D-012, D-009, D-013, D-141, D-146, D-147*
+The identifier is the value used in `loginFactors` (`10` section 4.1a), in `/auth/factor`
+requests and in credential records; eleven identifiers may appear in `loginFactors`
+(D-151).
+
+*Source: D-151; D-148, D-012, D-009, D-013, D-141, D-146, D-147*
 
 Conditional UI (autofill) is a presentation mode of passkey sign-in, not a separate
 factor. A hardware security key is one way to hold a WebAuthn credential, appearing

@@ -127,7 +127,8 @@ message — rewording the human-facing text is free, changing the code is breaki
 |---|---|---|
 | `config.key.protected` **(renamed)** | Setting is not changeable through the application | OPS-CFG-004 |
 | `config.value.belowfloor` | Value below the enforced minimum | OPS-CFG-003 |
-| `config.value.aboveceiling` **(new)** | Value above the enforced maximum | AUTH-SESS-005 |
+| `config.value.aboveceiling` | Value above the enforced maximum | AUTH-SESS-005 |
+| `config.value.notallowed` | Value outside the key's enum or set, or of the wrong type | section 4 value types, D-151 |
 | `config.change.stepuprequired` **(new)** | Loosening a control requires step-up | OPS-CFG-002 |
 | `config.policy.belowsystem` **(new)** | An organization policy field is looser than the system default | AUTH-STEP-002a, D-143 |
 | `model.containment.cycle` **(new)** | Containment declaration forms a cycle | AUTHZ-MODEL-004 |
@@ -227,6 +228,15 @@ All three are editable after bootstrap.
 Part of the stable public contract (LIB-API-001). Grouped by area. **R** =
 runtime-changeable, **P** = protected (not changeable through the application; mechanism is an infrastructure choice).
 
+**Value types (D-151).** Every key has exactly one type, read from its default: a
+number with a unit of time is a **duration** (ISO 8601, `PT10M`, `P90D`); a bare number is
+an **integer** unless the default carries a decimal point (**decimal**); `true`/`false` is
+a **boolean**; a backticked word from a stated set is an **enum**; a bracketed list is a
+**list** or **set** of the stated element type; anything else is a **string**. Where a
+default is written as prose for readability, the row's Scope column names the type. A
+value outside a key's enum or set is refused with `config.value.notallowed`; a value
+outside a floor or ceiling with `config.value.belowfloor` or `config.value.aboveceiling`.
+
 **Every key carries a safe default (P-001) except the eight that name the deployment**
 — origins (`webauthn.origins`), hosting location (`hosting.location`), the two alert
 destination lists, the owner's email and SMS destinations (D-129), the SMS balance
@@ -250,7 +260,7 @@ deployment and the only deliberate change is a loosening, which OPS-CFG-002 audi
 | `session.default.absolute` | 365 days | R, ceiling 365 d | AUTH-SESS-005, D-130 — the definite overall timeout NIST §2.1.3 requires |
 | `session.stepup.recency` | 15 minutes | R | AUTH-STEP-001, D-107 |
 | `policy.default` | the policy object of §4.1a with its system defaults | R, each field classified per §4.1a | AUTH-PRIN-002, D-116, D-143 — the **system** policy, for principals with no membership. Replaces `login.policy.default`, `stepup.policy.default`, `stepup.shape.<action>` / `stepup.gate.<action>` |
-| `policy.<organization>` | the fields the organization overrides; everything else inherits `policy.default` | R | AUTH-PRIN-002, D-116, D-143 — written by `PUT /admin/organizations/{id}/policy`; the administrative organization's is set at bootstrap (§4.1a). Replaces `login.policy.<organization>`, `stepup.policy.<organization>` |
+| `policy.<organization>` | `{}` (no override: every field inherits `policy.default`) | R, one key per organization identifier, created empty when the organization is | AUTH-PRIN-002, D-116, D-143 — written by `PUT /admin/organizations/{id}/policy`; the administrative organization's is set at bootstrap (§4.1a). Replaces `login.policy.<organization>`, `stepup.policy.<organization>` |
 | `privacy.export.ratelimit` | 3 per day | R | D-086, D-107 |
 | `policy.enforcement.grace` | 0 | R, ceiling 90 d | AUTH-FACT-017, D-146: the run-up an account gets when a policy's `requiredAssurance` or `credentialRedundancy` is raised; during it a non-compliant sign-in is told the requirement and the deadline and may continue, after it the sign-in stops at enrolment (`auth.policy.graceexpired`). Lengthening is loosening. The one place the grace is defined |
 
@@ -263,8 +273,8 @@ reads `requiredAssurance` — nothing is inferred from which factors are enabled
 | Field | Meaning — read by | System default (customers) | Administrative organization, at bootstrap | Direction (OPS-CFG-002) |
 |---|---|---|---|---|
 | `requiredAssurance` | `aal1` · `aal2`. The stated floor — session lifetimes (AUTH-SESS-005), the staff floor (AUTH-SESS-005b), the trusted-device offer (AUTH-FACT-015), the single-factor idle restore (D-139) | `aal1` | `aal2` | lowering is loosening |
-| `loginFactors` | The catalogue entries (`02` AUTH-FACT-002) a principal may sign in with, primary and second. The entries `emailLink`, `emailCode`, `phoneLink` and `phoneCode` are **off by default** and a host enables them here (D-146, D-147); `phoneLink` and `phoneCode` are restricted factors (AUTH-FACT-002b) | catalogue defaults; `emailLink`, `emailCode`, `phoneLink`, `phoneCode` off | passkeys only | adding is loosening |
-| `gates` | Per §5a action: `level` (`aal1` · `aal2` · `reachable`), `phishingResistant`, `maxAge` (AUTH-STEP-002/002a) | `reachable`, floor `aal1` · no · `session.stepup.recency` | `aal2` · yes · `session.stepup.recency` | lowering a level, dropping phishing-resistance or lengthening `maxAge` is loosening |
+| `loginFactors` | The set of catalogue identifiers (`02` AUTH-FACT-002: `password`, `passkey`, `emailLink`, `emailCode`, `phoneLink`, `google`, `apple`, `totp`, `securityKey`, `phoneCode`, `recoveryCodes`) a principal may sign in with, primary and second; `breakGlass` and the verification code are not entries and cannot appear here (D-151). The entries `emailLink`, `emailCode`, `phoneLink` and `phoneCode` are **off by default** and a host enables them here (D-146, D-147); `phoneLink` and `phoneCode` are restricted factors (AUTH-FACT-002b) | `password`, `passkey`, `google`, `apple`, `totp`, `securityKey`, `recoveryCodes` (that is, the catalogue less `emailLink`, `emailCode`, `phoneLink`, `phoneCode`) | `passkey` only | adding is loosening |
+| `gates` | Per §5a action, keyed by the action name: `level` (`aal1` · `aal2` · `reachable`), `phishingResistant`, `maxAge` (AUTH-STEP-002/002a) | `reachable`, floor `aal1` · no · `session.stepup.recency` | `aal2` · yes · `session.stepup.recency` | lowering a level, dropping phishing-resistance or lengthening `maxAge` is loosening |
 | `credentialRedundancy` | `advisory` · `enforced` — whether a second credential is required after a device-bound enrolment (AUTH-RECOV-001) | `advisory` | `enforced` | to `advisory` is loosening |
 | `selfServiceRecovery` | Whether email recovery and self-service loss reports are available (AUTH-RECOV-004, AUTH-RECOV-008) | `true` | `false` | to `true` is loosening |
 | `emailDomains` | Domain lock (REG-DOM-001, IDN-ORG-006): `off`, or the list of domains **verified by DNS** whose addresses members may sign in with. Written only through `/admin/organizations/{id}/domains`, never through `PUT .../policy`; a listed domain admits nothing until verified, and is re-verified on a schedule | `off` | `off` | adding a domain is loosening (OPS-CFG-002); removing one alerts (OPS-ALERT-001) |
@@ -280,13 +290,13 @@ object: it is the protected kill switch, unreachable from the application.
 | Key | Default | Scope | Source |
 |---|---|---|---|
 | `password.floor.singlefactor` | 15 | R, floor 15 (NIST SP 800-63B-4 SHALL) | AUTH-PASS-001, D-140 |
-| `password.floor.withmfa` | 10 | R, floor 8 (NIST minimum with MFA) | AUTH-PASS-001, D-140 |
+| `password.floor.withmfa` | 10 | R, integer, floor 8 (NIST minimum with MFA); SHALL NOT exceed `password.floor.singlefactor` | AUTH-PASS-001, D-140 |
 | `password.maximum` | 128 | R, floor 64 | AUTH-PASS-001, D-146 (was 64) |
-| `password.blocklist.source` | range API | R | AUTH-PASS-004: where the leaked-password list comes from (range API, offline fallback, self-hosted corpus) |
-| `password.blocklist.sources` | leaked list only | R | AUTH-PASS-004, D-146: the **rejection** sources. MAY add `dictionary` (a word list) and `context` (the person's own identifiers, profile fields and the service name); both off by default, a recorded deviation from NIST SP 800-63B-4 section 3.1.1.2 (`13-risk-register`). Adding a source is tightening |
+| `password.blocklist.source` | `rangeApi` | R; `rangeApi` · `offline` · `selfHosted` | AUTH-PASS-004: where the leaked-password list comes from (range API, offline fallback, self-hosted corpus) |
+| `password.blocklist.sources` | `[leaked]` | R; set of `leaked` · `dictionary` · `context`; `leaked` cannot be removed | AUTH-PASS-004, D-146: the **rejection** sources. MAY add `dictionary` (a word list) and `context` (the person's own identifiers, profile fields and the service name); both off by default, a recorded deviation from NIST SP 800-63B-4 section 3.1.1.2 (`13-risk-register`). Adding a source is tightening |
 | `password.blocklist.corpusmaxage` | 30 days | R | D-011, D-107 |
-| `password.argon2.memory` | 19456 KiB | R, floor enforced as a (memory, iterations) strength class — OWASP's equal-strength sets all pass | AUTH-PASS-007, D-120, D-135 |
-| `password.argon2.iterations` | 2 | R, floor enforced with memory as one class | AUTH-PASS-007, D-120, D-135 |
+| `password.argon2.memory` | 19456 | R, integer KiB; the floor is the rule that (`memory`, `iterations`) is at or above one of (19456, 2), (12288, 3), (9216, 4), (7168, 5), evaluated across both keys | AUTH-PASS-007, D-120, D-135 |
+| `password.argon2.iterations` | 2 | R, integer; floor as the rule on `password.argon2.memory` | AUTH-PASS-007, D-120, D-135 |
 | `password.argon2.parallelism` | 1 | R | AUTH-PASS-007, D-120 |
 
 ### 4.3 Factors
@@ -304,7 +314,7 @@ object: it is the protected kill switch, unreachable from the application.
 | `webauthn.rpid` | derived | **P** | AUTH-FACT-010 |
 | `webauthn.origins` | — **required** | **P** | AUTH-FACT-010 |
 | `webauthn.relatedorigins` | empty | R | AUTH-FACT-012, D-107 |
-| `webauthn.algorithms` | `[-8, -7, -257]` — EdDSA, ES256, RS256; −7 cannot be removed | **P** | AUTH-FACT-014, D-120 |
+| `webauthn.algorithms` | `[-8, -7, -257]` (EdDSA, ES256, RS256) | **P**, list of COSE algorithm integers; −7 SHALL be a member | AUTH-FACT-014, D-120 |
 
 ### 4.4 Recovery
 
@@ -322,10 +332,10 @@ object: it is the protected kill switch, unreachable from the application.
 | `abuse.throttle.enabled` | true | **P** | OPS-CFG-004 |
 | `abuse.throttle.threshold` | 3 consecutive failures | R | AUTH-ABUSE-001, D-140 — failures before the first delay |
 | `abuse.throttle.delay.initial` | 1 second | R | AUTH-ABUSE-001, D-132 — first delay after the threshold |
-| `abuse.throttle.delay.factor` | ×2 per further failure | R | AUTH-ABUSE-001, D-132 |
+| `abuse.throttle.delay.factor` | 2.0 | R, decimal multiplier per further failure, floor 1.0 | AUTH-ABUSE-001, D-132 |
 | `abuse.throttle.delay.max` | 60 seconds per source | R, ceiling 10 min | AUTH-ABUSE-001, D-132 |
 | `abuse.throttle.account.cap` | 30 seconds | R, ceiling 60 s | AUTH-ABUSE-001, D-132 — the per-account component's cap; keeps the denial-of-service lever small |
-| `abuse.throttle.decay` | halves every 10 minutes without failures | R | AUTH-ABUSE-001, D-132 |
+| `abuse.throttle.decay` | `PT10M` | R, duration: the half-life of the accumulated delay while no failure occurs | AUTH-ABUSE-001, D-132 |
 | `abuse.nonexistent.window` | 1 hour per address | R | AUTH-ABUSE-003, D-132, D-148: one notice per address per window, for both the non-existence message sent to an unknown address at a sign-in path (AUTH-ABUSE-003) and the notice sent to the owner of an address someone else tried to register or add (REG-SESS-005, REG-IDENT-008) |
 | `abuse.sms.window` | *Retired by D-146. See `restrictions` below and AUTH-ABUSE-004.* | | |
 | `restrictions` | the four shipped restrictions below | R, edited through `GET/PUT/DELETE /admin/restrictions/{name}` (step-up `restriction:edit`); a loosening (a higher max, a shorter interval, a removed bucket, a deleted restriction) falls under OPS-CFG-002 and raises a Normal alert | AUTH-ABUSE-004, OPS-CFG-008, D-146: the **named restriction set** governing every send. Each restriction is a key (§5.14), an optional purpose (§5.15) and one or more buckets of (max, interval, `sliding` · `fixed`, §5.16). Security notices to an existing holder are outside destination restrictions and governed by `notification.destination` only. Replaces `abuse.sms.window`, INT-SMS-002 and IDN-LIFE-011 |
@@ -338,7 +348,7 @@ object: it is the protected kill switch, unreachable from the application.
 | `link.magic.lifetime` | 15 minutes | R, ceiling 1 h | AUTH-FACT-003, AUTH-FACT-004, D-132, D-146: email and SMS sign-in links (`emailLink`, `phoneLink`, `POST /auth/link`); the link completes only in the requesting browser and only on a press (REG-SESS-003) |
 | `link.invitation.lifetime` | 7 days | R, ceiling 30 d | IDN-LIFE-009a, D-132 — single use |
 | `photo.maxbytes` | 2 MB | R, ceiling 10 MB | IDN-ATTR-004, D-132 |
-| `photo.maxdimension` | 1024 px (longest side; larger images are downscaled) | R | IDN-ATTR-004, D-132 |
+| `photo.maxdimension` | 1024 | R, integer pixels on the longest side; larger images are downscaled | IDN-ATTR-004, D-132 |
 | `abuse.sms.balancefloor` | — **required** | R | INT-SMS-004 |
 | `abuse.botdefence.signals` | datacenter ranges, repeated attempts | R | AUTH-ABUSE-008, D-107 |
 | `exfiltration.readvolume.alerting` | on | R | D-045 |
@@ -387,13 +397,13 @@ object: it is the protected kill switch, unreachable from the application.
 | Key | Default | Scope | Source |
 |---|---|---|---|
 | `privacy.request.decision` | 6 working days from submission | R, ceiling enforced (the statutory period) | PRIV-RIGHT-002, D-126, D-136 — the decision deadline; lapse is a deemed rejection |
-| `privacy.workingdays` | Sunday–Thursday | R | PRIV-RIGHT-002, D-136 — the week on which "working days" are counted |
+| `privacy.workingdays` | `[sunday, monday, tuesday, wednesday, thursday]` | R, set of weekday names, at least one | PRIV-RIGHT-002, D-136 — the week on which "working days" are counted |
 | `privacy.holidays` | **empty** — public-holiday dates, added and moved as they are announced | R, **loosening** (OPS-CFG-002: step-up, reason, audit) | PRIV-RIGHT-002, D-136, D-142 — never required, never a startup condition: an unlisted holiday counts as a working day and makes a deadline *earlier*, which is always compliant. A Normal alert fires when no listed date lies beyond `maintenance.expiry.warninglead` (OPS-ALERT-001) |
 | `privacy.request.warninglead` | 2 working days before the deadline | R | PRIV-RIGHT-002, OPS-ALERT-001, D-126 |
 | `retention.audit.security` | 7 years | R, floor 5 years | PRIV-RET-001, D-132 — security events, permission changes, financial actions; five-year tax retention plus a margin for claims |
 | `retention.audit.routine` | 90 days | R, floor 30 days | PRIV-RET-001, D-132 — routine access logging |
-| `retention.consent` | life of the processing + 3 years | R, floor 1 year after processing ends | PRIV-RET-001, D-132 — evidential period |
-| `retention.<host-category>` | — declared by the host with its floor | R, floor enforced | PRIV-RET-001, D-107 |
+| `retention.consent` | `P3Y` | R, duration counted from the end of the processing the consent covered, floor `P1Y` | PRIV-RET-001, D-132 — evidential period |
+| `retention.<host-category>` | the floor the host declares for that category (LIB-HOST-001); no library default, startup fails for a declared category without one | R, duration, one key per declared category, floor enforced | PRIV-RET-001, D-107 |
 | `backup.retention` | 35 days | R, floor 14 days | DR-003, DR-006a, DR-010, D-132 — also bounds how long a pre-erasure backup survives |
 | `hosting.location` | — **required** | **P** | INT-HOST-001 |
 | `hosting.crossborderbasis` | — **required when outside Egypt** | **P** | INT-HOST-002 |
@@ -413,7 +423,7 @@ redeployment. Every change is recorded and alerted (OPS-ALERT-001).
 | `audit.enabled` | OPS-CFG-004 |
 | `exfiltration.export.auditing` | D-045 |
 | `abuse.throttle.enabled` | OPS-CFG-004 |
-| `stepup.enforcement.<organization>` | OPS-CFG-004 |
+| `stepup.enforcement.<organization>` | OPS-CFG-004; boolean, default `true`, one key per organization identifier (D-151) |
 | `webauthn.rpid` | OPS-CFG-004 |
 | `token.signing.algorithm` | OPS-CFG-004; value and rationale in §4.9 (D-147) |
 | `token.signature.verification` | OPS-CFG-004 |
@@ -655,29 +665,43 @@ The actions on the library's own surface that require step-up under the principa
 policy (AUTH-STEP-001, AUTH-STEP-002). Listed once here so a builder does not have to
 infer them endpoint by endpoint; `09` marks each.
 
-| Action | Endpoint(s) |
-|---|---|
-| Set or change a password | `POST /account/password` |
-| Change email or phone | *Retired by D-146. See `identifier:add`, `identifier:remove` below; setting the primary or the backup setting needs no gate (REG-IDENT-005).* |
-| `identifier:add` | `POST /account/identifiers`, `PUT /account/identifiers/{id}/replace` (REG-IDENT-004, REG-IDENT-007) |
-| `identifier:remove` | `DELETE /account/identifiers/{id}` (REG-IDENT-006); the undo is link-borne and not gated |
-| `username:change` | `PUT /account/profile` with a `username` (REG-IDENT-009); display name and legal name are not gated |
-| Enrol a factor (AUTH-STEP-007); upgrade a security key to a passkey; remove an `active` factor; generate recovery codes | `/account/factors/*`, `/auth/webauthn/register/*`, `POST /account/credentials/{id}/upgrade`, `DELETE /account/credentials/{id}`, `POST /account/recoverycodes` — reporting a *lost* factor is **not** gated: `POST /recovery/report-loss` (AUTH-RECOV-007); nor are the label (`PATCH /account/credentials/{id}`) and the preferred second step (`PUT /account/secondstep/preferred`) |
-| `mailcredential:create` · `mailcredential:revoke` | `POST /account/mail/apppasswords`, `DELETE /account/mail/apppasswords/{id}` (REG-MAIL-002, INT-MAIL-010) |
-| Export personal data | `GET /privacy/export` |
-| Request account deletion | `POST /account/delete` |
-| Deactivate the account (`suspendedBy = self`) | `POST /account/deactivate` (IDN-LIFE-013, D-147); reactivation at `POST /account/reactivate` accepts the link token from the deactivation notice and is not gated |
-| Link or unlink a social provider | `POST|DELETE /account/link/{provider}` |
-| Approve a recovery; issue an invitation | `POST /admin/recovery/approve`, `POST /admin/organizations/{id}/invitations` |
-| Grant, revoke or change roles and grants | `/admin/grants/*`, `/admin/roles/*` |
-| Suspend, reactivate, take down or reverse a takedown | `/admin/accounts/{subject}/suspend` · `/reactivate` · `/takedown` · `/takedown/reverse` |
-| Complete a stuck erasure manually | `POST /admin/erasures/{id}/complete` |
-| Loosen any security setting; change alert destinations; change organization policy; add a locked domain (`domain:manage`) | `PUT /admin/config/{key}`, `PUT /admin/organizations/{id}/policy`, `POST /admin/organizations/{id}/domains` |
-| `restriction:edit` | `PUT/DELETE /admin/restrictions/{name}` (AUTH-ABUSE-004): every edit; a loosening also needs a reason |
-| `restriction:grant` | `POST /admin/restrictions/{name}/grant` (AUTH-ABUSE-004): the support role, a reason required |
-| Generate a replacement break-glass credential | from a break-glass session, which satisfies step-up for its lifetime (AUTH-STEP-004), or by a stepped-up system administrator from the management application (OPS-BOOT-004, D-147) |
+| Name | Action | Endpoint(s) |
+|---|---|---|
+| `password:set` | Set or change a password | `POST /account/password` |
+| `identifier:add` | Add an identifier; replace in single-address mode | `POST /account/identifiers`, `PUT /account/identifiers/{id}/replace` (REG-IDENT-004, REG-IDENT-007); setting the primary or the backup setting needs no gate (REG-IDENT-005) |
+| `identifier:remove` | Remove an identifier | `DELETE /account/identifiers/{id}` (REG-IDENT-006); the undo is link-borne and not gated |
+| `username:change` | Change the username | `PUT /account/profile` with a `username` (REG-IDENT-009); display name and legal name are not gated |
+| `factor:enrol` | Enrol a factor (AUTH-STEP-007); upgrade a security key to a passkey | `/account/factors/*`, `/auth/webauthn/register/*`, `POST /account/credentials/{id}/upgrade`; the label (`PATCH /account/credentials/{id}`) and the preferred second step (`PUT /account/secondstep/preferred`) are not gated |
+| `factor:remove` | Remove an `active` factor | `DELETE /account/factors/{id}`, `DELETE /account/credentials/{id}` |
+| `recoverycodes:generate` | Generate or regenerate recovery codes | `POST /account/recoverycodes` |
+| `mailcredential:create` | Create a mail app password | `POST /account/mail/apppasswords` (REG-MAIL-002, INT-MAIL-010) |
+| `mailcredential:revoke` | Revoke a mail app password | `DELETE /account/mail/apppasswords/{id}` |
+| `privacy:export` | Export personal data | `GET /privacy/export` |
+| `account:delete` | Request account deletion | `POST /account/delete` |
+| `account:deactivate` | Deactivate the account (`suspendedBy = self`) | `POST /account/deactivate` (IDN-LIFE-013, D-147); reactivation at `POST /account/reactivate` accepts the link token from the deactivation notice and is not gated |
+| `provider:link` | Link a social provider | `POST /account/link/{provider}` |
+| `provider:unlink` | Unlink a social provider | `DELETE /account/link/{provider}` |
+| `recovery:approve` | Approve a recovery | `POST /admin/recovery/approve` |
+| `invitation:issue` | Issue an invitation | `POST /admin/organizations/{id}/invitations` |
+| `grant:manage` | Grant, revoke or change roles and grants | `/admin/grants/*`, `/admin/roles/*` |
+| `account:suspend` | Suspend an account | `POST /admin/accounts/{subject}/suspend` |
+| `account:reactivate` | Reactivate a suspended account | `POST /admin/accounts/{subject}/reactivate` |
+| `account:takedown` | Execute a takedown | `POST /admin/accounts/{subject}/takedown` |
+| `account:takedownreverse` | Reverse a takedown | `POST /admin/accounts/{subject}/takedown/reverse` |
+| `erasure:complete` | Complete a stuck erasure manually | `POST /admin/erasures/{id}/complete` |
+| `config:loosen` | Loosen any security setting | `PUT /admin/config/{key}` where the change is a loosening (OPS-CFG-002); a tightening is not gated |
+| `alerting:destinations` | Change alert destinations | `PUT /admin/config/{key}` for the `alerting.*.destinations` keys (OPS-ALERT-004a) |
+| `policy:change` | Change an organization's policy | `PUT /admin/organizations/{id}/policy` |
+| `domain:manage` | Add, verify or remove a locked domain | `/admin/organizations/{id}/domains/*` (REG-DOM-001) |
+| `restriction:edit` | Edit a sending restriction | `PUT/DELETE /admin/restrictions/{name}` (AUTH-ABUSE-004): every edit; a loosening also needs a reason |
+| `restriction:grant` | Grant sends to a key | `POST /admin/restrictions/{name}/grant` (AUTH-ABUSE-004): the support role, a reason required |
+| `breakglass:replace` | Generate a replacement break-glass credential | from a break-glass session, which satisfies step-up for its lifetime (AUTH-STEP-004), or by a stepped-up system administrator from the management application (OPS-BOOT-004, D-147) |
 
-*Source: AUTH-STEP-001, D-132, D-146, D-147*
+The name is the key of the policy's `gates` field (section 4.1a) and the value the
+`09` endpoint declares; it follows the `resource:action` shape of CONV-NAME-002 but is
+a gate name, not a permission string (D-151).
+
+*Source: AUTH-STEP-001, D-132, D-146, D-147, D-151*
 
 Every gate is three values — level, phishing-resistance, maximum age
 (AUTH-STEP-002). Under the system policy the level is **the account's reachable
