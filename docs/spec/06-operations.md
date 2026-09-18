@@ -286,11 +286,14 @@ protected from pull-request modification.
 **OPS-DEP-004** — A secret-scanning step SHALL run in the pipeline and fail the build
 on detection.
 
-*Source: D-042.3*
+*Source: D-042.3, D-150*
 
 GitHub's own secret scanning and push protection are unavailable on this plan for
 private repositories, so OPS-SEC-001 has no platform enforcement. The check moves
-into the pipeline.
+into the pipeline. The scanner is **gitleaks**, run from its official action pinned to
+a release commit SHA (never a floating tag), over the full history on every push, with
+its default rule set and a committed `.gitleaks.toml` holding only allow-list entries
+that name the file and the reason (D-150). No other scanner is added.
 
 **Acceptance criteria**
 1. A committed credential fails the build.

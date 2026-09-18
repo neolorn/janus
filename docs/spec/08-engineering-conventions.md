@@ -121,10 +121,12 @@ project (`RestorePackagesWithLockFile`); restore SHALL run in locked mode in the
 ---
 
 **CONV-SETUP-003** — The public surface SHALL be tracked with
-`Microsoft.CodeAnalysis.PublicApiAnalyzers`, enabled on **every** project:
-`PublicAPI.Shipped.txt` and `PublicAPI.Unshipped.txt` are populated in `Janus.Core`,
-`Janus.Hosting` and `Janus.Conformance` and empty in every other project, so that a
-public member anywhere else is a build error. A public change without its line in the
+`Microsoft.CodeAnalysis.PublicApiAnalyzers`, enabled on **every source project** and on
+no test project: `PublicAPI.Shipped.txt` and `PublicAPI.Unshipped.txt` are populated in
+`Janus.Core`, `Janus.Hosting` and `Janus.Conformance` and empty in every other source
+project, so that a public member anywhere else in the shipped code is a build error.
+Test projects ship nothing and their test classes are public by the framework's
+requirement, so the analyser does not apply to them (D-150). A public change without its line in the
 unshipped file fails the build; the shipped file changes only in a release commit.
 
 *Source: LIB-API-001, LIB-API-002, LIB-TEST-002, D-149*
@@ -157,6 +159,7 @@ and no others; any further deviation is a specification defect, not a local supp
 | CA2007 (`ConfigureAwait`) | none | test projects, `Janus.Hosting`, `Janus.Cli` | required of library code only (CONV-CODE-002) |
 | CA1515 (make public types internal) | none | `Janus.Core`, `Janus.Hosting`, `Janus.Conformance` | these projects hold the contract |
 | CA1062 (validate public arguments) | none | all | guards are placed by CONV-CODE-006, not on every public member |
+| CA1707 (underscores in identifiers) | none | test projects | the test naming scheme of CONV-TEST-007 uses underscores by design (D-150) |
 
 CA1848 stays at error: logging uses the `LoggerMessage` source generator (CONV-LOG-001).
 
@@ -165,7 +168,7 @@ CA1848 stays at error: logging uses the `LoggerMessage` source generator (CONV-L
 **Acceptance criteria**
 1. A file that `dotnet format` would change fails the gate.
 2. The `.editorconfig` is the only place a style rule is configured.
-3. No rule other than the four above is set below error in any configuration file, and
+3. No rule other than the five above is set below error in any configuration file, and
    no `#pragma warning disable` or `SuppressMessage` exists without a justification on the
    same line and a phase-report entry.
 
@@ -504,7 +507,7 @@ where the base class library or a permitted package provides one (CONV-DESIGN-00
 
 ---
 
-**CONV-CODE-008** — `Janus.Analyzers` SHALL ship the following rules, each an error,
+**CONV-CODE-008** — `Janus.Analyzers` SHALL ship the following six rules, each an error,
 and the gates that name them (CONV-GATE-001) SHALL rely on them and on nothing else.
 
 | Rule | Detects | Serves |
@@ -514,6 +517,7 @@ and the gates that name them (CONV-GATE-001) SHALL rely on them and on nothing e
 | JAN0003 | A `public` or `internal` non-abstract class that is not `sealed` | CONV-CODE-001 |
 | JAN0004 | `.Result`, `.Wait()`, `.GetAwaiter().GetResult()` on a task; an `async` method without a `CancellationToken` parameter | CONV-CODE-002 |
 | JAN0005 | A `Result` or `Result<T>` expression whose value is discarded | CONV-DESIGN-005 |
+| JAN0006 | A `catch` block that is empty, or whose every path neither throws, rethrows, returns a failure `Result` nor calls a logging method (D-150) | CONV-ERR-003 |
 
 *Source: D-149*
 
@@ -566,8 +570,11 @@ pressure defeats the entire security model, and it looks reasonable in review.
 **CONV-ERR-003** — Exceptions SHALL NOT be swallowed. A caught exception is either
 handled meaningfully or rethrown. Empty catch blocks SHALL NOT exist.
 
+*Source: D-150*
+
 **Acceptance criteria**
-1. An analyzer rule fails the build on an empty catch.
+1. JAN0006 (CONV-CODE-008) fails the build on an empty catch and on a catch that
+   neither throws, rethrows, returns a failure result nor logs.
 2. Catch-and-log-and-continue does not appear on a security path.
 
 ---
@@ -858,14 +865,19 @@ current plan.
 **CONV-VCS-003** — Commit messages SHALL follow **Conventional Commits 1.0.0**: a
 type from `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `build`, `ci`, `chore`, an
 optional scope naming the area or feature (`feat(identifiers): ...`), a description in
-the imperative, and `BREAKING CHANGE:` in the footer or `!` after the type for any
-change that breaks LIB-API-001. One logical change per commit.
+the imperative of at most 72 characters, and `BREAKING CHANGE:` in the footer or `!`
+after the type for any change that breaks LIB-API-001. One logical change per commit.
+A body is present only when the diff cannot explain itself and SHALL consist of
+fragments, one per line, each beginning with a dash and at most 72 characters, stating
+a reason or a non-obvious consequence; a body SHALL NOT describe what the diff shows
+and SHALL NOT contain sentences of prose (D-150).
 
 *Source: D-149*
 
 **Acceptance criteria**
-1. A commit message that does not parse under Conventional Commits 1.0.0 fails a
-   check on push and on pull request.
+1. A commit message that does not parse under Conventional Commits 1.0.0, whose
+   description exceeds 72 characters, or whose body has a line that does not begin
+   with a dash or exceeds 72 characters, fails a check on push and on pull request.
 2. Every breaking change to the contract carries the breaking marker.
 
 ---
@@ -977,7 +989,7 @@ With one developer, the checks a reviewer would perform are mechanical.
 | Double migration run | OPS-MIG-007 |
 | Analyzer: no permitted outcome from a catch block | CONV-ERR-002 |
 | Analyzer: no forbidden values in logs | CONV-LOG-003 |
-| Secret scanning | OPS-DEP-004 |
+| Secret scanning (gitleaks) | OPS-DEP-004 |
 | Dependency vulnerability alerting | CONV-DEP-002 |
 | Destructive-operation detection report | OPS-DEP-002 |
 | `dotnet format --verify-no-changes` | CONV-SETUP-004 |
@@ -989,7 +1001,7 @@ With one developer, the checks a reviewer would perform are mechanical.
 | Forbidden markers and commented-out code | CONV-CODE-005 |
 | `InternalsVisibleTo` allow-list | CONV-LAYOUT-002 |
 | Acceptance-criterion test names present for each item of the phase | CONV-TEST-007 |
-| `Janus.Analyzers` rules JAN0001 to JAN0005 | CONV-CODE-008 |
+| `Janus.Analyzers` rules JAN0001 to JAN0006 | CONV-CODE-008 |
 
 **Acceptance criteria**
 1. Each runs on pull request.

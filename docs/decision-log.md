@@ -7904,6 +7904,40 @@ CONV-TEST-007; CONV-VCS-003/005; CONV-GATE-001).
 
 ---
 
+## D-150 — Phase 0 questions: test projects under the analysers, the swallowed-exception rule, the secret scanner
+
+**Date:** 2026-09-18 · **Status:** accepted · **Amends:** D-149 (CONV-SETUP-003/004, CONV-CODE-008) · **Extends:** D-042.3
+
+**TL;DR.** The first implementation run stopped at phase 0 with three questions, two of
+them defects in D-149's text.
+
+1. **Test projects.** CONV-SETUP-003 enabled public-surface tracking on every project,
+   and CONV-SETUP-001's full analysis with warnings as errors applied to test projects.
+   Test classes must be public and CONV-TEST-007's names carry underscores, so no test
+   project could build. Public-surface tracking now applies to source projects only, and
+   CA1707 is set below error in test projects (the fifth and last row of the
+   CONV-SETUP-004 table).
+2. **Swallowed exceptions.** CONV-ERR-003 AC1 demanded an analyser rule and CONV-CODE-008
+   fixed the rules at five, none of which detected an empty catch. JAN0006 is added: a
+   catch that is empty, or whose every path neither throws, rethrows, returns a failure
+   result nor logs.
+3. **Secret scanner.** OPS-DEP-004 required an open-source scanner and named none.
+   gitleaks is chosen: the most widely used open-source scanner, run from its official
+   action pinned to a release commit SHA, full history on every push, default rules plus
+   a committed allow-list that names each entry's file and reason. *Rejected:* trufflehog
+   (heavier, verification calls out to providers) and detect-secrets (baseline-file
+   workflow suits audits better than a build gate).
+
+4. **Commit bodies.** The first run's bodies narrated the diff in paragraphs. CONV-VCS-003
+   now fixes the body form: only when the diff cannot explain itself, dash-prefixed
+   fragments of at most 72 characters stating a reason or non-obvious consequence, never
+   a description of the change, enforced by the commit check.
+
+**Propagated to:** `06` OPS-DEP-004 · `08` (CONV-SETUP-003, CONV-SETUP-004, CONV-ERR-003,
+CONV-CODE-008, CONV-VCS-003, CONV-GATE-001).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -8063,6 +8097,7 @@ CONV-TEST-007; CONV-VCS-003/005; CONV-GATE-001).
 | Token lifetimes, KEK rotation operation, infrastructure definition, `emergency` outside identifier rules; housekeeping four (review-4 M-4, M-7 to M-10, L-1 to L-22; D-144 question) | D-147 |
 | Staff accounts carry a verified personal email from day one; review-5 closed | D-148 |
 | Every design and code choice fixed; Conventional Commits 1.0.0; Keep a Changelog 1.1.0; MinVer | D-149 |
+| Phase 0 questions: test projects under the analysers, JAN0006, gitleaks | D-150 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
