@@ -31,11 +31,4 @@
     <PackageReference Include="MinVer" PrivateAssets="all" />
   </ItemGroup>
 
-  <!-- CONV-SETUP-003: the public surface is tracked on every project, so a public
-       member outside Janus.Core, Janus.Hosting and Janus.Conformance is a build
-       error. -->
-  <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
-  </ItemGroup>
-
 </Project>

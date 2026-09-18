@@ -1,6 +1,6 @@
 # CONV-SETUP-004: formatting and style are defined once, here, and enforced by
 # dotnet format --verify-no-changes and by the build. Every style rule this file
-# encodes is an error. The four rules the convention places below error are at the
+# encodes is an error. The five rules the convention places below error are at the
 # end of this file, scoped as it scopes them; no other rule is set below error.
 
 root = true
@@ -180,7 +180,7 @@ dotnet_naming_rule.locals_and_parameters_are_camel_case.symbols = locals_and_par
 dotnet_naming_rule.locals_and_parameters_are_camel_case.style = camel_case
 dotnet_naming_rule.locals_and_parameters_are_camel_case.severity = error
 
-#### The four rules CONV-SETUP-004 places below error, and no others. ####
+#### The five rules CONV-SETUP-004 places below error, and no others. ####
 
 # CA1062: guards are placed by CONV-CODE-006, not on every public member.
 dotnet_diagnostic.CA1062.severity = none
@@ -197,3 +197,7 @@ dotnet_diagnostic.CA1515.severity = none
 [{tests,src/Janus.Hosting,src/Janus.Cli}/**/*.cs]
 # CA2007: ConfigureAwait is required of library code only (CONV-CODE-002).
 dotnet_diagnostic.CA2007.severity = none
+
+[tests/**/*.cs]
+# CA1707: the test naming scheme of CONV-TEST-007 uses underscores by design.
+dotnet_diagnostic.CA1707.severity = none

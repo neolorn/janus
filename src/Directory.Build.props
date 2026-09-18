@@ -1,0 +1,12 @@
+<Project>
+
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <!-- CONV-SETUP-003: the public surface is tracked on every source project and on no
+       test project, so a public member anywhere in the shipped code outside
+       Janus.Core, Janus.Hosting and Janus.Conformance is a build error. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>
