@@ -244,11 +244,18 @@ and what it resolves to when the parameter names nothing.
 
 Fast checks on every commit of the phase: `dotnet build Janus.slnx` with warnings as
 errors and analysers at latest-all, `dotnet format Janus.slnx --verify-no-changes`,
-`dotnet restore Janus.slnx --locked-mode`, and `dotnet test Janus.slnx`. Green on each.
+`dotnet restore Janus.slnx --locked-mode`, and the test suite. Green on each.
 
-Full gate: GitHub Actions run `35389336972` on `f013c94`, all seventeen jobs green.
-The integration, migration and conformance suites do not exist in this phase; the
-three rows of CONV-GATE-001 that run them are listed in section 2.
+From the last commits of the phase, `dotnet test` on the development machine reports
+that no tests ran: the test host ends during its start-up when the command line drives
+it in server mode. The pipeline runs `dotnet test` unchanged and green, so the suite
+was run locally by executing the test binaries, which runs the same tests.
+
+Full gate: GitHub Actions runs `35391824706` (push) and `35391830140` (pull request)
+on branch `phase-00-report`, all seventeen jobs green; the commit carrying this
+sentence re-runs them before the merge. The integration, migration and conformance
+suites do not exist in this phase; the three rows of CONV-GATE-001 that run them are
+listed in section 2.
 
 Tests: 69, all passing. `tests/Janus.Core.Tests` 54, `tests/Janus.Analyzers.Tests` 15.
 
