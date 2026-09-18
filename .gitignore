@@ -2,6 +2,7 @@
 [Bb]in/
 [Oo]bj/
 artifacts/
+TestResults/
 
 # Local editor and tooling state.
 .vs/
