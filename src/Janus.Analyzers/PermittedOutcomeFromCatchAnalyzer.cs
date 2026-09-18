@@ -87,6 +87,6 @@ internal sealed class PermittedOutcomeFromCatchAnalyzer : DiagnosticAnalyzer
         }
 
         return string.Equals(method.Name, SuccessFactoryName, StringComparison.Ordinal)
-            && results.Contains(method.ContainingType);
+            && results.Contains(method.ReturnType);
     }
 }
