@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Janus.Analyzers\Janus.Analyzers.csproj" />
+    <ProjectReference Include="..\..\src\Janus.Core\Janus.Core.csproj" />
+  </ItemGroup>
+
+  <!-- The cases are compiled in memory, so the analysers meet the logging types the
+       library uses rather than a stand-in for them. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+</Project>
