@@ -1,0 +1,83 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Xml.Linq;
+using Xunit;
+
+namespace Janus.Core.Tests;
+
+/// <summary>
+/// The catalogue of error codes: its documentation and its stability
+/// (CONV-NAME-003, LIB-API-003).
+/// </summary>
+[Trait("kind", "contract")]
+public sealed class ErrorCodesTests
+{
+    private static readonly string[] Catalogue =
+    [
+        "config.change.stepuprequired",
+        "config.key.protected",
+        "config.policy.belowsystem",
+        "config.value.aboveceiling",
+        "config.value.belowfloor",
+        "model.startup.governinglanguage",
+    ];
+
+    /// <summary>
+    /// CONV-NAME-003 AC1: every code is documented with its meaning and what the
+    /// caller does about it.
+    /// </summary>
+    [Fact]
+    public void CONV_NAME_003_AC1_EveryCodeCarriesMeaningAndRemediation() =>
+        AssertEveryCodeIsDocumented();
+
+    /// <summary>
+    /// LIB-API-003 AC2: the same documentation obligation seen from the boundary, where
+    /// the host renders a sentence from the code and nothing else.
+    /// </summary>
+    [Fact]
+    public void LIB_API_003_AC2_EveryCodeCarriesMeaningAndRemediation() =>
+        AssertEveryCodeIsDocumented();
+
+    /// <summary>
+    /// CONV-NAME-003 AC2: a code that changes fails this test, so the change is made
+    /// deliberately and carries its version bump.
+    /// </summary>
+    [Fact]
+    public void CONV_NAME_003_AC2_ChangingACodeFailsTheContractTest()
+    {
+        var declared = Codes().Values.Order(StringComparer.Ordinal).ToList();
+
+        Assert.Equal(Catalogue, declared);
+    }
+
+    private static void AssertEveryCodeIsDocumented()
+    {
+        var documentation = XDocument.Parse(
+            File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Janus.Core.xml")));
+
+        foreach (string name in Codes().Keys)
+        {
+            XElement? summary = documentation
+                .Descendants("member")
+                .FirstOrDefault(member =>
+                    string.Equals(member.Attribute("name")?.Value, "P:Janus.Core.ErrorCodes." + name, StringComparison.Ordinal))
+                ?.Element("summary");
+
+            Assert.NotNull(summary);
+            Assert.True(
+                summary.Value.Count(character => character == '.') >= 2,
+                name + " states a meaning but no remediation.");
+        }
+    }
+
+    private static Dictionary<string, string> Codes() =>
+        typeof(ErrorCodes)
+            .GetProperties(BindingFlags.Public | BindingFlags.Static)
+            .ToDictionary(
+                property => property.Name,
+                property => property.GetValue(null)!.ToString()!,
+                StringComparer.Ordinal);
+}

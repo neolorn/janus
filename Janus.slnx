@@ -11,4 +11,7 @@
     <Project Path="src/Janus.Privacy/Janus.Privacy.csproj" />
     <Project Path="src/Janus.Storage/Janus.Storage.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Janus.Core.Tests/Janus.Core.Tests.csproj" />
+  </Folder>
 </Solution>

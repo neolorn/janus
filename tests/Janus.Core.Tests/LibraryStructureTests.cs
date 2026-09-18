@@ -1,0 +1,269 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Xml.Linq;
+using Xunit;
+
+namespace Janus.Core.Tests;
+
+/// <summary>
+/// The shape of the solution: which project may depend on which, what a project file
+/// may declare, and which packages the build may resolve
+/// (CONV-LAYOUT-001, CONV-LAYOUT-002, CONV-LAYOUT-003, CONV-SETUP-001, CONV-SETUP-002,
+/// CONV-DESIGN-008, CONV-CODE-008, LIB-PKG-001, LIB-PKG-002).
+/// </summary>
+[Trait("kind", "contract")]
+public sealed class LibraryStructureTests
+{
+    private static readonly Dictionary<string, string[]> Dependencies = new(StringComparer.Ordinal)
+    {
+        ["Janus.Core"] = [],
+        ["Janus.Identity"] = ["Janus.Core"],
+        ["Janus.Authentication"] = ["Janus.Core"],
+        ["Janus.Authorization"] = ["Janus.Core"],
+        ["Janus.Privacy"] = ["Janus.Core"],
+        ["Janus.Storage"] = ["Janus.Authentication", "Janus.Authorization", "Janus.Core", "Janus.Identity", "Janus.Privacy"],
+        ["Janus.Hosting"] = ["Janus.Authentication", "Janus.Authorization", "Janus.Core", "Janus.Identity", "Janus.Privacy", "Janus.Storage"],
+        ["Janus.Conformance"] = ["Janus.Core", "Janus.Hosting"],
+        ["Janus.Analyzers"] = [],
+        ["Janus.Cli"] = ["Janus.Authentication", "Janus.Core", "Janus.Identity", "Janus.Storage"],
+    };
+
+    private static readonly string[] Areas =
+    [
+        "Janus.Identity",
+        "Janus.Authentication",
+        "Janus.Authorization",
+        "Janus.Privacy",
+    ];
+
+    private static readonly string[] AllowedPackages =
+    [
+        "Dapper",
+        "Fido2",
+        "Konscious.Security.Cryptography.Argon2",
+        "Microsoft.AspNetCore.Authentication.OpenIdConnect",
+        "Microsoft.CodeAnalysis.Analyzers",
+        "Microsoft.CodeAnalysis.CSharp",
+        "Microsoft.CodeAnalysis.PublicApiAnalyzers",
+        "Microsoft.EntityFrameworkCore",
+        "Microsoft.EntityFrameworkCore.Design",
+        "Microsoft.Testing.Platform",
+        "MinVer",
+        "Npgsql.EntityFrameworkCore.PostgreSQL",
+        "OpenIddict.AspNetCore",
+        "OpenIddict.Server",
+        "OpenIddict.Validation",
+        "Otp.NET",
+        "StackExchange.Redis",
+        "Testcontainers.PostgreSql",
+        "Testcontainers.Redis",
+        "xunit.v3",
+    ];
+
+    private static readonly string[] InheritedProperties =
+    [
+        "AnalysisLevel",
+        "Deterministic",
+        "EnforceCodeStyleInBuild",
+        "GenerateDocumentationFile",
+        "ImplicitUsings",
+        "Nullable",
+        "TargetFramework",
+        "TargetFrameworks",
+        "TreatWarningsAsErrors",
+    ];
+
+    /// <summary>
+    /// CONV-LAYOUT-001 AC3: every project's library dependencies are exactly the ones
+    /// the table gives, so a dependency pointing outward does not build.
+    /// </summary>
+    [Fact]
+    public void CONV_LAYOUT_001_AC3_DependenciesAreExactlyTheOnesTheTableGives()
+    {
+        foreach ((string project, string[] expected) in Dependencies)
+        {
+            Assert.Equal(expected, LibraryReferences(project));
+        }
+    }
+
+    /// <summary>
+    /// CONV-LAYOUT-001 AC2 and LIB-PKG-002 AC1: the contracts compile with no database
+    /// dependency, and with no package at all.
+    /// </summary>
+    [Fact]
+    public void CONV_LAYOUT_001_AC2_CoreCarriesNoPackage() =>
+        Assert.Empty(PackageReferences("Janus.Core"));
+
+    /// <summary>
+    /// LIB-PKG-001 AC2: no area reaches into another area.
+    /// </summary>
+    [Fact]
+    public void LIB_PKG_001_AC2_NoAreaDependsOnAnotherArea()
+    {
+        foreach (string area in Areas)
+        {
+            Assert.Empty(LibraryReferences(area).Intersect(Areas, StringComparer.Ordinal));
+        }
+    }
+
+    /// <summary>
+    /// CONV-LAYOUT-002 AC1: the only grants of internal visibility are the ones the
+    /// item permits.
+    /// </summary>
+    [Fact]
+    public void CONV_LAYOUT_002_AC1_InternalsAreVisibleOnlyWhereThePermittedGrantsSay()
+    {
+        foreach (string project in Dependencies.Keys)
+        {
+            Assert.Equal(PermittedGrants(project), Grants(project));
+        }
+    }
+
+    /// <summary>
+    /// CONV-LAYOUT-003 AC1: a file's namespace matches its folder path.
+    /// </summary>
+    [Fact]
+    public void CONV_LAYOUT_003_AC1_EveryNamespaceMatchesItsFolder()
+    {
+        foreach (string file in Sources())
+        {
+            string expected = Path
+                .GetRelativePath(Path.Combine(Repository.Root, "src"), Path.GetDirectoryName(file)!)
+                .Replace(Path.DirectorySeparatorChar, '.');
+
+            Assert.Contains(
+                "namespace " + expected + ";",
+                File.ReadAllText(file),
+                StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// CONV-SETUP-001 AC1: no project file sets a target framework or any inherited
+    /// property, except the analyser project, which must target netstandard2.0.
+    /// </summary>
+    [Fact]
+    public void CONV_SETUP_001_AC1_NoProjectOverridesTheInheritedProperties()
+    {
+        foreach (string project in Projects().Where(project => !IsTheAnalyserProject(project)))
+        {
+            Assert.Empty(XDocument
+                .Parse(File.ReadAllText(project))
+                .Descendants("PropertyGroup")
+                .Elements()
+                .Select(element => element.Name.LocalName)
+                .Intersect(InheritedProperties, StringComparer.Ordinal));
+        }
+    }
+
+    /// <summary>
+    /// CONV-SETUP-002 AC1: no project file carries a package version.
+    /// </summary>
+    [Fact]
+    public void CONV_SETUP_002_AC1_NoProjectFileCarriesAPackageVersion()
+    {
+        foreach (string project in Projects())
+        {
+            Assert.DoesNotContain(
+                XDocument.Parse(File.ReadAllText(project)).Descendants("PackageReference"),
+                reference => reference.Attribute("Version") is not null);
+        }
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-008 AC1: the set of package identifiers the build may resolve is
+    /// exactly the table's.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_008_AC1_ThePackageSetIsExactlyTheAllowList()
+    {
+        string[] declared = XDocument
+            .Parse(Repository.ReadText("Directory.Packages.props"))
+            .Descendants("PackageVersion")
+            .Select(package => package.Attribute("Include")!.Value)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(AllowedPackages, declared);
+    }
+
+    /// <summary>
+    /// CONV-CODE-008 AC2: every source project reads the analysers as analysers, and
+    /// none of them links the analyser assembly.
+    /// </summary>
+    [Fact]
+    public void CONV_CODE_008_AC2_TheAnalyserProjectIsReferencedAsAnAnalyser()
+    {
+        foreach (string project in Projects().Where(project => !IsTheAnalyserProject(project)))
+        {
+            XElement reference = Assert.Single(
+                XDocument.Parse(File.ReadAllText(project)).Descendants("ProjectReference"),
+                candidate => candidate.Attribute("Include")!.Value.EndsWith("Janus.Analyzers.csproj", StringComparison.Ordinal));
+
+            Assert.Equal("Analyzer", reference.Attribute("OutputItemType")?.Value);
+            Assert.Equal("false", reference.Attribute("ReferenceOutputAssembly")?.Value);
+        }
+    }
+
+    private static bool IsTheAnalyserProject(string project) =>
+        string.Equals(Path.GetFileNameWithoutExtension(project), "Janus.Analyzers", StringComparison.Ordinal);
+
+    private static IEnumerable<string> Projects() =>
+        Directory.EnumerateFiles(Path.Combine(Repository.Root, "src"), "*.csproj", SearchOption.AllDirectories);
+
+    private static IEnumerable<string> Sources() =>
+        Directory
+            .EnumerateFiles(Path.Combine(Repository.Root, "src"), "*.cs", SearchOption.AllDirectories)
+            .Where(file => !file.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                && !file.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar, StringComparison.Ordinal));
+
+    private static string[] LibraryReferences(string project) =>
+        XDocument
+            .Parse(Repository.ReadText(Path.Combine("src", project, project + ".csproj")))
+            .Descendants("ProjectReference")
+            .Where(reference => reference.Attribute("OutputItemType") is null)
+            .Select(reference => Path.GetFileNameWithoutExtension(reference.Attribute("Include")!.Value))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+    private static string[] PackageReferences(string project) =>
+        XDocument
+            .Parse(Repository.ReadText(Path.Combine("src", project, project + ".csproj")))
+            .Descendants("PackageReference")
+            .Select(reference => reference.Attribute("Include")!.Value)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+    private static string[] Grants(string project) =>
+        XDocument
+            .Parse(Repository.ReadText(Path.Combine("src", project, project + ".csproj")))
+            .Descendants("InternalsVisibleTo")
+            .Select(grant => grant.Attribute("Include")!.Value)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+    private static string[] PermittedGrants(string project)
+    {
+        var permitted = new List<string>();
+
+        if (!string.Equals(project, "Janus.Core", StringComparison.Ordinal))
+        {
+            permitted.Add(project + ".Tests");
+        }
+
+        if (Areas.Contains(project, StringComparer.Ordinal))
+        {
+            permitted.AddRange(["Janus.Storage", "Janus.Hosting", "Janus.Cli"]);
+        }
+
+        if (string.Equals(project, "Janus.Core", StringComparison.Ordinal)
+            || string.Equals(project, "Janus.Storage", StringComparison.Ordinal))
+        {
+            permitted.AddRange(["Janus.Hosting", "Janus.Cli"]);
+        }
+
+        return [.. permitted.Order(StringComparer.Ordinal)];
+    }
+}
