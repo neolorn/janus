@@ -54,6 +54,9 @@ Janus.Core.Configuration.DateListSetting
 Janus.Core.Configuration.DecimalSetting
 Janus.Core.Configuration.DurationSetting
 Janus.Core.Configuration.FlagSetting
+Janus.Core.Configuration.IConfigurationStore
+Janus.Core.Configuration.IConfigurationStore.ReadAsync<TValue>(Janus.Core.Configuration.Setting<TValue>! setting, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<TValue>>
+Janus.Core.Configuration.IConfigurationStore.ReadAsync<TValue>(Janus.Core.Configuration.SettingFamily<TValue>! family, string! parameter, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<TValue>>
 Janus.Core.Configuration.IntegerListSetting
 Janus.Core.Configuration.IntegerListSetting.Unremovable.get -> System.Collections.Generic.IReadOnlySet<int>!
 Janus.Core.Configuration.IntegerSetting

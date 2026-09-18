@@ -18,6 +18,9 @@ against the public contract of LIB-API-001.
   a logging call.
 - `Settings` in `Janus.Core.Configuration`: every configuration key with its type,
   its default and the floors, ceilings and value sets it admits.
+- `IConfigurationStore` in `Janus.Core.Configuration`: the keys that change at runtime
+  are read through it, so a change made through the management application takes
+  effect without a restart.
 - `Policy`, `Policies` and the step-up, factor and assurance vocabularies in
   `Janus.Core`: the policy a principal resolves to, with the system and
   administrative defaults.
