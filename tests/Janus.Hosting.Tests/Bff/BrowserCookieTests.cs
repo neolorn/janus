@@ -62,6 +62,33 @@ public sealed class BrowserCookieTests : IDisposable
     }
 
     /// <summary>
+    /// AUTHZ-CACHE-002 AC1: what the browser holds is two drawn values, so no
+    /// permission and no role name can be in a cookie: every permission the library
+    /// declares and every administrative role of chapter 10 section 3 is absent from
+    /// what is written, and the values decode to bytes that spell none of them.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_CACHE_002_AC1_NoPermissionOrRoleNameIsInACookie()
+    {
+        IssuedSession issued = Issued();
+        string written = string.Join(
+            " ",
+            Answering(issued, JanusApplication.Public).Response.Headers.SetCookie.Select(header => header!));
+        string decoded = string.Join(
+            " ",
+            new[] { issued.Secret, issued.CsrfToken }.Select(carried =>
+                Encoding.UTF8.GetString(Base64Url.DecodeFromChars(carried.Value))));
+
+        Assert.All(
+            Named(),
+            name =>
+            {
+                Assert.DoesNotContain(name, written, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain(name, decoded, StringComparison.OrdinalIgnoreCase);
+            });
+    }
+
+    /// <summary>
     /// BFF-SESS-001 AC2: the value decodes to drawn bytes and says nothing, in
     /// particular not which session it is.
     /// </summary>
@@ -204,6 +231,15 @@ public sealed class BrowserCookieTests : IDisposable
 
     /// <inheritdoc/>
     public void Dispose() => _randomness.Dispose();
+
+    // Every permission the library declares and every role chapter 10 section 3 names.
+    private static string[] Named() =>
+    [
+        .. Permissions.All.Select(permission => permission.ToString()),
+        "system-administrator",
+        "auditor",
+        "support",
+    ];
 
     private IssuedSession Issued() => new(
         SessionId.New(TimeProvider.System),
