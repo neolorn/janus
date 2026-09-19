@@ -23,6 +23,7 @@ public sealed class AuthorizationDeclarationBuilder
     private readonly List<RelationshipDeclaration> _relationships = [];
     private readonly List<ResourceTypeDeclaration> _resourceTypes = [];
     private readonly List<string> _sensitiveCategories = [];
+    private readonly Dictionary<Permission, string> _stepUpGates = [];
 
     /// <summary>
     /// Declares one of the host's kinds of thing.
@@ -116,6 +117,35 @@ public sealed class AuthorizationDeclarationBuilder
     }
 
     /// <summary>
+    /// Binds one of the host's actions to a step-up gate: what a session has to have
+    /// proved, how recently, before the action is exercised. The gate is one of chapter
+    /// 10 section 5a or one the host names itself, and the three values it stands for
+    /// are set by the principal's policy, never here.
+    /// </summary>
+    /// <param name="permission">The permission, as <c>resource:action</c>.</param>
+    /// <param name="gate">The gate's name.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">
+    /// The permission is not well-formed, the gate is absent or blank, or the
+    /// permission is already bound to a gate.
+    /// </exception>
+    public AuthorizationDeclarationBuilder StepUpGate(string permission, string gate)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(gate);
+
+        var parsed = Core.Permission.Parse(permission);
+
+        if (!_stepUpGates.TryAdd(parsed, gate))
+        {
+            throw new ArgumentException(
+                "The permission " + parsed + " is bound to a step-up gate twice.",
+                nameof(permission));
+        }
+
+        return this;
+    }
+
+    /// <summary>
     /// Declares a lawful basis a purpose may rest on.
     /// </summary>
     /// <param name="basis">The basis and the properties the library branches on.</param>
@@ -153,6 +183,7 @@ public sealed class AuthorizationDeclarationBuilder
             [.. _relationships],
             [.. _permissions],
             [.. _readingActions],
+            new Dictionary<Permission, string>(_stepUpGates),
             [.. _bases],
             [.. _sensitiveCategories]);
 }

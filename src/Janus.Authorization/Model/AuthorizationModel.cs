@@ -28,6 +28,7 @@ internal sealed class AuthorizationModel
     private readonly HashSet<string> _readingActions;
     private readonly Dictionary<string, RelationshipDeclaration> _relationships;
     private readonly IReadOnlyList<string> _sensitiveCategories;
+    private readonly IReadOnlyDictionary<Permission, string> _stepUpGates;
     private readonly Dictionary<ResourceType, ResourceTypeDeclaration> _types;
 
     private AuthorizationModel(
@@ -36,6 +37,7 @@ internal sealed class AuthorizationModel
         Dictionary<string, RelationshipDeclaration> relationships,
         HashSet<Permission> permissions,
         HashSet<string> readingActions,
+        IReadOnlyDictionary<Permission, string> stepUpGates,
         Dictionary<string, LawfulBasisDeclaration> bases,
         IReadOnlyList<string> sensitiveCategories)
     {
@@ -44,6 +46,7 @@ internal sealed class AuthorizationModel
         _relationships = relationships;
         _permissions = permissions;
         _readingActions = readingActions;
+        _stepUpGates = stepUpGates;
         _bases = bases;
         _sensitiveCategories = sensitiveCategories;
     }
@@ -108,6 +111,7 @@ internal sealed class AuthorizationModel
             relationships,
             Permissions(declaration),
             new HashSet<string>([.. Reading, .. declaration.ReadingActions], StringComparer.Ordinal),
+            declaration.StepUpGates,
             bases,
             declaration.SensitiveCategories);
     }
@@ -130,6 +134,19 @@ internal sealed class AuthorizationModel
     /// restriction refuses it.
     /// </remarks>
     public bool IsReading(Permission permission) => _readingActions.Contains(permission.Action);
+
+    /// <summary>
+    /// The step-up gate the action is bound to, or nothing where it is bound to none.
+    /// </summary>
+    /// <param name="permission">The permission being asked for.</param>
+    /// <returns>The gate's name, or nothing.</returns>
+    /// <remarks>
+    /// Implements AUTHZ-GATE-005 and D-160. The gate is what a capability's
+    /// <c>stepup</c> residual is read from; the three values it stands for are the
+    /// principal's policy's.
+    /// </remarks>
+    public string? GateOf(Permission permission) =>
+        _stepUpGates.TryGetValue(permission, out string? gate) ? gate : null;
 
     /// <summary>
     /// The declaration of a resource type, or nothing where the model declares none.
@@ -209,6 +226,11 @@ internal sealed class AuthorizationModel
                 [.. _types.Values.OrderBy(type => type.Name.ToString(), StringComparer.Ordinal).Select(Serialized)],
                 [.. _relationships.Values.OrderBy(relationship => relationship.Name, StringComparer.Ordinal).Select(Serialized)],
                 [.. _permissions.Select(permission => permission.ToString()).Order(StringComparer.Ordinal)],
+                [.. _readingActions.Order(StringComparer.Ordinal)],
+                [.. _stepUpGates
+                    .Select(binding => new SerializedModel.StepUpGate(
+                        binding.Key.ToString(), binding.Value))
+                    .OrderBy(binding => binding.Permission, StringComparer.Ordinal)],
                 [.. _bases.Values.OrderBy(basis => basis.Key, StringComparer.Ordinal).Select(Serialized)],
                 [.. _sensitiveCategories.Order(StringComparer.Ordinal)]),
             ModelJson.Default.SerializedModel);

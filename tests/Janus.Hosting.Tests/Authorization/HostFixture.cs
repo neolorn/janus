@@ -107,7 +107,9 @@ public sealed class HostFixture : IAsyncLifetime
             IsObjectable: false))
         .Permission(HostPermissions.Read.ToString())
         .Permission(HostPermissions.Edit.ToString())
+        .Permission(HostPermissions.Publish.ToString())
         .Permission(HostPermissions.ReadNote.ToString())
+        .StepUpGate(HostPermissions.Publish.ToString(), "document:publish")
         .Resource<HostWorkspace>("workspace", type => type
             .BelongsToOrganization()
             .Purpose("running the host", "contract"))

@@ -19,6 +19,11 @@ internal static class HostPermissions
     public static Permission Edit { get; } = Permission.Parse("document:edit");
 
     /// <summary>
+    /// Publishing one of the host's records, which the host binds to a step-up gate.
+    /// </summary>
+    public static Permission Publish { get; } = Permission.Parse("document:publish");
+
+    /// <summary>
     /// Reading one of the host's records of the type that discloses.
     /// </summary>
     public static Permission ReadNote { get; } = Permission.Parse("note:read");

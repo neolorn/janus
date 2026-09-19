@@ -492,6 +492,79 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
         Assert.NotEmpty(capability.Can);
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-005 AC3: an action the grants confer and a step-up gate stands in
+    /// front of is offered with what it still requires, and the check that meets it
+    /// says what is missing rather than failing silently.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_005_AC3_ACapabilityCarriesWhatTheActionStillRequiresAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Publish]);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        Capability capability = Assert.Single(Rendered(
+            await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .CapabilitiesAsync(
+                    AccessContext.Of(nested.Account),
+                    Document,
+                    [nested.Record.Id],
+                    [HostPermissions.Read, HostPermissions.Publish],
+                    cancellationToken)));
+
+        Assert.Contains(HostPermissions.Publish, capability.Can);
+        Assert.Equal(
+            [CapabilityResidual.StepUp],
+            Assert.Contains(HostPermissions.Publish, capability.Requires));
+        Assert.DoesNotContain(HostPermissions.Read, capability.Requires);
+        Assert.NotNull(await RefusalAsync(nested.Account, nested.Record, HostPermissions.Publish));
+    }
+
+    /// <summary>
+    /// LIB-HOST-004 AC2, AUTH-STEP-003 AC1, AC2: with no assurance provider registered,
+    /// an action bound to a step-up gate is refused although the grants confer it, and
+    /// the refusal is a different code from the one an absent grant carries.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task LIB_HOST_004_AC2_ABoundActionIsDeniedWithNoAssuranceProviderAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Publish]);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        Assert.True(await ChecksAsync(nested.Account, nested.Record));
+        Assert.Equal(
+            ErrorCodes.StepUpUnavailable,
+            await RefusalAsync(nested.Account, nested.Record, HostPermissions.Publish));
+        Assert.Equal(
+            ErrorCodes.Denied,
+            await RefusalAsync(
+                await nested.Deployment.AccountAsync(cancellationToken),
+                nested.Record,
+                HostPermissions.Publish));
+    }
+
     private static TRendering Rendered<TRendering>(Result<TRendering> outcome) =>
         outcome.Match(
             rendering => rendering,

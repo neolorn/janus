@@ -57,6 +57,13 @@ public static class JanusRegistration
         // AUTHZ-GROUP-002: one set per operation, which is what makes ten checks in one
         // request resolve membership once.
         services.AddScoped<SubjectSets>();
+
+        // LIB-HOST-004: the assurance provider is the host's to supply, and a host
+        // that supplies none is one where nothing reports what a session has proved.
+        services.AddScoped(services => new StepUpGates(
+            services.GetRequiredService<AuthorizationModel>(),
+            services.GetService<IAssuranceProvider>()));
+
         services.AddScoped<IAccessGate, AccessGate>();
 
         return services;

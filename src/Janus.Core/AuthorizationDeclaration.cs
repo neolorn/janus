@@ -14,6 +14,9 @@ namespace Janus.Core;
 /// The actions the host declares to be reading rather than modifying, beside the three
 /// that are reading by name.
 /// </param>
+/// <param name="StepUpGates">
+/// The step-up gate each of the host's actions is bound to, where it binds one.
+/// </param>
 /// <param name="LawfulBases">The closed list a purpose's basis is drawn from.</param>
 /// <param name="SensitiveCategories">The closed list a type's sensitivity is drawn from.</param>
 /// <remarks>
@@ -26,5 +29,6 @@ public sealed record AuthorizationDeclaration(
     IReadOnlyList<RelationshipDeclaration> Relationships,
     IReadOnlyList<Permission> Permissions,
     IReadOnlyList<string> ReadingActions,
+    IReadOnlyDictionary<Permission, string> StepUpGates,
     IReadOnlyList<LawfulBasisDeclaration> LawfulBases,
     IReadOnlyList<string> SensitiveCategories);

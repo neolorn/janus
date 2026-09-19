@@ -274,6 +274,41 @@ public sealed class AuthorizationModelTests
     }
 
     /// <summary>
+    /// An action reads when it is named read, list or export or when the host declared
+    /// it reading; every other action modifies, one nobody classified included.
+    /// </summary>
+    [Fact]
+    public void IsReading_AnActionNobodyClassified_Modifies()
+    {
+        var model = AuthorizationModel.Of(HostDomain.Declared()
+            .Permission("document:preview", reading: true)
+            .Build());
+
+        Assert.True(model.IsReading(Permission.Parse("document:read")));
+        Assert.True(model.IsReading(Permission.Parse("folder:list")));
+        Assert.True(model.IsReading(Permission.Parse("document:export")));
+        Assert.True(model.IsReading(Permission.Parse("document:preview")));
+        Assert.False(model.IsReading(Permission.Parse("document:edit")));
+        Assert.False(model.IsReading(Permission.Parse("document:archive")));
+    }
+
+    /// <summary>
+    /// An action the host bound to a step-up gate names the gate; one bound to none
+    /// names nothing, which is the whole of what the residual is read from.
+    /// </summary>
+    [Fact]
+    public void GateOf_ABoundAction_NamesTheGateItIsBoundTo()
+    {
+        var model = AuthorizationModel.Of(HostDomain.Declared()
+            .Permission("document:publish")
+            .StepUpGate("document:publish", "document:publish")
+            .Build());
+
+        Assert.Equal("document:publish", model.GateOf(Permission.Parse("document:publish")));
+        Assert.Null(model.GateOf(Permission.Parse("document:read")));
+    }
+
+    /// <summary>
     /// CONV-NAME-002 AC1: a permission outside the pattern never reaches the model,
     /// because the declaration that names it is refused where it is written.
     /// </summary>

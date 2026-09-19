@@ -172,6 +172,21 @@ public static class ErrorCodes
     public static ErrorCode ChallengeRequired { get; } = ErrorCode.Parse("auth.challenge.required");
 
     /// <summary>
+    /// The step-up gate bound to the action is not met. Present what the gate asks
+    /// for and repeat the operation.
+    /// </summary>
+    /// <remarks>Implements AUTH-STEP-001, AUTH-STEP-002, chapter 10 section 1.2.</remarks>
+    public static ErrorCode StepUpRequired { get; } = ErrorCode.Parse("auth.stepup.required");
+
+    /// <summary>
+    /// The action is bound to a step-up gate and no assurance provider is registered,
+    /// so nothing reports what the session has proved and the gate is unmet rather
+    /// than waived.
+    /// </summary>
+    /// <remarks>Implements AUTH-STEP-003, LIB-HOST-004, chapter 10 section 1.2.</remarks>
+    public static ErrorCode StepUpUnavailable { get; } = ErrorCode.Parse("auth.stepup.unavailable");
+
+    /// <summary>
     /// Permission is absent, on something whose existence is not concealed. Hold the
     /// permission, or ask someone who does.
     /// </summary>

@@ -10,6 +10,8 @@ namespace Janus.Authorization.Model;
 /// <param name="ResourceTypes">The kinds of thing the host holds, by name.</param>
 /// <param name="Relationships">The facts a derivation may follow from, by name.</param>
 /// <param name="Permissions">Every declared permission, the library's own included.</param>
+/// <param name="ReadingActions">Every action that reads rather than modifies.</param>
+/// <param name="StepUpGates">The gate each bound action is bound to, by permission.</param>
 /// <param name="LawfulBases">The bases a purpose may rest on, by key.</param>
 /// <param name="SensitiveCategories">The categories a type may carry.</param>
 /// <remarks>Implements AUTHZ-MODEL-005.</remarks>
@@ -17,6 +19,8 @@ internal sealed record SerializedModel(
     IReadOnlyList<SerializedModel.Type> ResourceTypes,
     IReadOnlyList<SerializedModel.Relationship> Relationships,
     IReadOnlyList<string> Permissions,
+    IReadOnlyList<string> ReadingActions,
+    IReadOnlyList<SerializedModel.StepUpGate> StepUpGates,
     IReadOnlyList<SerializedModel.Basis> LawfulBases,
     IReadOnlyList<string> SensitiveCategories)
 {
@@ -78,6 +82,13 @@ internal sealed record SerializedModel(
         string Table,
         string SubjectColumn,
         IReadOnlyList<string> Columns);
+
+    /// <summary>
+    /// One action and the step-up gate it is bound to.
+    /// </summary>
+    /// <param name="Permission">The permission.</param>
+    /// <param name="Gate">The gate a session satisfies before exercising it.</param>
+    internal sealed record StepUpGate(string Permission, string Gate);
 
     /// <summary>
     /// One lawful basis and the properties the library branches on.

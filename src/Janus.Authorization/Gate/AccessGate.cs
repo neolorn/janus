@@ -21,6 +21,7 @@ namespace Janus.Authorization.Gate;
 /// <param name="evaluator">Where a rendered rule is run.</param>
 /// <param name="audit">Where a refusal is recorded and read back.</param>
 /// <param name="subjects">Who the principal is, resolved once per operation.</param>
+/// <param name="gates">What an action's step-up gate still asks of the session.</param>
 /// <param name="time">The clock liveness is read against.</param>
 /// <remarks>
 /// Implements AUTHZ-SEAM-001, AUTHZ-PRIN-001, AUTHZ-PRIN-003, AUTHZ-GATE-002,
@@ -35,17 +36,13 @@ internal sealed class AccessGate(
     IAccessEvaluator evaluator,
     IAccessAudit audit,
     SubjectSets subjects,
+    StepUpGates gates,
     TimeProvider time) : IAccessGate
 {
     private static readonly ResourceType OrganizationWide = ResourceType.Parse("organization");
 
     private static readonly IReadOnlyDictionary<Permission, IReadOnlySet<CapabilityResidual>>
         NoResiduals = new Dictionary<Permission, IReadOnlySet<CapabilityResidual>>();
-
-    // What a restriction leaves outstanding on a modifying action it stands in the way
-    // of (chapter 10 section 5.20).
-    private static readonly IReadOnlySet<CapabilityResidual> RestrictedResidual =
-        new HashSet<CapabilityResidual> { CapabilityResidual.Restricted }.ToFrozenSet();
 
     // A restriction admits no modifying action, so what the host composes into its
     // query is a fragment that matches nothing rather than a rule that cannot match.
@@ -67,14 +64,17 @@ internal sealed class AccessGate(
         Decision decided = await DecideAsync(context, permission, resource, cancellationToken)
             .ConfigureAwait(false);
 
-        return decided.Grant is { Deny: false }
-            ? Result.Success()
-            : await RefusedAsync(
+        if (decided.Grant is not { Deny: false })
+        {
+            return await RefusedAsync(
                 context,
                 permission,
                 resource.Type,
                 decided.Organization,
                 cancellationToken).ConfigureAwait(false);
+        }
+
+        return Outstanding(permission);
     }
 
     /// <inheritdoc/>
@@ -94,14 +94,17 @@ internal sealed class AccessGate(
 
         // AUTHZ-CONCEAL-005: nothing is concealed here, so what the caller answers is
         // that the operation is forbidden. The refusal is recorded the same way.
-        return decided is { Deny: false }
-            ? Result.Success()
-            : await RefusedAsync(
+        if (decided is not { Deny: false })
+        {
+            return await RefusedAsync(
                 context,
                 permission,
                 OrganizationWide,
                 organization,
                 cancellationToken).ConfigureAwait(false);
+        }
+
+        return Outstanding(permission);
     }
 
     /// <inheritdoc/>
@@ -267,17 +270,38 @@ internal sealed class AccessGate(
                 .Select(row => Permission.Parse(row.Permission)),
         ];
 
-        if (!restricted)
+        var requires = new Dictionary<Permission, IReadOnlySet<CapabilityResidual>>();
+
+        foreach (Permission permission in can)
         {
-            return new Capability(resource, can, NoResiduals);
+            var outstanding = new HashSet<CapabilityResidual>();
+
+            if (restricted && !model.IsReading(permission))
+            {
+                outstanding.Add(CapabilityResidual.Restricted);
+            }
+
+            if (gates.OutstandingOn(permission) is not null)
+            {
+                outstanding.Add(CapabilityResidual.StepUp);
+            }
+
+            if (outstanding.Count > 0)
+            {
+                requires.Add(permission, outstanding.ToFrozenSet());
+            }
         }
 
-        return new Capability(
-            resource,
-            can,
-            can.Where(permission => !model.IsReading(permission))
-                .ToDictionary(permission => permission, _ => RestrictedResidual));
+        return new Capability(resource, can, requires.Count == 0 ? NoResiduals : requires);
     }
+
+    // AUTHZ-GATE-005: what the grants confer is still subject to the session's gates,
+    // so an action the grants allow and the gate does not is refused with what it is
+    // waiting for rather than with a denial (AUTH-STEP-001).
+    private Result Outstanding(Permission permission) =>
+        gates.OutstandingOn(permission) is ErrorCode code
+            ? Result.Failure(Error.From(code))
+            : Result.Success();
 
     private static Result<IReadOnlyList<Capability>> Nothing(IReadOnlyList<ResourceId> resources) =>
         Result.Success<IReadOnlyList<Capability>>(

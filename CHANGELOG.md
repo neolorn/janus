@@ -251,6 +251,11 @@ against the public contract of LIB-API-001.
   category once its end has passed that category's retention. The two retention
   periods are passed in, because a key left at its default has no stored row the
   database could read, and either below the floor its key carries is refused.
+- A host binds one of its actions to a step-up gate in the model builder, and the gate
+  is then read wherever the action is: a capability for it carries `stepup` beside what
+  the grants confer, and a check of it is refused until the session satisfies the gate.
+  A deployment that registers no assurance provider is refused with
+  `auth.stepup.unavailable`, told apart from an ordinary denial.
 - An account under a processing restriction keeps its reading actions and is refused
   every action that would change anything, with `authz.restricted`, in a check, a
   listing filter and a capability alike. `read`, `list` and `export` are reading by
