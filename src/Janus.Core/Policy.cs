@@ -37,7 +37,7 @@ namespace Janus.Core;
 [SuppressMessage(
     "Naming",
     "CA1724:Type names should not match namespaces",
-    Justification = "Chapter 10 section 4.1a names it the policy object, and System.Security.Policy is a .NET Framework namespace that does not exist on this framework.")]
+    Justification = "Chapter 10 section 4.1a fixes the type name, and the System.Security.Policy namespace the rule matches it against is never referenced in this code base.")]
 public sealed record Policy(
     AssuranceLevel RequiredAssurance,
     IReadOnlySet<Factor> LoginFactors,
