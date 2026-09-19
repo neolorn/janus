@@ -488,6 +488,22 @@ decorate and miss background jobs, exports and webhooks.
 definition**: an expression composable into LINQ, and a parameterised SQL fragment
 for hand-written queries.
 
+**Shape (D-159).** The rule is evaluated in two steps that both renderings share.
+First the library resolves the principal's **subject set** (the account, its groups by
+the group closure, its organization roles): a small, bounded set, read once per request
+from the library's own store. Second, the rendering is a predicate over the host's row
+that asks the library's two contract tables whether any grant for that permission
+exists for one of those subjects on the resource **or on any of its ancestors**
+(AUTHZ-INHERIT-002); a deny grant defeats it. The LINQ rendering is
+`Expression<Func<TResource, bool>>` built from the host's resource-identifier selector
+and two `IQueryable`s the host supplies **from its own `DbContext`**: `AncestryEntry`
+and `EffectiveGrant`, public plain records in `Janus.Core`, mapped into the host's
+context by `MapJanusAuthorization(ModelBuilder)` in `Janus.Hosting`; the subquery is a
+same-context correlated `EXISTS` that EF Core translates. The SQL rendering is the same
+`EXISTS` over `janus.ancestry` and `janus.effective_grants`, with the row alias and
+column supplied by the caller and the subject set, permission and resource type as
+parameters. Neither rendering ever enumerates permitted resources (AUTHZ-PRIN-002).
+
 *Source: D-017*
 
 **Acceptance criteria**

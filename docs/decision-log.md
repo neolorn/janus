@@ -8298,6 +8298,41 @@ forgotten merge would redden `main` again for a reason with no substance.
 
 ---
 
+## D-159 — Phase 2 question: the filter is a same-context subquery over the contract tables
+
+**Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-017 (made concrete), D-149 (Hosting public surface) · **Extends:** D-158
+
+**TL;DR.** A permission filter over a host's row has to consult the library's ancestry
+and grants, which are not on that row. D-017 already made the ancestry closure public
+contract because hand-written SQL queries it; the LINQ side now uses the same fact. The
+host maps the two contract tables into its own context and hands their sets to the
+filter, and the expression is a correlated `EXISTS` subquery EF Core translates on its
+own. Nothing new is asked of the host beyond one `ModelBuilder` call.
+
+**The shape.** Two steps, shared by both renderings. The library first resolves the
+principal's subject set (account, groups by closure, organization roles): small, bounded,
+read once from the library's store. The rendering is then a predicate over the host's
+row: does a live, non-denied grant for this permission exist for one of those subjects
+on the resource or any ancestor. LINQ: `Expression<Func<TResource, bool>>` built from the
+host's identifier selector and the host's `IQueryable<AncestryEntry>` and
+`IQueryable<EffectiveGrant>` (public records in `Janus.Core`, mapped by
+`MapJanusAuthorization(ModelBuilder)` in `Janus.Hosting`). SQL: the same `EXISTS` over
+`janus.ancestry` and `janus.effective_grants` with alias and column from the caller and
+everything else parameterised. Both derive from one rule object; the truth table runs
+through both.
+
+**Rejected.** *Closing over the permitted identifiers* (reading 2): a grant on a
+container makes that set the size of the container, which is the post-filtering
+AUTHZ-PRIN-002 forbids under another name. *The expression as the library's own
+evaluation path and the fragment as the host's* (reading 3): it reads "composable into
+LINQ" out of AUTHZ-GATE-002, and D-017 pairs each rendering with one of the host's two
+tools for a reason.
+
+**Propagated to:** `03` AUTHZ-GATE-002 · `07` LIB-HOST-002 · `08` CONV-LAYOUT-002
+(Hosting's public surface).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -8466,6 +8501,7 @@ forgotten merge would redden `main` again for a reason with no substance.
 | Phase 1 questions, third stop: area grants to Storage.Tests; test infrastructure is Tier 1 | D-156 |
 | Phase 1 questions, fourth stop: photo unreadable not removed; administrative flag; role names; retention by argument | D-157 |
 | Phase 1, fifth stop: merge commits outside CONV-VCS-003; a gate's own defect is Tier 1 | D-158 |
+| Phase 2 question: the filter is a same-context EXISTS over the contract tables; subject set first | D-159 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

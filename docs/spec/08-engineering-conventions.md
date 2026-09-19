@@ -63,7 +63,8 @@ does for free.
 
 `Janus.Hosting` is public because the middleware pipeline and its ordering are part of
 the public contract (LIB-API-001, BFF-OWN-003) — a host must be able to mount it.
-Public in that project are exactly the mounting types and the `AddJanus` registration
+Public in that project are exactly the mounting types, the `MapJanusAuthorization`
+model-builder extension (AUTHZ-GATE-002, D-159) and the `AddJanus` registration
 entry point (CONV-DESIGN-007); request and response DTOs are `internal sealed record`,
 their wire shape being the contract, not their type.
 
