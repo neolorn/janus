@@ -2,7 +2,9 @@
 
 # CONV-VCS-003 AC1: the form of a commit message is a gate, not a habit. A description
 # over 72 characters, a body line that is prose rather than a dash fragment, and a
-# type outside the list all fail here.
+# type outside the list all fail here. A commit with two parents is the merge commit
+# the platform writes, which carries no change of its own and is outside the item, so
+# only single-parent commits are inspected.
 
 set -euo pipefail
 
@@ -18,13 +20,13 @@ if [ -n "$base" ] && [ "$base" != "$empty" ] && ! git cat-file -e "${base}^{comm
 fi
 
 if [ -z "$base" ] || [ "$base" = "$empty" ]; then
-  range="${head} -1"
+  range="--no-walk ${head}"
 else
   range="${base}..${head}"
 fi
 
 # shellcheck disable=SC2086 # the range is two arguments when only the head is checked
-commits=$(git rev-list ${range})
+commits=$(git rev-list --no-merges ${range})
 status=0
 
 for commit in $commits; do

@@ -8280,6 +8280,24 @@ OPS-MIG-003.
 
 ---
 
+## D-158 — Phase 1, fifth stop: merge commits are outside the message rule; a gate's own defect is Tier 1
+
+**Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-149 (CONV-VCS-003), the agent instructions (Tier 1) · **Extends:** D-157
+
+**TL;DR.** The commit-message gate has been red on `main` since the first merge because
+it inspects the merge commit the platform writes. A merge commit carries no change and
+was never what CONV-VCS-003 is about; the gate skips two-parent commits. And a gate that
+fails on something its own chapter does not say is a defect in the gate, which the agent
+fixes and records rather than stopping for.
+
+Rejected: a Conventional message on every merge commit. It would have to be typed at
+merge time by whoever merges, it says nothing the pull request title does not, and one
+forgotten merge would redden `main` again for a reason with no substance.
+
+**Propagated to:** `08` CONV-VCS-003 · the working guide section 3.
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -8447,6 +8465,7 @@ OPS-MIG-003.
 | Phase 1 questions, second stop: persistence records and the port encrypt; kind detection; collation scope | D-155 |
 | Phase 1 questions, third stop: area grants to Storage.Tests; test infrastructure is Tier 1 | D-156 |
 | Phase 1 questions, fourth stop: photo unreadable not removed; administrative flag; role names; retention by argument | D-157 |
+| Phase 1, fifth stop: merge commits outside CONV-VCS-003; a gate's own defect is Tier 1 | D-158 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

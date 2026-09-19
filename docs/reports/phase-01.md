@@ -8,12 +8,13 @@ its port, the profile, the photo, the preferences, organizations, memberships, t
 trail with its partitions and its two maintenance functions, the three database roles
 and the erasure are in place and green.
 
-The question of the third run is answered by D-156 and the three of the fourth by D-157,
-and all four are implemented here: each area project grants its internals to
-`Janus.Storage.Tests`; the photo row stays where it is with its bytes unreadable; the
-administrative organization is marked on its own row and refuses its own deletion; and
-the roles are `janus_migrate`, `janus_app` and `janus_maintenance`, with the partition
-drop taking the two retentions as arguments.
+The question of the third run is answered by D-156, the three of the fourth by D-157 and
+the one of the fifth by D-158, and all five are implemented here: each area project
+grants its internals to `Janus.Storage.Tests`; the photo row stays where it is with its
+bytes unreadable; the administrative organization is marked on its own row and refuses
+its own deletion; the roles are `janus_migrate`, `janus_app` and `janus_maintenance`,
+with the partition drop taking the two retentions as arguments; and the commit-message
+gate inspects single-parent commits only.
 
 ## 1. Items implemented
 
@@ -160,10 +161,11 @@ Criteria no test can decide, and how each was verified:
 | `src/Janus.Storage/Migrations/20260919124515_AddDatabaseRoles.cs`, the revokes | PRIV-RET-002 says the drop function is "executable only by" the maintenance role, and PostgreSQL grants execution on a new function to everyone | PRIV-RET-002, whose word is "only" | Execution is taken from everyone and given back to the one role, for both functions |
 | `src/Janus.Identity/Organizations/Organization.cs`, `RequestDeletion` | IDN-ORG-004 AC1 requires a refusal carrying `identity.organization.protected`, and the method returned nothing | CONV-DESIGN-005, under which an expected outcome is a `Result` carrying a code, which `PreferenceSet.Set` already is | The method returns a `Result`; the two conditions no chapter names a code for stay exceptions, because they are misuse rather than a refusal |
 | `src/Janus.Core/AuditAction.cs` | PRIV-RET-004 requires a code rather than a sentence, and no chapter enumerates the codes an audit record carries | CONV-NAME-003, which fixes the shape of a dotted code, with PRIV-RET-004 | The action is a dotted code of the same shape as an error code, parsed and refused the same way; the set is open, because each phase records the events it adds |
+| `.github/gates/commit-message.sh` | The job inspected the merge commit the platform writes on a pull request, whose subject is not a Conventional description, so the default branch was red on a commit that carries no change | CONV-VCS-003 AC1, under which a commit with two parents is outside the item and the gate inspects single-parent commits only (D-158) | The range the job walks excludes merges, and the head-only range yields nothing when the head is itself a merge |
 
 ## 4. Open questions
 
-None. The three of the previous run are answered by D-157 and implemented above.
+None.
 
 ## 5. Gate result
 
@@ -183,15 +185,24 @@ request #6, runs `35436793900` and `35436801833`, `35438577668` and `35438580241
 finally `35443959810` (push) and `35443961616` (pull request), carrying the
 administrative organization, the photo criterion and the three database roles.
 
-The last pull-request run is green on all nineteen jobs it runs, including `Integration
-tests`, `Double migration run`, `Unicode tables regenerate without a diff`, `Commit
-message format` and `Changelog line present`; `Secret scanning` runs on the push event,
-as CONV-GATE-002 states, and the last push run is green. Six earlier pull-request runs
-failed `Commit message format` alone, on two messages of 74 characters where
-CONV-VCS-003 AC1 allows 72; both were rewritten and the branch force-pushed with the
-lease, so the messages in history are
+The branch's runs `35444156089` (push) and `35444158631` (pull request) are
+green on every job, including `Integration tests`, `Double migration run`, `Unicode
+tables regenerate without a diff`, `Commit message format` and `Changelog line present`;
+`Secret scanning` runs on the push event, as CONV-GATE-002 states. Six earlier
+pull-request runs failed `Commit message format` alone, on two messages of 74 characters
+where CONV-VCS-003 AC1 allows 72; both were rewritten and the branch force-pushed with
+the lease, so the messages in history are
 `test(storage): run the account and subject-key ports against a database` and
 `- a column names a collation by one identifier, never by a schema`.
+
+The phase merged through pull request #6 with every check green. The push run that
+followed on the default branch, `35444325117`, failed `Commit message format` on the
+merge commit itself, as the run of pull request #4's merge, `35432996701`, had. D-158
+settles that a commit with two parents is outside CONV-VCS-003, and the job now walks
+single-parent commits only; replayed over the push event that produced `35444325117`,
+it passes. The report and the fix stand on branch `phase-01-report`, pull request #7,
+whose runs `35444550704` (push) and `35444557736` (pull request) were green before the
+fix and `35444996427` (push) and `35444998653` (pull request) after it.
 
 Tests: 562, all passing. `tests/Janus.Core.Tests` 348, `tests/Janus.Storage.Tests` 124
 (25 unit, 99 integration), `tests/Janus.Identity.Tests` 62,
