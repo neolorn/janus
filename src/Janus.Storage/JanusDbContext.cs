@@ -1,5 +1,6 @@
 using System;
 using Janus.Storage.Identity.Accounts;
+using Janus.Storage.Identity.Audit;
 using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Identity.Preferences;
@@ -90,6 +91,11 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     public DbSet<SubjectKeyRecord> SubjectKeys => Set<SubjectKeyRecord>();
 
     /// <summary>
+    /// The audit trail. It is appended to and read; nothing changes or removes a row.
+    /// </summary>
+    public DbSet<AuditRowRecord> AuditRecords => Set<AuditRowRecord>();
+
+    /// <summary>
     /// The runtime-changeable configuration values in force.
     /// </summary>
     public DbSet<SettingRecord> Settings => Set<SettingRecord>();
@@ -120,6 +126,7 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new ProfilePhotoConfiguration());
         modelBuilder.ApplyConfiguration(new PreferenceConfiguration());
         modelBuilder.ApplyConfiguration(new SubjectKeyConfiguration());
+        modelBuilder.ApplyConfiguration(new AuditConfiguration());
         modelBuilder.ApplyConfiguration(new SettingConfiguration());
     }
 }

@@ -154,6 +154,17 @@ against the public contract of LIB-API-001.
   which the row stays and the identifier goes on resolving. A membership is a record
   of its own that ends without touching either side, and an account may hold more
   than one. Nothing in the schema separates staff from customers.
+- An audit trail. Every record names who acted, whose identity the action was taken
+  under, the instant it occurred and the organization where one applies; an event about
+  a principal holding no membership carries none, and the absence is the recorded fact.
+  What happened is a code and never a sentence. The table is partitioned by retention
+  category and then by calendar month, three months kept open ahead by
+  `audit_ensure_partitions`, and an attribute an event must record is held under the
+  subject's own key, so erasure reaches it without a row being touched.
+- Named principals for background jobs, imports and webhooks. One acts for a single
+  organization and reaches no other; the other exists for pool-wide work, runs only
+  the operations it names and acts for nobody. Neither can be constructed without a
+  stated reason.
 
 ### Changed
 

@@ -2,12 +2,14 @@ using System;
 using System.Security.Cryptography;
 using Janus.Core;
 using Janus.Identity.Accounts;
+using Janus.Identity.Audit;
 using Janus.Identity.Identifiers;
 using Janus.Identity.Organizations;
 using Janus.Identity.Preferences;
 using Janus.Identity.Profiles;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Identity.Accounts;
+using Janus.Storage.Identity.Audit;
 using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Identity.Preferences;
@@ -78,6 +80,10 @@ internal static class StorageRegistration
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IPreferenceStore>(provider => new PreferenceStore(
+            provider.GetRequiredService<JanusDbContext>(),
+            keyEncryptionKeys,
+            provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<IAuditStore>(provider => new AuditStore(
             provider.GetRequiredService<JanusDbContext>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
