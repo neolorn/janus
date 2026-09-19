@@ -36,10 +36,11 @@ public sealed class CredentialLabelTests
     }
 
     /// <summary>
-    /// AUTH-FACT-001: the default label is the client's description of the device.
+    /// AUTH-FACT-001 AC6: an enrolment that supplies no label takes the client's
+    /// description of the device.
     /// </summary>
     [Fact]
-    public void AUTH_FACT_001_TheDefaultLabelIsTheDeviceDescription() =>
+    public void AUTH_FACT_001_AC6_TheDefaultLabelIsTheDeviceDescription() =>
         Assert.Equal(
             "Firefox Fedora",
             CredentialLabel.Of(new DeviceDescription("Firefox", "Fedora")).Value);

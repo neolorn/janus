@@ -211,6 +211,48 @@ public sealed class PolicyResolutionTests : IDisposable
             PolicyStrictness.Strictest(one, other).EmailDomains);
     }
 
+    /// <summary>
+    /// AUTH-STEP-002a AC1: a principal holding no membership resolves to the system
+    /// policy, whose login rule and gates are the ones it is judged by.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_STEP_002a_AC1_APrincipalWithNoMembershipResolvesToTheSystemPolicyAsync()
+    {
+        Policy resolved = await ResolvedAsync(SubjectId.New(_randomness));
+
+        Assert.Equal<IEnumerable<Factor>>([.. SystemPolicy.LoginFactors], [.. resolved.LoginFactors]);
+        Assert.Equal(SystemPolicy.Gates, resolved.Gates);
+    }
+
+    /// <summary>
+    /// AUTH-STEP-002a AC2: tightening the administrative organization's login rule
+    /// and its gates leaves a customer where they stood, the two being resolved from
+    /// the principal's own membership.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_STEP_002a_AC2_TheAdministrativeOrganizationsPolicyDoesNotReachACustomerAsync()
+    {
+        var customer = SubjectId.New(_randomness);
+        OrganizationId administrative = Organization();
+
+        _memberships.Place(SubjectId.New(_randomness), administrative);
+
+        Policy before = await ResolvedAsync(customer);
+
+        Override(administrative, new PolicyOverride(
+            AssuranceLevel.Aal2,
+            new[] { Factor.Passkey }.ToFrozenSet(),
+            Enum.GetValues<StepUpAction>().ToFrozenDictionary(
+                action => action,
+                _ => new Gate(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5))),
+            CredentialRedundancy.Enforced,
+            SelfServiceRecovery: false,
+            null));
+
+        AssertTheSame(before, await ResolvedAsync(customer));
+        AssertTheSame(SystemPolicy, await ResolvedAsync(customer));
+    }
+
     // A policy's collections are compared by reference by the record it is, so two
     // policies saying the same thing are compared field by field.
     private static void AssertTheSame(Policy expected, Policy actual)

@@ -405,6 +405,40 @@ public sealed class BrowserProfileTests : IDisposable
     }
 
     /// <summary>
+    /// BFF-CSRF-005 AC4: a return the provider makes as a top-level navigation keeps
+    /// the session and reaches the application, while one arriving as a cross-site
+    /// state change does not, which is why a return that posts has to land on a route
+    /// that reads. The cookie a public application issues is lax, so the browser
+    /// carries it on that navigation (BFF-CSRF-005 AC2).
+    /// </summary>
+    [Fact]
+    public async Task BFF_CSRF_005_AC4_AReturnByNavigationKeepsTheSessionAsync()
+    {
+        var log = new LogInMemory<ResourceIsolation>();
+        (OpaqueToken secret, OpaqueToken _) = await LiveAsync();
+        HttpContext navigating = Arriving(
+            "GET",
+            ("Sec-Fetch-Site", "cross-site"),
+            ("Sec-Fetch-Mode", "navigate"));
+
+        Carrying(navigating, secret);
+
+        await new ResourceIsolation(log).InvokeAsync(navigating, Endpoint);
+
+        Assert.True(_reached);
+        Assert.Equal(
+            secret.Value,
+            navigating.Request.Cookies[BrowserCookies.Session]);
+
+        _reached = false;
+
+        await new ResourceIsolation(log)
+            .InvokeAsync(Arriving("POST", ("Sec-Fetch-Site", "cross-site")), Endpoint);
+
+        Assert.False(_reached);
+    }
+
+    /// <summary>
     /// BFF-CSRF-001 AC2: no endpoint can be excluded by configuration or attribute,
     /// the pipeline reading neither the endpoint nor its metadata.
     /// </summary>

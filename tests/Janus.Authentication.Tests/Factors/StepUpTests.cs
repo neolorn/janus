@@ -420,6 +420,159 @@ public sealed class StepUpTests : IDisposable
         Assert.False(open.PhishingResistant);
     }
 
+    /// <summary>
+    /// AUTH-STEP-002 AC1: a gate is a required tier, a phishing-resistance
+    /// requirement and a maximum age, and carries nothing else; no value of it names
+    /// a factor.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_002_AC1_AGateIsThreeValuesAndNamesNoFactor()
+    {
+        Assert.Equal(
+            ["Level", "MaximumAge", "PhishingResistant"],
+            [.. typeof(Gate)
+                .GetProperties()
+                .Select(property => property.Name)
+                .Order(StringComparer.Ordinal)]);
+
+        Assert.DoesNotContain(
+            typeof(Gate).GetProperties(),
+            property => property.PropertyType.FullName!.Contains(
+                nameof(Factor),
+                StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// AUTH-STEP-002 AC2: what a gate requires is read from the session record and
+    /// what the account reaches, so a session that already proved it is not
+    /// challenged whatever the account is enrolled in.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_002_AC2_TheDecisionReadsTheSessionAndWhatIsReachable()
+    {
+        Session proved = Signed(new Assurance(AssuranceLevel.Aal2, PhishingResistant: true));
+        Gate gate = Gate(GateLevel.Aal2, phishingResistant: true);
+
+        Assert.All(
+            Accounts(),
+            held => Assert.Equal(
+                StepUpOutcome.Satisfied,
+                StepUp.On(proved, gate, held, Noon).Outcome));
+    }
+
+    /// <summary>
+    /// AUTH-STEP-002 AC6: the offer holds every combination that reaches the gate and
+    /// none that falls short of it, the same account being offered nothing at all
+    /// where the gate asks for relay resistance it cannot reach.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_002_AC6_NothingThatFallsShortIsOffered()
+    {
+        HeldFactors held = Held(password: true, Factor.Totp, Factor.PhoneCode);
+
+        Assert.Equal(
+            [[Factor.Password, Factor.Totp], [Factor.Password, Factor.PhoneCode]],
+            Offered(Challenge(Gate(GateLevel.Aal2, phishingResistant: false), held)));
+        Assert.Empty(Offered(Challenge(Gate(GateLevel.Aal2, phishingResistant: true), held)));
+    }
+
+    /// <summary>
+    /// AUTH-STEP-004 AC3: the exception is the session's and dies with it, so the
+    /// next session the same subject holds is asked what every other session is.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_004_AC3_TheExceptionDoesNotOutliveTheSession()
+    {
+        var subject = SubjectId.New(_randomness);
+        Gate gate = Gate(GateLevel.Aal2, phishingResistant: true);
+
+        Assert.Equal(
+            StepUpOutcome.Satisfied,
+            StepUp.On(Standing(subject, satisfiesEveryGate: true), gate, Held(password: true), Noon)
+                .Outcome);
+
+        Assert.Equal(
+            StepUpOutcome.Enrol,
+            StepUp.On(Standing(subject, satisfiesEveryGate: false), gate, Held(password: true), Noon)
+                .Outcome);
+    }
+
+    /// <summary>
+    /// AUTH-STEP-005 AC2: a subject holding only what a provider asserted is told to
+    /// enrol, and enrolling either entry that begins an authentication on its own
+    /// lifts them past the gate. Which entry that is the catalogue says and this rule
+    /// does not.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_005_AC2_ASocialOnlySubjectIsToldToEnrol()
+    {
+        Gate gate = Gate(GateLevel.Reachable, phishingResistant: false);
+        StepUpChallenge challenge = Challenge(gate, Held(password: false, Factor.Google, Factor.Apple));
+
+        Assert.Equal(StepUpOutcome.Enrol, challenge.Outcome);
+        Assert.Equal(AssuranceLevel.Aal1, challenge.Required);
+        Assert.Empty(challenge.Combinations);
+
+        Assert.All(
+            new[] { Factor.Password, Factor.Passkey },
+            enrolled => Assert.Equal(
+                StepUpOutcome.Present,
+                Challenge(gate, Held(password: false, Factor.Google, enrolled)).Outcome));
+    }
+
+    /// <summary>
+    /// AUTH-STEP-005 AC3: what the provider asserted decides nothing, so a session it
+    /// began passes no gate on its word and holding its credential changes no offer.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_005_AC3_WhatTheProviderAssertedDecidesNothing()
+    {
+        Gate gate = Gate(GateLevel.Reachable, phishingResistant: false);
+        Session signed = Signed(new Assurance(AssuranceLevel.Delegated, PhishingResistant: false));
+
+        Assert.All(
+            new[] { Factor.Google, Factor.Apple },
+            provider => Assert.Equal(
+                StepUpOutcome.Enrol,
+                StepUp.On(signed, gate, Held(password: false, provider), Noon).Outcome));
+
+        Assert.Equal(
+            Offered(StepUp.On(signed, gate, Held(password: true), Noon)),
+            Offered(StepUp.On(signed, gate, Held(password: true, Factor.Google, Factor.Apple), Noon)));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002a AC4: the prompt on a session a provider began offers only the
+    /// account's own factors that reach the declared tier; the provider's credential
+    /// is in none of them.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_002a_AC4_TheProvidersCredentialIsInNoCombination() =>
+        Assert.Equal(
+            [[Factor.Password, Factor.Totp]],
+            Offered(StepUp.On(
+                Signed(new Assurance(AssuranceLevel.Delegated, PhishingResistant: false)),
+                Gate(GateLevel.Aal2, phishingResistant: false),
+                Held(password: true, Factor.Google, Factor.Totp),
+                Noon)));
+
+    /// <summary>
+    /// AUTH-SESS-009 AC2: a session standing below a requirement that has since been
+    /// raised passes no gate under it and is told what to present again.
+    /// </summary>
+    [Fact]
+    public void AUTH_SESS_009_AC2_ASessionBelowTheRaisedRequirementIsAskedAgain()
+    {
+        StepUpChallenge challenge = StepUp.On(
+            Signed(new Assurance(AssuranceLevel.Aal1, PhishingResistant: false)),
+            Janus.Core.Policies.AdministrativeOrganization.Gates[StepUpAction.PrivacyExport],
+            Held(password: true, Factor.SecurityKey),
+            Noon);
+
+        Assert.Equal(StepUpOutcome.Present, challenge.Outcome);
+        Assert.Equal([[Factor.Password, Factor.SecurityKey]], Offered(challenge));
+    }
+
     private static HashSet<Factor> Set(params Factor[] factors) => [.. factors];
 
     private static Gate Gate(GateLevel level, bool phishingResistant) =>
@@ -465,6 +618,17 @@ public sealed class StepUpTests : IDisposable
         Held(password: true, Factor.Passkey, Factor.Totp),
         Held(password: false, Factor.Totp),
     ];
+
+    private static Session Standing(SubjectId subject, bool satisfiesEveryGate) =>
+        Session.Begin(
+            SessionId.New(TimeProvider.System),
+            subject,
+            new Assurance(AssuranceLevel.Aal1, PhishingResistant: false),
+            Origin(),
+            Noon,
+            TimeSpan.FromMinutes(30),
+            TimeSpan.FromHours(1),
+            satisfiesEveryGate);
 
     private StepUpChallenge Challenge(Gate gate, HeldFactors held) =>
         StepUp.On(Signed(null), gate, held, Noon);
