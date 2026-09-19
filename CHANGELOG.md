@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Every session carries a synchronizer token of its own, bound to that session and
+  to no other, and reissued whenever the session's secret is. Neither value is ever
+  read back: the record holds only what each fingerprints to.
 - A password is screened against the compromised-password corpus over the range
   API, which is sent five characters of a hash and never the password or the whole
   hash. Where the service cannot answer the deployment's offline list answers and

@@ -10,7 +10,7 @@ namespace Janus.Storage.Authentication.Sessions;
 /// How a session is stored.
 /// </summary>
 /// <remarks>
-/// Implements AUTH-SESS-001, AUTH-SESS-002, AUTH-SESS-003, AUTH-SESS-013 and
+/// Implements AUTH-SESS-001, AUTH-SESS-002, AUTH-SESS-003, AUTH-SESS-013, BFF-CSRF-001 and
 /// CONV-ENUM-001. The spine is indexed, so ending a record is one statement over the
 /// sessions that name it.
 /// </remarks>
@@ -68,6 +68,10 @@ internal sealed class SessionConfiguration : IEntityTypeConfiguration<SessionRec
 
         builder.Property(session => session.SecretFingerprint)
             .HasColumnName("secret_fingerprint")
+            .HasMaxLength(Fingerprint.Length);
+
+        builder.Property(session => session.CsrfFingerprint)
+            .HasColumnName("csrf_fingerprint")
             .HasMaxLength(Fingerprint.Length);
 
         builder.Property(session => session.CreatedAt).HasColumnName("created_at");

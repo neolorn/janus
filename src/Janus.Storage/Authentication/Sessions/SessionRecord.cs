@@ -28,6 +28,9 @@ internal sealed class SessionRecord
     /// <summary>The <c>secret_fingerprint</c> column.</summary>
     public byte[] SecretFingerprint { get; set; } = [];
 
+    /// <summary>The fingerprint of the synchronizer token bound to the session.</summary>
+    public byte[] CsrfFingerprint { get; set; } = [];
+
     /// <summary>The <c>created_at</c> column.</summary>
     public DateTimeOffset CreatedAt { get; set; }
 

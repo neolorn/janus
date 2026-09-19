@@ -168,7 +168,7 @@ internal sealed class SessionService(
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The new secret, or the failure where nothing was presented.</returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
-    public async ValueTask<Result<OpaqueToken>> PresentAsync(
+    public async ValueTask<Result<IssuedSession>> PresentAsync(
         Session session,
         IReadOnlyCollection<Factor> presented,
         CancellationToken cancellationToken)
@@ -178,11 +178,12 @@ internal sealed class SessionService(
 
         if (presented.Count == 0)
         {
-            return Result.Failure<OpaqueToken>(Error.From(ErrorCodes.FactorRequired));
+            return Result.Failure<IssuedSession>(Error.From(ErrorCodes.FactorRequired));
         }
 
         DateTimeOffset now = time.GetUtcNow();
         var secret = OpaqueToken.Draw(randomness);
+        var token = OpaqueToken.Draw(randomness);
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
@@ -195,13 +196,14 @@ internal sealed class SessionService(
         }
 
         await sessions.RecordAsync(session, cancellationToken).ConfigureAwait(false);
-        await sessions.ReplaceSecretAsync(session.Id, secret.Fingerprint(), cancellationToken)
+        await sessions
+            .ReplaceSecretAsync(session.Id, secret.Fingerprint(), token.Fingerprint(), cancellationToken)
             .ConfigureAwait(false);
         await audit.PresentedAsync(session.Id, session.Subject, presented, now, cancellationToken)
             .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-        return Result.Success(secret);
+        return Result.Success(new IssuedSession(session.Id, secret, token));
     }
 
     /// <summary>
@@ -268,19 +270,49 @@ internal sealed class SessionService(
             await LifetimesAsync(policy, cancellationToken).ConfigureAwait(false);
 
         var restored = OpaqueToken.Draw(randomness);
+        var restoredToken = OpaqueToken.Draw(randomness);
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
         session.Present(proved, now);
         session.Touch(origin, now, inactivity);
         await sessions.RecordAsync(session, cancellationToken).ConfigureAwait(false);
-        await sessions.ReplaceSecretAsync(session.Id, restored.Fingerprint(), cancellationToken)
+        await sessions
+            .ReplaceSecretAsync(
+                session.Id,
+                restored.Fingerprint(),
+                restoredToken.Fingerprint(),
+                cancellationToken)
             .ConfigureAwait(false);
         await audit.PresentedAsync(session.Id, session.Subject, presented, now, cancellationToken)
             .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-        return Result.Success(new IssuedSession(session.Id, restored));
+        return Result.Success(new IssuedSession(session.Id, restored, restoredToken));
+    }
+
+    /// <summary>
+    /// Whether the synchronizer token a request presented is the one bound to its
+    /// session.
+    /// </summary>
+    /// <param name="id">Which session.</param>
+    /// <param name="presented">The token the request carried.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Whether it matches. A session with no token, and a request that presents the
+    /// wrong one, both answer no; the comparison does not depend on how much of the
+    /// value matched (BFF-CSRF-001).
+    /// </returns>
+    public async ValueTask<bool> CsrfMatchesAsync(
+        SessionId id,
+        OpaqueToken presented,
+        CancellationToken cancellationToken)
+    {
+        byte[]? bound = await sessions.CsrfFingerprintAsync(id, cancellationToken)
+            .ConfigureAwait(false);
+
+        return bound is not null
+            && CryptographicOperations.FixedTimeEquals(bound, presented.Fingerprint());
     }
 
     /// <summary>
@@ -291,20 +323,22 @@ internal sealed class SessionService(
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The new secret.</returns>
     /// <exception cref="ArgumentNullException">The session is absent.</exception>
-    public async ValueTask<Result<OpaqueToken>> RotateAsync(
+    public async ValueTask<Result<IssuedSession>> RotateAsync(
         Session session,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
 
         var secret = OpaqueToken.Draw(randomness);
+        var token = OpaqueToken.Draw(randomness);
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-        await sessions.ReplaceSecretAsync(session.Id, secret.Fingerprint(), cancellationToken)
+        await sessions
+            .ReplaceSecretAsync(session.Id, secret.Fingerprint(), token.Fingerprint(), cancellationToken)
             .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-        return Result.Success(secret);
+        return Result.Success(new IssuedSession(session.Id, secret, token));
     }
 
     /// <summary>
@@ -357,12 +391,15 @@ internal sealed class SessionService(
 
         Session derived = record.Derive(SessionId.New(time), type, origin, now, inactivity);
         var secret = OpaqueToken.Draw(randomness);
+        var token = OpaqueToken.Draw(randomness);
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-        await sessions.AddAsync(derived, secret.Fingerprint(), cancellationToken).ConfigureAwait(false);
+        await sessions
+            .AddAsync(derived, secret.Fingerprint(), token.Fingerprint(), cancellationToken)
+            .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-        return Result.Success(new IssuedSession(derived.Id, secret));
+        return Result.Success(new IssuedSession(derived.Id, secret, token));
     }
 
     /// <inheritdoc/>
@@ -613,13 +650,16 @@ internal sealed class SessionService(
             absolute,
             satisfiesEveryGate);
         var secret = OpaqueToken.Draw(randomness);
+        var token = OpaqueToken.Draw(randomness);
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-        await sessions.AddAsync(session, secret.Fingerprint(), cancellationToken).ConfigureAwait(false);
+        await sessions
+            .AddAsync(session, secret.Fingerprint(), token.Fingerprint(), cancellationToken)
+            .ConfigureAwait(false);
         await audit.PresentedAsync(session.Id, subject, presented, now, cancellationToken)
             .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-        return Result.Success(new IssuedSession(session.Id, secret));
+        return Result.Success(new IssuedSession(session.Id, secret, token));
     }
 }
