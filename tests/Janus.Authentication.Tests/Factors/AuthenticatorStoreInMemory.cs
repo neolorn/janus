@@ -38,6 +38,14 @@ internal sealed class AuthenticatorStoreInMemory : IAuthenticatorStore
         ValueTask.FromResult(_held.GetValueOrDefault(id));
 
     /// <inheritdoc/>
+    public ValueTask<Authenticator?> ByCredentialAsync(
+        ReadOnlyMemory<byte> credentialId,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_held.Values.FirstOrDefault(credential =>
+            credential.WebAuthn is not null
+            && credential.WebAuthn.CredentialId.Span.SequenceEqual(credentialId.Span)));
+
+    /// <inheritdoc/>
     public ValueTask<IReadOnlyList<Authenticator>> OfAsync(
         SubjectId subject,
         CancellationToken cancellationToken) =>

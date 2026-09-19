@@ -16,6 +16,14 @@ against the public contract of LIB-API-001.
   origins share rather than taken from the first of them. The related-origins
   document lists exactly the additional origins configured, and a set of them wider
   than a browser reads stops the deployment too.
+- A WebAuthn credential records the relying party it was created under, whether it
+  may be synced and whether it currently is, so a credential left behind by a
+  configuration change is found from the account's own record rather than at a
+  sign-in that fails without explanation. Enrolment refuses an algorithm outside the
+  configured allow-list and a ceremony that verified nobody, asks for no attestation,
+  and a signature counter that fails to advance is refused and audited as the cloned
+  credential it indicates. A second-factor security key can be re-registered as a
+  passkey, which retires the entry it came from.
 - Recovery codes are issued ten at a time, each ten symbols of an alphabet that omits
   the letters a reader confuses with digits, and are read back leniently: case,
   spacing and those confusions make no difference to whether a code is accepted. Only

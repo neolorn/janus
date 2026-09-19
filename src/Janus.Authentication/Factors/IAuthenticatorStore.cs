@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,6 +20,18 @@ internal interface IAuthenticatorStore
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The credential, or nothing where there is none.</returns>
     ValueTask<Authenticator?> FindAsync(AuthenticatorId id, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads the credential an authenticator answered with, which is how a
+    /// discoverable credential is resolved: the browser names the credential and not
+    /// the account.
+    /// </summary>
+    /// <param name="credentialId">What the authenticator returned.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The credential, or nothing where there is none.</returns>
+    ValueTask<Authenticator?> ByCredentialAsync(
+        ReadOnlyMemory<byte> credentialId,
+        CancellationToken cancellationToken);
 
     /// <summary>
     /// Every credential of an account, whatever its state.
