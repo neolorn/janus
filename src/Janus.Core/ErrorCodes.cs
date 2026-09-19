@@ -57,4 +57,81 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements PRIV-CONS-005, LIB-HOST-001, chapter 10 section 1.5.</remarks>
     public static ErrorCode StartupGoverningLanguage { get; } = ErrorCode.Parse("model.startup.governinglanguage");
+
+    /// <summary>
+    /// Startup: a value the deployment has to name, a subject-event handler or a
+    /// restriction key supplier is absent. The details name it under <c>key</c>,
+    /// <c>handler</c> or <c>supplier</c>; supply it.
+    /// </summary>
+    /// <remarks>Implements LIB-HOST-001, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupDeclarationMissing { get; } = ErrorCode.Parse("model.startup.declarationmissing");
+
+    /// <summary>
+    /// Startup: a resource type references a type the model does not declare. Declare
+    /// the referenced type or drop the reference.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-MODEL-004, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupUndeclaredTypeReference { get; } = ErrorCode.Parse("model.type.undeclaredreference");
+
+    /// <summary>
+    /// Startup: a role grants a permission the model does not declare. Declare the
+    /// permission or drop it from the role.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-MODEL-004, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupUndeclaredPermission { get; } = ErrorCode.Parse("model.role.undeclaredpermission");
+
+    /// <summary>
+    /// Startup: a derivation references a type or relationship the model does not
+    /// declare. Declare it or drop the derivation.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-MODEL-004, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupUndeclaredDerivationReference { get; } = ErrorCode.Parse("model.derivation.undeclaredreference");
+
+    /// <summary>
+    /// A preference value is of a type other than its declaration. Send a value of the
+    /// declared type.
+    /// </summary>
+    /// <remarks>Implements REG-PREF-001, chapter 10 section 1.5.</remarks>
+    public static ErrorCode PreferenceWrongType { get; } = ErrorCode.Parse("identity.preference.wrongtype");
+
+    /// <summary>
+    /// The preference set would exceed <c>preferences.maxsize</c>. Remove or shorten a
+    /// value.
+    /// </summary>
+    /// <remarks>Implements REG-PREF-001, chapter 10 section 1.5.</remarks>
+    public static ErrorCode PreferenceTooLarge { get; } = ErrorCode.Parse("identity.preference.toolarge");
+
+    /// <summary>
+    /// The preference is declared administrator-only and the person is not one. Ask an
+    /// administrator to set it.
+    /// </summary>
+    /// <remarks>Implements REG-PREF-001, chapter 10 section 1.5.</remarks>
+    public static ErrorCode PreferenceAdministratorOnly { get; } = ErrorCode.Parse("identity.preference.administratoronly");
+
+    /// <summary>
+    /// A bot-defence signal fired and the host declared a challenge verifier. Present a
+    /// passing challenge token and repeat the step.
+    /// </summary>
+    /// <remarks>Implements AUTH-ABUSE-008, chapter 10 section 1.5.</remarks>
+    public static ErrorCode ChallengeRequired { get; } = ErrorCode.Parse("auth.challenge.required");
+
+    /// <summary>
+    /// A grant was created or revoked without a reason. Supply a non-empty reason.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-003, chapter 10 section 1.5.</remarks>
+    public static ErrorCode GrantReasonRequired { get; } = ErrorCode.Parse("authz.grant.reasonrequired");
+
+    /// <summary>
+    /// The change would leave an alert destination list empty. Add a destination
+    /// before removing the last one.
+    /// </summary>
+    /// <remarks>Implements OPS-ALERT-004a, chapter 10 section 1.5.</remarks>
+    public static ErrorCode ConfigurationLastDestination { get; } = ErrorCode.Parse("config.value.lastdestination");
+
+    /// <summary>
+    /// An unhandled fault. The body carries the correlation identifier and nothing
+    /// else; quote it when reporting the fault.
+    /// </summary>
+    /// <remarks>Implements BFF-ERR-002, chapter 10 sections 1.5 and 6.</remarks>
+    public static ErrorCode SystemFault { get; } = ErrorCode.Parse("system.fault");
 }

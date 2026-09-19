@@ -31,3 +31,7 @@ against the public contract of LIB-API-001.
   `aal2`, and refuses the emergency credential as a login factor.
 - `config.value.notallowed`: a configuration value outside its key's set, or of the
   wrong type, is now refused with its own code.
+- The rest of the error catalogue: a missing deployment declaration, a model
+  reference to something the host never declared, the three preference refusals, a
+  required challenge, a grant with no reason, the last alert destination, and an
+  unhandled fault.

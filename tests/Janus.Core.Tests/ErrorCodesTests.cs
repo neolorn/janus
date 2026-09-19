@@ -17,13 +17,24 @@ public sealed class ErrorCodesTests
 {
     private static readonly string[] Catalogue =
     [
+        "auth.challenge.required",
+        "authz.grant.reasonrequired",
         "config.change.stepuprequired",
         "config.key.protected",
         "config.policy.belowsystem",
         "config.value.aboveceiling",
         "config.value.belowfloor",
+        "config.value.lastdestination",
         "config.value.notallowed",
+        "identity.preference.administratoronly",
+        "identity.preference.toolarge",
+        "identity.preference.wrongtype",
+        "model.derivation.undeclaredreference",
+        "model.role.undeclaredpermission",
+        "model.startup.declarationmissing",
         "model.startup.governinglanguage",
+        "model.type.undeclaredreference",
+        "system.fault",
     ];
 
     /// <summary>
