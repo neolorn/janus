@@ -1,5 +1,9 @@
 using System;
 using Janus.Core;
+using Janus.Identity.Accounts;
+using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Identity.Accounts;
+using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -12,7 +16,8 @@ namespace Janus.Storage;
 internal static class StorageRegistration
 {
     /// <summary>
-    /// Registers the context, the unit of work and the connection accessor.
+    /// Registers the context, the unit of work, the connection accessor and the
+    /// persistence ports.
     /// </summary>
     /// <param name="services">The host's collection.</param>
     /// <param name="connectionString">
@@ -33,6 +38,9 @@ internal static class StorageRegistration
 
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<DataConnections>();
+
+        services.AddScoped<IAccountStore, AccountStore>();
+        services.AddScoped<ISubjectKeyStore, SubjectKeyStore>();
 
         return services;
     }

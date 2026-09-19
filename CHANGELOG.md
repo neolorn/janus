@@ -103,6 +103,9 @@ against the public contract of LIB-API-001.
   entered and the form it is compared under, exactly one identifier of a kind is
   primary once the account has a verified one of that kind, and each kind's backup
   setting decides who a security notice reaches beyond the primary.
+- An account and its per-subject data key are now written and read back through
+  ports of their own, so the account a caller holds carries the transitions and the
+  row carries the columns, and neither knows the other's shape.
 
 ### Changed
 
