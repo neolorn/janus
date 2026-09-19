@@ -35,3 +35,7 @@ against the public contract of LIB-API-001.
   reference to something the host never declared, the three preference refusals, a
   required challenge, a grant with no reason, the last alert destination, and an
   unhandled fault.
+- `CapabilityResidual`, `ConsentMechanism`, `AgeGroup`, `AlertCondition` and
+  `BotDefenceSignal` in `Janus.Core`: what still stands between a principal and an
+  action, where a consent record was made, what the age screen recorded, which
+  condition raised an alert, and what bot defence counts.

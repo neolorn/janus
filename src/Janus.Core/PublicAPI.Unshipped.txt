@@ -1,4 +1,39 @@
 #nullable enable
+Janus.Core.AgeGroup
+Janus.Core.AgeGroup.Adult = 1 -> Janus.Core.AgeGroup
+Janus.Core.AgeGroup.Minor = 0 -> Janus.Core.AgeGroup
+Janus.Core.AlertCondition
+Janus.Core.AlertCondition.AlertDestinationChanged = 6 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.ApproverVolume = 2 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.AuthFailuresSustained = 0 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.BackgroundJobFailed = 11 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.BreakGlassUsed = 4 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.CallbackVerificationFailed = 16 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.CertificateRenewalFailed = 13 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.ClockDrift = 14 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.ConcurrentSessionsImplausible = 8 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.Degradation = 15 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.DenialSpike = 9 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.DomainRemoved = 27 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.DomainReverificationFailed = 26 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.ErasureDeliveryExhausted = 12 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.ExpiryApproaching = 20 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.GoverningLanguageChanged = 28 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.GoverningTextMissing = 29 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.HolidayListExhausted = 21 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.NoEmergencyCredential = 22 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.NonexistentNoticeRate = 17 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.PrivacyDeadlineApproaching = 18 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.PrivacyDeadlineReached = 19 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.ProtectedSettingChanged = 5 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.ReadVolumeAnomaly = 3 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.RecoveryClustering = 1 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.RelayDomainUnregistered = 30 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.RestoreTestFailed = 23 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.RestrictionGranted = 25 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.RestrictionLoosened = 24 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.SmsBalance = 10 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.StepUpPolicyWeakened = 7 -> Janus.Core.AlertCondition
 Janus.Core.AlertSeverity
 Janus.Core.AlertSeverity.High = 1 -> Janus.Core.AlertSeverity
 Janus.Core.AlertSeverity.Normal = 0 -> Janus.Core.AlertSeverity
@@ -21,6 +56,12 @@ Janus.Core.Bucket.Window.init -> void
 Janus.Core.BucketWindow
 Janus.Core.BucketWindow.Fixed = 1 -> Janus.Core.BucketWindow
 Janus.Core.BucketWindow.Sliding = 0 -> Janus.Core.BucketWindow
+Janus.Core.CapabilityResidual
+Janus.Core.CapabilityResidual.AccountState = 4 -> Janus.Core.CapabilityResidual
+Janus.Core.CapabilityResidual.Consent = 3 -> Janus.Core.CapabilityResidual
+Janus.Core.CapabilityResidual.Reauthenticate = 1 -> Janus.Core.CapabilityResidual
+Janus.Core.CapabilityResidual.Restricted = 2 -> Janus.Core.CapabilityResidual
+Janus.Core.CapabilityResidual.StepUp = 0 -> Janus.Core.CapabilityResidual
 Janus.Core.Configuration.Argon2StrengthClass
 Janus.Core.Configuration.Argon2StrengthClass.<Clone>$() -> Janus.Core.Configuration.Argon2StrengthClass!
 Janus.Core.Configuration.Argon2StrengthClass.Argon2StrengthClass(int Memory, int Iterations) -> void
@@ -42,6 +83,9 @@ Janus.Core.Configuration.BlocklistSource
 Janus.Core.Configuration.BlocklistSource.Offline = 1 -> Janus.Core.Configuration.BlocklistSource
 Janus.Core.Configuration.BlocklistSource.RangeApi = 0 -> Janus.Core.Configuration.BlocklistSource
 Janus.Core.Configuration.BlocklistSource.SelfHosted = 2 -> Janus.Core.Configuration.BlocklistSource
+Janus.Core.Configuration.BotDefenceSignal
+Janus.Core.Configuration.BotDefenceSignal.DatacenterRange = 0 -> Janus.Core.Configuration.BotDefenceSignal
+Janus.Core.Configuration.BotDefenceSignal.RepeatedAttempts = 1 -> Janus.Core.Configuration.BotDefenceSignal
 Janus.Core.Configuration.BoundedSetting<TValue>
 Janus.Core.Configuration.BoundedSetting<TValue>.Ceiling.get -> TValue?
 Janus.Core.Configuration.BoundedSetting<TValue>.Floor.get -> TValue?
@@ -96,6 +140,11 @@ Janus.Core.Configuration.Settings
 Janus.Core.Configuration.TextListSetting
 Janus.Core.Configuration.TextListSetting.Minimum.get -> int
 Janus.Core.Configuration.TextSetting
+Janus.Core.ConsentMechanism
+Janus.Core.ConsentMechanism.Administrator = 3 -> Janus.Core.ConsentMechanism
+Janus.Core.ConsentMechanism.Dashboard = 1 -> Janus.Core.ConsentMechanism
+Janus.Core.ConsentMechanism.Reconsent = 2 -> Janus.Core.ConsentMechanism
+Janus.Core.ConsentMechanism.Registration = 0 -> Janus.Core.ConsentMechanism
 Janus.Core.CredentialRedundancy
 Janus.Core.CredentialRedundancy.Advisory = 0 -> Janus.Core.CredentialRedundancy
 Janus.Core.CredentialRedundancy.Enforced = 1 -> Janus.Core.CredentialRedundancy
