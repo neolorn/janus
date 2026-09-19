@@ -1,4 +1,10 @@
 #nullable enable
+Janus.Core.AccountState
+Janus.Core.AccountState.Active = 0 -> Janus.Core.AccountState
+Janus.Core.AccountState.Deleted = 4 -> Janus.Core.AccountState
+Janus.Core.AccountState.Deleting = 3 -> Janus.Core.AccountState
+Janus.Core.AccountState.Restricted = 2 -> Janus.Core.AccountState
+Janus.Core.AccountState.Suspended = 1 -> Janus.Core.AccountState
 Janus.Core.AgeGroup
 Janus.Core.AgeGroup.Adult = 1 -> Janus.Core.AgeGroup
 Janus.Core.AgeGroup.Minor = 0 -> Janus.Core.AgeGroup
@@ -149,6 +155,18 @@ Janus.Core.ConsentMechanism.Registration = 0 -> Janus.Core.ConsentMechanism
 Janus.Core.CredentialRedundancy
 Janus.Core.CredentialRedundancy.Advisory = 0 -> Janus.Core.CredentialRedundancy
 Janus.Core.CredentialRedundancy.Enforced = 1 -> Janus.Core.CredentialRedundancy
+Janus.Core.DeletionOrigin
+Janus.Core.DeletionOrigin.OutOfBandRequest = 2 -> Janus.Core.DeletionOrigin
+Janus.Core.DeletionOrigin.Self = 0 -> Janus.Core.DeletionOrigin
+Janus.Core.DeletionOrigin.Takedown = 1 -> Janus.Core.DeletionOrigin
+Janus.Core.ErasureReason
+Janus.Core.ErasureReason.ErasureRequest = 0 -> Janus.Core.ErasureReason
+Janus.Core.ErasureReason.MinorTakedown = 1 -> Janus.Core.ErasureReason
+Janus.Core.ErasureReason.OrganizationErasure = 2 -> Janus.Core.ErasureReason
+Janus.Core.ErasureStatus
+Janus.Core.ErasureStatus.AwaitingSubscribers = 0 -> Janus.Core.ErasureStatus
+Janus.Core.ErasureStatus.Complete = 1 -> Janus.Core.ErasureStatus
+Janus.Core.ErasureStatus.Failed = 2 -> Janus.Core.ErasureStatus
 Janus.Core.Error
 Janus.Core.Error.<Clone>$() -> Janus.Core.Error!
 Janus.Core.Error.Code.get -> Janus.Core.ErrorCode
@@ -311,6 +329,14 @@ Janus.Core.SubjectId.SubjectId() -> void
 Janus.Core.SubjectId.SubjectId(System.Guid Value) -> void
 Janus.Core.SubjectId.Value.get -> System.Guid
 Janus.Core.SubjectId.Value.init -> void
+Janus.Core.SuspensionOrigin
+Janus.Core.SuspensionOrigin.Administrator = 1 -> Janus.Core.SuspensionOrigin
+Janus.Core.SuspensionOrigin.Self = 0 -> Janus.Core.SuspensionOrigin
+Janus.Core.TakedownTrigger
+Janus.Core.TakedownTrigger.AuthorityRequest = 3 -> Janus.Core.TakedownTrigger
+Janus.Core.TakedownTrigger.AutomatedSignal = 2 -> Janus.Core.TakedownTrigger
+Janus.Core.TakedownTrigger.CustomerReport = 1 -> Janus.Core.TakedownTrigger
+Janus.Core.TakedownTrigger.StaffReport = 0 -> Janus.Core.TakedownTrigger
 abstract Janus.Core.Configuration.Setting<TValue>.Accept(TValue value) -> Janus.Core.Result<TValue>
 override Janus.Core.Bucket.Equals(object? obj) -> bool
 override Janus.Core.Bucket.GetHashCode() -> int

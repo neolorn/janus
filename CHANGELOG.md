@@ -48,6 +48,9 @@ against the public contract of LIB-API-001.
 - `SubjectId` and `OrganizationId` in `Janus.Core`: an account's opaque identifier,
   drawn from randomness alone so that it carries nothing about the person, and the
   organization's, ordered by the instant it was issued.
+- `AccountState`, `SuspensionOrigin`, `DeletionOrigin`, `TakedownTrigger`,
+  `ErasureStatus` and `ErasureReason` in `Janus.Core`: the state an account is in,
+  why it entered the one it is in, and how far an erasure's host-side work has got.
 
 ### Changed
 
