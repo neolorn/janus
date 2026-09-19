@@ -39,7 +39,7 @@ public sealed class FactorCatalogueTests
     /// name.
     /// </summary>
     [Fact]
-    public void AUTH_STEP_008_NoGateRuleNamesAFactor() =>
+    public void AUTH_STEP_008_AC1_NoGateRuleNamesAFactor() =>
         Assert.DoesNotContain(
             Path.Combine("Janus.Authentication", "Factors", "StepUp.cs"),
             BranchingOnAFactor());
