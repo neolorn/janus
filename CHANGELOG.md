@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A password is screened against the compromised-password corpus over the range
+  API, which is sent five characters of a hash and never the password or the whole
+  hash. Where the service cannot answer the deployment's offline list answers and
+  the fall back is logged; where neither can, the password is refused rather than
+  accepted unscreened, and so is one judged against a corpus older than the
+  deployment admits. Naming the self-hosted corpus is the whole of switching to it.
 - Sessions, passwords, enrolled credentials, recovery codes and known browsers
   are stored in PostgreSQL. A session's record carries what it reached and the
   fingerprint of its cookie, never the cookie, and where it was used from is held

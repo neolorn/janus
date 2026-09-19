@@ -470,10 +470,17 @@ public sealed class LibraryStructureTests
         // An area opens its internals to Janus.Storage for the port implementations and
         // to Janus.Storage.Tests, where a port implementation is tested against the
         // aggregate it translates (D-156), and to the two projects that register it.
+        // Janus.Hosting implements ports of its own, so its test project reads the same
+        // internals for the same reason.
         if (Areas.Contains(project, StringComparer.Ordinal))
         {
-            permitted.AddRange(
-                ["Janus.Storage", "Janus.Storage.Tests", "Janus.Hosting", "Janus.Cli"]);
+            permitted.AddRange([
+                "Janus.Storage",
+                "Janus.Storage.Tests",
+                "Janus.Hosting",
+                "Janus.Hosting.Tests",
+                "Janus.Cli",
+            ]);
         }
 
         if (string.Equals(project, "Janus.Core", StringComparison.Ordinal)
