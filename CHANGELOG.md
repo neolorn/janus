@@ -21,6 +21,10 @@ against the public contract of LIB-API-001.
   the password nor its full hash is ever sent. A corpus that cannot answer falls back
   to the offline one and records the degradation; with nothing able to answer the
   operation is refused rather than accepting a password nothing screened.
+- `ISessions` in `Janus.Core`: an account sees its live sessions with the time of
+  sign-in, the time of last use, the device and a city-level location, ends one of
+  them on its own, or signs out everywhere. An administrator ends one account's
+  sessions, and the emergency operation ends every session in the deployment.
 - `IAccessGate` in `Janus.Core`: the one place a permission is evaluated. A check and a
   list filter are the same rule rendered two ways, an expression a host composes into
   its own LINQ query and a parameterised PostgreSQL fragment a hand-written query
