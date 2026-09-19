@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -18,7 +17,6 @@ namespace Janus.Storage.Tests;
 /// Implements OPS-DB-001 and OPS-MIG-007. One container per test class, torn down with
 /// the class (CONV-TEST-002, CONV-TEST-007).
 /// </remarks>
-[SuppressMessage("Design", "CA1515:Consider making public types internal", Justification = "The runner constructs the class fixture CONV-TEST-007 requires from outside this assembly, which is the reference the rule looks for and cannot see.")]
 public sealed class DatabaseFixture : IAsyncLifetime
 {
     private const string Database = "janus";

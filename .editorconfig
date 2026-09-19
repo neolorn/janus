@@ -201,3 +201,7 @@ dotnet_diagnostic.CA2007.severity = none
 [tests/**/*.cs]
 # CA1707: the test naming scheme of CONV-TEST-007 uses underscores by design.
 dotnet_diagnostic.CA1707.severity = none
+
+# CA1515: a fixture and a test class are instantiated by the test framework and are
+# public for it to reach them (D-154).
+dotnet_diagnostic.CA1515.severity = none
