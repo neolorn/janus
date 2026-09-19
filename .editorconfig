@@ -185,20 +185,20 @@ dotnet_naming_rule.locals_and_parameters_are_camel_case.severity = error
 # CA1062: guards are placed by CONV-CODE-006, not on every public member.
 dotnet_diagnostic.CA1062.severity = none
 
-[src/**/*.cs]
+[src/**.cs]
 # CA1812: every service is internal sealed and constructed by dependency injection
 # (CONV-DESIGN-002).
 dotnet_diagnostic.CA1812.severity = none
 
-[src/{Janus.Core,Janus.Hosting,Janus.Conformance}/**/*.cs]
+[src/{Janus.Core,Janus.Hosting,Janus.Conformance}/**.cs]
 # CA1515: these projects hold the contract (CONV-LAYOUT-002).
 dotnet_diagnostic.CA1515.severity = none
 
-[{tests,src/Janus.Hosting,src/Janus.Cli}/**/*.cs]
+[{tests,src/Janus.Hosting,src/Janus.Cli}/**.cs]
 # CA2007: ConfigureAwait is required of library code only (CONV-CODE-002).
 dotnet_diagnostic.CA2007.severity = none
 
-[tests/**/*.cs]
+[tests/**.cs]
 # CA1707: the test naming scheme of CONV-TEST-007 uses underscores by design.
 dotnet_diagnostic.CA1707.severity = none
 
