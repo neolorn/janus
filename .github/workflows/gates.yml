@@ -58,7 +58,11 @@ jobs:
         with:
           global-json-file: global.json
       - run: dotnet restore Janus.slnx --locked-mode
-      - run: dotnet test Janus.slnx --no-restore -- --filter-trait "kind=unit"
+      # A project holding no test of the kind being run is not a failing gate, and
+      # exit code 8 is the platform saying the filter matched nothing there.
+      - run: >
+          dotnet test Janus.slnx --no-restore --
+          --filter-trait "kind=unit" --ignore-exit-code 8
 
   contract-tests:
     name: Contract tests
@@ -95,7 +99,11 @@ jobs:
         with:
           global-json-file: global.json
       - run: dotnet restore Janus.slnx --locked-mode
-      - run: dotnet test Janus.slnx --no-restore -- --filter-trait "kind=integration"
+      # A project holding no test of the kind being run is not a failing gate, and
+      # exit code 8 is the platform saying the filter matched nothing there.
+      - run: >
+          dotnet test Janus.slnx --no-restore --
+          --filter-trait "kind=integration" --ignore-exit-code 8
 
   policy-coverage:
     name: Policy coverage test
