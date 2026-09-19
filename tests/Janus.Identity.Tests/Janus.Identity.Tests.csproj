@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Janus.Identity\Janus.Identity.csproj" />
+  </ItemGroup>
+
+</Project>

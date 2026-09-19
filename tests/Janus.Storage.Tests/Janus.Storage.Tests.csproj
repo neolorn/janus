@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Janus.Storage\Janus.Storage.csproj" />
+  </ItemGroup>
+
+  <!-- CONV-TEST-002: the integration kind runs against a real PostgreSQL in a
+       container. -->
+  <ItemGroup>
+    <PackageReference Include="Testcontainers.PostgreSql" />
+  </ItemGroup>
+
+</Project>
