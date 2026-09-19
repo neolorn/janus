@@ -10,6 +10,8 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The organizations a principal belongs to now are read from the database, so a
+  policy resolves against live memberships and not against ended ones.
 - Erasing a subject ends every session they hold before the key their fields are
   under is destroyed, so no request survives on a session whose account is gone.
 - The browser-facing pipeline is mounted with one call and protects whatever the
