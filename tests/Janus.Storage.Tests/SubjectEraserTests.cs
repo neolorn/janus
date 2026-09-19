@@ -123,11 +123,12 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     }
 
     /// <summary>
-    /// PRIV-RIGHT-005 AC4: the photo is removed by the same operation, so the bytes are
-    /// not merely unreadable but gone.
+    /// IDN-ATTR-003 AC1: erasing the account leaves the photo unreadable in the same
+    /// transaction, because the image is held under the key that transaction destroys.
+    /// The row stays where it is (IDN-PRIN-003).
     /// </summary>
     [Fact]
-    public async Task PRIV_RIGHT_005_AC4_ThePhotoIsRemovedByTheSameOperationAsync()
+    public async Task IDN_ATTR_003_AC1_ThePhotoIsUnreadableInTheSameTransactionAsync()
     {
         SubjectId subject = await DeletingAccountAsync();
         byte[] image = new byte[256];
@@ -144,8 +145,12 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await using JanusDbContext reading = database.Context();
 
-        Assert.False(await reading.ProfilePhotos
+        Assert.True(await reading.ProfilePhotos
             .AnyAsync(photo => photo.Subject == subject, TestContext.Current.CancellationToken));
+
+        await Assert.ThrowsAsync<CryptographicException>(async () =>
+            await new ProfilePhotoStore(reading, _deployment.Keys, _deployment.Randomness)
+                .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
     }
 
     /// <summary>

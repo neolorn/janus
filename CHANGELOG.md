@@ -167,8 +167,9 @@ against the public contract of LIB-API-001.
   stated reason.
 - The erasure, as one operation and one transaction. The account reaches `deleted`,
   the subject's wrapped key is overwritten with the irreversible value, its
-  fingerprints are neutralised, its photo is removed and an erasures row records why
-  and how far the host-side work has got. A transaction that does not commit leaves no
+  fingerprints are neutralised, and an erasures row records why and how far the
+  host-side work has got. The photo row stays where it is and its bytes stop being
+  readable with everything else the key covered. A transaction that does not commit leaves no
   row and erases nothing; there is no third state. Erasure progress is on that row and
   on no column of the account, and every outstanding erasure is read in one query.
 

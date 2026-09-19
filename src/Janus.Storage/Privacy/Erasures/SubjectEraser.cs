@@ -9,7 +9,6 @@ using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Identifiers;
-using Janus.Storage.Identity.Profiles;
 using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 
@@ -22,10 +21,10 @@ namespace Janus.Storage.Privacy.Erasures;
 /// <remarks>
 /// Implements PRIV-RIGHT-005, PRIV-RIGHT-005a, PRIV-RIGHT-005c, IDN-LIFE-003b,
 /// IDN-LIFE-014, IDN-ACCT-002 and IDN-PRIN-003. Every write here is made on one
-/// context and committed by the caller's unit of work, so the four writes and the
-/// erasures row reach the database together or not at all. No row is removed but the
-/// photo, which PRIV-RIGHT-005 AC4 names, and which is a current likeness rather than
-/// a record of something that happened.
+/// context and committed by the caller's unit of work, so the three writes and the
+/// erasures row reach the database together or not at all. No row is removed: the
+/// photo's bytes are held under the same key as every other personal field, so
+/// destroying it leaves them unreadable where they are (IDN-ATTR-003, IDN-PRIN-003).
 /// </remarks>
 internal sealed class SubjectEraser(JanusDbContext context) : ISubjectEraser
 {
@@ -45,7 +44,6 @@ internal sealed class SubjectEraser(JanusDbContext context) : ISubjectEraser
         await MarkErasedAsync(subject, cancellationToken).ConfigureAwait(false);
         await DestroyKeyAsync(subject, cancellationToken).ConfigureAwait(false);
         await NeutraliseFingerprintsAsync(subject, cancellationToken).ConfigureAwait(false);
-        await RemovePhotoAsync(subject, cancellationToken).ConfigureAwait(false);
 
         var erasure = Erasure.Begun(subject, at, reason);
 
@@ -117,18 +115,6 @@ internal sealed class SubjectEraser(JanusDbContext context) : ISubjectEraser
         foreach (IdentifierRecord identifier in identifiers)
         {
             identifier.Fingerprint = Fingerprint.Neutralised();
-        }
-    }
-
-    private async ValueTask RemovePhotoAsync(SubjectId subject, CancellationToken cancellationToken)
-    {
-        ProfilePhotoRecord? photo = await context.ProfilePhotos
-            .FindAsync([subject], cancellationToken)
-            .ConfigureAwait(false);
-
-        if (photo is not null)
-        {
-            context.ProfilePhotos.Remove(photo);
         }
     }
 }

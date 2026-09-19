@@ -759,7 +759,7 @@ static Janus.Core.ScriptMixing.IsSingleScriptPerWord(string! value) -> bool
 static Janus.Core.SubjectId.New(System.Security.Cryptography.RandomNumberGenerator! randomness) -> Janus.Core.SubjectId
 static Janus.Core.SubjectId.operator !=(Janus.Core.SubjectId left, Janus.Core.SubjectId right) -> bool
 static Janus.Core.SubjectId.operator ==(Janus.Core.SubjectId left, Janus.Core.SubjectId right) -> bool
-static Janus.Core.SystemPrincipal.ForDeployment(string! name, string! reason, params Janus.Core.SystemOperation[]! operations) -> Janus.Core.SystemPrincipal!
+static Janus.Core.SystemPrincipal.ForDeployment(string! name, string! reason, params System.Collections.Generic.IReadOnlyList<Janus.Core.SystemOperation>! operations) -> Janus.Core.SystemPrincipal!
 static Janus.Core.SystemPrincipal.ForOrganization(string! name, string! reason, Janus.Core.OrganizationId organization) -> Janus.Core.SystemPrincipal!
 static Janus.Core.Username.TryParse(string! entered, out Janus.Core.Username username) -> bool
 static Janus.Core.Username.operator !=(Janus.Core.Username left, Janus.Core.Username right) -> bool

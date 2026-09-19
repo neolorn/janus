@@ -86,12 +86,12 @@ public sealed class SystemPrincipal
     public static SystemPrincipal ForDeployment(
         string name,
         string reason,
-        params SystemOperation[] operations)
+        params IReadOnlyList<SystemOperation> operations)
     {
         Stated(name, reason);
         ArgumentNullException.ThrowIfNull(operations);
 
-        if (operations.Length == 0)
+        if (operations.Count == 0)
         {
             throw new ArgumentException(
                 "A deployment-scoped principal names the operations it exists for.",
