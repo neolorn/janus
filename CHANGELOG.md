@@ -61,6 +61,8 @@ against the public contract of LIB-API-001.
   the subject, table and column it was written to, so a value moved elsewhere no
   longer decrypts. Erasure overwrites the wrapped key and everything encrypted
   under it becomes unreadable at once, including values in the host's own tables.
+- Keyed fingerprints for searchable identifiers, computed under a key held outside
+  the database, neutralised by erasure and never matched once neutralised.
 
 ### Changed
 
