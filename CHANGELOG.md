@@ -141,6 +141,13 @@ against the public contract of LIB-API-001.
 - An account's photo is now held in a table and a port of its own, under the subject's
   own key. Nothing that reads an account reads image bytes, a dump yields no
   photograph, and erasure of the key leaves the image unrecoverable.
+- An account carries a language, a time zone and the values of the preference keys the
+  host declares at startup. A declaration names a type, a default and whether only an
+  administrator may set the key; a malformed one fails startup with
+  `model.startup.preferencedeclaration`. The declared values are stored under the
+  subject key as one document, capped by `preferences.maxsize`; the language and the
+  time zone are not, so a notice still reaches an erased account in a language it
+  reads.
 
 ### Changed
 

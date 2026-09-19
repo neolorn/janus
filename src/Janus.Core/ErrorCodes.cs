@@ -67,6 +67,13 @@ public static class ErrorCodes
     public static ErrorCode StartupDeclarationMissing { get; } = ErrorCode.Parse("model.startup.declarationmissing");
 
     /// <summary>
+    /// Startup: a host preference declaration is malformed. The details name the key
+    /// under <c>preference</c>; correct the declaration.
+    /// </summary>
+    /// <remarks>Implements REG-PREF-001, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupPreferenceDeclaration { get; } = ErrorCode.Parse("model.startup.preferencedeclaration");
+
+    /// <summary>
     /// Startup: a resource type references a type the model does not declare. Declare
     /// the referenced type or drop the reference.
     /// </summary>
@@ -95,24 +102,31 @@ public static class ErrorCodes
     public static ErrorCode UsernameInvalid { get; } = ErrorCode.Parse("identity.username.invalid");
 
     /// <summary>
+    /// The preference key is one the host never declared. Send a key the deployment
+    /// declares.
+    /// </summary>
+    /// <remarks>Implements REG-PREF-001, chapter 10 section 1.1.</remarks>
+    public static ErrorCode PreferenceUndeclared { get; } = ErrorCode.Parse("identity.preference.undeclared");
+
+    /// <summary>
     /// A preference value is of a type other than its declaration. Send a value of the
     /// declared type.
     /// </summary>
-    /// <remarks>Implements REG-PREF-001, chapter 10 section 1.5.</remarks>
+    /// <remarks>Implements REG-PREF-001, chapter 10 section 1.1.</remarks>
     public static ErrorCode PreferenceWrongType { get; } = ErrorCode.Parse("identity.preference.wrongtype");
 
     /// <summary>
     /// The preference set would exceed <c>preferences.maxsize</c>. Remove or shorten a
     /// value.
     /// </summary>
-    /// <remarks>Implements REG-PREF-001, chapter 10 section 1.5.</remarks>
+    /// <remarks>Implements REG-PREF-001, chapter 10 section 1.1.</remarks>
     public static ErrorCode PreferenceTooLarge { get; } = ErrorCode.Parse("identity.preference.toolarge");
 
     /// <summary>
     /// The preference is declared administrator-only and the person is not one. Ask an
     /// administrator to set it.
     /// </summary>
-    /// <remarks>Implements REG-PREF-001, chapter 10 section 1.5.</remarks>
+    /// <remarks>Implements REG-PREF-001, chapter 10 section 1.1.</remarks>
     public static ErrorCode PreferenceAdministratorOnly { get; } = ErrorCode.Parse("identity.preference.administratoronly");
 
     /// <summary>

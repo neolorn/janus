@@ -296,6 +296,30 @@ Janus.Core.PolicyOverride.RequiredAssurance.init -> void
 Janus.Core.PolicyOverride.SelfServiceRecovery.get -> bool?
 Janus.Core.PolicyOverride.SelfServiceRecovery.init -> void
 Janus.Core.Precis
+Janus.Core.PreferenceDeclaration
+Janus.Core.PreferenceDeclaration.<Clone>$() -> Janus.Core.PreferenceDeclaration!
+Janus.Core.PreferenceDeclaration.AdministratorOnly.get -> bool
+Janus.Core.PreferenceDeclaration.AdministratorOnly.init -> void
+Janus.Core.PreferenceDeclaration.Admits(string! value) -> bool
+Janus.Core.PreferenceDeclaration.Choices.get -> System.Collections.Generic.IReadOnlySet<string!>?
+Janus.Core.PreferenceDeclaration.Choices.init -> void
+Janus.Core.PreferenceDeclaration.Deconstruct(out string! Name, out Janus.Core.PreferenceKind Kind, out string! Default, out bool AdministratorOnly, out System.Collections.Generic.IReadOnlySet<string!>? Choices) -> void
+Janus.Core.PreferenceDeclaration.Default.get -> string!
+Janus.Core.PreferenceDeclaration.Default.init -> void
+Janus.Core.PreferenceDeclaration.Equals(Janus.Core.PreferenceDeclaration? other) -> bool
+Janus.Core.PreferenceDeclaration.Kind.get -> Janus.Core.PreferenceKind
+Janus.Core.PreferenceDeclaration.Kind.init -> void
+Janus.Core.PreferenceDeclaration.Name.get -> string!
+Janus.Core.PreferenceDeclaration.Name.init -> void
+Janus.Core.PreferenceDeclaration.PreferenceDeclaration(string! Name, Janus.Core.PreferenceKind Kind, string! Default, bool AdministratorOnly = false, System.Collections.Generic.IReadOnlySet<string!>? Choices = null) -> void
+Janus.Core.PreferenceDeclarations
+Janus.Core.PreferenceDeclarations.All.get -> System.Collections.Generic.IReadOnlyCollection<Janus.Core.PreferenceDeclaration!>!
+Janus.Core.PreferenceDeclarations.TryFind(string! name, out Janus.Core.PreferenceDeclaration! declaration) -> bool
+Janus.Core.PreferenceKind
+Janus.Core.PreferenceKind.Choice = 3 -> Janus.Core.PreferenceKind
+Janus.Core.PreferenceKind.Flag = 1 -> Janus.Core.PreferenceKind
+Janus.Core.PreferenceKind.Number = 2 -> Janus.Core.PreferenceKind
+Janus.Core.PreferenceKind.Text = 0 -> Janus.Core.PreferenceKind
 Janus.Core.Restriction
 Janus.Core.Restriction.<Clone>$() -> Janus.Core.Restriction!
 Janus.Core.Restriction.Buckets.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Bucket!>!
@@ -447,6 +471,9 @@ override Janus.Core.Policy.ToString() -> string!
 override Janus.Core.PolicyOverride.Equals(object? obj) -> bool
 override Janus.Core.PolicyOverride.GetHashCode() -> int
 override Janus.Core.PolicyOverride.ToString() -> string!
+override Janus.Core.PreferenceDeclaration.Equals(object? obj) -> bool
+override Janus.Core.PreferenceDeclaration.GetHashCode() -> int
+override Janus.Core.PreferenceDeclaration.ToString() -> string!
 override Janus.Core.Restriction.Equals(object? obj) -> bool
 override Janus.Core.Restriction.GetHashCode() -> int
 override Janus.Core.Restriction.ToString() -> string!
@@ -630,9 +657,11 @@ static Janus.Core.ErrorCodes.ConfigurationValueNotAllowed.get -> Janus.Core.Erro
 static Janus.Core.ErrorCodes.GrantReasonRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PreferenceAdministratorOnly.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PreferenceTooLarge.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.PreferenceUndeclared.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PreferenceWrongType.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupDeclarationMissing.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupGoverningLanguage.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.StartupPreferenceDeclaration.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupUndeclaredDerivationReference.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupUndeclaredPermission.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupUndeclaredTypeReference.get -> Janus.Core.ErrorCode
@@ -664,6 +693,10 @@ static Janus.Core.PolicyOverride.operator !=(Janus.Core.PolicyOverride? left, Ja
 static Janus.Core.PolicyOverride.operator ==(Janus.Core.PolicyOverride? left, Janus.Core.PolicyOverride? right) -> bool
 static Janus.Core.Precis.TryEnforceNickname(string! value, out string! enforced) -> bool
 static Janus.Core.Precis.TryEnforceUsername(string! value, out string! enforced) -> bool
+static Janus.Core.PreferenceDeclaration.operator !=(Janus.Core.PreferenceDeclaration? left, Janus.Core.PreferenceDeclaration? right) -> bool
+static Janus.Core.PreferenceDeclaration.operator ==(Janus.Core.PreferenceDeclaration? left, Janus.Core.PreferenceDeclaration? right) -> bool
+static Janus.Core.PreferenceDeclarations.None.get -> Janus.Core.PreferenceDeclarations!
+static Janus.Core.PreferenceDeclarations.Of(System.Collections.Generic.IEnumerable<Janus.Core.PreferenceDeclaration!>! declared) -> Janus.Core.PreferenceDeclarations!
 static Janus.Core.Restriction.operator !=(Janus.Core.Restriction? left, Janus.Core.Restriction? right) -> bool
 static Janus.Core.Restriction.operator ==(Janus.Core.Restriction? left, Janus.Core.Restriction? right) -> bool
 static Janus.Core.Result.Failure(Janus.Core.Error! error) -> Janus.Core.Result

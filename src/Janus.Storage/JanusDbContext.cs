@@ -1,6 +1,7 @@
 using System;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Identifiers;
+using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Identity.Profiles;
 using Janus.Storage.Privacy.SubjectKeys;
 using Janus.Storage.Settings;
@@ -60,6 +61,12 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     public DbSet<ProfilePhotoRecord> ProfilePhotos => Set<ProfilePhotoRecord>();
 
     /// <summary>
+    /// What each account has settled about language, time zone and the keys the host
+    /// declared.
+    /// </summary>
+    public DbSet<PreferenceRecord> AccountPreferences => Set<PreferenceRecord>();
+
+    /// <summary>
     /// The wrapped per-subject data keys.
     /// </summary>
     public DbSet<SubjectKeyRecord> SubjectKeys => Set<SubjectKeyRecord>();
@@ -91,6 +98,7 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new BackupSettingConfiguration());
         modelBuilder.ApplyConfiguration(new ProfileConfiguration());
         modelBuilder.ApplyConfiguration(new ProfilePhotoConfiguration());
+        modelBuilder.ApplyConfiguration(new PreferenceConfiguration());
         modelBuilder.ApplyConfiguration(new SubjectKeyConfiguration());
         modelBuilder.ApplyConfiguration(new SettingConfiguration());
     }
