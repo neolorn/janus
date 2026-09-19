@@ -1,4 +1,9 @@
 #nullable enable
+Janus.Core.AccessContext
+Janus.Core.AccessContext.Acting.get -> Janus.Core.SubjectId?
+Janus.Core.AccessContext.Effective.get -> Janus.Core.SubjectId?
+Janus.Core.AccessContext.IsSystem.get -> bool
+Janus.Core.AccessContext.Principal.get -> Janus.Core.SystemPrincipal?
 Janus.Core.AccountState
 Janus.Core.AccountState.Active = 0 -> Janus.Core.AccountState
 Janus.Core.AccountState.Deleted = 4 -> Janus.Core.AccountState
@@ -273,10 +278,33 @@ Janus.Core.GateLevel
 Janus.Core.GateLevel.Aal1 = 1 -> Janus.Core.GateLevel
 Janus.Core.GateLevel.Aal2 = 2 -> Janus.Core.GateLevel
 Janus.Core.GateLevel.Reachable = 0 -> Janus.Core.GateLevel
+Janus.Core.GrantId
+Janus.Core.GrantId.Deconstruct(out System.Guid Value) -> void
+Janus.Core.GrantId.Equals(Janus.Core.GrantId other) -> bool
+Janus.Core.GrantId.GrantId() -> void
+Janus.Core.GrantId.GrantId(System.Guid Value) -> void
+Janus.Core.GrantId.Value.get -> System.Guid
+Janus.Core.GrantId.Value.init -> void
 Janus.Core.GrantKind
 Janus.Core.GrantKind.Derived = 1 -> Janus.Core.GrantKind
 Janus.Core.GrantKind.Materialised = 2 -> Janus.Core.GrantKind
 Janus.Core.GrantKind.Stored = 0 -> Janus.Core.GrantKind
+Janus.Core.GrantSubject
+Janus.Core.GrantSubject.Deconstruct(out Janus.Core.SubjectType Type, out System.Guid Value) -> void
+Janus.Core.GrantSubject.Equals(Janus.Core.GrantSubject other) -> bool
+Janus.Core.GrantSubject.GrantSubject() -> void
+Janus.Core.GrantSubject.GrantSubject(Janus.Core.SubjectType Type, System.Guid Value) -> void
+Janus.Core.GrantSubject.Type.get -> Janus.Core.SubjectType
+Janus.Core.GrantSubject.Type.init -> void
+Janus.Core.GrantSubject.Value.get -> System.Guid
+Janus.Core.GrantSubject.Value.init -> void
+Janus.Core.GroupId
+Janus.Core.GroupId.Deconstruct(out System.Guid Value) -> void
+Janus.Core.GroupId.Equals(Janus.Core.GroupId other) -> bool
+Janus.Core.GroupId.GroupId() -> void
+Janus.Core.GroupId.GroupId(System.Guid Value) -> void
+Janus.Core.GroupId.Value.get -> System.Guid
+Janus.Core.GroupId.Value.init -> void
 Janus.Core.ISecretSource
 Janus.Core.ISecretSource.ReadFingerprintKeyAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.ReadOnlyMemory<byte>>
 Janus.Core.ISecretSource.ReadKeyEncryptionKeysAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.KeyEncryptionKeys!>
@@ -440,6 +468,15 @@ Janus.Core.RelationshipDeclaration.Table.init -> void
 Janus.Core.ResourceId
 Janus.Core.ResourceId.Equals(Janus.Core.ResourceId other) -> bool
 Janus.Core.ResourceId.ResourceId() -> void
+Janus.Core.ResourceReference
+Janus.Core.ResourceReference.Deconstruct(out Janus.Core.ResourceType Type, out Janus.Core.ResourceId Id) -> void
+Janus.Core.ResourceReference.Equals(Janus.Core.ResourceReference other) -> bool
+Janus.Core.ResourceReference.Id.get -> Janus.Core.ResourceId
+Janus.Core.ResourceReference.Id.init -> void
+Janus.Core.ResourceReference.ResourceReference() -> void
+Janus.Core.ResourceReference.ResourceReference(Janus.Core.ResourceType Type, Janus.Core.ResourceId Id) -> void
+Janus.Core.ResourceReference.Type.get -> Janus.Core.ResourceType
+Janus.Core.ResourceReference.Type.init -> void
 Janus.Core.ResourceType
 Janus.Core.ResourceType.Equals(Janus.Core.ResourceType other) -> bool
 Janus.Core.ResourceType.ResourceType() -> void
@@ -640,6 +677,12 @@ override Janus.Core.ErrorCode.ToString() -> string!
 override Janus.Core.Gate.Equals(object? obj) -> bool
 override Janus.Core.Gate.GetHashCode() -> int
 override Janus.Core.Gate.ToString() -> string!
+override Janus.Core.GrantId.GetHashCode() -> int
+override Janus.Core.GrantId.ToString() -> string!
+override Janus.Core.GrantSubject.GetHashCode() -> int
+override Janus.Core.GrantSubject.ToString() -> string!
+override Janus.Core.GroupId.GetHashCode() -> int
+override Janus.Core.GroupId.ToString() -> string!
 override Janus.Core.IdentifierId.GetHashCode() -> int
 override Janus.Core.IdentifierId.ToString() -> string!
 override Janus.Core.KeyEncryptionKeys.Equals(object? obj) -> bool
@@ -675,6 +718,7 @@ override Janus.Core.RelationshipDeclaration.GetHashCode() -> int
 override Janus.Core.RelationshipDeclaration.ToString() -> string!
 override Janus.Core.ResourceId.GetHashCode() -> int
 override Janus.Core.ResourceId.ToString() -> string!
+override Janus.Core.ResourceReference.GetHashCode() -> int
 override Janus.Core.ResourceType.GetHashCode() -> int
 override Janus.Core.ResourceType.ToString() -> string!
 override Janus.Core.ResourceTypeDeclaration.Equals(object? obj) -> bool
@@ -691,6 +735,9 @@ override Janus.Core.SubjectId.GetHashCode() -> int
 override Janus.Core.SubjectId.ToString() -> string!
 override Janus.Core.Username.GetHashCode() -> int
 override Janus.Core.Username.ToString() -> string!
+static Janus.Core.AccessContext.Of(Janus.Core.SubjectId acting, Janus.Core.SubjectId effective) -> Janus.Core.AccessContext!
+static Janus.Core.AccessContext.Of(Janus.Core.SubjectId subject) -> Janus.Core.AccessContext!
+static Janus.Core.AccessContext.Of(Janus.Core.SystemPrincipal! principal) -> Janus.Core.AccessContext!
 static Janus.Core.AuditAction.Parse(string! value) -> Janus.Core.AuditAction
 static Janus.Core.AuditAction.operator !=(Janus.Core.AuditAction left, Janus.Core.AuditAction right) -> bool
 static Janus.Core.AuditAction.operator ==(Janus.Core.AuditAction left, Janus.Core.AuditAction right) -> bool
@@ -901,6 +948,16 @@ static Janus.Core.ErrorCodes.SystemFault.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.UsernameInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.Gate.operator !=(Janus.Core.Gate? left, Janus.Core.Gate? right) -> bool
 static Janus.Core.Gate.operator ==(Janus.Core.Gate? left, Janus.Core.Gate? right) -> bool
+static Janus.Core.GrantId.New(System.TimeProvider! time) -> Janus.Core.GrantId
+static Janus.Core.GrantId.operator !=(Janus.Core.GrantId left, Janus.Core.GrantId right) -> bool
+static Janus.Core.GrantId.operator ==(Janus.Core.GrantId left, Janus.Core.GrantId right) -> bool
+static Janus.Core.GrantSubject.Of(Janus.Core.GroupId group) -> Janus.Core.GrantSubject
+static Janus.Core.GrantSubject.Of(Janus.Core.SubjectId subject) -> Janus.Core.GrantSubject
+static Janus.Core.GrantSubject.operator !=(Janus.Core.GrantSubject left, Janus.Core.GrantSubject right) -> bool
+static Janus.Core.GrantSubject.operator ==(Janus.Core.GrantSubject left, Janus.Core.GrantSubject right) -> bool
+static Janus.Core.GroupId.New(System.TimeProvider! time) -> Janus.Core.GroupId
+static Janus.Core.GroupId.operator !=(Janus.Core.GroupId left, Janus.Core.GroupId right) -> bool
+static Janus.Core.GroupId.operator ==(Janus.Core.GroupId left, Janus.Core.GroupId right) -> bool
 static Janus.Core.IdentifierId.New(System.TimeProvider! time) -> Janus.Core.IdentifierId
 static Janus.Core.IdentifierId.operator !=(Janus.Core.IdentifierId left, Janus.Core.IdentifierId right) -> bool
 static Janus.Core.IdentifierId.operator ==(Janus.Core.IdentifierId left, Janus.Core.IdentifierId right) -> bool
@@ -968,6 +1025,8 @@ static Janus.Core.RelationshipDeclaration.operator ==(Janus.Core.RelationshipDec
 static Janus.Core.ResourceId.Parse(string! value) -> Janus.Core.ResourceId
 static Janus.Core.ResourceId.operator !=(Janus.Core.ResourceId left, Janus.Core.ResourceId right) -> bool
 static Janus.Core.ResourceId.operator ==(Janus.Core.ResourceId left, Janus.Core.ResourceId right) -> bool
+static Janus.Core.ResourceReference.operator !=(Janus.Core.ResourceReference left, Janus.Core.ResourceReference right) -> bool
+static Janus.Core.ResourceReference.operator ==(Janus.Core.ResourceReference left, Janus.Core.ResourceReference right) -> bool
 static Janus.Core.ResourceType.Parse(string! value) -> Janus.Core.ResourceType
 static Janus.Core.ResourceType.TryParse(string? value, out Janus.Core.ResourceType type) -> bool
 static Janus.Core.ResourceType.operator !=(Janus.Core.ResourceType left, Janus.Core.ResourceType right) -> bool
@@ -1003,6 +1062,9 @@ static Janus.Core.Username.operator ==(Janus.Core.Username left, Janus.Core.User
 ~override Janus.Core.DisplayName.Equals(object obj) -> bool
 ~override Janus.Core.EmailAddress.Equals(object obj) -> bool
 ~override Janus.Core.ErrorCode.Equals(object obj) -> bool
+~override Janus.Core.GrantId.Equals(object obj) -> bool
+~override Janus.Core.GrantSubject.Equals(object obj) -> bool
+~override Janus.Core.GroupId.Equals(object obj) -> bool
 ~override Janus.Core.IdentifierId.Equals(object obj) -> bool
 ~override Janus.Core.LegalName.Equals(object obj) -> bool
 ~override Janus.Core.MembershipId.Equals(object obj) -> bool
@@ -1010,6 +1072,8 @@ static Janus.Core.Username.operator ==(Janus.Core.Username left, Janus.Core.User
 ~override Janus.Core.Permission.Equals(object obj) -> bool
 ~override Janus.Core.PhoneNumber.Equals(object obj) -> bool
 ~override Janus.Core.ResourceId.Equals(object obj) -> bool
+~override Janus.Core.ResourceReference.Equals(object obj) -> bool
+~override Janus.Core.ResourceReference.ToString() -> string
 ~override Janus.Core.ResourceType.Equals(object obj) -> bool
 ~override Janus.Core.Result.Equals(object obj) -> bool
 ~override Janus.Core.Result.ToString() -> string

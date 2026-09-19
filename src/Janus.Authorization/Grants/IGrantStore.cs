@@ -1,0 +1,86 @@
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using Janus.Core;
+
+namespace Janus.Authorization.Grants;
+
+/// <summary>
+/// Where grants are read and written.
+/// </summary>
+/// <remarks>
+/// Implements AUTHZ-GRANT-001, AUTHZ-GRANT-003, AUTHZ-CACHE-001 and CONV-DESIGN-003.
+/// What a read returns is the rows a principal holds, never a resolved outcome: role
+/// definitions, ancestry, expiry and account state are read live wherever the outcome
+/// is worked out.
+/// </remarks>
+internal interface IGrantStore
+{
+    /// <summary>
+    /// Reads one grant, revoked or not.
+    /// </summary>
+    /// <param name="id">Which grant.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The grant, or nothing where no such row exists.</returns>
+    ValueTask<Grant?> FindAsync(GrantId id, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Writes a new grant, and bumps the counter of every account it reaches in the
+    /// same transaction.
+    /// </summary>
+    /// <param name="grant">The grant to record.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask CreateAsync(Grant grant, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Carries the grant as it now stands onto its row, and bumps the counter of every
+    /// account it reaches in the same transaction.
+    /// </summary>
+    /// <param name="grant">The grant as it now stands.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    /// <exception cref="InvalidOperationException">No such row exists.</exception>
+    ValueTask RecordAsync(Grant grant, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Whether a live grant saying exactly this already exists, which is what makes
+    /// another one a duplicate.
+    /// </summary>
+    /// <param name="grant">The grant that would be written.</param>
+    /// <param name="at">The instant liveness is read at.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Whether one already exists.</returns>
+    ValueTask<bool> ExistsAsync(Grant grant, DateTimeOffset at, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The live grants a principal holds, its own and those of every group it belongs
+    /// to, within one organization.
+    /// </summary>
+    /// <param name="holders">The principal and the groups it belongs to.</param>
+    /// <param name="organization">The organization the evaluation is scoped to.</param>
+    /// <param name="at">The instant liveness is read at.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The grants, revoked and expired ones left out.</returns>
+    ValueTask<IReadOnlyList<Grant>> HeldByAsync(
+        IReadOnlyList<GrantSubject> holders,
+        OrganizationId organization,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The live grants on one record or on anything containing it, whoever holds them.
+    /// This is what the "who can access this?" view reads for stored grants.
+    /// </summary>
+    /// <param name="ancestry">The record and everything containing it.</param>
+    /// <param name="organization">The organization the record belongs to.</param>
+    /// <param name="at">The instant liveness is read at.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The grants.</returns>
+    ValueTask<IReadOnlyList<Grant>> OnAsync(
+        IReadOnlyList<ResourceReference> ancestry,
+        OrganizationId organization,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+}

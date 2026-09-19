@@ -40,7 +40,7 @@ public sealed class AuthorizationModelTests
 
             Assert.All(
                 HostTypeNames,
-                name => Assert.DoesNotMatch("\b" + name + "\b", text));
+                name => Assert.DoesNotMatch("\\b" + name + "\\b", text));
         }
     }
 

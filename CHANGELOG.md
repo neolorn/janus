@@ -10,6 +10,19 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A grant is one sentence, subject has role on resource, and one row carries every kind
+  of it: an account's and a group's, an allow and a deny, a grant on one record and a
+  grant on a whole organization. What a role allows is read where a grant naming it is
+  evaluated, so editing a role takes effect at once.
+- Every grant records who granted it, when and why, and a revocation records the same.
+  A grant or a revocation stating no reason is refused with `authz.grant.reasonrequired`.
+  An expired grant confers nothing at the instant it is read, whether or not a sweep
+  has run.
+- `AccessContext` in `Janus.Core`: who is acting, whom they are acting for, and the
+  named principal a background job runs as.
+- `GrantId`, `GroupId`, `GrantSubject` and `ResourceReference` in `Janus.Core`: what a
+  grant, a group and one of the host's records are named by. A record's identifier is
+  the host's own text, so an integer, a UUID or a code all serve.
 - `AuthorizationDeclarationBuilder` in `Janus.Core`: a host declares its own kinds of
   thing, their containment, what they are processed for, which fields are encrypted and
   under whose key, and the relationships in its own data that confer a role. Every
