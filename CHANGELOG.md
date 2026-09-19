@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Recovery codes are issued ten at a time, each ten symbols of an alphabet that omits
+  the letters a reader confuses with digits, and are read back leniently: case,
+  spacing and those confusions make no difference to whether a code is accepted. Only
+  hashes are stored, a code is spent on first use, and generating a set retires the
+  previous one whole. The account shows how many remain and its owner is reminded
+  once when a set has gone a long time untouched.
 - Time-based codes run on thirty-second steps at six digits, with a drift tolerance
   the deployment sets and no code accepted twice: a code whose step has been spent is
   refused as replayed, so an observer has no window to reuse one in. An enrolment
