@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <PackageReference Include="Konscious.Security.Cryptography.Argon2" />
+    <PackageReference Include="Otp.NET" />
   </ItemGroup>
 
   <!-- CONV-CODE-008 AC2: referenced as an analyser, never as a library. -->
