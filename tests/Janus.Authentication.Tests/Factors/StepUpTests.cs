@@ -390,6 +390,36 @@ public sealed class StepUpTests : IDisposable
             Challenge(gate, Held(password: true, Factor.PhoneCode)).Required);
     }
 
+    /// <summary>
+    /// AUTH-STEP-001 AC1, AC3: what an action costs is the principal's policy's gate
+    /// and nothing about where the request came from, so the same action on a second
+    /// organization's policy asks for what that organization set and leaves the
+    /// first where it stood.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_001_AC3_ASecondOrganizationSetsItsOwnGateIndependently()
+    {
+        Session session = Signed(new Assurance(AssuranceLevel.Aal2, PhishingResistant: false));
+        HeldFactors held = Held(password: true, Factor.Totp);
+
+        StepUpChallenge open = StepUp.On(
+            session,
+            Janus.Core.Policies.SystemDefault.Gates[StepUpAction.PrivacyExport],
+            held,
+            Noon);
+
+        StepUpChallenge strict = StepUp.On(
+            session,
+            Janus.Core.Policies.AdministrativeOrganization.Gates[StepUpAction.PrivacyExport],
+            held,
+            Noon);
+
+        Assert.Equal(StepUpOutcome.Satisfied, open.Outcome);
+        Assert.Equal(StepUpOutcome.Enrol, strict.Outcome);
+        Assert.True(strict.PhishingResistant);
+        Assert.False(open.PhishingResistant);
+    }
+
     private static HashSet<Factor> Set(params Factor[] factors) => [.. factors];
 
     private static Gate Gate(GateLevel level, bool phishingResistant) =>
