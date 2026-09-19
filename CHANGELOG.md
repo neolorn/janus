@@ -16,6 +16,15 @@ against the public contract of LIB-API-001.
   origins share rather than taken from the first of them. The related-origins
   document lists exactly the additional origins configured, and a set of them wider
   than a browser reads stops the deployment too.
+- A step-up gate is answered from the session record and what the account can reach
+  with the credentials it holds, and never from a list of what it has enrolled. Where
+  the session falls short, every combination of the account's own factors that would
+  reach the gate is offered and the person chooses among them; where none would, the
+  answer is to enrol, to report the loss, or that the loss report already made
+  completes at a stated time. A reported loss lowers what an account reaches only
+  once its window has run, an emergency session passes every gate while it lasts, and
+  enrolling a credential costs the lower of what the account reaches and what the new
+  credential itself would contribute.
 - A WebAuthn credential records the relying party it was created under, whether it
   may be synced and whether it currently is, so a credential left behind by a
   configuration change is found from the account's own record rather than at a

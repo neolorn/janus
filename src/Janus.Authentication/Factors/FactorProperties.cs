@@ -21,6 +21,19 @@ namespace Janus.Authentication.Factors;
 /// Whether its contribution is to a sign-in and to nothing afterwards: it is never a
 /// second step, satisfies no gate and restores no lapsed session.
 /// </param>
+/// <param name="IsWebAuthn">
+/// Whether a credential of this entry is created and presented by a WebAuthn
+/// ceremony.
+/// </param>
+/// <param name="IsDiscoverable">
+/// Whether the ceremony that creates it keeps it on the authenticator, which is what
+/// lets it be offered without the account being named first (AUTH-FACT-002b).
+/// </param>
+/// <param name="SingleUse">
+/// Whether presenting it spends it. What an account can reach counts none of these:
+/// a dwindling set of one-use secrets would be spent at every gate that read it as
+/// a factor the account holds (AUTH-STEP-006).
+/// </param>
 /// <remarks>
 /// Implements AUTH-FACT-001, AUTH-FACT-003 and chapter 10 section 5.3. How strong a
 /// factor is has one axis, the tier beside phishing-resistance, so no second axis can
@@ -33,4 +46,7 @@ internal sealed record FactorProperties(
     bool IsPhishingResistant,
     AssuranceLevel AssuranceLevel,
     bool VerificationOnly,
-    bool SignInOnly);
+    bool SignInOnly,
+    bool IsWebAuthn,
+    bool IsDiscoverable,
+    bool SingleUse);

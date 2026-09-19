@@ -77,7 +77,10 @@ public sealed class AssuranceTests
             IsPhishingResistant: false,
             AssuranceLevel.Aal2,
             VerificationOnly: true,
-            SignInOnly: false);
+            SignInOnly: false,
+            IsWebAuthn: false,
+            IsDiscoverable: false,
+            SingleUse: false);
 
         Assert.Null(Assurance.Reached([channel]));
         Assert.Equal(
