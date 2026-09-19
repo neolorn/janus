@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
+using Janus.Hosting.Bff;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -208,7 +209,8 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
             host.ConnectionString,
             new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
             new byte[32],
-            HostFixture.Declaration(materialised: true));
+            HostFixture.Declaration(materialised: true),
+            JanusApplication.Public);
 
         return services.BuildServiceProvider();
     }

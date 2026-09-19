@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Core;
+using Janus.Hosting.Bff;
 using Janus.Storage.Tests;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -85,7 +86,8 @@ public sealed class HostFixture : IAsyncLifetime
             ConnectionString,
             new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = material }),
             Encoding.UTF8.GetBytes("the fingerprint key of this deployment"),
-            Declaration());
+            Declaration(),
+            JanusApplication.Public);
 
         _services = services.BuildServiceProvider();
     }

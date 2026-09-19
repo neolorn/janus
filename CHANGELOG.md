@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The browser-facing pipeline is mounted with one call and protects whatever the
+  host mounts after it: a cross-site state change, a state change without the custom
+  request header, one claiming another origin, and one whose synchronizer token is
+  absent or belongs to another session are each refused before any endpoint runs, and
+  no key, attribute or route excludes an endpoint from any of it. The session and its
+  token are set in two cookies whose attributes no configuration can weaken, strict
+  for the management application and lax elsewhere.
 - Every session carries a synchronizer token of its own, bound to that session and
   to no other, and reissued whenever the session's secret is. Neither value is ever
   read back: the record holds only what each fingerprints to.

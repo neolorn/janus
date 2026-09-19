@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Core;
+using Janus.Hosting.Bff;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -577,7 +578,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             host.ConnectionString,
             new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
             new byte[32],
-            HostFixture.Declaration(materialised: true));
+            HostFixture.Declaration(materialised: true),
+            JanusApplication.Public);
 
         return services.BuildServiceProvider();
     }

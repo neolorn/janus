@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Core;
+using Janus.Hosting.Bff;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Npgsql;
@@ -101,7 +102,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         host.ConnectionString,
         new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
         new byte[32],
-        HostFixture.Declaration());
+        HostFixture.Declaration(),
+        JanusApplication.Public);
 
     private async Task WriteAsync(string statement, CancellationToken cancellationToken)
     {

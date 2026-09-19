@@ -10,6 +10,12 @@
     <ProjectReference Include="..\Janus.Storage.Tests\Janus.Storage.Tests.csproj" />
   </ItemGroup>
 
+  <!-- CONV-TEST-002: the session fakes the browser boundary runs against belong to
+       the area that owns the port. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Janus.Authentication.Tests\Janus.Authentication.Tests.csproj" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Testcontainers.PostgreSql" />
   </ItemGroup>
