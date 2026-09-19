@@ -1,12 +1,7 @@
 using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
-using Janus.Core;
-using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Xunit;
 
@@ -16,13 +11,11 @@ namespace Janus.Hosting.Tests.Authorization;
 /// What the planner does with the permission predicate once the deployment holds the
 /// volumes AUTHZ-TEST-002 names.
 /// </summary>
-/// <param name="host">The deployment the rows are written to.</param>
+/// <param name="volume">The seeded deployment and the plan read over it.</param>
 [Trait("kind", "integration")]
-public sealed class VolumeTests(HostFixture host) : IClassFixture<HostFixture>
+public sealed class VolumeTests(VolumeFixture volume) : IClassFixture<VolumeFixture>
 {
     private const int Page = 50;
-
-    private static readonly ResourceType Document = ResourceType.Parse("document");
 
     // The two tables the predicate reads by, and the only two the criterion is about.
     // janus.role_permissions holds two rows here and is correctly read whole; reading
@@ -33,44 +26,20 @@ public sealed class VolumeTests(HostFixture host) : IClassFixture<HostFixture>
         "Seq Scan on ancestry",
     ];
 
+    // What each of the two is reached by instead: the partial index over a holder's
+    // live grants, and the ancestry's own key.
+    private static readonly string[] Indexed = ["ix_grants_live_holder", "pk_ancestry"];
+
     /// <summary>
-    /// AUTHZ-TEST-002 AC1, AC2: the plan of the primary list query is read at the
-    /// stated volumes, and the permission predicate reaches the grants and the ancestry
-    /// by index rather than by reading either table whole.
+    /// AUTHZ-TEST-002 AC1: the plan of the primary list query is captured over a
+    /// deployment holding the volumes the criterion states.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task AUTHZ_TEST_002_AC1_TheListQueryPlanAtProductionVolumeUsesAnIndexAsync()
+    public async Task AUTHZ_TEST_002_AC1_ThePlanIsCapturedAtTheStatedVolumesAsync()
     {
-        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        await using NpgsqlConnection connection = await volume.OpenAsync();
 
-        var volume = new ProductionVolume(host);
-        await volume.SeedAsync(cancellationToken);
-
-        SqlFilter fragment = await FragmentAsync(volume, cancellationToken);
-        string listing = Listing(fragment);
-
-        await using NpgsqlConnection connection = await host.OpenAsync();
-
-        await VolumesAsync(connection, cancellationToken);
-
-        // A plan over a predicate that admits nothing says nothing, so the page the
-        // plan is read for is the page the listing would show.
-        Assert.Equal(Page, await PageAsync(connection, fragment, listing, cancellationToken));
-
-        string plan = await PlanAsync(connection, fragment, listing, cancellationToken);
-
-        TestContext.Current.TestOutputHelper?.WriteLine(plan);
-
-        Assert.All(
-            Scanned,
-            whole => Assert.DoesNotContain(whole, plan, StringComparison.Ordinal));
-    }
-
-    private static async Task VolumesAsync(
-        NpgsqlConnection connection,
-        CancellationToken cancellationToken)
-    {
         Counted counted = await connection.QuerySingleAsync<Counted>(new CommandDefinition(
             """
             SELECT (SELECT count(*) FROM janus.resources) AS "Resources",
@@ -80,7 +49,7 @@ public sealed class VolumeTests(HostFixture host) : IClassFixture<HostFixture>
                    (SELECT count(*) FROM janus.groups) AS "Groups";
             """,
             commandTimeout: 600,
-            cancellationToken: cancellationToken));
+            cancellationToken: TestContext.Current.CancellationToken));
 
         Assert.Equal(
             new Counted(
@@ -90,79 +59,27 @@ public sealed class VolumeTests(HostFixture host) : IClassFixture<HostFixture>
                 ProductionVolume.Principals,
                 ProductionVolume.Groups),
             counted);
+
+        Assert.Equal(Page, volume.Page);
+        Assert.Contains("documents janus_authz_row", volume.Plan, StringComparison.Ordinal);
     }
 
-    private static string Listing(SqlFilter fragment) => string.Create(
-        CultureInfo.InvariantCulture,
-        $"""
-        SELECT janus_authz_row.id
-        FROM host.documents AS janus_authz_row
-        WHERE {fragment.Text}
-        ORDER BY janus_authz_row.id
-        LIMIT {Page};
-        """);
-
-    private static DynamicParameters Arguments(SqlFilter fragment)
+    /// <summary>
+    /// AUTHZ-TEST-002 AC2: the permission predicate reaches the grants and the ancestry
+    /// by index rather than by reading either table whole.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_TEST_002_AC2_ThePermissionPredicateUsesAnIndex()
     {
-        var arguments = new DynamicParameters();
+        TestContext.Current.TestOutputHelper?.WriteLine(volume.Plan);
 
-        foreach (KeyValuePair<string, object> parameter in fragment.Parameters)
-        {
-            arguments.Add(parameter.Key, parameter.Value);
-        }
+        Assert.All(
+            Scanned,
+            whole => Assert.DoesNotContain(whole, volume.Plan, StringComparison.Ordinal));
 
-        return arguments;
-    }
-
-    private static async Task<int> PageAsync(
-        NpgsqlConnection connection,
-        SqlFilter fragment,
-        string listing,
-        CancellationToken cancellationToken)
-    {
-        IEnumerable<string> page = await connection.QueryAsync<string>(new CommandDefinition(
-            listing,
-            Arguments(fragment),
-            commandTimeout: 600,
-            cancellationToken: cancellationToken));
-
-        return page.Count();
-    }
-
-    private static async Task<string> PlanAsync(
-        NpgsqlConnection connection,
-        SqlFilter fragment,
-        string listing,
-        CancellationToken cancellationToken)
-    {
-        IEnumerable<string> lines = await connection.QueryAsync<string>(new CommandDefinition(
-            "EXPLAIN (ANALYZE, BUFFERS) " + listing,
-            Arguments(fragment),
-            commandTimeout: 600,
-            cancellationToken: cancellationToken));
-
-        return string.Join(Environment.NewLine, lines);
-    }
-
-    private async Task<SqlFilter> FragmentAsync(
-        ProductionVolume volume,
-        CancellationToken cancellationToken)
-    {
-        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
-
-        Result<SqlFilter> rendering = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
-            .FragmentAsync(
-                AccessContext.Of(volume.Reader),
-                HostPermissions.Read,
-                Document,
-                volume.Organization,
-                "janus_authz_row",
-                "id",
-                cancellationToken);
-
-        return rendering.Match(
-            fragment => fragment,
-            error => throw new InvalidOperationException(error.Code.ToString()));
+        Assert.All(
+            Indexed,
+            index => Assert.Contains(index, volume.Plan, StringComparison.Ordinal));
     }
 
     // What the database holds once the fixture has written it, read back rather than
