@@ -127,6 +127,96 @@ public sealed class SettingsTests
     }
 
     /// <summary>
+    /// The two size keys of chapter 10 section 4 are bytes, and a value above the
+    /// ceiling is refused rather than truncated.
+    /// </summary>
+    [Fact]
+    public void Accept_ASizeAboveItsCeiling_Refused()
+    {
+        Assert.Equal(2097152, Settings.PhotoMaxBytes.Default);
+        Assert.Equal(8192, Settings.PreferencesMaxSize.Default);
+        Assert.Equal(
+            ErrorCodes.ConfigurationValueAboveCeiling,
+            Code(Settings.PhotoMaxBytes.Accept(10485761)));
+        Assert.Equal(
+            ErrorCodes.ConfigurationValueAboveCeiling,
+            Code(Settings.PreferencesMaxSize.Accept(65537)));
+    }
+
+    /// <summary>
+    /// An account holds ten verified addresses of each kind by default and never
+    /// fewer than one, since the floor is what makes single-address mode expressible.
+    /// </summary>
+    [Fact]
+    public void Accept_AnIdentifierMaximumBelowOne_Refused()
+    {
+        Assert.Equal(10, Settings.IdentifiersEmailMax.Default);
+        Assert.Equal(10, Settings.IdentifiersPhoneMax.Default);
+        Assert.Equal(1, Settings.IdentifiersEmailMax.Accept(1).Match(value => value, _ => 0));
+        Assert.Equal(
+            ErrorCodes.ConfigurationValueBelowFloor,
+            Code(Settings.IdentifiersPhoneMax.Accept(0)));
+    }
+
+    /// <summary>
+    /// The bot-defence signal set is closed at the two members chapter 10 section 4.5
+    /// names, both of which are on by default.
+    /// </summary>
+    [Fact]
+    public void Accept_ASignalOutsideTheClosedSet_Refused()
+    {
+        Assert.Equal(
+            new HashSet<BotDefenceSignal>
+            {
+                BotDefenceSignal.DatacenterRange,
+                BotDefenceSignal.RepeatedAttempts,
+            },
+            Settings.AbuseBotDefenceSignals.Default);
+        Assert.Equal(
+            ErrorCodes.ConfigurationValueNotAllowed,
+            Code(Settings.AbuseBotDefenceSignals.Accept(
+                new HashSet<BotDefenceSignal> { (BotDefenceSignal)7 })));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-002: only a deadline shorter than the statutory period is
+    /// configurable, so the default is also the ceiling.
+    /// </summary>
+    [Fact]
+    public void Accept_APrivacyDeadlineAboveTheStatutoryPeriod_Refused()
+    {
+        Assert.Equal(6, Settings.PrivacyRequestDecision.Default);
+        Assert.Equal(5, Settings.PrivacyRequestDecision.Accept(5).Match(value => value, _ => 0));
+        Assert.Equal(
+            ErrorCodes.ConfigurationValueAboveCeiling,
+            Code(Settings.PrivacyRequestDecision.Accept(7)));
+    }
+
+    /// <summary>
+    /// The grace and cooling-off windows of chapter 10 section 4.6 carry a floor, so
+    /// none of them can be set to nothing.
+    /// </summary>
+    [Fact]
+    public void Accept_AGraceBelowItsFloor_Refused()
+    {
+        Assert.Equal(
+            ErrorCodes.ConfigurationValueBelowFloor,
+            Code(Settings.OrganizationDeletionGrace.Accept(TimeSpan.FromDays(6))));
+        Assert.Equal(
+            ErrorCodes.ConfigurationValueBelowFloor,
+            Code(Settings.AccountDeletionGrace.Accept(TimeSpan.Zero)));
+        Assert.Equal(
+            ErrorCodes.ConfigurationValueBelowFloor,
+            Code(Settings.TakedownGrace.Accept(TimeSpan.FromDays(6))));
+        Assert.Equal(
+            ErrorCodes.ConfigurationValueBelowFloor,
+            Code(Settings.IdentifierChangeCoolingOff.Accept(TimeSpan.FromHours(71))));
+        Assert.Equal(
+            ErrorCodes.ConfigurationValueBelowFloor,
+            Code(Settings.IdentifiersUsernameChangeCoolOff.Accept(TimeSpan.FromHours(23))));
+    }
+
+    /// <summary>
     /// A key the deployment has to name has no default to fall back to, so reading
     /// one is a fault rather than a silent empty value.
     /// </summary>
@@ -150,4 +240,7 @@ public sealed class SettingsTests
         Assert.Equal(
             "stepup.enforcement.acme",
             Settings.OrganizationStepUpEnforcement.For("acme").ToString());
+
+    private static ErrorCode? Code<TValue>(Result<TValue> outcome) =>
+        outcome.Match(_ => (ErrorCode?)null, failure => failure.Code);
 }

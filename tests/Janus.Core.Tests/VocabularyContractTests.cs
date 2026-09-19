@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json.Serialization;
+using Janus.Core.Configuration;
 using Xunit;
 
 namespace Janus.Core.Tests;
@@ -65,6 +66,42 @@ public sealed class VocabularyContractTests
         "breakGlass",
     ];
 
+    // Chapter 10 section 5.23, in the order the OPS-ALERT-001 table gives them.
+    private static readonly string[] AlertConditions =
+    [
+        "auth-failures-sustained",
+        "recovery-clustering",
+        "approver-volume",
+        "read-volume-anomaly",
+        "breakglass-used",
+        "protected-setting-changed",
+        "alert-destination-changed",
+        "stepup-policy-weakened",
+        "concurrent-sessions-implausible",
+        "denial-spike",
+        "sms-balance",
+        "background-job-failed",
+        "erasure-delivery-exhausted",
+        "certificate-renewal-failed",
+        "clock-drift",
+        "degradation",
+        "callback-verification-failed",
+        "nonexistent-notice-rate",
+        "privacy-deadline-approaching",
+        "privacy-deadline-reached",
+        "expiry-approaching",
+        "holiday-list-exhausted",
+        "no-emergency-credential",
+        "restore-test-failed",
+        "restriction-loosened",
+        "restriction-granted",
+        "domain-reverification-failed",
+        "domain-removed",
+        "governing-language-changed",
+        "governing-text-missing",
+        "relay-domain-unregistered",
+    ];
+
     /// <summary>
     /// LIB-API-001 AC2: the step-up action names are the keys of a policy's gates, so
     /// the set is fixed and a rename is caught here.
@@ -94,6 +131,38 @@ public sealed class VocabularyContractTests
     }
 
     /// <summary>
+    /// LIB-API-001 AC2: the closed sets of chapter 10 sections 5.20 to 5.22, which a
+    /// capability, a consent record and an age screen carry.
+    /// </summary>
+    [Fact]
+    public void LIB_API_001_AC2_TheClosedSetsOfSectionFiveAreTheContract()
+    {
+        Assert.Equal(
+            ["accountstate", "consent", "reauthenticate", "restricted", "stepup"],
+            WireNames<CapabilityResidual>());
+        Assert.Equal(
+            ["administrator", "dashboard", "reconsent", "registration"],
+            WireNames<ConsentMechanism>());
+        Assert.Equal(["adult", "minor"], WireNames<AgeGroup>());
+    }
+
+    /// <summary>
+    /// LIB-API-001 AC2: the alert conditions of chapter 10 section 5.23, one per
+    /// OPS-ALERT-001 row, which an alert carries and deduplicates on.
+    /// </summary>
+    [Fact]
+    public void LIB_API_001_AC2_TheAlertConditionsAreTheContract() =>
+        Assert.Equal(AlertConditions.Order(StringComparer.Ordinal), WireNames<AlertCondition>());
+
+    /// <summary>
+    /// LIB-API-001 AC2: the two members of the bot-defence signal set, which chapter
+    /// 10 section 4.5 closes until a decision adds one.
+    /// </summary>
+    [Fact]
+    public void LIB_API_001_AC2_TheBotDefenceSignalsAreTheContract() =>
+        Assert.Equal(["datacenterRange", "repeatedAttempts"], WireNames<BotDefenceSignal>());
+
+    /// <summary>
     /// Every member of every vocabulary carries a wire name, so none of them reaches a
     /// host as the name the compiler happens to give it.
     /// </summary>
@@ -107,6 +176,11 @@ public sealed class VocabularyContractTests
             typeof(AssuranceLevel),
             typeof(GateLevel),
             typeof(CredentialRedundancy),
+            typeof(CapabilityResidual),
+            typeof(ConsentMechanism),
+            typeof(AgeGroup),
+            typeof(AlertCondition),
+            typeof(BotDefenceSignal),
         ];
 
         foreach (Type vocabulary in vocabularies)

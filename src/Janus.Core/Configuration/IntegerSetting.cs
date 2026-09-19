@@ -13,11 +13,11 @@ public sealed class IntegerSetting : BoundedSetting<int>
     internal IntegerSetting(
         string key,
         SettingScope scope,
-        SettingDirection loosening,
         int fallback,
         int? floor = null,
-        int? ceiling = null)
-        : base(key, scope, loosening, required: false, fallback, floor, ceiling)
+        int? ceiling = null,
+        SettingDirection? loosening = null)
+        : base(key, scope, required: false, fallback, floor, ceiling, loosening)
     {
     }
 

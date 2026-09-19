@@ -183,7 +183,15 @@ way round the permission.
 | **Subject-event handlers** | Erasure, restriction and export, per sensitive resource type. **Startup fails without them** (PRIV-RIGHT-005b) |
 | **Governing language** | `legal.governinglanguage`: the default governing language of every legal document version (PRIV-CONS-005). Required, no default; protected once set (OPS-CFG-004) |
 | **Preference declaration** | Each host-declared preference: name, type (`string` · `boolean` · `integer` · `enum` with its values), default, and whether the person or only an administrator may edit it (REG-PREF-001). The declaration MAY be empty; a malformed one fails startup |
-| **Restriction key suppliers** | Optional: for each `host:<name>` restriction key the host uses (AUTH-ABUSE-004), a per-send callback registered under that name that returns the key value the restriction is evaluated against. A restriction naming a `host:<name>` key with no registered supplier fails startup |
+| **Restriction key suppliers** | Optional: for each `host:<name>` restriction key the host uses (AUTH-ABUSE-004), a per-send callback registered under that name that returns the key value the restriction is evaluated against. A restriction naming a `host:<name>` key with no registered supplier fails startup. The callback is `Func<SendContext, CancellationToken, ValueTask<string>>`; `SendContext` is a sealed record of `Purpose` (`10` section 5.15), `Kind` (`email` · `sms`), `SubjectId` (nullable) and `Source` (D-153) |
+| **Calendar time zone** | `privacy.calendar.timezone`: the IANA zone in which the legal clock counts days (PRIV-RIGHT-002). Required, protected (D-153) |
+| **Message languages** | `notification.languages`: the BCP 47 tags every outbound message may be sent in (IDN-ATTR-001, AUTH-ABUSE-005). Required, at least one (D-153) |
+| **Email sending domain** | `notification.email.sendingdomain`, and the optional set of relay-registered domains (INT-MAIL-011). Required (D-153) |
+| **Recipients** | Optional: the processors and recipients the records of processing list (PRIV-ROPA-002), each `{ name, characterisation, dataReceived, location, agreementReference, callback }`; the library ships `05` section 8 as the default set (D-153) |
+| **Challenge verifier** | Optional: a callback that takes a challenge token and answers pass or fail (AUTH-ABUSE-008). Absent, bot-defence signals are audited and no challenge is shown (D-153) |
+| **Phone signal provider** | Optional: a callback answering `none` · `clear` · `risk` for a number (AUTH-FACT-002b). Absent, the record says `unavailable` (D-153) |
+| **Reserved usernames** | Optional: names added to the library's reserved list (REG-IDENT-009) (D-153) |
+| **Sensitive-body endpoints** | Optional: the `SensitiveBody` endpoint metadata that turns body logging off for an endpoint (BFF-LOG-002) (D-153) |
 
 Everything else has a safe default the host may override (P-001, D-107), including
 the public-holiday list, whose safe default is empty and which staff maintain at
@@ -200,12 +208,15 @@ other requirements already contradicted; the subject-event handlers added by D-0
 were still missing after that correction; and `10` then listed twenty keys with no
 default, of which fourteen could be defaulted and six belonged here (D-107).*
 
-*Source: D-148; D-005, D-015, D-068, D-107, D-146*
+*Source: D-148; D-005, D-015, D-068, D-107, D-146, D-153*
 
 **Acceptance criteria**
 1. A minimal working configuration requires only the declarations listed above; every
    other key has a default.
-2. Omitting any produces a named startup error identifying which.
+2. Omitting any produces a named startup error identifying which:
+   `model.startup.declarationmissing` with `details.key`, `details.handler` or
+   `details.supplier` naming the omission (D-153); `legal.governinglanguage` keeps its
+   own code.
 3. No key outside this list fails startup when unset.
 4. Startup without `legal.governinglanguage` fails with a named error; startup with an
    empty preference declaration and no restriction key supplier succeeds.

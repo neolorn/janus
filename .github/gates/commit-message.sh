@@ -10,6 +10,13 @@ base=${1:-}
 head=${2:-HEAD}
 empty=0000000000000000000000000000000000000000
 
+# A force-pushed branch leaves the event's previous commit unreachable, which is a
+# fact about the push and not about the work. The range then starts where the branch
+# left the default branch.
+if [ -n "$base" ] && [ "$base" != "$empty" ] && ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+  base=$(git merge-base origin/main "$head" 2>/dev/null || git merge-base main "$head" 2>/dev/null || true)
+fi
+
 if [ -z "$base" ] || [ "$base" = "$empty" ]; then
   range="${head} -1"
 else

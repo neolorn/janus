@@ -73,6 +73,11 @@ Registered properties:
 | `AssuranceLevel` | Highest AAL this factor can contribute to |
 | `VerificationOnly` | Proves control of a channel; never authenticates |
 
+**Values (D-153).** The device description a credential or session records is derived
+server side from the `User-Agent` header as `{ browser, os }`, each at most 64
+characters; the default credential label is the two joined by a space. The frontend
+renders it; nothing else is read from the header.
+
 *Source: D-012, D-141, D-146*
 
 There is no separate "may satisfy step-up" property. Whether a factor, alone or in a
@@ -181,6 +186,11 @@ be retired. Each account SHALL carry a **preferred second-step method**
 factors**: the limitation SHALL be shown at enrolment, `phoneCode` SHALL be flagged
 less secure wherever it is listed, and SIM-change and porting risk signals, where
 available, SHALL be considered before an SMS factor is used.
+
+**Values (D-153).** The SIM-change or porting signal reaches the library through an
+optional host callback declared on the model builder (LIB-HOST-001), returning `none`
+· `clear` · `risk` for a number; where no callback is declared the record says
+`unavailable` and the rule of criterion 6 does not apply.
 
 *Source: D-146; NIST SP 800-63B-4 section 3.1.3.3; IDN-ATTR-008; `18` FE-SEC-001*
 
@@ -349,6 +359,9 @@ displayed once at generation, and stored hashed. The set SHALL record `viewedAt`
 through the account and as a notice when `recovery.codes.reminder` (default **365
 days**) has elapsed since the set was generated.
 
+**Values (D-153).** A recovery code is 10 symbols from the Crockford base32 alphabet
+(about 50 bits), shown as two groups of five and hashed as a password is.
+
 *Source: D-034, D-146*
 
 Hashed as passwords are: verifiable, never recoverable. The timestamps let the
@@ -474,6 +487,9 @@ whose `requiredAssurance` is below AAL2 MAY mark the browser as a **trusted devi
 second factor SHALL then be skipped on that browser for `factor.trusteddevice.lifetime`
 (default **30 days**, ceiling enforced). The primary factor is always still required.
 
+**Values (D-153).** The trust token lives in `__Host-janus-device`: 32 random bytes,
+base64url, stored server side against the account.
+
 *Source: D-124*
 
 **Mechanics.** A separate, opaque, single-purpose device token in its own `__Host-`
@@ -528,6 +544,10 @@ the email destination restriction (AUTH-ABUSE-004). The pending state SHALL be
 reported as `auth.device.verificationrequired`; completion SHALL raise
 `DeviceVerified`.
 
+**Values (D-153).** A browser that passed the check is remembered by a
+`__Host-janus-browser` cookie: 32 random bytes, base64url, stored server side, valid
+for `device.verification.lifetime`.
+
 *Source: D-148; D-146; AUTH-FACT-004, AUTH-ABUSE-004*
 
 A single-factor account's only protection against a leaked password is that the
@@ -563,6 +583,10 @@ requirement SHALL be told the requirement and the deadline and MAY continue; aft
 it, the sign-in SHALL stop at enrolment (`auth.policy.graceexpired`) until the
 requirement is met. An account created after the change SHALL be held at enrolment
 at once. Live sessions SHALL be handled by AUTH-SESS-009.
+
+**Values (D-153).** `policyRequirement` is `{ field, value, deadline }` with `field`
+one of `requiredAssurance` · `credentialRedundancy` (the two policy fields that can be
+raised), `value` the new requirement and `deadline` the instant the grace ends.
 
 *Source: D-146; AUTH-SESS-009, AUTH-STEP-002*
 
@@ -669,6 +693,17 @@ person's own identifiers and profile fields and the service name), both off by
 default. Context words SHALL be checked at set and at change only; a profile field
 added later that matches the password SHALL be caught at the next sign-in with a
 prompt to change, never a lockout.
+
+**Values (D-153).** The offline leaked list is the 100,000 most prevalent SHA-1 hashes
+of the Pwned Passwords downloadable corpus (the range API's provider), refreshed at
+each release and dated so `password.blocklist.corpusmaxage` can judge it; its licence
+is verified from the provider's published terms before the file is added, and the
+NOTICE file carries the attribution. The `dictionary` source is a public-domain
+English word list of at least 10,000 entries plus an Arabic transliteration list; a
+host may extend either by declaration. The `context` source reads the service name
+from `service.name` and the person's own identifiers and display name. A sign-in that
+completes on an account whose password now fails `context` (criterion 5) returns
+`passwordChangeRequired: true` beside `status: complete` (AUTH-RECOV-007a).
 
 *Source: D-011, D-041, D-146*
 
@@ -1093,6 +1128,10 @@ session SHALL be revocable on its own (`DELETE /account/sessions/{id}`). The loc
 SHALL be stored under the person's key and retained with the session record, no
 longer.
 
+**Values (D-153).** `location` is `{ city, country }` with `country` an ISO 3166-1 alpha-2
+code, both nullable and absent when INT-GEN-006 degrades; the device description is
+that of AUTH-FACT-001.
+
 *Source: D-146; AUTH-SESS-001, AUTH-SESS-008, AUTH-SESS-011, PRIV-RIGHT-005a*
 
 Per-account revocation of everything is AUTH-SESS-011 and "sign out everywhere" is
@@ -1130,7 +1169,8 @@ absolute lifetime — up to a year for a customer (AUTH-SESS-005). The takedown 
 stops immediately" was false.
 
 **Acceptance criteria**
-1. Suspending an account ends its sessions within one request cycle.
+1. Suspending an account ends its sessions within one request cycle: the first request
+   on any of them that reaches the session record after the commit is refused.
 2. The minor takedown ends sessions **in the same transaction as suspension** — both
    are library work, so this part genuinely is atomic.
 3. Deletion ends sessions before personal data is removed.
@@ -1493,6 +1533,11 @@ confirmation, require one approver (configurable upward), require a written reas
 notify the account owner on a channel separate from the recovery flow, and be subject
 to rate limiting and anomaly detection **per account and per approver**.
 
+**Values (D-153).** Rate limiting is `recovery.ratelimit.account` requests per account per
+day and `recovery.ratelimit.approver` approvals per approver per day, refused with
+`auth.throttled` beyond; the anomaly alerts fire at `alerting.recovery.accountthreshold`
+and `alerting.recovery.approverthreshold` (OPS-ALERT-001).
+
 *Source: D-008, D-041, D-111*
 
 **Where the link goes.** To a channel **already recorded on the account** and chosen by
@@ -1629,6 +1674,9 @@ from the link or from any session of the account returns it to `active`.
 configurable) and SHALL NOT complete if none of the notifications delivered. Only on
 invalidation is the account's reachable assurance recomputed (AUTH-STEP-006).
 
+**Values (D-153).** "Repeatedly" is once at the report, once every
+`recovery.invalidation.noticeinterval`, and once 24 hours before invalidation.
+
 *Source: D-009, D-022, D-141*
 
 **The waiting period is the control** — long enough that a real owner notices, short
@@ -1722,6 +1770,8 @@ the control without handing over the lever.
 3. A distributed attack across many addresses is caught by the per-account limit.
 4. The per-account delay does not exceed its cap regardless of attempt volume.
 5. A returning legitimate device is not held by an attack on that account.
+6. The identifier component uses the same threshold, delays, decay and cap as the
+   account component (`abuse.throttle.account.cap`); it has no keys of its own (D-153).
 
 ---
 
@@ -1774,11 +1824,14 @@ identifier, neither of which constrains this.
 
 **Acceptance criteria**
 1. Responses for existing and non-existent addresses are byte-identical.
-2. Response timing does not vary measurably with existence.
+2. Response timing does not vary measurably with existence: verified by construction
+   (one code path, fixed-time comparison, identical bytes), asserted by criterion 1, and
+   named in the report as verified by construction (CONV-TEST-007, D-153).
 3. The non-existence email is sent and its content does not name the requester.
 4. A second non-existence email to the same address within
    `abuse.nonexistent.window` is suppressed.
-5. An unusual rate of such sends raises an alert (OPS-ALERT-001, D-121).
+5. More than `alerting.nonexistent.threshold` such sends system-wide in an hour raises
+   the `nonexistent-notice-rate` alert (OPS-ALERT-001, D-121, D-153).
 6. The "someone tried to register or change to this address — nothing has changed"
    notification points the recipient to sign-in and to recovery, so a forgetful
    returning customer is not left at a dead end (D-140).
@@ -1846,6 +1899,8 @@ silence the notice that tells its owner something is wrong.
 **AUTH-ABUSE-005** — SMS message templates SHALL carry a per-language length budget,
 tested, with Arabic binding.
 
+**Values (D-153).** "Every configured language" is the set `notification.languages`.
+
 *Source: D-013, D-031*
 
 Unicode messages are 70 characters for a single SMS and 67 per part concatenated;
@@ -1869,7 +1924,10 @@ alerting, and sends hard-stopped below a configured floor.
 *Source: D-013*
 
 **Acceptance criteria**
-1. A drain rate exceeding threshold raises an alert without human monitoring.
+1. The balance is read every `abuse.sms.pollinterval`; spend in the last hour above
+   `abuse.sms.drainfactor` times the trailing seven-day hourly mean, or a balance that
+   would reach the floor within 24 hours at the current rate, raises the `sms-balance`
+   alert without human monitoring (D-153).
 2. Below the floor, sends are refused and the condition surfaced.
 
 ---
@@ -1877,6 +1935,10 @@ alerting, and sends hard-stopped below a configured floor.
 **AUTH-ABUSE-007** — The SMS delivery-report callback SHALL be treated as hostile
 input: correlation references unguessable, endpoint rate-limited, and a callback
 SHALL NEVER by itself advance a verification state.
+
+**Values (D-153).** The callback endpoints accept `integration.callback.ratelimit` requests
+per source per minute; a correlation reference is 128 random bits, base64url, compared
+in fixed time.
 
 *Source: D-013*
 
@@ -1900,6 +1962,14 @@ friction without proportionate benefit.
 **Acceptance criteria**
 1. An ordinary registration presents no challenge.
 2. A registration from a datacenter range, or repeated attempts, presents one.
+3. `repeatedAttempts` means more than `abuse.botdefence.repeatedattempts` registration
+   sessions from one source in an hour; `datacenterRange` matches a bundled range file
+   refreshed like the IP location database (INT-GEN-006) (D-153).
+4. The challenge is the host's: a challenge verifier callback declared on the model
+   builder (LIB-HOST-001) takes a token and answers pass or fail. When a signal fires
+   and a verifier is declared, the step answers `auth.challenge.required` and completes
+   only with a passing token; when none is declared the signal is audited and no
+   challenge is shown. The library ships no challenge (D-153).
 
 ---
 
@@ -1975,9 +2045,10 @@ lifetime `oidc.accesstoken.lifetime` (`10` section 4.9; default 10 minutes, ceil
 against the published JWKS (the mail server, INT-MAIL-004) does not consult the
 session record on each request, so a token it already holds stays valid until it
 expires. For such a party the access-token lifetime *is* the revocation latency.
-AUTH-SESS-001's "within one request cycle" applies to the session and to every
-validation that reaches the record, not to tokens already issued and validated
-offline. The default of 10 minutes is the accepted latency; an operator who raises it
+AUTH-SESS-001's "within one request cycle" means the first request that reaches the
+session record after the revoking transaction commits is refused (D-153); it applies to
+the session and to every validation that reaches the record, not to tokens already
+issued and validated offline. The default of 10 minutes is the accepted latency; an operator who raises it
 towards the ceiling accepts a longer one.
 
 **Acceptance criteria**

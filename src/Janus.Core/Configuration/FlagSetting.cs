@@ -7,8 +7,13 @@ namespace Janus.Core.Configuration;
 /// <remarks>Implements chapter 10 section 4 value types, OPS-CFG-002.</remarks>
 public sealed class FlagSetting : Setting<bool>
 {
-    internal FlagSetting(string key, SettingScope scope, SettingDirection loosening, bool fallback)
-        : base(key, scope, loosening, required: false, fallback)
+    internal FlagSetting(string key, SettingScope scope, bool fallback)
+        : base(
+            key,
+            scope,
+            fallback ? SettingDirection.Decrease : SettingDirection.Increase,
+            required: false,
+            fallback)
     {
     }
 

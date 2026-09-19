@@ -11,8 +11,8 @@ namespace Janus.Core.Configuration;
 /// <remarks>Implements chapter 10 section 4 value types, PRIV-RIGHT-002.</remarks>
 public sealed class DateListSetting : Setting<IReadOnlyList<DateOnly>>
 {
-    internal DateListSetting(string key, SettingScope scope, SettingDirection loosening)
-        : base(key, scope, loosening, required: false, fallback: [])
+    internal DateListSetting(string key, SettingScope scope)
+        : base(key, scope, SettingDirection.AnyChange, required: false, fallback: [])
     {
     }
 

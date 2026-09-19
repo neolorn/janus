@@ -14,10 +14,10 @@ public sealed class IntegerListSetting : Setting<IReadOnlyList<int>>
     internal IntegerListSetting(
         string key,
         SettingScope scope,
-        SettingDirection loosening,
         IReadOnlyList<int> fallback,
         IReadOnlySet<int> unremovable)
-        : base(key, scope, loosening, required: false, fallback) => Unremovable = unremovable;
+        : base(key, scope, SettingDirection.AnyChange, required: false, fallback) =>
+        Unremovable = unremovable;
 
     /// <summary>
     /// The members the chapter holds in place, which a change cannot drop.

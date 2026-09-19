@@ -152,7 +152,7 @@ another jurisdiction declares its own list and changes no code (D-091, D-108).
 |---|---|
 | Consent | Written consent captured before processing **for those purposes that rest on consent** (PRIV-SENS-002a) |
 | Encryption | Personal fields encrypted per subject (PRIV-RIGHT-005a); backups encrypted (DR-010); disk encrypted |
-| Retention | Stricter defaults than ordinary data |
+| Retention | Declared like any other category (PRIV-RET-001 AC1); the library has no default retention a sensitive category could be stricter than, so the declaration is required and the register shows it (D-153) |
 | Records | Reported in the sensitive category, separately from non-sensitive |
 
 *Source: D-030*
@@ -290,6 +290,9 @@ the financial-detail category from our own holdings.
 **PRIV-CONS-001** — Consent SHALL be recorded, never a boolean. Each record SHALL
 carry: the specific purpose, the **version of the notice displayed**, timestamp,
 mechanism, and withdrawal timestamp where applicable.
+
+**Values (D-153).** `mechanism` is one of `10` section 5.21: `registration` · `dashboard`
+· `reconsent` · `administrator`.
 
 *Source: D-024*
 
@@ -442,6 +445,13 @@ prior consent SHALL cease to be a valid basis and re-consent SHALL be requested.
 
 **A superseded consent version SHALL prompt, never block.** Processing under
 contractual or legal obligation SHALL be unaffected.
+
+**Values (D-153).** Whether a version is material is decided by the person publishing it:
+`POST /admin/documents/{document}/versions` takes a required boolean `material`. `true`
+supersedes every live consent on the purposes the document covers
+(`privacy.consent.superseded`) and the frontend re-asks; `false` publishes the version
+and touches no consent. The audit record carries the answer. Code does not judge
+materiality.
 
 *Source: D-024, D-066*
 
@@ -654,6 +664,14 @@ is adjusted accordingly by the administrator entering it (D-147). The system SHA
   complain to the Centre) and keep the record. Erasure cannot run without a human
   confirming identity, so the system never erases on its own
 
+**Values (D-153).** Calendar days, working days and holidays are determined in
+`privacy.calendar.timezone` (a required, protected deployment value). The six working
+days are the six that follow the submission's calendar day in that zone; `decisionDue`
+is the end (23:59:59) of the sixth; the warning fires `privacy.request.warninglead`
+before it and the High alert at 00:00 of the deadline day. `receivedAt` is a calendar
+date (`YYYY-MM-DD`) in that zone, refused with `privacy.request.receivedfuture` when
+later than today there; the clock runs from the end of that date.
+
 *Source: D-148; D-037, D-122, D-126, D-147*
 
 With one operator, any deadline that depends on a human click is a deadline missed by
@@ -758,6 +776,12 @@ singling-out test applies to these records.
 **PRIV-RIGHT-005a** — Personal fields SHALL be encrypted with a **per-subject data key,
 stored wrapped in the database under a key-encryption key held in the secrets manager**.
 Erasure SHALL overwrite the wrapped key with an irreversible value.
+
+**Values (D-153).** Fields are encrypted with AES-256-GCM (32 byte data key, 12 byte
+nonce, 16 byte tag), one data key per subject, wrapped under the key-encryption key
+with AES key wrap with padding (RFC 5649). The format marker is one byte, `0x01` for
+this scheme. An erased wrapped key is 32 zero bytes under marker `0x00`; every decrypt
+refuses it, and the DR-016 ledger and a restore recognise it as erased.
 
 *Source: D-097, D-099, D-100, D-147*
 
@@ -910,6 +934,10 @@ recoverable by decrypting the subject's own encrypted column — so rotation is 
 operation across every live subject. Erased subjects need none; their fingerprints are
 already neutralised.
 
+**Values (D-153).** The keyed function is HMAC-SHA-256 over the canonical UTF-8 bytes
+(IDN-ACCT-004), 32 byte output. The neutralised value is 32 zero bytes, and no lookup
+path may match it.
+
 *Source: D-082, D-093*
 
 Email and phone must be matchable for sign-in lookup and duplicate detection, and
@@ -1021,12 +1049,12 @@ Fields, and their source:
 | Retention period or criteria | Section 8 |
 | Recipients and their legal characterisation | Declared per recipient |
 | Data Protection Agreement links | Declared per recipient |
-| **Data Hosting Environment** | Configuration |
+| **Data Hosting Environment** | Configuration: `hosting.environment` (free text) and `hosting.location` (D-153) |
 | **Data Hosting Location** (inside / outside Egypt) | Configuration |
 | **Basis of Cross Border Transfer** | Configuration |
 | Personal Data Disposal Measures | PRIV-RIGHT-005 |
 | Organisational Roles with Access | Grants |
-| Implemented Technical Security Measures | Configuration |
+| Implemented Technical Security Measures | Derived: the PRIV-SENS-002 controls and the protected keys of `10` section 4.8 (D-153) |
 | **Data Owner** | **Declared — human input** |
 | **Implemented Organisational Security Measures** | **Declared — human input** |
 | **Links to LIA, DPIA, TIA** | **Declared — human input** |
@@ -1045,6 +1073,12 @@ characterisation and agreement reference.
 
 Current processors: the payment provider, the shipping provider, the SMS gateway,
 the hosting provider, and the developer.
+
+**Values (D-153).** Recipients are a `recipients` declaration on the model builder
+(LIB-HOST-001): each entry `{ name, characterisation: processor · recipient,
+dataReceived: [category labels], location: inside · outside, agreementReference
+(optional), callback: boolean }`, the six columns of `05` section 8. The library ships
+that section's rows as defaults the host edits.
 
 *Source: D-036, D-041, D-029*
 
@@ -1125,6 +1159,10 @@ indexing decision made now or a painful one made during an incident.
 basis)** with an enforced floor. Where a record carries several bases, **the longest
 legal basis governs storage** and consent governs **use**.
 
+**Values (D-153).** `retention.consent` counts from `withdrawnAt` where set, otherwise from
+the subject's erasure instant; a live consent on a live account is never purged. The
+same rule holds for objection records.
+
 *Source: D-026.1, D-066*
 
 Previously undefined: an order row is both sensitive data ("stricter defaults") and a
@@ -1158,7 +1196,9 @@ email change, the origin address on a sign-in — that attribute is written to a
 **per-subject-encrypted column**, and erasure destroys the key (PRIV-RIGHT-005a)
 rather than editing the row.
 
-**Retention purging happens by partition.** Audit tables are partitioned by period;
+**Retention purging happens by partition.** Audit tables are partitioned by calendar
+month on the occurrence instant, two months created ahead by the sweep, a partition
+dropped when its end is older than the category's retention (D-153);
 expired partitions are dropped by a scheduled background job (INF-BG-001) calling a
 single `SECURITY DEFINER` function, `audit_drop_expired_partitions()`, created by the
 migration step and executable only by a dedicated **maintenance role** whose

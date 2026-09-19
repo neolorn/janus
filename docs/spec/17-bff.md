@@ -92,6 +92,10 @@ opaque identifier in a cookie and nothing else.
 **BFF-SESS-002** — The session cookie SHALL carry `httpOnly`, `Secure`, `SameSite`
 (per BFF-CSRF-005), and the `__Host-` prefix. These SHALL NOT be configurable.
 
+**Values (D-153).** The cookies the library sets are `__Host-janus-session`,
+`__Host-janus-preauth` (BFF-CSRF-005a) and `__Host-janus-csrf` (BFF-CSRF-006), one set
+per application origin; the `__Host-` prefix already scopes them.
+
 *Source: AUTH-SESS-003, D-053*
 
 Each is load-bearing. Making them configurable creates a path to an insecure
@@ -229,6 +233,9 @@ treat absence as permission.
 **BFF-CSRF-003** — State-changing requests SHALL require a custom request header, and
 its absence SHALL reject.
 
+**Values (D-153).** The header is `X-Janus-Request`; its presence is checked and its value
+ignored. The frontend interceptor sets it on every request (FE-API-002).
+
 *Source: D-053*
 
 This relies on the same-origin policy: a cross-origin page cannot add a custom header
@@ -284,6 +291,10 @@ the session being present on the POST itself.
 
 **BFF-CSRF-005a** — A **pre-authentication session** SHALL be issued on first contact,
 serving as the CSRF token's binding target before a real session exists.
+
+**Values (D-153).** The pre-authentication session lives `registration.session.lifetime`,
+the registration session it carries being bound to it; no separate key. The notice
+(PRIV-CONS-006a) states that lifetime.
 
 *Source: D-092, D-146*
 
@@ -341,6 +352,9 @@ what turns the press into the right person's intent.
 **BFF-CSRF-006** — The synchronizer token SHALL be obtainable by the first-party
 frontend without a separate authenticated round trip, and SHALL rotate with the
 session.
+
+**Values (D-153).** The token is a script-readable `__Host-janus-csrf` cookie set beside the
+session cookie and validated server side against the session.
 
 *Source: AUTH-SESS-006, D-053*
 
@@ -403,6 +417,9 @@ SHALL be applied.
 | Idempotency | Keyed on the provider's event identifier |
 | Secret | From the secrets manager, rotatable with an overlap window |
 
+**Values (D-153).** A callback signing secret rotates with a 24 hour overlap during which
+both secrets verify.
+
 *Source: D-070*
 
 Signature verification is the accepted baseline for webhook security and is not
@@ -419,6 +436,10 @@ does not match the signed bytes.
 
 **BFF-MACH-003** — Where signing is **not available**, the callback SHALL be treated as
 a **hint that triggers verification against the provider's API** — never as a fact.
+
+**Values (D-153).** The endpoints accept `integration.callback.ratelimit` requests per
+source per minute; `alerting.callback.threshold` rejected callbacks from one source in
+an hour raise `callback-verification-failed`.
 
 *Source: D-070, INT-GEN-003*
 
@@ -502,6 +523,9 @@ default error pages.
 **BFF-ERR-002** — The BFF SHALL NOT leak internal fault detail. Faults SHALL surface
 as a generic code with the detail logged against the correlation identifier.
 
+**Values (D-153).** The generic code is `system.fault`, status 500, the body per
+API-CONV-002 carrying the correlation identifier and nothing else.
+
 *Source: CONV-ERR-001, P-003*
 
 **Acceptance criteria**
@@ -521,7 +545,7 @@ permission check first has disclosed the answer regardless of its content.
 
 **Acceptance criteria**
 1. Bodies are byte-identical.
-2. Timing distributions overlap within noise.
+2. Timing distributions overlap within noise: verified by construction (one code path, fixed-time comparison, identical bytes), asserted by the byte identity, and named in the report as verified by construction (CONV-TEST-007, D-153).
 3. Uniformity is enforced by the pipeline, not by endpoint discipline.
 
 ---
@@ -600,6 +624,10 @@ logging, audit, and any error response.
 **BFF-LOG-002** — The BFF SHALL NOT log request or response bodies for endpoints
 carrying order data.
 
+**Values (D-153).** An endpoint carrying order data is one the host marks with the
+`SensitiveBody` endpoint metadata (LIB-HOST-001); the library has no order concept.
+Body logging is off for a marked endpoint whatever the setting.
+
 *Source: CONV-LOG-003, PRIV-SENS-003*
 
 Order contents are health data. Body logging at the boundary is the most likely place
@@ -630,6 +658,10 @@ part of the public contract.
 | 9 | Host endpoint | |
 | 10 | Capability projection | Requires the result set |
 | 11 | Error translation and concealment | **Last**, so nothing earlier has disclosed existence |
+
+**Values (D-153).** Stage 4 admits `abuse.source.ratelimit` requests per source address
+per minute, sliding, and answers 429 `auth.throttled` beyond; sized for many people
+behind one address.
 
 *Source: D-052, D-053*
 

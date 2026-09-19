@@ -13,17 +13,15 @@ public sealed class ChoiceSetting<TValue> : Setting<TValue>
     internal ChoiceSetting(
         string key,
         SettingScope scope,
-        SettingDirection loosening,
         TValue fallback,
-        IReadOnlySet<TValue> allowed)
-        : base(key, scope, loosening, required: false, fallback) => Allowed = allowed;
+        IReadOnlySet<TValue> allowed,
+        SettingDirection? loosening = null)
+        : base(key, scope, loosening ?? SettingDirection.AnyChange, required: false, fallback) =>
+        Allowed = allowed;
 
-    internal ChoiceSetting(
-        string key,
-        SettingScope scope,
-        SettingDirection loosening,
-        IReadOnlySet<TValue> allowed)
-        : base(key, scope, loosening, required: true, fallback: default!) => Allowed = allowed;
+    internal ChoiceSetting(string key, SettingScope scope, IReadOnlySet<TValue> allowed)
+        : base(key, scope, SettingDirection.AnyChange, required: true, fallback: default!) =>
+        Allowed = allowed;
 
     /// <summary>
     /// The values the key admits.

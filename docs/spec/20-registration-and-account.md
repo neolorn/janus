@@ -113,7 +113,7 @@ A recovery link SHALL carry the `notification` sending purpose (`10` section 5.1
 
 The primary cannot be the backup and cannot be removed while primary. Changing the
 backup setting is notified to every identifier in the *current* set before the change
-applies. `identifiers.email.max` and `identifiers.phone.max` default to unlimited;
+applies. `identifiers.email.max` and `identifiers.phone.max` default to ten per kind (D-152);
 `1` gives the single-address mode of REG-IDENT-007.
 
 **Acceptance criteria**
@@ -136,7 +136,7 @@ and answer identically whether or not it resolves to an account.
 1. Signing in with a non-primary verified email or phone succeeds exactly as with the
    primary.
 2. The response to `/auth/begin` for an unknown identifier is byte- and timing-identical
-   to the response for a known one.
+   to the response for a known one; timing verified by construction (one code path, fixed-time comparison, identical bytes), asserted by the byte identity, and named in the report as verified by construction (CONV-TEST-007, D-153).
 
 ---
 
@@ -264,6 +264,13 @@ action with a cooling-off of `identifiers.username.changecooloff` between change
 username SHALL be **held** for the period of `retention.consent` and released
 afterwards.
 
+**Values (D-153).** The reserved list is the library's (`admin`, `administrator`, `root`,
+`support`, `security`, `postmaster`, `abuse`, `noreply`, `emergency`, `system`, `help`,
+`api`, `www`, `mail`) plus the host's declared additions (LIB-HOST-001). "Throttled
+per source" means each `taken` or `reserved` answer counts as one failure in the
+AUTH-ABUSE-001 per-source throttle. `identity.username.coolingoff` carries
+`details.retryAt`.
+
 *Source: D-146*
 
 Usernames are the one identifier where existence is disclosed, because they are public
@@ -305,7 +312,7 @@ rules.
 | Field | Enabled | Rules | Edited |
 |---|---|---|---|
 | Display name | always, optional | any script; PRECIS Nickname (RFC 8266); 1 to 64 **bytes**; mixed-script rule per word (IDN-ACCT-005); shown where a human needs to know who an account is, the primary email when absent | `PUT /account/profile`, no gate, audited |
-| Legal name | `profile.legalname` = off (default) · optional · required | 1 to 200 characters; mixed-script rule per word | same |
+| Legal name | `profile.legalname` = off (default) · optional · required | 1 to 200 Unicode scalar values after NFC (D-153); mixed-script rule per word | same |
 | Date of birth | `profile.dateofbirth` = off (default) · optional · required | the date entered at the age step (REG-PROF-002); **immutable to the person**, corrected through support; never used to infer anything but age | support only |
 | Photo | as IDN-ATTR-002 | as IDN-ATTR-002 to 004; `photo.maxbytes`, `photo.maxdimension`; validated client-side for convenience and server-side by content | photo endpoints |
 
@@ -344,7 +351,8 @@ defined outcome (`14-takedown-procedure`).
    and the same session accepts no further date.
 3. The account record carries the affirmation with its timestamp; the date is present
    only where `profile.dateofbirth` is on.
-4. With `registration.adultaffirmation` = `off`, the screen records the age group and no
+4. With `registration.adultaffirmation` = `off`, the screen records the age group
+   (`minor` · `adult`, `10` section 5.22) and no
    affirmation.
 
 ---
@@ -363,9 +371,13 @@ SHALL declare its preference keys at startup: name, type (`string` · `boolean` 
 `integer` · `enum` with values), default, and whether the person or only an
 administrator may edit it. The library SHALL validate values against the declaration,
 reject undeclared keys (`identity.preference.undeclared`), cap the whole set at
-`preferences.maxsize` (default 8 KB), store declared values under the subject key,
+`preferences.maxsize` (default 8 KiB), store declared values under the subject key,
 include them in the subject export and erase them with the rest. The library SHALL
 NEVER branch on a declared preference.
+
+**Values (D-153).** A value of the wrong type is refused with `identity.preference.wrongtype`,
+a set over `preferences.maxsize` with `identity.preference.toolarge`, and a person
+setting an administrator-only preference with `identity.preference.administratoronly`.
 
 *Source: D-146; amends D-055; IDN-ATTR-001 for the language*
 
@@ -518,10 +530,15 @@ no code SHALL be sent to the identifier, and its owner SHALL be notified once pe
 `abuse.nonexistent.window` that someone tried to register with it. The session SHALL
 carry a sign-in exit.
 
+**Values (D-153).** The sign-in exit is a static link on every registration screen, drawn
+by the frontend; `GET /register` carries no field for it, because a field present only
+for a duplicate would be an oracle.
+
 *Source: D-146; D-076, D-112*
 
 **Acceptance criteria**
-1. The response to a duplicate is byte- and timing-identical to the fresh case.
+1. The response to a duplicate is byte- and timing-identical to the fresh case; timing
+   verified by construction (one code path, fixed-time comparison, identical bytes), asserted by the byte identity, and named in the report as verified by construction (CONV-TEST-007, D-153).
 2. The owner's notice contains no link and no code.
 3. The session expires without creating an account.
 
@@ -668,6 +685,11 @@ sign-in email and any open email chosen at invitation acceptance SHALL be in the
 (`identity.identifier.domainnotallowed`). Adding a domain is a loosening under
 OPS-CFG-002; removing one SHALL stop new sign-ins with addresses in it and SHALL raise
 an alert.
+
+**Values (D-153).** Re-verification runs every `domain.reverify.interval` on the sweep. The
+record is `_janus-verify.<domain>` TXT with value
+`janus-domain-verification=<32 random bytes, base64url>`, one token per organization
+and domain, never reused.
 
 *Source: D-146*
 

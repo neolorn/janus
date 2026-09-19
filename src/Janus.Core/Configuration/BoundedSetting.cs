@@ -14,12 +14,12 @@ public abstract class BoundedSetting<TValue> : Setting<TValue>
     private protected BoundedSetting(
         string key,
         SettingScope scope,
-        SettingDirection loosening,
         bool required,
         TValue fallback,
         TValue? floor,
-        TValue? ceiling)
-        : base(key, scope, loosening, required, fallback)
+        TValue? ceiling,
+        SettingDirection? loosening)
+        : base(key, scope, loosening ?? DirectionFrom(floor, ceiling), required, fallback)
     {
         Floor = floor;
         Ceiling = ceiling;

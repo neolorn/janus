@@ -58,6 +58,11 @@ and source restriction where ranges are published.
 
 A callback SHALL NEVER by itself advance an authoritative state.
 
+**Values (D-153).** The callback endpoints accept `integration.callback.ratelimit` requests
+per source per minute, fixed window, and answer 429 `integration.callback.rejected`
+before any lookup. A correlation reference is 128 random bits, base64url, compared in
+fixed time. A signing secret rotates with a 24 hour overlap (BFF-MACH-002).
+
 *Source: D-070*
 
 *Source: D-013, D-030*
@@ -102,6 +107,10 @@ resolved from a **local IP-to-city database**: a file bundled with the library o
 supplied by the host, read in process, **never a call to a third party**. The file
 SHALL be refreshed on a schedule as a background job (INF-BG-001), and a stale or
 missing file SHALL degrade to no location, never to an external lookup.
+
+**Values (D-153).** The database is refreshed every `location.database.refresh`; a file older
+than `location.database.maxage` is stale, no location is shown, and the `degradation`
+condition is raised.
 
 *Source: D-146; AUTH-SESS-013*
 
@@ -288,7 +297,9 @@ because a failed push would otherwise leave a former employee reading mail, and
 reconciliation compares **enabled state**, not merely existence.
 
 **Acceptance criteria**
-1. Suspending an account disables its mailbox within one propagation cycle.
+1. Suspending an account disables its mailbox within one propagation cycle: the
+   disable request is published on the first outbox publisher run
+   (`outbox.poll.interval`) after the suspension commits.
 2. App-password authentication fails once the account is disabled.
 3. Reconciliation compares enabled state and flags drift.
 
@@ -373,6 +384,11 @@ relay service; the host SHALL declare its registered sending domains, and
 configuration validation SHALL surface, at startup and when the setting changes, a
 sending domain that is not declared as registered while Continue with Apple is
 enabled.
+
+**Values (D-153).** The sending domain is `notification.email.sendingdomain` (required);
+the domains registered with the relay are `notification.email.relayregistered`. When
+`apple` is in any effective `loginFactors` and the sending domain is not in that set,
+startup raises the Normal condition `relay-domain-unregistered` with `details.domain`.
 
 *Source: D-146; REG-IDENT-008*
 
@@ -616,6 +632,12 @@ double.
 **INT-SMS-004** — Balance SHALL be polled, drain rate alerted on, and sends
 hard-stopped below a configured floor.
 
+**Values (D-153).** `abuse.sms.balancefloor` is a decimal in the currency the gateway
+reports. The balance is read every `abuse.sms.pollinterval`; the `sms-balance` alert
+fires when the last hour's spend exceeds `abuse.sms.drainfactor` times the trailing
+seven-day hourly mean, or when the balance would reach the floor within 24 hours at the
+current rate.
+
 *Source: D-013, AUTH-ABUSE-006*
 
 **Acceptance criteria**
@@ -672,6 +694,10 @@ solves for non-engineer editors, of whom there are none.
 
 **INT-PWD-001** — Screening SHALL send only a hash prefix. The full hash and the
 password SHALL NEVER leave the system.
+
+**Values (D-153).** The prefix is the first 5 upper-case hexadecimal characters of the
+SHA-1 of the UTF-8 password; the remaining 35 are matched locally against the range
+returned (D-041).
 
 *Source: D-011*
 

@@ -46,6 +46,25 @@ public abstract class Setting
     public bool IsRequired { get; }
 
     /// <summary>
+    /// The way a key with no stated direction loosens, read from its bounds: a key
+    /// bounded only above loosens upward, a key bounded only below loosens downward,
+    /// and a key bounded at both ends or neither loosens on any change.
+    /// </summary>
+    /// <typeparam name="TBound">The type of the bounds.</typeparam>
+    /// <param name="floor">The floor, where the chapter declares one.</param>
+    /// <param name="ceiling">The ceiling, where the chapter declares one.</param>
+    /// <returns>The direction.</returns>
+    /// <remarks>Implements the chapter 10 section 4 preamble, OPS-CFG-002, D-152.</remarks>
+    private protected static SettingDirection DirectionFrom<TBound>(TBound? floor, TBound? ceiling)
+        where TBound : struct =>
+        (floor, ceiling) switch
+        {
+            (null, not null) => SettingDirection.Increase,
+            (not null, null) => SettingDirection.Decrease,
+            _ => SettingDirection.AnyChange,
+        };
+
+    /// <summary>
     /// The failure a refused value carries: the code, the key, and the constraint it
     /// missed, so the caller is told which end it crossed rather than having the
     /// value clamped under it.

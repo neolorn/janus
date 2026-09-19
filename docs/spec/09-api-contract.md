@@ -40,7 +40,12 @@ never rendered prose.
 *Source: LIB-API-003, CONV-NAME-003*
 
 The host renders the message in the user's language from the code. `details` carries
-structured context: never a sentence. A refused send (`auth.restriction.exceeded`,
+structured context: never a sentence. Every free-text request field (`reason`, `detail`,
+`channelUsed`, `note`) is 1 to 1024 characters after trimming, one rule (D-153). Where
+an endpoint below describes a response in prose and names no field, the field is the
+camelCase of the noun in the vocabulary this chapter already uses: `id`, `label`,
+`createdAt`, `lastUsedAt`, `expiresAt`, `signedInAt`, `device`, `location`, `current`
+(D-153). A refused send (`auth.restriction.exceeded`,
 AUTH-ABUSE-004) carries `retryAt` in `details`: the earliest time a bucket lifts, and
 the same value whether or not the address is registered (AUTH-ABUSE-002).
 
@@ -96,7 +101,9 @@ existence is disclosed is a username at choice time (REG-IDENT-009).
 
 **Acceptance criteria**
 1. Responses for existing and non-existent identifiers are byte-identical.
-2. Timing distributions overlap within noise.
+2. Timing distributions overlap within noise: verified by construction (one code path,
+   fixed-time comparison, identical bytes), asserted by criterion 1, and named in the
+   report as verified by construction (CONV-TEST-007, D-153).
 
 ---
 
@@ -113,8 +120,8 @@ living `registration.session.lifetime`, that stages everything the steps collect
 { "clientId": "..." }             // originating application, per API-REDIR-002
 ```
 
-**201**: session created; the cookie is set; body carries `expiresAt` and the first
-step
+**201**: session created; the cookie is set; body is the state document of
+`GET /register` at its first step
 **429**: throttled
 
 *Source: D-146; REG-SESS-001, REG-SESS-002, API-REDIR-002*
@@ -138,6 +145,22 @@ identical whether or not an identifier presented already belongs to an account
 with its verification state and whether it is locked (REG-IDENT-010), the security
 methods enrolled so far, and `expiresAt`. It is the polling fallback for
 `GET /register/events`.
+
+```json
+{
+  "step": "email",                       // 10 section 5.19
+  "expiresAt": "...",
+  "identifiers": [ { "id": "...", "kind": "email", "value": "...", "verified": true, "locked": false } ],
+  "security": { "password": true, "secondStep": ["totp"] }
+}
+```
+
+Request bodies (D-153): `PUT /register/age` `{ "dateOfBirth": "YYYY-MM-DD" }`;
+`PUT /register/security` `{ "password": "...", "secondStep": "totp" | "securityKey" |
+"passkey" | "none" }`; `POST /register/terms` `{ "termsVersion": "...", "noticeVersion":
+"...", "consents": { "<purpose>": true } }`. The state carries no sign-in exit field:
+every registration screen shows a static sign-in link (REG-SESS-005), because a field
+present only for duplicates would be an oracle (API-CONV-005).
 
 | Endpoint | Step | Does |
 |---|---|---|
@@ -193,8 +216,11 @@ The same endpoint shape serves adding an identifier to an existing account
 
 Server-sent events for the registration session, authenticated by the **session cookie
 alone**: no token in the URL, no query parameter (BFF-CSRF-005a). Emits an event when
-an identifier is verified, when a step completes and when the session ends. Where the
-stream is unavailable the frontend polls `GET /register` (FE-VER-001).
+an identifier is verified, when a step completes and when the session ends: `event:`
+names `identifier-verified` (`{ id, kind }`), `step-completed` (`{ step }`) and
+`session-ended` (`{}`), each with the `GET /register` state as its `data`, so polling
+and streaming are one shape (D-153). Where the stream is unavailable the frontend polls
+`GET /register` (FE-VER-001).
 
 **200**: event stream
 **401** is never used here (API-CONV-003); a request without the session cookie
@@ -427,8 +453,9 @@ see this status.
 
 **Grace period** (AUTH-FACT-017). Where the account does not yet meet a raised
 requirement and `policy.enforcement.grace` has not elapsed, the completing response
-carries `policyRequirement` (the requirement and its `deadline`) beside `status:
-"complete"`; after the grace the response is **403** `auth.policy.graceexpired` with
+carries `policyRequirement` (`{ field, value, deadline }`, AUTH-FACT-017) beside
+`status: "complete"`; a password that now fails the `context` blocklist adds
+`passwordChangeRequired: true` there (AUTH-PASS-004, D-153); after the grace the response is **403** `auth.policy.graceexpired` with
 `outcome: "enrol"` in `details`, and the sign-in stops at enrolment until the
 requirement is met.
 
@@ -471,8 +498,8 @@ this one skips nothing.
 ### `GET /account/devices` · `DELETE /account/devices/{id}`
 
 Lists the account's **trusted devices** (AUTH-FACT-015) and the browsers remembered by
-the new-device check (AUTH-FACT-016), each with label, created and last used, and
-removes one.
+the new-device check (AUTH-FACT-016), each `{ id, kind: trusted · remembered, label,
+createdAt, lastUsedAt }`, and removes one.
 Removing a trusted device requires the second factor again on that browser; removing
 a remembered browser makes it face the check again. **Sessions are not listed here**:
 they are `GET /account/sessions` (AUTH-SESS-013).
@@ -557,7 +584,8 @@ Never returns permissions or role names (AUTHZ-CACHE-002).
 
 ### `POST /auth/webauthn/register/begin` · `POST /auth/webauthn/register/complete`
 
-Registration ceremony. `begin` takes the **kind** being created: a passkey
+Registration ceremony. `begin` takes the **kind** being created, `{ "kind": "passkey" |
+"securityKey", "label": "..." }` (the AUTH-FACT-002 identifiers): a passkey
 (`residentKey: required`, `userVerification: required`) or a second-factor security
 key (`residentKey: discouraged`), per AUTH-FACT-002b; a security key under two-step is
 refused on an account with no password. `complete` takes the credential and a
@@ -594,7 +622,7 @@ Served from configured additional origins. Public, unauthenticated.
 
 ### `GET /.well-known/change-password` · `GET /.well-known/passkey-endpoints`
 
-`/.well-known/change-password` answers **30x** to the frontend's password page, so a
+`/.well-known/change-password` answers **302** to the frontend's password page, so a
 password manager can send the person straight there. `/.well-known/passkey-endpoints`
 answers **200** with JSON naming `enroll` (the passkey enrolment page) and `manage`
 (the credential list). The probe path
@@ -680,7 +708,7 @@ Administrative re-enrolment. Requires the approver permission and step-up.
 { "subject": "...", "reason": "...", "channelUsed": "..." }
 ```
 
-**200** — time-boxed enrolment link issued
+**200** `{ enrolmentLinkExpiresAt }`; the link itself goes to the channel
 **422** — `auth.recovery.reasonrequired`, `auth.recovery.channelnotonaccount`
 
 *Source: AUTH-RECOV-002, AUTH-RECOV-003*
@@ -1233,8 +1261,8 @@ email changed, `IdentifierPrimaryChanged`.
 
 ### `GET /privacy/consents`
 
-**200** — every consent record held for the subject, with purpose, notice version,
-timestamp, and withdrawal state.
+**200** — every consent record held for the subject: `{ purpose, noticeVersion,
+mechanism, grantedAt, withdrawnAt }` (objections: `recordedAt` for `grantedAt`) (D-153).
 
 *Source: PRIV-CONS-011*
 
@@ -1375,7 +1403,9 @@ All endpoints under `/admin` require the corresponding permission. Denials retur
 
 Stored and derived grants are reported **distinctly**. Where declared derivations
 make the answer unbounded, the response states the limitation rather than returning
-a partial answer silently.
+a partial answer silently: when evaluation exceeds `authz.reverselookup.budget` the
+response carries `partial: true` and `unevaluated`, the derivations not evaluated
+(AUTHZ-DERIVE-007, D-153).
 
 *Source: AUTHZ-GATE-004, AUTHZ-DERIVE-007*
 
@@ -1491,7 +1521,7 @@ Distinct from the automatic downgrade that follows a policy tightening.
 
 ### `GET|PUT /admin/config/{key}`
 
-`GET` returns the key's current value, its default and whether it is protected.
+`GET` returns `{ key, value, default, protected, direction }` (D-153).
 `PUT` sets it:
 
 ```json
@@ -1592,7 +1622,7 @@ operation loosens a control (OPS-CFG-002) or touches another person's account.
 | `POST /admin/organizations` | Creates an organization with its policy row (IDN-ORG-002) |
 | `PUT /admin/organizations/{id}/policy` | Replaces the organization's policy overrides — the policy object of `10` §4.1a: `requiredAssurance`, `loginFactors`, `gates`, `credentialRedundancy`, `selfServiceRecovery` and `emailDomains` (managed through the domain endpoints below, never written here); omitted fields inherit `policy.default`. **422** `config.policy.belowsystem` where a field is looser than the system default (AUTH-STEP-002a); loosening any field requires step-up and a reason (OPS-CFG-002). `GET` returns the resolved policy with each field marked inherited or overridden (D-143) |
 | `POST /admin/organizations/{id}/delete` · `/delete/cancel` | Request → suspend → grace → erasure, cancellable (IDN-ORG-003). **409** `identity.organization.protected` for the administrative organization |
-| `POST /admin/organizations/{id}/domains` · `POST /admin/organizations/{id}/domains/{domain}/verify` · `DELETE /admin/organizations/{id}/domains/{domain}` | Domain lock (REG-DOM-001, IDN-ORG-006): adds a domain to the policy field `emailDomains` (unverified, admitting nothing), verifies it by the DNS TXT record the add response names, removes it. Adding is a loosening (OPS-CFG-002: step-up `domain:manage`, reason, audit); removal stops new sign-ins with addresses in the domain and raises an alert (OPS-ALERT-001). Re-verification runs on a schedule; a failure alerts and revokes nothing. `GET` returns each domain with its verification state and last check |
+| `POST /admin/organizations/{id}/domains` · `POST /admin/organizations/{id}/domains/{domain}/verify` · `DELETE /admin/organizations/{id}/domains/{domain}` | Domain lock (REG-DOM-001, IDN-ORG-006): adds a domain to the policy field `emailDomains` (unverified, admitting nothing), verifies it by the DNS TXT record the add response names, removes it. Adding is a loosening (OPS-CFG-002: step-up `domain:manage`, reason, audit); removal stops new sign-ins with addresses in the domain and raises an alert (OPS-ALERT-001). Re-verification runs every `domain.reverify.interval` on the sweep; a failure alerts and revokes nothing. The record is `_janus-verify.<domain>` TXT with value `janus-domain-verification=<32 random bytes, base64url>`, one token per organization and domain, never reused (D-153). `GET` returns each domain with its verification state and last check |
 
 ### Memberships and invitations — `membership:manage`
 
@@ -1622,7 +1652,7 @@ operation loosens a control (OPS-CFG-002) or touches another person's account.
 
 | Endpoint | Does |
 |---|---|
-| `POST /admin/accounts/{subject}/takedown` | Phase one, in one transaction: suspends the account, ends its sessions, records `reason` and `trigger` (`staff-report` · `customer-report` · `automated-signal` · `authority-request`, `10` section 5.12d), and writes the outbox record for host-side order cancellation. Starts `takedown.grace` (7 days); erasure — key destruction, fingerprint neutralisation — runs when it elapses and the account becomes `deleted` (IDN-LIFE-003, D-127). Requires step-up. **202** with the takedown identifier and `erasureDue` |
+| `POST /admin/accounts/{subject}/takedown` | Phase one, in one transaction: suspends the account, ends its sessions, records `reason` and `trigger` (`staff-report` · `customer-report` · `automated-signal` · `authority-request`, `10` section 5.12d), and writes the outbox record for host-side order cancellation. Starts `takedown.grace` (7 days); erasure — key destruction, fingerprint neutralisation — runs when it elapses and the account becomes `deleted` (IDN-LIFE-003, D-127). Requires step-up. **202** `{ takedownId, erasureDue }` |
 | `POST /admin/accounts/{subject}/takedown/reverse` | Reverses a takedown inside its window — an adult misjudged. Restores `active`; cancelled orders are not restored. Records the reason. Requires step-up. **204** · **422** `identity.takedown.windowelapsed` |
 
 ### Privacy requests and erasures — `privacyrequest:manage`
@@ -1630,9 +1660,9 @@ operation loosens a control (OPS-CFG-002) or touches another person's account.
 | Endpoint | Does |
 |---|---|
 | `GET /admin/privacy/requests` | The queue, each request with its decision deadline and status — `open` · `fulfilled` · `refused` · `granted-by-lapse` · `deemed-refused-by-lapse` (PRIV-RIGHT-002) |
-| `POST /admin/privacy/requests` | Enters an out-of-band request on a subject's behalf, `type` one of `erasure` · `restriction` · `rectification` (`10` section 5.12c; rectification of editable data is account editing and is entered here only where the subject cannot edit it themselves); an `erasure` fulfilled enters `deleting` with `deletingBy = oob-request` (IDN-LIFE-003). Records the channel, the identity confirmation performed (D-113), and **`receivedAt` — required, the date the request reached the company, never later than now; the decision clock runs from it** (D-136). **422** `privacy.request.receivedfuture` |
+| `POST /admin/privacy/requests` | Enters an out-of-band request on a subject's behalf, `type` one of `erasure` · `restriction` · `rectification` (`10` section 5.12c; rectification of editable data is account editing and is entered here only where the subject cannot edit it themselves); an `erasure` fulfilled enters `deleting` with `deletingBy = oob-request` (IDN-LIFE-003). Records the channel, the identity confirmation performed (D-113), and **`receivedAt` — required, the calendar date (`YYYY-MM-DD`, in `privacy.calendar.timezone`) the request reached the company, never later than today there; the decision clock runs from the end of it** (D-136, D-153). **422** `privacy.request.receivedfuture` |
 | `POST /admin/privacy/requests/{id}/fulfil` · `/refuse` | The decision. Fulfilment of erasure starts the grace window, of restriction sets the state; refusal records the reason. Receipt is automatic at creation (D-126) — no acknowledge endpoint |
-| `GET /admin/erasures` · `GET /admin/erasures/{id}` | Every incomplete erasure in one query; per-subscriber state for one (IDN-LIFE-003b) |
+| `GET /admin/erasures` · `GET /admin/erasures/{id}` | Every incomplete erasure in one query; per-subscriber state for one (IDN-LIFE-003b): `{ id, subject, reason, status, attempts, subscribers: [ { name, required, confirmedAt } ] }` (D-153) |
 | `POST /admin/erasures/{id}/complete` | The manual completion path after exhausted retries — itself recorded (IDN-LIFE-003a). Requires step-up |
 
 ### Audit and explanations — `audit:read`
@@ -1648,7 +1678,7 @@ Self-service explanation for **non-concealed** types is `GET /account/explanatio
 
 | Endpoint | Does |
 |---|---|
-| `POST /admin/notices` · `POST /admin/documents/{document}/versions` | Publishes a new version: the governing-language text, its governing language (defaulting to `legal.governinglanguage`) and any translations (PRIV-CONS-005). A version without governing-language text is refused, **422** `privacy.notice.governingtextmissing`, and the condition is raised on OPS-ALERT-001 (PRIV-CONS-006). Marks which subjects require re-consent (PRIV-CONS-007) |
+| `POST /admin/notices` · `POST /admin/documents/{document}/versions` | Publishes a new version: the governing-language text, its governing language (defaulting to `legal.governinglanguage`) and any translations (PRIV-CONS-005). A version without governing-language text is refused, **422** `privacy.notice.governingtextmissing`, and the condition is raised on OPS-ALERT-001 (PRIV-CONS-006). Takes a required boolean `material`; `true` supersedes every live consent on the purposes the document covers and marks those subjects for re-consent, `false` publishes and touches no consent (PRIV-CONS-007, D-153) |
 | `PUT /admin/documents/{document}/versions/{version}/translations/{language}` | Attaches or corrects a translation on a published version without creating a new one (PRIV-CONS-006) |
 
 ### Compliance records — `compliance:manage`
@@ -1670,7 +1700,7 @@ Standard endpoints for first-party, manually registered clients.
 | `GET /oidc/jwks` | Signing keys |
 | `GET /oidc/authorize` | Authorization code with PKCE — **redirects to the authentication application; never renders a page**. Honours `prompt=none` for silent sign-on (AUTH-SESS-012) |
 | `POST /oidc/token` | Token issuance and refresh — machine profile (BFF-MACH-001) |
-| `GET /oidc/userinfo` | Claims |
+| `GET /oidc/userinfo` | Claims, by scope (D-153): `openid` gives `sub`; `email` gives `email` and `email_verified` (the primary email); `profile` gives `name` (display name), `preferred_username` where `identifiers.username.enabled`, and `locale` (language preference). Nothing else is issued: no phone, legal name, date of birth or photo |
 
 **Deliberately absent:** token introspection, dynamic client registration, consent
 screens.
@@ -1811,7 +1841,9 @@ promise the action will succeed: an action may still be refused for step-up, a
 downgraded session, the subject's processing restriction, or missing consent — none of
 which the per-row grant query evaluates.
 
-`requires` names what remains for each capability, so the frontend prompts rather than
+`requires` names what remains for each capability, from the closed set of `10` section
+5.20 (`stepup` · `reauthenticate` · `restricted` · `consent` · `accountstate`, D-153),
+so the frontend prompts rather than
 hiding a control the person is entitled to use or showing one that fails without
 explanation.
 

@@ -20,8 +20,7 @@ public sealed class StartupConfigurationTests
     /// starts, because every other key carries a default.
     /// </summary>
     [Fact]
-    public void LIB_HOST_001_AC1_NamingOnlyTheDeclarationsStarts() =>
-        Settings.ThrowIfIncomplete(Named(), HostingLocation.Inside);
+    public void LIB_HOST_001_AC1_NamingOnlyTheDeclarationsStarts() => Start(Named());
 
     /// <summary>
     /// LIB-HOST-001 AC2: a missing declaration stops startup, and the fault names the
@@ -31,11 +30,12 @@ public sealed class StartupConfigurationTests
     public void LIB_HOST_001_AC2_AMissingDeclarationNamesTheKey()
     {
         StartupException fault = Assert.Throws<StartupException>(
-            () => Settings.ThrowIfIncomplete(
-                Named(without: Settings.AlertingOwnerSms.Key),
-                HostingLocation.Inside));
+            () => Start(Named(without: Settings.AlertingOwnerSms.Key)));
 
-        Assert.Contains("alerting.owner.sms", fault.Message, StringComparison.Ordinal);
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, fault.Failure?.Code);
+        Assert.Equal(
+            "alerting.owner.sms",
+            fault.Failure?.Details["key"].GetString());
     }
 
     /// <summary>
@@ -46,9 +46,7 @@ public sealed class StartupConfigurationTests
     public void LIB_HOST_001_AC4_TheGoverningLanguageFailsWithItsNamedError()
     {
         StartupException fault = Assert.Throws<StartupException>(
-            () => Settings.ThrowIfIncomplete(
-                Named(without: Settings.LegalGoverningLanguage.Key),
-                HostingLocation.Inside));
+            () => Start(Named(without: Settings.LegalGoverningLanguage.Key)));
 
         Assert.Equal(ErrorCodes.StartupGoverningLanguage, fault.Failure?.Code);
     }
@@ -61,11 +59,13 @@ public sealed class StartupConfigurationTests
     public void INT_HOST_001_AC2_HostingOutsideEgyptRequiresTheCrossBorderBasis()
     {
         StartupException fault = Assert.Throws<StartupException>(
-            () => Settings.ThrowIfIncomplete(
+            () => Start(
                 Named(without: Settings.HostingCrossBorderBasis.Key),
                 HostingLocation.Outside));
 
-        Assert.Contains("hosting.crossborderbasis", fault.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            "hosting.crossborderbasis",
+            fault.Failure?.Details["key"].GetString());
     }
 
     /// <summary>
@@ -74,9 +74,55 @@ public sealed class StartupConfigurationTests
     /// </summary>
     [Fact]
     public void INT_HOST_001_AC2_HostingInsideEgyptNeedsNoCrossBorderBasis() =>
-        Settings.ThrowIfIncomplete(
-            Named(without: Settings.HostingCrossBorderBasis.Key),
-            HostingLocation.Inside);
+        Start(Named(without: Settings.HostingCrossBorderBasis.Key));
+
+    /// <summary>
+    /// AUTH-PASS-004: the context source forbids the service's own name in a
+    /// password, so it is the deployment that says what that name is.
+    /// </summary>
+    [Fact]
+    public void ThrowIfIncomplete_TheContextSourceIsOn_RequiresTheServiceName()
+    {
+        StartupException fault = Assert.Throws<StartupException>(
+            () => Start(
+                Named(without: Settings.ServiceName.Key),
+                blocklistSources: new HashSet<BlocklistRejectionSource>
+                {
+                    BlocklistRejectionSource.Leaked,
+                    BlocklistRejectionSource.Context,
+                }));
+
+        Assert.Equal("service.name", fault.Failure?.Details["key"].GetString());
+    }
+
+    /// <summary>
+    /// The same deployment with the source off starts without naming the service.
+    /// </summary>
+    [Fact]
+    public void ThrowIfIncomplete_TheContextSourceIsOff_NeedsNoServiceName() =>
+        Start(Named(without: Settings.ServiceName.Key));
+
+    /// <summary>
+    /// PRIV-ROPA-001: the hosting environment is a cell of the register, so it is
+    /// needed only by a deployment that generates one.
+    /// </summary>
+    [Fact]
+    public void ThrowIfIncomplete_TheRegisterIsGenerated_RequiresTheHostingEnvironment()
+    {
+        StartupException fault = Assert.Throws<StartupException>(
+            () => Start(
+                Named(without: Settings.HostingEnvironment.Key),
+                recordsOfProcessing: true));
+
+        Assert.Equal("hosting.environment", fault.Failure?.Details["key"].GetString());
+    }
+
+    /// <summary>
+    /// A deployment that generates no register starts without it.
+    /// </summary>
+    [Fact]
+    public void ThrowIfIncomplete_NoRegisterIsGenerated_NeedsNoHostingEnvironment() =>
+        Start(Named(without: Settings.HostingEnvironment.Key));
 
     /// <summary>
     /// OPS-CFG-003 AC3: a value outside the key's bounds stops startup rather than
@@ -166,6 +212,19 @@ public sealed class StartupConfigurationTests
         Assert.Null(Code(Settings.AcceptArgon2Cost(
             Settings.PasswordArgon2Memory.Default,
             Settings.PasswordArgon2Iterations.Default)));
+
+    // Startup against a deployment inside Egypt that screens passwords against the
+    // leaked list alone and generates no register, which is the shipped shape.
+    private static void Start(
+        IReadOnlySet<ConfigurationKey> named,
+        HostingLocation location = HostingLocation.Inside,
+        IReadOnlySet<BlocklistRejectionSource>? blocklistSources = null,
+        bool recordsOfProcessing = false) =>
+        Settings.ThrowIfIncomplete(
+            named,
+            location,
+            blocklistSources ?? Settings.PasswordBlocklistSources.Default,
+            recordsOfProcessing);
 
     // The keys a deployment names, less one where a test is about omitting it.
     private static HashSet<ConfigurationKey> Named(ConfigurationKey? without = null) =>

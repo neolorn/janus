@@ -1,4 +1,39 @@
 #nullable enable
+Janus.Core.AgeGroup
+Janus.Core.AgeGroup.Adult = 1 -> Janus.Core.AgeGroup
+Janus.Core.AgeGroup.Minor = 0 -> Janus.Core.AgeGroup
+Janus.Core.AlertCondition
+Janus.Core.AlertCondition.AlertDestinationChanged = 6 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.ApproverVolume = 2 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.AuthFailuresSustained = 0 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.BackgroundJobFailed = 11 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.BreakGlassUsed = 4 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.CallbackVerificationFailed = 16 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.CertificateRenewalFailed = 13 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.ClockDrift = 14 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.ConcurrentSessionsImplausible = 8 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.Degradation = 15 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.DenialSpike = 9 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.DomainRemoved = 27 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.DomainReverificationFailed = 26 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.ErasureDeliveryExhausted = 12 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.ExpiryApproaching = 20 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.GoverningLanguageChanged = 28 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.GoverningTextMissing = 29 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.HolidayListExhausted = 21 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.NoEmergencyCredential = 22 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.NonexistentNoticeRate = 17 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.PrivacyDeadlineApproaching = 18 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.PrivacyDeadlineReached = 19 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.ProtectedSettingChanged = 5 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.ReadVolumeAnomaly = 3 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.RecoveryClustering = 1 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.RelayDomainUnregistered = 30 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.RestoreTestFailed = 23 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.RestrictionGranted = 25 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.RestrictionLoosened = 24 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.SmsBalance = 10 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.StepUpPolicyWeakened = 7 -> Janus.Core.AlertCondition
 Janus.Core.AlertSeverity
 Janus.Core.AlertSeverity.High = 1 -> Janus.Core.AlertSeverity
 Janus.Core.AlertSeverity.Normal = 0 -> Janus.Core.AlertSeverity
@@ -21,6 +56,12 @@ Janus.Core.Bucket.Window.init -> void
 Janus.Core.BucketWindow
 Janus.Core.BucketWindow.Fixed = 1 -> Janus.Core.BucketWindow
 Janus.Core.BucketWindow.Sliding = 0 -> Janus.Core.BucketWindow
+Janus.Core.CapabilityResidual
+Janus.Core.CapabilityResidual.AccountState = 4 -> Janus.Core.CapabilityResidual
+Janus.Core.CapabilityResidual.Consent = 3 -> Janus.Core.CapabilityResidual
+Janus.Core.CapabilityResidual.Reauthenticate = 1 -> Janus.Core.CapabilityResidual
+Janus.Core.CapabilityResidual.Restricted = 2 -> Janus.Core.CapabilityResidual
+Janus.Core.CapabilityResidual.StepUp = 0 -> Janus.Core.CapabilityResidual
 Janus.Core.Configuration.Argon2StrengthClass
 Janus.Core.Configuration.Argon2StrengthClass.<Clone>$() -> Janus.Core.Configuration.Argon2StrengthClass!
 Janus.Core.Configuration.Argon2StrengthClass.Argon2StrengthClass(int Memory, int Iterations) -> void
@@ -42,6 +83,9 @@ Janus.Core.Configuration.BlocklistSource
 Janus.Core.Configuration.BlocklistSource.Offline = 1 -> Janus.Core.Configuration.BlocklistSource
 Janus.Core.Configuration.BlocklistSource.RangeApi = 0 -> Janus.Core.Configuration.BlocklistSource
 Janus.Core.Configuration.BlocklistSource.SelfHosted = 2 -> Janus.Core.Configuration.BlocklistSource
+Janus.Core.Configuration.BotDefenceSignal
+Janus.Core.Configuration.BotDefenceSignal.DatacenterRange = 0 -> Janus.Core.Configuration.BotDefenceSignal
+Janus.Core.Configuration.BotDefenceSignal.RepeatedAttempts = 1 -> Janus.Core.Configuration.BotDefenceSignal
 Janus.Core.Configuration.BoundedSetting<TValue>
 Janus.Core.Configuration.BoundedSetting<TValue>.Ceiling.get -> TValue?
 Janus.Core.Configuration.BoundedSetting<TValue>.Floor.get -> TValue?
@@ -95,7 +139,13 @@ Janus.Core.Configuration.SettingScope.Runtime = 0 -> Janus.Core.Configuration.Se
 Janus.Core.Configuration.Settings
 Janus.Core.Configuration.TextListSetting
 Janus.Core.Configuration.TextListSetting.Minimum.get -> int
+Janus.Core.Configuration.TextSetSetting
 Janus.Core.Configuration.TextSetting
+Janus.Core.ConsentMechanism
+Janus.Core.ConsentMechanism.Administrator = 3 -> Janus.Core.ConsentMechanism
+Janus.Core.ConsentMechanism.Dashboard = 1 -> Janus.Core.ConsentMechanism
+Janus.Core.ConsentMechanism.Reconsent = 2 -> Janus.Core.ConsentMechanism
+Janus.Core.ConsentMechanism.Registration = 0 -> Janus.Core.ConsentMechanism
 Janus.Core.CredentialRedundancy
 Janus.Core.CredentialRedundancy.Advisory = 0 -> Janus.Core.CredentialRedundancy
 Janus.Core.CredentialRedundancy.Enforced = 1 -> Janus.Core.CredentialRedundancy
@@ -265,6 +315,7 @@ override Janus.Core.Configuration.MultipleChoiceSetting<TValue>.Accept(System.Co
 override Janus.Core.Configuration.PolicySetting.Accept(Janus.Core.Policy! value) -> Janus.Core.Result<Janus.Core.Policy!>
 override Janus.Core.Configuration.RestrictionSetSetting.Accept(System.Collections.Generic.IReadOnlyList<Janus.Core.Restriction!>! value) -> Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.Restriction!>!>
 override Janus.Core.Configuration.TextListSetting.Accept(System.Collections.Generic.IReadOnlyList<string!>! value) -> Janus.Core.Result<System.Collections.Generic.IReadOnlyList<string!>!>
+override Janus.Core.Configuration.TextSetSetting.Accept(System.Collections.Generic.IReadOnlySet<string!>! value) -> Janus.Core.Result<System.Collections.Generic.IReadOnlySet<string!>!>
 override Janus.Core.Configuration.TextSetting.Accept(string! value) -> Janus.Core.Result<string!>
 override Janus.Core.Error.Equals(object? obj) -> bool
 override Janus.Core.Error.GetHashCode() -> int
@@ -292,8 +343,13 @@ static Janus.Core.Configuration.Argon2StrengthClass.operator ==(Janus.Core.Confi
 static Janus.Core.Configuration.ConfigurationKey.Parse(string! value) -> Janus.Core.Configuration.ConfigurationKey
 static Janus.Core.Configuration.ConfigurationKey.operator !=(Janus.Core.Configuration.ConfigurationKey left, Janus.Core.Configuration.ConfigurationKey right) -> bool
 static Janus.Core.Configuration.ConfigurationKey.operator ==(Janus.Core.Configuration.ConfigurationKey left, Janus.Core.Configuration.ConfigurationKey right) -> bool
+static Janus.Core.Configuration.Settings.AbuseBotDefenceRepeatedAttempts.get -> Janus.Core.Configuration.IntegerSetting!
+static Janus.Core.Configuration.Settings.AbuseBotDefenceSignals.get -> Janus.Core.Configuration.MultipleChoiceSetting<Janus.Core.Configuration.BotDefenceSignal>!
 static Janus.Core.Configuration.Settings.AbuseNonexistentWindow.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.AbuseSmsBalanceFloor.get -> Janus.Core.Configuration.DecimalSetting!
+static Janus.Core.Configuration.Settings.AbuseSmsDrainFactor.get -> Janus.Core.Configuration.DecimalSetting!
+static Janus.Core.Configuration.Settings.AbuseSmsPollInterval.get -> Janus.Core.Configuration.DurationSetting!
+static Janus.Core.Configuration.Settings.AbuseSourceRateLimit.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.AbuseThrottleAccountCap.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.AbuseThrottleDecay.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.AbuseThrottleDelayFactor.get -> Janus.Core.Configuration.DecimalSetting!
@@ -304,29 +360,42 @@ static Janus.Core.Configuration.Settings.AbuseThrottleThreshold.get -> Janus.Cor
 static Janus.Core.Configuration.Settings.AcceptArgon2Cost(int memory, int iterations) -> Janus.Core.Result
 static Janus.Core.Configuration.Settings.AcceptPasswordFloorPair(int singleFactor, int withMfa) -> Janus.Core.Result
 static Janus.Core.Configuration.Settings.AccountDeletionGrace.get -> Janus.Core.Configuration.DurationSetting!
+static Janus.Core.Configuration.Settings.AlertingAuthFailuresThreshold.get -> Janus.Core.Configuration.IntegerSetting!
+static Janus.Core.Configuration.Settings.AlertingCallbackThreshold.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.AlertingDedupeWindow.get -> Janus.Core.Configuration.DurationSetting!
-static Janus.Core.Configuration.Settings.AlertingDestinationChangeNotify.get -> Janus.Core.Configuration.FlagSetting!
+static Janus.Core.Configuration.Settings.AlertingDenialsThreshold.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.AlertingEmailDestinations.get -> Janus.Core.Configuration.TextListSetting!
+static Janus.Core.Configuration.Settings.AlertingNonexistentThreshold.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.AlertingOwnerEmail.get -> Janus.Core.Configuration.TextSetting!
 static Janus.Core.Configuration.Settings.AlertingOwnerEnabled.get -> Janus.Core.Configuration.FlagSetting!
 static Janus.Core.Configuration.Settings.AlertingOwnerSms.get -> Janus.Core.Configuration.TextSetting!
+static Janus.Core.Configuration.Settings.AlertingRecoveryAccountThreshold.get -> Janus.Core.Configuration.IntegerSetting!
+static Janus.Core.Configuration.Settings.AlertingRecoveryApproverThreshold.get -> Janus.Core.Configuration.IntegerSetting!
+static Janus.Core.Configuration.Settings.AlertingSessionsDistance.get -> Janus.Core.Configuration.IntegerSetting!
+static Janus.Core.Configuration.Settings.AlertingSessionsWindow.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.AlertingSmsDestinations.get -> Janus.Core.Configuration.TextListSetting!
 static Janus.Core.Configuration.Settings.AlertingSmsSeverityThreshold.get -> Janus.Core.Configuration.ChoiceSetting<Janus.Core.AlertSeverity>!
 static Janus.Core.Configuration.Settings.All.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Configuration.Setting!>!
 static Janus.Core.Configuration.Settings.Argon2StrengthClasses.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Configuration.Argon2StrengthClass!>!
 static Janus.Core.Configuration.Settings.AuditEnabled.get -> Janus.Core.Configuration.FlagSetting!
 static Janus.Core.Configuration.Settings.AuthzReverseLookupBudget.get -> Janus.Core.Configuration.DurationSetting!
+static Janus.Core.Configuration.Settings.BackupRestoreTestCanary.get -> Janus.Core.Configuration.TextSetting!
+static Janus.Core.Configuration.Settings.BackupRestoreTestInterval.get -> Janus.Core.Configuration.DurationSetting!
+static Janus.Core.Configuration.Settings.BackupRestoreTestObjective.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.BackupRetention.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.BreakGlassSessionLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.CodeVerificationAttempts.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.CodeVerificationLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.DeviceVerificationEnabled.get -> Janus.Core.Configuration.FlagSetting!
 static Janus.Core.Configuration.Settings.DeviceVerificationLifetime.get -> Janus.Core.Configuration.DurationSetting!
+static Janus.Core.Configuration.Settings.DomainReverifyInterval.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.ExfiltrationExportAuditing.get -> Janus.Core.Configuration.FlagSetting!
 static Janus.Core.Configuration.Settings.ExfiltrationExportRateLimit.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.ExfiltrationExportStepUpRequired.get -> Janus.Core.Configuration.FlagSetting!
 static Janus.Core.Configuration.Settings.ExfiltrationReadVolumeAlerting.get -> Janus.Core.Configuration.FlagSetting!
 static Janus.Core.Configuration.Settings.ExfiltrationReadVolumeBaselineWindow.get -> Janus.Core.Configuration.DurationSetting!
+static Janus.Core.Configuration.Settings.ExfiltrationReadVolumeFactor.get -> Janus.Core.Configuration.DecimalSetting!
+static Janus.Core.Configuration.Settings.ExfiltrationReadVolumeMinimum.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.FactorRecoveryCodesCount.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.FactorTotpDrift.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.FactorTrustedDeviceFailureLimit.get -> Janus.Core.Configuration.IntegerSetting!
@@ -334,20 +403,33 @@ static Janus.Core.Configuration.Settings.FactorTrustedDeviceLifetime.get -> Janu
 static Janus.Core.Configuration.Settings.Families.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Configuration.SettingFamily!>!
 static Janus.Core.Configuration.Settings.HostCategoryRetention.get -> Janus.Core.Configuration.SettingFamily<System.TimeSpan>!
 static Janus.Core.Configuration.Settings.HostingCrossBorderBasis.get -> Janus.Core.Configuration.TextSetting!
+static Janus.Core.Configuration.Settings.HostingEnvironment.get -> Janus.Core.Configuration.TextSetting!
 static Janus.Core.Configuration.Settings.HostingLocation.get -> Janus.Core.Configuration.ChoiceSetting<Janus.Core.Configuration.HostingLocation>!
 static Janus.Core.Configuration.Settings.IdentifierChangeCoolingOff.get -> Janus.Core.Configuration.DurationSetting!
+static Janus.Core.Configuration.Settings.IdentifiersEmailMax.get -> Janus.Core.Configuration.IntegerSetting!
+static Janus.Core.Configuration.Settings.IdentifiersPhoneMax.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.IdentifiersUsernameChangeCoolOff.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.IdentifiersUsernameEnabled.get -> Janus.Core.Configuration.FlagSetting!
+static Janus.Core.Configuration.Settings.IntegrationCallbackRateLimit.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.LegalGoverningLanguage.get -> Janus.Core.Configuration.TextSetting!
 static Janus.Core.Configuration.Settings.LinkInvitationLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.LinkMagicLifetime.get -> Janus.Core.Configuration.DurationSetting!
+static Janus.Core.Configuration.Settings.LocationDatabaseMaxAge.get -> Janus.Core.Configuration.DurationSetting!
+static Janus.Core.Configuration.Settings.LocationDatabaseRefresh.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.MaintenanceExpiryWarningLead.get -> Janus.Core.Configuration.DurationSetting!
+static Janus.Core.Configuration.Settings.NotificationEmailRelayRegistered.get -> Janus.Core.Configuration.TextSetSetting!
+static Janus.Core.Configuration.Settings.NotificationEmailSendingDomain.get -> Janus.Core.Configuration.TextSetting!
+static Janus.Core.Configuration.Settings.NotificationLanguages.get -> Janus.Core.Configuration.TextListSetting!
 static Janus.Core.Configuration.Settings.OidcAccessTokenLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.OidcCodeLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.OrganizationDeletionGrace.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.OrganizationMultipleMemberships.get -> Janus.Core.Configuration.FlagSetting!
 static Janus.Core.Configuration.Settings.OrganizationPolicy.get -> Janus.Core.Configuration.SettingFamily<Janus.Core.PolicyOverride!>!
 static Janus.Core.Configuration.Settings.OrganizationStepUpEnforcement.get -> Janus.Core.Configuration.SettingFamily<bool>!
+static Janus.Core.Configuration.Settings.OutboxPollInterval.get -> Janus.Core.Configuration.DurationSetting!
+static Janus.Core.Configuration.Settings.OutboxRetryFactor.get -> Janus.Core.Configuration.DecimalSetting!
+static Janus.Core.Configuration.Settings.OutboxRetryInitial.get -> Janus.Core.Configuration.DurationSetting!
+static Janus.Core.Configuration.Settings.OutboxRetryMaxAttempts.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.PasswordArgon2Iterations.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.PasswordArgon2Memory.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.PasswordArgon2Parallelism.get -> Janus.Core.Configuration.IntegerSetting!
@@ -357,9 +439,12 @@ static Janus.Core.Configuration.Settings.PasswordBlocklistSources.get -> Janus.C
 static Janus.Core.Configuration.Settings.PasswordFloorSingleFactor.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.PasswordFloorWithMfa.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.PasswordMaximum.get -> Janus.Core.Configuration.IntegerSetting!
+static Janus.Core.Configuration.Settings.PhotoMaxBytes.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.PhotoMaxDimension.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.PolicyDefault.get -> Janus.Core.Configuration.PolicySetting!
 static Janus.Core.Configuration.Settings.PolicyEnforcementGrace.get -> Janus.Core.Configuration.DurationSetting!
+static Janus.Core.Configuration.Settings.PreferencesMaxSize.get -> Janus.Core.Configuration.IntegerSetting!
+static Janus.Core.Configuration.Settings.PrivacyCalendarTimeZone.get -> Janus.Core.Configuration.TextSetting!
 static Janus.Core.Configuration.Settings.PrivacyExportRateLimit.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.PrivacyHolidays.get -> Janus.Core.Configuration.DateListSetting!
 static Janus.Core.Configuration.Settings.PrivacyRequestDecision.get -> Janus.Core.Configuration.IntegerSetting!
@@ -369,8 +454,11 @@ static Janus.Core.Configuration.Settings.ProfileDateOfBirth.get -> Janus.Core.Co
 static Janus.Core.Configuration.Settings.ProfileLegalName.get -> Janus.Core.Configuration.ChoiceSetting<Janus.Core.Configuration.AttributeRequirement>!
 static Janus.Core.Configuration.Settings.RecoveryApproversRequired.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.RecoveryCodesReminder.get -> Janus.Core.Configuration.DurationSetting!
+static Janus.Core.Configuration.Settings.RecoveryInvalidationNoticeInterval.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.RecoveryInvalidationWindow.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.RecoveryLinkLifetime.get -> Janus.Core.Configuration.DurationSetting!
+static Janus.Core.Configuration.Settings.RecoveryRateLimitAccount.get -> Janus.Core.Configuration.IntegerSetting!
+static Janus.Core.Configuration.Settings.RecoveryRateLimitApprover.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.RegistrationAdultAffirmation.get -> Janus.Core.Configuration.ChoiceSetting<Janus.Core.Configuration.AttributeRequirement>!
 static Janus.Core.Configuration.Settings.RegistrationPhone.get -> Janus.Core.Configuration.ChoiceSetting<Janus.Core.Configuration.AttributeRequirement>!
 static Janus.Core.Configuration.Settings.RegistrationSessionLifetime.get -> Janus.Core.Configuration.DurationSetting!
@@ -379,13 +467,15 @@ static Janus.Core.Configuration.Settings.Restrictions.get -> Janus.Core.Configur
 static Janus.Core.Configuration.Settings.RetentionAuditRoutine.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.RetentionAuditSecurity.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.RetentionConsent.get -> Janus.Core.Configuration.DurationSetting!
+static Janus.Core.Configuration.Settings.ServiceName.get -> Janus.Core.Configuration.TextSetting!
 static Janus.Core.Configuration.Settings.SessionAal2Absolute.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.SessionAal2Inactivity.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.SessionDefaultAbsolute.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.SessionDefaultInactivity.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.SessionStepUpRecency.get -> Janus.Core.Configuration.DurationSetting!
+static Janus.Core.Configuration.Settings.SweepInterval.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.TakedownGrace.get -> Janus.Core.Configuration.DurationSetting!
-static Janus.Core.Configuration.Settings.ThrowIfIncomplete(System.Collections.Generic.IReadOnlySet<Janus.Core.Configuration.ConfigurationKey>! named, Janus.Core.Configuration.HostingLocation? location) -> void
+static Janus.Core.Configuration.Settings.ThrowIfIncomplete(System.Collections.Generic.IReadOnlySet<Janus.Core.Configuration.ConfigurationKey>! named, Janus.Core.Configuration.HostingLocation? location, System.Collections.Generic.IReadOnlySet<Janus.Core.Configuration.BlocklistRejectionSource>! blocklistSources, bool recordsOfProcessing) -> void
 static Janus.Core.Configuration.Settings.TokenSignatureVerification.get -> Janus.Core.Configuration.FlagSetting!
 static Janus.Core.Configuration.Settings.TokenSigningAlgorithm.get -> Janus.Core.Configuration.ChoiceSetting<string!>!
 static Janus.Core.Configuration.Settings.TokenSigningRotation.get -> Janus.Core.Configuration.DurationSetting!
@@ -400,13 +490,24 @@ static Janus.Core.Error.operator ==(Janus.Core.Error? left, Janus.Core.Error? ri
 static Janus.Core.ErrorCode.Parse(string! value) -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCode.operator !=(Janus.Core.ErrorCode left, Janus.Core.ErrorCode right) -> bool
 static Janus.Core.ErrorCode.operator ==(Janus.Core.ErrorCode left, Janus.Core.ErrorCode right) -> bool
+static Janus.Core.ErrorCodes.ChallengeRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ConfigurationChangeStepUpRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ConfigurationKeyProtected.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.ConfigurationLastDestination.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ConfigurationPolicyBelowSystem.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ConfigurationValueAboveCeiling.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ConfigurationValueBelowFloor.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ConfigurationValueNotAllowed.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.GrantReasonRequired.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.PreferenceAdministratorOnly.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.PreferenceTooLarge.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.PreferenceWrongType.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.StartupDeclarationMissing.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupGoverningLanguage.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.StartupUndeclaredDerivationReference.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.StartupUndeclaredPermission.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.StartupUndeclaredTypeReference.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.SystemFault.get -> Janus.Core.ErrorCode
 static Janus.Core.Gate.operator !=(Janus.Core.Gate? left, Janus.Core.Gate? right) -> bool
 static Janus.Core.Gate.operator ==(Janus.Core.Gate? left, Janus.Core.Gate? right) -> bool
 static Janus.Core.Policies.AdministrativeOrganization.get -> Janus.Core.Policy!

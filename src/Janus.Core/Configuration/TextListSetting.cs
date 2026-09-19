@@ -14,13 +14,14 @@ public sealed class TextListSetting : Setting<IReadOnlyList<string>>
     internal TextListSetting(
         string key,
         SettingScope scope,
-        SettingDirection loosening,
         IReadOnlyList<string> fallback,
         int minimum = 0)
-        : base(key, scope, loosening, required: false, fallback) => Minimum = minimum;
+        : base(key, scope, SettingDirection.AnyChange, required: false, fallback) =>
+        Minimum = minimum;
 
-    internal TextListSetting(string key, SettingScope scope, SettingDirection loosening, int minimum)
-        : base(key, scope, loosening, required: true, fallback: []) => Minimum = minimum;
+    internal TextListSetting(string key, SettingScope scope, int minimum)
+        : base(key, scope, SettingDirection.AnyChange, required: true, fallback: []) =>
+        Minimum = minimum;
 
     /// <summary>
     /// The shortest list the key admits.
