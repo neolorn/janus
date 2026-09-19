@@ -118,10 +118,11 @@ records, so the suites were run locally by executing the test binaries. The pipe
 runs `dotnet test` unchanged.
 
 Full gate: GitHub Actions runs `35432791756` and `35432794060` on branch
-`phase-01-storage`, pull request #4, both green; and runs `35436670220` (push) and
-`35436676464` (pull request) on branch `phase-01-unicode`, pull request #5.
+`phase-01-storage`, pull request #4, both green; and runs `35436793900` (push) and
+`35436801833` (pull request) on branch `phase-01-canonicalisation`, pull request #6.
 `Unicode tables regenerate without a diff` is added in this phase and becomes the
-twentieth required status check on `main`.
+twentieth required status check on `main`. The commit carrying this report re-runs
+both before the merge.
 
 Tests: 340, all passing. `tests/Janus.Core.Tests` 263, `tests/Janus.Storage.Tests` 29
 (18 unit, 11 integration), `tests/Janus.Identity.Tests` 27, `tests/Janus.Analyzers.Tests`
