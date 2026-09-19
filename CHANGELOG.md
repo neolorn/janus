@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Raising the assurance floor or the redundancy requirement of a policy gives the
+  accounts already under it a run-up: their sign-ins carry the new requirement and
+  the date it falls due and continue until then, and stop at enrolment afterwards. A
+  run-up of nothing holds them at once, and an account created after the change was
+  created under the new requirement and is held at its first sign-in.
 - The relying party a passkey is bound to is settled when the deployment starts, not
   at the first enrolment: an identifier that does not sit over every configured
   origin stops the deployment, and one left unset is derived as the parent domain the

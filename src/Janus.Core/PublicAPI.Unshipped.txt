@@ -590,6 +590,9 @@ Janus.Core.Policy.RequiredAssurance.get -> Janus.Core.AssuranceLevel
 Janus.Core.Policy.RequiredAssurance.init -> void
 Janus.Core.Policy.SelfServiceRecovery.get -> bool
 Janus.Core.Policy.SelfServiceRecovery.init -> void
+Janus.Core.PolicyField
+Janus.Core.PolicyField.CredentialRedundancy = 1 -> Janus.Core.PolicyField
+Janus.Core.PolicyField.RequiredAssurance = 0 -> Janus.Core.PolicyField
 Janus.Core.PolicyOverride
 Janus.Core.PolicyOverride.<Clone>$() -> Janus.Core.PolicyOverride!
 Janus.Core.PolicyOverride.CredentialRedundancy.get -> Janus.Core.CredentialRedundancy?
@@ -607,6 +610,17 @@ Janus.Core.PolicyOverride.RequiredAssurance.get -> Janus.Core.AssuranceLevel?
 Janus.Core.PolicyOverride.RequiredAssurance.init -> void
 Janus.Core.PolicyOverride.SelfServiceRecovery.get -> bool?
 Janus.Core.PolicyOverride.SelfServiceRecovery.init -> void
+Janus.Core.PolicyRequirement
+Janus.Core.PolicyRequirement.<Clone>$() -> Janus.Core.PolicyRequirement!
+Janus.Core.PolicyRequirement.Deadline.get -> System.DateTimeOffset
+Janus.Core.PolicyRequirement.Deadline.init -> void
+Janus.Core.PolicyRequirement.Deconstruct(out Janus.Core.PolicyField Field, out string! Value, out System.DateTimeOffset Deadline) -> void
+Janus.Core.PolicyRequirement.Equals(Janus.Core.PolicyRequirement? other) -> bool
+Janus.Core.PolicyRequirement.Field.get -> Janus.Core.PolicyField
+Janus.Core.PolicyRequirement.Field.init -> void
+Janus.Core.PolicyRequirement.PolicyRequirement(Janus.Core.PolicyField Field, string! Value, System.DateTimeOffset Deadline) -> void
+Janus.Core.PolicyRequirement.Value.get -> string!
+Janus.Core.PolicyRequirement.Value.init -> void
 Janus.Core.Precis
 Janus.Core.PreferenceDeclaration
 Janus.Core.PreferenceDeclaration.<Clone>$() -> Janus.Core.PreferenceDeclaration!
@@ -991,6 +1005,9 @@ override Janus.Core.Policy.ToString() -> string!
 override Janus.Core.PolicyOverride.Equals(object? obj) -> bool
 override Janus.Core.PolicyOverride.GetHashCode() -> int
 override Janus.Core.PolicyOverride.ToString() -> string!
+override Janus.Core.PolicyRequirement.Equals(object? obj) -> bool
+override Janus.Core.PolicyRequirement.GetHashCode() -> int
+override Janus.Core.PolicyRequirement.ToString() -> string!
 override Janus.Core.PreferenceDeclaration.Equals(object? obj) -> bool
 override Janus.Core.PreferenceDeclaration.GetHashCode() -> int
 override Janus.Core.PreferenceDeclaration.ToString() -> string!
@@ -1358,6 +1375,8 @@ static Janus.Core.Policy.operator ==(Janus.Core.Policy? left, Janus.Core.Policy?
 static Janus.Core.PolicyOverride.None.get -> Janus.Core.PolicyOverride!
 static Janus.Core.PolicyOverride.operator !=(Janus.Core.PolicyOverride? left, Janus.Core.PolicyOverride? right) -> bool
 static Janus.Core.PolicyOverride.operator ==(Janus.Core.PolicyOverride? left, Janus.Core.PolicyOverride? right) -> bool
+static Janus.Core.PolicyRequirement.operator !=(Janus.Core.PolicyRequirement? left, Janus.Core.PolicyRequirement? right) -> bool
+static Janus.Core.PolicyRequirement.operator ==(Janus.Core.PolicyRequirement? left, Janus.Core.PolicyRequirement? right) -> bool
 static Janus.Core.Precis.TryEnforceNickname(string! value, out string! enforced) -> bool
 static Janus.Core.Precis.TryEnforceUsername(string! value, out string! enforced) -> bool
 static Janus.Core.PreferenceDeclaration.operator !=(Janus.Core.PreferenceDeclaration? left, Janus.Core.PreferenceDeclaration? right) -> bool

@@ -171,6 +171,7 @@ public sealed class VocabularyContractTests
         Assert.Equal(["active", "invalidated", "suspended"], WireNames<AuthenticatorState>());
         Assert.Equal(["full", "single-factor"], WireNames<ReauthenticationKind>());
         Assert.Equal(["remembered", "trusted"], WireNames<DeviceKind>());
+        Assert.Equal(["credentialRedundancy", "requiredAssurance"], WireNames<PolicyField>());
     }
 
     /// <summary>
@@ -265,6 +266,7 @@ public sealed class VocabularyContractTests
             typeof(AuthenticatorState),
             typeof(ReauthenticationKind),
             typeof(DeviceKind),
+            typeof(PolicyField),
         ];
 
         foreach (Type vocabulary in vocabularies)
