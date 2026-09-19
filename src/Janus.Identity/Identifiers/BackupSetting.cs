@@ -52,6 +52,22 @@ internal sealed class BackupSetting
         new(subject, kind, BackupRule.AllVerified, named: null);
 
     /// <summary>
+    /// The setting as it already stands. This is the store translating a stored row and
+    /// no change the account made.
+    /// </summary>
+    /// <param name="subject">Whose it is.</param>
+    /// <param name="kind">The kind it governs.</param>
+    /// <param name="rule">What it adds to the primary.</param>
+    /// <param name="named">The identifier it names, where it names one.</param>
+    /// <returns>The setting.</returns>
+    public static BackupSetting Existing(
+        SubjectId subject,
+        IdentifierKind kind,
+        BackupRule rule,
+        IdentifierId? named) =>
+        new(subject, kind, rule, named);
+
+    /// <summary>
     /// Sets the security-notice set to every verified identifier of the kind.
     /// </summary>
     public void UseEveryVerified()

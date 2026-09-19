@@ -162,6 +162,43 @@ internal sealed class Identifier
     }
 
     /// <summary>
+    /// The identifier as it already stands. This is the store translating a stored row
+    /// and no operation, so it takes the verification and the primary role it is given
+    /// without asking how the identifier came by them.
+    /// </summary>
+    /// <param name="id">The identifier issued for it.</param>
+    /// <param name="subject">Whose it is.</param>
+    /// <param name="kind">Which of the three kinds it is.</param>
+    /// <param name="entered">The form the person entered.</param>
+    /// <param name="canonical">The form it is compared under.</param>
+    /// <param name="addedAt">When it was added.</param>
+    /// <param name="verifiedAt">When it was verified, where it has been.</param>
+    /// <param name="isPrimary">Whether it is the primary of its kind.</param>
+    /// <param name="isLocked">Whether it is locked against change.</param>
+    /// <returns>The identifier.</returns>
+    /// <exception cref="ArgumentNullException">Either form is absent.</exception>
+    public static Identifier Existing(
+        IdentifierId id,
+        SubjectId subject,
+        IdentifierKind kind,
+        string entered,
+        string canonical,
+        DateTimeOffset addedAt,
+        DateTimeOffset? verifiedAt,
+        bool isPrimary,
+        bool isLocked)
+    {
+        ArgumentNullException.ThrowIfNull(entered);
+        ArgumentNullException.ThrowIfNull(canonical);
+
+        return new Identifier(id, subject, kind, entered, canonical, addedAt, isLocked)
+        {
+            VerifiedAt = verifiedAt,
+            IsPrimary = isPrimary,
+        };
+    }
+
+    /// <summary>
     /// Records that a code or a same-browser link confirmed the identifier.
     /// </summary>
     /// <param name="at">When it was confirmed.</param>

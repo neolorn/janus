@@ -1,8 +1,11 @@
 using System;
+using System.Security.Cryptography;
 using Janus.Core;
 using Janus.Identity.Accounts;
+using Janus.Identity.Identifiers;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Identity.Accounts;
+using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,10 +27,20 @@ internal static class StorageRegistration
     /// The application's own credential, which holds row-level access and no schema
     /// right (OPS-MIG-003).
     /// </param>
+    /// <param name="keyEncryptionKeys">
+    /// The versions a subject key may be wrapped under, read from the secrets manager
+    /// at startup and never from the database (OPS-SEC-001).
+    /// </param>
+    /// <param name="fingerprintKey">
+    /// The key the searchable fingerprints are computed under, read from the same
+    /// place and held outside the database (PRIV-RIGHT-005c).
+    /// </param>
     /// <returns>The collection, for chaining.</returns>
     public static IServiceCollection AddJanusStorage(
         this IServiceCollection services,
-        string connectionString)
+        string connectionString,
+        KeyEncryptionKeys keyEncryptionKeys,
+        ReadOnlyMemory<byte> fingerprintKey)
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -39,8 +52,15 @@ internal static class StorageRegistration
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<DataConnections>();
 
+        services.AddSingleton<RandomNumberGenerator>(_ => RandomNumberGenerator.Create());
+
         services.AddScoped<IAccountStore, AccountStore>();
         services.AddScoped<ISubjectKeyStore, SubjectKeyStore>();
+        services.AddScoped<IIdentifierStore>(provider => new IdentifierStore(
+            provider.GetRequiredService<JanusDbContext>(),
+            keyEncryptionKeys,
+            fingerprintKey,
+            provider.GetRequiredService<RandomNumberGenerator>()));
 
         return services;
     }

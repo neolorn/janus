@@ -40,6 +40,12 @@ internal sealed class IdentifierSet
     public IReadOnlyList<Identifier> All => _identifiers;
 
     /// <summary>
+    /// The backup settings the account has a setting for, which is what a store writes;
+    /// a kind the account has never settled keeps the default and needs no row.
+    /// </summary>
+    public IReadOnlyCollection<BackupSetting> Backups => _settings.Values;
+
+    /// <summary>
     /// Reads an account's identifiers as they stand.
     /// </summary>
     /// <param name="subject">Whose they are.</param>

@@ -122,6 +122,13 @@ against the public contract of LIB-API-001.
 - A subject key now carries its re-wrapping to the row. A rotation of the
   key-encryption key changes the wrapping and no stored value, and an erasure of the
   key leaves every field written under it unreadable wherever that field is held.
+- An account's identifiers are now written and read back through a port of their own.
+  Both forms are encrypted under the subject's own key, the canonical form is
+  fingerprinted under the deployment's fingerprint key, and a lookup by value matches
+  on that fingerprint, so an address entered in another casing finds the account that
+  already holds it and a neutralised fingerprint finds nobody. Reading an account's
+  identifiers unwraps its key once however many columns it decrypts, and reading them
+  after erasure refuses rather than yielding anything.
 
 ### Changed
 
