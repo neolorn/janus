@@ -39,8 +39,12 @@ for commit in $commits; do
     status=1
   fi
 
-  if [ "${#subject}" -gt 72 ]; then
-    echo "${commit}: the description is ${#subject} characters, over 72."
+  # The description is what follows the type and the optional scope, which is the
+  # span CONV-VCS-003 bounds; the prefix is not part of it.
+  description=${subject#*: }
+
+  if [ "${#description}" -gt 72 ]; then
+    echo "${commit}: the description is ${#description} characters, over 72."
     status=1
   fi
 
