@@ -3,6 +3,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Tests.Passwords;
 using Janus.Core;
 using OtpNet;
 using Xunit;
@@ -21,13 +22,14 @@ public sealed class TotpServiceTests : IAsyncDisposable
         new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
     private readonly AuthenticatorStoreInMemory _authenticators = new();
+    private readonly PasswordStoreInMemory _passwords = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
 
     private TotpService Service =>
-        new(_authenticators, _configuration, _work, _clock, _randomness);
+        new(_authenticators, _passwords, _configuration, _work, _clock, _randomness);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
@@ -248,7 +250,37 @@ public sealed class TotpServiceTests : IAsyncDisposable
 
     private DateTimeOffset Now => _clock.GetUtcNow();
 
-    private SubjectId Subject() => SubjectId.New(_randomness);
+    /// <summary>
+    /// AUTH-FACT-002b AC2: a code generator is a second step, so an account holding
+    /// no password does not enrol one.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC2_ACodeGeneratorIsRefusedWithoutAPasswordAsync()
+    {
+        SubjectId subject = Without();
+
+        Assert.Equal(
+            ErrorCodes.FactorNotPermitted,
+            Refusal(await Service.BeginAsync(
+                subject,
+                Label(),
+                TestContext.Current.CancellationToken)));
+
+        Assert.Empty(await _authenticators.OfAsync(subject, TestContext.Current.CancellationToken));
+    }
+
+    // Every enrolment here is of a second step, which an account holds only once it
+    // holds a password (AUTH-FACT-002b).
+    private SubjectId Subject()
+    {
+        SubjectId subject = Without();
+
+        _passwords.Hold(subject, Noon);
+
+        return subject;
+    }
+
+    private SubjectId Without() => SubjectId.New(_randomness);
 
     private async ValueTask<TotpEnrolment> EnrolledAsync(SubjectId subject)
     {

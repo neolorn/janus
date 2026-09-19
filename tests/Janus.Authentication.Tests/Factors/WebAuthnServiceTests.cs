@@ -4,6 +4,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Tests.Passwords;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Xunit;
@@ -21,6 +22,7 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
         new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
     private readonly AuthenticatorStoreInMemory _authenticators = new();
+    private readonly PasswordStoreInMemory _passwords = new();
     private readonly CredentialAuditInMemory _audit = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly UnitOfWorkInMemory _work = new();
@@ -36,7 +38,7 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             (IReadOnlyList<string>)["https://app.example.com", "https://id.example.com"]);
 
     private WebAuthnService Service =>
-        new(_authenticators, _audit, _configuration, _work, _clock, _randomness);
+        new(_authenticators, _passwords, _audit, _configuration, _work, _clock, _randomness);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
@@ -451,6 +453,35 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
                 Assertion(),
                 TestContext.Current.CancellationToken)));
 
+    /// <summary>
+    /// AUTH-FACT-002b AC2: a security key as a second step is refused on an account
+    /// that holds no password, and a passkey on the same account is not.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC2_ASecondStepIsRefusedWithoutAPasswordAsync()
+    {
+        SubjectId subject = Without();
+
+        Assert.Equal(
+            ErrorCodes.FactorNotPermitted,
+            Refusal(await Service.CompleteAsync(
+                subject,
+                Factor.SecurityKey,
+                Label(),
+                Registration(),
+                TestContext.Current.CancellationToken)));
+
+        Assert.Empty(await _authenticators.OfAsync(subject, TestContext.Current.CancellationToken));
+
+        Assert.Null(Refusal(await Service.CompleteAsync(
+            subject,
+            Factor.Passkey,
+            Label(),
+            Registration(),
+            TestContext.Current.CancellationToken)));
+    }
+
     private static WebAuthnRegistration Registration() =>
         new(
             new byte[] { 1, 2, 3 },
@@ -483,7 +514,18 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
     private static Xunit.Sdk.XunitException Failed(Error error) =>
         new(error.Code.ToString());
 
-    private SubjectId Subject() => SubjectId.New(_randomness);
+    // A second-factor key is enrolled only on an account that holds a password
+    // (AUTH-FACT-002b), and a passkey on either.
+    private SubjectId Subject()
+    {
+        SubjectId subject = Without();
+
+        _passwords.Hold(subject, Noon);
+
+        return subject;
+    }
+
+    private SubjectId Without() => SubjectId.New(_randomness);
 
     private async ValueTask<AuthenticatorId> EnrolledAsync(
         SubjectId subject,
