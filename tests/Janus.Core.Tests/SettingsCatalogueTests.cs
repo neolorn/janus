@@ -14,29 +14,20 @@ namespace Janus.Core.Tests;
 [Trait("kind", "contract")]
 public sealed class SettingsCatalogueTests
 {
-    // Every key chapter 10 section 4 marks P. Section 4.8 holds the ones OPS-CFG-004
-    // protects because turning them off would hide the person turning them off; the
-    // rest are marked P where they are declared, because they are facts about the
+    // Every key chapter 10 section 4 marks P: the nine of section 4.8 and the four
+    // more that are marked where they are declared, because they are facts about the
     // deployment rather than runtime controls.
     private static readonly string[] Protected =
     [
-        "abuse.throttle.enabled",
-        "alerting.destinationchange.notify",
-        "audit.enabled",
-        "exfiltration.export.auditing",
+        .. ProtectedBySectionFourEight,
         "hosting.crossborderbasis",
         "hosting.location",
-        "legal.governinglanguage",
-        "stepup.enforcement",
-        "token.signature.verification",
-        "token.signing.algorithm",
         "webauthn.algorithms",
         "webauthn.origins",
-        "webauthn.rpid",
     ];
 
-    // The eight keys of LIB-HOST-001 that name the deployment, and the one that is
-    // required only when hosting is outside Egypt.
+    // The eleven keys of LIB-HOST-001 that name the deployment, and the three that
+    // are named only where their condition holds.
     private static readonly string[] NamedByTheDeployment =
     [
         "abuse.sms.balancefloor",
@@ -45,9 +36,31 @@ public sealed class SettingsCatalogueTests
         "alerting.owner.sms",
         "alerting.sms.destinations",
         "hosting.crossborderbasis",
+        "hosting.environment",
         "hosting.location",
         "legal.governinglanguage",
+        "notification.email.sendingdomain",
+        "notification.languages",
+        "privacy.calendar.timezone",
+        "service.name",
         "webauthn.origins",
+    ];
+
+    // Chapter 10 section 4.8, which OPS-CFG-004 states is the same list as its own:
+    // the settings whose change would hide the person changing them, and the
+    // governing language, which is protected because the text a document binds in is
+    // not a runtime toggle.
+    private static string[] ProtectedBySectionFourEight =>
+    [
+        "abuse.throttle.enabled",
+        "audit.enabled",
+        "exfiltration.export.auditing",
+        "legal.governinglanguage",
+        "privacy.calendar.timezone",
+        "stepup.enforcement",
+        "token.signature.verification",
+        "token.signing.algorithm",
+        "webauthn.rpid",
     ];
 
     /// <summary>
@@ -121,6 +134,72 @@ public sealed class SettingsCatalogueTests
     }
 
     /// <summary>
+    /// OPS-CFG-004 and chapter 10 section 4.8 are one list, so every key section 4.8
+    /// holds is one the application cannot change.
+    /// </summary>
+    [Fact]
+    public void Scope_TheOpsCfg004List_IsProtectedInTheCatalogue()
+    {
+        foreach (string key in ProtectedBySectionFourEight)
+        {
+            Assert.Equal(SettingScope.Protected, ScopeOf(key));
+        }
+    }
+
+    /// <summary>
+    /// The chapter 10 section 4 direction rule: a key bounded only above loosens
+    /// upward, a key bounded only below loosens downward, and a key bounded at
+    /// neither end loosens on any change.
+    /// </summary>
+    [Fact]
+    public void Loosening_AKeyWhoseRowNamesNoDirection_IsReadFromItsBounds()
+    {
+        Assert.Equal(SettingDirection.Increase, Settings.SessionAal2Inactivity.Loosening);
+        Assert.Equal(SettingDirection.Decrease, Settings.PasswordMaximum.Loosening);
+        Assert.Equal(SettingDirection.AnyChange, Settings.SessionStepUpRecency.Loosening);
+    }
+
+    /// <summary>
+    /// The same rule for a boolean, which loosens away from its default whichever way
+    /// that is, and for the one family of booleans.
+    /// </summary>
+    [Fact]
+    public void Loosening_ABoolean_LoosensAwayFromItsDefault()
+    {
+        Assert.Equal(SettingDirection.Decrease, Settings.AuditEnabled.Loosening);
+        Assert.Equal(SettingDirection.Increase, Settings.AlertingOwnerEnabled.Loosening);
+        Assert.Equal(SettingDirection.Decrease, Settings.OrganizationStepUpEnforcement.Loosening);
+    }
+
+    /// <summary>
+    /// Where a row names a direction, that direction governs rather than the one the
+    /// bounds would give: the identifier maximum is bounded only below and yet
+    /// loosens upward, because each verified address is a send destination.
+    /// </summary>
+    [Fact]
+    public void Loosening_AKeyWhoseRowNamesADirection_CarriesTheNamedOne()
+    {
+        Assert.Equal(SettingDirection.Increase, Settings.IdentifiersEmailMax.Loosening);
+        Assert.Equal(SettingDirection.Increase, Settings.IdentifiersPhoneMax.Loosening);
+        Assert.Equal(SettingDirection.Decrease, Settings.PasswordBlocklistSources.Loosening);
+    }
+
+    /// <summary>
+    /// The chapter 10 section 4 holding rule: a duration written in years is held at
+    /// 366 days a year and one written in months at 31 days a month, so a floor
+    /// stated in either is never shorter than the calendar span it names.
+    /// </summary>
+    [Fact]
+    public void Default_ADurationInYearsOrMonths_IsHeldLong()
+    {
+        Assert.Equal(TimeSpan.FromDays(7 * 366), Settings.RetentionAuditSecurity.Default);
+        Assert.Equal(TimeSpan.FromDays(5 * 366), Settings.RetentionAuditSecurity.Floor);
+        Assert.Equal(TimeSpan.FromDays(3 * 366), Settings.RetentionConsent.Default);
+        Assert.Equal(TimeSpan.FromDays(366), Settings.RetentionConsent.Floor);
+        Assert.Equal(TimeSpan.FromDays(3 * 31), Settings.BackupRestoreTestInterval.Default);
+    }
+
+    /// <summary>
     /// Every key is named once. A duplicate would make one of the two unreachable
     /// through the store.
     /// </summary>
@@ -129,6 +208,11 @@ public sealed class SettingsCatalogueTests
         Assert.Equal(
             Settings.All.Count,
             Settings.All.Select(setting => setting.Key.ToString()).Distinct(StringComparer.Ordinal).Count());
+
+    // The scope the catalogue carries for a key or a family, by its written name.
+    private static SettingScope ScopeOf(string key) =>
+        Settings.All.SingleOrDefault(setting => setting.Key.ToString() == key)?.Scope
+            ?? Settings.Families.Single(family => family.Prefix == key).Scope;
 
     // Reading the default of a setting whose type is only known at runtime. A setting
     // that resolves hands back a value; one that does not throws, which is the failure

@@ -12,16 +12,23 @@ public sealed class DecimalSetting : BoundedSetting<decimal>
     internal DecimalSetting(
         string key,
         SettingScope scope,
-        SettingDirection loosening,
         decimal fallback,
         decimal? floor = null,
-        decimal? ceiling = null)
-        : base(key, scope, loosening, required: false, fallback, floor, ceiling)
+        decimal? ceiling = null,
+        SettingDirection? loosening = null)
+        : base(key, scope, required: false, fallback, floor, ceiling, loosening)
     {
     }
 
-    internal DecimalSetting(string key, SettingScope scope, SettingDirection loosening)
-        : base(key, scope, loosening, required: true, fallback: default, floor: null, ceiling: null)
+    internal DecimalSetting(string key, SettingScope scope)
+        : base(
+            key,
+            scope,
+            required: true,
+            fallback: default,
+            floor: null,
+            ceiling: null,
+            SettingDirection.AnyChange)
     {
     }
 

@@ -7,13 +7,13 @@ namespace Janus.Core.Configuration;
 /// <remarks>Implements chapter 10 section 4 value types, LIB-HOST-001.</remarks>
 public sealed class TextSetting : Setting<string>
 {
-    internal TextSetting(string key, SettingScope scope, SettingDirection loosening, string fallback)
-        : base(key, scope, loosening, required: false, fallback)
+    internal TextSetting(string key, SettingScope scope, string fallback)
+        : base(key, scope, SettingDirection.AnyChange, required: false, fallback)
     {
     }
 
-    internal TextSetting(string key, SettingScope scope, SettingDirection loosening)
-        : base(key, scope, loosening, required: true, fallback: string.Empty)
+    internal TextSetting(string key, SettingScope scope)
+        : base(key, scope, SettingDirection.AnyChange, required: true, fallback: string.Empty)
     {
     }
 

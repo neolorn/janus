@@ -7,8 +7,8 @@ namespace Janus.Core.Configuration;
 /// <remarks>Implements chapter 10 sections 4.1 and 4.1a, AUTH-PRIN-002.</remarks>
 public sealed class PolicySetting : Setting<Policy>
 {
-    internal PolicySetting(string key, SettingScope scope, SettingDirection loosening, Policy fallback)
-        : base(key, scope, loosening, required: false, fallback)
+    internal PolicySetting(string key, SettingScope scope, Policy fallback)
+        : base(key, scope, SettingDirection.AnyChange, required: false, fallback)
     {
     }
 

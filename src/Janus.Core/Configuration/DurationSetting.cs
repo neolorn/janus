@@ -12,11 +12,18 @@ public sealed class DurationSetting : BoundedSetting<TimeSpan>
     internal DurationSetting(
         string key,
         SettingScope scope,
-        SettingDirection loosening,
-        TimeSpan fallback,
-        TimeSpan? floor = null,
-        TimeSpan? ceiling = null)
-        : base(key, scope, loosening, required: false, fallback, floor, ceiling)
+        string fallback,
+        string? floor = null,
+        string? ceiling = null,
+        SettingDirection? loosening = null)
+        : base(
+            key,
+            scope,
+            required: false,
+            Duration.Parse(fallback),
+            floor is null ? null : Duration.Parse(floor),
+            ceiling is null ? null : Duration.Parse(ceiling),
+            loosening)
     {
     }
 

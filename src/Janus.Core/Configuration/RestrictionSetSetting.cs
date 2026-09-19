@@ -13,9 +13,8 @@ public sealed class RestrictionSetSetting : Setting<IReadOnlyList<Restriction>>
     internal RestrictionSetSetting(
         string key,
         SettingScope scope,
-        SettingDirection loosening,
         IReadOnlyList<Restriction> fallback)
-        : base(key, scope, loosening, required: false, fallback)
+        : base(key, scope, SettingDirection.AnyChange, required: false, fallback)
     {
     }
 

@@ -15,12 +15,12 @@ public sealed class MultipleChoiceSetting<TValue> : Setting<IReadOnlySet<TValue>
     internal MultipleChoiceSetting(
         string key,
         SettingScope scope,
-        SettingDirection loosening,
         IReadOnlySet<TValue> fallback,
         IReadOnlySet<TValue> allowed,
         IReadOnlySet<TValue> unremovable,
-        int minimum = 0)
-        : base(key, scope, loosening, required: false, fallback)
+        int minimum = 0,
+        SettingDirection? loosening = null)
+        : base(key, scope, loosening ?? SettingDirection.AnyChange, required: false, fallback)
     {
         Allowed = allowed;
         Unremovable = unremovable;
