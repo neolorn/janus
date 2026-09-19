@@ -4,8 +4,10 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Core;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Authorization;
@@ -97,9 +99,8 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
-    /// AUTHZ-GATE-004 AC4, AUTHZ-CONCEAL-004 AC1: the identifier a concealed refusal
-    /// carries resolves for a role holding <c>audit:read</c>, to the permission and the
-    /// principal, and for nobody else.
+    /// AUTHZ-GATE-004 AC4: the identifier a concealed refusal carries resolves for a
+    /// role holding <c>audit:read</c>, and for nobody else.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -125,9 +126,25 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
             TestContext.Current.CancellationToken);
 
         Assert.Equal(ErrorCodes.Denied, Refusal(withoutTheRole).Code);
+        Assert.Equal(AccessOutcome.Denied, Explained(asSupport).Outcome);
+    }
 
-        AccessExplanation resolved = Explained(asSupport);
+    /// <summary>
+    /// AUTHZ-CONCEAL-004 AC1: the identifier is the audit record's own, so it resolves
+    /// to the entry the refusal wrote, naming the permission that was asked for and the
+    /// principal who asked.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_CONCEAL_004_AC1_TheIdentifierResolvesToTheEntryItWroteAsync()
+    {
+        Deployed deployed = await DeployAsync(granted: false);
 
+        AuditRecordId correlation = await RefusedAsync(deployed, deployed.Record, HostPermissions.Read);
+
+        AccessExplanation resolved = await ResolvedAsync(deployed, correlation);
+
+        Assert.Equal(1, await RecordedAsync(correlation));
         Assert.Equal(AccessOutcome.Denied, resolved.Outcome);
         Assert.Equal(HostPermissions.Read, resolved.Permission);
         Assert.Equal(deployed.Account, resolved.Principal.Acting);
@@ -136,9 +153,41 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
-    /// AUTHZ-CONCEAL-002 AC1, AUTHZ-CONCEAL-004 AC2: a refusal about a record that is
-    /// there and a refusal about one that is not are the same answer, and neither
-    /// identifier says which it was.
+    /// AUTHZ-CONCEAL-004 AC2: the identifier is new at every refusal and derived from
+    /// nothing the caller named, so holding two of them says nothing about which record
+    /// was there.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_CONCEAL_004_AC2_TheIdentifierSaysNothingAboutTheRecordAsync()
+    {
+        Deployed deployed = await DeployAsync(granted: false);
+
+        ResourceReference absent = Reference(Document);
+
+        AuditRecordId present = await RefusedAsync(deployed, deployed.Record, HostPermissions.Read);
+        AuditRecordId missing = await RefusedAsync(deployed, absent, HostPermissions.Read);
+        AuditRecordId again = await RefusedAsync(deployed, deployed.Record, HostPermissions.Read);
+
+        Assert.NotEqual(present, missing);
+        Assert.NotEqual(present, again);
+
+        foreach (AuditRecordId identifier in new[] { present, missing, again })
+        {
+            Assert.DoesNotContain(
+                deployed.Record.Id.ToString(),
+                identifier.Value.ToString(),
+                StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(
+                absent.Id.ToString(),
+                identifier.Value.ToString(),
+                StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>
+    /// AUTHZ-CONCEAL-002 AC1: a refusal about a record that is there and a refusal
+    /// about one that is not are the same answer.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -156,9 +205,6 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
         Assert.Equal(present.Details.Keys.Order(StringComparer.Ordinal), absent.Details.Keys.Order(StringComparer.Ordinal));
         Assert.Equal(JsonValueKind.String, present.Details["correlation"].ValueKind);
         Assert.Equal(JsonValueKind.String, absent.Details["correlation"].ValueKind);
-        Assert.NotEqual(
-            present.Details["correlation"].GetGuid(),
-            absent.Details["correlation"].GetGuid());
     }
 
     /// <summary>
@@ -274,6 +320,30 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
         return outcome.Match(
             () => throw new InvalidOperationException("The permission was not refused."),
             error => error);
+    }
+
+    private async Task<AccessExplanation> ResolvedAsync(Deployed deployed, AuditRecordId correlation)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        return Explained(await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+            .ResolveAsync(
+                AccessContext.Of(deployed.Support),
+                deployed.Deployment.Organization,
+                correlation,
+                TestContext.Current.CancellationToken));
+    }
+
+    // The trail itself, read without the gate: an identifier that resolves through the
+    // gate alone would prove only that the gate remembers it.
+    private async Task<int> RecordedAsync(AuditRecordId correlation)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT count(*) FROM janus.audit_records WHERE id = @id AND action = @action;",
+            new { id = correlation.Value, action = "authz.access.denied" },
+            cancellationToken: TestContext.Current.CancellationToken));
     }
 
     private async Task<AuditRecordId> RefusedAsync(

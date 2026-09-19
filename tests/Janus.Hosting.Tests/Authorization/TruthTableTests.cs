@@ -30,32 +30,56 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     private static readonly ResourceType Document = ResourceType.Parse("document");
     private static readonly ResourceType Workspace = ResourceType.Parse("workspace");
 
+    // The table itself, stated once. Changing a policy is changing a row here, and both
+    // the case-by-case run and the agreement check read it (AUTHZ-TEST-001).
+    private static readonly (string Scenario, bool Allowed)[] Table =
+    [
+        ("a grant on the record itself", true),
+        ("a grant on the container", true),
+        ("a grant two containers above", true),
+        ("a grant on the whole organization", true),
+        ("a grant on a sibling", false),
+        ("no grant at all", false),
+        ("a grant to a group the account belongs to", true),
+        ("a grant to a group holding the account's group", true),
+        ("a grant to a group the account left", false),
+        ("a deny on the record over an allow on the container", false),
+        ("a deny on the container over an allow on the record", false),
+        ("a deny to a group over an allow to the account", false),
+        ("a grant that has expired", false),
+        ("a grant that expires later", true),
+        ("a grant that was revoked", false),
+        ("a grant in another organization", false),
+        ("a grant whose role does not allow the permission", false),
+    ];
+
     /// <summary>
-    /// AUTHZ-TEST-001 AC1, AC2, AUTHZ-GATE-002 AC2, AUTHZ-PRIN-001 AC1: every case of
-    /// the table decides the same way through the check, the expression and the
-    /// fragment.
+    /// The table as the run reads it.
+    /// </summary>
+    public static TheoryData<string, bool> Cases
+    {
+        get
+        {
+            var cases = new TheoryData<string, bool>();
+
+            foreach ((string scenario, bool allowed) in Table)
+            {
+                cases.Add(scenario, allowed);
+            }
+
+            return cases;
+        }
+    }
+
+    /// <summary>
+    /// AUTHZ-TEST-001 AC1, AC2, AUTHZ-GATE-002 AC2: every case of the table decides the
+    /// way the table says, through the check, the expression and the fragment alike.
     /// </summary>
     /// <param name="scenario">The case.</param>
     /// <param name="allowed">What it decides.</param>
     /// <returns>The work of running it.</returns>
     [Theory]
-    [InlineData("a grant on the record itself", true)]
-    [InlineData("a grant on the container", true)]
-    [InlineData("a grant two containers above", true)]
-    [InlineData("a grant on the whole organization", true)]
-    [InlineData("a grant on a sibling", false)]
-    [InlineData("no grant at all", false)]
-    [InlineData("a grant to a group the account belongs to", true)]
-    [InlineData("a grant to a group holding the account's group", true)]
-    [InlineData("a grant to a group the account left", false)]
-    [InlineData("a deny on the record over an allow on the container", false)]
-    [InlineData("a deny on the container over an allow on the record", false)]
-    [InlineData("a deny to a group over an allow to the account", false)]
-    [InlineData("a grant that has expired", false)]
-    [InlineData("a grant that expires later", true)]
-    [InlineData("a grant that was revoked", false)]
-    [InlineData("a grant in another organization", false)]
-    [InlineData("a grant whose role does not allow the permission", false)]
+    [MemberData(nameof(Cases))]
     public async Task AUTHZ_TEST_001_AC2_EveryCaseDecidesTheSameWayThroughBothPathsAsync(
         string scenario,
         bool allowed)
@@ -65,6 +89,31 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         Assert.Equal(allowed, await ChecksAsync(written));
         Assert.Equal(allowed, await ExpressionAdmitsAsync(written));
         Assert.Equal(allowed, await FragmentAdmitsAsync(written));
+    }
+
+    /// <summary>
+    /// AUTHZ-PRIN-001 AC1: the single check and the list filter are asked the whole
+    /// table and agree case for case, whatever the table says the answer is.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_PRIN_001_AC1_TheCheckAndTheFilterAgreeOnEveryCaseAsync()
+    {
+        List<(bool Check, bool Expression, bool Fragment)> decided = [];
+
+        foreach ((string scenario, bool _) in Table)
+        {
+            Case written = await WriteAsync(scenario);
+
+            decided.Add((
+                await ChecksAsync(written),
+                await ExpressionAdmitsAsync(written),
+                await FragmentAdmitsAsync(written)));
+        }
+
+        Assert.Equal(Table.Length, decided.Count);
+        Assert.All(decided, outcome => Assert.Equal(outcome.Check, outcome.Expression));
+        Assert.All(decided, outcome => Assert.Equal(outcome.Check, outcome.Fragment));
     }
 
     /// <summary>
@@ -131,9 +180,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     }
 
     /// <summary>
-    /// AUTHZ-PRIN-002 AC1, AC2, LIB-HOST-002 AC2: the predicate goes to the database as
-    /// a correlated existence check over the two contract tables, so the host's listing
-    /// stays one query and nothing is filtered after retrieval.
+    /// AUTHZ-PRIN-002 AC1, AC2: the predicate goes to the database as a correlated
+    /// existence check over the two contract tables, so the host's listing stays one
+    /// query and nothing is filtered after retrieval.
     /// </summary>
     [Fact]
     public async Task AUTHZ_PRIN_002_AC1_TheExpressionTranslatesToOneCorrelatedQueryAsync()
@@ -160,6 +209,40 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             (await listing.Select(document => document.Id)
                 .ToListAsync(TestContext.Current.CancellationToken))
                 .OrderBy(id => id, StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// LIB-HOST-002 AC2: the filter composes into the host's own query, over the host's
+    /// own table and the sets the host supplied, and the rows are counted in the
+    /// database rather than brought back to be counted.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task LIB_HOST_002_AC2_TheFilterComposesWithoutMaterialisingRowsAsync()
+    {
+        Case written = await WriteAsync("a grant on the container");
+
+        await using HostContext reading = host.Context();
+
+        IQueryable<HostDocument> listing = reading.Documents
+            .Where(await ExpressionAsync(written, reading))
+            .OrderBy(document => document.Id)
+            .Skip(1)
+            .Take(1);
+
+        string sql = listing.ToQueryString();
+
+        Assert.Contains("host.documents", sql, StringComparison.Ordinal);
+        Assert.Contains("LIMIT", sql, StringComparison.Ordinal);
+        Assert.Contains("OFFSET", sql, StringComparison.Ordinal);
+
+        Assert.Equal(
+            2,
+            await reading.Documents
+                .Where(await ExpressionAsync(written, reading))
+                .CountAsync(TestContext.Current.CancellationToken));
+
+        Assert.Single(await listing.ToListAsync(TestContext.Current.CancellationToken));
     }
 
     private static async Task<Expression<Func<HostDocument, bool>>> ExpressionAsync(

@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Janus.Authorization.Gate;
 using Janus.Core;
 using Xunit;
@@ -10,14 +12,15 @@ namespace Janus.Authorization.Tests.Gate;
 
 /// <summary>
 /// That there is one evaluation path and no way past it
-/// (AUTHZ-SEAM-001, LIB-SEAM-001, AUTHZ-GATE-001, AUTHZ-PRIN-003, AUTHZ-IMP-001).
+/// (AUTHZ-SEAM-001, LIB-SEAM-001, LIB-SEAM-002, LIB-HOST-004, AUTHZ-GATE-001,
+/// AUTHZ-PRIN-003, AUTHZ-IMP-001).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class AccessSeamTests
 {
     /// <summary>
-    /// AUTHZ-SEAM-001 AC1, LIB-SEAM-001 AC1: one type stands behind the interface, so
-    /// replacing what evaluates a permission is one change in one place.
+    /// AUTHZ-SEAM-001 AC1: one type stands behind the interface, so there is one
+    /// evaluation path and nothing else answering the same question.
     /// </summary>
     [Fact]
     public void AUTHZ_SEAM_001_AC1_OneTypeStandsBehindTheInterface()
@@ -115,12 +118,82 @@ public sealed class AccessSeamTests
         {
             string text = File.ReadAllText(file);
 
-            Assert.DoesNotMatch("Acting\\s*[!=]=\\s*", text);
-            Assert.DoesNotMatch("Effective\\s*[!=]=\\s*", text);
+            Assert.DoesNotMatch(Compared("Acting"), text);
+            Assert.DoesNotMatch(Compared("Effective"), text);
         }
     }
 
-    private static string[] Sources()
+    /// <summary>
+    /// LIB-SEAM-001 AC1: what evaluates a permission is named in one place, so putting
+    /// something else behind the interface is one line and no call site.
+    /// </summary>
+    [Fact]
+    public void LIB_SEAM_001_AC1_ReplacingWhatEvaluatesIsOneChange()
+    {
+        IEnumerable<string> naming = Tree("src")
+            .Where(file => Regex.IsMatch(
+                File.ReadAllText(file),
+                "\\b" + nameof(AccessGate) + "\\b",
+                RegexOptions.None,
+                TimeSpan.FromSeconds(1)))
+            .Select(Relative)
+            .Order(StringComparer.Ordinal);
+
+        Assert.Equal(
+            [
+                Path.Combine("Janus.Authorization", "Gate", "AccessGate.cs"),
+                Path.Combine("Janus.Hosting", "JanusRegistration.cs"),
+            ],
+            naming);
+    }
+
+    /// <summary>
+    /// LIB-SEAM-002 AC2: no feature anywhere in the library reads the acting and the
+    /// effective identity as differing, impersonation being a reserved seam.
+    /// </summary>
+    [Fact]
+    public void LIB_SEAM_002_AC2_NoFeatureReadsActingAndEffectiveAsDiffering()
+    {
+        foreach (string file in Tree("src"))
+        {
+            string text = File.ReadAllText(file);
+
+            Assert.DoesNotMatch(Compared("Acting"), text);
+            Assert.DoesNotMatch(Compared("Effective"), text);
+        }
+    }
+
+    /// <summary>
+    /// LIB-HOST-004 AC1: the area stands on the contract alone, so a host that consumes
+    /// authorization and no authentication has everything the gate needs; the suites
+    /// that run it are registered the same way.
+    /// </summary>
+    [Fact]
+    public void LIB_HOST_004_AC1_AuthorizationAloneCompilesAndRuns()
+    {
+        IEnumerable<string> referenced = typeof(AccessGate).Assembly
+            .GetReferencedAssemblies()
+            .Select(reference => reference.Name!)
+            .Where(name => name.StartsWith("Janus.", StringComparison.Ordinal))
+            .Order(StringComparer.Ordinal);
+
+        Assert.Equal(["Janus.Core"], referenced);
+    }
+
+    // One identity compared with another, written as the comparison would be.
+    private static string Compared(string identity) => identity + "\\s*[!=]=\\s*";
+
+    private static string[] Sources() => Tree(Path.Combine("src", "Janus.Authorization"));
+
+    private static string[] Tree(string under) => Directory.GetFiles(
+        Path.Combine(Root(), under),
+        "*.cs",
+        SearchOption.AllDirectories);
+
+    private static string Relative(string file) =>
+        Path.GetRelativePath(Path.Combine(Root(), "src"), file);
+
+    private static string Root()
     {
         var at = new DirectoryInfo(AppContext.BaseDirectory);
 
@@ -129,9 +202,6 @@ public sealed class AccessSeamTests
             at = at.Parent;
         }
 
-        return Directory.GetFiles(
-            Path.Combine(at!.FullName, "src", "Janus.Authorization"),
-            "*.cs",
-            SearchOption.AllDirectories);
+        return at!.FullName;
     }
 }
