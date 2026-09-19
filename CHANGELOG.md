@@ -80,6 +80,11 @@ against the public contract of LIB-API-001.
   and inside the same transaction as the rest of the operation, so it can never
   miss a write the operation has already made, and an operation that fails part
   way through leaves nothing behind.
+- The package now carries its own Unicode tables, at a pinned version. Composition,
+  decomposition, case folding, the PRECIS properties and the script data all come
+  from those tables rather than from whichever library the machine happens to have,
+  so a canonical form computed on one host is the canonical form computed on every
+  other, and the version the fingerprints were derived under is recorded.
 
 ### Changed
 

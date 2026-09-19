@@ -27,8 +27,13 @@ public sealed class LibraryStructureTests
         ["Janus.Hosting"] = ["Janus.Authentication", "Janus.Authorization", "Janus.Core", "Janus.Identity", "Janus.Privacy", "Janus.Storage"],
         ["Janus.Conformance"] = ["Janus.Core", "Janus.Hosting"],
         ["Janus.Analyzers"] = [],
+        ["Janus.UnicodeTables"] = [],
         ["Janus.Cli"] = ["Janus.Authentication", "Janus.Core", "Janus.Identity", "Janus.Storage"],
     };
+
+    // CONV-LAYOUT-001: the library is under src and the generators are under tools,
+    // outside the package. Both are held to the same conventions.
+    private static readonly string[] Roots = ["src", "tools"];
 
     private static readonly string[] RawSql =
     [
@@ -141,7 +146,7 @@ public sealed class LibraryStructureTests
         foreach (string file in Sources())
         {
             string expected = Path
-                .GetRelativePath(Path.Combine(Repository.Root, "src"), Path.GetDirectoryName(file)!)
+                .GetRelativePath(RootOf(file), Path.GetDirectoryName(file)!)
                 .Replace(Path.DirectorySeparatorChar, '.');
 
             Assert.Contains(
@@ -244,17 +249,31 @@ public sealed class LibraryStructureTests
         string.Equals(Path.GetFileNameWithoutExtension(project), "Janus.Analyzers", StringComparison.Ordinal);
 
     private static IEnumerable<string> Projects() =>
-        Directory.EnumerateFiles(Path.Combine(Repository.Root, "src"), "*.csproj", SearchOption.AllDirectories);
+        Roots.SelectMany(root =>
+            Directory.EnumerateFiles(Path.Combine(Repository.Root, root), "*.csproj", SearchOption.AllDirectories));
 
     private static IEnumerable<string> Sources() =>
-        Directory
-            .EnumerateFiles(Path.Combine(Repository.Root, "src"), "*.cs", SearchOption.AllDirectories)
+        Roots
+            .SelectMany(root =>
+                Directory.EnumerateFiles(Path.Combine(Repository.Root, root), "*.cs", SearchOption.AllDirectories))
             .Where(file => !file.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar, StringComparison.Ordinal)
                 && !file.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar, StringComparison.Ordinal));
 
+    private static string RootOf(string file) =>
+        Roots
+            .Select(root => Path.Combine(Repository.Root, root))
+            .Single(root => file.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal));
+
+    private static bool IsLibrary(string project) =>
+        string.Equals(RootOf(Project(project)), Path.Combine(Repository.Root, "src"), StringComparison.Ordinal);
+
+    private static string Project(string project) =>
+        Projects().Single(file =>
+            string.Equals(Path.GetFileNameWithoutExtension(file), project, StringComparison.Ordinal));
+
     private static string[] LibraryReferences(string project) =>
         XDocument
-            .Parse(Repository.ReadText(Path.Combine("src", project, project + ".csproj")))
+            .Parse(File.ReadAllText(Project(project)))
             .Descendants("ProjectReference")
             .Where(reference => reference.Attribute("OutputItemType") is null)
             .Select(reference => Referenced(reference.Attribute("Include")!.Value))
@@ -263,7 +282,7 @@ public sealed class LibraryStructureTests
 
     private static string[] PackageReferences(string project) =>
         XDocument
-            .Parse(Repository.ReadText(Path.Combine("src", project, project + ".csproj")))
+            .Parse(File.ReadAllText(Project(project)))
             .Descendants("PackageReference")
             .Select(reference => reference.Attribute("Include")!.Value)
             .Order(StringComparer.Ordinal)
@@ -271,7 +290,7 @@ public sealed class LibraryStructureTests
 
     private static string[] Grants(string project) =>
         XDocument
-            .Parse(Repository.ReadText(Path.Combine("src", project, project + ".csproj")))
+            .Parse(File.ReadAllText(Project(project)))
             .Descendants("InternalsVisibleTo")
             .Select(grant => grant.Attribute("Include")!.Value)
             .Order(StringComparer.Ordinal)
@@ -281,7 +300,11 @@ public sealed class LibraryStructureTests
     {
         var permitted = new List<string>();
 
-        if (!string.Equals(project, "Janus.Core", StringComparison.Ordinal))
+        // CONV-LAYOUT-002 permits a source project other than Core, whose surface is
+        // public already, to open its internals to its own test project (CONV-TEST-001).
+        // The generator of CONV-LAYOUT-001 is not a source project: it lives outside the
+        // package and the gate that regenerates its output is what covers it.
+        if (!string.Equals(project, "Janus.Core", StringComparison.Ordinal) && IsLibrary(project))
         {
             permitted.Add(project + ".Tests");
         }
