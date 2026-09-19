@@ -14,6 +14,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Janus.Identity.Tests" />
     <InternalsVisibleTo Include="Janus.Storage" />
+    <InternalsVisibleTo Include="Janus.Storage.Tests" />
     <InternalsVisibleTo Include="Janus.Hosting" />
     <InternalsVisibleTo Include="Janus.Cli" />
   </ItemGroup>

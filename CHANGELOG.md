@@ -119,6 +119,9 @@ against the public contract of LIB-API-001.
   anything else is a username where the deployment admits one. A username now holds at
   least one letter, so that no value is both a number and a username, and an all-digit
   choice is refused with `identity.username.invalid`.
+- A subject key now carries its re-wrapping to the row. A rotation of the
+  key-encryption key changes the wrapping and no stored value, and an erasure of the
+  key leaves every field written under it unreadable wherever that field is held.
 
 ### Changed
 

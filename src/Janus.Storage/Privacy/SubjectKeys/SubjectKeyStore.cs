@@ -18,9 +18,7 @@ internal sealed class SubjectKeyStore(JanusDbContext context) : ISubjectKeyStore
         SubjectId subject,
         CancellationToken cancellationToken)
     {
-        SubjectKeyRecord? record = await context.SubjectKeys
-            .FindAsync([subject], cancellationToken)
-            .ConfigureAwait(false);
+        SubjectKeyRecord? record = await FindAsync(subject, cancellationToken).ConfigureAwait(false);
 
         return record is null ? null : SubjectKey.Existing(
             record.Subject,
@@ -46,4 +44,22 @@ internal sealed class SubjectKeyStore(JanusDbContext context) : ISubjectKeyStore
                 cancellationToken)
             .ConfigureAwait(false);
     }
+
+    /// <inheritdoc/>
+    public async ValueTask RecordWrappingAsync(SubjectKey key, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+
+        SubjectKeyRecord record = await FindAsync(key.Subject, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("The subject has no key row to carry the wrapping.");
+
+        record.FormatMarker = key.FormatMarker;
+        record.KeyVersion = key.KeyVersion;
+        record.WrappedKey = key.WrappedKey.ToArray();
+    }
+
+    private async ValueTask<SubjectKeyRecord?> FindAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken) =>
+        await context.SubjectKeys.FindAsync([subject], cancellationToken).ConfigureAwait(false);
 }
