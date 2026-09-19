@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Xunit;
 
@@ -11,8 +12,8 @@ namespace Janus.Core.Tests;
 /// The shape of the solution: which project may depend on which, what a project file
 /// may declare, and which packages the build may resolve
 /// (CONV-LAYOUT-001, CONV-LAYOUT-002, CONV-LAYOUT-003, CONV-SETUP-001, CONV-SETUP-002,
-/// CONV-DESIGN-008, CONV-CODE-008, LIB-PKG-001, LIB-PKG-002, OPS-DATA-001,
-/// OPS-DATA-002).
+/// CONV-DESIGN-003, CONV-DESIGN-004, CONV-DESIGN-008, CONV-CODE-008, LIB-PKG-001,
+/// LIB-PKG-002, OPS-DATA-001, OPS-DATA-002).
 /// </summary>
 [Trait("kind", "contract")]
 public sealed class LibraryStructureTests
@@ -64,6 +65,30 @@ public sealed class LibraryStructureTests
         "Janus.Authorization",
         "Janus.Privacy",
     ];
+
+    // CONV-DESIGN-003: the tools an area must not reach for, whatever it wanted them
+    // for. Persistence is the port's business and the port is an interface.
+    private static readonly string[] Persistence =
+    [
+        "Microsoft.EntityFrameworkCore",
+        "Microsoft.EntityFrameworkCore.Design",
+        "Npgsql.EntityFrameworkCore.PostgreSQL",
+        "Dapper",
+    ];
+
+    // CONV-DESIGN-004: a property a caller can assign is a property the type's own
+    // methods no longer govern.
+    private static readonly Regex Setter = new(
+        @"\{\s*get;\s*(internal\s+)?set;",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(5));
+
+    // CONV-DESIGN-004 AC2: a parameter of the underlying type where the library has a
+    // type of its own for the thing.
+    private static readonly Regex Untyped = new(
+        @"[(,]\s*(Guid\s+[a-z]|string\s+(subject|organization|email|phone|username|address))",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(5));
 
     private static readonly string[] AllowedPackages =
     [
@@ -200,6 +225,75 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC1: no area reaches a database tool, so persistence can only
+    /// leave an area through a port.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_003_AC1_NoAreaReferencesADatabasePackage()
+    {
+        foreach (string area in Areas)
+        {
+            Assert.Empty(PackageReferences(area).Intersect(Persistence, StringComparer.Ordinal));
+        }
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC2: no port hands a query out of the area for someone else to
+    /// finish, so what a port returns is what the caller gets.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_003_AC2_NoPortMethodReturnsAQueryable()
+    {
+        IEnumerable<string> handing = SourcesOf(Areas)
+            .Where(file => File.ReadAllText(file).Contains("IQueryable", StringComparison.Ordinal));
+
+        Assert.Empty(handing);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC4: the field cipher is reached from a port implementation and
+    /// from nowhere else, so no caller above the port holds a personal field's
+    /// ciphertext and no caller below it holds the plaintext.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_003_AC4_OnlyAPortImplementationReachesTheFieldCipher()
+    {
+        IEnumerable<string> reaching = Sources()
+            .Where(file => !IsCipherOrStore(file))
+            .Where(file => File.ReadAllText(file).Contains("PersonalFieldCipher", StringComparison.Ordinal));
+
+        Assert.Empty(reaching);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-004 AC1: no domain type exposes a setter, so its state changes only
+    /// through the methods named for the actions that change it. The persistence
+    /// records of `Janus.Storage` are columns rather than domain types and are what EF
+    /// Core assigns (CONV-DESIGN-003).
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_004_AC1_NoDomainTypeExposesAPropertySetter()
+    {
+        IEnumerable<string> assignable = SourcesOf(Areas)
+            .Where(file => Setter.IsMatch(File.ReadAllText(file)));
+
+        Assert.Empty(assignable);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-004 AC2: nothing outside the type that gives a value its rules takes
+    /// that value as the type it is stored in.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_004_AC2_NoMethodTakesAValueAsItsUnderlyingType()
+    {
+        IEnumerable<string> taking = SourcesOf([.. Areas, "Janus.Storage"])
+            .Where(file => Untyped.IsMatch(File.ReadAllText(file)));
+
+        Assert.Empty(taking);
+    }
+
+    /// <summary>
     /// CONV-SETUP-001 AC1: no project file sets a target framework or any inherited
     /// property, except the analyser project, which must target netstandard2.0.
     /// </summary>
@@ -280,6 +374,18 @@ public sealed class LibraryStructureTests
     private static IEnumerable<string> Projects() =>
         Roots.SelectMany(root =>
             Directory.EnumerateFiles(Path.Combine(Repository.Root, root), "*.csproj", SearchOption.AllDirectories));
+
+    // The cipher itself and the port implementations that run it. A store is named for
+    // what it stores, so the suffix is the whole rule.
+    private static bool IsCipherOrStore(string file) =>
+        Path.GetFileName(file) is "PersonalFieldCipher.cs" or "PersonalFieldLocation.cs"
+            || Path.GetFileNameWithoutExtension(file).EndsWith("Store", StringComparison.Ordinal);
+
+    private static IEnumerable<string> SourcesOf(string[] projects) =>
+        projects
+            .Select(project => Path.Combine(Repository.Root, "src", project) + Path.DirectorySeparatorChar)
+            .SelectMany(folder => Sources().Where(file =>
+                file.StartsWith(folder, StringComparison.Ordinal)));
 
     private static IEnumerable<string> Sources() =>
         Roots

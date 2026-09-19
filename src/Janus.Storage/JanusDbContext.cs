@@ -1,6 +1,4 @@
 using System;
-using Janus.Identity.Accounts;
-using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Privacy.SubjectKeys;
 using Janus.Storage.Settings;
@@ -13,7 +11,10 @@ namespace Janus.Storage;
 /// host table, and the host's migrations never collide with these.
 /// </summary>
 /// <param name="options">How the context reaches the database.</param>
-/// <remarks>Implements OPS-DB-002 and CONV-DESIGN-003.</remarks>
+/// <remarks>
+/// Implements OPS-DB-002 and CONV-DESIGN-003. What the context maps is a persistence
+/// record per table and never a domain entity; the ports translate between the two.
+/// </remarks>
 internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) : DbContext(options)
 {
     /// <summary>
@@ -34,17 +35,17 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     /// <summary>
     /// The accounts.
     /// </summary>
-    public DbSet<Account> Accounts => Set<Account>();
+    public DbSet<AccountRecord> Accounts => Set<AccountRecord>();
 
     /// <summary>
     /// The wrapped per-subject data keys.
     /// </summary>
-    public DbSet<SubjectKey> SubjectKeys => Set<SubjectKey>();
+    public DbSet<SubjectKeyRecord> SubjectKeys => Set<SubjectKeyRecord>();
 
     /// <summary>
     /// The runtime-changeable configuration values in force.
     /// </summary>
-    public DbSet<StoredSetting> Settings => Set<StoredSetting>();
+    public DbSet<SettingRecord> Settings => Set<SettingRecord>();
 
     /// <inheritdoc/>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -65,6 +66,6 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
 
         modelBuilder.ApplyConfiguration(new AccountConfiguration());
         modelBuilder.ApplyConfiguration(new SubjectKeyConfiguration());
-        modelBuilder.ApplyConfiguration(new StoredSettingConfiguration());
+        modelBuilder.ApplyConfiguration(new SettingConfiguration());
     }
 }

@@ -14,7 +14,7 @@ namespace Janus.Storage.Tests;
 /// through it (OPS-DATA-002).
 /// </summary>
 /// <remarks>
-/// The entity is the settings row, which <c>Janus.Storage</c> owns, so the write goes
+/// The record is the settings row, which <c>Janus.Storage</c> owns, so the write goes
 /// through the context and the read through the accessor without any project seeing
 /// another's internals (D-154).
 /// </remarks>
@@ -38,7 +38,7 @@ public sealed class DataConnectionsTests(DatabaseFixture database) : IClassFixtu
         {
             await work.BeginAsync(TestContext.Current.CancellationToken);
 
-            context.Settings.Add(StoredSetting.InForce(key, "P45D"));
+            context.Settings.Add(new SettingRecord { Key = key, Value = "P45D" });
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
             AmbientConnection ambient = await new DataConnections(context)

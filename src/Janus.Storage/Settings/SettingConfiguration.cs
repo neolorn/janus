@@ -8,11 +8,11 @@ namespace Janus.Storage.Settings;
 /// <summary>
 /// How a runtime-changeable configuration value is stored.
 /// </summary>
-/// <remarks>Implements OPS-CFG-008.</remarks>
-internal sealed class StoredSettingConfiguration : IEntityTypeConfiguration<StoredSetting>
+/// <remarks>Implements OPS-CFG-008 and CONV-DESIGN-003.</remarks>
+internal sealed class SettingConfiguration : IEntityTypeConfiguration<SettingRecord>
 {
     /// <inheritdoc/>
-    public void Configure(EntityTypeBuilder<StoredSetting> builder)
+    public void Configure(EntityTypeBuilder<SettingRecord> builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
 

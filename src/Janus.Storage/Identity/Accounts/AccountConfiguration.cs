@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using Janus.Core;
-using Janus.Identity.Accounts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -11,14 +10,15 @@ namespace Janus.Storage.Identity.Accounts;
 /// How an account is stored.
 /// </summary>
 /// <remarks>
-/// Implements IDN-ACCT-007, IDN-LIFE-003, IDN-LIFE-013 and CONV-ENUM-001. The three
+/// Implements IDN-ACCT-007, IDN-LIFE-003, IDN-LIFE-013, CONV-ENUM-001 and
+/// CONV-DESIGN-003. The three
 /// vocabularies are constrained columns rather than native enum types, so a value the
 /// code does not branch on is refused by the database and the list changes freely.
 /// </remarks>
-internal sealed class AccountConfiguration : IEntityTypeConfiguration<Account>
+internal sealed class AccountConfiguration : IEntityTypeConfiguration<AccountRecord>
 {
     /// <inheritdoc/>
-    public void Configure(EntityTypeBuilder<Account> builder)
+    public void Configure(EntityTypeBuilder<AccountRecord> builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
 
