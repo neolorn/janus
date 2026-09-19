@@ -244,5 +244,21 @@ Fast checks on every commit, all green: build with warnings as errors, the analy
 CONV-CODE-008, `dotnet format --verify-no-changes` over `Janus.slnx`, and the unit
 tests.
 
-The full gate result is recorded with its run identifiers in the commit that follows
-this report.
+`dotnet test` still reports that no tests ran on the development machine, as phase 0
+records, so the suites were run locally by executing the test binaries. The pipeline runs
+`dotnet test` unchanged. The local counts at the end of the phase: `Janus.Core.Tests` 366,
+`Janus.Identity.Tests` 62, `Janus.Privacy.Tests` 13, `Janus.Authorization.Tests` 92,
+`Janus.Analyzers.Tests` 15, `Janus.Storage.Tests` 153 and `Janus.Hosting.Tests` 68, none
+failing.
+
+Full gate: GitHub Actions runs `35458546778` (push) and `35458549489` (pull request) on
+branch `phase-02-authorization`, pull request #8, green on every job. `Integration tests`,
+`Double migration run`, `Destructive-operation detection report`, `Truth-table suite` and
+`Dependency vulnerability alerting` run on the pull-request event and `Secret scanning` on
+the push event, as CONV-GATE-002 states, so the two runs together are one pass of the
+table of CONV-GATE-001.
+
+The runs of the previous push, `35458375860` and `35458378062`, carry the same code and
+are green on the same jobs; the commit between them changes the report alone.
+
+The pull request is not for merging until section 4 is answered.
