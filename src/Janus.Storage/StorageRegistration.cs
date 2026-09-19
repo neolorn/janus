@@ -1,5 +1,8 @@
 using System;
 using System.Security.Cryptography;
+using Janus.Authentication.Factors;
+using Janus.Authentication.Passwords;
+using Janus.Authentication.Sessions;
 using Janus.Authorization.Gate;
 using Janus.Authorization.Grants;
 using Janus.Authorization.Groups;
@@ -15,6 +18,9 @@ using Janus.Identity.Preferences;
 using Janus.Identity.Profiles;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Authentication.Factors;
+using Janus.Storage.Authentication.Passwords;
+using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Authorization.Gate;
 using Janus.Storage.Authorization.Grants;
 using Janus.Storage.Authorization.Groups;
@@ -103,6 +109,20 @@ internal static class StorageRegistration
             provider.GetRequiredService<JanusDbContext>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
+
+        services.AddScoped<ISessionStore>(provider => new SessionStore(
+            provider.GetRequiredService<JanusDbContext>(),
+            keyEncryptionKeys,
+            provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<IAuthenticatorStore>(provider => new AuthenticatorStore(
+            provider.GetRequiredService<JanusDbContext>(),
+            keyEncryptionKeys,
+            provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<IPasswordStore, PasswordStore>();
+        services.AddScoped<IRecoveryCodeStore, RecoveryCodeStore>();
+        services.AddScoped<IDeviceStore, DeviceStore>();
+        services.AddScoped<ISessionAudit, SessionAudit>();
+        services.AddScoped<ICredentialAudit, CredentialAudit>();
 
         services.AddScoped<IRoleStore, RoleStore>();
         services.AddScoped<IGrantStore, GrantStore>();

@@ -1,4 +1,7 @@
 using System;
+using Janus.Storage.Authentication.Factors;
+using Janus.Storage.Authentication.Passwords;
+using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Authorization.Grants;
 using Janus.Storage.Authorization.Groups;
 using Janus.Storage.Authorization.Resources;
@@ -155,6 +158,36 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     /// </summary>
     public DbSet<AncestryRecord> Ancestry => Set<AncestryRecord>();
 
+    /// <summary>
+    /// The sessions, which are the spine every credential derives from.
+    /// </summary>
+    public DbSet<SessionRecord> Sessions => Set<SessionRecord>();
+
+    /// <summary>
+    /// The passwords, one to an account.
+    /// </summary>
+    public DbSet<PasswordRecord> Passwords => Set<PasswordRecord>();
+
+    /// <summary>
+    /// The enrolled credentials.
+    /// </summary>
+    public DbSet<AuthenticatorRecord> Authenticators => Set<AuthenticatorRecord>();
+
+    /// <summary>
+    /// The recovery-code sets, one to an account.
+    /// </summary>
+    public DbSet<RecoveryCodeSetRecord> RecoveryCodeSets => Set<RecoveryCodeSetRecord>();
+
+    /// <summary>
+    /// The recovery codes of those sets.
+    /// </summary>
+    public DbSet<RecoveryCodeRecord> RecoveryCodes => Set<RecoveryCodeRecord>();
+
+    /// <summary>
+    /// The browsers the accounts know.
+    /// </summary>
+    public DbSet<DeviceRecord> Devices => Set<DeviceRecord>();
+
     /// <inheritdoc/>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -193,5 +226,11 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new GroupClosureConfiguration());
         modelBuilder.ApplyConfiguration(new ResourceConfiguration());
         modelBuilder.ApplyConfiguration(new AncestryConfiguration());
+        modelBuilder.ApplyConfiguration(new SessionConfiguration());
+        modelBuilder.ApplyConfiguration(new PasswordConfiguration());
+        modelBuilder.ApplyConfiguration(new AuthenticatorConfiguration());
+        modelBuilder.ApplyConfiguration<RecoveryCodeSetRecord>(new RecoveryCodeConfiguration());
+        modelBuilder.ApplyConfiguration<RecoveryCodeRecord>(new RecoveryCodeConfiguration());
+        modelBuilder.ApplyConfiguration(new DeviceConfiguration());
     }
 }
