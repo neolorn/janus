@@ -1102,6 +1102,9 @@ static Janus.Core.ErrorCode.Parse(string! value) -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCode.operator !=(Janus.Core.ErrorCode left, Janus.Core.ErrorCode right) -> bool
 static Janus.Core.ErrorCode.operator ==(Janus.Core.ErrorCode left, Janus.Core.ErrorCode right) -> bool
 static Janus.Core.ErrorCodes.ChallengeRequired.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.CodeExpired.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.CodeInvalid.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.CodeReplayed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ConfigurationChangeStepUpRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ConfigurationKeyProtected.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ConfigurationLastDestination.get -> Janus.Core.ErrorCode
@@ -1111,18 +1114,28 @@ static Janus.Core.ErrorCodes.ConfigurationValueBelowFloor.get -> Janus.Core.Erro
 static Janus.Core.ErrorCodes.ConfigurationValueNotAllowed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.Denied.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.DerivationSourcesMissing.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.DeviceVerificationRequired.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.FactorNotPermitted.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.FactorRejected.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.FactorRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GrantDuplicate.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GrantExpired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GrantNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GrantReasonRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GroupCycle.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.OrganizationProtected.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.PasswordBlocklisted.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.PasswordTooShort.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.PolicyGraceExpired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PolicyUnregistered.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PreferenceAdministratorOnly.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PreferenceTooLarge.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PreferenceUndeclared.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PreferenceWrongType.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.Restricted.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.ScreeningUnavailable.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.SessionCsrfInvalid.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.SessionExpired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupContainmentCycle.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupDeclarationMissing.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupGoverningLanguage.get -> Janus.Core.ErrorCode
@@ -1137,6 +1150,10 @@ static Janus.Core.ErrorCodes.StepUpRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StepUpUnavailable.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.SystemFault.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.UsernameInvalid.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.WebAuthnAlgorithmNotAllowed.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.WebAuthnCounterMismatch.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.WebAuthnRelyingPartyChanged.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.WebAuthnUserVerificationRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ExplainedGrant.operator !=(Janus.Core.ExplainedGrant? left, Janus.Core.ExplainedGrant? right) -> bool
 static Janus.Core.ExplainedGrant.operator ==(Janus.Core.ExplainedGrant? left, Janus.Core.ExplainedGrant? right) -> bool
 static Janus.Core.ExplainedPrincipal.operator !=(Janus.Core.ExplainedPrincipal left, Janus.Core.ExplainedPrincipal right) -> bool
