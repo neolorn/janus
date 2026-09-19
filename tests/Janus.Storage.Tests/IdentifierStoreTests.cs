@@ -30,14 +30,10 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
 {
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
 
-    private static readonly byte[] FingerprintKey =
-        Encoding.UTF8.GetBytes("the fingerprint key of this deployment");
-
     private static readonly byte[] Elsewhere =
         Encoding.UTF8.GetBytes("the fingerprint key of another deployment");
 
-    private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
-    private readonly Dictionary<int, ReadOnlyMemory<byte>> _versions = [];
+    private readonly Deployment _deployment = new(database);
 
     // One live fingerprint of a kind exists across the deployment (REG-SESS-005), so no
     // two tests of this class may enter the same address.
@@ -53,7 +49,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     [Fact]
     public async Task IDN_ACCT_004_AC2_TheFormThePersonEnteredIsWhatComesBackAsync()
     {
-        SubjectId subject = await AccountAsync();
+        SubjectId subject = await _deployment.AccountAsync(Noon);
         IdentifierId id = await WriteAsync(subject, _entered);
 
         await using JanusDbContext reading = database.Context();
@@ -81,7 +77,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     [Fact]
     public async Task PRIV_RIGHT_005a_AC8_NoFormOfAnIdentifierIsInTheDatabaseInPlainAsync()
     {
-        SubjectId subject = await AccountAsync();
+        SubjectId subject = await _deployment.AccountAsync(Noon);
         IdentifierId id = await WriteAsync(subject, _entered);
 
         IdentifierRecord stored = await StoredAsync(id);
@@ -102,13 +98,13 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     [Fact]
     public async Task PRIV_RIGHT_005c_AC4_TheCanonicalisationVersionIsStoredBesideTheFingerprintAsync()
     {
-        SubjectId subject = await AccountAsync();
+        SubjectId subject = await _deployment.AccountAsync(Noon);
         IdentifierId id = await WriteAsync(subject, _entered);
 
         IdentifierRecord stored = await StoredAsync(id);
 
         Assert.Equal(CanonicalForm.UnicodeVersion, stored.CanonicalisationVersion);
-        Assert.Equal(Fingerprint.Compute(Encoding.UTF8.GetBytes(Canonical), FingerprintKey), stored.Fingerprint);
+        Assert.Equal(Fingerprint.Compute(Encoding.UTF8.GetBytes(Canonical), Deployment.FingerprintKey), stored.Fingerprint);
     }
 
     /// <summary>
@@ -119,7 +115,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     [Fact]
     public async Task IDN_ACCT_006_AC1_AnAddressEnteredInAnotherCaseFindsTheAccountHoldingItAsync()
     {
-        SubjectId subject = await AccountAsync();
+        SubjectId subject = await _deployment.AccountAsync(Noon);
         await WriteAsync(subject, _entered);
 
         Assert.True(EmailAddress.TryParse(_entered.ToUpperInvariant(), out EmailAddress again));
@@ -141,11 +137,15 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     [Fact]
     public async Task PRIV_RIGHT_005c_AC1_DuplicateDetectionMatchesOnTheKeyedFingerprintAsync()
     {
-        SubjectId subject = await AccountAsync();
+        SubjectId subject = await _deployment.AccountAsync(Noon);
         await WriteAsync(subject, _entered);
 
         await using JanusDbContext reading = database.Context();
-        var elsewhere = new IdentifierStore(reading, Keys(), Elsewhere, _randomness);
+        var elsewhere = new IdentifierStore(
+            reading,
+            _deployment.Keys,
+            Elsewhere,
+            _deployment.Randomness);
 
         Assert.Null(await elsewhere.FindOwnerAsync(
             IdentifierKind.Email,
@@ -167,19 +167,19 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     [Fact]
     public async Task PRIV_RIGHT_005a_AC12_ReadingAnAccountsIdentifiersUnwrapsItsKeyOnceAsync()
     {
-        SubjectId subject = await AccountAsync();
+        SubjectId subject = await _deployment.AccountAsync(Noon);
         await WriteAsync(subject, _entered);
         await WriteAsync(subject, Fresh("Basma"));
         await WriteAsync(subject, Fresh("Cyrus"));
 
-        var counting = new CountingVersions(_versions);
+        var counting = new CountingVersions(_deployment.Versions);
 
         await using JanusDbContext reading = database.Context();
         var store = new IdentifierStore(
             reading,
             new KeyEncryptionKeys(1, counting),
-            FingerprintKey,
-            _randomness);
+            Deployment.FingerprintKey,
+            _deployment.Randomness);
 
         IdentifierSet set = await store.FindBySubjectAsync(subject, TestContext.Current.CancellationToken);
 
@@ -195,9 +195,9 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     [Fact]
     public async Task PRIV_RIGHT_005a_AC9_TheIdentifiersOfAnErasedSubjectAreNotReadableAsync()
     {
-        SubjectId subject = await AccountAsync();
+        SubjectId subject = await _deployment.AccountAsync(Noon);
         await WriteAsync(subject, _entered);
-        await EraseAsync(subject);
+        await _deployment.EraseAsync(subject);
 
         await using JanusDbContext reading = database.Context();
 
@@ -212,7 +212,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     [Fact]
     public async Task PRIV_RIGHT_005c_AC5_ANeutralisedFingerprintBelongsToNobodyAsync()
     {
-        SubjectId subject = await AccountAsync();
+        SubjectId subject = await _deployment.AccountAsync(Noon);
         IdentifierId id = await WriteAsync(subject, _entered);
 
         await using (JanusDbContext erasing = database.Context())
@@ -241,7 +241,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     [Fact]
     public async Task RecordAsync_AVerificationAndThePrimaryRole_ReachTheRowsAsync()
     {
-        SubjectId subject = await AccountAsync();
+        SubjectId subject = await _deployment.AccountAsync(Noon);
         IdentifierId id = await WriteAsync(subject, _entered);
 
         await using (JanusDbContext verifying = database.Context())
@@ -275,7 +275,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     [Fact]
     public async Task RecordAsync_AChangedValue_ReplacesBothFormsAndTheFingerprintAsync()
     {
-        SubjectId subject = await AccountAsync();
+        SubjectId subject = await _deployment.AccountAsync(Noon);
         await WriteAsync(subject, _entered);
 
         string moved = Fresh("Hana");
@@ -324,7 +324,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     [Fact]
     public async Task RecordAsync_AnIdentifierThatDidNotChange_LeavesItsColumnsAsTheyWereAsync()
     {
-        SubjectId subject = await AccountAsync();
+        SubjectId subject = await _deployment.AccountAsync(Noon);
         IdentifierId id = await WriteAsync(subject, _entered);
 
         IdentifierRecord before = await StoredAsync(id);
@@ -357,7 +357,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     [Fact]
     public async Task RecordAsync_ABackupSettingAndItsReturnToTheDefault_WriteAndGiveUpTheRowAsync()
     {
-        SubjectId subject = await AccountAsync();
+        SubjectId subject = await _deployment.AccountAsync(Noon);
         await WriteAsync(subject, _entered);
         IdentifierId second = await WriteAsync(subject, Fresh("Basma"));
 
@@ -425,7 +425,10 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     /// <inheritdoc/>
-    public void Dispose() => _randomness.Dispose();
+    public void Dispose() => _deployment.Dispose();
+
+    private IdentifierStore Store(JanusDbContext context) =>
+        new(context, _deployment.Keys, Deployment.FingerprintKey, _deployment.Randomness);
 
     private static string Fresh(string person) =>
         person + "." + Guid.NewGuid().ToString("N") + "@Example.COM";
@@ -435,55 +438,6 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
         Assert.True(EmailAddress.TryParse(entered, out EmailAddress address));
 
         return address.Value;
-    }
-
-    private KeyEncryptionKeys Keys()
-    {
-        if (_versions.Count == 0)
-        {
-            byte[] material = new byte[PersonalDataFormat.DataKeyLength];
-            _randomness.GetBytes(material);
-            _versions[1] = material;
-        }
-
-        return new KeyEncryptionKeys(1, _versions);
-    }
-
-    private IdentifierStore Store(JanusDbContext context) =>
-        new(context, Keys(), FingerprintKey, _randomness);
-
-    private async Task<SubjectId> AccountAsync()
-    {
-        SubjectId subject = Subjects.New();
-        byte[] dataKey = PersonalFieldCipher.NewDataKey(_randomness);
-
-        try
-        {
-            await using JanusDbContext context = database.Context();
-
-            context.Accounts.Add(new AccountRecord
-            {
-                Subject = subject,
-                CreatedAt = Noon,
-                State = AccountState.Active,
-            });
-
-            context.SubjectKeys.Add(new SubjectKeyRecord
-            {
-                Subject = subject,
-                FormatMarker = PersonalDataFormat.Marker,
-                KeyVersion = 1,
-                WrappedKey = PersonalFieldCipher.Wrap(dataKey, Keys().Current.Span),
-            });
-
-            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(dataKey);
-        }
-
-        return subject;
     }
 
     private async Task<IdentifierId> WriteAsync(SubjectId subject, string entered)
