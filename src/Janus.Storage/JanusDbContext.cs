@@ -55,6 +55,11 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     public DbSet<ProfileRecord> Profiles => Set<ProfileRecord>();
 
     /// <summary>
+    /// The images the accounts show for themselves.
+    /// </summary>
+    public DbSet<ProfilePhotoRecord> ProfilePhotos => Set<ProfilePhotoRecord>();
+
+    /// <summary>
     /// The wrapped per-subject data keys.
     /// </summary>
     public DbSet<SubjectKeyRecord> SubjectKeys => Set<SubjectKeyRecord>();
@@ -85,6 +90,7 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new IdentifierConfiguration());
         modelBuilder.ApplyConfiguration(new BackupSettingConfiguration());
         modelBuilder.ApplyConfiguration(new ProfileConfiguration());
+        modelBuilder.ApplyConfiguration(new ProfilePhotoConfiguration());
         modelBuilder.ApplyConfiguration(new SubjectKeyConfiguration());
         modelBuilder.ApplyConfiguration(new SettingConfiguration());
     }

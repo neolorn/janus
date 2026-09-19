@@ -67,6 +67,10 @@ internal static class StorageRegistration
             provider.GetRequiredService<JanusDbContext>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<IProfilePhotoStore>(provider => new ProfilePhotoStore(
+            provider.GetRequiredService<JanusDbContext>(),
+            keyEncryptionKeys,
+            provider.GetRequiredService<RandomNumberGenerator>()));
 
         return services;
     }

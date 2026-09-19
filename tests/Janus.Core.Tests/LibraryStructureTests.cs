@@ -266,6 +266,23 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
+    /// IDN-ATTR-003 AC2: the photo is in a table of its own and only its own port
+    /// reaches it, so no ordinary read of an account carries image bytes.
+    /// </summary>
+    [Fact]
+    public void IDN_ATTR_003_AC2_OnlyThePhotosOwnPortReachesTheImageTable()
+    {
+        IEnumerable<string> reaching = Sources()
+            .Where(file => !Path.GetFileNameWithoutExtension(file).StartsWith(
+                "ProfilePhoto",
+                StringComparison.Ordinal))
+            .Where(file => !Path.GetFileName(file).Equals("JanusDbContext.cs", StringComparison.Ordinal))
+            .Where(file => File.ReadAllText(file).Contains(".ProfilePhotos", StringComparison.Ordinal));
+
+        Assert.Empty(reaching);
+    }
+
+    /// <summary>
     /// CONV-DESIGN-004 AC1: no domain type exposes a setter, so its state changes only
     /// through the methods named for the actions that change it. The persistence
     /// records of `Janus.Storage` are columns rather than domain types and are what EF

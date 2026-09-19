@@ -138,6 +138,9 @@ against the public contract of LIB-API-001.
   birth are each held under the subject's own key, so a dump yields none of them and
   erasure leaves none of them readable; a field the account gives up clears its column,
   and a field it did not touch is not written again.
+- An account's photo is now held in a table and a port of its own, under the subject's
+  own key. Nothing that reads an account reads image bytes, a dump yields no
+  photograph, and erasure of the key leaves the image unrecoverable.
 
 ### Changed
 
