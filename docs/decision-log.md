@@ -8187,6 +8187,42 @@ CONV-SETUP-004, CONV-GATE-001 · D-115 (rejected item annotated).
 
 ---
 
+## D-155 — Phase 1 questions, second stop: EF Core maps records, the port encrypts
+
+**Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-149 (CONV-DESIGN-003), D-153 (OPS-DB-001 value) · **Extends:** D-154
+
+**TL;DR.** Per-subject encryption needs the row's subject identifier, and EF Core's value
+converters cannot see the row. The answer is the one that also keeps domain entities
+plain: EF Core never maps a domain entity, it maps a persistence record owned by
+Storage, and the port implementation that translates between the two is where the
+field cipher runs.
+
+1. **Persistence records.** Each table is an `internal sealed class` in `Janus.Storage`
+   with one property per column, encrypted columns as `byte[]`, beside its
+   `IEntityTypeConfiguration<T>`. The port implementation maps aggregate to records and
+   back, calling the field cipher with the subject identifier from the record's declared
+   subject column and the table and column as associated data. Rejected: value
+   converters (no access to the row), `SaveChanges` and materialization interceptors
+   (an implicit security boundary that a reader of the port cannot see), and mapping
+   domain entities directly (forces setters or backing-field tricks onto types
+   CONV-DESIGN-004 wants plain). The cost is one mapping per aggregate, written by hand
+   and read in one place, which for a security boundary is the point.
+2. **Kind detection at `/auth/begin`** (REG-IDENT-003): `@` means email; digits of any
+   script with the usual separators and a `+` or `00` prefix mean phone; anything else is
+   a username where usernames are on, otherwise the concealed path. So that the second
+   and third never overlap, a username must contain a letter; an all-digit choice is
+   refused with `identity.username.invalid`, a code the profile's other refusals also
+   use.
+3. **`janus_ci` applies to what is plaintext and spelled by a person**: organization
+   names and locked domain names today. Identifiers are fingerprints and personal fields
+   are ciphertext; a collation cannot see through either, and D-153's wording that named
+   display names and usernames was wrong.
+
+**Propagated to:** `08` CONV-DESIGN-003 · `06` OPS-DB-001 · `20` REG-IDENT-003,
+REG-IDENT-009 · `10` section 1.1.
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -8351,6 +8387,7 @@ CONV-SETUP-004, CONV-GATE-001 · D-115 (rejected item annotated).
 | Phase 0 questions, third stop: bytes, maximums, signals, floors, years, direction | D-152 |
 | Word-shaped values: one pass over every chapter; alert thresholds as keys, time zone, materiality, userinfo claims, host challenge, offline lists | D-153 |
 | Phase 1 questions: generated Unicode tables at a pinned version, PRECIS as validation, CA1515 in tests, the visibility test | D-154 |
+| Phase 1 questions, second stop: persistence records and the port encrypt; kind detection; collation scope | D-155 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

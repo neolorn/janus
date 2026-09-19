@@ -238,7 +238,16 @@ in the aggregate's feature folder as an `internal interface` with intention-reve
 methods (`FindBySubjectAsync`, `AddAsync`, `MarkVerifiedAsync`), implemented in
 `Janus.Storage`. There SHALL be no generic repository, no `IQueryable` crossing a port,
 and no EF Core type in an area project. `Janus.Storage` SHALL hold one `DbContext` with
-one `IEntityTypeConfiguration<T>` per entity in a folder mirroring the area and feature.
+one `IEntityTypeConfiguration<T>` per **persistence record** in a folder mirroring the
+area and feature. **What EF Core maps is a persistence record, never a domain entity
+(D-155):** an `internal sealed class` in `Janus.Storage` with one property per column,
+encrypted columns as `byte[]`, beside its configuration. The port implementation
+translates between the aggregate and its records in both directions, and that
+translation is the one place per-subject encryption happens: it calls the field cipher
+with the subject identifier read from the record's declared subject column
+(PRIV-RIGHT-005a) and the table and column names as associated data. No value
+converter, interceptor or shadow state encrypts anything; a domain entity never holds
+ciphertext, a record never holds plaintext of an encrypted column.
 The **unit of work is the operation**: a service method runs inside one transaction
 opened by an `IUnitOfWork` port and committed once, at the end, after every write.
 Hand-written SQL (OPS-DATA-001) lives in `Janus.Storage` beside the port implementation
@@ -255,6 +264,8 @@ CONSTRAINT`; the serialized model of AUTHZ-MODEL-005 is JSON written by
 1. No area project references EF Core or Npgsql.
 2. No port method returns `IQueryable`.
 3. A service method with two writes and a failure between them leaves neither.
+4. No domain entity type appears in the `DbContext` model; every encrypted column is
+   written and read through the field cipher inside a port implementation (D-155).
 
 ---
 

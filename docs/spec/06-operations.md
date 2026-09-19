@@ -73,7 +73,10 @@ collation for identifier columns.
 
 **Values (D-153).** Database locale `und-x-icu`. The case-insensitive collation is
 `janus_ci`, created as `(provider = icu, locale = 'und-u-ks-level2', deterministic = false)`
-and applied to the plaintext columns criterion 2 names.
+and applied to the plaintext text columns a person spells and the library compares or
+sorts: organization names and locked domain names today; a column added later that
+meets that description takes it (D-155). Identifiers and personal fields are
+fingerprints and ciphertext and take no collation.
 
 *Source: D-040*
 
