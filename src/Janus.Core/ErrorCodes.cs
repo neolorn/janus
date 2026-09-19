@@ -95,6 +95,13 @@ public static class ErrorCodes
     public static ErrorCode StartupUndeclaredDerivationReference { get; } = ErrorCode.Parse("model.derivation.undeclaredreference");
 
     /// <summary>
+    /// The organization named is the administrative one, which is not deletable.
+    /// Delete another organization, or none.
+    /// </summary>
+    /// <remarks>Implements IDN-ORG-004, chapter 10 section 1.1.</remarks>
+    public static ErrorCode OrganizationProtected { get; } = ErrorCode.Parse("identity.organization.protected");
+
+    /// <summary>
     /// The username fails the PRECIS UsernameCaseMapped profile, its length bounds, or
     /// holds no letter. Choose one the profile admits that is not all digits.
     /// </summary>

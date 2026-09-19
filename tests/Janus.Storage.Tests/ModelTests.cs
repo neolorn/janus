@@ -124,8 +124,9 @@ public sealed class ModelTests
             "memberships.organization",
             "memberships.subject",
 
-            // The organization of IDN-ORG-001, with the deletion window of
-            // IDN-ORG-003.
+            // The organization of IDN-ORG-001, with the mark IDN-ORG-004 reads and
+            // the deletion window of IDN-ORG-003.
+            "organizations.administrative",
             "organizations.created_at",
             "organizations.deletion_requested_at",
             "organizations.erased_at",

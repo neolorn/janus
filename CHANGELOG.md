@@ -172,6 +172,11 @@ against the public contract of LIB-API-001.
   readable with everything else the key covered. A transaction that does not commit leaves no
   row and erases nothing; there is no third state. Erasure progress is on that row and
   on no column of the account, and every outstanding erasure is read in one query.
+- The administrative organization is marked on its own row, set once when the
+  deployment is bootstrapped and by nothing else, and the database holds the mark to
+  exactly one organization. Requesting its deletion is refused with
+  `identity.organization.protected`; every other organization takes the window as
+  before.
 
 ### Changed
 

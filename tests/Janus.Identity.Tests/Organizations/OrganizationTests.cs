@@ -7,7 +7,7 @@ namespace Janus.Identity.Tests.Organizations;
 
 /// <summary>
 /// An organization and the window its deletion runs through (IDN-ORG-001, IDN-ORG-003,
-/// IDN-PRIN-003).
+/// IDN-ORG-004, IDN-PRIN-003).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class OrganizationTests
@@ -151,4 +151,60 @@ public sealed class OrganizationTests
     [Fact]
     public void Create_WithoutAName_Throws() =>
         Assert.Throws<ArgumentException>(() => Organization.Create(Acme, "  ", Noon));
+
+    /// <summary>
+    /// IDN-ORG-004 AC1: a deletion request naming the administrative organization is
+    /// refused by its named code, and no window starts.
+    /// </summary>
+    [Fact]
+    public void IDN_ORG_004_AC1_ADeletionRequestOnTheAdministrativeOrganizationIsRefused()
+    {
+        var organization = Organization.CreateAdministrative(Acme, "Janus", Noon);
+
+        Result outcome = organization.RequestDeletion(Noon);
+
+        Assert.Equal(ErrorCodes.OrganizationProtected, Code(outcome));
+        Assert.False(organization.IsSuspended);
+        Assert.Null(organization.DeletionRequestedAt);
+    }
+
+    /// <summary>
+    /// IDN-ORG-004 AC2: the refusal is the organization's own, so it stands wherever
+    /// the request came from. Nothing an application path reaches makes an
+    /// organization administrative: the mark is set when bootstrap creates it and is
+    /// carried back from the row, and no other path produces one.
+    /// </summary>
+    [Fact]
+    public void IDN_ORG_004_AC2_TheMarkIsSetWhereBootstrapSetsItAndNowhereElse()
+    {
+        Assert.False(Organization.Create(Acme, "Acme", Noon).IsAdministrative);
+        Assert.True(Organization.CreateAdministrative(Acme, "Janus", Noon).IsAdministrative);
+        Assert.True(Organization
+            .Existing(Acme, "Janus", Noon, isAdministrative: true, null, null)
+            .IsAdministrative);
+    }
+
+    /// <summary>
+    /// An ordinary organization takes the window, which is what IDN-ORG-004 refuses
+    /// only the administrative one.
+    /// </summary>
+    [Fact]
+    public void RequestDeletion_AnOrdinaryOrganization_Succeeds()
+    {
+        var organization = Organization.Create(Acme, "Acme", Noon);
+
+        Result outcome = organization.RequestDeletion(Noon);
+
+        Assert.Null(Code(outcome));
+        Assert.True(organization.IsSuspended);
+    }
+
+    private static ErrorCode? Code(Result outcome)
+    {
+        ErrorCode? code = null;
+
+        outcome.Switch(() => { }, failure => code = failure.Code);
+
+        return code;
+    }
 }

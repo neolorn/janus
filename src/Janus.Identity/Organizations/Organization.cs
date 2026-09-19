@@ -9,19 +9,26 @@ namespace Janus.Identity.Organizations;
 /// boundary.
 /// </summary>
 /// <remarks>
-/// Implements IDN-ORG-001, IDN-ORG-002, IDN-ORG-003, IDN-ORG-005 and IDN-PRIN-003.
+/// Implements IDN-ORG-001, IDN-ORG-002, IDN-ORG-003, IDN-ORG-004, IDN-ORG-005 and
+/// IDN-PRIN-003.
 /// Deletion is a window, not a removal: the request suspends the organization at once,
 /// the window runs for <c>organization.deletion.grace</c>, a cancellation inside it
 /// restores everything, and its end leaves the row where it was with the identifying
-/// data of its members unreadable.
+/// data of its members unreadable. The administrative organization is refused the
+/// window altogether (IDN-ORG-004).
 /// </remarks>
 internal sealed class Organization
 {
-    private Organization(OrganizationId id, string name, DateTimeOffset createdAt)
+    private Organization(
+        OrganizationId id,
+        string name,
+        DateTimeOffset createdAt,
+        bool isAdministrative)
     {
         Id = id;
         Name = name;
         CreatedAt = createdAt;
+        IsAdministrative = isAdministrative;
     }
 
     /// <summary>
@@ -53,6 +60,13 @@ internal sealed class Organization
     public DateTimeOffset? ErasedAt { get; private set; }
 
     /// <summary>
+    /// Whether this is the administrative organization, whose members are what would
+    /// elsewhere be called staff. Bootstrap sets it on the one organization it creates
+    /// and nothing else ever sets it (IDN-ORG-001).
+    /// </summary>
+    public bool IsAdministrative { get; }
+
+    /// <summary>
     /// Whether the organization is suspended: its deletion has been requested and the
     /// request has not been cancelled. Suspension is the deletion request's own effect
     /// and is no state an administrator sets on its own.
@@ -71,7 +85,27 @@ internal sealed class Organization
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
-        return new Organization(id, name, createdAt);
+        return new Organization(id, name, createdAt, isAdministrative: false);
+    }
+
+    /// <summary>
+    /// The administrative organization, which bootstrap creates once and which
+    /// IDN-ORG-004 refuses to delete. No path an administrator can reach calls this.
+    /// </summary>
+    /// <param name="id">The identifier issued for it.</param>
+    /// <param name="name">What it is called.</param>
+    /// <param name="createdAt">When it was created.</param>
+    /// <returns>The organization.</returns>
+    /// <exception cref="ArgumentException">The name is absent or blank.</exception>
+    /// <remarks>Implements IDN-ORG-001 and OPS-BOOT-001.</remarks>
+    public static Organization CreateAdministrative(
+        OrganizationId id,
+        string name,
+        DateTimeOffset createdAt)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        return new Organization(id, name, createdAt, isAdministrative: true);
     }
 
     /// <summary>
@@ -81,6 +115,7 @@ internal sealed class Organization
     /// <param name="id">The identifier.</param>
     /// <param name="name">What it is called.</param>
     /// <param name="createdAt">When it was created.</param>
+    /// <param name="isAdministrative">Whether the row carries the administrative mark.</param>
     /// <param name="deletionRequestedAt">When deletion was requested, where it was.</param>
     /// <param name="erasedAt">When the erasure executed, where it did.</param>
     /// <returns>The organization.</returns>
@@ -89,12 +124,13 @@ internal sealed class Organization
         OrganizationId id,
         string name,
         DateTimeOffset createdAt,
+        bool isAdministrative,
         DateTimeOffset? deletionRequestedAt,
         DateTimeOffset? erasedAt)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
-        return new Organization(id, name, createdAt)
+        return new Organization(id, name, createdAt, isAdministrative)
         {
             DeletionRequestedAt = deletionRequestedAt,
             ErasedAt = erasedAt,
@@ -106,10 +142,11 @@ internal sealed class Organization
     /// grace window.
     /// </summary>
     /// <param name="at">The instant of the request.</param>
+    /// <returns>Success, or the refusal and its code.</returns>
     /// <exception cref="InvalidOperationException">
     /// A window is already running, or the erasure has already executed.
     /// </exception>
-    public void RequestDeletion(DateTimeOffset at)
+    public Result RequestDeletion(DateTimeOffset at)
     {
         if (ErasedAt is not null)
         {
@@ -121,7 +158,14 @@ internal sealed class Organization
             throw new InvalidOperationException("The organization is already being deleted.");
         }
 
+        if (IsAdministrative)
+        {
+            return Result.Failure(Error.From(ErrorCodes.OrganizationProtected));
+        }
+
         DeletionRequestedAt = at;
+
+        return Result.Success();
     }
 
     /// <summary>

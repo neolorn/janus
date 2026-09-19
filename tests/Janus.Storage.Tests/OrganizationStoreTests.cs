@@ -11,7 +11,7 @@ namespace Janus.Storage.Tests;
 
 /// <summary>
 /// Organizations and memberships as their rows carry them (IDN-ORG-001, IDN-ORG-003,
-/// IDN-MEM-001, IDN-MEM-002, OPS-DB-001).
+/// IDN-ORG-004, IDN-MEM-001, IDN-MEM-002, OPS-DB-001).
 /// </summary>
 /// <remarks>
 /// The port implementations are tested against the aggregates they translate, with the
@@ -245,6 +245,35 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
             await Memberships(context).RecordAsync(membership, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// IDN-ORG-004 AC2: the database holds the administrative mark to one row, so a
+    /// second organization carrying it cannot be written whatever asks for it.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ORG_004_AC2_OnlyOneOrganizationCarriesTheMarkAsync()
+    {
+        await CreateAdministrativeAsync(Fresh("Janus"));
+
+        await Assert.ThrowsAsync<DbUpdateException>(async () =>
+            await CreateAdministrativeAsync(Fresh("Janus Again")));
+    }
+
+    /// <summary>
+    /// IDN-ORG-004: the mark the row carries is the one the organization comes back
+    /// with, and an ordinary organization comes back without it.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ORG_004_TheMarkReadsBackFromTheRowAsync()
+    {
+        OrganizationId ordinary = await CreateAsync(Fresh("Acme Trading"));
+
+        await using JanusDbContext reading = database.Context();
+        Organization read = Assert.IsType<Organization>(
+            await Store(reading).FindAsync(ordinary, TestContext.Current.CancellationToken));
+
+        Assert.False(read.IsAdministrative);
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
@@ -264,6 +293,19 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
         await using JanusDbContext writing = database.Context();
         await Store(writing).CreateAsync(
             Organization.Create(id, name, Noon),
+            TestContext.Current.CancellationToken);
+        await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        return id;
+    }
+
+    private async ValueTask<OrganizationId> CreateAdministrativeAsync(string name)
+    {
+        var id = new OrganizationId(Guid.CreateVersion7());
+
+        await using JanusDbContext writing = database.Context();
+        await Store(writing).CreateAsync(
+            Organization.CreateAdministrative(id, name, Noon),
             TestContext.Current.CancellationToken);
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
 

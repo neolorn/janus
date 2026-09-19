@@ -26,6 +26,7 @@ public sealed class ErrorCodesTests
         "config.value.belowfloor",
         "config.value.lastdestination",
         "config.value.notallowed",
+        "identity.organization.protected",
         "identity.preference.administratoronly",
         "identity.preference.toolarge",
         "identity.preference.undeclared",

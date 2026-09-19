@@ -9,7 +9,8 @@ namespace Janus.Storage.Identity.Organizations;
 /// How an organization is stored.
 /// </summary>
 /// <remarks>
-/// Implements IDN-ORG-001, IDN-ORG-002, IDN-ORG-003, OPS-DB-001 and CONV-DESIGN-003.
+/// Implements IDN-ORG-001, IDN-ORG-002, IDN-ORG-003, IDN-ORG-004, OPS-DB-001 and
+/// CONV-DESIGN-003.
 /// The name is the first plaintext column a person spells, so it carries the
 /// case-insensitive collation; no column says what kind of organization the row is.
 /// </remarks>
@@ -39,10 +40,21 @@ internal sealed class OrganizationConfiguration : IEntityTypeConfiguration<Organ
 
         builder.Property(organization => organization.CreatedAt).HasColumnName("created_at");
 
+        builder.Property(organization => organization.IsAdministrative)
+            .HasColumnName("administrative")
+            .HasDefaultValue(false);
+
         builder.Property(organization => organization.DeletionRequestedAt)
             .HasColumnName("deletion_requested_at");
 
         builder.Property(organization => organization.ErasedAt).HasColumnName("erased_at");
+
+        // IDN-ORG-004: the mark is the domain's answer to which organization is the
+        // administrative one, so the database holds it to exactly one row.
+        builder.HasIndex(organization => organization.IsAdministrative)
+            .HasDatabaseName("ux_organizations_administrative")
+            .HasFilter("administrative")
+            .IsUnique();
 
         // The sweep of OPS-OBS-003 reads the windows that have elapsed and nothing else.
         builder.HasIndex(organization => organization.DeletionRequestedAt)

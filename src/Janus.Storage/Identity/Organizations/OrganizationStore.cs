@@ -11,7 +11,7 @@ namespace Janus.Storage.Identity.Organizations;
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
 /// <remarks>
-/// Implements IDN-ORG-001, IDN-ORG-003 and CONV-DESIGN-003. The translation between the
+/// Implements IDN-ORG-001, IDN-ORG-003, IDN-ORG-004 and CONV-DESIGN-003. The translation between the
 /// organization and its row lives here and nowhere else.
 /// </remarks>
 internal sealed class OrganizationStore(JanusDbContext context) : IOrganizationStore
@@ -27,6 +27,7 @@ internal sealed class OrganizationStore(JanusDbContext context) : IOrganizationS
             record.Id,
             record.Name,
             record.CreatedAt,
+            record.IsAdministrative,
             record.DeletionRequestedAt,
             record.ErasedAt);
     }
@@ -43,6 +44,7 @@ internal sealed class OrganizationStore(JanusDbContext context) : IOrganizationS
                     Id = organization.Id,
                     Name = organization.Name,
                     CreatedAt = organization.CreatedAt,
+                    IsAdministrative = organization.IsAdministrative,
                     DeletionRequestedAt = organization.DeletionRequestedAt,
                     ErasedAt = organization.ErasedAt,
                 },
