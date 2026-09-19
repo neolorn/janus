@@ -14,7 +14,7 @@ namespace Janus.Hosting.Tests.Authorization;
 
 /// <summary>
 /// What the gate says about a decision, and what a refusal discloses
-/// (AUTHZ-GATE-004, AUTHZ-CONCEAL-001 to AUTHZ-CONCEAL-005).
+/// (AUTHZ-GATE-004, AUTHZ-CONCEAL-001 to AUTHZ-CONCEAL-005, AUTHZ-IMP-001).
 /// </summary>
 [Trait("kind", "integration")]
 public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixture>
@@ -186,6 +186,23 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
+    /// AUTHZ-IMP-001 AC2: the record the gate writes carries both identities, whether
+    /// or not anybody is acting for anybody.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_IMP_001_AC2_BothIdentitiesAreWrittenToTheAuditRecordAsync()
+    {
+        Deployed deployed = await DeployAsync(granted: false);
+
+        AuditRecordId correlation = await RefusedAsync(deployed, deployed.Record, HostPermissions.Read);
+
+        Assert.Equal(
+            new Identified(deployed.Account.Value, deployed.Account.Value),
+            await IdentifiedAsync(correlation));
+    }
+
+    /// <summary>
     /// AUTHZ-CONCEAL-002 AC1: a refusal about a record that is there and a refusal
     /// about one that is not are the same answer.
     /// </summary>
@@ -346,6 +363,20 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
             cancellationToken: TestContext.Current.CancellationToken));
     }
 
+    private async Task<Identified> IdentifiedAsync(AuditRecordId correlation)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.QuerySingleAsync<Identified>(new CommandDefinition(
+            """
+            SELECT acting_subject AS "Acting", effective_subject AS "Effective"
+            FROM janus.audit_records
+            WHERE id = @id;
+            """,
+            new { id = correlation.Value },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
     private async Task<AuditRecordId> RefusedAsync(
         Deployed deployed,
         ResourceReference resource,
@@ -355,6 +386,9 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
 
         return new AuditRecordId(refusal.Details["correlation"].GetGuid());
     }
+
+    // The two identity columns of one record, read as the row holds them.
+    private sealed record Identified(Guid Acting, Guid Effective);
 
     private async Task<Deployed> DeployAsync(bool granted)
     {
