@@ -53,6 +53,50 @@ public sealed class GrantStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// AUTHZ-DERIVE-005 AC2: a row precomputed from a fact reads back as one, so it is
+    /// never taken for a row somebody wrote.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_005_AC2_AMaterialisedGrantReadsBackAsOneAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId account = await _deployment.AccountAsync(Noon);
+        ResourceReference record = Reference("document");
+
+        await RoleAsync();
+
+        Grant materialised = Grant.Create(
+            GrantId.New(TimeProvider.System),
+            GrantSubject.Of(account),
+            RoleName.Parse("editor"),
+            organization,
+            record,
+            deny: false,
+            GrantKind.Materialised,
+            expiresAt: null,
+            await _deployment.AccountAsync(Noon),
+            Noon,
+            "The derivation this row was precomputed from.")
+            .Match(grant => grant, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        await using (JanusDbContext writing = database.Context())
+        {
+            await using var transaction = new UnitOfWork(writing);
+            await transaction.BeginAsync(TestContext.Current.CancellationToken);
+            await Store(writing).CreateAsync(materialised, TestContext.Current.CancellationToken);
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using JanusDbContext reading = database.Context();
+
+        Grant? held = await Store(reading)
+            .FindAsync(materialised.Id, TestContext.Current.CancellationToken);
+
+        Assert.Equal(GrantKind.Materialised, held?.Kind);
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-001 AC2: a grant with no resource is on the whole organization, and
     /// is read for every record in it.
     /// </summary>

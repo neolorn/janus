@@ -79,7 +79,7 @@ public interface IAccessGate
 
     /// <summary>
     /// The same rule as a fragment a hand-written query composes into its <c>WHERE</c>
-    /// clause.
+    /// clause. The fragment is PostgreSQL, as AUTHZ-GATE-003 and LIB-API-004 fix it.
     /// </summary>
     /// <param name="context">Who is asking.</param>
     /// <param name="permission">What they are asking to do.</param>
