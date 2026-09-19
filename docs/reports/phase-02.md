@@ -135,8 +135,12 @@ Fast checks on every commit, all green: build with warnings as errors, the analy
 CONV-CODE-008, `dotnet format --verify-no-changes` over `Janus.slnx`, and the unit
 tests.
 
-The full gate is not run. The plan runs it once, at the end of the phase, and the phase
-is not complete.
+Full gate green on branch `phase-02-authorization`, pull request #8: run `35446531966`
+(push), sixteen jobs green with the four pull-request jobs skipped, and run
+`35446609410` (pull request), nineteen jobs green including `Integration tests`,
+`Double migration run`, `Contract tests` and `Destructive-operation detection report`;
+`Secret scanning` runs on the push event, as CONV-GATE-002 states, and is green there.
+The phase is not complete, so the gate stands over the items of section 1 only.
 
 Tests: 632 discovered, 508 run locally and all passing. `tests/Janus.Core.Tests` 364,
 `tests/Janus.Identity.Tests` 62, `tests/Janus.Authorization.Tests` 54,
