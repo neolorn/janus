@@ -49,4 +49,21 @@ internal readonly record struct Assurance(AssuranceLevel Level, bool PhishingRes
                 counting.Max(factor => factor.AssuranceLevel),
                 counting.Exists(factor => factor.IsPhishingResistant));
     }
+
+    /// <summary>
+    /// What the factors presented together prove on a session that already exists,
+    /// which is the same arithmetic over the factors that count after a sign-in.
+    /// </summary>
+    /// <param name="presented">The properties of the factors presented.</param>
+    /// <returns>
+    /// What they prove, or nothing where none of them counts here: an email factor,
+    /// a link and a second factor alone each contribute nothing.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The collection is absent.</exception>
+    public static Assurance? Proved(IReadOnlyCollection<FactorProperties> presented)
+    {
+        ArgumentNullException.ThrowIfNull(presented);
+
+        return Reached([.. presented.Where(factor => !factor.SignInOnly)]);
+    }
 }

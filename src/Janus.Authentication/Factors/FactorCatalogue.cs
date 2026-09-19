@@ -24,9 +24,9 @@ internal static class FactorCatalogue
         {
             [Factor.Password] = Primary(AssuranceLevel.Aal1, phishingResistant: false),
             [Factor.Passkey] = Primary(AssuranceLevel.Aal2, phishingResistant: true),
-            [Factor.EmailLink] = Primary(AssuranceLevel.Aal1, phishingResistant: false),
-            [Factor.EmailCode] = Primary(AssuranceLevel.Aal1, phishingResistant: false),
-            [Factor.PhoneLink] = Primary(AssuranceLevel.Aal1, phishingResistant: false),
+            [Factor.EmailLink] = AtSignIn(AssuranceLevel.Aal1),
+            [Factor.EmailCode] = AtSignIn(AssuranceLevel.Aal1),
+            [Factor.PhoneLink] = AtSignIn(AssuranceLevel.Aal1),
             [Factor.Google] = Primary(AssuranceLevel.Delegated, phishingResistant: false),
             [Factor.Apple] = Primary(AssuranceLevel.Delegated, phishingResistant: false),
             [Factor.Totp] = Second(phishingResistant: false),
@@ -51,7 +51,20 @@ internal static class FactorCatalogue
             CanBeSecondFactor: false,
             phishingResistant,
             level,
-            VerificationOnly: false);
+            VerificationOnly: false,
+            SignInOnly: false);
+
+    // An entry whose contribution is to a sign-in and to nothing afterwards: the
+    // mailbox or the number behind it is also the recovery channel, so counting it
+    // later would make one compromise both steps (AUTH-FACT-003).
+    private static FactorProperties AtSignIn(AssuranceLevel level) =>
+        new(
+            CanBePrimary: true,
+            CanBeSecondFactor: false,
+            IsPhishingResistant: false,
+            level,
+            VerificationOnly: false,
+            SignInOnly: true);
 
     // An entry that is never a first step and lifts a sign-in beside one.
     private static FactorProperties Second(bool phishingResistant) =>
@@ -60,5 +73,6 @@ internal static class FactorCatalogue
             CanBeSecondFactor: true,
             phishingResistant,
             AssuranceLevel.Aal2,
-            VerificationOnly: false);
+            VerificationOnly: false,
+            SignInOnly: false);
 }

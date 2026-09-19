@@ -17,15 +17,20 @@ namespace Janus.Authentication.Factors;
 /// <param name="VerificationOnly">
 /// Whether it proves control of a channel and never authenticates.
 /// </param>
+/// <param name="SignInOnly">
+/// Whether its contribution is to a sign-in and to nothing afterwards: it is never a
+/// second step, satisfies no gate and restores no lapsed session.
+/// </param>
 /// <remarks>
-/// Implements AUTH-FACT-001 and chapter 10 section 5.3. There is no property for
-/// whether a factor may satisfy step-up: that follows from the tier and the
-/// phishing-resistance against the gate (AUTH-STEP-002), and a second axis would let
-/// two rules disagree about the same factor.
+/// Implements AUTH-FACT-001, AUTH-FACT-003 and chapter 10 section 5.3. How strong a
+/// factor is has one axis, the tier beside phishing-resistance, so no second axis can
+/// let two rules disagree about the same factor; what the tier cannot say is when a
+/// contribution counts, which is what <paramref name="SignInOnly"/> carries.
 /// </remarks>
 internal sealed record FactorProperties(
     bool CanBePrimary,
     bool CanBeSecondFactor,
     bool IsPhishingResistant,
     AssuranceLevel AssuranceLevel,
-    bool VerificationOnly);
+    bool VerificationOnly,
+    bool SignInOnly);

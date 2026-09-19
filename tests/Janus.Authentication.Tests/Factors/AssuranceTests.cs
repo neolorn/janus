@@ -76,13 +76,49 @@ public sealed class AssuranceTests
             CanBeSecondFactor: true,
             IsPhishingResistant: false,
             AssuranceLevel.Aal2,
-            VerificationOnly: true);
+            VerificationOnly: true,
+            SignInOnly: false);
 
         Assert.Null(Assurance.Reached([channel]));
         Assert.Equal(
             new Assurance(AssuranceLevel.Aal1, PhishingResistant: false),
             Assurance.Reached([FactorCatalogue.Of(Factor.Password), channel]));
     }
+
+    /// <summary>
+    /// AUTH-FACT-003 AC2 and AC3: a link alone signs in at AAL1 and proves nothing
+    /// afterwards, whichever channel carried it.
+    /// </summary>
+    /// <param name="factor">The entry.</param>
+    [Theory]
+    [InlineData(Factor.EmailLink)]
+    [InlineData(Factor.EmailCode)]
+    [InlineData(Factor.PhoneLink)]
+    public void AUTH_FACT_003_AC2_AnEmailFactorSignsInAtAal1AndProvesNothingAfterwards(Factor factor)
+    {
+        Assert.Equal(
+            new Assurance(AssuranceLevel.Aal1, PhishingResistant: false),
+            Assurance.Reached(Properties([factor])));
+        Assert.Null(Assurance.Proved(Properties([factor])));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-003 AC3: the factor beside an email factor is what counts
+    /// afterwards, the email factor itself contributing nothing to it.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_003_AC3_AnEmailFactorRaisesNothingBesideASecondFactor() =>
+        Assert.Null(Assurance.Proved(Properties([Factor.EmailCode, Factor.Totp])));
+
+    /// <summary>
+    /// AUTH-STEP-002: what a combination of the account's own factors proves on a
+    /// session that already exists is the same arithmetic as at sign-in.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_002_AC4_AnOwnCombinationProvesWhatItReaches() =>
+        Assert.Equal(
+            new Assurance(AssuranceLevel.Aal2, PhishingResistant: true),
+            Assurance.Proved(Properties([Factor.Password, Factor.SecurityKey])));
 
     private static FactorProperties[] Properties(Factor[] presented)
     {
