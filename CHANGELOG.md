@@ -10,6 +10,17 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Passwords are held under Argon2id at the parameters the deployment configures, with
+  the parameters carried by each hash, so raising them leaves every stored password
+  verifiable and marks it for a silent rehash. The floor is fifteen characters where
+  the password could sign in alone and ten where it never could, and the shorter floor
+  is reached by holding a second factor rather than by choosing it. There are no
+  composition rules and no scheduled expiry.
+- Every password is screened before it is accepted. Only a five-character hash prefix
+  leaves the deployment and the range that comes back is matched locally, so neither
+  the password nor its full hash is ever sent. A corpus that cannot answer falls back
+  to the offline one and records the degradation; with nothing able to answer the
+  operation is refused rather than accepting a password nothing screened.
 - `IAccessGate` in `Janus.Core`: the one place a permission is evaluated. A check and a
   list filter are the same rule rendered two ways, an expression a host composes into
   its own LINQ query and a parameterised PostgreSQL fragment a hand-written query

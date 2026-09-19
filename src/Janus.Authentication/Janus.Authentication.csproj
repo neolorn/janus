@@ -4,6 +4,10 @@
     <ProjectReference Include="..\Janus.Core\Janus.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Konscious.Security.Cryptography.Argon2" />
+  </ItemGroup>
+
   <!-- CONV-CODE-008 AC2: referenced as an analyser, never as a library. -->
   <ItemGroup>
     <ProjectReference Include="..\Janus.Analyzers\Janus.Analyzers.csproj"
