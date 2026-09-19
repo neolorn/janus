@@ -43,6 +43,25 @@ public sealed class SettingsTests
     }
 
     /// <summary>
+    /// AUTH-SESS-005 AC5: the absolute maximum of a session at the higher tier is a
+    /// day, so forty-eight hours is refused by name rather than clamped.
+    /// </summary>
+    [Fact]
+    public void AUTH_SESS_005_AC5_AnAal2AbsoluteOfFortyEightHoursIsRejected()
+    {
+        Result<TimeSpan> outcome = Settings.SessionAal2Absolute.Accept(TimeSpan.FromHours(48));
+
+        Assert.Equal(
+            ErrorCodes.ConfigurationValueAboveCeiling,
+            outcome.Match(_ => default, failure => failure.Code));
+        Assert.Equal(
+            "P1D",
+            outcome.Match(
+                _ => throw new InvalidOperationException(),
+                failure => failure.Details)["ceiling"].GetString());
+    }
+
+    /// <summary>
     /// OPS-CFG-003 AC1: the failure carries the key and the bound, so the management
     /// application can say which value would be accepted.
     /// </summary>

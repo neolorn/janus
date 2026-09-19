@@ -331,6 +331,80 @@ public sealed class BrowserProfileTests : IDisposable
     }
 
     /// <summary>
+    /// AUTH-SESS-007 AC1 and AC3: a state-changing request whose token is not the
+    /// session's is rejected, and the rejection is recorded.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_007_AC1_AStateChangeWithoutAValidTokenIsRejectedAsync()
+    {
+        var log = new LogInMemory<SynchronizerToken>();
+        (OpaqueToken secret, OpaqueToken _) = await LiveAsync();
+        HttpContext context = Arriving("POST");
+
+        Carrying(context, secret);
+
+        await new SynchronizerToken(new SynchronizerTokens(_sessions), log)
+            .InvokeAsync(context, Endpoint);
+
+        await AssertRefusedAsync(context);
+        Assert.False(_reached);
+        Assert.Single(log.Entries);
+    }
+
+    /// <summary>
+    /// AUTH-SESS-007 AC3: the entry is recorded at a level a quieter deployment does
+    /// not suppress, a refused state change being a security event.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_007_AC3_TheRejectionIsLoggedAsync()
+    {
+        var log = new LogInMemory<SynchronizerToken>();
+
+        await new SynchronizerToken(new SynchronizerTokens(_sessions), log)
+            .InvokeAsync(Arriving("POST"), Endpoint);
+
+        Assert.Equal(LogLevel.Warning, Assert.Single(log.Entries).Level);
+    }
+
+    /// <summary>
+    /// AUTH-SESS-007 AC2: enforcement is the pipeline's, so nothing an endpoint
+    /// carries and no key of chapter 10 section 4 takes it out of the layer.
+    /// </summary>
+    [Fact]
+    public void AUTH_SESS_007_AC2_NoEndpointCanOptOut() => Assert.Empty(
+        Repository
+            .Sources()
+            .Where(file => File.ReadLines(file).Any(line =>
+                line.Contains("GetEndpoint", StringComparison.Ordinal)
+                || line.Contains("Metadata", StringComparison.Ordinal)
+                || line.Contains("IConfigurationStore", StringComparison.Ordinal)))
+            .Select(Path.GetFileName)
+            .Order(StringComparer.Ordinal));
+
+    /// <summary>
+    /// BFF-SESS-004 AC2: the secret the session answered to before is invalidated,
+    /// not left resolving an ended session alongside the new one.
+    /// </summary>
+    [Fact]
+    public async Task BFF_SESS_004_AC2_ThePreviousIdentifierIsInvalidatedNotOrphanedAsync()
+    {
+        (OpaqueToken secret, OpaqueToken _) = await LiveAsync();
+        Session held = (await _sessions.FindByFingerprintAsync(
+            secret.Fingerprint(),
+            TestContext.Current.CancellationToken))!;
+
+        await _sessions.ReplaceSecretAsync(
+            held.Id,
+            OpaqueToken.Draw(_randomness).Fingerprint(),
+            OpaqueToken.Draw(_randomness).Fingerprint(),
+            TestContext.Current.CancellationToken);
+
+        Assert.Null(await _sessions.FindByFingerprintAsync(
+            secret.Fingerprint(),
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// BFF-CSRF-001 AC2: no endpoint can be excluded by configuration or attribute,
     /// the pipeline reading neither the endpoint nor its metadata.
     /// </summary>
