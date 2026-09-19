@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
@@ -232,6 +233,101 @@ public sealed class BrowserProfileTests : IDisposable
 
         Assert.False(await tokens.MatchesAsync(rotated, token, TestContext.Current.CancellationToken));
         Assert.True(await tokens.MatchesAsync(rotated, reissued, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// BFF-SESS-004 AC1 and AC2: rotation gives the session a different identifier
+    /// and the one before it resolves nothing, rather than being left orphaned.
+    /// </summary>
+    [Fact]
+    public async Task BFF_SESS_004_AC1_RotationReplacesTheIdentifierAndInvalidatesItAsync()
+    {
+        (OpaqueToken secret, OpaqueToken _) = await LiveAsync();
+        Session held = (await _sessions.FindByFingerprintAsync(
+            secret.Fingerprint(),
+            TestContext.Current.CancellationToken))!;
+
+        var rotated = OpaqueToken.Draw(_randomness);
+
+        Assert.NotEqual(secret.Value, rotated.Value);
+
+        await _sessions.ReplaceSecretAsync(
+            held.Id,
+            rotated.Fingerprint(),
+            OpaqueToken.Draw(_randomness).Fingerprint(),
+            TestContext.Current.CancellationToken);
+
+        Assert.Null(await _sessions.FindByFingerprintAsync(
+            secret.Fingerprint(),
+            TestContext.Current.CancellationToken));
+        Assert.Equal(
+            held.Id,
+            (await _sessions.FindByFingerprintAsync(
+                rotated.Fingerprint(),
+                TestContext.Current.CancellationToken))!.Id);
+    }
+
+    /// <summary>
+    /// BFF-SESS-003 AC3: every application's session stands on one record, so ending
+    /// the record ends all of them and none is left behind.
+    /// </summary>
+    [Fact]
+    public async Task BFF_SESS_003_AC3_EndingTheRecordTerminatesEveryApplicationsSessionAsync()
+    {
+        (OpaqueToken secret, OpaqueToken _) = await LiveAsync();
+        Session record = (await _sessions.FindByFingerprintAsync(
+            secret.Fingerprint(),
+            TestContext.Current.CancellationToken))!;
+
+        foreach (int which in new[] { 1, 2 })
+        {
+            await _sessions.AddAsync(
+                record.Derive(
+                    SessionId.New(TimeProvider.System),
+                    SessionType.PerApp,
+                    new SessionOrigin(
+                        "198.51.100." + which.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        new DeviceDescription("Firefox", "Linux"),
+                        null),
+                    Noon,
+                    TimeSpan.FromHours(8)),
+                OpaqueToken.Draw(_randomness).Fingerprint(),
+                OpaqueToken.Draw(_randomness).Fingerprint(),
+                TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(
+            3,
+            (await _sessions.LiveOfAsync(
+                record.Subject,
+                Noon.AddHours(1),
+                TestContext.Current.CancellationToken)).Count);
+
+        await _sessions.EndSpineAsync(
+            record.Id,
+            Noon.AddHours(2),
+            TestContext.Current.CancellationToken);
+
+        Assert.Empty(await _sessions.LiveOfAsync(
+            record.Subject,
+            Noon.AddHours(3),
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// BFF-OWN-001 AC1 and AC3: mounting takes the pipeline and nothing else, so
+    /// there is no security-relevant value to get right and every application mounts
+    /// the same one implementation.
+    /// </summary>
+    [Fact]
+    public void BFF_OWN_001_AC1_MountingTakesNoSecurityRelevantConfiguration()
+    {
+        MethodInfo mounting = Assert.Single(typeof(JanusPipeline).GetMethods(
+            BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly));
+
+        ParameterInfo only = Assert.Single(mounting.GetParameters());
+
+        Assert.Equal(typeof(IApplicationBuilder), only.ParameterType);
     }
 
     /// <summary>
