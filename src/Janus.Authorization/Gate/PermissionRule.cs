@@ -381,7 +381,7 @@ internal sealed class PermissionRule
                     .Visit(relationship.Resource.Body))
             .Visit(above.Body);
 
-        return rows(Expression.Lambda(
+        return rows.Any(Expression.Lambda(
             Expression.AndAlso(
                 Holds(relationship.Holder.Body),
                 new Substitution(above.Parameters[1], named).Visit(held)),
@@ -421,7 +421,7 @@ internal sealed class PermissionRule
                 .Visit(relationship.Resource.Body),
             Expression.Property(above, nameof(AncestryEntry.AncestorId)));
 
-        Expression held = rows(Expression.Lambda(
+        Expression held = rows.Any(Expression.Lambda(
             Expression.AndAlso(Holds(relationship.Holder.Body), names),
             row));
 
@@ -578,14 +578,4 @@ internal sealed class PermissionRule
         [Prefix + "groups"] = _subjects.Groups,
         [Prefix + "at"] = _at,
     };
-
-    // The predicate is written once over an identifier and then read over the host's
-    // own row, so that one rule serves both renderings rather than two being kept
-    // alike by hand (AUTHZ-PRIN-001).
-    private sealed class Substitution(ParameterExpression parameter, Expression replacement)
-        : ExpressionVisitor
-    {
-        protected override Expression VisitParameter(ParameterExpression node) =>
-            node == parameter ? replacement : base.VisitParameter(node);
-    }
 }

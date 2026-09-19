@@ -35,6 +35,12 @@ internal sealed class Deployment(HostFixture fixture)
     public OrganizationId Organization { get; } = new(Guid.NewGuid());
 
     /// <summary>
+    /// The account the case's grants are recorded as granted by, which is also the
+    /// account a host's own operation would run a refresh under.
+    /// </summary>
+    public SubjectId Granter => _granter;
+
+    /// <summary>
     /// Writes the organization and the role the grants name.
     /// </summary>
     /// <param name="permissions">What the role allows.</param>

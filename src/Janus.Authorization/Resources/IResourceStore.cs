@@ -60,6 +60,20 @@ internal interface IResourceStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// The records of one type that a container reaches, itself included where it is
+    /// of that type. This is what a materialised derivation writes its grants on
+    /// (AUTHZ-DERIVE-005).
+    /// </summary>
+    /// <param name="container">The record the derivation's relationship is about.</param>
+    /// <param name="type">The kind of thing the derivation is declared on.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The records, which is nothing where the container reaches none.</returns>
+    ValueTask<IReadOnlyList<ResourceId>> BeneathAsync(
+        ResourceReference container,
+        ResourceType type,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// The record itself and everything containing it, nearest first. This is the
     /// ancestry an explanation names the container from.
     /// </summary>

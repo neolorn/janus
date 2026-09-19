@@ -265,6 +265,16 @@ Janus.Core.DerivationDeclaration.Relationship.get -> string!
 Janus.Core.DerivationDeclaration.Relationship.init -> void
 Janus.Core.DerivationDeclaration.Role.get -> Janus.Core.RoleName
 Janus.Core.DerivationDeclaration.Role.init -> void
+Janus.Core.DerivationRefresh
+Janus.Core.DerivationRefresh.<Clone>$() -> Janus.Core.DerivationRefresh!
+Janus.Core.DerivationRefresh.Deconstruct(out int Written, out int Revoked) -> void
+Janus.Core.DerivationRefresh.DerivationRefresh(int Written, int Revoked) -> void
+Janus.Core.DerivationRefresh.Drifted.get -> bool
+Janus.Core.DerivationRefresh.Equals(Janus.Core.DerivationRefresh? other) -> bool
+Janus.Core.DerivationRefresh.Revoked.get -> int
+Janus.Core.DerivationRefresh.Revoked.init -> void
+Janus.Core.DerivationRefresh.Written.get -> int
+Janus.Core.DerivationRefresh.Written.init -> void
 Janus.Core.DisplayName
 Janus.Core.DisplayName.DisplayName() -> void
 Janus.Core.DisplayName.Equals(Janus.Core.DisplayName other) -> bool
@@ -431,6 +441,8 @@ Janus.Core.IAccessGate.RequireAsync<TResource>(Janus.Core.AccessContext! context
 Janus.Core.IAccessGate.ResolveAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, Janus.Core.AuditRecordId correlation, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AccessExplanation!>>
 Janus.Core.IAssuranceProvider
 Janus.Core.IAssuranceProvider.LevelAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AssuranceLevel>>
+Janus.Core.IDerivationMaterialiser
+Janus.Core.IDerivationMaterialiser.RefreshAsync<TResource>(Janus.Core.AccessContext! context, string! derivation, Janus.Core.ResourceId resource, Janus.Core.FilterSources<TResource>! sources, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.DerivationRefresh!>>
 Janus.Core.ISecretSource
 Janus.Core.ISecretSource.ReadFingerprintKeyAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.ReadOnlyMemory<byte>>
 Janus.Core.ISecretSource.ReadKeyEncryptionKeysAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.KeyEncryptionKeys!>
@@ -597,6 +609,8 @@ Janus.Core.RelationshipDeclaration.Resource.init -> void
 Janus.Core.RelationshipDeclaration.ResourceColumn.get -> string!
 Janus.Core.RelationshipDeclaration.ResourceColumn.init -> void
 Janus.Core.RelationshipRows
+Janus.Core.RelationshipRows.Any(System.Linq.Expressions.LambdaExpression! predicate) -> System.Linq.Expressions.Expression!
+Janus.Core.RelationshipRows.HeldBy(System.Linq.Expressions.LambdaExpression! predicate, System.Linq.Expressions.LambdaExpression! holder) -> System.Collections.Generic.IAsyncEnumerable<Janus.Core.SubjectId>!
 Janus.Core.ResourceId
 Janus.Core.ResourceId.Equals(Janus.Core.ResourceId other) -> bool
 Janus.Core.ResourceId.ResourceId() -> void
@@ -812,6 +826,9 @@ override Janus.Core.Configuration.TextSetting.Accept(string! value) -> Janus.Cor
 override Janus.Core.DerivationDeclaration.Equals(object? obj) -> bool
 override Janus.Core.DerivationDeclaration.GetHashCode() -> int
 override Janus.Core.DerivationDeclaration.ToString() -> string!
+override Janus.Core.DerivationRefresh.Equals(object? obj) -> bool
+override Janus.Core.DerivationRefresh.GetHashCode() -> int
+override Janus.Core.DerivationRefresh.ToString() -> string!
 override Janus.Core.DisplayName.GetHashCode() -> int
 override Janus.Core.DisplayName.ToString() -> string!
 override Janus.Core.EffectiveGrant.Equals(object? obj) -> bool
@@ -965,6 +982,7 @@ static Janus.Core.Configuration.Settings.BackupRetention.get -> Janus.Core.Confi
 static Janus.Core.Configuration.Settings.BreakGlassSessionLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.CodeVerificationAttempts.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.CodeVerificationLifetime.get -> Janus.Core.Configuration.DurationSetting!
+static Janus.Core.Configuration.Settings.DerivationMaterialisedDriftCheck.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.DeviceVerificationEnabled.get -> Janus.Core.Configuration.FlagSetting!
 static Janus.Core.Configuration.Settings.DeviceVerificationLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.DomainReverifyInterval.get -> Janus.Core.Configuration.DurationSetting!
@@ -1064,6 +1082,8 @@ static Janus.Core.Configuration.Settings.WebAuthnRelatedOrigins.get -> Janus.Cor
 static Janus.Core.Configuration.Settings.WebAuthnRelyingPartyId.get -> Janus.Core.Configuration.TextSetting!
 static Janus.Core.DerivationDeclaration.operator !=(Janus.Core.DerivationDeclaration? left, Janus.Core.DerivationDeclaration? right) -> bool
 static Janus.Core.DerivationDeclaration.operator ==(Janus.Core.DerivationDeclaration? left, Janus.Core.DerivationDeclaration? right) -> bool
+static Janus.Core.DerivationRefresh.operator !=(Janus.Core.DerivationRefresh? left, Janus.Core.DerivationRefresh? right) -> bool
+static Janus.Core.DerivationRefresh.operator ==(Janus.Core.DerivationRefresh? left, Janus.Core.DerivationRefresh? right) -> bool
 static Janus.Core.DisplayName.TryParse(string! entered, out Janus.Core.DisplayName name) -> bool
 static Janus.Core.DisplayName.operator !=(Janus.Core.DisplayName left, Janus.Core.DisplayName right) -> bool
 static Janus.Core.DisplayName.operator ==(Janus.Core.DisplayName left, Janus.Core.DisplayName right) -> bool
@@ -1233,7 +1253,6 @@ static Janus.Core.SystemPrincipal.ForOrganization(string! name, string! reason, 
 static Janus.Core.Username.TryParse(string! entered, out Janus.Core.Username username) -> bool
 static Janus.Core.Username.operator !=(Janus.Core.Username left, Janus.Core.Username right) -> bool
 static Janus.Core.Username.operator ==(Janus.Core.Username left, Janus.Core.Username right) -> bool
-virtual Janus.Core.RelationshipRows.Invoke(System.Linq.Expressions.LambdaExpression! predicate) -> System.Linq.Expressions.Expression!
 ~override Janus.Core.AuditAction.Equals(object obj) -> bool
 ~override Janus.Core.AuditRecordId.Equals(object obj) -> bool
 ~override Janus.Core.Configuration.ConfigurationKey.Equals(object obj) -> bool

@@ -136,6 +136,33 @@ internal sealed class GrantStore(JanusDbContext context, DataConnections connect
             .ConfigureAwait(false);
 
     /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<Grant>> MaterialisedAsync(
+        RoleName role,
+        ResourceType type,
+        IReadOnlyList<ResourceId> resources,
+        OrganizationId organization,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(resources);
+
+        ResourceId?[] records = [.. resources.Select(resource => (ResourceId?)resource)];
+
+        List<GrantRecord> rows = await context.Grants
+            .Where(row => row.Kind == GrantKind.Materialised
+                && row.Role == role
+                && row.Organization == organization
+                && row.RevokedAt == null
+                && (row.ExpiresAt == null || row.ExpiresAt > at)
+                && row.ResourceType == type
+                && records.Contains(row.ResourceId))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. rows.Select(Read)];
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<Grant>> OnAsync(
         ResourceReference reference,
         OrganizationId organization,

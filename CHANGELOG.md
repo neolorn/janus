@@ -60,6 +60,13 @@ against the public contract of LIB-API-001.
   containing it, with no grant written and nothing to keep in sync. Removing the fact
   removes the access on the next request, and a deny defeats a derived grant as it
   defeats a written one.
+- `IDerivationMaterialiser` in `Janus.Core`: a derivation a deployment declares
+  materialised is precomputed into ordinary grant rows, marked as such wherever they
+  are read. The host refreshes it from the operation that changes the relationship,
+  inside the same unit of work, so the fact and the rows computed from it are written
+  together or not at all. A refresh run later reports what it had to change and
+  corrects it in the same run, which is how drift is found where the refresh was
+  missed. `derivation.materialised.driftcheck` sets how often that runs.
 - `AccessContext` in `Janus.Core`: who is acting, whom they are acting for, and the
   named principal a background job runs as.
 - `GrantId`, `GroupId`, `GrantSubject` and `ResourceReference` in `Janus.Core`: what a

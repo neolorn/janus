@@ -195,6 +195,23 @@ internal sealed class ResourceStore(JanusDbContext context, DataConnections conn
     }
 
     /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<ResourceId>> BeneathAsync(
+        ResourceReference container,
+        ResourceType type,
+        CancellationToken cancellationToken)
+    {
+        List<ResourceId> records = await context.Ancestry
+            .Where(entry => entry.AncestorType == container.Type
+                && entry.AncestorId == container.Id
+                && entry.Type == type)
+            .Select(entry => entry.Id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return records;
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<ResourceReference>> AncestryAsync(
         ResourceReference reference,
         CancellationToken cancellationToken)

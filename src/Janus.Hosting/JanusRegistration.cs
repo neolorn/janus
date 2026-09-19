@@ -67,6 +67,7 @@ public static class JanusRegistration
 
         services.AddScoped<Derivations>();
         services.AddScoped<IAccessGate, AccessGate>();
+        services.AddScoped<IDerivationMaterialiser, DerivationMaterialiser>();
         services.AddScoped<ModelValidation>();
 
         // AUTHZ-MODEL-004 AC2 (D-160): what a hosted service starts before is what was
