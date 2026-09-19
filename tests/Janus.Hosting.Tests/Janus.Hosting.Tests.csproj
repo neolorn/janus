@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Janus.Hosting\Janus.Hosting.csproj" />
+  </ItemGroup>
+
+  <!-- CONV-TEST-002: the library's own schema is what a host maps against, and the
+       fixture that raises it belongs to the project that owns the schema. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Janus.Storage.Tests\Janus.Storage.Tests.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Testcontainers.PostgreSql" />
+  </ItemGroup>
+
+</Project>

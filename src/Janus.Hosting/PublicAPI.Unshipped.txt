@@ -1,1 +1,5 @@
 #nullable enable
+Janus.Hosting.JanusAuthorizationModel
+Janus.Hosting.JanusRegistration
+static Janus.Hosting.JanusAuthorizationModel.MapJanusAuthorization(this Microsoft.EntityFrameworkCore.ModelBuilder! builder) -> Microsoft.EntityFrameworkCore.ModelBuilder!
+static Janus.Hosting.JanusRegistration.AddJanus(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! connectionString, Janus.Core.KeyEncryptionKeys! keyEncryptionKeys, System.ReadOnlyMemory<byte> fingerprintKey, Janus.Core.AuthorizationDeclaration! declaration) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

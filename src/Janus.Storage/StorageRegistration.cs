@@ -1,5 +1,6 @@
 using System;
 using System.Security.Cryptography;
+using Janus.Authorization.Gate;
 using Janus.Authorization.Grants;
 using Janus.Authorization.Groups;
 using Janus.Authorization.Resources;
@@ -13,6 +14,7 @@ using Janus.Identity.Preferences;
 using Janus.Identity.Profiles;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Authorization.Gate;
 using Janus.Storage.Authorization.Grants;
 using Janus.Storage.Authorization.Groups;
 using Janus.Storage.Authorization.Resources;
@@ -104,6 +106,8 @@ internal static class StorageRegistration
         services.AddScoped<IGrantStore, GrantStore>();
         services.AddScoped<IGroupStore, GroupStore>();
         services.AddScoped<IResourceStore, ResourceStore>();
+
+        services.AddScoped<IAccessEvaluator, AccessEvaluator>();
 
         return services;
     }

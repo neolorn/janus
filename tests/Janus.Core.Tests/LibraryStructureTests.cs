@@ -239,13 +239,19 @@ public sealed class LibraryStructureTests
 
     /// <summary>
     /// CONV-DESIGN-003 AC2: no port hands a query out of the area for someone else to
-    /// finish, so what a port returns is what the caller gets.
+    /// finish, so what a port returns is what the caller gets. A queryable the host
+    /// passes in from its own context is the opposite motion and is what a permission
+    /// filter is built from (AUTHZ-GATE-002, D-159), so the rule is read over the port
+    /// declarations, which is where a port's methods are.
     /// </summary>
     [Fact]
     public void CONV_DESIGN_003_AC2_NoPortMethodReturnsAQueryable()
     {
         IEnumerable<string> handing = SourcesOf(Areas)
-            .Where(file => File.ReadAllText(file).Contains("IQueryable", StringComparison.Ordinal));
+            .Select(file => new { File = file, Text = File.ReadAllText(file) })
+            .Where(source => source.Text.Contains("internal interface", StringComparison.Ordinal))
+            .Where(source => source.Text.Contains("IQueryable", StringComparison.Ordinal))
+            .Select(source => source.File);
 
         Assert.Empty(handing);
     }

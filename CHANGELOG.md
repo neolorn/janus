@@ -10,6 +10,19 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `IAccessGate` in `Janus.Core`: the one place a permission is evaluated. A check and a
+  list filter are the same rule rendered two ways, an expression a host composes into
+  its own LINQ query and a parameterised PostgreSQL fragment a hand-written query
+  composes into its `WHERE` clause, so a list screen cannot come to show what a check
+  would refuse. Neither rendering enumerates permitted records.
+- `MapJanusAuthorization` in `Janus.Hosting`: a host maps the ancestry closure and the
+  effective grants into its own context, so a filtered listing is one query against its
+  own tables and the library reads nothing of the host's.
+- `AddJanus` in `Janus.Hosting`: the one method a host calls to register the library.
+  What the host declares about its own domain is built and checked here, at startup.
+- The gate explains itself: an explanation names the grant that decided, the container
+  it was inherited from, and the principal it was decided for, or states that no grant
+  matched. Capabilities for a page of records are computed in one query.
 - Inheritance is resolved through an ancestry closure maintained in the same
   transaction as the create or the move that changes it, so a permission query joins
   one table rather than walking the tree, and permission data and business data cannot
