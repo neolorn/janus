@@ -174,6 +174,34 @@ internal sealed class AuthorizationModel
         _relationships.TryGetValue(name, out RelationshipDeclaration? declaration) ? declaration : null;
 
     /// <summary>
+    /// Every derivation reaching records of the type: those declared on the type
+    /// itself and those declared on a type containing it, each with the relationship
+    /// it follows from.
+    /// </summary>
+    /// <param name="type">The resource type.</param>
+    /// <returns>The derivations, which is nothing where the type declares none.</returns>
+    /// <remarks>
+    /// Implements AUTHZ-DERIVE-001 and AUTHZ-DERIVE-002. A relationship on a container
+    /// reaches what the container holds, as a grant on it does.
+    /// </remarks>
+    public IReadOnlyList<ReachingDerivation> Derivations(ResourceType type)
+    {
+        var reaching = new List<ReachingDerivation>();
+
+        foreach (ResourceType at in Containment(type))
+        {
+            foreach (DerivationDeclaration derivation in _types[at].Derivations)
+            {
+                reaching.Add(new ReachingDerivation(
+                    derivation,
+                    _relationships[derivation.Relationship]));
+            }
+        }
+
+        return reaching;
+    }
+
+    /// <summary>
     /// The resource type and every type containing it, outermost last. Inheritance is
     /// read from this and from nothing else.
     /// </summary>
@@ -257,9 +285,9 @@ internal sealed class AuthorizationModel
         new(
             relationship.Name,
             relationship.On.ToString(),
-            relationship.Table,
-            relationship.SubjectColumn,
-            [.. relationship.Columns.Order(StringComparer.Ordinal)]);
+            relationship.Relation,
+            relationship.HolderColumn,
+            relationship.ResourceColumn);
 
     private static SerializedModel.Basis Serialized(LawfulBasisDeclaration basis) =>
         new(

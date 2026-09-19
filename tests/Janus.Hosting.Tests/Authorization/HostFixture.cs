@@ -63,6 +63,11 @@ public sealed class HostFixture : IAsyncLifetime
                 """
                 CREATE SCHEMA host;
                 CREATE TABLE host.documents (id text PRIMARY KEY, title text NOT NULL);
+                CREATE TABLE host.reviewers (
+                    workspace_id text NOT NULL,
+                    reviewer uuid NOT NULL,
+                    PRIMARY KEY (workspace_id, reviewer));
+                CREATE INDEX ix_reviewers_reviewer ON host.reviewers (reviewer);
                 """);
         }
 
@@ -110,8 +115,17 @@ public sealed class HostFixture : IAsyncLifetime
         .Permission(HostPermissions.Publish.ToString())
         .Permission(HostPermissions.ReadNote.ToString())
         .StepUpGate(HostPermissions.Publish.ToString(), "document:publish")
+        .Relationship<HostReviewer>(
+            "reviewer",
+            "workspace",
+            "host.reviewers",
+            row => row.Reviewer,
+            "reviewer",
+            row => row.WorkspaceId,
+            "workspace_id")
         .Resource<HostWorkspace>("workspace", type => type
             .BelongsToOrganization()
+            .Derivation("reviewer", "reviewer")
             .Purpose("running the host", "contract"))
         .Resource<HostDocument>("document", type => type
             .ContainedIn("workspace")

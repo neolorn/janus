@@ -22,6 +22,7 @@ namespace Janus.Authorization.Gate;
 /// <param name="audit">Where a refusal is recorded and read back.</param>
 /// <param name="subjects">Who the principal is, resolved once per operation.</param>
 /// <param name="gates">What an action's step-up gate still asks of the session.</param>
+/// <param name="derived">Which of the host's relationships confer what is being asked.</param>
 /// <param name="time">The clock liveness is read against.</param>
 /// <remarks>
 /// Implements AUTHZ-SEAM-001, AUTHZ-PRIN-001, AUTHZ-PRIN-003, AUTHZ-GATE-002,
@@ -37,6 +38,7 @@ internal sealed class AccessGate(
     IAccessAudit audit,
     SubjectSets subjects,
     StepUpGates gates,
+    Derivations derived,
     TimeProvider time) : IAccessGate
 {
     private static readonly ResourceType OrganizationWide = ResourceType.Parse("organization");
@@ -396,7 +398,8 @@ internal sealed class AccessGate(
             type,
             organization,
             await subjects.OfAsync(context, cancellationToken).ConfigureAwait(false),
-            time.GetUtcNow());
+            time.GetUtcNow(),
+            await derived.ReachingAsync(type, permissions, cancellationToken).ConfigureAwait(false));
     }
 
     private async ValueTask<CandidateGrant?> HoldsAsync(

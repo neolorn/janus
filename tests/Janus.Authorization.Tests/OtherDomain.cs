@@ -20,7 +20,7 @@ internal static class OtherDomain
     internal sealed class Depot
     {
         /// <summary>The depot.</summary>
-        public Guid Id { get; init; }
+        public string Id { get; init; } = string.Empty;
 
         /// <summary>The organization owning it.</summary>
         public Guid OrganizationId { get; init; }
@@ -32,10 +32,10 @@ internal static class OtherDomain
     internal sealed class Vehicle
     {
         /// <summary>The vehicle.</summary>
-        public Guid Id { get; init; }
+        public string Id { get; init; } = string.Empty;
 
         /// <summary>The depot it is kept at.</summary>
-        public Guid DepotId { get; init; }
+        public string DepotId { get; init; } = string.Empty;
 
         /// <summary>The person keeping it, where one is named.</summary>
         public SubjectId Keeper { get; init; }
@@ -47,10 +47,10 @@ internal static class OtherDomain
     internal sealed class Journey
     {
         /// <summary>The journey.</summary>
-        public Guid Id { get; init; }
+        public string Id { get; init; } = string.Empty;
 
         /// <summary>The vehicle it was made in.</summary>
-        public Guid VehicleId { get; init; }
+        public string VehicleId { get; init; } = string.Empty;
     }
 
     /// <summary>
@@ -59,7 +59,7 @@ internal static class OtherDomain
     /// <param name="organization">The organization owning it.</param>
     /// <returns>The depot.</returns>
     public static Depot NewDepot(Guid organization) =>
-        new() { Id = Guid.CreateVersion7(), OrganizationId = organization };
+        new() { Id = Named(), OrganizationId = organization };
 
     /// <summary>
     /// A vehicle kept at a depot.
@@ -67,16 +67,16 @@ internal static class OtherDomain
     /// <param name="depot">The depot it is kept at.</param>
     /// <param name="keeper">The person keeping it.</param>
     /// <returns>The vehicle.</returns>
-    public static Vehicle NewVehicle(Guid depot, SubjectId keeper) =>
-        new() { Id = Guid.CreateVersion7(), DepotId = depot, Keeper = keeper };
+    public static Vehicle NewVehicle(string depot, SubjectId keeper) =>
+        new() { Id = Named(), DepotId = depot, Keeper = keeper };
 
     /// <summary>
     /// A journey made in a vehicle.
     /// </summary>
     /// <param name="vehicle">The vehicle it was made in.</param>
     /// <returns>The journey.</returns>
-    public static Journey NewJourney(Guid vehicle) =>
-        new() { Id = Guid.CreateVersion7(), VehicleId = vehicle };
+    public static Journey NewJourney(string vehicle) =>
+        new() { Id = Named(), VehicleId = vehicle };
 
     /// <summary>
     /// A declaration of the whole domain, valid as it stands.
@@ -86,7 +86,14 @@ internal static class OtherDomain
         new AuthorizationDeclarationBuilder()
             .LawfulBasis(new LawfulBasisDeclaration("contract", false, false, false, false))
             .Permission("journey:read")
-            .Relationship<Vehicle>("keeper", "vehicle", "vehicles", vehicle => vehicle.Keeper)
+            .Relationship<Vehicle>(
+                "keeper",
+                "vehicle",
+                "host.vehicles",
+                vehicle => vehicle.Keeper,
+                "keeper",
+                vehicle => vehicle.Id,
+                "id")
             .Resource<Depot>("depot", depot => depot
                 .BelongsToOrganization()
                 .Purpose("haulage", "contract"))
@@ -97,4 +104,7 @@ internal static class OtherDomain
             .Resource<Journey>("journey", journey => journey
                 .ContainedIn("vehicle")
                 .Purpose("haulage", "contract"));
+
+    // A record is named by the host's own text, whatever the host makes that of.
+    private static string Named() => Guid.CreateVersion7().ToString();
 }

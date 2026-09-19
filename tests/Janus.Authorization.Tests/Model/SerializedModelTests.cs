@@ -66,7 +66,14 @@ public sealed class SerializedModelTests
             .Permission("document:read")
             .LawfulBasis(new LawfulBasisDeclaration("interest", false, false, true, true))
             .LawfulBasis(new LawfulBasisDeclaration("contract", false, false, false, false))
-            .Relationship<HostDomain.Folder>("reviewer", "folder", "folders", folder => folder.Reviewer)
+            .Relationship<HostDomain.Folder>(
+                "reviewer",
+                "folder",
+                "host.folders",
+                folder => folder.Reviewer,
+                "reviewer",
+                folder => folder.Id,
+                "id")
             .SensitiveCategory("financial")
             .Resource<HostDomain.Document>("document", document => document
                 .ContainedIn("folder")

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Reflection;
 using Janus.Authorization.Model;
 using Janus.Core;
@@ -83,7 +84,8 @@ public sealed class AuthorizationModelTests
             document.EncryptedFields.Single());
         Assert.Equal(
             nameof(HostDomain.Folder.Reviewer),
-            declared.Relationships.Single().SubjectColumn);
+            Assert.IsAssignableFrom<MemberExpression>(
+                declared.Relationships.Single().Holder.Body).Member.Name);
     }
 
     /// <summary>

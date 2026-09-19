@@ -21,7 +21,7 @@ internal static class HostDomain
     internal sealed class Workspace
     {
         /// <summary>The workspace.</summary>
-        public Guid Id { get; init; }
+        public string Id { get; init; } = string.Empty;
 
         /// <summary>The organization owning it.</summary>
         public Guid OrganizationId { get; init; }
@@ -33,10 +33,10 @@ internal static class HostDomain
     internal sealed class Folder
     {
         /// <summary>The folder.</summary>
-        public Guid Id { get; init; }
+        public string Id { get; init; } = string.Empty;
 
         /// <summary>The workspace containing it.</summary>
-        public Guid WorkspaceId { get; init; }
+        public string WorkspaceId { get; init; } = string.Empty;
 
         /// <summary>The person reviewing what is in it, where one is named.</summary>
         public SubjectId Reviewer { get; init; }
@@ -48,10 +48,10 @@ internal static class HostDomain
     internal sealed class Document
     {
         /// <summary>The document.</summary>
-        public Guid Id { get; init; }
+        public string Id { get; init; } = string.Empty;
 
         /// <summary>The folder containing it.</summary>
-        public Guid FolderId { get; init; }
+        public string FolderId { get; init; } = string.Empty;
 
         /// <summary>The body, held as ciphertext.</summary>
         public byte[] Body { get; init; } = [];
@@ -66,10 +66,10 @@ internal static class HostDomain
     internal sealed class Draft
     {
         /// <summary>The draft.</summary>
-        public Guid Id { get; init; }
+        public string Id { get; init; } = string.Empty;
 
         /// <summary>The folder containing it.</summary>
-        public Guid FolderId { get; init; }
+        public string FolderId { get; init; } = string.Empty;
     }
 
     /// <summary>
@@ -78,7 +78,7 @@ internal static class HostDomain
     /// <param name="organization">The organization owning it.</param>
     /// <returns>The workspace.</returns>
     public static Workspace NewWorkspace(Guid organization) =>
-        new() { Id = Guid.CreateVersion7(), OrganizationId = organization };
+        new() { Id = Named(), OrganizationId = organization };
 
     /// <summary>
     /// A folder in a workspace.
@@ -86,8 +86,8 @@ internal static class HostDomain
     /// <param name="workspace">The workspace containing it.</param>
     /// <param name="reviewer">The person reviewing what is in it.</param>
     /// <returns>The folder.</returns>
-    public static Folder NewFolder(Guid workspace, SubjectId reviewer) =>
-        new() { Id = Guid.CreateVersion7(), WorkspaceId = workspace, Reviewer = reviewer };
+    public static Folder NewFolder(string workspace, SubjectId reviewer) =>
+        new() { Id = Named(), WorkspaceId = workspace, Reviewer = reviewer };
 
     /// <summary>
     /// A document in a folder.
@@ -95,16 +95,16 @@ internal static class HostDomain
     /// <param name="folder">The folder containing it.</param>
     /// <param name="author">The subject whose key the body is held under.</param>
     /// <returns>The document.</returns>
-    public static Document NewDocument(Guid folder, SubjectId author) =>
-        new() { Id = Guid.CreateVersion7(), FolderId = folder, Author = author };
+    public static Document NewDocument(string folder, SubjectId author) =>
+        new() { Id = Named(), FolderId = folder, Author = author };
 
     /// <summary>
     /// A draft in a folder.
     /// </summary>
     /// <param name="folder">The folder containing it.</param>
     /// <returns>The draft.</returns>
-    public static Draft NewDraft(Guid folder) =>
-        new() { Id = Guid.CreateVersion7(), FolderId = folder };
+    public static Draft NewDraft(string folder) =>
+        new() { Id = Named(), FolderId = folder };
 
     /// <summary>
     /// A declaration of the whole domain, valid as it stands.
@@ -117,7 +117,14 @@ internal static class HostDomain
             .SensitiveCategory("financial")
             .Permission("document:read")
             .Permission("document:edit")
-            .Relationship<Folder>("reviewer", "folder", "folders", folder => folder.Reviewer)
+            .Relationship<Folder>(
+                "reviewer",
+                "folder",
+                "host.folders",
+                folder => folder.Reviewer,
+                "reviewer",
+                folder => folder.Id,
+                "id")
             .Resource<Workspace>("workspace", workspace => workspace
                 .BelongsToOrganization()
                 .Purpose("collaboration", "contract"))
@@ -129,4 +136,7 @@ internal static class HostDomain
                 .ContainedIn("folder")
                 .Purpose("collaboration", "contract")
                 .Encrypted(item => item.Body, item => item.Author));
+
+    // A record is named by the host's own text, whatever the host makes that of.
+    private static string Named() => Guid.CreateVersion7().ToString();
 }

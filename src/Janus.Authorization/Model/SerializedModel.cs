@@ -73,15 +73,15 @@ internal sealed record SerializedModel(
     /// </summary>
     /// <param name="Name">The relationship.</param>
     /// <param name="On">The resource type the fact is about.</param>
-    /// <param name="Table">The host table holding it.</param>
-    /// <param name="SubjectColumn">The column naming the subject.</param>
-    /// <param name="Columns">Every column the evaluation reads.</param>
+    /// <param name="Relation">The relation holding it.</param>
+    /// <param name="HolderColumn">The column naming the subject.</param>
+    /// <param name="ResourceColumn">The column naming the record.</param>
     internal sealed record Relationship(
         string Name,
         string On,
-        string Table,
-        string SubjectColumn,
-        IReadOnlyList<string> Columns);
+        string Relation,
+        string HolderColumn,
+        string ResourceColumn);
 
     /// <summary>
     /// One action and the step-up gate it is bound to.

@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -19,6 +21,9 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
 {
     private static readonly ResourceType Document = ResourceType.Parse("document");
     private static readonly ResourceType Workspace = ResourceType.Parse("workspace");
+
+    // The role the host's declaration says a reviewer holds on what they review.
+    private static readonly RoleName Reviewer = RoleName.Parse("reviewer");
 
     /// <summary>
     /// AUTHZ-INHERIT-001 AC1: a grant on a container confers the same access on a
@@ -563,6 +568,186 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
                 await nested.Deployment.AccountAsync(cancellationToken),
                 nested.Record,
                 HostPermissions.Publish));
+    }
+
+    /// <summary>
+    /// AUTHZ-DERIVE-001 AC2: the fact is the host's own, so writing it confers the role
+    /// on the next request, with no grant written and nothing to keep in sync.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_001_AC2_TheHostsOwnDataDecidesTheNextRequestAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+
+        await nested.Deployment.NamedRoleAsync(Reviewer, [HostPermissions.Read], cancellationToken);
+
+        await using HostContext reading = host.Context();
+
+        Assert.Empty(await ListedAsync(nested, reading));
+
+        await nested.Deployment.ReviewAsync(nested.Bottom, nested.Account, cancellationToken);
+
+        Assert.Equal(
+            nested.Record.Id.ToString(),
+            Assert.Single(await ListedAsync(nested, reading)));
+    }
+
+    /// <summary>
+    /// AUTHZ-DERIVE-001 AC3: the access is the fact, so taking the fact away takes the
+    /// access with it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_001_AC3_RemovingTheRelationshipRemovesTheAccessAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+
+        await nested.Deployment.NamedRoleAsync(Reviewer, [HostPermissions.Read], cancellationToken);
+        await nested.Deployment.ReviewAsync(nested.Bottom, nested.Account, cancellationToken);
+
+        await using HostContext reading = host.Context();
+
+        Assert.NotEmpty(await ListedAsync(nested, reading));
+
+        await nested.Deployment.UnreviewAsync(nested.Bottom, nested.Account, cancellationToken);
+
+        Assert.Empty(await ListedAsync(nested, reading));
+    }
+
+    /// <summary>
+    /// AUTHZ-DERIVE-002 AC1: a deny defeats a derived grant as it defeats a stored one,
+    /// both being the same sentence.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_002_AC1_ADenyDefeatsADerivedGrantAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+
+        await nested.Deployment.NamedRoleAsync(Reviewer, [HostPermissions.Read], cancellationToken);
+        await nested.Deployment.ReviewAsync(nested.Bottom, nested.Account, cancellationToken);
+
+        await using HostContext reading = host.Context();
+
+        Assert.NotEmpty(await ListedAsync(nested, reading));
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            true,
+            null,
+            null,
+            cancellationToken);
+
+        Assert.Empty(await ListedAsync(nested, reading));
+    }
+
+    /// <summary>
+    /// AUTHZ-DERIVE-002 AC2: inheritance applies to a derived grant, so the fact held
+    /// three containers above reaches the record beneath them.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_002_AC2_ADerivedGrantOnAContainerReachesItsContentsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+
+        await nested.Deployment.NamedRoleAsync(Reviewer, [HostPermissions.Read], cancellationToken);
+        await nested.Deployment.ReviewAsync(nested.Top, nested.Account, cancellationToken);
+
+        await using HostContext reading = host.Context();
+
+        Assert.Equal(
+            nested.Record.Id.ToString(),
+            Assert.Single(await ListedAsync(nested, reading)));
+    }
+
+    /// <summary>
+    /// AUTHZ-DERIVE-002 AC2, AUTHZ-SCOPE-001: a fact held on a container elsewhere
+    /// reaches nothing under this one, inheritance following containment and nothing
+    /// else.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_002_AC2_AFactOnAnotherContainerReachesNothingHereAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+
+        await nested.Deployment.NamedRoleAsync(Reviewer, [HostPermissions.Read], cancellationToken);
+        await nested.Deployment.ReviewAsync(nested.Elsewhere, nested.Account, cancellationToken);
+
+        await using HostContext reading = host.Context();
+
+        Assert.Empty(await ListedAsync(nested, reading));
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-001 AC4: what a caller of the gate is told is that the record is
+    /// reachable, and the answer for a record reached by a written grant is the answer
+    /// for one reached by a fact in the host's data.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_001_AC4_AStoredAndADerivedGrantAnswerAlikeAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+        ResourceReference derived = Reference(Document);
+
+        await nested.Deployment.RegisterAsync(derived, nested.Elsewhere, cancellationToken);
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        await nested.Deployment.NamedRoleAsync(Reviewer, [HostPermissions.Read], cancellationToken);
+        await nested.Deployment.ReviewAsync(nested.Elsewhere, nested.Account, cancellationToken);
+
+        await using HostContext reading = host.Context();
+
+        IReadOnlyList<string> listed = await ListedAsync(nested, reading);
+
+        Assert.Equal(2, listed.Count);
+        Assert.Contains(nested.Record.Id.ToString(), listed, StringComparer.Ordinal);
+        Assert.Contains(derived.Id.ToString(), listed, StringComparer.Ordinal);
+    }
+
+    // What a listing over the host's own table returns with the filter applied, which
+    // is the path a derivation is evaluated through (D-160): the rows of the host's
+    // relation are the host's, and its context executes the composed query.
+    private async Task<IReadOnlyList<string>> ListedAsync(Nested nested, HostContext reading)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        Expression<Func<HostDocument, bool>> filter = Rendered(
+            await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .FilterAsync(
+                    AccessContext.Of(nested.Account),
+                    HostPermissions.Read,
+                    Document,
+                    nested.Deployment.Organization,
+                    new FilterSources<HostDocument>(
+                        reading.Ancestry,
+                        reading.Grants,
+                        document => document.Id)
+                        .Relationship("reviewer", reading.Reviewers),
+                    TestContext.Current.CancellationToken));
+
+        return await reading.Documents
+            .Where(filter)
+            .Select(document => document.Id)
+            .ToListAsync(TestContext.Current.CancellationToken);
     }
 
     private static TRendering Rendered<TRendering>(Result<TRendering> outcome) =>

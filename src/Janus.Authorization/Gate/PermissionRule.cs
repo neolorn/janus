@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Text;
 using Janus.Core;
 
 namespace Janus.Authorization.Gate;
@@ -42,6 +43,7 @@ internal sealed class PermissionRule
 
     private const string Prefix = "janus_authz_";
 
+    private readonly IReadOnlyList<RelationshipDeclaration> _derivations;
     private readonly string[] _permissions;
     private readonly ResourceType? _type;
     private readonly OrganizationId _organization;
@@ -57,14 +59,23 @@ internal sealed class PermissionRule
     /// <param name="organization">The organization the evaluation is scoped to.</param>
     /// <param name="subjects">Who holds grants for the principal.</param>
     /// <param name="at">The instant liveness is read at.</param>
+    /// <param name="derivations">
+    /// The relationships whose derivations confer one of the permissions on records of
+    /// the type, each rendered beside the grants (AUTHZ-DERIVE-002).
+    /// </param>
     /// <exception cref="ArgumentNullException">The permissions or the subjects are absent.</exception>
     public PermissionRule(
         IReadOnlyList<Permission> permissions,
         ResourceType type,
         OrganizationId organization,
         SubjectSet subjects,
-        DateTimeOffset at)
-        : this(permissions, organization, subjects, at) => _type = type;
+        DateTimeOffset at,
+        IReadOnlyList<RelationshipDeclaration>? derivations = null)
+        : this(permissions, organization, subjects, at)
+    {
+        _type = type;
+        _derivations = derivations ?? [];
+    }
 
     /// <summary>
     /// The same rule asked of the organization itself, which is the third scope a
@@ -88,6 +99,7 @@ internal sealed class PermissionRule
         _organization = organization;
         _subjects = subjects;
         _at = at;
+        _derivations = [];
     }
 
     // Every rendering but the organization-wide one is about records of one type, and
@@ -132,7 +144,7 @@ internal sealed class PermissionRule
         Guid[] groups = _subjects.Groups;
         DateTimeOffset at = _at;
 
-        Expression<Func<string, bool>> byIdentifier = identifier =>
+        Expression<Func<string, bool>> allowed = identifier =>
             grants.Any(grant =>
                 !grant.Deny
                 && permissions.Contains(grant.Permission)
@@ -146,8 +158,10 @@ internal sealed class PermissionRule
                         entry.ResourceType == type
                         && entry.ResourceId == identifier
                         && entry.AncestorType == grant.ResourceType
-                        && entry.AncestorId == grant.ResourceId)))
-            && !grants.Any(grant =>
+                        && entry.AncestorId == grant.ResourceId)));
+
+        Expression<Func<string, bool>> denied = identifier =>
+            grants.Any(grant =>
                 grant.Deny
                 && permissions.Contains(grant.Permission)
                 && grant.Organization == organization
@@ -162,10 +176,24 @@ internal sealed class PermissionRule
                         && entry.AncestorType == grant.ResourceType
                         && entry.AncestorId == grant.ResourceId)));
 
-        Expression body = new Substitution(byIdentifier.Parameters[0], sources.Identifier.Body)
-            .Visit(byIdentifier.Body);
+        ParameterExpression named = allowed.Parameters[0];
+        Expression reaches = allowed.Body;
 
-        return Expression.Lambda<Func<TResource, bool>>(body, sources.Identifier.Parameters[0]);
+        // AUTHZ-DERIVE-001, AUTHZ-DERIVE-002 (D-160): a grant or a relationship row for
+        // one of the principal's subjects, on the record or on something above it, and
+        // a deny defeats either.
+        foreach (RelationshipDeclaration relationship in _derivations)
+        {
+            reaches = Expression.OrElse(reaches, Derived(relationship, sources, ancestry, named));
+        }
+
+        Expression body = Expression.AndAlso(
+            reaches,
+            Expression.Not(new Substitution(denied.Parameters[0], named).Visit(denied.Body)));
+
+        return Expression.Lambda<Func<TResource, bool>>(
+            new Substitution(named, sources.Identifier.Body).Visit(body),
+            sources.Identifier.Parameters[0]);
     }
 
     /// <summary>
@@ -186,12 +214,12 @@ internal sealed class PermissionRule
         string text = string.Create(
             CultureInfo.InvariantCulture,
             $"""
-            (EXISTS (
+            ((EXISTS (
                 SELECT 1
                 FROM janus.effective_grants AS {Prefix}allow
                 WHERE {Prefix}allow.deny = false
                   AND {Matches(Prefix + "allow", row)}
-            ) AND NOT EXISTS (
+            ){Derived(row)}) AND NOT EXISTS (
                 SELECT 1
                 FROM janus.effective_grants AS {Prefix}deny
                 WHERE {Prefix}deny.deny = true
@@ -199,7 +227,7 @@ internal sealed class PermissionRule
             ))
             """);
 
-        return new SqlFilter(text, Parameters());
+        return new SqlFilter(text, FragmentParameters());
     }
 
     /// <summary>
@@ -275,6 +303,98 @@ internal sealed class PermissionRule
             """),
         Parameters());
 
+    // AUTHZ-DERIVE-001 (D-160): the rows are the host's, and what the predicate over
+    // one of them asks is that its holder is one of the principal's subjects and that
+    // the record it names is this one or one above it.
+    private Expression Derived<TResource>(
+        RelationshipDeclaration relationship,
+        FilterSources<TResource> sources,
+        IQueryable<AncestryEntry> ancestry,
+        ParameterExpression named)
+    {
+        if (!sources.Relationships.TryGetValue(relationship.Name, out RelationshipRows? rows))
+        {
+            throw new InvalidOperationException(string.Create(
+                CultureInfo.InvariantCulture,
+                $"A derivation follows from the relationship '{relationship.Name}', whose rows the filter was not given."));
+        }
+
+        string type = Type.ToString();
+        string on = relationship.On.ToString();
+
+        Expression<Func<string, string, bool>> above = (resource, identifier) =>
+            ancestry.Any(entry =>
+                entry.ResourceType == type
+                && entry.ResourceId == identifier
+                && entry.AncestorType == on
+                && entry.AncestorId == resource);
+
+        ParameterExpression row = relationship.Holder.Parameters[0];
+
+        Expression held = new Substitution(
+                above.Parameters[0],
+                new Substitution(relationship.Resource.Parameters[0], row)
+                    .Visit(relationship.Resource.Body))
+            .Visit(above.Body);
+
+        return rows(Expression.Lambda(
+            Expression.AndAlso(
+                Holds(relationship.Holder.Body),
+                new Substitution(above.Parameters[1], named).Visit(held)),
+            row));
+    }
+
+    // Whether the row is held by one of the principal's subjects. The column is the
+    // host's, mapped by the host's own model, so the set stands against it as the
+    // subject identifiers the host's model reads there.
+    private Expression Holds(Expression holder)
+    {
+        SubjectId[] subjects = [.. _subjects.Accounts.Select(account => new SubjectId(account))];
+        Expression<Func<SubjectId, bool>> held = candidate => subjects.Contains(candidate);
+
+        return new Substitution(held.Parameters[0], holder).Visit(held.Body);
+    }
+
+    // The same rule over the host's own relations, one clause per derivation. The
+    // relation and its two columns are the declaration's; everything else is a
+    // parameter (AUTHZ-GATE-002 AC3).
+    private string Derived(string row)
+    {
+        var text = new StringBuilder();
+
+        for (int index = 0; index < _derivations.Count; index++)
+        {
+            RelationshipDeclaration relationship = _derivations[index];
+            string held = Alias(index);
+
+            text.Append(string.Create(
+                CultureInfo.InvariantCulture,
+                $"""
+                 OR EXISTS (
+                    SELECT 1
+                    FROM {Relation(relationship.Relation)} AS {held}
+                    WHERE {held}.{Identifier(relationship.HolderColumn, nameof(relationship.HolderColumn))} = ANY(@{Prefix}accounts)
+                      AND EXISTS (
+                          SELECT 1
+                          FROM janus.ancestry AS {held}_above
+                          WHERE {held}_above.resource_type = @{Prefix}type
+                            AND {held}_above.resource_id = {row}
+                            AND {held}_above.ancestor_type = @{held}_on
+                            AND {held}_above.ancestor_id = {held}.{Identifier(relationship.ResourceColumn, nameof(relationship.ResourceColumn))}))
+                """));
+        }
+
+        return text.ToString();
+    }
+
+    private static string Alias(int index) =>
+        Prefix + "derived" + index.ToString(CultureInfo.InvariantCulture);
+
+    // A relation may be schema-qualified, and every part of it is held to what an
+    // unquoted identifier may be.
+    private static string Relation(string relation) =>
+        string.Join('.', relation.Split('.').Select(part => Identifier(part, nameof(relation))));
+
     // A fragment names the caller's row, so the two pieces of it that cannot be
     // parameters are held to what an unquoted identifier may be. Everything else the
     // fragment carries is a parameter (AUTHZ-GATE-002 AC3).
@@ -345,6 +465,20 @@ internal sealed class PermissionRule
         [Prefix + "groups"] = _subjects.Groups,
         [Prefix + "at"] = _at,
     };
+
+    // The fragment is the one rendering that reaches the host's own relations, so it
+    // is the one that names the type each derivation is declared on.
+    private Dictionary<string, object> FragmentParameters()
+    {
+        Dictionary<string, object> parameters = Parameters();
+
+        for (int index = 0; index < _derivations.Count; index++)
+        {
+            parameters[Alias(index) + "_on"] = _derivations[index].On.ToString();
+        }
+
+        return parameters;
+    }
 
     // The organization-wide rendering reads no ancestry, so it carries no resource
     // type: the statement would hold a parameter it never names.

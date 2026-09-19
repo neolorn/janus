@@ -160,14 +160,59 @@ public sealed class PermissionRuleTests
         foreach (string text in Renderings(rule))
         {
             Assert.All(
-                Read().Matches(text).Select(match => match.Groups[1].Value),
-                relation => Assert.True(
-                    relation.StartsWith("janus.", StringComparison.Ordinal)
-                        || string.Equals(relation, "unnest", StringComparison.Ordinal),
-                    relation));
+                Relations(text),
+                relation => Assert.StartsWith("janus.", relation, StringComparison.Ordinal));
         }
 
         Assert.Contains("janus_authz_row.id", rule.ToFragment("janus_authz_row", "id").Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// LIB-HOST-002 AC1: a derivation follows from a relation the host owns, and the
+    /// only rendering that names it is the fragment the host composes into its own
+    /// query; what the library runs over its own connection names nothing of the
+    /// host's (D-160).
+    /// </summary>
+    [Fact]
+    public void LIB_HOST_002_AC1_OnlyWhatTheHostRunsNamesTheRelationItDeclared()
+    {
+        PermissionRule rule = Rule(Reviewer());
+
+        Assert.All(
+            Relations(rule.ToCandidates().Text).Concat(Relations(rule.ToPage().Text)),
+            relation => Assert.StartsWith("janus.", relation, StringComparison.Ordinal));
+
+        Assert.All(
+            Relations(rule.ToFragment("janus_authz_row", "id").Text)
+                .Where(relation => !relation.StartsWith("janus.", StringComparison.Ordinal)),
+            relation => Assert.Equal("host.folders", relation));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-002 AC1, AC3: the derivation is rendered from the same rule as the
+    /// grants, the SQL naming the relation and the two columns the host declared and
+    /// carrying what it asks of them as parameters (D-160).
+    /// </summary>
+    [Fact]
+    public void AUTHZ_GATE_002_AC1_TheDerivedRenderingNamesWhatTheHostDeclared()
+    {
+        PermissionRule rule = Rule(Reviewer());
+
+        SqlFilter fragment = rule.ToFragment("janus_authz_row", "id");
+
+        Assert.Contains(
+            "FROM host.folders AS janus_authz_derived0",
+            fragment.Text,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "janus_authz_derived0.reviewer = ANY(@janus_authz_accounts)",
+            fragment.Text,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "ancestor_id = janus_authz_derived0.id",
+            fragment.Text,
+            StringComparison.Ordinal);
+        Assert.Equal("folder", Assert.IsType<string>(fragment.Parameters["janus_authz_derived0_on"]));
     }
 
     // What a rendering reads from, in the two words a statement names it by.
@@ -176,6 +221,18 @@ public sealed class PermissionRuleTests
         RegexOptions.None,
         TimeSpan.FromSeconds(1));
 
+    // The relations one rendering reads, less the function a page unpacks the
+    // identifiers it was given with.
+    private static IEnumerable<string> Relations(string text) =>
+        Read().Matches(text)
+            .Select(match => match.Groups[1].Value)
+            .Where(relation => !string.Equals(relation, "unnest", StringComparison.Ordinal));
+
+    // The relationship the host's domain declares, which the derivation on its folders
+    // follows from.
+    private static RelationshipDeclaration Reviewer() =>
+        HostDomain.Declared().Build().Relationships.Single();
+
     private static string[] Renderings(PermissionRule rule) =>
     [
         rule.ToFragment("janus_authz_row", "id").Text,
@@ -183,7 +240,7 @@ public sealed class PermissionRuleTests
         rule.ToPage().Text,
     ];
 
-    private static PermissionRule Rule()
+    private static PermissionRule Rule(params RelationshipDeclaration[] derivations)
     {
         var subjects = SubjectSet.Of(
             Subject(),
@@ -196,7 +253,8 @@ public sealed class PermissionRuleTests
             Document,
             new OrganizationId(Guid.NewGuid()),
             subjects,
-            DateTimeOffset.UnixEpoch);
+            DateTimeOffset.UnixEpoch,
+            derivations);
     }
 
     private static SubjectId Subject()

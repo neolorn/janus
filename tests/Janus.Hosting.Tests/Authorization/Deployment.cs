@@ -109,6 +109,89 @@ internal sealed class Deployment(HostFixture fixture)
     }
 
     /// <summary>
+    /// Writes the role a derivation confers, which the declaration names at startup
+    /// and which the deployment fills with what it allows.
+    /// </summary>
+    /// <param name="name">The role the derivation names.</param>
+    /// <param name="permissions">What the role allows.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The role.</returns>
+    public async Task<RoleName> NamedRoleAsync(
+        RoleName name,
+        IReadOnlyList<Permission> permissions,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(permissions);
+
+        await using NpgsqlConnection connection = await fixture.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO janus.roles (name) VALUES (@role) ON CONFLICT DO NOTHING;",
+            new { role = name.ToString() },
+            cancellationToken: cancellationToken));
+
+        foreach (Permission permission in permissions)
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                """
+                INSERT INTO janus.role_permissions (role, permission)
+                VALUES (@role, @permission)
+                ON CONFLICT DO NOTHING;
+                """,
+                new { role = name.ToString(), permission = permission.ToString() },
+                cancellationToken: cancellationToken));
+        }
+
+        return name;
+    }
+
+    /// <summary>
+    /// Writes the host's own fact that a subject reviews what is in a workspace.
+    /// </summary>
+    /// <param name="workspace">The workspace.</param>
+    /// <param name="reviewer">The person reviewing what is in it.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of writing it.</returns>
+    public async Task ReviewAsync(
+        ResourceReference workspace,
+        SubjectId reviewer,
+        CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await fixture.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO host.reviewers (workspace_id, reviewer)
+            VALUES (@workspace, @reviewer);
+            """,
+            new { workspace = workspace.Id.ToString(), reviewer = reviewer.Value },
+            cancellationToken: cancellationToken));
+    }
+
+    /// <summary>
+    /// Takes the host's own fact away again.
+    /// </summary>
+    /// <param name="workspace">The workspace.</param>
+    /// <param name="reviewer">The person who was reviewing what is in it.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of removing it.</returns>
+    public async Task UnreviewAsync(
+        ResourceReference workspace,
+        SubjectId reviewer,
+        CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await fixture.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            DELETE FROM host.reviewers
+            WHERE workspace_id = @workspace AND reviewer = @reviewer;
+            """,
+            new { workspace = workspace.Id.ToString(), reviewer = reviewer.Value },
+            cancellationToken: cancellationToken));
+    }
+
+    /// <summary>
     /// Writes an account.
     /// </summary>
     /// <param name="cancellationToken">Abandons the operation.</param>

@@ -283,7 +283,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 new FilterSources<HostDocument>(
                     reading.Ancestry,
                     reading.Grants,
-                    document => document.Id),
+                    document => document.Id)
+                    .Relationship("reviewer", reading.Reviewers),
                 TestContext.Current.CancellationToken));
     }
 

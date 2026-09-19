@@ -48,33 +48,48 @@ public sealed class AuthorizationDeclarationBuilder
     }
 
     /// <summary>
-    /// Declares a fact in the host's own data that a derivation may follow from: a
-    /// column of one of the host's tables naming a subject.
+    /// Declares a fact in the host's own data that a derivation may follow from: a row
+    /// of one of the host's relations naming a subject and one of its records. The two
+    /// selectors are read where the predicate is composed into the host's own query;
+    /// the relation is what the SQL rendering names.
     /// </summary>
-    /// <typeparam name="TResource">The host's own type.</typeparam>
+    /// <typeparam name="TRelationship">The host's own row.</typeparam>
     /// <param name="name">The relationship, in the language of the host's domain.</param>
     /// <param name="on">The resource type the fact is about.</param>
-    /// <param name="table">The host table holding it.</param>
-    /// <param name="subject">The field of that table naming the subject.</param>
+    /// <param name="relation">The relation holding it, as SQL names it.</param>
+    /// <param name="holder">The field of that row naming the subject.</param>
+    /// <param name="holderColumn">That field's column, as SQL names it.</param>
+    /// <param name="resource">The field of that row naming the record.</param>
+    /// <param name="resourceColumn">That field's column, as SQL names it.</param>
     /// <returns>This builder.</returns>
-    /// <exception cref="ArgumentNullException">The subject expression is absent.</exception>
+    /// <exception cref="ArgumentNullException">A selector is absent.</exception>
     /// <exception cref="ArgumentException">
-    /// A name is absent or blank, the resource type is not a well-formed name, or the
-    /// expression references no member.
+    /// A name is absent or blank, or the resource type is not a well-formed name.
     /// </exception>
-    public AuthorizationDeclarationBuilder Relationship<TResource>(
+    public AuthorizationDeclarationBuilder Relationship<TRelationship>(
         string name,
         string on,
-        string table,
-        Expression<Func<TResource, object?>> subject)
+        string relation,
+        Expression<Func<TRelationship, SubjectId>> holder,
+        string holderColumn,
+        Expression<Func<TRelationship, string>> resource,
+        string resourceColumn)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        ArgumentException.ThrowIfNullOrWhiteSpace(table);
-
-        string column = DeclaredMember.Of(subject);
+        ArgumentException.ThrowIfNullOrWhiteSpace(relation);
+        ArgumentException.ThrowIfNullOrWhiteSpace(holderColumn);
+        ArgumentException.ThrowIfNullOrWhiteSpace(resourceColumn);
+        ArgumentNullException.ThrowIfNull(holder);
+        ArgumentNullException.ThrowIfNull(resource);
 
         _relationships.Add(new RelationshipDeclaration(
-            name, ResourceType.Parse(on), table, column, [column]));
+            name,
+            ResourceType.Parse(on),
+            relation,
+            holderColumn,
+            resourceColumn,
+            holder,
+            resource));
 
         return this;
     }

@@ -64,6 +64,7 @@ public static class JanusRegistration
             services.GetRequiredService<AuthorizationModel>(),
             services.GetService<IAssuranceProvider>()));
 
+        services.AddScoped<Derivations>();
         services.AddScoped<IAccessGate, AccessGate>();
 
         return services;

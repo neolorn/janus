@@ -22,6 +22,11 @@ internal sealed class HostContext(DbContextOptions<HostContext> options) : DbCon
     public DbSet<HostDocument> Documents => Set<HostDocument>();
 
     /// <summary>
+    /// The host's own record of who reviews what is in a workspace.
+    /// </summary>
+    public DbSet<HostReviewer> Reviewers => Set<HostReviewer>();
+
+    /// <summary>
     /// The ancestry closure, read from the library's schema.
     /// </summary>
     public DbSet<AncestryEntry> Ancestry => Set<AncestryEntry>();
@@ -42,6 +47,16 @@ internal sealed class HostContext(DbContextOptions<HostContext> options) : DbCon
             document.HasKey(row => row.Id);
             document.Property(row => row.Id).HasColumnName("id");
             document.Property(row => row.Title).HasColumnName("title");
+        });
+
+        modelBuilder.Entity<HostReviewer>(reviewer =>
+        {
+            reviewer.ToTable("reviewers", "host");
+            reviewer.HasKey(row => new { row.WorkspaceId, row.Reviewer });
+            reviewer.Property(row => row.WorkspaceId).HasColumnName("workspace_id");
+            reviewer.Property(row => row.Reviewer)
+                .HasColumnName("reviewer")
+                .HasConversion(subject => subject.Value, value => new SubjectId(value));
         });
 
         modelBuilder.MapJanusAuthorization();

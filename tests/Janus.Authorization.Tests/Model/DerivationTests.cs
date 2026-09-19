@@ -37,9 +37,10 @@ public sealed class DerivationTests
                 string.Equals(relationship.Name, derivation.Relationship, StringComparison.Ordinal));
 
             Assert.NotNull(named);
-            Assert.NotEmpty(named.Table);
-            Assert.NotEmpty(named.SubjectColumn);
-            Assert.NotEmpty(named.Columns);
+            Assert.NotEmpty(named.Relation);
+            Assert.NotEmpty(named.HolderColumn);
+            Assert.NotEmpty(named.ResourceColumn);
+            Assert.Equal([named.HolderColumn, named.ResourceColumn], named.Columns);
         });
     }
 

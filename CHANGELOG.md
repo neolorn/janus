@@ -49,6 +49,12 @@ against the public contract of LIB-API-001.
   A grant or a revocation stating no reason is refused with `authz.grant.reasonrequired`.
   An expired grant confers nothing at the instant it is read, whether or not a sweep
   has run.
+- A derivation confers a role from a fact in the host's own data. The host declares the
+  relationship and hands its rows to the filter beside the ancestry and the grants, and
+  a listing then reaches everything that fact reaches, on the record or on anything
+  containing it, with no grant written and nothing to keep in sync. Removing the fact
+  removes the access on the next request, and a deny defeats a derived grant as it
+  defeats a written one.
 - `AccessContext` in `Janus.Core`: who is acting, whom they are acting for, and the
   named principal a background job runs as.
 - `GrantId`, `GroupId`, `GrantSubject` and `ResourceReference` in `Janus.Core`: what a

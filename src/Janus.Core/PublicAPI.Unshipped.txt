@@ -124,7 +124,7 @@ Janus.Core.AuthorizationDeclarationBuilder.Build() -> Janus.Core.AuthorizationDe
 Janus.Core.AuthorizationDeclarationBuilder.LawfulBasis(Janus.Core.LawfulBasisDeclaration! basis) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.Permission(string! permission) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.Permission(string! permission, bool reading) -> Janus.Core.AuthorizationDeclarationBuilder!
-Janus.Core.AuthorizationDeclarationBuilder.Relationship<TResource>(string! name, string! on, string! table, System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! subject) -> Janus.Core.AuthorizationDeclarationBuilder!
+Janus.Core.AuthorizationDeclarationBuilder.Relationship<TRelationship>(string! name, string! on, string! relation, System.Linq.Expressions.Expression<System.Func<TRelationship, Janus.Core.SubjectId>!>! holder, string! holderColumn, System.Linq.Expressions.Expression<System.Func<TRelationship, string!>!>! resource, string! resourceColumn) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.Resource<TResource>(string! name, System.Action<Janus.Core.ResourceTypeDeclarationBuilder<TResource>!>! declare) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.SensitiveCategory(string! category) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.StepUpGate(string! permission, string! gate) -> Janus.Core.AuthorizationDeclarationBuilder!
@@ -375,6 +375,8 @@ Janus.Core.FilterSources<TResource>.Ancestry.get -> System.Linq.IQueryable<Janus
 Janus.Core.FilterSources<TResource>.FilterSources(System.Linq.IQueryable<Janus.Core.AncestryEntry!>! ancestry, System.Linq.IQueryable<Janus.Core.EffectiveGrant!>! grants, System.Linq.Expressions.Expression<System.Func<TResource, string!>!>! identifier) -> void
 Janus.Core.FilterSources<TResource>.Grants.get -> System.Linq.IQueryable<Janus.Core.EffectiveGrant!>!
 Janus.Core.FilterSources<TResource>.Identifier.get -> System.Linq.Expressions.Expression<System.Func<TResource, string!>!>!
+Janus.Core.FilterSources<TResource>.Relationship<TRelationship>(string! name, System.Linq.IQueryable<TRelationship>! rows) -> Janus.Core.FilterSources<TResource>!
+Janus.Core.FilterSources<TResource>.Relationships.get -> System.Collections.Generic.IReadOnlyDictionary<string!, Janus.Core.RelationshipRows!>!
 Janus.Core.Gate
 Janus.Core.Gate.<Clone>$() -> Janus.Core.Gate!
 Janus.Core.Gate.Deconstruct(out Janus.Core.GateLevel Level, out bool PhishingResistant, out System.TimeSpan MaximumAge) -> void
@@ -575,18 +577,24 @@ Janus.Core.PurposeDeclaration.PurposeDeclaration(string! Name, string! Basis, st
 Janus.Core.RelationshipDeclaration
 Janus.Core.RelationshipDeclaration.<Clone>$() -> Janus.Core.RelationshipDeclaration!
 Janus.Core.RelationshipDeclaration.Columns.get -> System.Collections.Generic.IReadOnlyList<string!>!
-Janus.Core.RelationshipDeclaration.Columns.init -> void
-Janus.Core.RelationshipDeclaration.Deconstruct(out string! Name, out Janus.Core.ResourceType On, out string! Table, out string! SubjectColumn, out System.Collections.Generic.IReadOnlyList<string!>! Columns) -> void
+Janus.Core.RelationshipDeclaration.Deconstruct(out string! Name, out Janus.Core.ResourceType On, out string! Relation, out string! HolderColumn, out string! ResourceColumn, out System.Linq.Expressions.LambdaExpression! Holder, out System.Linq.Expressions.LambdaExpression! Resource) -> void
 Janus.Core.RelationshipDeclaration.Equals(Janus.Core.RelationshipDeclaration? other) -> bool
+Janus.Core.RelationshipDeclaration.Holder.get -> System.Linq.Expressions.LambdaExpression!
+Janus.Core.RelationshipDeclaration.Holder.init -> void
+Janus.Core.RelationshipDeclaration.HolderColumn.get -> string!
+Janus.Core.RelationshipDeclaration.HolderColumn.init -> void
 Janus.Core.RelationshipDeclaration.Name.get -> string!
 Janus.Core.RelationshipDeclaration.Name.init -> void
 Janus.Core.RelationshipDeclaration.On.get -> Janus.Core.ResourceType
 Janus.Core.RelationshipDeclaration.On.init -> void
-Janus.Core.RelationshipDeclaration.RelationshipDeclaration(string! Name, Janus.Core.ResourceType On, string! Table, string! SubjectColumn, System.Collections.Generic.IReadOnlyList<string!>! Columns) -> void
-Janus.Core.RelationshipDeclaration.SubjectColumn.get -> string!
-Janus.Core.RelationshipDeclaration.SubjectColumn.init -> void
-Janus.Core.RelationshipDeclaration.Table.get -> string!
-Janus.Core.RelationshipDeclaration.Table.init -> void
+Janus.Core.RelationshipDeclaration.Relation.get -> string!
+Janus.Core.RelationshipDeclaration.Relation.init -> void
+Janus.Core.RelationshipDeclaration.RelationshipDeclaration(string! Name, Janus.Core.ResourceType On, string! Relation, string! HolderColumn, string! ResourceColumn, System.Linq.Expressions.LambdaExpression! Holder, System.Linq.Expressions.LambdaExpression! Resource) -> void
+Janus.Core.RelationshipDeclaration.Resource.get -> System.Linq.Expressions.LambdaExpression!
+Janus.Core.RelationshipDeclaration.Resource.init -> void
+Janus.Core.RelationshipDeclaration.ResourceColumn.get -> string!
+Janus.Core.RelationshipDeclaration.ResourceColumn.init -> void
+Janus.Core.RelationshipRows
 Janus.Core.ResourceId
 Janus.Core.ResourceId.Equals(Janus.Core.ResourceId other) -> bool
 Janus.Core.ResourceId.ResourceId() -> void
@@ -1222,6 +1230,7 @@ static Janus.Core.SystemPrincipal.ForOrganization(string! name, string! reason, 
 static Janus.Core.Username.TryParse(string! entered, out Janus.Core.Username username) -> bool
 static Janus.Core.Username.operator !=(Janus.Core.Username left, Janus.Core.Username right) -> bool
 static Janus.Core.Username.operator ==(Janus.Core.Username left, Janus.Core.Username right) -> bool
+virtual Janus.Core.RelationshipRows.Invoke(System.Linq.Expressions.LambdaExpression! predicate) -> System.Linq.Expressions.Expression!
 ~override Janus.Core.AuditAction.Equals(object obj) -> bool
 ~override Janus.Core.AuditRecordId.Equals(object obj) -> bool
 ~override Janus.Core.Configuration.ConfigurationKey.Equals(object obj) -> bool
