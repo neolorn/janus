@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
+using Janus.Authentication.Factors;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests.Policies;
@@ -683,6 +684,201 @@ public sealed class SessionServiceTests : IAsyncDisposable
         Assert.Equal(1, _work.Committed);
     }
 
+    /// <summary>
+    /// AUTH-FACT-002 AC1: an entry the deployment leaves off signs nothing in until
+    /// the applicable policy names it, and naming it is the whole of enabling it.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002_AC1_AnEntryOffByDefaultSignsInOnlyWhenNamedAsync()
+    {
+        Assert.Equal(
+            ErrorCodes.FactorNotPermitted,
+            Refusal(await Service.BeginAsync(
+                Subject(),
+                [Factor.EmailLink],
+                Somewhere,
+                TestContext.Current.CancellationToken)));
+
+        Policy shipped = Janus.Core.Policies.SystemDefault;
+
+        _configuration.Set(
+            Settings.PolicyDefault,
+            new Policy(
+                shipped.RequiredAssurance,
+                new HashSet<Factor>(shipped.LoginFactors) { Factor.EmailLink },
+                shipped.Gates,
+                shipped.CredentialRedundancy,
+                shipped.SelfServiceRecovery,
+                shipped.EmailDomains));
+
+        Assert.Null(Refusal(await Service.BeginAsync(
+            Subject(),
+            [Factor.EmailLink],
+            Somewhere,
+            TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC2: removing an entry from the policy blocks it for the
+    /// organization at the next sign-in, with nothing deployed in between.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002_AC2_RemovingAnEntryBlocksItWithoutADeployAsync()
+    {
+        var organization = OrganizationId.New(_clock);
+        SubjectId subject = Subject();
+
+        _memberships.Place(subject, organization);
+        Admits(organization, Factor.Password, Factor.Totp);
+
+        Assert.Null(Refusal(await Service.BeginAsync(
+            subject,
+            [Factor.Password, Factor.Totp],
+            Somewhere,
+            TestContext.Current.CancellationToken)));
+
+        Admits(organization, Factor.Password, Factor.SecurityKey);
+
+        Assert.Equal(
+            ErrorCodes.FactorNotPermitted,
+            Refusal(await Service.BeginAsync(
+                subject,
+                [Factor.Password, Factor.Totp],
+                Somewhere,
+                TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002a AC1: a provider's word is the whole of the sign-in, so the
+    /// session is usable at once and nothing further is asked.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002a_AC1_ASocialSignInYieldsAUsableSessionAtOnceAsync()
+    {
+        IssuedSession issued = await BegunAsync(Subject(), [Factor.Google]);
+
+        Assert.Null(await RefusalAsync(issued.Secret));
+        Assert.Equal([Factor.Google], Assert.Single(_audit.Records).Presented);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002a AC2: a second step is second to a password, so an account that
+    /// signed in on a provider's word is asked for none, whatever it has enrolled.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_002a_AC2_ASocialSignInIsNoSecondStepsFirst()
+    {
+        Assert.False(SecondStep.Is(Factor.Google));
+        Assert.False(SecondStep.Is(Factor.Apple));
+        Assert.Empty(SecondStep.Offerable(
+            password: false,
+            FactorCatalogue.Entries.Keys.ToFrozenSet()));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002a AC3: the session records no tier of ours, the provider having
+    /// asserted none.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002a_AC3_TheSessionRecordsDelegatedAsync()
+    {
+        IssuedSession issued = await BegunAsync(Subject(), [Factor.Apple]);
+
+        Assert.Equal(AssuranceLevel.Delegated, _sessions.Behind(issued.Secret)!.Attained);
+    }
+
+    /// <summary>
+    /// AUTH-SESS-004 AC1: each application answers to its own secret, so the one
+    /// taken from a compromised application opens nothing else.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_004_AC1_ACompromisedApplicationsSessionOpensNoOtherAsync()
+    {
+        IssuedSession record = await BegunAsync(Subject(), [Factor.Passkey]);
+        IssuedSession first = Value(await Service.DeriveAsync(
+            record.Id,
+            SessionType.PerApp,
+            Somewhere,
+            TestContext.Current.CancellationToken));
+        IssuedSession second = Value(await Service.DeriveAsync(
+            record.Id,
+            SessionType.PerApp,
+            Somewhere,
+            TestContext.Current.CancellationToken));
+
+        Assert.NotEqual(first.Secret.Value, second.Secret.Value);
+        Assert.NotEqual(_sessions.Behind(first.Secret)!.Id, _sessions.Behind(second.Secret)!.Id);
+        Assert.Null(_sessions.Behind(OpaqueToken.Of(first.Secret.Value + "x")));
+    }
+
+    /// <summary>
+    /// AUTH-SESS-004 AC2: the record is what the next application derives from, so
+    /// arriving at it asks the person for nothing and authenticates nobody again.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_004_AC2_AnotherApplicationDerivesWithoutReauthenticatingAsync()
+    {
+        IssuedSession record = await BegunAsync(Subject(), [Factor.Passkey]);
+
+        _audit.Records.Clear();
+
+        IssuedSession app = Value(await Service.DeriveAsync(
+            record.Id,
+            SessionType.PerApp,
+            Somewhere,
+            TestContext.Current.CancellationToken));
+
+        Assert.Null(await RefusalAsync(app.Secret));
+        Assert.Empty(_audit.Records);
+    }
+
+    /// <summary>
+    /// AUTH-SESS-005 AC6: an organization whose policy asks for the higher tier gets
+    /// the shorter pair of lifetimes, and a principal outside it keeps the longer.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_005_AC6_AnOrganizationsShorterTimeoutAppliesAsync()
+    {
+        IssuedSession shorter = await BegunAsync(Staff(), [Factor.Passkey]);
+        IssuedSession longer = await BegunAsync(Subject(), [Factor.Passkey]);
+
+        Assert.Equal(
+            Noon + Settings.SessionAal2Inactivity.Default,
+            _sessions.Behind(shorter.Secret)!.IdleExpiry);
+        Assert.Equal(
+            Noon + Settings.SessionDefaultInactivity.Default,
+            _sessions.Behind(longer.Secret)!.IdleExpiry);
+    }
+
+    /// <summary>
+    /// AUTH-SESS-008 AC2: the record every application stands on is gone too, so the
+    /// next application signs nobody back in.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_008_AC2_AnotherApplicationRequiresAuthenticationAfterLogoutAsync()
+    {
+        SubjectId subject = Subject();
+        IssuedSession record = await BegunAsync(subject, [Factor.Password]);
+        IssuedSession app = Value(await Service.DeriveAsync(
+            record.Id,
+            SessionType.PerApp,
+            Somewhere,
+            TestContext.Current.CancellationToken));
+
+        await Service.EndEverywhereAsync(
+            AccessContext.Of(subject),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.SessionExpired, await RefusalAsync(app.Secret));
+        Assert.Equal(
+            ErrorCodes.SessionExpired,
+            Refusal(await Service.DeriveAsync(
+                record.Id,
+                SessionType.PerApp,
+                Somewhere,
+                TestContext.Current.CancellationToken)));
+    }
+
     private static PolicyOverride Tightened() =>
         new(
             AssuranceLevel.Aal2,
@@ -702,6 +898,12 @@ public sealed class SessionServiceTests : IAsyncDisposable
         result.Match<ErrorCode?>(_ => null, error => error.Code);
 
     private SubjectId Subject() => SubjectId.New(_randomness);
+
+    private void Admits(OrganizationId organization, params Factor[] factors) =>
+        _configuration.Set(
+            Settings.OrganizationPolicy,
+            organization.ToString(),
+            new PolicyOverride(null, factors.ToFrozenSet(), null, null, null, null));
 
     private SubjectId Staff(params Factor[] factors)
     {

@@ -1,4 +1,7 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using Janus.Authentication.Factors;
 using Janus.Core;
 using Xunit;
@@ -122,6 +125,96 @@ public sealed class AssuranceTests
         Assert.Equal(
             new Assurance(AssuranceLevel.Aal2, PhishingResistant: true),
             Assurance.Proved(Properties([Factor.Password, Factor.SecurityKey])));
+
+    /// <summary>
+    /// AUTH-SESS-005a AC2: a session opened on a provider's word alone records no
+    /// tier of ours, whichever provider it was.
+    /// </summary>
+    /// <param name="provider">The provider.</param>
+    [Theory]
+    [InlineData(Factor.Google)]
+    [InlineData(Factor.Apple)]
+    public void AUTH_SESS_005a_AC2_ASocialOnlySessionRecordsDelegated(Factor provider) =>
+        Assert.Equal(
+            new Assurance(AssuranceLevel.Delegated, PhishingResistant: false),
+            Assurance.Reached(Properties([provider])));
+
+    /// <summary>
+    /// AUTH-SESS-005a AC2b and AUTH-FACT-002 AC5: a password and a code sent by SMS
+    /// reach the second tier and resist no relay.
+    /// </summary>
+    [Fact]
+    public void AUTH_SESS_005a_AC2b_APasswordAndAnSmsCodeReachAal2WithoutRelayResistance() =>
+        Assert.Equal(
+            new Assurance(AssuranceLevel.Aal2, PhishingResistant: false),
+            Assurance.Reached(Properties([Factor.Password, Factor.PhoneCode])));
+
+    /// <summary>
+    /// AUTH-SESS-005a AC3: the arithmetic reads the catalogue's properties and has no
+    /// other input, so nothing an external provider asserts can raise a tier.
+    /// </summary>
+    [Fact]
+    public void AUTH_SESS_005a_AC3_NoLevelIsDerivedFromAnExternalClaim()
+    {
+        ParameterInfo only = Assert.Single(
+            typeof(Assurance).GetMethod(nameof(Assurance.Reached))!.GetParameters());
+
+        Assert.Equal(typeof(IReadOnlyCollection<FactorProperties>), only.ParameterType);
+        Assert.Equal(
+            Assurance.Reached(Properties([Factor.Google])),
+            Assurance.Reached(Properties([Factor.Apple])));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC5: a link sent by SMS signs in at the first tier on its own.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_002_AC5_APhoneLinkAloneRecordsAal1() =>
+        Assert.Equal(
+            new Assurance(AssuranceLevel.Aal1, PhishingResistant: false),
+            Assurance.Reached(Properties([Factor.PhoneLink])));
+
+    /// <summary>
+    /// AUTH-FACT-001 AC2: an entry registered as relay-resistant reaches what its
+    /// properties say and satisfies the rules that read them, none of which changes
+    /// to admit it.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_001_AC2_ANewRelayResistantFactorSatisfiesTheRulesUnchanged()
+    {
+        var registered = new FactorProperties(
+            CanBePrimary: true,
+            CanBeSecondFactor: true,
+            IsPhishingResistant: true,
+            AssuranceLevel.Aal2,
+            VerificationOnly: false,
+            SignInOnly: false,
+            IsWebAuthn: false,
+            IsDiscoverable: true,
+            SingleUse: false);
+
+        Assert.Equal(
+            new Assurance(AssuranceLevel.Aal2, PhishingResistant: true),
+            Assurance.Reached([registered]));
+        Assert.Equal(
+            new Assurance(AssuranceLevel.Aal2, PhishingResistant: true),
+            Assurance.Proved([registered]));
+    }
+
+    /// <summary>
+    /// AUTH-SESS-002 AC3: a step-up rule carries a tier, whether relay resistance is
+    /// asked and how recently it was proved, and no field for a factor.
+    /// </summary>
+    [Fact]
+    public void AUTH_SESS_002_AC3_AStepUpRuleIsALevelAResistanceAndAnAge()
+    {
+        string[] held = [.. typeof(Gate).GetProperties().Select(property => property.Name).Order(StringComparer.Ordinal)];
+
+        Assert.Equal(["Level", "MaximumAge", "PhishingResistant"], held);
+        Assert.DoesNotContain(
+            typeof(Gate).GetProperties(),
+            property => property.PropertyType == typeof(Factor));
+    }
 
     private static FactorProperties[] Properties(Factor[] presented)
     {

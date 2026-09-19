@@ -152,6 +152,43 @@ public sealed class BrowserCookieTests : IDisposable
     }
 
     /// <summary>
+    /// AUTH-SESS-003 AC1: the session token is in a cookie the browser will not hand
+    /// to a script, and the library writes to no browser store at all. The one value
+    /// a script does read is the synchronizer token, which is not a session token and
+    /// is what BFF-CSRF-006 requires it to read.
+    /// </summary>
+    [Fact]
+    public void AUTH_SESS_003_AC1_NoSessionTokenIsReadableByAScript()
+    {
+        Assert.Contains(
+            "httponly",
+            Written(JanusApplication.Public, SessionCookie),
+            StringComparison.OrdinalIgnoreCase);
+
+        Assert.Empty(Repository
+            .Sources()
+            .Where(file => File.ReadLines(file).Any(line =>
+                line.Contains("localStorage", StringComparison.Ordinal)
+                || line.Contains("sessionStorage", StringComparison.Ordinal)))
+            .Select(Path.GetFileName)
+            .Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// AUTH-SESS-003 AC2: the cookie carries the four attributes on every issue.
+    /// </summary>
+    [Fact]
+    public void AUTH_SESS_003_AC2_TheCookieCarriesAllFourAttributes()
+    {
+        string written = Written(JanusApplication.Management, SessionCookie);
+
+        Assert.StartsWith("__Host-", written, StringComparison.Ordinal);
+        Assert.Contains("secure", written, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("httponly", written, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("samesite=strict", written, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// BFF-SESS-002 AC2: no configuration key weakens an attribute, there being no
     /// key read anywhere the attributes are decided.
     /// </summary>
