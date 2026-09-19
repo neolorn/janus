@@ -256,6 +256,97 @@ internal sealed class Deployment(HostFixture fixture)
     }
 
     /// <summary>
+    /// Moves a record under another container, rewriting its ancestry.
+    /// </summary>
+    /// <param name="reference">The record that moves. It holds nothing beneath it.</param>
+    /// <param name="containedIn">Its new container.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of writing it.</returns>
+    public async Task MoveAsync(
+        ResourceReference reference,
+        ResourceReference containedIn,
+        CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await fixture.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE janus.resources
+            SET contained_in_type = @containerType, contained_in_id = @containerId
+            WHERE resource_type = @type AND resource_id = @id;
+
+            DELETE FROM janus.ancestry
+            WHERE resource_type = @type AND resource_id = @id AND depth > 0;
+
+            INSERT INTO janus.ancestry
+                (resource_type, resource_id, ancestor_type, ancestor_id, depth, organization)
+            SELECT @type, @id, above.ancestor_type, above.ancestor_id, above.depth + 1,
+                   @organization
+            FROM janus.ancestry AS above
+            WHERE above.resource_type = @containerType AND above.resource_id = @containerId;
+            """,
+            new
+            {
+                type = reference.Type.ToString(),
+                id = reference.Id.ToString(),
+                containerType = containedIn.Type.ToString(),
+                containerId = containedIn.Id.ToString(),
+                organization = Organization.Value,
+            },
+            cancellationToken: cancellationToken));
+    }
+
+    /// <summary>
+    /// Revokes a grant.
+    /// </summary>
+    /// <param name="grant">Which grant.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of writing it.</returns>
+    public async Task RevokeAsync(GrantId grant, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await fixture.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE janus.grants
+            SET revoked_at = @at, revoked_by = @by, revocation_reason = @reason
+            WHERE id = @id;
+            """,
+            new
+            {
+                id = grant.Value,
+                at = Noon,
+                by = _granter.Value,
+                reason = "The reason the grant was taken away.",
+            },
+            cancellationToken: cancellationToken));
+    }
+
+    /// <summary>
+    /// Adds a permission to a role, or takes one away.
+    /// </summary>
+    /// <param name="role">Which role.</param>
+    /// <param name="permission">Which permission.</param>
+    /// <param name="allows">Whether the role allows it afterwards.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of writing it.</returns>
+    public async Task AllowAsync(
+        RoleName role,
+        Permission permission,
+        bool allows,
+        CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await fixture.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            allows
+                ? "INSERT INTO janus.role_permissions (role, permission) VALUES (@role, @permission);"
+                : "DELETE FROM janus.role_permissions WHERE role = @role AND permission = @permission;",
+            new { role = role.ToString(), permission = permission.ToString() },
+            cancellationToken: cancellationToken));
+    }
+
+    /// <summary>
     /// Writes a grant.
     /// </summary>
     /// <param name="subject">Who holds it.</param>
