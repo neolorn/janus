@@ -10,6 +10,10 @@ namespace Janus.Core;
 /// <param name="ResourceTypes">The kinds of thing the host holds.</param>
 /// <param name="Relationships">The facts in the host's data a derivation may follow from.</param>
 /// <param name="Permissions">The permissions the host declares, beside the library's own.</param>
+/// <param name="ReadingActions">
+/// The actions the host declares to be reading rather than modifying, beside the three
+/// that are reading by name.
+/// </param>
 /// <param name="LawfulBases">The closed list a purpose's basis is drawn from.</param>
 /// <param name="SensitiveCategories">The closed list a type's sensitivity is drawn from.</param>
 /// <remarks>
@@ -21,5 +25,6 @@ public sealed record AuthorizationDeclaration(
     IReadOnlyList<ResourceTypeDeclaration> ResourceTypes,
     IReadOnlyList<RelationshipDeclaration> Relationships,
     IReadOnlyList<Permission> Permissions,
+    IReadOnlyList<string> ReadingActions,
     IReadOnlyList<LawfulBasisDeclaration> LawfulBases,
     IReadOnlyList<string> SensitiveCategories);

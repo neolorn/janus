@@ -91,7 +91,7 @@ public sealed class PermissionRuleTests
     [Fact]
     public void AUTHZ_GRANT_001_AC2_TheOrganizationRenderingReadsNoAncestry()
     {
-        var subjects = SubjectSet.Of(Subject(), [], 0);
+        var subjects = SubjectSet.Of(Subject(), [], 0, restricted: false);
         var rule = new PermissionRule(
             [Permission.Parse("audit:read")],
             new OrganizationId(Guid.NewGuid()),
@@ -185,7 +185,11 @@ public sealed class PermissionRuleTests
 
     private static PermissionRule Rule()
     {
-        var subjects = SubjectSet.Of(Subject(), [GroupId.New(TimeProvider.System)], 3);
+        var subjects = SubjectSet.Of(
+            Subject(),
+            [GroupId.New(TimeProvider.System)],
+            3,
+            restricted: false);
 
         return new PermissionRule(
             [Permission.Parse("document:read"), Permission.Parse("document:edit")],

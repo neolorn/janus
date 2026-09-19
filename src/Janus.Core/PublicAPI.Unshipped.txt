@@ -101,13 +101,15 @@ Janus.Core.AuditRecordId.Value.get -> System.Guid
 Janus.Core.AuditRecordId.Value.init -> void
 Janus.Core.AuthorizationDeclaration
 Janus.Core.AuthorizationDeclaration.<Clone>$() -> Janus.Core.AuthorizationDeclaration!
-Janus.Core.AuthorizationDeclaration.AuthorizationDeclaration(System.Collections.Generic.IReadOnlyList<Janus.Core.ResourceTypeDeclaration!>! ResourceTypes, System.Collections.Generic.IReadOnlyList<Janus.Core.RelationshipDeclaration!>! Relationships, System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, System.Collections.Generic.IReadOnlyList<Janus.Core.LawfulBasisDeclaration!>! LawfulBases, System.Collections.Generic.IReadOnlyList<string!>! SensitiveCategories) -> void
-Janus.Core.AuthorizationDeclaration.Deconstruct(out System.Collections.Generic.IReadOnlyList<Janus.Core.ResourceTypeDeclaration!>! ResourceTypes, out System.Collections.Generic.IReadOnlyList<Janus.Core.RelationshipDeclaration!>! Relationships, out System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, out System.Collections.Generic.IReadOnlyList<Janus.Core.LawfulBasisDeclaration!>! LawfulBases, out System.Collections.Generic.IReadOnlyList<string!>! SensitiveCategories) -> void
+Janus.Core.AuthorizationDeclaration.AuthorizationDeclaration(System.Collections.Generic.IReadOnlyList<Janus.Core.ResourceTypeDeclaration!>! ResourceTypes, System.Collections.Generic.IReadOnlyList<Janus.Core.RelationshipDeclaration!>! Relationships, System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, System.Collections.Generic.IReadOnlyList<string!>! ReadingActions, System.Collections.Generic.IReadOnlyList<Janus.Core.LawfulBasisDeclaration!>! LawfulBases, System.Collections.Generic.IReadOnlyList<string!>! SensitiveCategories) -> void
+Janus.Core.AuthorizationDeclaration.Deconstruct(out System.Collections.Generic.IReadOnlyList<Janus.Core.ResourceTypeDeclaration!>! ResourceTypes, out System.Collections.Generic.IReadOnlyList<Janus.Core.RelationshipDeclaration!>! Relationships, out System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions, out System.Collections.Generic.IReadOnlyList<string!>! ReadingActions, out System.Collections.Generic.IReadOnlyList<Janus.Core.LawfulBasisDeclaration!>! LawfulBases, out System.Collections.Generic.IReadOnlyList<string!>! SensitiveCategories) -> void
 Janus.Core.AuthorizationDeclaration.Equals(Janus.Core.AuthorizationDeclaration? other) -> bool
 Janus.Core.AuthorizationDeclaration.LawfulBases.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.LawfulBasisDeclaration!>!
 Janus.Core.AuthorizationDeclaration.LawfulBases.init -> void
 Janus.Core.AuthorizationDeclaration.Permissions.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>!
 Janus.Core.AuthorizationDeclaration.Permissions.init -> void
+Janus.Core.AuthorizationDeclaration.ReadingActions.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Janus.Core.AuthorizationDeclaration.ReadingActions.init -> void
 Janus.Core.AuthorizationDeclaration.Relationships.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.RelationshipDeclaration!>!
 Janus.Core.AuthorizationDeclaration.Relationships.init -> void
 Janus.Core.AuthorizationDeclaration.ResourceTypes.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.ResourceTypeDeclaration!>!
@@ -119,6 +121,7 @@ Janus.Core.AuthorizationDeclarationBuilder.AuthorizationDeclarationBuilder() -> 
 Janus.Core.AuthorizationDeclarationBuilder.Build() -> Janus.Core.AuthorizationDeclaration!
 Janus.Core.AuthorizationDeclarationBuilder.LawfulBasis(Janus.Core.LawfulBasisDeclaration! basis) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.Permission(string! permission) -> Janus.Core.AuthorizationDeclarationBuilder!
+Janus.Core.AuthorizationDeclarationBuilder.Permission(string! permission, bool reading) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.Relationship<TResource>(string! name, string! on, string! table, System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! subject) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.Resource<TResource>(string! name, System.Action<Janus.Core.ResourceTypeDeclarationBuilder<TResource>!>! declare) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.SensitiveCategory(string! category) -> Janus.Core.AuthorizationDeclarationBuilder!

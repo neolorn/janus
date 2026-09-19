@@ -136,6 +136,22 @@ internal sealed class Deployment(HostFixture fixture)
     }
 
     /// <summary>
+    /// Restricts an account's processing, as a data subject's request does.
+    /// </summary>
+    /// <param name="subject">The account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of writing it.</returns>
+    public async Task RestrictAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await fixture.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE janus.accounts SET state = 'restricted' WHERE subject = @subject;",
+            new { subject = subject.Value },
+            cancellationToken: cancellationToken));
+    }
+
+    /// <summary>
     /// Writes a group.
     /// </summary>
     /// <param name="cancellationToken">Abandons the operation.</param>

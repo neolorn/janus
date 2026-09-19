@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -41,6 +42,16 @@ internal sealed class AccessGate(
     private static readonly IReadOnlyDictionary<Permission, IReadOnlySet<CapabilityResidual>>
         NoResiduals = new Dictionary<Permission, IReadOnlySet<CapabilityResidual>>();
 
+    // What a restriction leaves outstanding on a modifying action it stands in the way
+    // of (chapter 10 section 5.20).
+    private static readonly IReadOnlySet<CapabilityResidual> RestrictedResidual =
+        new HashSet<CapabilityResidual> { CapabilityResidual.Restricted }.ToFrozenSet();
+
+    // A restriction admits no modifying action, so what the host composes into its
+    // query is a fragment that matches nothing rather than a rule that cannot match.
+    private static readonly SqlFilter MatchesNothing =
+        new("false", new Dictionary<string, object>(StringComparer.Ordinal));
+
     /// <inheritdoc/>
     public async ValueTask<Result> RequireAsync(
         AccessContext context,
@@ -48,6 +59,11 @@ internal sealed class AccessGate(
         ResourceReference resource,
         CancellationToken cancellationToken)
     {
+        if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
+        {
+            return Result.Failure(Error.From(ErrorCodes.Restricted));
+        }
+
         Decision decided = await DecideAsync(context, permission, resource, cancellationToken)
             .ConfigureAwait(false);
 
@@ -68,6 +84,11 @@ internal sealed class AccessGate(
         OrganizationId organization,
         CancellationToken cancellationToken)
     {
+        if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
+        {
+            return Result.Failure(Error.From(ErrorCodes.Restricted));
+        }
+
         CandidateGrant? decided = await HoldsAsync(context, permission, organization, cancellationToken)
             .ConfigureAwait(false);
 
@@ -151,6 +172,11 @@ internal sealed class AccessGate(
         FilterSources<TResource> sources,
         CancellationToken cancellationToken)
     {
+        if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
+        {
+            return Result.Success<Expression<Func<TResource, bool>>>(_ => false);
+        }
+
         PermissionRule rule = await RuleAsync(
             context,
             [permission],
@@ -171,6 +197,11 @@ internal sealed class AccessGate(
         string column,
         CancellationToken cancellationToken)
     {
+        if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
+        {
+            return Result.Success(MatchesNothing);
+        }
+
         PermissionRule rule = await RuleAsync(
             context,
             [permission],
@@ -208,25 +239,25 @@ internal sealed class AccessGate(
             return Nothing(resources);
         }
 
-        var rule = new PermissionRule(
-            permissions,
-            type,
-            first.Organization,
-            await subjects.OfAsync(context, cancellationToken).ConfigureAwait(false),
-            time.GetUtcNow());
+        SubjectSet set = await subjects.OfAsync(context, cancellationToken).ConfigureAwait(false);
+
+        var rule = new PermissionRule(permissions, type, first.Organization, set, time.GetUtcNow());
 
         IReadOnlyList<PageCapability> conferred = await evaluator
             .PageAsync(rule.ToPage(), resources, cancellationToken)
             .ConfigureAwait(false);
 
         return Result.Success<IReadOnlyList<Capability>>(
-            [.. resources.Select(resource => Held(resource, conferred))]);
+            [.. resources.Select(resource => Held(resource, conferred, set.Restricted))]);
     }
 
     // AUTHZ-GATE-005: a capability is permitted by grants; what it still requires is
     // what the per-row query does not evaluate. Nothing is outstanding on a permission
     // the grants do not confer at all, so only the conferred ones carry residuals.
-    private static Capability Held(ResourceId resource, IReadOnlyList<PageCapability> conferred)
+    private Capability Held(
+        ResourceId resource,
+        IReadOnlyList<PageCapability> conferred,
+        bool restricted)
     {
         HashSet<Permission> can =
         [
@@ -236,7 +267,16 @@ internal sealed class AccessGate(
                 .Select(row => Permission.Parse(row.Permission)),
         ];
 
-        return new Capability(resource, can, NoResiduals);
+        if (!restricted)
+        {
+            return new Capability(resource, can, NoResiduals);
+        }
+
+        return new Capability(
+            resource,
+            can,
+            can.Where(permission => !model.IsReading(permission))
+                .ToDictionary(permission => permission, _ => RestrictedResidual));
     }
 
     private static Result<IReadOnlyList<Capability>> Nothing(IReadOnlyList<ResourceId> resources) =>
@@ -308,6 +348,15 @@ internal sealed class AccessGate(
             "correlation",
             JsonSerializer.SerializeToElement(correlation.Value)));
     }
+
+    // AUTHZ-GATE-006: a restriction leaves the account's reading actions and refuses
+    // every modifying one, wherever the gate is evaluated (D-160).
+    private async ValueTask<bool> RestrictedAsync(
+        AccessContext context,
+        Permission permission,
+        CancellationToken cancellationToken) =>
+        !model.IsReading(permission)
+        && (await subjects.OfAsync(context, cancellationToken).ConfigureAwait(false)).Restricted;
 
     private async ValueTask<PermissionRule> RuleAsync(
         AccessContext context,

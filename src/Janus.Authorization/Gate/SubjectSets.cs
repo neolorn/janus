@@ -14,6 +14,7 @@ namespace Janus.Authorization.Gate;
 /// </summary>
 /// <param name="groups">Where the transitive group set is read from.</param>
 /// <param name="grants">Where the counter the set is keyed by is read from.</param>
+/// <param name="restrictions">Where the account's processing restriction is read from.</param>
 /// <remarks>
 /// Implements AUTHZ-GROUP-002 and AUTHZ-CACHE-001. Ten checks in one request resolve
 /// membership once. What is held is the group set and the counter it was read at, never
@@ -21,7 +22,10 @@ namespace Janus.Authorization.Gate;
 /// live at every check. The instance lives for the operation, so nothing outlives the
 /// transaction that could change it.
 /// </remarks>
-internal sealed class SubjectSets(IGroupStore groups, IGrantStore grants)
+internal sealed class SubjectSets(
+    IGroupStore groups,
+    IGrantStore grants,
+    ISubjectRestrictions restrictions)
 {
     private readonly Dictionary<SubjectId, SubjectSet> _resolved = [];
 
@@ -56,7 +60,12 @@ internal sealed class SubjectSets(IGroupStore groups, IGrantStore grants)
             .ConfigureAwait(false);
 
         long version = await grants.VersionAsync(subject, cancellationToken).ConfigureAwait(false);
-        var resolved = SubjectSet.Of(subject, belongsTo, version);
+
+        bool restricted = await restrictions
+            .IsRestrictedAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        var resolved = SubjectSet.Of(subject, belongsTo, version, restricted);
 
         _resolved[subject] = resolved;
 

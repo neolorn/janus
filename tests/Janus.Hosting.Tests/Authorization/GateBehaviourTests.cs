@@ -500,6 +500,81 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     private static ResourceReference Reference(ResourceType type) =>
         new(type, ResourceId.Parse(Guid.NewGuid().ToString()));
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC1, AC2: a restricted account reads its own records and modifies
+    /// none of them, and the refusal is the restriction's own code rather than an
+    /// absent grant.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC1_ARestrictedAccountReadsAndDoesNotModifyAsync()
+    {
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Edit]);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            TestContext.Current.CancellationToken);
+
+        await nested.Deployment.RestrictAsync(
+            nested.Account,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(await ChecksAsync(nested.Account, nested.Record));
+        Assert.Equal(
+            ErrorCodes.Restricted,
+            await RefusalAsync(nested.Account, nested.Record, HostPermissions.Edit));
+    }
+
+    /// <summary>
+    /// AUTHZ-CACHE-001 AC8: restricting an account decides the next request, with no
+    /// wait and nothing to invalidate.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_CACHE_001_AC8_RestrictingAnAccountTakesEffectImmediatelyAsync()
+    {
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Edit]);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(await ChecksAsync(nested.Account, nested.Record, HostPermissions.Edit));
+
+        await nested.Deployment.RestrictAsync(
+            nested.Account,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(await ChecksAsync(nested.Account, nested.Record, HostPermissions.Edit));
+    }
+
+    private async Task<ErrorCode?> RefusalAsync(
+        SubjectId account,
+        ResourceReference resource,
+        Permission permission)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+            .RequireAsync(
+                AccessContext.Of(account),
+                permission,
+                resource,
+                TestContext.Current.CancellationToken);
+
+        return outcome.Match(() => (ErrorCode?)null, error => error.Code);
+    }
+
     private async Task<bool> ChecksAsync(
         SubjectId account,
         ResourceReference resource,
@@ -519,12 +594,16 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
 
     // One organization with three levels of containment, a record at the bottom, and a
     // fourth container off to one side for a record to be moved into.
-    private async Task<Nested> NestAsync(SubjectId? asAccount = null)
+    private async Task<Nested> NestAsync(
+        SubjectId? asAccount = null,
+        IReadOnlyList<Permission>? allowing = null)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         var deployment = new Deployment(host);
 
-        RoleName role = await deployment.BeginAsync([HostPermissions.Read], cancellationToken);
+        RoleName role = await deployment.BeginAsync(
+            allowing ?? [HostPermissions.Read],
+            cancellationToken);
         SubjectId account = asAccount ?? await deployment.AccountAsync(cancellationToken);
 
         ResourceReference top = Reference(Workspace);

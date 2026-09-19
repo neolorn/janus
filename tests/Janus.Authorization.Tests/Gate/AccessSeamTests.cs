@@ -203,6 +203,37 @@ public sealed class AccessSeamTests
         Assert.Equal(["Janus.Core"], referenced);
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC2: a restriction is read in one place and refused in one
+    /// place, so no feature can come to enforce it differently or to forget it.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_GATE_006_AC2_TheRestrictionIsReadAndRefusedInOnePlace()
+    {
+        Assert.Equal(
+            [
+                Path.Combine("Janus.Authorization", "Gate", "AccessGate.cs"),
+            ],
+            Naming("ErrorCodes.Restricted"));
+
+        Assert.Equal(
+            [
+                Path.Combine("Janus.Authorization", "Gate", "ISubjectRestrictions.cs"),
+                Path.Combine("Janus.Authorization", "Gate", "SubjectSets.cs"),
+                Path.Combine("Janus.Storage", "Authorization", "Gate", "SubjectRestrictions.cs"),
+            ],
+            Naming("IsRestrictedAsync"));
+    }
+
+    // The files of the library naming something, as the repository lays them out.
+    private static string[] Naming(string what) =>
+    [
+        .. Tree("src")
+            .Where(file => File.ReadAllText(file).Contains(what, StringComparison.Ordinal))
+            .Select(Relative)
+            .Order(StringComparer.Ordinal),
+    ];
+
     // One identity compared with another, written as the comparison would be.
     private static string Compared(string identity) => identity + "\\s*[!=]=\\s*";
 

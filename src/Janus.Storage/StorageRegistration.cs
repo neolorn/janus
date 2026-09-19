@@ -108,6 +108,7 @@ internal static class StorageRegistration
         services.AddScoped<IResourceStore, ResourceStore>();
 
         services.AddScoped<IAccessEvaluator, AccessEvaluator>();
+        services.AddScoped<ISubjectRestrictions, SubjectRestrictions>();
         services.AddScoped<IAccessAudit, AccessAudit>();
 
         return services;

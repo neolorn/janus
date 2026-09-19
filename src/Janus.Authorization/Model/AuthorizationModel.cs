@@ -18,9 +18,14 @@ namespace Janus.Authorization.Model;
 /// </remarks>
 internal sealed class AuthorizationModel
 {
+    // The three actions that read by their name alone; every other action modifies
+    // unless the host declared it reading (AUTHZ-GATE-006, D-160).
+    private static readonly string[] Reading = ["read", "list", "export"];
+
     private readonly Dictionary<string, LawfulBasisDeclaration> _bases;
     private readonly Dictionary<Type, ResourceTypeDeclaration> _entities;
     private readonly HashSet<Permission> _permissions;
+    private readonly HashSet<string> _readingActions;
     private readonly Dictionary<string, RelationshipDeclaration> _relationships;
     private readonly IReadOnlyList<string> _sensitiveCategories;
     private readonly Dictionary<ResourceType, ResourceTypeDeclaration> _types;
@@ -30,6 +35,7 @@ internal sealed class AuthorizationModel
         Dictionary<Type, ResourceTypeDeclaration> entities,
         Dictionary<string, RelationshipDeclaration> relationships,
         HashSet<Permission> permissions,
+        HashSet<string> readingActions,
         Dictionary<string, LawfulBasisDeclaration> bases,
         IReadOnlyList<string> sensitiveCategories)
     {
@@ -37,6 +43,7 @@ internal sealed class AuthorizationModel
         _entities = entities;
         _relationships = relationships;
         _permissions = permissions;
+        _readingActions = readingActions;
         _bases = bases;
         _sensitiveCategories = sensitiveCategories;
     }
@@ -100,6 +107,7 @@ internal sealed class AuthorizationModel
             entities,
             relationships,
             Permissions(declaration),
+            new HashSet<string>([.. Reading, .. declaration.ReadingActions], StringComparer.Ordinal),
             bases,
             declaration.SensitiveCategories);
     }
@@ -110,6 +118,18 @@ internal sealed class AuthorizationModel
     /// <param name="permission">The permission a role would grant.</param>
     /// <returns>Whether it is declared.</returns>
     public bool Declares(Permission permission) => _permissions.Contains(permission);
+
+    /// <summary>
+    /// Whether the permission's action reads rather than modifies, which is what a
+    /// processing restriction is read against.
+    /// </summary>
+    /// <param name="permission">The permission being asked for.</param>
+    /// <returns>Whether its action reads.</returns>
+    /// <remarks>
+    /// Implements AUTHZ-GATE-006 and D-160. An action nobody classified modifies, so a
+    /// restriction refuses it.
+    /// </remarks>
+    public bool IsReading(Permission permission) => _readingActions.Contains(permission.Action);
 
     /// <summary>
     /// The declaration of a resource type, or nothing where the model declares none.

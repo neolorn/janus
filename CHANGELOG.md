@@ -251,6 +251,11 @@ against the public contract of LIB-API-001.
   category once its end has passed that category's retention. The two retention
   periods are passed in, because a key left at its default has no stored row the
   database could read, and either below the floor its key carries is refused.
+- An account under a processing restriction keeps its reading actions and is refused
+  every action that would change anything, with `authz.restricted`, in a check, a
+  listing filter and a capability alike. `read`, `list` and `export` are reading by
+  name, a host declares which of its own actions are reading, and everything else
+  modifies.
 
 ### Changed
 

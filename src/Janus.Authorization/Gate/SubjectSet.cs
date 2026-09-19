@@ -16,11 +16,12 @@ namespace Janus.Authorization.Gate;
 /// </remarks>
 internal sealed class SubjectSet
 {
-    private SubjectSet(Guid[] accounts, Guid[] groups, long version)
+    private SubjectSet(Guid[] accounts, Guid[] groups, long version, bool restricted)
     {
         Accounts = accounts;
         Groups = groups;
         Version = version;
+        Restricted = restricted;
     }
 
     /// <summary>
@@ -39,26 +40,38 @@ internal sealed class SubjectSet
     public long Version { get; }
 
     /// <summary>
+    /// Whether the account's processing is restricted, which leaves its reading
+    /// actions and refuses the rest (AUTHZ-GATE-006).
+    /// </summary>
+    public bool Restricted { get; }
+
+    /// <summary>
     /// The set an account resolves to.
     /// </summary>
     /// <param name="subject">The account.</param>
     /// <param name="groups">The groups holding it, at any depth.</param>
     /// <param name="version">The counter the set was read at.</param>
+    /// <param name="restricted">Whether the account's processing is restricted.</param>
     /// <returns>The set.</returns>
     /// <exception cref="ArgumentNullException">The groups are absent.</exception>
-    public static SubjectSet Of(SubjectId subject, IReadOnlyList<GroupId> groups, long version)
+    public static SubjectSet Of(
+        SubjectId subject,
+        IReadOnlyList<GroupId> groups,
+        long version,
+        bool restricted)
     {
         ArgumentNullException.ThrowIfNull(groups);
 
         return new SubjectSet(
             [subject.Value],
             [.. groups.Select(group => group.Value)],
-            version);
+            version,
+            restricted);
     }
 
     /// <summary>
     /// The set a principal with no account resolves to, which holds no grant at all.
     /// </summary>
     /// <returns>The empty set.</returns>
-    public static SubjectSet None() => new([], [], 0);
+    public static SubjectSet None() => new([], [], 0, restricted: false);
 }

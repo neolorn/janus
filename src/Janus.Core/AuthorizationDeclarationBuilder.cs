@@ -19,6 +19,7 @@ public sealed class AuthorizationDeclarationBuilder
 {
     private readonly List<LawfulBasisDeclaration> _bases = [];
     private readonly List<Permission> _permissions = [];
+    private readonly List<string> _readingActions = [];
     private readonly List<RelationshipDeclaration> _relationships = [];
     private readonly List<ResourceTypeDeclaration> _resourceTypes = [];
     private readonly List<string> _sensitiveCategories = [];
@@ -91,6 +92,30 @@ public sealed class AuthorizationDeclarationBuilder
     }
 
     /// <summary>
+    /// Declares a permission the host's own roles may grant, saying whether its action
+    /// reads or modifies. An action named <c>read</c>, <c>list</c> or <c>export</c>
+    /// reads without being declared; every other action modifies unless it is declared
+    /// here, which is what a processing restriction is read against (AUTHZ-GATE-006).
+    /// </summary>
+    /// <param name="permission">The permission, as <c>resource:action</c>.</param>
+    /// <param name="reading">Whether the action reads rather than modifies.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">The value is not a well-formed permission.</exception>
+    public AuthorizationDeclarationBuilder Permission(string permission, bool reading)
+    {
+        var parsed = Core.Permission.Parse(permission);
+
+        _permissions.Add(parsed);
+
+        if (reading)
+        {
+            _readingActions.Add(parsed.Action);
+        }
+
+        return this;
+    }
+
+    /// <summary>
     /// Declares a lawful basis a purpose may rest on.
     /// </summary>
     /// <param name="basis">The basis and the properties the library branches on.</param>
@@ -127,6 +152,7 @@ public sealed class AuthorizationDeclarationBuilder
             [.. _resourceTypes],
             [.. _relationships],
             [.. _permissions],
+            [.. _readingActions],
             [.. _bases],
             [.. _sensitiveCategories]);
 }
