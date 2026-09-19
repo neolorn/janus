@@ -1,6 +1,7 @@
 using System;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Identifiers;
+using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Identity.Profiles;
 using Janus.Storage.Privacy.SubjectKeys;
@@ -31,14 +32,31 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     public const string MigrationsHistoryTable = "__janus_migrations_history";
 
     /// <summary>
-    /// The case-insensitive collation the plaintext identifier columns carry.
+    /// The case-insensitive collation the plaintext columns a person spells carry.
     /// </summary>
     public const string CaseInsensitiveCollation = "janus_ci";
+
+    /// <summary>
+    /// The schema the collation is created in. A column names a collation by one
+    /// identifier and never by a schema and a name, so the collation has to be
+    /// reachable from the search path; the library's own schema is not.
+    /// </summary>
+    public const string CollationSchema = "public";
 
     /// <summary>
     /// The accounts.
     /// </summary>
     public DbSet<AccountRecord> Accounts => Set<AccountRecord>();
+
+    /// <summary>
+    /// The organizations.
+    /// </summary>
+    public DbSet<OrganizationRecord> Organizations => Set<OrganizationRecord>();
+
+    /// <summary>
+    /// The memberships linking an account to an organization.
+    /// </summary>
+    public DbSet<MembershipRecord> Memberships => Set<MembershipRecord>();
 
     /// <summary>
     /// The accounts' identifiers.
@@ -87,13 +105,15 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         // created here rather than by hand so that a database built from the migrations
         // alone carries it.
         modelBuilder.HasCollation(
-            Schema,
+            CollationSchema,
             CaseInsensitiveCollation,
             locale: "und-u-ks-level2",
             provider: "icu",
             deterministic: false);
 
         modelBuilder.ApplyConfiguration(new AccountConfiguration());
+        modelBuilder.ApplyConfiguration(new OrganizationConfiguration());
+        modelBuilder.ApplyConfiguration(new MembershipConfiguration());
         modelBuilder.ApplyConfiguration(new IdentifierConfiguration());
         modelBuilder.ApplyConfiguration(new BackupSettingConfiguration());
         modelBuilder.ApplyConfiguration(new ProfileConfiguration());

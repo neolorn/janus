@@ -41,6 +41,27 @@ public sealed class ModelTests
             Model().GetEntityTypes(),
             entity => Assert.Equal(JanusDbContext.Schema, entity.GetSchema()));
 
+    /// <summary>
+    /// IDN-ORG-002 AC1: nothing in the schema says which kind of person a row is
+    /// about. Staff are the members of the administrative organization, so a flag
+    /// separating them from customers would be a second answer to a question the
+    /// membership already answers.
+    /// </summary>
+    [Fact]
+    public void IDN_ORG_002_AC1_NoColumnDistinguishesStaffFromCustomers()
+    {
+        string[] forbidden = ["staff", "customer", "employee", "internal", "external"];
+
+        IEnumerable<string> columns = Model()
+            .GetEntityTypes()
+            .SelectMany(entity => entity.GetProperties())
+            .Select(property => property.GetColumnName());
+
+        Assert.All(columns, column => Assert.DoesNotContain(
+            forbidden,
+            word => column.Contains(word, StringComparison.OrdinalIgnoreCase)));
+    }
+
     private static IModel Model()
     {
         using JanusDbContext context = new DesignTimeContextFactory().CreateDbContext([]);

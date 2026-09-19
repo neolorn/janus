@@ -3,11 +3,13 @@ using System.Security.Cryptography;
 using Janus.Core;
 using Janus.Identity.Accounts;
 using Janus.Identity.Identifiers;
+using Janus.Identity.Organizations;
 using Janus.Identity.Preferences;
 using Janus.Identity.Profiles;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Identifiers;
+using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Identity.Profiles;
 using Janus.Storage.Privacy.SubjectKeys;
@@ -60,6 +62,8 @@ internal static class StorageRegistration
 
         services.AddScoped<IAccountStore, AccountStore>();
         services.AddScoped<ISubjectKeyStore, SubjectKeyStore>();
+        services.AddScoped<IOrganizationStore, OrganizationStore>();
+        services.AddScoped<IMembershipStore, MembershipStore>();
         services.AddScoped<IIdentifierStore>(provider => new IdentifierStore(
             provider.GetRequiredService<JanusDbContext>(),
             keyEncryptionKeys,

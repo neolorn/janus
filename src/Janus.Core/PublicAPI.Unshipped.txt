@@ -247,6 +247,13 @@ Janus.Core.LegalName
 Janus.Core.LegalName.Equals(Janus.Core.LegalName other) -> bool
 Janus.Core.LegalName.LegalName() -> void
 Janus.Core.LegalName.Value.get -> string!
+Janus.Core.MembershipId
+Janus.Core.MembershipId.Deconstruct(out System.Guid Value) -> void
+Janus.Core.MembershipId.Equals(Janus.Core.MembershipId other) -> bool
+Janus.Core.MembershipId.MembershipId() -> void
+Janus.Core.MembershipId.MembershipId(System.Guid Value) -> void
+Janus.Core.MembershipId.Value.get -> System.Guid
+Janus.Core.MembershipId.Value.init -> void
 Janus.Core.NeverLoggedAttribute
 Janus.Core.NeverLoggedAttribute.NeverLoggedAttribute() -> void
 Janus.Core.OrganizationId
@@ -461,6 +468,8 @@ override Janus.Core.KeyEncryptionKeys.GetHashCode() -> int
 override Janus.Core.KeyEncryptionKeys.ToString() -> string!
 override Janus.Core.LegalName.GetHashCode() -> int
 override Janus.Core.LegalName.ToString() -> string!
+override Janus.Core.MembershipId.GetHashCode() -> int
+override Janus.Core.MembershipId.ToString() -> string!
 override Janus.Core.OrganizationId.GetHashCode() -> int
 override Janus.Core.OrganizationId.ToString() -> string!
 override Janus.Core.PhoneNumber.GetHashCode() -> int
@@ -678,6 +687,9 @@ static Janus.Core.KeyEncryptionKeys.operator ==(Janus.Core.KeyEncryptionKeys? le
 static Janus.Core.LegalName.TryParse(string! entered, out Janus.Core.LegalName name) -> bool
 static Janus.Core.LegalName.operator !=(Janus.Core.LegalName left, Janus.Core.LegalName right) -> bool
 static Janus.Core.LegalName.operator ==(Janus.Core.LegalName left, Janus.Core.LegalName right) -> bool
+static Janus.Core.MembershipId.New(System.TimeProvider! time) -> Janus.Core.MembershipId
+static Janus.Core.MembershipId.operator !=(Janus.Core.MembershipId left, Janus.Core.MembershipId right) -> bool
+static Janus.Core.MembershipId.operator ==(Janus.Core.MembershipId left, Janus.Core.MembershipId right) -> bool
 static Janus.Core.OrganizationId.New(System.TimeProvider! time) -> Janus.Core.OrganizationId
 static Janus.Core.OrganizationId.operator !=(Janus.Core.OrganizationId left, Janus.Core.OrganizationId right) -> bool
 static Janus.Core.OrganizationId.operator ==(Janus.Core.OrganizationId left, Janus.Core.OrganizationId right) -> bool
@@ -720,6 +732,7 @@ static Janus.Core.Username.operator ==(Janus.Core.Username left, Janus.Core.User
 ~override Janus.Core.ErrorCode.Equals(object obj) -> bool
 ~override Janus.Core.IdentifierId.Equals(object obj) -> bool
 ~override Janus.Core.LegalName.Equals(object obj) -> bool
+~override Janus.Core.MembershipId.Equals(object obj) -> bool
 ~override Janus.Core.OrganizationId.Equals(object obj) -> bool
 ~override Janus.Core.PhoneNumber.Equals(object obj) -> bool
 ~override Janus.Core.Result.Equals(object obj) -> bool

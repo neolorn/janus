@@ -49,7 +49,7 @@ public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<Databa
         await using NpgsqlConnection connection = await database.OpenAsync();
 
         bool same = await connection.ExecuteScalarAsync<bool>(
-            "SELECT 'Ahmed' = 'ahmed' COLLATE janus.janus_ci");
+            "SELECT 'Ahmed' = 'ahmed' COLLATE janus_ci");
 
         Assert.True(same);
     }

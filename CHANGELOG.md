@@ -148,9 +148,17 @@ against the public contract of LIB-API-001.
   subject key as one document, capped by `preferences.maxsize`; the language and the
   time zone are not, so a notice still reaches an erased account in a language it
   reads.
+- Organizations and memberships. An organization is an entity in the one identity
+  pool and no isolation boundary; its deletion suspends it at once, runs for
+  `organization.deletion.grace` and is cancellable until the window closes, after
+  which the row stays and the identifier goes on resolving. A membership is a record
+  of its own that ends without touching either side, and an account may hold more
+  than one. Nothing in the schema separates staff from customers.
 
 ### Changed
 
+- The case-insensitive collation is created in the default schema, because a column
+  names a collation by one identifier and cannot reach one held in another schema.
 - A configuration key loosens the way its row states. Where a row states nothing, a
   key with only a ceiling loosens upward, a key with only a floor loosens downward,
   and a flag loosens away from its default, so a tightening no longer costs the
