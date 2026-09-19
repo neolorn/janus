@@ -63,6 +63,11 @@ internal sealed class ProductionVolume(HostFixture fixture)
     /// </summary>
     public const int PerContainer = Contained / Containers;
 
+    /// <summary>
+    /// How many facts the host's own relation holds, one derivation following from it.
+    /// </summary>
+    public const int Reviewers = Principals;
+
     private const string Workspace = "workspace";
     private const string Document = "document";
 
@@ -97,13 +102,14 @@ internal sealed class ProductionVolume(HostFixture fixture)
         await GroupsAsync(connection, cancellationToken);
         await RecordsAsync(connection, cancellationToken);
         await GrantsAsync(connection, cancellationToken);
+        await ReviewersAsync(connection, cancellationToken);
 
         // Without statistics the planner has nothing to choose an index by, and a plan
         // read before them says nothing about the deployment.
         await connection.ExecuteAsync(new CommandDefinition(
             "ANALYZE janus.grants, janus.ancestry, janus.resources, janus.group_closure, "
             + "janus.group_members, janus.role_permissions, janus.accounts, janus.groups, "
-            + "host.documents;",
+            + "host.documents, host.reviewers;",
             commandTimeout: 600,
             cancellationToken: cancellationToken));
     }
@@ -134,9 +140,9 @@ internal sealed class ProductionVolume(HostFixture fixture)
             """
             INSERT INTO janus.organizations (id, name, created_at)
             VALUES (@organization, @name, @at);
-            INSERT INTO janus.roles (name) VALUES ('reader');
+            INSERT INTO janus.roles (name) VALUES ('reader'), ('reviewer');
             INSERT INTO janus.role_permissions (role, permission)
-            VALUES ('reader', @read), ('reader', @edit);
+            VALUES ('reader', @read), ('reader', @edit), ('reviewer', @read);
             """,
             new
             {
@@ -307,6 +313,29 @@ internal sealed class ProductionVolume(HostFixture fixture)
         }
 
         await documents.CompleteAsync(cancellationToken);
+    }
+
+    // The fact a derivation follows from, at the volume the host's own relation would
+    // hold it at: every container reviewed by ten of the principals, the first of them
+    // the account the plan is read for (AUTHZ-DERIVE-004).
+    private async Task ReviewersAsync(NpgsqlConnection connection, CancellationToken cancellationToken)
+    {
+        await using NpgsqlBinaryImporter reviewers = await ImporterAsync(
+            connection,
+            "COPY host.reviewers (workspace_id, reviewer) FROM STDIN (FORMAT BINARY)",
+            cancellationToken);
+
+        for (int at = 0; at < Reviewers; at++)
+        {
+            await reviewers.StartRowAsync(cancellationToken);
+            await reviewers.WriteAsync(
+                Identifier(Workspace, at % Containers),
+                NpgsqlDbType.Text,
+                cancellationToken);
+            await reviewers.WriteAsync(_accounts[at], NpgsqlDbType.Uuid, cancellationToken);
+        }
+
+        await reviewers.CompleteAsync(cancellationToken);
     }
 
     private async Task GrantsAsync(NpgsqlConnection connection, CancellationToken cancellationToken)

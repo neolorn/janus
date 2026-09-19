@@ -18,7 +18,7 @@ public sealed class VolumeTests(VolumeFixture volume) : IClassFixture<VolumeFixt
     private const int Page = 50;
 
     // The two tables the predicate reads by, and the only two the criterion is about.
-    // janus.role_permissions holds two rows here and is correctly read whole; reading
+    // janus.role_permissions holds three rows here and is correctly read whole; reading
     // it by index would be the slower plan, so it is not asked for.
     private static readonly string[] Scanned =
     [
@@ -46,7 +46,8 @@ public sealed class VolumeTests(VolumeFixture volume) : IClassFixture<VolumeFixt
                    (SELECT count(*) FROM janus.grants) AS "Grants",
                    (SELECT count(*) FROM janus.grants WHERE revoked_at IS NOT NULL) AS "Revoked",
                    (SELECT count(*) FROM janus.accounts) AS "Principals",
-                   (SELECT count(*) FROM janus.groups) AS "Groups";
+                   (SELECT count(*) FROM janus.groups) AS "Groups",
+                   (SELECT count(*) FROM host.reviewers) AS "Reviewers";
             """,
             commandTimeout: 600,
             cancellationToken: TestContext.Current.CancellationToken));
@@ -57,11 +58,26 @@ public sealed class VolumeTests(VolumeFixture volume) : IClassFixture<VolumeFixt
                 ProductionVolume.Grants,
                 ProductionVolume.Revoked,
                 ProductionVolume.Principals,
-                ProductionVolume.Groups),
+                ProductionVolume.Groups,
+                ProductionVolume.Reviewers),
             counted);
 
         Assert.Equal(Page, volume.Page);
         Assert.Contains("documents janus_authz_row", volume.Plan, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// AUTHZ-DERIVE-004 AC2: the derivation joins the host's own relation, and at the
+    /// stated volumes it reaches it by the index its declared column carries rather
+    /// than by reading the relation whole.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_DERIVE_004_AC2_TheDerivedRuleUsesAnIndex()
+    {
+        TestContext.Current.TestOutputHelper?.WriteLine(volume.Plan);
+
+        Assert.DoesNotContain("Seq Scan on reviewers", volume.Plan, StringComparison.Ordinal);
+        Assert.Contains("ix_reviewers_reviewer", volume.Plan, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -89,5 +105,6 @@ public sealed class VolumeTests(VolumeFixture volume) : IClassFixture<VolumeFixt
         long Grants,
         long Revoked,
         long Principals,
-        long Groups);
+        long Groups,
+        long Reviewers);
 }
