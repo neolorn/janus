@@ -2,10 +2,8 @@ using System;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Core;
-using Janus.Core.Configuration;
 using Janus.Storage.Identity.Accounts;
-using Janus.Storage.Settings;
-using Microsoft.EntityFrameworkCore;
+using Janus.Storage.Privacy.SubjectKeys;
 using Npgsql;
 using Xunit;
 
@@ -21,10 +19,14 @@ namespace Janus.Storage.Tests;
 [Trait("kind", "integration")]
 public sealed class UnitOfWorkTests(DatabaseFixture database) : IClassFixture<DatabaseFixture>
 {
+    private const byte Scheme = 0x01;
+    private const int WrappedKeyLength = 40;
+
     private const string CountAccounts =
         "SELECT count(*) FROM janus.accounts WHERE subject = @subject";
 
-    private const string CountSettings = "SELECT count(*) FROM janus.settings WHERE key = @key";
+    private const string CountKeys =
+        "SELECT count(*) FROM janus.subject_keys WHERE subject = @subject";
 
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
 
@@ -43,7 +45,7 @@ public sealed class UnitOfWorkTests(DatabaseFixture database) : IClassFixture<Da
 
         await using NpgsqlConnection connection = await database.OpenAsync();
 
-        Assert.Equal(0, await CountAsync(connection, subject));
+        Assert.Equal(0, await WrittenAsync(connection, subject));
     }
 
     /// <summary>
@@ -59,15 +61,12 @@ public sealed class UnitOfWorkTests(DatabaseFixture database) : IClassFixture<Da
 
         await using NpgsqlConnection connection = await database.OpenAsync();
 
-        Assert.Equal(2, await CountAsync(connection, subject));
+        Assert.Equal(2, await WrittenAsync(connection, subject));
     }
 
-    private static async Task<int> CountAsync(NpgsqlConnection connection, SubjectId subject) =>
+    private static async Task<int> WrittenAsync(NpgsqlConnection connection, SubjectId subject) =>
         await connection.ExecuteScalarAsync<int>(CountAccounts, new { subject = subject.Value })
-            + await connection.ExecuteScalarAsync<int>(CountSettings, new { key = Key(subject) });
-
-    // A key of the deployment's own, so that two runs of these tests never collide.
-    private static string Key(SubjectId subject) => "account.deletion.grace." + subject;
+            + await connection.ExecuteScalarAsync<int>(CountKeys, new { subject = subject.Value });
 
     private static Task BetweenAsync(bool failing) =>
         failing
@@ -91,10 +90,12 @@ public sealed class UnitOfWorkTests(DatabaseFixture database) : IClassFixture<Da
 
         await BetweenAsync(failing);
 
-        context.Settings.Add(new SettingRecord
+        context.SubjectKeys.Add(new SubjectKeyRecord
         {
-            Key = ConfigurationKey.Parse(Key(subject)),
-            Value = "P45D",
+            Subject = subject,
+            FormatMarker = Scheme,
+            KeyVersion = 1,
+            WrappedKey = new byte[WrappedKeyLength],
         });
 
         await work.CommitAsync(TestContext.Current.CancellationToken);

@@ -106,6 +106,13 @@ against the public contract of LIB-API-001.
 - An account and its per-subject data key are now written and read back through
   ports of their own, so the account a caller holds carries the transitions and the
   row carries the columns, and neither knows the other's shape.
+- The schema now carries an account's identifiers and each kind's backup setting.
+  Both forms of an identifier are encrypted under the subject's own key, what is
+  looked up is the keyed fingerprint of the canonical form, and the Unicode version
+  that form was computed under is recorded beside it. One live fingerprint of a kind
+  exists across the deployment, so an identifier belongs to at most one account;
+  erasure neutralises the fingerprint and leaves the row, and a neutralised one is
+  outside that rule.
 - `IdentifierKinds` in `Janus.Core`: one field takes every identifier and the kind is
   read from the value. An address carries the sign, a number is digits once the
   separators a person writes are taken out, in whichever script they were typed, and

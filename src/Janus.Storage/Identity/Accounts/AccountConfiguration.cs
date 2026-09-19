@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using Janus.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -26,15 +25,15 @@ internal sealed class AccountConfiguration : IEntityTypeConfiguration<AccountRec
         {
             table.HasCheckConstraint(
                 "ck_accounts_state",
-                Admits("state", VocabularyConverter<AccountState>.Admitted));
+                Vocabulary.Admits<AccountState>("state"));
             table.HasCheckConstraint(
                 "ck_accounts_suspended_by",
                 "suspended_by IS NULL OR "
-                    + Admits("suspended_by", VocabularyConverter<SuspensionOrigin>.Admitted));
+                    + Vocabulary.Admits<SuspensionOrigin>("suspended_by"));
             table.HasCheckConstraint(
                 "ck_accounts_deleting_by",
                 "deleting_by IS NULL OR "
-                    + Admits("deleting_by", VocabularyConverter<DeletionOrigin>.Admitted));
+                    + Vocabulary.Admits<DeletionOrigin>("deleting_by"));
 
             // IDN-ACCT-007: a grace window that is running has an instant it began, and
             // one that is not has neither an origin nor an instant.
@@ -71,6 +70,4 @@ internal sealed class AccountConfiguration : IEntityTypeConfiguration<AccountRec
             .HasFilter("deleting_since IS NOT NULL");
     }
 
-    private static string Admits(string column, IReadOnlyList<string> spellings) =>
-        column + " IN ('" + string.Join("', '", spellings) + "')";
 }
