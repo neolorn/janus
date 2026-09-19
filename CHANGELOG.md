@@ -311,6 +311,12 @@ against the public contract of LIB-API-001.
   named only by a deployment that uses them. A missing declaration now fails with
   `model.startup.declarationmissing` naming the key.
 
+### Fixed
+
+- A per-organization configuration key is accepted whatever the organization
+  identifier begins with. A key such as `policy.<organization>` was refused whenever
+  the identifier began with a digit, which is about half of them.
+
 ### Removed
 
 - `alerting.destinationchange.notify`. The notice to the previous destinations is
