@@ -138,6 +138,41 @@ internal sealed class Authenticator
     }
 
     /// <summary>
+    /// The credential as it already stands, which is the store's translation of a row
+    /// and no change to it.
+    /// </summary>
+    /// <param name="id">Which credential.</param>
+    /// <param name="subject">Whose it is.</param>
+    /// <param name="factor">Which catalogue entry it is an instance of.</param>
+    /// <param name="label">What the person calls it.</param>
+    /// <param name="state">Where it stands.</param>
+    /// <param name="addedAt">When it was enrolled.</param>
+    /// <param name="lastUsedAt">When it was last presented.</param>
+    /// <param name="invalidatesAt">When a suspended one is invalidated.</param>
+    /// <param name="confirmed">Whether the enrolment was confirmed.</param>
+    /// <param name="totp">The shared secret, where it is a code generator.</param>
+    /// <param name="webAuthn">The key material, where it holds a key.</param>
+    /// <returns>The credential.</returns>
+    public static Authenticator Existing(
+        AuthenticatorId id,
+        SubjectId subject,
+        Factor factor,
+        CredentialLabel label,
+        AuthenticatorState state,
+        DateTimeOffset addedAt,
+        DateTimeOffset? lastUsedAt,
+        DateTimeOffset? invalidatesAt,
+        bool confirmed,
+        TotpMaterial? totp,
+        WebAuthnMaterial? webAuthn) =>
+        new(id, subject, factor, label, addedAt, confirmed, totp, webAuthn)
+        {
+            State = state,
+            LastUsedAt = lastUsedAt,
+            InvalidatesAt = invalidatesAt,
+        };
+
+    /// <summary>
     /// The enrolment was confirmed by presenting the credential once.
     /// </summary>
     /// <param name="at">When.</param>

@@ -81,6 +81,37 @@ internal sealed class Device
         new(id, subject, kind, label, at, at + lifetime);
 
     /// <summary>
+    /// The browser as the account already knows it, which is the store's translation
+    /// of a row and no change to it.
+    /// </summary>
+    /// <param name="id">Which browser.</param>
+    /// <param name="subject">Whose it is.</param>
+    /// <param name="kind">What it is known for.</param>
+    /// <param name="label">What the person calls it.</param>
+    /// <param name="createdAt">When it became known.</param>
+    /// <param name="lastUsedAt">When it was last seen.</param>
+    /// <param name="expiresAt">When what it stands for lapses.</param>
+    /// <param name="consecutiveFailures">How many sign-ins on it failed in a row.</param>
+    /// <param name="revoked">Whether it was revoked before it lapsed.</param>
+    /// <returns>The browser.</returns>
+    public static Device Existing(
+        DeviceId id,
+        SubjectId subject,
+        DeviceKind kind,
+        CredentialLabel label,
+        DateTimeOffset createdAt,
+        DateTimeOffset lastUsedAt,
+        DateTimeOffset expiresAt,
+        int consecutiveFailures,
+        bool revoked) =>
+        new(id, subject, kind, label, createdAt, expiresAt)
+        {
+            LastUsedAt = lastUsedAt,
+            ConsecutiveFailures = consecutiveFailures,
+            Revoked = revoked,
+        };
+
+    /// <summary>
     /// Whether what it stands for holds at this instant.
     /// </summary>
     /// <param name="now">The instant.</param>

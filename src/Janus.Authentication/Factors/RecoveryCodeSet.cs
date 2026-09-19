@@ -21,11 +21,11 @@ internal sealed class RecoveryCodeSet
 
     private RecoveryCodeSet(
         SubjectId subject,
-        IReadOnlyList<PasswordHash> codes,
+        List<RecoveryCodeEntry> codes,
         DateTimeOffset at)
     {
         Subject = subject;
-        _codes = [.. codes.Select(hash => new RecoveryCodeEntry(hash, UsedAt: null))];
+        _codes = codes;
         GeneratedAt = at;
     }
 
@@ -68,7 +68,40 @@ internal sealed class RecoveryCodeSet
     {
         ArgumentNullException.ThrowIfNull(codes);
 
-        return new RecoveryCodeSet(subject, codes, at);
+        return new RecoveryCodeSet(
+            subject,
+            [.. codes.Select(hash => new RecoveryCodeEntry(hash, UsedAt: null))],
+            at);
+    }
+
+    /// <summary>
+    /// The set as it already stands, which is the store's translation of its rows and
+    /// no change to them.
+    /// </summary>
+    /// <param name="subject">Whose set it is.</param>
+    /// <param name="codes">The codes, spent and unspent, in the order they were drawn.</param>
+    /// <param name="generatedAt">When it was issued.</param>
+    /// <param name="viewedAt">When the codes were shown.</param>
+    /// <param name="exportedAt">When they were copied, downloaded or printed.</param>
+    /// <param name="remindedAt">When the reminder was sent.</param>
+    /// <returns>The set.</returns>
+    /// <exception cref="ArgumentNullException">The codes are absent.</exception>
+    public static RecoveryCodeSet Existing(
+        SubjectId subject,
+        IReadOnlyList<RecoveryCodeEntry> codes,
+        DateTimeOffset generatedAt,
+        DateTimeOffset? viewedAt,
+        DateTimeOffset? exportedAt,
+        DateTimeOffset? remindedAt)
+    {
+        ArgumentNullException.ThrowIfNull(codes);
+
+        return new RecoveryCodeSet(subject, [.. codes], generatedAt)
+        {
+            ViewedAt = viewedAt,
+            ExportedAt = exportedAt,
+            RemindedAt = remindedAt,
+        };
     }
 
     /// <summary>

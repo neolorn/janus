@@ -140,6 +140,70 @@ internal sealed class Session
     }
 
     /// <summary>
+    /// The session as it already stands, which is the store's translation of a row
+    /// and no change to it.
+    /// </summary>
+    /// <param name="id">Which session.</param>
+    /// <param name="spine">The record it derives from, which is itself for a record.</param>
+    /// <param name="type">Which kind.</param>
+    /// <param name="subject">Whose session it is.</param>
+    /// <param name="createdAt">When it began.</param>
+    /// <param name="lastSeenAt">When it was last used.</param>
+    /// <param name="attained">The tier it reached.</param>
+    /// <param name="attainedAt">When it reached that tier.</param>
+    /// <param name="phishingResistant">Whether it reached that resisting relay.</param>
+    /// <param name="phishingResistantAt">When it did.</param>
+    /// <param name="origin">Where it began.</param>
+    /// <param name="lastSeen">Where it was last used.</param>
+    /// <param name="idleExpiry">When it lapses without use.</param>
+    /// <param name="absoluteExpiry">When it lapses whatever happens.</param>
+    /// <param name="endedAt">When it ended, or nothing while it stands.</param>
+    /// <param name="satisfiesEveryGate">Whether it passes every gate while it lasts.</param>
+    /// <returns>The session.</returns>
+    /// <exception cref="ArgumentNullException">An origin is absent.</exception>
+    public static Session Existing(
+        SessionId id,
+        SessionId spine,
+        SessionType type,
+        SubjectId subject,
+        DateTimeOffset createdAt,
+        DateTimeOffset lastSeenAt,
+        AssuranceLevel attained,
+        DateTimeOffset attainedAt,
+        bool phishingResistant,
+        DateTimeOffset? phishingResistantAt,
+        SessionOrigin origin,
+        SessionOrigin lastSeen,
+        DateTimeOffset idleExpiry,
+        DateTimeOffset absoluteExpiry,
+        DateTimeOffset? endedAt,
+        bool satisfiesEveryGate)
+    {
+        ArgumentNullException.ThrowIfNull(origin);
+        ArgumentNullException.ThrowIfNull(lastSeen);
+
+        return new Session(
+            id,
+            spine,
+            type,
+            subject,
+            new Assurance(attained, phishingResistant),
+            origin,
+            createdAt,
+            TimeSpan.Zero,
+            absoluteExpiry,
+            satisfiesEveryGate)
+        {
+            LastSeenAt = lastSeenAt,
+            AttainedAt = attainedAt,
+            PhishingResistantAt = phishingResistantAt,
+            LastSeen = lastSeen,
+            IdleExpiry = idleExpiry,
+            EndedAt = endedAt,
+        };
+    }
+
+    /// <summary>
     /// A session of another kind standing on this record, which inherits what the
     /// record proved and ends when the record does.
     /// </summary>

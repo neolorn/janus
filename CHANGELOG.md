@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Sessions, passwords, enrolled credentials, recovery codes and known browsers
+  are stored in PostgreSQL. A session's record carries what it reached and the
+  fingerprint of its cookie, never the cookie, and where it was used from is held
+  under the person's key, so a database dump yields no location and erasure leaves
+  none readable. A code generator's shared secret is held under the same key, and
+  a recovery code is stored as a password is.
 - A second step is second to a password: a code generator or a security key under
   two-step is refused to an account that holds none, and an account signing in with a
   passkey alone is offered no second step to enrol. A set of recovery codes is not a
