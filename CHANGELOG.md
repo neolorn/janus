@@ -177,6 +177,17 @@ against the public contract of LIB-API-001.
   exactly one organization. Requesting its deletion is refused with
   `identity.organization.protected`; every other organization takes the window as
   before.
+- The three database roles the deployment attaches credentials to. `janus_migrate`
+  owns the schema and is the only role that alters it, `janus_app` reads and writes
+  rows, and `janus_maintenance` executes the two audit partition functions and reads
+  and updates the wrapped keys. The migration creates the two runtime roles where they
+  are absent and writes every grant, so an audit row cannot be updated or deleted by
+  the application at all, and no credential that alters schema reaches the running
+  system.
+- `audit_drop_expired_partitions`: the scheduled job drops a month of one retention
+  category once its end has passed that category's retention. The two retention
+  periods are passed in, because a key left at its default has no stored row the
+  database could read, and either below the floor its key carries is refused.
 
 ### Changed
 
