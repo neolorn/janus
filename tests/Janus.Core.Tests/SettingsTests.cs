@@ -100,11 +100,15 @@ public sealed class SettingsTests
     }
 
     /// <summary>
-    /// A list that drops the one algorithm the chapter requires is refused.
+    /// AUTH-FACT-014 AC5: the default allow-list is exactly the three algorithms, in
+    /// the preference order the chapter states, and a list that drops the one it
+    /// holds in place is refused.
     /// </summary>
     [Fact]
-    public void Accept_DroppingTheRequiredAlgorithm_Refused()
+    public void AUTH_FACT_014_AC5_TheAllowListHoldsItsThreeAlgorithmsAndKeepsOne()
     {
+        Assert.Equal([-8, -7, -257], Settings.WebAuthnAlgorithms.Default);
+
         Result<IReadOnlyList<int>> outcome = Settings.WebAuthnAlgorithms.Accept([-8, -257]);
 
         Assert.Equal(
