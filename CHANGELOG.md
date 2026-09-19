@@ -56,6 +56,11 @@ against the public contract of LIB-API-001.
   library ships no secrets-manager client and no default.
 - `IUnitOfWork` in `Janus.Core`: an operation runs in one transaction and commits
   once, so a failure part way through leaves nothing written.
+- Per-subject encryption of personal fields: one data key per subject, wrapped in
+  the database under the deployment's key-encryption key, with every value bound to
+  the subject, table and column it was written to, so a value moved elsewhere no
+  longer decrypts. Erasure overwrites the wrapped key and everything encrypted
+  under it becomes unreadable at once, including values in the host's own tables.
 
 ### Changed
 
