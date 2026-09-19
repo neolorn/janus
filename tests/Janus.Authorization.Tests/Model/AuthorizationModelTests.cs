@@ -210,6 +210,20 @@ public sealed class AuthorizationModelTests
         Assert.False(model.Declares(Permission.Parse("document:destroy")));
     }
 
+    /// <summary>
+    /// CONV-NAME-002 AC1: a permission outside the pattern never reaches the model,
+    /// because the declaration that names it is refused where it is written.
+    /// </summary>
+    /// <param name="permission">A string that is not a permission.</param>
+    [Theory]
+    [InlineData("Document:read")]
+    [InlineData("document:Read")]
+    [InlineData("document")]
+    [InlineData("document:read:draft")]
+    public void CONV_NAME_002_AC1_APermissionOutsideThePatternFailsModelValidation(string permission) =>
+        Assert.Throws<ArgumentException>(
+            () => new AuthorizationDeclarationBuilder().Permission(permission));
+
     private static AuthorizationDeclaration Malformed(int index) => index switch
     {
         0 => new AuthorizationDeclarationBuilder()
