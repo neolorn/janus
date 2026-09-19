@@ -45,6 +45,9 @@ against the public contract of LIB-API-001.
   re-verification interval, the location database cadence, the restore-test
   objective and interval, the two identifier maximums, the two size caps and the
   bot-defence signal set.
+- `SubjectId` and `OrganizationId` in `Janus.Core`: an account's opaque identifier,
+  drawn from randomness alone so that it carries nothing about the person, and the
+  organization's, ordered by the instant it was issued.
 
 ### Changed
 
