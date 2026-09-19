@@ -83,7 +83,7 @@ jobs:
         with:
           global-json-file: global.json
       - run: dotnet restore Janus.slnx --locked-mode
-      - run: dotnet test Janus.slnx --no-restore -- --filter-trait "kind=integration"
+      - run: dotnet test tests/Janus.Storage.Tests --no-restore -- --filter-trait "kind=integration"
 
   double-migration:
     name: Double migration run
