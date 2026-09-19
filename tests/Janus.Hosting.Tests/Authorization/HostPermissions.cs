@@ -17,4 +17,9 @@ internal static class HostPermissions
     /// Editing one of the host's records.
     /// </summary>
     public static Permission Edit { get; } = Permission.Parse("document:edit");
+
+    /// <summary>
+    /// Reading one of the host's records of the type that discloses.
+    /// </summary>
+    public static Permission ReadNote { get; } = Permission.Parse("note:read");
 }

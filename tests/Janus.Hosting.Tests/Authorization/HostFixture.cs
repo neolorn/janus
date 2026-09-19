@@ -107,11 +107,16 @@ public sealed class HostFixture : IAsyncLifetime
             IsObjectable: false))
         .Permission(HostPermissions.Read.ToString())
         .Permission(HostPermissions.Edit.ToString())
+        .Permission(HostPermissions.ReadNote.ToString())
         .Resource<HostWorkspace>("workspace", type => type
             .BelongsToOrganization()
             .Purpose("running the host", "contract"))
         .Resource<HostDocument>("document", type => type
             .ContainedIn("workspace")
+            .Purpose("running the host", "contract"))
+        .Resource<HostNote>("note", type => type
+            .ContainedIn("workspace")
+            .Discloses()
             .Purpose("running the host", "contract"))
         .Build();
 }

@@ -39,6 +39,25 @@ public interface IAccessGate
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Whether the caller may do this at all, where what is being asked for is not
+    /// tied to one record.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="permission">What they are asking to do.</param>
+    /// <param name="organization">The organization they are asking within.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Nothing, or <c>authz.denied</c>. Nothing is being concealed when an
+    /// administrative operation is called without the permission, so the caller answers
+    /// that the operation is forbidden (AUTHZ-CONCEAL-005).
+    /// </returns>
+    ValueTask<Result> RequireAsync(
+        AccessContext context,
+        Permission permission,
+        OrganizationId organization,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// The same rule as a predicate over the host's own rows, for the host to apply to
     /// its own query.
     /// </summary>
@@ -100,6 +119,26 @@ public interface IAccessGate
         AccessContext context,
         Permission permission,
         ResourceReference resource,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The refusal a correlation identifier stands for, for a support role holding
+    /// <c>audit:read</c>.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="organization">The organization the support role is held in.</param>
+    /// <param name="correlation">The identifier the refusal was answered with.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The explanation the refusal was recorded with, or <c>authz.denied</c> where the
+    /// caller does not hold <c>audit:read</c> or the identifier stands for no refusal of
+    /// theirs to resolve. It names the permission and the principal and nothing about
+    /// the record (AUTHZ-CONCEAL-004).
+    /// </returns>
+    ValueTask<Result<AccessExplanation>> ResolveAsync(
+        AccessContext context,
+        OrganizationId organization,
+        AuditRecordId correlation,
         CancellationToken cancellationToken);
 
     /// <summary>

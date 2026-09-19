@@ -183,6 +183,44 @@ public sealed class AuthorizationModelTests
     }
 
     /// <summary>
+    /// AUTHZ-CONCEAL-001 AC1: a type that says nothing about what its refusals
+    /// disclose conceals, because whatever a declaration omits is what most types will
+    /// carry.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_CONCEAL_001_AC1_ATypeDeclaringNothingConceals()
+    {
+        var model = AuthorizationModel.Of(HostDomain.Declared().Build());
+
+        Assert.All(
+            model.ResourceTypes,
+            type => Assert.Equal(ConcealmentBehaviour.Conceal, type.Concealment));
+    }
+
+    /// <summary>
+    /// AUTHZ-CONCEAL-001 AC2: a type whose refusals say the record is there and is
+    /// forbidden says so itself, in one place, for every record of that type
+    /// (AUTHZ-CONCEAL-003).
+    /// </summary>
+    [Fact]
+    public void AUTHZ_CONCEAL_001_AC2_DisclosingIsDeclaredAndNotInferred()
+    {
+        var model = AuthorizationModel.Of(HostDomain.Declared()
+            .Resource<HostDomain.Draft>("draft", draft => draft
+                .ContainedIn("folder")
+                .Discloses()
+                .Purpose("collaboration", "contract"))
+            .Build());
+
+        Assert.Equal(
+            ConcealmentBehaviour.Disclose,
+            model.Find(ResourceType.Parse("draft"))?.Concealment);
+        Assert.Equal(
+            ConcealmentBehaviour.Conceal,
+            model.Find(ResourceType.Parse("document"))?.Concealment);
+    }
+
+    /// <summary>
     /// Containment is read from the model, outermost last, which is what inheritance
     /// walks and the only place it is written down.
     /// </summary>

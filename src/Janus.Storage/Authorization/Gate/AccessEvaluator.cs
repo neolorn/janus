@@ -45,6 +45,26 @@ internal sealed class AccessEvaluator(DataConnections connections) : IAccessEval
     }
 
     /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<CandidateGrant>> OrganizationCandidatesAsync(
+        SqlFilter candidates,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(candidates);
+
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        IEnumerable<MatchedGrant> matched = await ambient.Connection
+            .QueryAsync<MatchedGrant>(new CommandDefinition(
+                candidates.Text,
+                Arguments(candidates, []),
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+
+        return [.. matched.Select(Read)];
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<PageCapability>> PageAsync(
         SqlFilter page,
         IReadOnlyList<ResourceId> resources,

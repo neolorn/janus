@@ -23,6 +23,14 @@ against the public contract of LIB-API-001.
 - The gate explains itself: an explanation names the grant that decided, the container
   it was inherited from, and the principal it was decided for, or states that no grant
   matched. Capabilities for a page of records are computed in one query.
+- A refusal on one record answers as a record that does not exist unless the type says
+  otherwise, and a type says so in one place for every record of it. A type that
+  conceals has no self-service explanation, because saying that no grant matched says
+  that the record is there.
+- Every refusal carries a correlation identifier, which is the audit row it was
+  recorded as. A role holding `audit:read` resolves it to the permission and the
+  principal; it says nothing about whether the record exists. A permission that names
+  no record is refused as a permission the caller does not hold, with nothing concealed.
 - Inheritance is resolved through an ancestry closure maintained in the same
   transaction as the create or the move that changes it, so a permission query joins
   one table rather than walking the tree, and permission data and business data cannot

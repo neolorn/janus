@@ -43,7 +43,7 @@ internal sealed class PermissionRule
     private const string Prefix = "janus_authz_";
 
     private readonly string[] _permissions;
-    private readonly ResourceType _type;
+    private readonly ResourceType? _type;
     private readonly OrganizationId _organization;
     private readonly SubjectSet _subjects;
     private readonly DateTimeOffset _at;
@@ -64,16 +64,37 @@ internal sealed class PermissionRule
         OrganizationId organization,
         SubjectSet subjects,
         DateTimeOffset at)
+        : this(permissions, organization, subjects, at) => _type = type;
+
+    /// <summary>
+    /// The same rule asked of the organization itself, which is the third scope a
+    /// grant may name (AUTHZ-GRANT-001).
+    /// </summary>
+    /// <param name="permissions">What is being asked for.</param>
+    /// <param name="organization">The organization the evaluation is scoped to.</param>
+    /// <param name="subjects">Who holds grants for the principal.</param>
+    /// <param name="at">The instant liveness is read at.</param>
+    /// <exception cref="ArgumentNullException">The permissions or the subjects are absent.</exception>
+    public PermissionRule(
+        IReadOnlyList<Permission> permissions,
+        OrganizationId organization,
+        SubjectSet subjects,
+        DateTimeOffset at)
     {
         ArgumentNullException.ThrowIfNull(permissions);
         ArgumentNullException.ThrowIfNull(subjects);
 
         _permissions = [.. permissions.Select(permission => permission.ToString())];
-        _type = type;
         _organization = organization;
         _subjects = subjects;
         _at = at;
     }
+
+    // Every rendering but the organization-wide one is about records of one type, and
+    // the type is what the ancestry is read by.
+    private ResourceType Type => _type
+        ?? throw new InvalidOperationException(
+            "The rule was built for the organization itself and names no resource type.");
 
     /// <summary>
     /// What the matched grants decide: a deny defeats every allow, and the nearest
@@ -105,7 +126,7 @@ internal sealed class PermissionRule
         IQueryable<AncestryEntry> ancestry = sources.Ancestry;
         IQueryable<EffectiveGrant> grants = sources.Grants;
         string[] permissions = _permissions;
-        string type = _type.ToString();
+        string type = Type.ToString();
         Guid organization = _organization.Value;
         Guid[] accounts = _subjects.Accounts;
         Guid[] groups = _subjects.Groups;
@@ -212,6 +233,30 @@ internal sealed class PermissionRule
         Parameters());
 
     /// <summary>
+    /// The grants the rule matches on the organization itself, the one that decides
+    /// first. Nothing is inherited here: a grant naming a record confers nothing over
+    /// the organization that record sits in.
+    /// </summary>
+    /// <returns>The statement and its parameters.</returns>
+    public SqlFilter ToOrganizationCandidates() => new(
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"""
+            SELECT {Prefix}grant.grant_id AS "{nameof(CandidateGrant.Grant)}",
+                   {Prefix}grant.kind AS "{nameof(CandidateGrant.Kind)}",
+                   {Prefix}grant.subject_type AS "{nameof(CandidateGrant.SubjectType)}",
+                   {Prefix}grant.subject_id AS "{nameof(CandidateGrant.SubjectId)}",
+                   {Prefix}grant.role AS "{nameof(CandidateGrant.Role)}",
+                   {Prefix}grant.deny AS "{nameof(CandidateGrant.Deny)}",
+                   CAST(NULL AS text) AS "{nameof(CandidateGrant.AncestorType)}",
+                   CAST(NULL AS text) AS "{nameof(CandidateGrant.AncestorId)}"
+            FROM janus.effective_grants AS {Prefix}grant
+            WHERE {MatchesOrganization(Prefix + "grant")}
+            ORDER BY {Prefix}grant.deny DESC, {Prefix}grant.grant_id ASC;
+            """),
+        OrganizationParameters());
+
+    /// <summary>
     /// What each record of a page confers, for every permission the rule names, in one
     /// query rather than one per row.
     /// </summary>
@@ -257,14 +302,7 @@ internal sealed class PermissionRule
     private static string Matches(string grant, string row) => string.Create(
         CultureInfo.InvariantCulture,
         $"""
-        {grant}.permission = ANY(@{Prefix}permissions)
-                  AND {grant}.organization = @{Prefix}organization
-                  AND {grant}.revoked_at IS NULL
-                  AND ({grant}.expires_at IS NULL OR {grant}.expires_at > @{Prefix}at)
-                  AND (({grant}.subject_type = 'user'
-                          AND {grant}.subject_id = ANY(@{Prefix}accounts))
-                    OR ({grant}.subject_type = 'group'
-                          AND {grant}.subject_id = ANY(@{Prefix}groups)))
+        {Live(grant)}
                   AND ({grant}.resource_type IS NULL OR EXISTS (
                       SELECT 1
                       FROM janus.ancestry AS {grant}_above
@@ -274,10 +312,45 @@ internal sealed class PermissionRule
                         AND {grant}_above.ancestor_id = {grant}.resource_id))
         """);
 
+    // The same predicate asked of the organization itself, which AUTHZ-GRANT-001 makes
+    // a scope a grant may name: only a grant naming no record reaches it, and a grant
+    // on one record confers nothing over the organization it sits in.
+    private static string MatchesOrganization(string grant) => string.Create(
+        CultureInfo.InvariantCulture,
+        $"""
+        {Live(grant)}
+                  AND {grant}.resource_type IS NULL
+        """);
+
+    // What every rendering asks of a grant before it asks what the grant reaches.
+    private static string Live(string grant) => string.Create(
+        CultureInfo.InvariantCulture,
+        $"""
+        {grant}.permission = ANY(@{Prefix}permissions)
+                  AND {grant}.organization = @{Prefix}organization
+                  AND {grant}.revoked_at IS NULL
+                  AND ({grant}.expires_at IS NULL OR {grant}.expires_at > @{Prefix}at)
+                  AND (({grant}.subject_type = 'user'
+                          AND {grant}.subject_id = ANY(@{Prefix}accounts))
+                    OR ({grant}.subject_type = 'group'
+                          AND {grant}.subject_id = ANY(@{Prefix}groups)))
+        """);
+
     private Dictionary<string, object> Parameters() => new(StringComparer.Ordinal)
     {
         [Prefix + "permissions"] = _permissions,
-        [Prefix + "type"] = _type.ToString(),
+        [Prefix + "type"] = Type.ToString(),
+        [Prefix + "organization"] = _organization.Value,
+        [Prefix + "accounts"] = _subjects.Accounts,
+        [Prefix + "groups"] = _subjects.Groups,
+        [Prefix + "at"] = _at,
+    };
+
+    // The organization-wide rendering reads no ancestry, so it carries no resource
+    // type: the statement would hold a parameter it never names.
+    private Dictionary<string, object> OrganizationParameters() => new(StringComparer.Ordinal)
+    {
+        [Prefix + "permissions"] = _permissions,
         [Prefix + "organization"] = _organization.Value,
         [Prefix + "accounts"] = _subjects.Accounts,
         [Prefix + "groups"] = _subjects.Groups,

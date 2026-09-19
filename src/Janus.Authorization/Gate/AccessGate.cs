@@ -18,21 +18,29 @@ namespace Janus.Authorization.Gate;
 /// <param name="model">The host's declared domain, read for containment and concealment.</param>
 /// <param name="records">Where a record's organization is read from.</param>
 /// <param name="evaluator">Where a rendered rule is run.</param>
+/// <param name="audit">Where a refusal is recorded and read back.</param>
 /// <param name="subjects">Who the principal is, resolved once per operation.</param>
 /// <param name="time">The clock liveness is read against.</param>
 /// <remarks>
 /// Implements AUTHZ-SEAM-001, AUTHZ-PRIN-001, AUTHZ-PRIN-003, AUTHZ-GATE-002,
-/// AUTHZ-GATE-004, AUTHZ-GATE-005, AUTHZ-SCOPE-001 and LIB-SEAM-001. A check and a
-/// filter are the one rule rendered two ways, so neither can come to answer what the
-/// other would refuse. Every path that cannot resolve what it needs denies.
+/// AUTHZ-GATE-004, AUTHZ-GATE-005, AUTHZ-SCOPE-001, AUTHZ-CONCEAL-004 and LIB-SEAM-001.
+/// A check and a filter are the one rule rendered two ways, so neither can come to
+/// answer what the other would refuse. Every path that cannot resolve what it needs
+/// denies.
 /// </remarks>
 internal sealed class AccessGate(
     AuthorizationModel model,
     IResourceStore records,
     IAccessEvaluator evaluator,
+    IAccessAudit audit,
     SubjectSets subjects,
     TimeProvider time) : IAccessGate
 {
+    private static readonly ResourceType OrganizationWide = ResourceType.Parse("organization");
+
+    private static readonly IReadOnlyDictionary<Permission, IReadOnlySet<CapabilityResidual>>
+        NoResiduals = new Dictionary<Permission, IReadOnlySet<CapabilityResidual>>();
+
     /// <inheritdoc/>
     public async ValueTask<Result> RequireAsync(
         AccessContext context,
@@ -40,15 +48,39 @@ internal sealed class AccessGate(
         ResourceReference resource,
         CancellationToken cancellationToken)
     {
-        CandidateGrant? decided = await DecideAsync(context, permission, resource, cancellationToken)
+        Decision decided = await DecideAsync(context, permission, resource, cancellationToken)
             .ConfigureAwait(false);
 
+        return decided.Grant is { Deny: false }
+            ? Result.Success()
+            : await RefusedAsync(
+                context,
+                permission,
+                resource.Type,
+                decided.Organization,
+                cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result> RequireAsync(
+        AccessContext context,
+        Permission permission,
+        OrganizationId organization,
+        CancellationToken cancellationToken)
+    {
+        CandidateGrant? decided = await HoldsAsync(context, permission, organization, cancellationToken)
+            .ConfigureAwait(false);
+
+        // AUTHZ-CONCEAL-005: nothing is concealed here, so what the caller answers is
+        // that the operation is forbidden. The refusal is recorded the same way.
         return decided is { Deny: false }
             ? Result.Success()
-            : Result.Failure(Error.From(
-                ErrorCodes.Denied,
-                "correlation",
-                JsonSerializer.SerializeToElement(Guid.CreateVersion7(time.GetUtcNow()))));
+            : await RefusedAsync(
+                context,
+                permission,
+                OrganizationWide,
+                organization,
+                cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -60,14 +92,54 @@ internal sealed class AccessGate(
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        CandidateGrant? decided = await DecideAsync(context, permission, resource, cancellationToken)
+        // AUTHZ-GATE-004: on a type whose denial answers as a record that does not
+        // exist, an explanation saying no grant matched says that it does.
+        if (Declared(resource.Type).Concealment is ConcealmentBehaviour.Conceal)
+        {
+            return Result.Failure<AccessExplanation>(Error.From(ErrorCodes.Denied));
+        }
+
+        Decision decided = await DecideAsync(context, permission, resource, cancellationToken)
             .ConfigureAwait(false);
 
         return Result.Success(new AccessExplanation(
-            decided is { Deny: false } ? AccessOutcome.Allowed : AccessOutcome.Denied,
+            decided.Grant is { Deny: false } ? AccessOutcome.Allowed : AccessOutcome.Denied,
             permission,
             new ExplainedPrincipal(context.Acting, context.Effective),
-            decided is null ? null : Explained(decided, resource)));
+            decided.Grant is null ? null : Explained(decided.Grant, resource)));
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result<AccessExplanation>> ResolveAsync(
+        AccessContext context,
+        OrganizationId organization,
+        AuditRecordId correlation,
+        CancellationToken cancellationToken)
+    {
+        Result held = await RequireAsync(context, Permissions.AuditRead, organization, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!held.Match(() => true, _ => false))
+        {
+            return Result.Failure<AccessExplanation>(Error.From(ErrorCodes.Denied));
+        }
+
+        DeniedAccess? recorded = await audit.FindAsync(correlation, cancellationToken)
+            .ConfigureAwait(false);
+
+        // A refusal recorded against no organization is one about a record the library
+        // holds no row for, which no organization owns; the identifier, which only its
+        // holder has, is the whole of what reaches it.
+        if (recorded is null || recorded.Organization is OrganizationId owner && owner != organization)
+        {
+            return Result.Failure<AccessExplanation>(Error.From(ErrorCodes.Denied));
+        }
+
+        return Result.Success(new AccessExplanation(
+            AccessOutcome.Denied,
+            recorded.Permission,
+            new ExplainedPrincipal(recorded.Acting, recorded.Effective),
+            Grant: null));
     }
 
     /// <inheritdoc/>
@@ -198,6 +270,45 @@ internal sealed class AccessGate(
             CultureInfo.InvariantCulture,
             $"The resource type '{type}' is not declared, so no policy governs it."));
 
+    // AUTHZ-CONCEAL-004, CONV-LOG-005: one path answers every refusal, and the
+    // identifier it hands back is the row the refusal was recorded as. A context naming
+    // no account names nobody the trail can record the refusal against, both of its
+    // identity fields being accounts (IDN-AUD-001).
+    private async ValueTask<Result> RefusedAsync(
+        AccessContext context,
+        Permission permission,
+        ResourceType type,
+        OrganizationId? organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context.Acting is not SubjectId acting || context.Effective is not SubjectId effective)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        var correlation = AuditRecordId.New(time);
+
+        await audit
+            .RecordAsync(
+                new DeniedAccess(
+                    correlation,
+                    acting,
+                    effective,
+                    organization,
+                    permission,
+                    type,
+                    time.GetUtcNow()),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return Result.Failure(Error.From(
+            ErrorCodes.Denied,
+            "correlation",
+            JsonSerializer.SerializeToElement(correlation.Value)));
+    }
+
     private async ValueTask<PermissionRule> RuleAsync(
         AccessContext context,
         IReadOnlyList<Permission> permissions,
@@ -215,7 +326,26 @@ internal sealed class AccessGate(
             time.GetUtcNow());
     }
 
-    private async ValueTask<CandidateGrant?> DecideAsync(
+    private async ValueTask<CandidateGrant?> HoldsAsync(
+        AccessContext context,
+        Permission permission,
+        OrganizationId organization,
+        CancellationToken cancellationToken)
+    {
+        var rule = new PermissionRule(
+            [permission],
+            organization,
+            await subjects.OfAsync(context, cancellationToken).ConfigureAwait(false),
+            time.GetUtcNow());
+
+        IReadOnlyList<CandidateGrant> candidates = await evaluator
+            .OrganizationCandidatesAsync(rule.ToOrganizationCandidates(), cancellationToken)
+            .ConfigureAwait(false);
+
+        return PermissionRule.Decides(candidates);
+    }
+
+    private async ValueTask<Decision> DecideAsync(
         AccessContext context,
         Permission permission,
         ResourceReference resource,
@@ -232,7 +362,7 @@ internal sealed class AccessGate(
 
         if (registered is null)
         {
-            return null;
+            return new Decision(Grant: null, Organization: null);
         }
 
         var rule = new PermissionRule(
@@ -246,9 +376,10 @@ internal sealed class AccessGate(
             .CandidatesAsync(rule.ToCandidates(), resource.Id, cancellationToken)
             .ConfigureAwait(false);
 
-        return PermissionRule.Decides(candidates);
+        return new Decision(PermissionRule.Decides(candidates), registered.Organization);
     }
 
-    private static readonly IReadOnlyDictionary<Permission, IReadOnlySet<CapabilityResidual>>
-        NoResiduals = new Dictionary<Permission, IReadOnlySet<CapabilityResidual>>();
+    // What an evaluation decided, and the organization it was scoped to, which is what
+    // a refusal is recorded against.
+    private sealed record Decision(CandidateGrant? Grant, OrganizationId? Organization);
 }

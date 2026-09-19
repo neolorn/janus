@@ -77,6 +77,38 @@ internal sealed class Deployment(HostFixture fixture)
     }
 
     /// <summary>
+    /// Writes a further role of the organization.
+    /// </summary>
+    /// <param name="permissions">What the role allows.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The role.</returns>
+    public async Task<RoleName> RoleAsync(
+        IReadOnlyList<Permission> permissions,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(permissions);
+
+        var role = RoleName.Parse("role" + Guid.NewGuid().ToString("n")[..8]);
+
+        await using NpgsqlConnection connection = await fixture.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO janus.roles (name) VALUES (@role);",
+            new { role = role.ToString() },
+            cancellationToken: cancellationToken));
+
+        foreach (Permission permission in permissions)
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                "INSERT INTO janus.role_permissions (role, permission) VALUES (@role, @permission);",
+                new { role = role.ToString(), permission = permission.ToString() },
+                cancellationToken: cancellationToken));
+        }
+
+        return role;
+    }
+
+    /// <summary>
     /// Writes an account.
     /// </summary>
     /// <param name="cancellationToken">Abandons the operation.</param>

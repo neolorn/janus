@@ -29,6 +29,17 @@ internal interface IAccessEvaluator
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// The grants a rule matches on the organization itself, the one that decides
+    /// first.
+    /// </summary>
+    /// <param name="candidates">The rendered statement and its parameters.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The matched grants.</returns>
+    ValueTask<IReadOnlyList<CandidateGrant>> OrganizationCandidatesAsync(
+        SqlFilter candidates,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// What each record of a page confers, read in one query for the whole page.
     /// </summary>
     /// <param name="page">The rendered statement and its parameters.</param>
