@@ -75,6 +75,11 @@ against the public contract of LIB-API-001.
   identifiers are compared under, and every fixed vocabulary stored as the
   spelling it carries on the wire and constrained by a check rather than a
   native enum type, so the admitted set changes without a locking migration.
+- The transaction an operation runs in, and the one accessor hand-written SQL
+  takes its connection from: a query written by hand runs on the same connection
+  and inside the same transaction as the rest of the operation, so it can never
+  miss a write the operation has already made, and an operation that fails part
+  way through leaves nothing behind.
 
 ### Changed
 
