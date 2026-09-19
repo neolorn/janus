@@ -117,6 +117,29 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     }
 
     /// <summary>
+    /// AUTHZ-GATE-002 AC2: the two renderings of the one rule are asked every case of
+    /// the table and answer it alike, neither having been written separately.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_002_AC2_EveryCaseIsEqualAcrossBothRenderingsAsync()
+    {
+        List<(bool Expression, bool Fragment)> rendered = [];
+
+        foreach ((string scenario, bool _) in Table)
+        {
+            Case written = await WriteAsync(scenario);
+
+            rendered.Add((
+                await ExpressionAdmitsAsync(written),
+                await FragmentAdmitsAsync(written)));
+        }
+
+        Assert.Equal(Table.Length, rendered.Count);
+        Assert.All(rendered, outcome => Assert.Equal(outcome.Expression, outcome.Fragment));
+    }
+
+    /// <summary>
     /// AUTHZ-GATE-002 AC3: the fragment carries every value as a parameter, so nothing
     /// a caller supplied reaches its text.
     /// </summary>

@@ -160,7 +160,32 @@ public sealed class GrantStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
-    /// AUTHZ-GRANT-003 AC2, AC3: who granted it, when and why are on the row, and so are
+    /// AUTHZ-GRANT-003 AC3: who granted a record's grants and when is a query over the
+    /// grants themselves, needing no separate log to be kept in step.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_GRANT_003_AC3_WhoGrantedThisAndWhenIsAnsweredByQueryAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId account = await _deployment.AccountAsync(Noon);
+        SubjectId administrator = await _deployment.AccountAsync(Noon);
+        ResourceReference record = await RegisterAsync(organization, containedIn: null);
+
+        GrantId id = await WriteAsync(
+            GrantSubject.Of(account),
+            organization,
+            record,
+            grantedBy: administrator);
+
+        Grant found = Assert.Single(await OnAsync(record, organization));
+
+        Assert.Equal(id, found.Id);
+        Assert.Equal(administrator, found.GrantedBy);
+        Assert.Equal(Noon, found.GrantedAt);
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-003 AC2: who granted it, when and why are on the row, and so are
     /// who revoked it, when and why.
     /// </summary>
     [Fact]

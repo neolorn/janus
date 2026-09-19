@@ -45,9 +45,9 @@ public sealed class SubjectSetsTests
     }
 
     /// <summary>
-    /// AUTHZ-GROUP-002 AC2, AUTHZ-CACHE-001: what is held is the group set and the
-    /// counter it was read at, so the entry is orphaned by the next change rather than
-    /// waiting for an expiry.
+    /// AUTHZ-CACHE-001 AC3: what is held is the group set and the counter it was read
+    /// at, so the entry is orphaned by the next change rather than waiting for an
+    /// expiry.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -65,6 +65,36 @@ public sealed class SubjectSetsTests
 
         Assert.Equal(2, resolved.Version);
         Assert.Equal([subject.Value], resolved.Accounts);
+    }
+
+    /// <summary>
+    /// AUTHZ-GROUP-002 AC2: the resolved set is held for the operation and carries the
+    /// counter it was read at, which is what the next change to a holder's grants or
+    /// memberships raises (AUTHZ-CACHE-001).
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GROUP_002_AC2_TheResolvedSetIsHeldAndInvalidatedByTheCounterAsync()
+    {
+        var groups = new GroupsInMemory();
+        var grants = new GrantsInMemory();
+        var sets = new SubjectSets(groups, grants);
+        SubjectId subject = Subject();
+        var context = AccessContext.Of(subject);
+
+        SubjectSet first = await sets.OfAsync(context, TestContext.Current.CancellationToken);
+
+        grants.Bump(subject);
+
+        SubjectSet again = await sets.OfAsync(context, TestContext.Current.CancellationToken);
+        int held = groups.Reads;
+
+        SubjectSet afterwards = await new SubjectSets(groups, grants)
+            .OfAsync(context, TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, held);
+        Assert.Equal(first.Version, again.Version);
+        Assert.NotEqual(first.Version, afterwards.Version);
     }
 
     /// <summary>

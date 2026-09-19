@@ -305,6 +305,193 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             error => error.Code));
     }
 
+    /// <summary>
+    /// AUTHZ-INHERIT-001 AC2, AUTHZ-GRANT-004 AC2: taking the grant away takes the
+    /// inherited access with it, on the request after it and without anything else
+    /// happening in between.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_INHERIT_001_AC2_RemovingTheGrantRemovesTheInheritedAccessAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+
+        GrantId grant = await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Top,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        Assert.True(await ChecksAsync(nested.Account, nested.Record));
+
+        await nested.Deployment.RevokeAsync(grant, cancellationToken);
+
+        Assert.False(await ChecksAsync(nested.Account, nested.Record));
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-004 AC2: a grant written now is read by the request after it, no
+    /// restart and no wait between the two.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_004_AC2_GrantingTakesEffectOnTheNextRequestAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+
+        Assert.False(await ChecksAsync(nested.Account, nested.Record));
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Bottom,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        Assert.True(await ChecksAsync(nested.Account, nested.Record));
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-002 AC1: a deny on the record itself defeats an allow inherited from
+    /// a container above it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_002_AC1_ADenyOnTheRecordDefeatsAnInheritedAllowAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Top,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            true,
+            null,
+            null,
+            cancellationToken);
+
+        Assert.False(await ChecksAsync(nested.Account, nested.Record));
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-002 AC3: taking the deny away restores what the allow already
+    /// conferred, the allow never having been touched.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_002_AC3_RemovingTheDenyRestoresTheAllowAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+
+        GrantId allow = await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Top,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        GrantId deny = await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            true,
+            null,
+            null,
+            cancellationToken);
+
+        Assert.False(await ChecksAsync(nested.Account, nested.Record));
+
+        await nested.Deployment.RevokeAsync(deny, cancellationToken);
+
+        Assert.True(await ChecksAsync(nested.Account, nested.Record));
+        Assert.NotEqual(allow, deny);
+    }
+
+    /// <summary>
+    /// AUTHZ-CACHE-001 AC7: a grant whose expiry has passed confers nothing, no sweep
+    /// having run and nothing having been invalidated.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_CACHE_001_AC7_AnExpiredGrantConfersNothingWithoutASweepAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Top,
+            false,
+            Deployment.Noon.AddHours(-1),
+            null,
+            cancellationToken);
+
+        Assert.False(await ChecksAsync(nested.Account, nested.Record));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-005 AC2: a capability the gate reports with nothing further required
+    /// is a capability the check grants, so a frontend that shows the control is right
+    /// to show it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_005_AC2_ACapabilityRequiringNothingFurtherSucceedsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Top,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        Capability capability = Assert.Single(Rendered(
+            await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .CapabilitiesAsync(
+                    AccessContext.Of(nested.Account),
+                    Document,
+                    [nested.Record.Id],
+                    [HostPermissions.Read, HostPermissions.Edit],
+                    cancellationToken)));
+
+        Assert.Empty(capability.Requires);
+
+        foreach (Permission permission in capability.Can)
+        {
+            Assert.True(await ChecksAsync(nested.Account, nested.Record, permission));
+        }
+
+        Assert.NotEmpty(capability.Can);
+    }
+
     private static TRendering Rendered<TRendering>(Result<TRendering> outcome) =>
         outcome.Match(
             rendering => rendering,

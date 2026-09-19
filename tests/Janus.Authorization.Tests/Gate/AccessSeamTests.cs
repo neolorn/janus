@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using Janus.Authorization.Gate;
 using Janus.Core;
@@ -73,8 +74,8 @@ public sealed class AccessSeamTests
     }
 
     /// <summary>
-    /// AUTHZ-GATE-001 AC2, AUTHZ-IMP-001 AC1: every operation of the gate is asked by
-    /// somebody, so background work reaches data as a named principal or not at all.
+    /// AUTHZ-GATE-001 AC2: every operation of the gate is asked by somebody, so
+    /// background work reaches data as a named principal or not at all.
     /// </summary>
     [Fact]
     public void AUTHZ_GATE_001_AC2_EveryOperationNamesWhoIsAsking()
@@ -105,6 +106,28 @@ public sealed class AccessSeamTests
                 "IQueryable",
                 method.ReturnType.Name,
                 StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// AUTHZ-IMP-001 AC1: both identities are on every context, one principal standing
+    /// for both where nobody is acting for anybody.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_IMP_001_AC1_BothFieldsArePresentOnEveryAccessContext()
+    {
+        using var randomness = RandomNumberGenerator.Create();
+
+        var subject = SubjectId.New(randomness);
+        var context = AccessContext.Of(subject);
+
+        Assert.Equal(subject, context.Acting);
+        Assert.Equal(subject, context.Effective);
+
+        Assert.All(
+            typeof(AccessContext).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(property => property.Name is nameof(AccessContext.Acting)
+                    or nameof(AccessContext.Effective)),
+            property => Assert.NotNull(property.GetMethod));
     }
 
     /// <summary>

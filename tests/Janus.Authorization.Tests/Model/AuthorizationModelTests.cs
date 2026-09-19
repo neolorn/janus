@@ -11,7 +11,8 @@ namespace Janus.Authorization.Tests.Model;
 
 /// <summary>
 /// The model a host declares and what building it refuses
-/// (AUTHZ-MODEL-001 to AUTHZ-MODEL-004, AUTHZ-MODEL-006).
+/// (AUTHZ-MODEL-001 to AUTHZ-MODEL-004, AUTHZ-MODEL-006, AUTHZ-GATE-001,
+/// AUTHZ-CONCEAL-001).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class AuthorizationModelTests
@@ -161,6 +162,30 @@ public sealed class AuthorizationModelTests
             new object[] { workspace, folder, document },
             entity => Assert.NotNull(model.Find(entity.GetType())));
         Assert.Null(model.Find(journey.GetType()));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-001 AC3: the enumeration is over every type the gate would be asked
+    /// about, and one the declaration does not name has no policy for the gate to read,
+    /// so it fails here rather than at the first request.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_GATE_001_AC3_EveryQueryableEntityIsEnumeratedAgainstItsPolicy()
+    {
+        var model = AuthorizationModel.Of(HostDomain.Declared().Build());
+
+        Assert.NotEmpty(model.ResourceTypes);
+
+        Assert.All(
+            model.ResourceTypes,
+            type =>
+            {
+                Assert.NotNull(model.Find(type.Name));
+                Assert.NotNull(model.Find(type.Entity));
+            });
+
+        Assert.Null(model.Find(typeof(OtherDomain.Journey)));
+        Assert.Null(model.Find(ResourceType.Parse("journey")));
     }
 
     /// <summary>
