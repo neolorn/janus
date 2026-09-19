@@ -69,6 +69,12 @@ against the public contract of LIB-API-001.
   back from. A takedown passes through suspension into that window in one step
   and is reversed, never cancelled. The record itself is never deleted, so an
   audit trail keeps resolving after the personal data is gone.
+- The library's own database schema and its first migration: one schema the
+  library owns, with a migration history table of its own so a host's migrations
+  never collide with it, a case-insensitive ICU collation for the columns
+  identifiers are compared under, and every fixed vocabulary stored as the
+  spelling it carries on the wire and constrained by a check rather than a
+  native enum type, so the admitted set changes without a locking migration.
 
 ### Changed
 
