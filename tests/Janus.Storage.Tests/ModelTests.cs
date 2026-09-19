@@ -48,19 +48,8 @@ public sealed class ModelTests
     /// membership already answers.
     /// </summary>
     [Fact]
-    public void IDN_ORG_002_AC1_NoColumnDistinguishesStaffFromCustomers()
-    {
-        string[] forbidden = ["staff", "customer", "employee", "internal", "external"];
-
-        IEnumerable<string> columns = Model()
-            .GetEntityTypes()
-            .SelectMany(entity => entity.GetProperties())
-            .Select(property => property.GetColumnName());
-
-        Assert.All(columns, column => Assert.DoesNotContain(
-            forbidden,
-            word => column.Contains(word, StringComparison.OrdinalIgnoreCase)));
-    }
+    public void IDN_ORG_002_AC1_NoColumnDistinguishesStaffFromCustomers() =>
+        RefuseColumnsNamedAfter(["staff", "customer", "employee", "internal", "external"]);
 
     /// <summary>
     /// REG-ACCT-001 AC2: every column the library maps is a field the item's table
@@ -166,13 +155,58 @@ public sealed class ModelTests
             "subject_keys.wrapped_key",
         ];
 
-        IEnumerable<string> mapped = Model()
+        Assert.Equal(expected, Columns().OrderBy(name => name, StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// IDN-ATTR-005 AC1: no table of the library's holds an address. Where the host
+    /// keeps one it is the host's own, and nothing here has a column to put it in.
+    /// </summary>
+    [Fact]
+    public void IDN_ATTR_005_AC1_NoLibraryTableHoldsAnAddress() =>
+        RefuseColumnsNamedAfter(["address", "street", "city", "postcode", "district"]);
+
+    /// <summary>
+    /// IDN-ATTR-006 AC1: no field holds a latitude or a longitude. A location resolves
+    /// to an area and the coordinates are discarded before anything is written.
+    /// </summary>
+    [Fact]
+    public void IDN_ATTR_006_AC1_NoSchemaFieldHoldsCoordinates() =>
+        RefuseColumnsNamedAfter(["latitude", "longitude", "coordinate"]);
+
+    /// <summary>
+    /// IDN-ATTR-007 AC1: the profile is the display name, the legal name, the date of
+    /// birth and the photo. A fifth field would be one nothing states a rule for.
+    /// </summary>
+    [Fact]
+    public void IDN_ATTR_007_AC1_TheProfileIsTheFourFieldsAndNothingElse()
+    {
+        string[] expected =
+        [
+            "profile_photos.enc_image",
+            "profiles.enc_date_of_birth",
+            "profiles.enc_display_name",
+            "profiles.enc_legal_name",
+        ];
+
+        IEnumerable<string> fields = Columns()
+            .Where(column => column.Contains(".enc_", StringComparison.Ordinal))
+            .Where(column => column.StartsWith("profile", StringComparison.Ordinal));
+
+        Assert.Equal(expected, fields.OrderBy(name => name, StringComparer.Ordinal));
+    }
+
+    private static void RefuseColumnsNamedAfter(string[] forbidden) =>
+        Assert.All(Columns(), column => Assert.DoesNotContain(
+            forbidden,
+            word => column.Contains(word, StringComparison.OrdinalIgnoreCase)));
+
+    private static List<string> Columns() =>
+        Model()
             .GetEntityTypes()
             .SelectMany(entity => entity.GetProperties()
-                .Select(property => entity.GetTableName() + "." + property.GetColumnName()));
-
-        Assert.Equal(expected, mapped.OrderBy(name => name, StringComparer.Ordinal));
-    }
+                .Select(property => entity.GetTableName() + "." + property.GetColumnName()))
+            .ToList();
 
     private static IModel Model()
     {
