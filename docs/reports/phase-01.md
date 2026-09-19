@@ -1,6 +1,6 @@
 # Phase 1: Storage and identity core
 
-Status: complete. The library's own schema and its eleven migrations, the account
+Status: items complete, stopped at the open question of section 4. The library's own schema and its eleven migrations, the account
 states and their transitions, the per-subject data key with the field cipher, the keyed
 fingerprint, the pinned Unicode tables with the canonical form and the two PRECIS
 profiles over them, the mixed-script rule, the settings table, the identifier model with
@@ -163,7 +163,39 @@ Criteria no test can decide, and how each was verified:
 
 ## 4. Open questions
 
-None. The three of the previous run are answered by D-157 and implemented above.
+### 1. The commit-message gate fails every merge commit (Tier 2)
+
+- **Item.** CONV-VCS-003 AC1; CONV-GATE-001 AC1, AC2; CONV-VCS-001, CONV-VCS-002.
+- **What the code needs.** `Commit message format` runs over the push range as well as
+  the pull-request range. On the default branch that range holds the merge commit the
+  platform wrote, whose subject is `Merge pull request #6 from neolorn/phase-01-canonicalisation`
+  and whose body is the pull request's title. Neither parses under Conventional Commits
+  1.0.0, so the job fails and the default branch is red. It has been red since the merge
+  of pull request #4: runs `35432996701` and `35444325117`, both on `main`, both failing
+  that job alone. The gate cannot be satisfied on the default branch while the
+  repository merges rather than squashes.
+- **What the specification says.** CONV-VCS-003 requires every commit message to follow
+  Conventional Commits 1.0.0, with a type from a list of nine, a description in the
+  imperative and a body of dash fragments; AC1 makes a message that does not parse fail
+  a check on push and on pull request. CONV-VCS-001 requires the branch to be merged via
+  pull request, and squash merges are off because the commits are already atomic.
+  CONV-GATE-001 AC2 states the purpose of the gate: a failing check blocks the merge.
+  Nothing in `08` or the decision log says what a merge commit's message is.
+- **The readings.** (a) The gate is stated over the message a change carries, and a
+  merge commit carries no change of its own, so a commit with two parents is outside it.
+  This fits CONV-GATE-001 AC2, under which the gate exists to block a merge and so runs
+  on what the merge would bring in. (b) A merge commit carries a Conventional message
+  like any other, written when the merge is made (`chore(main): merge phase 1`, with no
+  body), and the platform's default subject is simply not used.
+- **The smallest fix for each.** (a) One sentence in CONV-VCS-003 stating that a commit
+  with more than one parent is outside AC1, and the same condition in
+  `.github/gates/commit-message.sh`. (b) One sentence in CONV-VCS-003 giving the form a
+  merge commit's message takes, and the merge command supplying it every time.
+- **Why this is not resolved by rule.** Both readings are workable and the choice
+  decides what the history of the default branch looks like for the life of the
+  repository. The report of this phase is on a branch and its pull request is left open,
+  because merging it under reading (b) would need the wording first and under reading
+  (a) would leave the default branch red again.
 
 ## 5. Gate result
 
@@ -183,15 +215,19 @@ request #6, runs `35436793900` and `35436801833`, `35438577668` and `35438580241
 finally `35443959810` (push) and `35443961616` (pull request), carrying the
 administrative organization, the photo criterion and the three database roles.
 
-The last pull-request run is green on all nineteen jobs it runs, including `Integration
-tests`, `Double migration run`, `Unicode tables regenerate without a diff`, `Commit
-message format` and `Changelog line present`; `Secret scanning` runs on the push event,
-as CONV-GATE-002 states, and the last push run is green. Six earlier pull-request runs
-failed `Commit message format` alone, on two messages of 74 characters where
-CONV-VCS-003 AC1 allows 72; both were rewritten and the branch force-pushed with the
-lease, so the messages in history are
+The branch's last two runs, `35444156089` (push) and `35444158631` (pull request), are
+green on every job, including `Integration tests`, `Double migration run`, `Unicode
+tables regenerate without a diff`, `Commit message format` and `Changelog line present`;
+`Secret scanning` runs on the push event, as CONV-GATE-002 states. Six earlier
+pull-request runs failed `Commit message format` alone, on two messages of 74 characters
+where CONV-VCS-003 AC1 allows 72; both were rewritten and the branch force-pushed with
+the lease, so the messages in history are
 `test(storage): run the account and subject-key ports against a database` and
 `- a column names a collation by one identifier, never by a schema`.
+
+The phase merged through pull request #6 with every check green. The push run that
+followed on the default branch, `35444325117`, fails `Commit message format` on the
+merge commit itself, which is the open question of section 4.
 
 Tests: 562, all passing. `tests/Janus.Core.Tests` 348, `tests/Janus.Storage.Tests` 124
 (25 unit, 99 integration), `tests/Janus.Identity.Tests` 62,
