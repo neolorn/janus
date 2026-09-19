@@ -51,6 +51,11 @@ against the public contract of LIB-API-001.
 - `AccountState`, `SuspensionOrigin`, `DeletionOrigin`, `TakedownTrigger`,
   `ErasureStatus` and `ErasureReason` in `Janus.Core`: the state an account is in,
   why it entered the one it is in, and how far an erasure's host-side work has got.
+- `ISecretSource` and `KeyEncryptionKeys` in `Janus.Core`: the host supplies the
+  key-encryption key, the fingerprint key and the maintenance credential, and the
+  library ships no secrets-manager client and no default.
+- `IUnitOfWork` in `Janus.Core`: an operation runs in one transaction and commits
+  once, so a failure part way through leaves nothing written.
 
 ### Changed
 
