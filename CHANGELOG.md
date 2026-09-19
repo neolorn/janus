@@ -63,6 +63,12 @@ against the public contract of LIB-API-001.
   under it becomes unreadable at once, including values in the host's own tables.
 - Keyed fingerprints for searchable identifiers, computed under a key held outside
   the database, neutralised by erasure and never matched once neutralised.
+- Account states and the transitions between them: an account is created active,
+  deactivated by its owner or suspended by an administrator, restricted at the
+  subject's request, and removed only through a grace window it can be brought
+  back from. A takedown passes through suspension into that window in one step
+  and is reversed, never cancelled. The record itself is never deleted, so an
+  audit trail keeps resolving after the personal data is gone.
 
 ### Changed
 
