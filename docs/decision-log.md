@@ -8298,6 +8298,104 @@ forgotten merge would redden `main` again for a reason with no substance.
 
 ---
 
+## D-159 — Phase 2 question: the filter is a same-context subquery over the contract tables
+
+**Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-017 (made concrete), D-149 (Hosting public surface) · **Extends:** D-158
+
+**TL;DR.** A permission filter over a host's row has to consult the library's ancestry
+and grants, which are not on that row. D-017 already made the ancestry closure public
+contract because hand-written SQL queries it; the LINQ side now uses the same fact. The
+host maps the two contract tables into its own context and hands their sets to the
+filter, and the expression is a correlated `EXISTS` subquery EF Core translates on its
+own. Nothing new is asked of the host beyond one `ModelBuilder` call.
+
+**The shape.** Two steps, shared by both renderings. The library first resolves the
+principal's subject set (account, groups by closure, organization roles): small, bounded,
+read once from the library's store. The rendering is then a predicate over the host's
+row: does a live, non-denied grant for this permission exist for one of those subjects
+on the resource or any ancestor. LINQ: `Expression<Func<TResource, bool>>` built from the
+host's identifier selector and the host's `IQueryable<AncestryEntry>` and
+`IQueryable<EffectiveGrant>` (public records in `Janus.Core`, mapped by
+`MapJanusAuthorization(ModelBuilder)` in `Janus.Hosting`). SQL: the same `EXISTS` over
+`janus.ancestry` and `janus.effective_grants` with alias and column from the caller and
+everything else parameterised. Both derive from one rule object; the truth table runs
+through both.
+
+**Rejected.** *Closing over the permitted identifiers* (reading 2): a grant on a
+container makes that set the size of the container, which is the post-filtering
+AUTHZ-PRIN-002 forbids under another name. *The expression as the library's own
+evaluation path and the fragment as the host's* (reading 3): it reads "composable into
+LINQ" out of AUTHZ-GATE-002, and D-017 pairs each rendering with one of the host's two
+tools for a reason.
+
+**Propagated to:** `03` AUTHZ-GATE-002 · `07` LIB-HOST-002 · `08` CONV-LAYOUT-002
+(Hosting's public surface).
+
+---
+
+## D-160 — Phase 2 questions, second stop: derivations are host-supplied relations; reading and modifying; the gate binding; database-backed validation
+
+**Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-043, D-037, D-078, D-015 (startup) · **Extends:** D-159
+
+**TL;DR.** Four gaps in the authorization chapter, one of them a real contradiction.
+
+1. **Derivations do not break LIB-HOST-002.** The library never queries a host table;
+   the host supplies the relationship as a queryable from its own context, exactly as it
+   supplies the ancestry and grant sets under D-159, and the composed `EXISTS` runs in
+   the host's query. The declaration carries the selectors for the LINQ side and the
+   relation and column names for the SQL side. A single check on a derived type is the
+   filter applied to one resource through the host's query. Rejected: a library-side
+   join into host tables (what AUTHZ-DERIVE-004's wording implied), which would be the
+   one thing LIB-HOST-002 exists to forbid.
+2. **Reading or modifying** is a property of every action: `read`, `list` and `export`
+   are reading by name, everything else is modifying unless declared reading. Fail
+   closed: an unclassified action is modifying. Restriction allows the account's own
+   reading actions and refuses the rest.
+3. **The `stepup` residual comes from the gate bound to the action**, declared in the
+   model builder for host actions and listed in section 5a for library actions. A gate
+   name was never a permission string (D-151); LIB-HOST-004's wording is corrected.
+4. **Startup validation that reads the database** runs in a hosted service registered
+   before the web server, failing the process before it serves; `IHostedService` is in
+   the shared framework, so no package. `Janus.Cli` runs the same validation first.
+   Rejected: a blocking call in `AddJanus` (synchronous database access at registration)
+   and a public `ValidateAsync` the host must remember to await (a startup check the
+   host can forget is not a startup check).
+
+**Propagated to:** `03` AUTHZ-DERIVE-001, AUTHZ-GATE-005, AUTHZ-GATE-006, AUTHZ-MODEL-004
+· `07` LIB-HOST-004.
+
+---
+
+## D-161 — Phase 2, third stop: derived checks take sources; refresh is the host's call; the agent decides alone through Milestone 1
+
+**Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-160, D-043, the agent instructions (Tiers 2 and 3) · **Extends:** D-160
+
+**TL;DR.** Three derivation gaps closed, and a change of working mode: the owner cannot
+attend the remaining stops, so the agent decides and records instead of stopping.
+
+1. **Single check and capabilities on a derived type** take the same host-supplied
+   sources the filter takes; without them the call is refused with
+   `authz.derivation.sourcesmissing`, a fault, so no path answers from stored grants
+   alone.
+2. **Materialised refresh** is the host's call, `IDerivationMaterialiser.RefreshAsync`,
+   inside the host's own write; a daily drift check on the sweep
+   (`derivation.materialised.driftcheck`) re-evaluates and corrects, raising
+   `degradation` on a difference.
+3. **Reverse lookup over derivations** is the phase 8 view: stored and materialised
+   grants by query, unmaterialised derivations evaluated over the host-supplied relation
+   within `authz.reverselookup.budget`, `partial: true` past it.
+4. **Working mode.** Tier 2 questions are decided by the agent (most consistent reading,
+   fail closed, smaller surface, no package) and recorded under **Decided in the owner's
+   absence** with the chapter text that should change; Tier 3 questions are decided the
+   same way with the strictest reading. The chapters are not edited by the agent; the
+   owner reconciles them from the report entries afterwards. The Milestone 1 exit gate
+   and the ban on Milestone 2 stand.
+
+**Propagated to:** `03` AUTHZ-DERIVE-001, 005, 007 · `10` sections 1.3, 4.5a ·
+the working guide sections 3 and 6.
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -8466,6 +8564,9 @@ forgotten merge would redden `main` again for a reason with no substance.
 | Phase 1 questions, third stop: area grants to Storage.Tests; test infrastructure is Tier 1 | D-156 |
 | Phase 1 questions, fourth stop: photo unreadable not removed; administrative flag; role names; retention by argument | D-157 |
 | Phase 1, fifth stop: merge commits outside CONV-VCS-003; a gate's own defect is Tier 1 | D-158 |
+| Phase 2 question: the filter is a same-context EXISTS over the contract tables; subject set first | D-159 |
+| Phase 2, second stop: host-supplied relations; reading vs modifying; gate binding; hosted-service validation | D-160 |
+| Phase 2, third stop: derived checks take sources; host-called refresh; the agent decides alone through Milestone 1 | D-161 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

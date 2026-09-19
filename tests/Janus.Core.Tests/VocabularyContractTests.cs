@@ -147,6 +147,19 @@ public sealed class VocabularyContractTests
     }
 
     /// <summary>
+    /// LIB-API-001 AC2: the subject types of chapter 10 section 5.5, the grant kinds of
+    /// section 5.6 and the concealment behaviour of section 5.11, which every grant row
+    /// and every resource type declaration carries.
+    /// </summary>
+    [Fact]
+    public void LIB_API_001_AC2_TheAuthorizationVocabulariesAreTheContract()
+    {
+        Assert.Equal(["group", "user"], WireNames<SubjectType>());
+        Assert.Equal(["derived", "materialised", "stored"], WireNames<GrantKind>());
+        Assert.Equal(["conceal", "disclose"], WireNames<ConcealmentBehaviour>());
+    }
+
+    /// <summary>
     /// LIB-API-001 AC2: the alert conditions of chapter 10 section 5.23, one per
     /// OPS-ALERT-001 row, which an alert carries and deduplicates on.
     /// </summary>

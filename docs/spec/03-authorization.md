@@ -209,6 +209,23 @@ they should not, silently. No choice of registry syntax makes it easier or harde
 stating that whoever holds a named relationship in the host's own data holds a given
 role on a given resource type.
 
+**Values (D-160).** A derivation names a **relationship the host supplies**: in the model
+builder, the relationship's name, its resource type, the role it confers, and two
+selectors over the host's relationship row (the holder's subject identifier, the
+resource identifier), plus the SQL relation name and the two column names for the SQL
+rendering. At filter time the host passes an `IQueryable` of that relationship row from
+its own context, beside the ancestry and grant sets (AUTHZ-GATE-002); the LINQ rendering
+composes it into the same `EXISTS` (a grant **or** a relationship row for one of the
+principal's subjects, on the resource or an ancestor), and the SQL rendering names the
+declared relation. The library issues no query of its own against a host table
+(LIB-HOST-002): the host's context executes the composed query. A single check on a
+type with derivations therefore runs as the filter applied to the one resource, through
+the host's query, never as a library-side read. Concretely (D-161): `RequireAsync` and
+`CapabilitiesAsync` take the same host-supplied sources object the filter takes; on a
+type that declares a derivation, a call without sources is refused with
+`authz.derivation.sourcesmissing`, a fault and not a denial, so no path answers from
+stored grants alone (AUTHZ-PRIN-001 AC2).
+
 *Source: D-043*
 
 A stored grant exists because someone wrote it. A derived grant exists because a
@@ -278,6 +295,15 @@ the underlying data changes.
 Materialisation SHALL be an explicit, per-derivation choice, and materialised grants
 SHALL be marked as such so they are never mistaken for stored grants someone wrote.
 
+**Values (D-161).** Refresh is the host's call inside its own write: the library exposes
+`IDerivationMaterialiser.RefreshAsync(derivationName, resourceId)` which the host calls
+from the operation that changes the relationship, inside the same unit of work, so
+criterion 3's first clause holds. The second clause is the safety net: the sweep
+re-evaluates every materialised derivation against the host-supplied relation every
+`derivation.materialised.driftcheck` (default `P1D`), and a difference raises the
+`degradation` condition with the derivation's name in `details` and is corrected in the
+same run.
+
 *Source: D-043*
 
 Materialisation reintroduces, deliberately and in one controlled place, the
@@ -320,6 +346,13 @@ option reached last rather than first.
 grants SHALL be answered by evaluating declared derivations, and its cost SHALL be
 documented as bounded by the number of derivations and the size of the candidate
 set.
+
+**Values (D-161).** Reverse lookup is the `GET /admin/access` view of `09` section 8 and is
+built in phase 8. It answers stored grants by query, materialised derived grants by
+query (they are rows), and unmaterialised derivations by evaluating each declared
+derivation over the host-supplied relation for the resource and its ancestors, inside
+`authz.reverselookup.budget`; past the budget the response carries `partial: true` and
+`unevaluated`. Nothing of it is built in phase 2.
 
 *Source: D-043, AUTHZ-GATE-004*
 
@@ -408,7 +441,12 @@ and compliance records all derive from it.
 
 ### 3.2 Validation
 
-**AUTHZ-MODEL-004** — The model SHALL be validated at startup, failing loudly. The
+**AUTHZ-MODEL-004** — The model SHALL be validated at startup, failing loudly. Checks
+that need only the declaration run inside `AddJanus`; checks that read the database
+(an undeclared permission granted by a stored role, an unindexed derivation column) run
+in a hosted service `Janus.Hosting` registers before the web server, so the process
+exits non-zero before a request is served; `Janus.Cli` runs the same validation before
+any command (D-160). The
 following SHALL fail:
 
 - A containment cycle
@@ -488,6 +526,22 @@ decorate and miss background jobs, exports and webhooks.
 definition**: an expression composable into LINQ, and a parameterised SQL fragment
 for hand-written queries.
 
+**Shape (D-159).** The rule is evaluated in two steps that both renderings share.
+First the library resolves the principal's **subject set** (the account, its groups by
+the group closure, its organization roles): a small, bounded set, read once per request
+from the library's own store. Second, the rendering is a predicate over the host's row
+that asks the library's two contract tables whether any grant for that permission
+exists for one of those subjects on the resource **or on any of its ancestors**
+(AUTHZ-INHERIT-002); a deny grant defeats it. The LINQ rendering is
+`Expression<Func<TResource, bool>>` built from the host's resource-identifier selector
+and two `IQueryable`s the host supplies **from its own `DbContext`**: `AncestryEntry`
+and `EffectiveGrant`, public plain records in `Janus.Core`, mapped into the host's
+context by `MapJanusAuthorization(ModelBuilder)` in `Janus.Hosting`; the subquery is a
+same-context correlated `EXISTS` that EF Core translates. The SQL rendering is the same
+`EXISTS` over `janus.ancestry` and `janus.effective_grants`, with the row alias and
+column supplied by the caller and the subject set, permission and resource type as
+parameters. Neither rendering ever enumerates permitted resources (AUTHZ-PRIN-002).
+
 *Source: D-017*
 
 **Acceptance criteria**
@@ -558,6 +612,12 @@ explanation.
 **Values (D-153).** `requires` carries members of the closed set in `10` section 5.20:
 `stepup` · `reauthenticate` · `restricted` · `consent` · `accountstate`.
 
+**Values (D-160).** The `stepup` residual comes from the **gate bound to the action**, not
+from the permission string: the model builder binds a host-declared action to a step-up
+gate name (`10` section 5a or a host-declared gate), and the library-owned actions carry
+their bindings in section 5a. `requires` lists `stepup` for an action whose bound gate
+the session does not currently satisfy.
+
 *Source: D-015, D-078*
 
 The frontend must never infer permissions from role names; that is how a button
@@ -574,6 +634,12 @@ produces N+1 queries.
 
 **AUTHZ-GATE-006** — A processing restriction (`01-identity`, state `restricted`)
 SHALL be evaluated wherever the gate is evaluated.
+
+**Values (D-160).** Every permission action is classified **reading** or **modifying**. An
+action named `read`, `list` or `export` is reading; every other action is modifying
+unless the model builder declares it reading. Under restriction the gate allows the
+account's own reading actions and refuses every modifying one with `authz.restricted`.
+The library-owned actions of `10` section 2.1 follow the same rule.
 
 *Source: D-037*
 

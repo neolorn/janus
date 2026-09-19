@@ -24,6 +24,308 @@ partial class JanusDbContextModelSnapshot : ModelSnapshot
 
         NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+        modelBuilder.Entity("Janus.Storage.Authorization.Grants.GrantRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<bool>("Deny")
+                    .HasColumnType("boolean")
+                    .HasColumnName("deny");
+
+                b.Property<DateTimeOffset?>("ExpiresAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("expires_at");
+
+                b.Property<DateTimeOffset>("GrantedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("granted_at");
+
+                b.Property<Guid>("GrantedBy")
+                    .HasColumnType("uuid")
+                    .HasColumnName("granted_by");
+
+                b.Property<string>("Kind")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("kind");
+
+                b.Property<Guid>("Organization")
+                    .HasColumnType("uuid")
+                    .HasColumnName("organization");
+
+                b.Property<string>("Reason")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("reason");
+
+                b.Property<string>("ResourceId")
+                    .HasColumnType("text")
+                    .HasColumnName("resource_id");
+
+                b.Property<string>("ResourceType")
+                    .HasColumnType("text")
+                    .HasColumnName("resource_type");
+
+                b.Property<string>("RevocationReason")
+                    .HasColumnType("text")
+                    .HasColumnName("revocation_reason");
+
+                b.Property<DateTimeOffset?>("RevokedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("revoked_at");
+
+                b.Property<Guid?>("RevokedBy")
+                    .HasColumnType("uuid")
+                    .HasColumnName("revoked_by");
+
+                b.Property<string>("Role")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("role");
+
+                b.Property<Guid>("SubjectId")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject_id");
+
+                b.Property<string>("SubjectType")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("subject_type");
+
+                b.HasKey("Id")
+                    .HasName("pk_grants");
+
+                b.HasIndex("Role")
+                    .HasDatabaseName("ix_grants_role");
+
+                b.HasIndex("ResourceType", "ResourceId")
+                    .HasDatabaseName("ix_grants_live_resource")
+                    .HasFilter("revoked_at IS NULL");
+
+                b.HasIndex("Organization", "SubjectType", "SubjectId")
+                    .HasDatabaseName("ix_grants_live_holder")
+                    .HasFilter("revoked_at IS NULL");
+
+                b.ToTable("grants", "janus", t =>
+                    {
+                        t.HasCheckConstraint("ck_grants_kind", "kind IN ('derived', 'materialised', 'stored')");
+
+                        t.HasCheckConstraint("ck_grants_reason", "length(btrim(reason)) BETWEEN 1 AND 1024");
+
+                        t.HasCheckConstraint("ck_grants_resource", "(resource_type IS NULL) = (resource_id IS NULL)");
+
+                        t.HasCheckConstraint("ck_grants_revocation", "(revoked_at IS NULL AND revoked_by IS NULL AND revocation_reason IS NULL)\nOR (revoked_at IS NOT NULL AND revoked_by IS NOT NULL\n    AND length(btrim(revocation_reason)) BETWEEN 1 AND 1024)");
+
+                        t.HasCheckConstraint("ck_grants_subject_type", "subject_type IN ('group', 'user')");
+                    });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authorization.Grants.GrantVersionRecord", b =>
+            {
+                b.Property<Guid>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
+
+                b.Property<long>("Version")
+                    .HasColumnType("bigint")
+                    .HasColumnName("version");
+
+                b.HasKey("Subject")
+                    .HasName("pk_grant_versions");
+
+                b.ToTable("grant_versions", "janus", t =>
+                    {
+                        t.HasCheckConstraint("ck_grant_versions_version", "version >= 0");
+                    });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authorization.Groups.GroupClosureRecord", b =>
+            {
+                b.Property<Guid>("Group")
+                    .HasColumnType("uuid")
+                    .HasColumnName("group_id");
+
+                b.Property<string>("MemberType")
+                    .HasColumnType("text")
+                    .HasColumnName("member_type");
+
+                b.Property<Guid>("MemberId")
+                    .HasColumnType("uuid")
+                    .HasColumnName("member_id");
+
+                b.Property<int>("Depth")
+                    .HasColumnType("integer")
+                    .HasColumnName("depth");
+
+                b.HasKey("Group", "MemberType", "MemberId")
+                    .HasName("pk_group_closure");
+
+                b.HasIndex("MemberType", "MemberId")
+                    .HasDatabaseName("ix_group_closure_member");
+
+                b.ToTable("group_closure", "janus", t =>
+                    {
+                        t.HasCheckConstraint("ck_group_closure_depth", "depth >= 1");
+
+                        t.HasCheckConstraint("ck_group_closure_member_type", "member_type IN ('group', 'user')");
+                    });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authorization.Groups.GroupMemberRecord", b =>
+            {
+                b.Property<Guid>("Group")
+                    .HasColumnType("uuid")
+                    .HasColumnName("group_id");
+
+                b.Property<string>("MemberType")
+                    .HasColumnType("text")
+                    .HasColumnName("member_type");
+
+                b.Property<Guid>("MemberId")
+                    .HasColumnType("uuid")
+                    .HasColumnName("member_id");
+
+                b.HasKey("Group", "MemberType", "MemberId")
+                    .HasName("pk_group_members");
+
+                b.HasIndex("MemberType", "MemberId")
+                    .HasDatabaseName("ix_group_members_member");
+
+                b.ToTable("group_members", "janus", t =>
+                    {
+                        t.HasCheckConstraint("ck_group_members_member_type", "member_type IN ('group', 'user')");
+                    });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authorization.Groups.GroupRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<string>("Name")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("name");
+
+                b.Property<Guid>("Organization")
+                    .HasColumnType("uuid")
+                    .HasColumnName("organization");
+
+                b.HasKey("Id")
+                    .HasName("pk_groups");
+
+                b.HasIndex("Organization")
+                    .HasDatabaseName("ix_groups_organization");
+
+                b.ToTable("groups", "janus");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authorization.Resources.AncestryRecord", b =>
+            {
+                b.Property<string>("Type")
+                    .HasColumnType("text")
+                    .HasColumnName("resource_type");
+
+                b.Property<string>("Id")
+                    .HasColumnType("text")
+                    .HasColumnName("resource_id");
+
+                b.Property<string>("AncestorType")
+                    .HasColumnType("text")
+                    .HasColumnName("ancestor_type");
+
+                b.Property<string>("AncestorId")
+                    .HasColumnType("text")
+                    .HasColumnName("ancestor_id");
+
+                b.Property<int>("Depth")
+                    .HasColumnType("integer")
+                    .HasColumnName("depth");
+
+                b.Property<Guid>("Organization")
+                    .HasColumnType("uuid")
+                    .HasColumnName("organization");
+
+                b.HasKey("Type", "Id", "AncestorType", "AncestorId")
+                    .HasName("pk_ancestry");
+
+                b.HasIndex("AncestorType", "AncestorId")
+                    .HasDatabaseName("ix_ancestry_ancestor");
+
+                b.ToTable("ancestry", "janus", t =>
+                    {
+                        t.HasCheckConstraint("ck_ancestry_depth", "depth >= 0");
+                    });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authorization.Resources.ResourceRecord", b =>
+            {
+                b.Property<string>("Type")
+                    .HasColumnType("text")
+                    .HasColumnName("resource_type");
+
+                b.Property<string>("Id")
+                    .HasColumnType("text")
+                    .HasColumnName("resource_id");
+
+                b.Property<string>("ContainedInId")
+                    .HasColumnType("text")
+                    .HasColumnName("contained_in_id");
+
+                b.Property<string>("ContainedInType")
+                    .HasColumnType("text")
+                    .HasColumnName("contained_in_type");
+
+                b.Property<Guid>("Organization")
+                    .HasColumnType("uuid")
+                    .HasColumnName("organization");
+
+                b.HasKey("Type", "Id")
+                    .HasName("pk_resources");
+
+                b.HasIndex("Organization")
+                    .HasDatabaseName("ix_resources_organization");
+
+                b.HasIndex("ContainedInType", "ContainedInId")
+                    .HasDatabaseName("ix_resources_contained_in");
+
+                b.ToTable("resources", "janus", t =>
+                    {
+                        t.HasCheckConstraint("ck_resources_contained_in", "(contained_in_type IS NULL) = (contained_in_id IS NULL)");
+                    });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authorization.Roles.RolePermissionRecord", b =>
+            {
+                b.Property<string>("Role")
+                    .HasColumnType("text")
+                    .HasColumnName("role");
+
+                b.Property<string>("Permission")
+                    .HasColumnType("text")
+                    .HasColumnName("permission");
+
+                b.HasKey("Role", "Permission")
+                    .HasName("pk_role_permissions");
+
+                b.ToTable("role_permissions", "janus");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authorization.Roles.RoleRecord", b =>
+            {
+                b.Property<string>("Name")
+                    .HasColumnType("text")
+                    .HasColumnName("name");
+
+                b.HasKey("Name")
+                    .HasName("pk_roles");
+
+                b.ToTable("roles", "janus");
+            });
+
         modelBuilder.Entity("Janus.Storage.Identity.Accounts.AccountRecord", b =>
             {
                 b.Property<Guid>("Subject")
@@ -471,6 +773,83 @@ partial class JanusDbContextModelSnapshot : ModelSnapshot
                     .HasName("pk_settings");
 
                 b.ToTable("settings", "janus");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authorization.Grants.GrantRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Identity.Organizations.OrganizationRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Organization")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_grants_organization");
+
+                b.HasOne("Janus.Storage.Authorization.Roles.RoleRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Role")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_grants_role");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authorization.Grants.GrantVersionRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Subject")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired()
+                    .HasConstraintName("fk_grant_versions_subject");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authorization.Groups.GroupClosureRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Authorization.Groups.GroupRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Group")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired()
+                    .HasConstraintName("fk_group_closure_group");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authorization.Groups.GroupMemberRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Authorization.Groups.GroupRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Group")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired()
+                    .HasConstraintName("fk_group_members_group");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authorization.Groups.GroupRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Identity.Organizations.OrganizationRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Organization")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_groups_organization");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authorization.Resources.ResourceRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Identity.Organizations.OrganizationRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Organization")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_resources_organization");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authorization.Roles.RolePermissionRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Authorization.Roles.RoleRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Role")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired()
+                    .HasConstraintName("fk_role_permissions_role");
             });
 
         modelBuilder.Entity("Janus.Storage.Identity.Identifiers.BackupSettingRecord", b =>

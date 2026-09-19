@@ -16,7 +16,9 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Janus.Analyzers.Tests/Janus.Analyzers.Tests.csproj" />
+    <Project Path="tests/Janus.Authorization.Tests/Janus.Authorization.Tests.csproj" />
     <Project Path="tests/Janus.Core.Tests/Janus.Core.Tests.csproj" />
+    <Project Path="tests/Janus.Hosting.Tests/Janus.Hosting.Tests.csproj" />
     <Project Path="tests/Janus.Identity.Tests/Janus.Identity.Tests.csproj" />
     <Project Path="tests/Janus.Privacy.Tests/Janus.Privacy.Tests.csproj" />
     <Project Path="tests/Janus.Storage.Tests/Janus.Storage.Tests.csproj" />

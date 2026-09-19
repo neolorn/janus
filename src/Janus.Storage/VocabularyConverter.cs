@@ -42,6 +42,23 @@ internal sealed class VocabularyConverter<TVocabulary> : ValueConverter<TVocabul
     public static IReadOnlyList<string> Admitted { get; } =
         [.. Spellings.Values.Order(StringComparer.Ordinal)];
 
+    /// <summary>
+    /// The member a stored spelling stands for.
+    /// </summary>
+    /// <param name="spelling">The spelling as the column holds it.</param>
+    /// <returns>The member.</returns>
+    /// <exception cref="KeyNotFoundException">
+    /// The spelling is outside the vocabulary, which the column's check refuses.
+    /// </exception>
+    public static TVocabulary Read(string spelling) => Members[spelling];
+
+    /// <summary>
+    /// The spelling a member is held under.
+    /// </summary>
+    /// <param name="member">The member.</param>
+    /// <returns>The spelling as the column holds it.</returns>
+    public static string Write(TVocabulary member) => Spellings[member];
+
     private static string ToSpelling(TVocabulary member) => Spellings[member];
 
     private static TVocabulary ToMember(string spelling) => Members[spelling];

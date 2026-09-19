@@ -10,6 +10,91 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `IAccessGate` in `Janus.Core`: the one place a permission is evaluated. A check and a
+  list filter are the same rule rendered two ways, an expression a host composes into
+  its own LINQ query and a parameterised PostgreSQL fragment a hand-written query
+  composes into its `WHERE` clause, so a list screen cannot come to show what a check
+  would refuse. Neither rendering enumerates permitted records.
+- `MapJanusAuthorization` in `Janus.Hosting`: a host maps the ancestry closure and the
+  effective grants into its own context, so a filtered listing is one query against its
+  own tables and the library reads nothing of the host's.
+- `AddJanus` in `Janus.Hosting`: the one method a host calls to register the library.
+  What the host declares about its own domain is built and checked here, at startup.
+- The gate explains itself: an explanation names the grant that decided, the container
+  it was inherited from, and the principal it was decided for, or states that no grant
+  matched. Capabilities for a page of records are computed in one query.
+- A refusal on one record answers as a record that does not exist unless the type says
+  otherwise, and a type says so in one place for every record of it. A type that
+  conceals has no self-service explanation, because saying that no grant matched says
+  that the record is there.
+- Every refusal carries a correlation identifier, which is the audit row it was
+  recorded as. A role holding `audit:read` resolves it to the permission and the
+  principal; it says nothing about whether the record exists. A permission that names
+  no record is refused as a permission the caller does not hold, with nothing concealed.
+- Inheritance is resolved through an ancestry closure maintained in the same
+  transaction as the create or the move that changes it, so a permission query joins
+  one table rather than walking the tree, and permission data and business data cannot
+  diverge. Moving a record carries everything beneath it.
+- Groups nest to any depth, and the groups a principal belongs to are read once per
+  request from a closure maintained beside the memberships. Adding or removing a
+  member, or writing a grant to a group, raises the counter of every account it
+  reaches, in the same transaction.
+- `AncestryEntry` and `EffectiveGrant` in `Janus.Core`: the two rows a host maps into
+  its own context so that a permission filter is one query against its own tables.
+- A grant is one sentence, subject has role on resource, and one row carries every kind
+  of it: an account's and a group's, an allow and a deny, a grant on one record and a
+  grant on a whole organization. What a role allows is read where a grant naming it is
+  evaluated, so editing a role takes effect at once.
+- Every grant records who granted it, when and why, and a revocation records the same.
+  A grant or a revocation stating no reason is refused with `authz.grant.reasonrequired`.
+  An expired grant confers nothing at the instant it is read, whether or not a sweep
+  has run.
+- A check and a capability page take the same host-supplied rows the filter takes, so a
+  type whose access follows in part from a fact in the host's own data answers the same
+  way whichever of them is asked. Asked without those rows, they refuse with
+  `authz.derivation.sourcesmissing`, a fault and not a denial, rather than answering from
+  the stored grants alone.
+- A derivation confers a role from a fact in the host's own data. The host declares the
+  relationship and hands its rows to the filter beside the ancestry and the grants, and
+  a listing then reaches everything that fact reaches, on the record or on anything
+  containing it, with no grant written and nothing to keep in sync. Removing the fact
+  removes the access on the next request, and a deny defeats a derived grant as it
+  defeats a written one.
+- `IDerivationMaterialiser` in `Janus.Core`: a derivation a deployment declares
+  materialised is precomputed into ordinary grant rows, marked as such wherever they
+  are read. The host refreshes it from the operation that changes the relationship,
+  inside the same unit of work, so the fact and the rows computed from it are written
+  together or not at all. A refresh run later reports what it had to change and
+  corrects it in the same run, which is how drift is found where the refresh was
+  missed. `derivation.materialised.driftcheck` sets how often that runs.
+- `AccessContext` in `Janus.Core`: who is acting, whom they are acting for, and the
+  named principal a background job runs as.
+- `GrantId`, `GroupId`, `GrantSubject` and `ResourceReference` in `Janus.Core`: what a
+  grant, a group and one of the host's records are named by. A record's identifier is
+  the host's own text, so an integer, a UUID or a code all serve.
+- `AuthorizationDeclarationBuilder` in `Janus.Core`: a host declares its own kinds of
+  thing, their containment, what they are processed for, which fields are encrypted and
+  under whose key, and the relationships in its own data that confer a role. Every
+  reference to one of the host's fields is an expression the compiler checks.
+- The authorization model is built and checked once, at startup: a containment cycle, a
+  reference to a type that was never declared, a type that reaches no organization, a
+  type with no purpose, a purpose whose basis needs an assessment and names none, and a
+  derivation from a relationship that was never declared each stop the deployment with
+  their own code.
+- The two checks the declaration alone cannot decide run as the deployment starts and
+  before it serves a request: a role someone wrote allowing a permission the model does
+  not declare, and a derivation naming a column no index reaches, each stop the process
+  with their own code.
+- The built model is written to `model.json` in one order, so two runs of one
+  configuration produce the same bytes and a change to the model is a diff in review.
+- `Permission` and `Permissions` in `Janus.Core`: a permission is a lowercase
+  `resource:action` that cannot be constructed in another shape, and the library's own
+  twenty-two are listed where a host can read them.
+- `SubjectType`, `GrantKind` and `ConcealmentBehaviour` in `Janus.Core`: what a grant
+  is held by, where it came from, and what a denial on a record discloses.
+- The authorization error codes: a denial, the four grant refusals, a group that would
+  contain itself, an entity with no registered policy, a restricted subject, and the
+  three model validations a startup fails on.
 - `JAN0006`: a caught exception that is neither handled nor reported now fails the
   build.
 - `Result`, `Result<T>`, `Error` and `ErrorCode` in `Janus.Core`: an expected outcome
@@ -188,6 +273,16 @@ against the public contract of LIB-API-001.
   category once its end has passed that category's retention. The two retention
   periods are passed in, because a key left at its default has no stored row the
   database could read, and either below the floor its key carries is refused.
+- A host binds one of its actions to a step-up gate in the model builder, and the gate
+  is then read wherever the action is: a capability for it carries `stepup` beside what
+  the grants confer, and a check of it is refused until the session satisfies the gate.
+  A deployment that registers no assurance provider is refused with
+  `auth.stepup.unavailable`, told apart from an ordinary denial.
+- An account under a processing restriction keeps its reading actions and is refused
+  every action that would change anything, with `authz.restricted`, in a check, a
+  listing filter and a capability alike. `read`, `list` and `export` are reading by
+  name, a host declares which of its own actions are reading, and everything else
+  modifies.
 
 ### Changed
 

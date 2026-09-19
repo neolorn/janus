@@ -74,6 +74,34 @@ public static class ErrorCodes
     public static ErrorCode StartupPreferenceDeclaration { get; } = ErrorCode.Parse("model.startup.preferencedeclaration");
 
     /// <summary>
+    /// Startup: the containment declaration forms a cycle. Break the cycle; a type
+    /// cannot be contained, at any depth, by a type it contains.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-MODEL-004, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupContainmentCycle { get; } = ErrorCode.Parse("model.containment.cycle");
+
+    /// <summary>
+    /// Startup: a derivation names a column that carries no index. Index the column or
+    /// drop the derivation.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-DERIVE-004, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupUnindexedDerivation { get; } = ErrorCode.Parse("model.derivation.unindexed");
+
+    /// <summary>
+    /// Startup: a resource type reaches no organization through its containment.
+    /// Contain it, at some depth, in a type that names the organization it belongs to.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-MODEL-004, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupNoOrganizationPath { get; } = ErrorCode.Parse("model.type.noorganizationpath");
+
+    /// <summary>
+    /// Startup: a purpose rests on a basis that requires an assessment and names
+    /// none. Name the legitimate interest assessment, or rest the purpose elsewhere.
+    /// </summary>
+    /// <remarks>Implements PRIV-BASIS-002, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupMissingAssessment { get; } = ErrorCode.Parse("model.purpose.missingassessment");
+
+    /// <summary>
     /// Startup: a resource type references a type the model does not declare. Declare
     /// the referenced type or drop the reference.
     /// </summary>
@@ -144,10 +172,85 @@ public static class ErrorCodes
     public static ErrorCode ChallengeRequired { get; } = ErrorCode.Parse("auth.challenge.required");
 
     /// <summary>
+    /// The step-up gate bound to the action is not met. Present what the gate asks
+    /// for and repeat the operation.
+    /// </summary>
+    /// <remarks>Implements AUTH-STEP-001, AUTH-STEP-002, chapter 10 section 1.2.</remarks>
+    public static ErrorCode StepUpRequired { get; } = ErrorCode.Parse("auth.stepup.required");
+
+    /// <summary>
+    /// The action is bound to a step-up gate and no assurance provider is registered,
+    /// so nothing reports what the session has proved and the gate is unmet rather
+    /// than waived. Register an assurance provider, or bind the action to no gate.
+    /// </summary>
+    /// <remarks>Implements AUTH-STEP-003, LIB-HOST-004, chapter 10 section 1.2.</remarks>
+    public static ErrorCode StepUpUnavailable { get; } = ErrorCode.Parse("auth.stepup.unavailable");
+
+    /// <summary>
+    /// Permission is absent, on something whose existence is not concealed. Hold the
+    /// permission, or ask someone who does.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-CONCEAL-005, chapter 10 section 1.3.</remarks>
+    public static ErrorCode Denied { get; } = ErrorCode.Parse("authz.denied");
+
+    /// <summary>
+    /// A check or a capability query was made on a type that declares a derivation
+    /// without the host-supplied sources it is evaluated over. Pass the same sources
+    /// the filter takes.
+    /// </summary>
+    /// <remarks>
+    /// Implements AUTHZ-DERIVE-001, D-161, chapter 10 section 1.3. A fault and not a
+    /// denial: the caller asked a question the library cannot answer, rather than one
+    /// whose answer is no.
+    /// </remarks>
+    public static ErrorCode DerivationSourcesMissing { get; } =
+        ErrorCode.Parse("authz.derivation.sourcesmissing");
+
+    /// <summary>
+    /// An identical live grant exists. Revoke it, or change what this one says.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-003, chapter 10 section 1.3.</remarks>
+    public static ErrorCode GrantDuplicate { get; } = ErrorCode.Parse("authz.grant.duplicate");
+
+    /// <summary>
+    /// The grant is past its expiry and confers nothing. Grant it again, with an
+    /// expiry that has not passed.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-003, chapter 10 section 1.3.</remarks>
+    public static ErrorCode GrantExpired { get; } = ErrorCode.Parse("authz.grant.expired");
+
+    /// <summary>
+    /// No such grant. Name a grant that exists.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-001, chapter 10 section 1.3.</remarks>
+    public static ErrorCode GrantNotFound { get; } = ErrorCode.Parse("authz.grant.notfound");
+
+    /// <summary>
     /// A grant was created or revoked without a reason. Supply a non-empty reason.
     /// </summary>
-    /// <remarks>Implements AUTHZ-GRANT-003, chapter 10 section 1.5.</remarks>
+    /// <remarks>Implements AUTHZ-GRANT-003, chapter 10 section 1.3.</remarks>
     public static ErrorCode GrantReasonRequired { get; } = ErrorCode.Parse("authz.grant.reasonrequired");
+
+    /// <summary>
+    /// Adding the member would make a group contain itself. Add it somewhere the
+    /// group does not already reach.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GROUP-001, chapter 10 section 1.3.</remarks>
+    public static ErrorCode GroupCycle { get; } = ErrorCode.Parse("authz.group.cycle");
+
+    /// <summary>
+    /// The entity has no registered policy, which is a fault rather than a denial.
+    /// Register a policy for the entity in the model.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GATE-001, chapter 10 section 1.3.</remarks>
+    public static ErrorCode PolicyUnregistered { get; } = ErrorCode.Parse("authz.policy.unregistered");
+
+    /// <summary>
+    /// The subject's processing is restricted, so the record is readable and not
+    /// modifiable. Lift the restriction first.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GATE-006, chapter 10 section 1.3.</remarks>
+    public static ErrorCode Restricted { get; } = ErrorCode.Parse("authz.restricted");
 
     /// <summary>
     /// The change would leave an alert destination list empty. Add a destination
