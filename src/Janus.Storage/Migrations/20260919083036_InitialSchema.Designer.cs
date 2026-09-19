@@ -9,103 +9,102 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace Janus.Storage.Migrations
+namespace Janus.Storage.Migrations;
+
+[DbContext(typeof(JanusDbContext))]
+[Migration("20260919083036_InitialSchema")]
+partial class InitialSchema
 {
-    [DbContext(typeof(JanusDbContext))]
-    [Migration("20260919083036_InitialSchema")]
-    partial class InitialSchema
+    /// <inheritdoc />
+    protected override void BuildTargetModel(ModelBuilder modelBuilder)
     {
-        /// <inheritdoc />
-        protected override void BuildTargetModel(ModelBuilder modelBuilder)
-        {
 #pragma warning disable 612, 618
-            modelBuilder
-                .HasDefaultSchema("janus")
-                .HasAnnotation("Npgsql:CollationDefinition:janus.janus_ci", "und-u-ks-level2,und-u-ks-level2,icu,False")
-                .HasAnnotation("ProductVersion", "10.0.4")
-                .HasAnnotation("Relational:MaxIdentifierLength", 63);
+        modelBuilder
+            .HasDefaultSchema("janus")
+            .HasAnnotation("Npgsql:CollationDefinition:janus.janus_ci", "und-u-ks-level2,und-u-ks-level2,icu,False")
+            .HasAnnotation("ProductVersion", "10.0.4")
+            .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
-            NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+        NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("Janus.Identity.Accounts.Account", b =>
-                {
-                    b.Property<Guid>("Subject")
-                        .HasColumnType("uuid")
-                        .HasColumnName("subject");
+        modelBuilder.Entity("Janus.Identity.Accounts.Account", b =>
+            {
+                b.Property<Guid>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
 
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
+                b.Property<DateTimeOffset>("CreatedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("created_at");
 
-                    b.Property<string>("DeletingBy")
-                        .HasColumnType("text")
-                        .HasColumnName("deleting_by");
+                b.Property<string>("DeletingBy")
+                    .HasColumnType("text")
+                    .HasColumnName("deleting_by");
 
-                    b.Property<DateTimeOffset?>("DeletingSince")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("deleting_since");
+                b.Property<DateTimeOffset?>("DeletingSince")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("deleting_since");
 
-                    b.Property<string>("State")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("state");
+                b.Property<string>("State")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("state");
 
-                    b.Property<string>("SuspendedBy")
-                        .HasColumnType("text")
-                        .HasColumnName("suspended_by");
+                b.Property<string>("SuspendedBy")
+                    .HasColumnType("text")
+                    .HasColumnName("suspended_by");
 
-                    b.HasKey("Subject")
-                        .HasName("pk_accounts");
+                b.HasKey("Subject")
+                    .HasName("pk_accounts");
 
-                    b.HasIndex("DeletingSince")
-                        .HasDatabaseName("ix_accounts_deleting_since")
-                        .HasFilter("deleting_since IS NOT NULL");
+                b.HasIndex("DeletingSince")
+                    .HasDatabaseName("ix_accounts_deleting_since")
+                    .HasFilter("deleting_since IS NOT NULL");
 
-                    b.ToTable("accounts", "janus", t =>
-                        {
-                            t.HasCheckConstraint("ck_accounts_deleting", "(deleting_by IS NULL) = (deleting_since IS NULL)");
+                b.ToTable("accounts", "janus", t =>
+                    {
+                        t.HasCheckConstraint("ck_accounts_deleting", "(deleting_by IS NULL) = (deleting_since IS NULL)");
 
-                            t.HasCheckConstraint("ck_accounts_deleting_by", "deleting_by IS NULL OR deleting_by IN ('oob-request', 'self', 'takedown')");
+                        t.HasCheckConstraint("ck_accounts_deleting_by", "deleting_by IS NULL OR deleting_by IN ('oob-request', 'self', 'takedown')");
 
-                            t.HasCheckConstraint("ck_accounts_state", "state IN ('active', 'deleted', 'deleting', 'restricted', 'suspended')");
+                        t.HasCheckConstraint("ck_accounts_state", "state IN ('active', 'deleted', 'deleting', 'restricted', 'suspended')");
 
-                            t.HasCheckConstraint("ck_accounts_suspended_by", "suspended_by IS NULL OR suspended_by IN ('administrator', 'self')");
-                        });
-                });
+                        t.HasCheckConstraint("ck_accounts_suspended_by", "suspended_by IS NULL OR suspended_by IN ('administrator', 'self')");
+                    });
+            });
 
-            modelBuilder.Entity("Janus.Privacy.SubjectKeys.SubjectKey", b =>
-                {
-                    b.Property<Guid>("Subject")
-                        .HasColumnType("uuid")
-                        .HasColumnName("subject");
+        modelBuilder.Entity("Janus.Privacy.SubjectKeys.SubjectKey", b =>
+            {
+                b.Property<Guid>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
 
-                    b.Property<byte>("FormatMarker")
-                        .HasColumnType("smallint")
-                        .HasColumnName("format_marker");
+                b.Property<byte>("FormatMarker")
+                    .HasColumnType("smallint")
+                    .HasColumnName("format_marker");
 
-                    b.Property<int>("KeyVersion")
-                        .HasColumnType("integer")
-                        .HasColumnName("key_version");
+                b.Property<int>("KeyVersion")
+                    .HasColumnType("integer")
+                    .HasColumnName("key_version");
 
-                    b.Property<byte[]>("WrappedKey")
-                        .IsRequired()
-                        .HasColumnType("bytea")
-                        .HasColumnName("wrapped_key");
+                b.Property<byte[]>("WrappedKey")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("wrapped_key");
 
-                    b.HasKey("Subject")
-                        .HasName("pk_subject_keys");
+                b.HasKey("Subject")
+                    .HasName("pk_subject_keys");
 
-                    b.HasIndex("KeyVersion")
-                        .HasDatabaseName("ix_subject_keys_key_version");
+                b.HasIndex("KeyVersion")
+                    .HasDatabaseName("ix_subject_keys_key_version");
 
-                    b.ToTable("subject_keys", "janus", t =>
-                        {
-                            t.HasCheckConstraint("ck_subject_keys_format", "(format_marker = 1 AND octet_length(wrapped_key) = 40) OR (format_marker = 0 AND wrapped_key = decode(repeat('00', 32), 'hex'))");
+                b.ToTable("subject_keys", "janus", t =>
+                    {
+                        t.HasCheckConstraint("ck_subject_keys_format", "(format_marker = 1 AND octet_length(wrapped_key) = 40) OR (format_marker = 0 AND wrapped_key = decode(repeat('00', 32), 'hex'))");
 
-                            t.HasCheckConstraint("ck_subject_keys_version", "key_version >= 1");
-                        });
-                });
+                        t.HasCheckConstraint("ck_subject_keys_version", "key_version >= 1");
+                    });
+            });
 #pragma warning restore 612, 618
-        }
     }
 }
