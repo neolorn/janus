@@ -3,9 +3,11 @@ using System.Security.Cryptography;
 using Janus.Core;
 using Janus.Identity.Accounts;
 using Janus.Identity.Identifiers;
+using Janus.Identity.Profiles;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Identifiers;
+using Janus.Storage.Identity.Profiles;
 using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -60,6 +62,10 @@ internal static class StorageRegistration
             provider.GetRequiredService<JanusDbContext>(),
             keyEncryptionKeys,
             fingerprintKey,
+            provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<IProfileStore>(provider => new ProfileStore(
+            provider.GetRequiredService<JanusDbContext>(),
+            keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
 
         return services;

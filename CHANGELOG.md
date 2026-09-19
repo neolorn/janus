@@ -133,6 +133,11 @@ against the public contract of LIB-API-001.
   the form it is held in. A display name takes the Nickname profile and is bounded in
   bytes; a legal name takes Normalization Form C and is bounded in scalar values; both
   are of one script per word.
+- The schema now carries an account's profile, and the profile is written and read
+  back through a port of its own. The display name, the legal name and the date of
+  birth are each held under the subject's own key, so a dump yields none of them and
+  erasure leaves none of them readable; a field the account gives up clears its column,
+  and a field it did not touch is not written again.
 
 ### Changed
 

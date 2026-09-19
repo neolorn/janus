@@ -1,6 +1,7 @@
 using System;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Identifiers;
+using Janus.Storage.Identity.Profiles;
 using Janus.Storage.Privacy.SubjectKeys;
 using Janus.Storage.Settings;
 using Microsoft.EntityFrameworkCore;
@@ -49,6 +50,11 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     public DbSet<BackupSettingRecord> BackupSettings => Set<BackupSettingRecord>();
 
     /// <summary>
+    /// The accounts' profiles.
+    /// </summary>
+    public DbSet<ProfileRecord> Profiles => Set<ProfileRecord>();
+
+    /// <summary>
     /// The wrapped per-subject data keys.
     /// </summary>
     public DbSet<SubjectKeyRecord> SubjectKeys => Set<SubjectKeyRecord>();
@@ -78,6 +84,7 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new AccountConfiguration());
         modelBuilder.ApplyConfiguration(new IdentifierConfiguration());
         modelBuilder.ApplyConfiguration(new BackupSettingConfiguration());
+        modelBuilder.ApplyConfiguration(new ProfileConfiguration());
         modelBuilder.ApplyConfiguration(new SubjectKeyConfiguration());
         modelBuilder.ApplyConfiguration(new SettingConfiguration());
     }
