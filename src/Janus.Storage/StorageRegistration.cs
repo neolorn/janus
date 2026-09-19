@@ -2,6 +2,7 @@ using System;
 using System.Security.Cryptography;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Passwords;
+using Janus.Authentication.Policies;
 using Janus.Authentication.Sessions;
 using Janus.Authorization.Gate;
 using Janus.Authorization.Grants;
@@ -20,6 +21,7 @@ using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Passwords;
+using Janus.Storage.Authentication.Policies;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Authorization.Gate;
 using Janus.Storage.Authorization.Grants;
@@ -121,6 +123,7 @@ internal static class StorageRegistration
         services.AddScoped<IPasswordStore, PasswordStore>();
         services.AddScoped<IRecoveryCodeStore, RecoveryCodeStore>();
         services.AddScoped<IDeviceStore, DeviceStore>();
+        services.AddScoped<IMembershipLookup, MembershipLookup>();
         services.AddScoped<ISessionAudit, SessionAudit>();
         services.AddScoped<ICredentialAudit, CredentialAudit>();
 
