@@ -170,6 +170,7 @@ public sealed class VocabularyContractTests
         Assert.Equal(["auth", "oidc-token", "per-app"], WireNames<SessionType>());
         Assert.Equal(["active", "invalidated", "suspended"], WireNames<AuthenticatorState>());
         Assert.Equal(["full", "single-factor"], WireNames<ReauthenticationKind>());
+        Assert.Equal(["remembered", "trusted"], WireNames<DeviceKind>());
     }
 
     /// <summary>
@@ -263,6 +264,7 @@ public sealed class VocabularyContractTests
             typeof(SessionType),
             typeof(AuthenticatorState),
             typeof(ReauthenticationKind),
+            typeof(DeviceKind),
         ];
 
         foreach (Type vocabulary in vocabularies)
