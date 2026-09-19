@@ -464,9 +464,14 @@ records, so the suites were run locally by executing the test binaries. The pipe
 `Janus.Analyzers.Tests` 15, `Janus.Storage.Tests` 153 and `Janus.Hosting.Tests` 99, none
 failing.
 
-Full gate: GitHub Actions runs RUN_PUSH (push) and RUN_PR (pull request) on branch
-`phase-02-authorization`, pull request #8, green on every job. `Integration tests`,
+Full gate: GitHub Actions runs `35465019064` (push) and `35465067470` (pull request) on
+branch `phase-02-authorization-2`, pull request #9, green on every job. `Integration tests`,
 `Double migration run`, `Destructive-operation detection report`, `Truth-table suite` and
 `Dependency vulnerability alerting` run on the pull-request event and `Secret scanning` on
 the push event, as CONV-GATE-002 states, so the two runs together are one pass of the
 table of CONV-GATE-001.
+
+Pull request #8 carried the same tree on branch `phase-02-authorization`; two of its
+commit bodies ran over the 72-character bound of CONV-VCS-003, so the branch was
+rebuilt with those two messages corrected and the pull request replaced. The commit
+after the two runs above changes this section alone.
