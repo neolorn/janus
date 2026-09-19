@@ -8366,6 +8366,36 @@ tools for a reason.
 
 ---
 
+## D-161 — Phase 2, third stop: derived checks take sources; refresh is the host's call; the agent decides alone through Milestone 1
+
+**Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-160, D-043, the agent instructions (Tiers 2 and 3) · **Extends:** D-160
+
+**TL;DR.** Three derivation gaps closed, and a change of working mode: the owner cannot
+attend the remaining stops, so the agent decides and records instead of stopping.
+
+1. **Single check and capabilities on a derived type** take the same host-supplied
+   sources the filter takes; without them the call is refused with
+   `authz.derivation.sourcesmissing`, a fault, so no path answers from stored grants
+   alone.
+2. **Materialised refresh** is the host's call, `IDerivationMaterialiser.RefreshAsync`,
+   inside the host's own write; a daily drift check on the sweep
+   (`derivation.materialised.driftcheck`) re-evaluates and corrects, raising
+   `degradation` on a difference.
+3. **Reverse lookup over derivations** is the phase 8 view: stored and materialised
+   grants by query, unmaterialised derivations evaluated over the host-supplied relation
+   within `authz.reverselookup.budget`, `partial: true` past it.
+4. **Working mode.** Tier 2 questions are decided by the agent (most consistent reading,
+   fail closed, smaller surface, no package) and recorded under **Decided in the owner's
+   absence** with the chapter text that should change; Tier 3 questions are decided the
+   same way with the strictest reading. The chapters are not edited by the agent; the
+   owner reconciles them from the report entries afterwards. The Milestone 1 exit gate
+   and the ban on Milestone 2 stand.
+
+**Propagated to:** `03` AUTHZ-DERIVE-001, 005, 007 · `10` sections 1.3, 4.5a ·
+the working guide sections 3 and 6.
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -8536,6 +8566,7 @@ tools for a reason.
 | Phase 1, fifth stop: merge commits outside CONV-VCS-003; a gate's own defect is Tier 1 | D-158 |
 | Phase 2 question: the filter is a same-context EXISTS over the contract tables; subject set first | D-159 |
 | Phase 2, second stop: host-supplied relations; reading vs modifying; gate binding; hosted-service validation | D-160 |
+| Phase 2, third stop: derived checks take sources; host-called refresh; the agent decides alone through Milestone 1 | D-161 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

@@ -111,6 +111,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `authz.policy.unregistered` **(new)** | Entity has no registered policy — a fault, not a denial | AUTHZ-GATE-001 |
 | `authz.restricted` **(new)** | Subject's processing is restricted | AUTHZ-GATE-006 |
 | `authz.group.cycle` **(new)** | Adding the member would make a group contain itself | AUTHZ-GROUP-001, D-106 |
+| `authz.derivation.sourcesmissing` | A check or capability query on a type with derivations was made without the host-supplied sources; a fault, not a denial | AUTHZ-DERIVE-001, D-161 |
 | `authz.grant.reasonrequired` | A grant created or revoked without a non-empty `reason`; 422 | AUTHZ-GRANT-003, D-153 |
 
 ### 1.4 Privacy
@@ -414,6 +415,7 @@ object: it is the protected kill switch, unreachable from the application.
 | Key | Default | Scope | Source |
 |---|---|---|---|
 | `authz.reverselookup.budget` | 2 seconds | R | AUTHZ-SEAM-001, R-A09, D-125 — the migration trigger's measurable bound |
+| `derivation.materialised.driftcheck` | `P1D` | R, duration; lengthening is loosening | AUTHZ-DERIVE-005, D-161: how often the sweep re-evaluates every materialised derivation and corrects drift |
 
 ### 4.6 Organizations and lifecycle
 

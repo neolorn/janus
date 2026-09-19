@@ -220,7 +220,11 @@ principal's subjects, on the resource or an ancestor), and the SQL rendering nam
 declared relation. The library issues no query of its own against a host table
 (LIB-HOST-002): the host's context executes the composed query. A single check on a
 type with derivations therefore runs as the filter applied to the one resource, through
-the host's query, never as a library-side read.
+the host's query, never as a library-side read. Concretely (D-161): `RequireAsync` and
+`CapabilitiesAsync` take the same host-supplied sources object the filter takes; on a
+type that declares a derivation, a call without sources is refused with
+`authz.derivation.sourcesmissing`, a fault and not a denial, so no path answers from
+stored grants alone (AUTHZ-PRIN-001 AC2).
 
 *Source: D-043*
 
@@ -291,6 +295,15 @@ the underlying data changes.
 Materialisation SHALL be an explicit, per-derivation choice, and materialised grants
 SHALL be marked as such so they are never mistaken for stored grants someone wrote.
 
+**Values (D-161).** Refresh is the host's call inside its own write: the library exposes
+`IDerivationMaterialiser.RefreshAsync(derivationName, resourceId)` which the host calls
+from the operation that changes the relationship, inside the same unit of work, so
+criterion 3's first clause holds. The second clause is the safety net: the sweep
+re-evaluates every materialised derivation against the host-supplied relation every
+`derivation.materialised.driftcheck` (default `P1D`), and a difference raises the
+`degradation` condition with the derivation's name in `details` and is corrected in the
+same run.
+
 *Source: D-043*
 
 Materialisation reintroduces, deliberately and in one controlled place, the
@@ -333,6 +346,13 @@ option reached last rather than first.
 grants SHALL be answered by evaluating declared derivations, and its cost SHALL be
 documented as bounded by the number of derivations and the size of the candidate
 set.
+
+**Values (D-161).** Reverse lookup is the `GET /admin/access` view of `09` section 8 and is
+built in phase 8. It answers stored grants by query, materialised derived grants by
+query (they are rows), and unmaterialised derivations by evaluating each declared
+derivation over the host-supplied relation for the resource and its ancestors, inside
+`authz.reverselookup.budget`; past the budget the response carries `partial: true` and
+`unevaluated`. Nothing of it is built in phase 2.
 
 *Source: D-043, AUTHZ-GATE-004*
 
