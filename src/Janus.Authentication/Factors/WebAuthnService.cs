@@ -4,6 +4,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Passwords;
 using Janus.Core;
 using Janus.Core.Configuration;
 
@@ -14,6 +15,7 @@ namespace Janus.Authentication.Factors;
 /// in and the security key that stands beside a password.
 /// </summary>
 /// <param name="authenticators">Where enrolled credentials are read and written.</param>
+/// <param name="passwords">Where the account's password is read.</param>
 /// <param name="audit">Where an event about a credential is recorded.</param>
 /// <param name="configuration">Where the relying party is read from.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
@@ -27,6 +29,7 @@ namespace Janus.Authentication.Factors;
 /// </remarks>
 internal sealed class WebAuthnService(
     IAuthenticatorStore authenticators,
+    IPasswordStore passwords,
     ICredentialAudit audit,
     IConfigurationStore configuration,
     IUnitOfWork work,
@@ -87,6 +90,13 @@ internal sealed class WebAuthnService(
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(registration);
+
+        if (SecondStep.Is(kind)
+            && !await SecondStep.AvailableAsync(passwords, subject, cancellationToken)
+                .ConfigureAwait(false))
+        {
+            return Result.Failure<AuthenticatorId>(Error.From(ErrorCodes.FactorNotPermitted));
+        }
 
         RelyingParty party = await RelyingParty.ForAsync(configuration, cancellationToken)
             .ConfigureAwait(false);

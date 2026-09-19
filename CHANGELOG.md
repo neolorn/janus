@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A second step is second to a password: a code generator or a security key under
+  two-step is refused to an account that holds none, and an account signing in with a
+  passkey alone is offered no second step to enrol. A set of recovery codes is not a
+  second step and stays available either way.
 - A password is set and presented through one path: the length floor that the
   account's reachable assurance decides, the screening that never silently skips, the
   hashing, and the silent rehash on the next sign-in after the parameters are raised.

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Passwords;
 using Janus.Core;
 using Janus.Core.Configuration;
 
@@ -13,17 +14,19 @@ namespace Janus.Authentication.Factors;
 /// Enrolling a code generator and presenting a code from one.
 /// </summary>
 /// <param name="authenticators">Where enrolled credentials are read and written.</param>
+/// <param name="passwords">Where the account's password is read.</param>
 /// <param name="configuration">Where the drift tolerance is read from.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where a shared secret is drawn from.</param>
 /// <remarks>
-/// Implements AUTH-FACT-005, AUTH-FACT-006 and AUTH-FACT-007. An enrolment becomes
-/// usable only once one valid code has been presented, so a mis-scanned code does not
-/// lock its owner out.
+/// Implements AUTH-FACT-005, AUTH-FACT-006, AUTH-FACT-007 and the second-step rule
+/// of AUTH-FACT-002b. An enrolment becomes usable only once one valid code has been
+/// presented, so a mis-scanned code does not lock its owner out.
 /// </remarks>
 internal sealed class TotpService(
     IAuthenticatorStore authenticators,
+    IPasswordStore passwords,
     IConfigurationStore configuration,
     IUnitOfWork work,
     TimeProvider time,
@@ -49,6 +52,13 @@ internal sealed class TotpService(
             label,
             secret,
             time.GetUtcNow());
+
+        if (SecondStep.Is(enrolling.Factor)
+            && !await SecondStep.AvailableAsync(passwords, subject, cancellationToken)
+                .ConfigureAwait(false))
+        {
+            return Result.Failure<TotpEnrolment>(Error.From(ErrorCodes.FactorNotPermitted));
+        }
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await authenticators.AddAsync(enrolling, cancellationToken).ConfigureAwait(false);
