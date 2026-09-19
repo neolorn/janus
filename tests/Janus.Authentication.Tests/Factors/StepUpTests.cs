@@ -357,7 +357,7 @@ public sealed class StepUpTests : IDisposable
     /// answer is a move and never a bare refusal, and an offer never comes empty.
     /// </summary>
     [Fact]
-    public void AUTH_STEP_008_EveryAccountStateAndGateHasAMove()
+    public void AUTH_STEP_008_AC3_EveryAccountStateAndGateHasAMove()
     {
         foreach (HeldFactors held in Accounts())
         {
@@ -376,12 +376,12 @@ public sealed class StepUpTests : IDisposable
     }
 
     /// <summary>
-    /// AUTH-STEP-002 AC8, AUTH-STEP-008 invariant 2: a gate is decided from the
+    /// AUTH-STEP-008 invariant 2: a gate is decided from the
     /// session record and what the account reaches, so two accounts reaching the same
     /// thing are asked the same thing whatever they hold.
     /// </summary>
     [Fact]
-    public void AUTH_STEP_002_AC8_TwoAccountsReachingTheSameAreAskedTheSame()
+    public void AUTH_STEP_008_AC2_TwoAccountsReachingTheSameAreAskedTheSame()
     {
         Gate gate = Gate(GateLevel.Reachable, phishingResistant: false);
 
@@ -571,6 +571,94 @@ public sealed class StepUpTests : IDisposable
 
         Assert.Equal(StepUpOutcome.Present, challenge.Outcome);
         Assert.Equal([[Factor.Password, Factor.SecurityKey]], Offered(challenge));
+    }
+
+    /// <summary>
+    /// AUTH-STEP-008 invariant 4: removing an authenticator is gated on the tier the
+    /// account reaches and never on the authenticator itself, so the passkey that is
+    /// no longer in its owner's hands is in none of the combinations offered to
+    /// remove it.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_008_AC4_RemovingAnAuthenticatorIsNotGatedOnPresentingIt()
+    {
+        StepUpChallenge challenge = StepUp.On(
+            Signed(null),
+            Janus.Core.Policies.SystemDefault.Gates[StepUpAction.FactorRemove],
+            new HeldFactors(
+                Set(Factor.Password, Factor.Totp),
+                Set(Factor.Password, Factor.Passkey),
+                null),
+            Noon);
+
+        Assert.Equal(StepUpOutcome.Present, challenge.Outcome);
+        Assert.DoesNotContain(
+            Offered(challenge).SelectMany(combination => combination),
+            factor => factor is Factor.Passkey);
+    }
+
+    /// <summary>
+    /// AUTH-STEP-008 invariant 5: what an account reaches does not fall when a loss
+    /// is reported, only when the window completes and the authenticator is
+    /// invalidated. The notification that accompanies the fall is AUTH-RECOV-007's.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_008_AC5_ReachableAssuranceFallsOnlyOnInvalidation()
+    {
+        Assert.Equal(
+            AssuranceLevel.Aal2,
+            StepUp.Reachable(HeldFactors.Of([Suspended(Factor.Totp)], password: true).Standing).Level);
+
+        Assert.Equal(
+            AssuranceLevel.Aal1,
+            StepUp.Reachable(HeldFactors.Of([Invalidated(Factor.Totp)], password: true).Standing).Level);
+    }
+
+    /// <summary>
+    /// AUTH-STEP-008 invariant 6: what a combination proves is what the table of
+    /// AUTH-SESS-005a assigns it and never more, whichever way the session came
+    /// about.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_008_AC6_NothingProvesMoreThanWhatWasPresented()
+    {
+        foreach (HeldFactors held in Accounts())
+        {
+            foreach (Gate gate in Gates())
+            {
+                StepUpChallenge challenge = Challenge(gate, held);
+
+                Assert.All(
+                    Offered(challenge),
+                    combination => Assert.True(
+                        Assurance.Proved([.. combination.Select(FactorCatalogue.Of)]) is { } proved
+                        && proved.Level >= challenge.Required
+                        && (!challenge.PhishingResistant || proved.PhishingResistant)));
+            }
+        }
+    }
+
+    /// <summary>
+    /// AUTH-STEP-008 invariant 7: the tier a gate asks for is read from the policy
+    /// and from what the account reaches, and from no second anchor, so the same
+    /// account under the same policy is asked the same thing however it signed in.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_008_AC7_OneAnchorDecidesWhatIsAsked()
+    {
+        Gate gate = Gate(GateLevel.Reachable, phishingResistant: false);
+        HeldFactors held = Held(password: true, Factor.Totp);
+
+        Assert.All(
+            new Assurance?[]
+            {
+                null,
+                new Assurance(AssuranceLevel.Aal1, PhishingResistant: false),
+                new Assurance(AssuranceLevel.Delegated, PhishingResistant: false),
+            },
+            reached => Assert.Equal(
+                AssuranceLevel.Aal2,
+                StepUp.On(Signed(reached), gate, held, Noon).Required));
     }
 
     private static HashSet<Factor> Set(params Factor[] factors) => [.. factors];
