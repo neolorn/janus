@@ -68,6 +68,10 @@ performance one.
 **OPS-DB-001** — The database SHALL use ICU collation, with a case-insensitive
 collation for identifier columns.
 
+**Values (D-153).** Database locale `und-x-icu`. The case-insensitive collation is
+`janus_ci`, created as `(provider = icu, locale = 'und-u-ks-level2', deterministic = false)`
+and applied to the plaintext columns criterion 2 names.
+
 *Source: D-040*
 
 Without ICU, Arabic sorts by byte order, producing meaningless ordering. Without
@@ -97,6 +101,10 @@ separate from the host's.
 
 **OPS-DB-003** — Grant lookup SHALL be supported by a partial index excluding
 revoked rows, and reverse lookup ("who can access this?") by its own index.
+
+**Values (D-153).** "Production-scale volume" is the integration fixture of
+AUTHZ-TEST-002: 1,000,000 resources, 1,000,000 grants of which 10% are revoked,
+100,000 principals, 10,000 groups.
 
 *Source: D-015, AUTHZ-TEST-002*
 
@@ -240,7 +248,9 @@ could fail against existing rows — SHALL be gated by a **pipeline split**:
 - When the gate is enabled and destructive operations are present, the automatic
   deploy **fails with a message**
 - A **separate, manually dispatched workflow** applies destructive migrations
-- The toggle is a **repository variable**
+- The toggle is a **repository variable**, `DESTRUCTIVE_DDL_GATE`, with the values
+  `enabled` and `disabled`; the manual workflow is
+  `.github/workflows/deploy-destructive.yml` (D-153)
 
 The gate is **currently disabled**; the pipeline is written with it wired in.
 
@@ -381,7 +391,10 @@ tightening or a loosening on its face.
   (PRIV-CONS-005): a restart to change, and the change raises a Normal alert
   (OPS-ALERT-001)
 
-*Source: D-148; D-010, D-020.1, D-045, D-146*
+This list and `10` section 4.8 are the same list; a key marked protected in `10`
+appears in both or in neither (D-152).
+
+*Source: D-148; D-010, D-020.1, D-045, D-146, D-152*
 
 The selection test is not "how sensitive is this setting" but **"does turning this
 off blind us to the person turning it off."** The governing language is the one entry
@@ -512,7 +525,21 @@ alerted (`SendingRestrictionGranted`).
 | **`legal.governinglanguage` changed** | Normal | PRIV-CONS-005, OPS-CFG-004, D-146 |
 | **Governing-language text missing**: a document version cannot publish, or a document that must be shown has no governing-language text | Normal | PRIV-CONS-006, D-146 |
 
-*Source: D-048, D-071, D-121, D-146, D-147*
+*Source: D-048, D-071, D-121, D-146, D-147, D-153*
+
+**Identifiers and thresholds (D-153).** Every row carries the identifier `10` section
+5.23 lists, in table order; `AlertRaised` carries it and OPS-ALERT-002 deduplicates on
+it. Where a row's condition is a rate, the number is a key in `10` section 4.5:
+sustained failures `alerting.authfailures.threshold`; recovery clustering
+`alerting.recovery.accountthreshold`; approver volume
+`alerting.recovery.approverthreshold`; read volume `exfiltration.readvolume.factor`
+and `.minimum` (OPS-ALERT-005); implausible sessions `alerting.sessions.distance` and
+`.window` (OPS-ALERT-007); denial spike `alerting.denials.threshold`, per actor;
+duplicate-identifier notices `alerting.nonexistent.threshold`; callback failures
+`alerting.callback.threshold`; balance drain `abuse.sms.drainfactor`; restore test
+`backup.restoretest.objective`. A job that has not run raises `background-job-failed`
+when its last success is older than twice its interval (INF-BG-001). The condition
+`relay-domain-unregistered` (INT-MAIL-011, Normal) is also on the list.
 
 The seven conditions from the duplicate-identifier probe to the restore test were
 required elsewhere to "raise an alert", "be surfaced" or
@@ -535,6 +562,10 @@ destinations as well (`alerting.owner.email`, `alerting.owner.sms`), regardless 
 ---
 
 **OPS-ALERT-002** — Alerts SHALL be **deduplicated per condition per window**.
+
+**Values (D-153).** "Sustained" is `alerting.authfailures.threshold` failures against
+one account inside `alerting.dedupe.window`; the deduplication key is the condition
+identifier of `10` section 5.23 plus the account or actor the row names.
 
 *Source: D-048*
 
@@ -598,6 +629,8 @@ REG-IDENT-006): the existing security-notice set is always told, whatever the ne
 2. The notification cannot be suppressed by any setting.
 3. Removing the last destination of a channel is refused.
 4. The change alert is delivered to the previous destinations, not the new ones.
+5. A change that would leave a channel's destination list empty is refused with `config.value.lastdestination` (D-153).
+
 
 ---
 
@@ -621,6 +654,13 @@ reach them regardless of the switch** (OPS-BOOT-002, D-129).
 
 **OPS-ALERT-005** — Read volume per actor SHALL be baselined and alerted on deviation
 from **that actor's own history**, not a fixed threshold.
+
+**Values (D-153).** A read is one record returned to the actor by a gate-filtered
+query or an export, counted per calendar day in `privacy.calendar.timezone`. The
+alert fires when today's count exceeds `exfiltration.readvolume.factor` times the
+actor's mean daily count over `exfiltration.readvolume.baselinewindow` **and** exceeds
+`exfiltration.readvolume.minimum`; the minimum keeps a low-volume actor's first busy
+day silent.
 
 *Source: D-045, D-071*
 
@@ -648,6 +688,11 @@ Bulk export is the exfiltration mechanism; ordinary browsing is not.
 **OPS-ALERT-007** — Concurrent sessions for one account from implausibly distant
 origins SHALL raise an alert.
 
+**Values (D-153).** Implausible means two sessions of one account both used inside
+`alerting.sessions.window` whose resolved cities (AUTH-SESS-013, INT-GEN-006) are
+further apart than `alerting.sessions.distance` or lie in different countries. The
+same city, or an unresolved location on either side, never alerts.
+
 *Source: D-051*
 
 Attribution is load-bearing for volume alerting, approver anomaly detection, audit
@@ -663,10 +708,17 @@ records and offboarding verification. Shared credentials break all four silently
 
 **OPS-BOOT-001** — A fresh deployment SHALL be initialised by a command-line
 operation run against the database, creating the first organization, the first
-system administrator, an enrolment link for that administrator, and the reserved
-**`emergency`** account (OPS-BOOT-002) with no credential. **It SHALL NOT
+system administrator, an enrolment link for that administrator, the reserved
+**`emergency`** account (OPS-BOOT-002) with no credential, and the restore-test canary
+subject of DR-007 (recorded in `backup.restoretest.canary`). **It SHALL NOT
 generate the break-glass credential**: that is issued from the management application
 (OPS-BOOT-004), so the secret never touches a terminal, a log or a file.
+
+**Values (D-153).** The command is `janus bootstrap`; its arguments are the
+organization name, the administrator's email and phone, and every required deployment
+value by its key name (`10` section 4 preamble). The enrolment link is printed once to
+the command's standard output as the full `/enrol` address, because the mailbox is only
+queued; it lives for `recovery.link.lifetime`. Exit code 0 on success, 1 on refusal.
 
 *Source: D-028, D-133*
 
@@ -752,10 +804,15 @@ never in the secrets manager, never emailed, never written to a file.
 
 *Source: D-148; D-065, D-133, D-147*
 
-**Strength and throttle (D-147).** The credential SHALL carry at least 128 bits of
+**Strength and throttle (D-147, D-153).** The credential SHALL carry at least 128 bits of
 entropy, drawn from a typeable alphabet (no characters that are confused in print or
 absent from a common keyboard) and rendered in the check-charactered groups above, so
-a transcription error is caught before submission. Attempts at `/auth/break-glass`
+a transcription error is caught before submission. The alphabet is Crockford base32
+(digits and upper-case letters without I, L, O and U; input folds case and maps i and
+l to 1 and o to 0). The code is 27 data symbols (135 bits) in 9 groups; each group is
+3 data symbols and 1 check symbol equal to the weighted sum of the group's symbol
+values (weights 1, 2, 3) modulo 32; printed as 36 symbols in groups of four separated
+by hyphens. Attempts at `/auth/break-glass`
 SHALL be source-throttled per AUTH-ABUSE-001 and, in addition, limited to at most 5
 attempts per hour globally across all sources. With 128 bits behind it, the global
 limit exists to make the attack loud, not to make it infeasible.
@@ -849,6 +906,12 @@ cadence, overlap and algorithm are the keys of `10` section 4.9 (AUTH-KEY-001).
 command-line operation of `Janus.Cli` (CONV-LAYOUT-001), run under the maintenance
 credential (OPS-MIG-003a), and SHALL NOT be an endpoint of the management application.
 
+**Values (D-153).** The command is `janus rotate-kek`; the fingerprint key's is
+`janus rotate-fingerprint-key`. The batch is 500 subject keys per transaction ordered
+by subject identifier; the progress row holds the key version, the last subject
+identifier processed, the processed count, and the started, completed and retired
+instants.
+
 *Source: D-148; D-147; DR-009a, PRIV-RIGHT-005a, OPS-SEC-001*
 
 **The shape.** The command introduces a new key version in the secrets manager and
@@ -926,6 +989,11 @@ reconciliation discrepancy SHALL each surface.
 **OPS-OBS-003** — Cleanup of expired sessions, consumed tokens, used one-time codes,
 and elapsed grace windows SHALL run as background jobs.
 
+**Values (D-153).** One sweep every `sweep.interval` (default five minutes) covers
+expired sessions, tokens and codes, elapsed grace and cooling-off windows, and domain
+re-verification (`domain.reverify.interval`); a deadline therefore takes effect within
+that interval of its instant. The DR-016 replay is `janus replay-erasures <ledger path>`.
+
 *Source: D-007, D-038*
 
 **Acceptance criteria**
@@ -957,6 +1025,11 @@ application, of each recurring human task above when performed and of the monthl
 pipeline-consumption review (OPS-DEP-005, CONV-GATE-002), the weekly approver-report
 review (`11` section 4) and the quarterly review of accepted-risk triggers (`13`
 RISK-001).
+
+**Values (D-153).** A licence record is `{ id, kind: licence · permit, name, expiresAt,
+renewedAt }`. A log entry is `{ task, performedAt, actor, note }` with `task` one of
+`envelope-rotation` · `licence-renewal` · `approver-review` ·
+`pipeline-consumption-review` · `risk-trigger-review`, the five section 9 tasks.
 
 *Source: D-148; D-041, D-147*
 

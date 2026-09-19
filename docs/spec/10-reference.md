@@ -55,6 +55,9 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `identity.photo.toolarge` **(new)** | Upload exceeds the size or dimension limit | IDN-ATTR-004, D-106 |
 | `identity.photo.notenabled` **(new)** | Photos not enabled by the subject's organization policy | IDN-ATTR-002, D-106 |
 | `identity.account.adminsuspended` **(new)** | Self-reactivation attempted on an administratively suspended account; moved here from section 1.2 (D-148) | IDN-LIFE-013, D-135 |
+| `identity.preference.wrongtype` | A preference value of a type other than its declaration; 422 | REG-PREF-001, D-153 |
+| `identity.preference.toolarge` | The preference set would exceed `preferences.maxsize`; 422 | REG-PREF-001, D-153 |
+| `identity.preference.administratoronly` | The person set a preference declared administrator-only; 422 | REG-PREF-001, D-153 |
 
 ### 1.2 Authentication
 
@@ -94,6 +97,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `auth.webauthn.countermismatch` **(new)** | Signature counter moved backwards — possible cloned credential | AUTH-FACT-014 |
 | `auth.webauthn.rpidchanged` **(new)** | Credential enrolled under a different relying party identifier | AUTH-FACT-011 |
 | `auth.webauthn.userverificationrequired` | User verification did not occur | AUTH-FACT-014 |
+| `auth.challenge.required` | A bot-defence signal fired and the host declared a challenge verifier; the step completes only with a passing challenge token (AUTH-ABUSE-008) | AUTH-ABUSE-008, D-153 |
 
 ### 1.3 Authorization
 
@@ -106,6 +110,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `authz.policy.unregistered` **(new)** | Entity has no registered policy — a fault, not a denial | AUTHZ-GATE-001 |
 | `authz.restricted` **(new)** | Subject's processing is restricted | AUTHZ-GATE-006 |
 | `authz.group.cycle` **(new)** | Adding the member would make a group contain itself | AUTHZ-GROUP-001, D-106 |
+| `authz.grant.reasonrequired` | A grant created or revoked without a non-empty `reason`; 422 | AUTHZ-GRANT-003, D-153 |
 
 ### 1.4 Privacy
 
@@ -130,6 +135,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `config.value.aboveceiling` | Value above the enforced maximum | AUTH-SESS-005 |
 | `config.value.notallowed` | Value outside the key's enum or set, or of the wrong type | section 4 value types, D-151 |
 | `config.change.stepuprequired` **(new)** | Loosening a control requires step-up | OPS-CFG-002 |
+| `config.value.lastdestination` | A change would leave an `alerting.*.destinations` list empty; 422 | OPS-ALERT-004a, D-153 |
 | `config.policy.belowsystem` **(new)** | An organization policy field is looser than the system default | AUTH-STEP-002a, D-143 |
 | `model.containment.cycle` **(new)** | Containment declaration forms a cycle | AUTHZ-MODEL-004 |
 | `model.derivation.unindexed` **(new)** | Derivation names an unindexed column | AUTHZ-DERIVE-004 |
@@ -141,6 +147,11 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `model.startup.kekunavailable` **(new)** | Startup: the key-encryption key or the fingerprint key could not be obtained from the secrets manager | OPS-SEC-001, AUTH-KEY-002, D-147 |
 | `model.startup.governinglanguage` **(new)** | Startup: `legal.governinglanguage` is unset | PRIV-CONS-005, LIB-HOST-001, D-147 |
 | `model.startup.preferencedeclaration` **(new)** | Startup: a host preference declaration is malformed | REG-PREF-001, D-147 |
+| `model.startup.declarationmissing` | Startup: a required deployment value, subject-event handler or restriction key supplier is absent; `details.key`, `details.handler` or `details.supplier` names it | LIB-HOST-001, D-153 |
+| `model.type.undeclaredreference` | Startup: a resource type references a type that is not declared | AUTHZ-MODEL-004, D-153 |
+| `model.role.undeclaredpermission` | Startup: a role grants a permission that is not declared | AUTHZ-MODEL-004, D-153 |
+| `model.derivation.undeclaredreference` | Startup: a derivation references a type or relationship that is not declared | AUTHZ-MODEL-004, D-153 |
+| `system.fault` | An unhandled fault; 500, body per API-CONV-002 carrying the correlation identifier and nothing else | BFF-ERR-002, D-153 |
 
 ### 1.6 Integration
 
@@ -236,13 +247,26 @@ a **boolean**; a backticked word from a stated set is an **enum**; a bracketed l
 default is written as prose for readability, the row's Scope column names the type. A
 value outside a key's enum or set is refused with `config.value.notallowed`; a value
 outside a floor or ceiling with `config.value.belowfloor` or `config.value.aboveceiling`.
+A duration written in years or months is held at 366 days a year and 31 days a month,
+so the held value is never shorter than any calendar span of that length (D-152); a
+size in bytes is a bare integer with the binary unit stated in the Scope column.
 
-**Every key carries a safe default (P-001) except the eight that name the deployment**
+**Direction (D-152).** OPS-CFG-002 needs a loosening direction for every key. Where a
+row names one, that governs. Otherwise a key with a ceiling and no floor loosens
+upward, a key with a floor and no ceiling loosens downward, a boolean loosens away
+from its default, and any other key (both bounds, neither bound, enum, list, set,
+string) loosens on any change, as D-079b classifies settings with no direction.
+
+**Every key carries a safe default (P-001) except the eleven that name the deployment**
 — origins (`webauthn.origins`), hosting location (`hosting.location`), the two alert
 destination lists, the owner's email and SMS destinations (D-129), the SMS balance
-floor, and the governing language of legal documents (`legal.governinglanguage`,
-D-146). **One further key is conditional**: `hosting.crossborderbasis`, required only when
-`hosting.location` is outside Egypt (INT-HOST-002, D-147). Those are
+floor, the governing language of legal documents (`legal.governinglanguage`,
+D-146), the calendar time zone (`privacy.calendar.timezone`), the message languages
+(`notification.languages`) and the email sending domain
+(`notification.email.sendingdomain`) (D-153). **Three further keys are conditional**: `hosting.crossborderbasis`, required only when
+`hosting.location` is outside Egypt (INT-HOST-002, D-147); `service.name`, required only
+when `context` is in `password.blocklist.sources`; `hosting.environment`, required only
+when the records-of-processing generator is used (PRIV-ROPA-001) (D-153). Those are
 shown with no default, are listed in LIB-HOST-001, and startup **fails** with a named
 error if any is unset (the conditional one, when its condition holds). The public-holiday list is **not** among them (D-142): its
 safe default is empty. Defaults sit
@@ -323,6 +347,9 @@ object: it is the protected kill switch, unreachable from the application.
 | `recovery.approvers.required` | 1 | R | AUTH-RECOV-002 |
 | `recovery.link.lifetime` | 1 hour | R | AUTH-RECOV-002, D-107 |
 | `recovery.invalidation.window` | 7 days | R | AUTH-RECOV-007, D-141 — from loss report (or assurance-lowering removal) to invalidation; formerly `recovery.mfaremoval.window` |
+| `recovery.invalidation.noticeinterval` | `P1D` | R | AUTH-RECOV-007, D-153: the loss-report notice repeats at this interval across the window, plus once at the report and once 24 hours before invalidation |
+| `recovery.ratelimit.account` | 3 per `P1D` | R, integer per day; raising is loosening | AUTH-RECOV-002, D-153: recovery requests accepted for one account |
+| `recovery.ratelimit.approver` | 5 per `P1D` | R, integer per day; raising is loosening | AUTH-RECOV-002, D-153: approvals one approver may give |
 | `breakglass.session.lifetime` | 4 hours, ceiling 12 | R, ceiling enforced | D-065, D-107 |
 
 ### 4.5 Abuse controls
@@ -338,6 +365,9 @@ object: it is the protected kill switch, unreachable from the application.
 | `abuse.throttle.decay` | `PT10M` | R, duration: the half-life of the accumulated delay while no failure occurs | AUTH-ABUSE-001, D-132 |
 | `abuse.nonexistent.window` | 1 hour per address | R | AUTH-ABUSE-003, D-132, D-148: one notice per address per window, for both the non-existence message sent to an unknown address at a sign-in path (AUTH-ABUSE-003) and the notice sent to the owner of an address someone else tried to register or add (REG-SESS-005, REG-IDENT-008) |
 | `abuse.sms.window` | *Retired by D-146. See `restrictions` below and AUTH-ABUSE-004.* | | |
+| `abuse.source.ratelimit` | 300 per `PT1M` | R, integer requests per minute per source address, sliding; 429 `auth.throttled`; raising is loosening | BFF-ORDER-001 stage 4, D-153: the flood limit on every request before any expensive work; sized for many people behind one address |
+| `abuse.botdefence.repeatedattempts` | 3 per `PT1H` | R, integer registration sessions per source per hour; raising is loosening | AUTH-ABUSE-008, D-153: the count behind the `repeatedAttempts` signal |
+| `integration.callback.ratelimit` | 60 per `PT1M` | R, integer per source per minute, fixed window; 429 `integration.callback.rejected` before any lookup; raising is loosening | INT-GEN-003, BFF-MACH-003, D-153 |
 | `restrictions` | the four shipped restrictions below | R, edited through `GET/PUT/DELETE /admin/restrictions/{name}` (step-up `restriction:edit`); a loosening (a higher max, a shorter interval, a removed bucket, a deleted restriction) falls under OPS-CFG-002 and raises a Normal alert | AUTH-ABUSE-004, OPS-CFG-008, D-146: the **named restriction set** governing every send. Each restriction is a key (§5.14), an optional purpose (§5.15) and one or more buckets of (max, interval, `sliding` · `fixed`, §5.16). Security notices to an existing holder are outside destination restrictions and governed by `notification.destination` only. Replaces `abuse.sms.window`, INT-SMS-002 and IDN-LIFE-011 |
 | `restrictions` · `sms.destination` | key `destination`, purpose `any`, 3 per 24 h sliding | R, as above | AUTH-ABUSE-004, D-146 |
 | `restrictions` · `sms.source` | key `source`, purpose `any`, 10 per 1 h sliding | R, as above | AUTH-ABUSE-004, D-146 |
@@ -347,23 +377,35 @@ object: it is the protected kill switch, unreachable from the application.
 | `code.verification.attempts` | 5 | R, ceiling 10 | AUTH-FACT-004, REG-SESS-003, D-146: wrong tries after which a verification code is invalidated and a correct one refused; a replacement draws on the restrictions |
 | `link.magic.lifetime` | 15 minutes | R, ceiling 1 h | AUTH-FACT-003, AUTH-FACT-004, D-132, D-146: email and SMS sign-in links (`emailLink`, `phoneLink`, `POST /auth/link`); the link completes only in the requesting browser and only on a press (REG-SESS-003) |
 | `link.invitation.lifetime` | 7 days | R, ceiling 30 d | IDN-LIFE-009a, D-132 — single use |
-| `photo.maxbytes` | 2 MB | R, ceiling 10 MB | IDN-ATTR-004, D-132 |
+| `photo.maxbytes` | 2097152 | R, integer bytes (2 MiB), ceiling 10485760 (10 MiB) | IDN-ATTR-004, D-132, D-152 |
 | `photo.maxdimension` | 1024 | R, integer pixels on the longest side; larger images are downscaled | IDN-ATTR-004, D-132 |
-| `abuse.sms.balancefloor` | — **required** | R | INT-SMS-004 |
-| `abuse.botdefence.signals` | datacenter ranges, repeated attempts | R | AUTH-ABUSE-008, D-107 |
-| `exfiltration.readvolume.alerting` | on | R | D-045 |
+| `abuse.sms.balancefloor` | — **required** | R, decimal in the currency the gateway reports | INT-SMS-004, D-153 |
+| `abuse.sms.pollinterval` | `PT15M` | R | INT-SMS-004, AUTH-ABUSE-006, D-153: how often the gateway balance is read |
+| `abuse.sms.drainfactor` | 3.0 | R, decimal, floor 1.0; raising is loosening | INT-SMS-004, D-153: the `sms-balance` alert fires when the last hour's spend exceeds this factor times the trailing seven-day hourly mean, or when the balance would reach `abuse.sms.balancefloor` within 24 hours at the current rate |
+| `abuse.botdefence.signals` | `[datacenterRange, repeatedAttempts]` | R, set over the two members named; the set is closed until a decision adds a member; removing a member is loosening | AUTH-ABUSE-008, D-107, D-152 |
+| `exfiltration.readvolume.alerting` | `true` | R | D-045 |
 | `exfiltration.export.stepuprequired` | true | R | D-045, D-148: **staff bulk export only**. `/privacy/export` is not governed by this key; it is gated at the account's reachable assurance by AUTH-STEP-002a instead (D-141) |
 | `exfiltration.export.ratelimit` | 5 per hour | R | D-045, D-107 |
-| `exfiltration.export.auditing` | on | **P** | D-045 |
+| `exfiltration.export.auditing` | `true` | **P** | D-045 |
 | `alerting.email.destinations` | — **required** | R, **list** | D-048, D-071 |
 | `alerting.sms.destinations` | — **required** | R, **list** | D-048, D-071 |
 | `alerting.owner.enabled` | false | R | D-071, D-129 — routine alerts to the owner; break-glass events bypass it |
 | `alerting.owner.email` | — **required** | R | OPS-BOOT-002, D-129 |
 | `alerting.owner.sms` | — **required** | R | OPS-BOOT-002, D-129 |
-| `alerting.destinationchange.notify` | on | **P** | D-083 |
+| `alerting.destinationchange.notify` | *Retired by D-152. The notice to the previous destinations is non-suppressible (D-083, OPS-ALERT-004a); a switch for it was the hole D-083 closed, so no key exists.* | | |
 | `exfiltration.readvolume.baselinewindow` | 30 days | R | D-071, D-107 |
+| `exfiltration.readvolume.factor` | 3.0 | R, decimal, floor 1.0; raising is loosening | OPS-ALERT-005, D-153: `read-volume-anomaly` fires when the actor's records returned today exceed this factor times their daily mean over the baseline window and exceed `exfiltration.readvolume.minimum` |
+| `exfiltration.readvolume.minimum` | 500 | R, integer; raising is loosening | OPS-ALERT-005, D-153: the floor under which no read-volume alert fires |
+| `alerting.authfailures.threshold` | 20 | R, integer failures on one account inside `alerting.dedupe.window`; raising is loosening | OPS-ALERT-002, D-153: `auth-failures-sustained` |
+| `alerting.recovery.accountthreshold` | 3 per `P1D` | R, integer; raising is loosening | OPS-ALERT-001, D-153: `recovery-clustering` |
+| `alerting.recovery.approverthreshold` | 3 per `P1D` | R, integer; raising is loosening | OPS-ALERT-001, D-153: `approver-volume` |
+| `alerting.denials.threshold` | 50 per `PT10M` | R, integer denials per actor in a fixed ten-minute window; raising is loosening | AUTHZ-GATE-004, D-153: `denial-spike` |
+| `alerting.sessions.distance` | 500 | R, integer kilometres; raising is loosening | OPS-ALERT-007, D-153: `concurrent-sessions-implausible` fires when two sessions of one account are both used inside `alerting.sessions.window` and their resolved cities are further apart than this, or their countries differ; an unresolved location never fires |
+| `alerting.sessions.window` | `PT1H` | R, duration; lengthening is loosening | OPS-ALERT-007, D-153 |
+| `alerting.nonexistent.threshold` | 20 per `PT1H` | R, integer, system-wide; raising is loosening | AUTH-ABUSE-003, D-121, D-153: `nonexistent-notice-rate` |
+| `alerting.callback.threshold` | 10 per `PT1H` | R, integer rejected callbacks per source; raising is loosening | BFF-MACH-003, D-153: `callback-verification-failed` |
 | `alerting.dedupe.window` | 1 hour | R | D-048, D-107 |
-| `alerting.sms.severitythreshold` | high | R | D-048 |
+| `alerting.sms.severitythreshold` | `high` | R: `high` · `normal` (OPS-ALERT-001 severities); to `normal` sends more, to `high` fewer | D-048, D-152 |
 | `maintenance.expiry.warninglead` | 30 days | R | OPS-MAINT-001, OPS-ALERT-001, D-121 |
 
 ### 4.5a Authorization
@@ -376,34 +418,51 @@ object: it is the protected kill switch, unreachable from the application.
 
 | Key | Default | Scope | Source |
 |---|---|---|---|
-| `organization.deletion.grace` | 30 days | R, floor enforced | IDN-ORG-003 |
-| `takedown.grace` | 7 days | R, floor enforced | IDN-LIFE-003, D-127 — access stops at trigger; erasure runs at the end of the window |
-| `account.deletion.grace` | 30 days | R, floor enforced | IDN-ACCT-007, D-113 |
+| `organization.deletion.grace` | `P30D` | R, floor `P7D` | IDN-ORG-003, D-152 |
+| `takedown.grace` | `P7D` | R, floor `P7D` (the default; D-127 chose the period) | IDN-LIFE-003, D-127, D-152 — access stops at trigger; erasure runs at the end of the window |
+| `account.deletion.grace` | `P30D` | R, floor `P7D` | IDN-ACCT-007, D-113, D-152 |
 | `organization.multiplememberships` | false | R | IDN-MEM-002 |
-| `identifier.change.coolingoff` | 72 hours | R, floor enforced | IDN-LIFE-007, IDN-LIFE-010, D-107, D-134, D-146 — email and phone alike (was `email.change.coolingoff`); since D-146 the **undo window** after an identifier removal or replace, during which the remaining security-notice set holds a one-click restore (REG-IDENT-006, REG-IDENT-007) |
+| `identifier.change.coolingoff` | `PT72H` | R, floor `PT72H` (the default; D-134 chose the window) | IDN-LIFE-007, IDN-LIFE-010, D-107, D-134, D-146 — email and phone alike (was `email.change.coolingoff`); since D-146 the **undo window** after an identifier removal or replace, during which the remaining security-notice set holds a one-click restore (REG-IDENT-006, REG-IDENT-007) |
 | `registration.phone` | `required` | R: `required` · `optional`; to `optional` is loosening (OPS-CFG-002) | REG-IDENT-001, D-146: whether an account must hold a verified phone; phone is never the sole identifier |
 | `registration.adultaffirmation` | `required` | R: `required` · `off` | REG-PROF-002, D-146: `required` ends the session on an under-age date; `off` records the age group and no affirmation (a host that serves minors) |
 | `registration.session.lifetime` | 24 hours | R, ceiling 72 h | REG-SESS-001, D-146: life of a registration session; an expired one is swept and leaves nothing |
-| `identifiers.email.max` | unlimited | R, floor 1 | REG-IDENT-002, REG-IDENT-007, D-146: verified emails per account; `1` is single-address mode (replace in one operation) |
-| `identifiers.phone.max` | unlimited | R, floor 1 | REG-IDENT-002, REG-IDENT-007, D-146: verified phones per account; `1` is single-address mode |
+| `identifiers.email.max` | 10 | R, integer, floor 1, no ceiling; raising is loosening (each verified address is a send destination and a recovery channel) | REG-IDENT-002, REG-IDENT-007, D-146, D-152: verified emails per account; `1` is single-address mode (replace in one operation) |
+| `identifiers.phone.max` | 10 | R, integer, floor 1, no ceiling; raising is loosening | REG-IDENT-002, REG-IDENT-007, D-146, D-152: verified phones per account; `1` is single-address mode |
 | `identifiers.username.enabled` | false | R | REG-IDENT-001, REG-IDENT-009, D-146: while off no request accepts a username and no response carries the field |
-| `identifiers.username.changecooloff` | 30 days | R, floor enforced | REG-IDENT-009, D-146: minimum interval between username changes (`identity.username.coolingoff`) |
+| `identifiers.username.changecooloff` | `P30D` | R, floor `P1D` | REG-IDENT-009, D-146, D-152: minimum interval between username changes (`identity.username.coolingoff`) |
 | `profile.legalname` | `off` | R: `off` · `optional` · `required` | REG-PROF-001, D-146: a proofing attribute, collected only with a declared purpose |
 | `profile.dateofbirth` | `off` | R: `off` · `optional` · `required` | REG-PROF-001, REG-PROF-002, D-146: whether the date entered at the age step is retained; with `off` only the derived affirmation is kept. The date is immutable to the person |
-| `preferences.maxsize` | 8 KB | R, ceiling 64 KB | REG-PREF-001, D-146: cap on the whole set of host-declared preference values per account |
+| `domain.reverify.interval` | `P1D` | R, duration, floor `PT1H`; lengthening is loosening | REG-DOM-001, D-153: the sweep re-verifies every locked domain's TXT record at this interval |
+| `outbox.poll.interval` | `PT5S` | R, duration | IDN-LIFE-003a, INT-MAIL-006a, D-153: the outbox publisher cadence |
+| `outbox.retry.initial` | `PT30S` | R, duration | IDN-LIFE-003a, D-153: first retry delay, full jitter |
+| `outbox.retry.factor` | 2.0 | R, decimal, floor 1.0 | IDN-LIFE-003a, D-153: multiplier per further attempt |
+| `outbox.retry.maxattempts` | 10 | R, integer, floor 1 | IDN-LIFE-003a, D-153: attempts before `failed` and the `erasure-delivery-exhausted` alert (about eight hours end to end at the defaults) |
+| `sweep.interval` | `PT5M` | R, duration, ceiling `PT15M` | OPS-OBS-003, AUTH-KEY-003, D-153: one sweep for expired sessions, tokens, codes, elapsed grace windows and domain re-verification; a deadline therefore fires within this interval of its instant |
+| `notification.languages` | — **required** | R, **list** of BCP 47 tags, at least one | IDN-ATTR-001, AUTH-ABUSE-005, D-031, D-153: the deployment's message languages; step 3 of the recipient-language resolution sends in all of them, and every template is validated in each at startup |
+| `notification.email.sendingdomain` | — **required** | R, string | INT-MAIL-011, D-153 |
+| `notification.email.relayregistered` | empty | R, **set** of domains | INT-MAIL-011, D-153: domains registered with the Apple private relay; when `apple` is in any effective `loginFactors` and the sending domain is not in this set, the Normal condition `relay-domain-unregistered` fires |
+| `location.database.refresh` | `P7D` | R, duration | INT-GEN-006, D-153: IP location database refresh cadence |
+| `location.database.maxage` | `P30D` | R, duration | INT-GEN-006, D-153: beyond this age the file is stale, no location is shown, and a Normal degradation is raised |
+| `service.name` | — **required when `context` is in `password.blocklist.sources`** | R, string | AUTH-PASS-004, D-153: the word the `context` source forbids in passwords |
+| `preferences.maxsize` | 8192 | R, integer bytes (8 KiB), ceiling 65536 (64 KiB) | REG-PREF-001, D-146, D-152: cap on the whole set of host-declared preference values per account |
 
 ### 4.7 Privacy
 
 | Key | Default | Scope | Source |
 |---|---|---|---|
-| `privacy.request.decision` | 6 working days from submission | R, ceiling enforced (the statutory period) | PRIV-RIGHT-002, D-126, D-136 — the decision deadline; lapse is a deemed rejection |
+| `privacy.request.decision` | 6 | R, integer working days from submission, ceiling 6 (the statutory period PRIV-RIGHT-002 cites; only a shorter deadline is configurable) | PRIV-RIGHT-002, D-126, D-136, D-152 — the decision deadline; lapse is a deemed rejection |
+| `privacy.calendar.timezone` | — **required** | **P**, IANA time zone name | PRIV-RIGHT-002, LIB-HOST-001, D-153: the zone in which calendar days, working days and holidays are determined; `Africa/Cairo` for the default deployment |
 | `privacy.workingdays` | `[sunday, monday, tuesday, wednesday, thursday]` | R, set of weekday names, at least one | PRIV-RIGHT-002, D-136 — the week on which "working days" are counted |
 | `privacy.holidays` | **empty** — public-holiday dates, added and moved as they are announced | R, **loosening** (OPS-CFG-002: step-up, reason, audit) | PRIV-RIGHT-002, D-136, D-142 — never required, never a startup condition: an unlisted holiday counts as a working day and makes a deadline *earlier*, which is always compliant. A Normal alert fires when no listed date lies beyond `maintenance.expiry.warninglead` (OPS-ALERT-001) |
 | `privacy.request.warninglead` | 2 working days before the deadline | R | PRIV-RIGHT-002, OPS-ALERT-001, D-126 |
-| `retention.audit.security` | 7 years | R, floor 5 years | PRIV-RET-001, D-132 — security events, permission changes, financial actions; five-year tax retention plus a margin for claims |
+| `retention.audit.security` | `P7Y` | R, duration, floor `P5Y` | PRIV-RET-001, D-132, D-152 — security events, permission changes, financial actions; five-year tax retention plus a margin for claims |
 | `retention.audit.routine` | 90 days | R, floor 30 days | PRIV-RET-001, D-132 — routine access logging |
-| `retention.consent` | `P3Y` | R, duration counted from the end of the processing the consent covered, floor `P1Y` | PRIV-RET-001, D-132 — evidential period |
+| `retention.consent` | `P3Y` | R, duration counted from the end of the processing the consent covered, floor `P1Y` | PRIV-RET-001, D-132, D-152 — evidential period |
 | `retention.<host-category>` | the floor the host declares for that category (LIB-HOST-001); no library default, startup fails for a declared category without one | R, duration, one key per declared category, floor enforced | PRIV-RET-001, D-107 |
+| `hosting.environment` | — **required with the records-of-processing generator** | R, string | PRIV-ROPA-001, D-153: the free-text hosting environment cell of the register |
+| `backup.restoretest.objective` | `PT8H` | R, duration, ceiling `PT8H` | DR-007, D-044, D-153: `restore-test-failed` fires when the automatic restore test exceeds this; the upper bound of the accepted objective |
+| `backup.restoretest.interval` | `P3M` | R, duration, ceiling `P3M` | DR-007, D-110, D-153 |
+| `backup.restoretest.canary` | set at bootstrap | R, subject identifier | DR-007, OPS-BOOT-001, D-153: the canary subject bootstrap seeds in the administrative organization, holding one encrypted field and one verified email; the restore test decrypts the field and resolves the fingerprint |
 | `backup.retention` | 35 days | R, floor 14 days | DR-003, DR-006a, DR-010, D-132 — also bounds how long a pre-erasure backup survives |
 | `hosting.location` | — **required** | **P** | INT-HOST-001 |
 | `hosting.crossborderbasis` | — **required when outside Egypt** | **P** | INT-HOST-002 |
@@ -427,6 +486,7 @@ redeployment. Every change is recorded and alerted (OPS-ALERT-001).
 | `webauthn.rpid` | OPS-CFG-004 |
 | `token.signing.algorithm` | OPS-CFG-004; value and rationale in §4.9 (D-147) |
 | `token.signature.verification` | OPS-CFG-004 |
+| `privacy.calendar.timezone` | OPS-CFG-004; a legal clock that moves at runtime is a clock nobody can audit (D-153) |
 | `legal.governinglanguage` | PRIV-CONS-005, D-146 (protected for a different reason: the language a document binds in is not a runtime toggle) |
 
 ### 4.9 Tokens and keys
@@ -657,6 +717,47 @@ the end of `terms`.
 
 *Source: REG-SESS-002, D-146*
 
+### 5.20 Capability residuals
+
+The closed set a capability's `requires` may carry (API-CAP-001, AUTHZ-GATE-005):
+`stepup` · `reauthenticate` (a downgraded session, AUTH-SESS-009) · `restricted`
+(AUTHZ-GATE-006) · `consent` (PRIV-SENS-002, PRIV-CONS-007) · `accountstate`.
+
+*Source: AUTHZ-GATE-005, D-153*
+
+### 5.21 Consent and objection mechanism
+
+The `mechanism` of a consent or objection record: `registration` (the terms step,
+REG-SESS-007) · `dashboard` (`/privacy/consents/*`, `/privacy/objections/*`) ·
+`reconsent` (the PRIV-CONS-007 prompt) · `administrator` (entered on the subject's
+behalf).
+
+*Source: PRIV-CONS-001, PRIV-RIGHT-001a, D-153*
+
+### 5.22 Age group
+
+Recorded by the age screen when `registration.adultaffirmation` = `off`: `minor` ·
+`adult`. Finer bands are host work when a host needs them.
+
+*Source: REG-PROF-002, D-153*
+
+### 5.23 Alert conditions
+
+One identifier per OPS-ALERT-001 row, carried by `AlertRaised` and used as the
+deduplication key of OPS-ALERT-002: `auth-failures-sustained` · `recovery-clustering`
+· `approver-volume` · `read-volume-anomaly` · `breakglass-used` ·
+`protected-setting-changed` · `alert-destination-changed` · `stepup-policy-weakened`
+· `concurrent-sessions-implausible` · `denial-spike` · `sms-balance` ·
+`background-job-failed` · `erasure-delivery-exhausted` · `certificate-renewal-failed`
+· `clock-drift` · `degradation` · `callback-verification-failed` ·
+`nonexistent-notice-rate` · `privacy-deadline-approaching` ·
+`privacy-deadline-reached` · `expiry-approaching` · `holiday-list-exhausted` ·
+`no-emergency-credential` · `restore-test-failed` · `restriction-loosened` ·
+`restriction-granted` · `domain-reverification-failed` · `domain-removed` ·
+`governing-language-changed` · `governing-text-missing` · `relay-domain-unregistered`.
+
+*Source: OPS-ALERT-001, OPS-ALERT-002, D-153*
+
 ---
 
 ## 5a. Step-up actions — library-owned
@@ -742,7 +843,7 @@ and effective identities where a person acted, and an idempotency key
 | `CredentialEnrolled` | An authenticator reached `active` — with the enrolment notification to every other recorded channel (AUTH-STEP-007) | Host (optional) |
 | `CredentialSuspended` · `CredentialRestored` · `CredentialInvalidated` | A loss report started, was cancelled, or completed after the window (AUTH-RECOV-007) | Host (optional) |
 | `NotificationRequested` | The library needs a message delivered — verification, recovery, deletion, change notifications, alerts | The notification transport (INT-MAIL-008); retried by the outbox |
-| `AlertRaised` | An OPS-ALERT-001 condition fires | Alert channels |
+| `AlertRaised` | An OPS-ALERT-001 condition fires; carries the condition identifier (section 5.23), the severity and the structured details of the row | Alert channels |
 
 *Source: LIB-API-001, IDN-LIFE-003a, PRIV-RIGHT-005b, D-022, D-132, D-141, D-146*
 
@@ -760,6 +861,7 @@ and effective identities where a person acted, and an idempotency key
 | 409 | Conflict — duplicate, or state precondition failed |
 | 422 | Well-formed, semantically rejected |
 | 429 | Throttled, carries `Retry-After` |
+| 500 | An unhandled fault: `system.fault` with the correlation identifier and nothing else (BFF-ERR-002, D-153) |
 
 *Source: API-CONV-003*
 

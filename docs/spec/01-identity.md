@@ -246,7 +246,8 @@ physically deleted (IDN-PRIN-003).
 *Source: D-038, D-090*
 
 **Acceptance criteria**
-1. Requesting deletion halts member access within one request cycle.
+1. Requesting deletion halts member access within one request cycle: the first request
+   on any member session that reaches the session record after the commit is refused.
 2. Cancelling on day 29 restores all memberships and grants intact.
 3. Erasure does not execute before the configured window elapses.
 4. The window is runtime-configurable with an enforced minimum.
@@ -554,7 +555,10 @@ changes not at all.
 - **Subscribers SHALL be idempotent.** Delivery is at-least-once; a retry may arrive
   after a successful attempt. Built from the start rather than retro-fitted
 - **Retries SHALL use exponential backoff with jitter**, bounded — not indefinite. A
-  request failing from a defect fails identically at every interval
+  request failing from a defect fails identically at every interval. The publisher runs
+  every `outbox.poll.interval`; the schedule is `outbox.retry.initial` multiplied by
+  `outbox.retry.factor` per attempt with full jitter, for `outbox.retry.maxattempts`
+  attempts, after which the record is `failed` (D-153)
 - **Exhausted retries SHALL alert immediately.** The failed record is a diagnostic
   signal, not somewhere failures go quietly
 - **A manual completion path SHALL exist** for permanent failure, itself recorded
@@ -610,7 +614,8 @@ REG-IDENT-007), the session SHALL rotate and all other sessions SHALL terminate.
 *Source: D-035, D-033.4, D-146*
 
 **Acceptance criteria**
-1. Sessions on other devices are invalidated within one request cycle.
+1. Sessions on other devices are invalidated within one request cycle: the first request
+   on any of them that reaches the session record after the commit is refused.
 
 ---
 
@@ -703,6 +708,10 @@ suspended account is reactivated only by an administrator (`account:manage`). Wh
 the deactivation notice is lost, the owner uses ordinary recovery (`/recovery/begin`),
 which is available to a self-suspended account and restores `active` on completion
 (D-140).
+
+The reactivation link in the deactivation notice is valid for as long as the account
+is `suspended` with a `self` origin; it has no separate lifetime, as the deletion-cancel
+link lives the whole grace window (D-153).
 
 *Source: D-006, D-125, D-135, D-147*
 
@@ -799,7 +808,8 @@ branching on a value (REG-PREF-001).
 
 1. Stored account preference, where set
 2. The current request's locale, where a request exists
-3. **Both languages**, only when there is neither
+3. **Every language in `notification.languages`** (the deployment declares them,
+   D-153), only when there is neither
 
 **Registration SHALL set the preference from the request locale**, so the verification
 message matches the language in use and case 3 becomes nearly unreachable.
@@ -807,7 +817,7 @@ message matches the language in use and case 3 becomes nearly unreachable.
 **Acceptance criteria**
 1. The preference is editable by the person and appears in the subject access export.
 2. A background-triggered notification resolves language without a request.
-3. An account with no preference and no request receives both languages.
+3. An account with no preference and no request receives every declared language.
 
 ---
 
@@ -852,7 +862,11 @@ which an unencrypted image would have failed.
 **IDN-ATTR-004** — Uploads SHALL be validated by **content**, size- and
 dimension-limited server-side, and **re-encoded on upload**.
 
-*Source: D-060*
+**Values (D-153).** JPEG, PNG and WebP are accepted, recognised by content and never by
+extension or declared type. The stored image is JPEG at quality 85 with every metadata
+segment removed, and `GET /account/photo` serves `image/jpeg`.
+
+*Source: D-060, D-153*
 
 Re-encoding strips metadata. Photographs carry location and device information by
 default; a photo with coordinates is an exposure nobody intended.

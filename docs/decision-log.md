@@ -7984,6 +7984,170 @@ a name or a type. Each is now a name.
 
 ---
 
+## D-152 — Phase 0 questions, third stop: values where the reference chapter had words
+
+**Date:** 2026-09-18 · **Status:** accepted · **Amends:** D-146 (identifier maximum), D-083 (switch removed) · **Extends:** D-151
+
+**TL;DR.** Seven rows of `10` section 4 gave the code a word where it needed a value.
+Each now has a value, and two derivation rules join the D-151 type rule so the next
+such row answers itself.
+
+1. **`alerting.destinationchange.notify` is retired.** D-083 made the notice to the
+   previous destinations non-suppressible; a switch for it, protected or not, was the
+   hole D-083 closed. The key leaves the catalogue; OPS-CFG-004 and `10` section 4.8
+   are stated to be one list, so a protected mark that appears in neither is a defect,
+   never a third scope.
+2. **Sizes are bytes.** `photo.maxbytes` 2097152, ceiling 10485760; `preferences.maxsize`
+   8192, ceiling 65536. Binary units, written as bare integers with the unit in the
+   Scope column, as the Argon2 memory already is.
+3. **Identifier maximums are ten per kind**, floor 1, no ceiling, raising is loosening.
+   Unlimited was never a value; every verified address is a send destination and a
+   recovery channel, so an unbounded set is an unbounded attack surface. Ten exceeds
+   any real need and a host may raise it under OPS-CFG-002.
+4. **Bot-defence signals** are a set over two named members, `datacenterRange` and
+   `repeatedAttempts`, both on by default; the set is closed until a decision adds a
+   member.
+5. **The privacy decision deadline** is an integer of working days, default 6, ceiling
+   6: the statutory period PRIV-RIGHT-002 cites. Only a shorter deadline can be
+   configured. It stays a library constant; a second market with another period is the
+   deferred multi-market work, not a declaration.
+6. **Grace and cooling-off floors** are written: `organization.deletion.grace` and
+   `account.deletion.grace` floor `P7D` (default `P30D`); `takedown.grace` floor `P7D`
+   (the default, D-127); `identifier.change.coolingoff` floor `PT72H` (the default,
+   D-134, a security window); `identifiers.username.changecooloff` floor `P1D`
+   (default `P30D`, an abuse control at host discretion).
+7. **Years are held long, not short.** A duration written in years or months is held at
+   366 days a year and 31 days a month, so a five-year floor is never shorter than any
+   five calendar years. `retention.audit.security` is `P7Y`, floor `P5Y`;
+   `retention.consent` keeps `P3Y`, floor `P1Y`. No calendar type, no package.
+8. **Direction rule.** Where a row names no loosening direction: ceiling only loosens
+   upward, floor only loosens downward, boolean loosens away from its default,
+   anything else loosens on any change (D-079b). Replaces the interim reading that
+   every direction-less key loosens on any change, which would have charged a
+   tightening the friction OPS-CFG-002 makes free.
+
+Housekeeping in the same pass: `on` defaults are written `true`;
+`alerting.sms.severitythreshold` is an enum `high` · `normal`.
+
+**Propagated to:** `06` OPS-CFG-004 · `10` (section 4 preamble, 4.5, 4.6, 4.7) · `20`
+REG-IDENT-002, REG-PREF-001.
+
+---
+
+## D-153 — Word-shaped values: one pass over every chapter
+
+**Date:** 2026-09-18 · **Status:** accepted · **Amends:** D-083 (destination list refusal code), D-045 (read-volume rule), D-051 (distance rule), D-008 (recovery limits), D-013 (challenge, drain rule), D-024 (materiality), D-030 (sensitive retention), D-036 (register inputs), D-060 (photo formats), D-097 (primitives) · **Extends:** D-151, D-152
+
+**TL;DR.** Three phase-0 stops in a row were the same defect: a chapter written for a
+reader gave a word where a compiler needs a value. Rather than pay one stop per phase,
+every chapter was read once for that defect. 113 raw findings, 88 distinct; every one now
+has a value. Seven were owner decisions; the rest are mechanical fills.
+
+**Owner decisions.**
+
+1. **Alert thresholds are keys.** Ten OPS-ALERT-001 conditions said "sustained",
+   "unusual", "spike", "implausibly distant", "abnormal". Each is now a runtime key in
+   `10` section 4.5 with a conservative default (twenty failures an hour on one account;
+   three recoveries a day for one account or three approvals for one approver; fifty
+   denials in ten minutes per actor; three times the actor's daily read mean and at
+   least 500 records; two sessions an hour apart in cities over 500 km apart or in
+   different countries; twenty non-existence notices an hour; ten rejected callbacks an
+   hour from one source; SMS spend three times the seven-day hourly mean; a restore test
+   over eight hours). Raising a threshold is loosening. A fixed constant would mean a
+   redeploy to tune an alert.
+2. **A flood limit per source**: `abuse.source.ratelimit` 300 requests a minute, sliding.
+   Sixty, the number a reviewer reaches for, would lock out an office or a mobile
+   carrier behind one address; 300 stops a naive flood and lets a busy shop floor work.
+3. **A deployment time zone**: `privacy.calendar.timezone`, required and protected. A
+   six-working-day legal clock has to know what day it is where the company is; fixing
+   UTC could lose or gain a day against a statutory deadline. The six working days are
+   the six calendar days in that zone after the submission's day; `decisionDue` is the
+   end of the sixth. `receivedAt` is a calendar date in that zone.
+4. **Materiality is the publisher's call.** `POST /admin/documents/{document}/versions`
+   takes a required boolean `material`. Code cannot judge whether a legal text changed
+   substantially; the human publishing it says so and the audit record keeps the answer.
+5. **What the mail server learns**: `sub`, primary `email` and `email_verified`,
+   display `name`, `preferred_username` where usernames are on, `locale`. No phone, legal
+   name, date of birth or photo. More is the deferred third-party work.
+6. **The library ships no challenge.** Bot defence calls a host-declared verifier; with
+   none declared the signal is audited and no challenge appears. A CAPTCHA is a
+   third-party product with its own privacy notice and would be a dependency `08` does
+   not list. `repeatedAttempts` is more than three registration sessions from one source
+   in an hour.
+7. **The offline password lists** are the 100,000 most prevalent Pwned Passwords SHA-1
+   hashes plus a public-domain word list with an Arabic transliteration list; the
+   licence is verified from the provider's terms before the file enters the package.
+
+**Lead decisions, by kind.**
+
+- *Undecidable criteria made decidable.* "Within one request cycle" is the first request
+  that reaches the session record after the commit. Timing criteria ("overlap within
+  noise", "does not vary measurably") are verified by construction (one code path,
+  fixed-time comparison, identical bytes) and asserted through byte identity; no
+  statistical benchmark runs in CI, because a flaky test is worse than none.
+  "Production-scale volume" is one fixture: a million resources, a million grants (10%
+  revoked), a hundred thousand principals, ten thousand groups. A job that has not run
+  is one whose last success is older than twice its interval. One sweep every
+  `sweep.interval` (five minutes) fires every deadline.
+- *Names.* Every alert condition has a kebab-case identifier (`10` section 5.23) that
+  `AlertRaised` carries and deduplication keys on. Nine error codes were added, among
+  them `system.fault` (500), `config.value.lastdestination`,
+  `model.startup.declarationmissing` and three preference refusals. Three closed sets
+  were added: capability residuals (5.20), consent mechanism (5.21), age group (5.22,
+  `minor` · `adult`). Cookies are `__Host-janus-session`, `-preauth`, `-csrf`, `-device`,
+  `-browser`; the CSRF header is `X-Janus-Request`. The DNS record is
+  `_janus-verify.<domain>`. The CLI verbs are `bootstrap`, `rotate-kek`,
+  `rotate-fingerprint-key`, `replay-erasures`.
+- *Shapes.* The registration state document, the SSE events, `policyRequirement`,
+  `passwordChangeRequired`, the device description (`{ browser, os }` from the
+  user agent), the location (`{ city, country }`), the explanation record, the
+  prose-only list responses (camelCase of the noun in the chapter's vocabulary), the
+  recipients declaration, the restriction supplier signature, the ledger line, the
+  progress row, monthly audit partitions. Free text is 1 to 1024 characters after
+  trimming, one rule.
+- *Security parameters.* AES-256-GCM per field with a per-subject key wrapped under the
+  KEK with AES key wrap with padding (RFC 5649); marker byte `0x01`, erased key 32 zero
+  bytes under `0x00`. HMAC-SHA-256 fingerprints, neutralised to 32 zero bytes. Recovery
+  codes 10 Crockford base32 symbols. Break-glass 27 data symbols in nine groups of
+  three plus a weighted check symbol modulo 32. Correlation references 128 bits.
+  Callback secrets overlap 24 hours. The enrolment link prints once to the bootstrap
+  command's output, since the mailbox is only queued.
+- *New keys* beyond the thresholds: outbox schedule (`outbox.poll.interval`,
+  `outbox.retry.*`), `notification.languages` (required; "both languages" was never a
+  value), `notification.email.sendingdomain` (required) and `.relayregistered`,
+  `domain.reverify.interval`, `location.database.refresh` and `.maxage`,
+  `recovery.ratelimit.*`, `recovery.invalidation.noticeinterval`, `service.name`,
+  `hosting.environment`, `backup.restoretest.*`, `integration.callback.ratelimit`,
+  `abuse.botdefence.repeatedattempts`, `sweep.interval`. The deployment values are now
+  eleven, with three conditional.
+- *Privacy semantics.* PRIV-SENS-002's "stricter retention defaults" is dropped from
+  code: there is no library default a sensitive category could be stricter than, so
+  the declaration is required like any other. `retention.consent` counts from
+  withdrawal or, failing that, erasure. Photos accept JPEG, PNG and WebP by content and
+  store JPEG at quality 85 with metadata stripped. The reactivation link lives while
+  the account is self-suspended.
+
+**What this says about the reviews.** Five review passes checked coherence and
+completeness of meaning, never machine-readability of constants. This pass closes that
+gap for the values found; some will still surface only when code is written, at a far
+lower rate than one per phase.
+
+**Propagated to:** `01` IDN-ORG-003, IDN-LIFE-003a, IDN-LIFE-008, IDN-LIFE-013,
+IDN-ATTR-001, IDN-ATTR-004 · `02` AUTH-FACT-001, 002b, 008, 015, 016, 017, AUTH-PASS-004,
+AUTH-RECOV-002, 007, AUTH-ABUSE-001, 003, 005, 006, 007, 008, AUTH-SESS-011, 013 · `03`
+AUTHZ-MODEL-004, AUTHZ-GATE-004, 005, AUTHZ-GRANT-003, AUTHZ-DERIVE-004, 007,
+AUTHZ-CONCEAL-002, AUTHZ-TEST-002 · `04` PRIV-CONS-001, 007, PRIV-SENS-002,
+PRIV-RIGHT-002, 005a, 005c, PRIV-RET-001, 002, PRIV-ROPA-001, 002 · `05` INT-GEN-003,
+006, INT-MAIL-006a, 011, INT-SMS-004, INT-PWD-001 · `06` OPS-DB-001, 003, OPS-DEP-001,
+OPS-ALERT-001, 002, 004a, 005, 007, OPS-BOOT-001, 004, OPS-SEC-003, OPS-OBS-003,
+OPS-MAINT-001 · `07` LIB-HOST-001 · `09` API-CONV-002, 005, and the endpoints named ·
+`10` sections 1, 4 (preamble, 4.4 to 4.8), 5.20 to 5.23, 5b, 6 · `12` DR-007, DR-016 ·
+`17` BFF-SESS-002, BFF-CSRF-003, 005a, 006, BFF-MACH-002, 003, BFF-ORDER-001,
+BFF-ERR-002, 003, BFF-LOG-002 · `19` INF-BG-001 · `20` REG-IDENT-003, 009, REG-DOM-001,
+REG-PROF-001, 002, REG-PREF-001, REG-SESS-005.
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -8145,6 +8309,8 @@ a name or a type. Each is now a name.
 | Every design and code choice fixed; Conventional Commits 1.0.0; Keep a Changelog 1.1.0; MinVer | D-149 |
 | Phase 0 questions: test projects under the analysers, JAN0006, gitleaks | D-150 |
 | Phase 0 questions, second stop: gate names, factor identifiers, enum values, key types, families | D-151 |
+| Phase 0 questions, third stop: bytes, maximums, signals, floors, years, direction | D-152 |
+| Word-shaped values: one pass over every chapter; alert thresholds as keys, time zone, materiality, userinfo claims, host challenge, offline lists | D-153 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

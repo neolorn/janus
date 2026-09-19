@@ -325,7 +325,9 @@ it does not depend on the application being up (D-147).
 
 **Acceptance criteria**
 1. Scheduled work runs without a person triggering it.
-2. Failure to run raises an alert rather than passing unnoticed.
+2. Failure to run raises an alert rather than passing unnoticed: a job whose last
+   successful run is older than twice its interval raises `background-job-failed`
+   (D-153).
 
 ---
 

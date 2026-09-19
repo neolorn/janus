@@ -303,6 +303,10 @@ under them has expired.
 **DR-016** — Completed erasures SHALL be appended to an **off-host ledger**, and the
 restore procedure SHALL replay it.
 
+**Values (D-153).** One line per erasure: the RFC 3339 UTC instant to the second, one space,
+the full subject identifier, one space, the reason (`10` section 5.12a); UTF-8, no
+header. The replay is `janus replay-erasures <ledger path>`, idempotent over every line.
+
 *Source: D-096*
 
 **Deferred until the tier upgrade**, when object storage becomes available (DR-005). Until
@@ -452,6 +456,11 @@ values (INF-HOST-003) by name only.
 **DR-007** — Restore SHALL be tested **by an automated job**, at least quarterly,
 **timed**, with the measured recovery time recorded. The test SHALL **decrypt
 something and prove it**, and SHALL alert on failure.
+
+**Values (D-153).** The test runs every `backup.restoretest.interval` and fails when it exceeds
+`backup.restoretest.objective`. The canary is the subject bootstrap seeds
+(`backup.restoretest.canary`, OPS-BOOT-001): the job decrypts its one encrypted field
+and resolves its verified email's fingerprint.
 
 *Source: D-148; D-044, D-069, D-110, D-147*
 

@@ -104,6 +104,10 @@ ordering rules.
 **AUTHZ-GRANT-003** — Grants SHALL carry an optional expiry, and SHALL record who
 granted, when, why, and who revoked.
 
+**Values (D-153).** `reason` is required and non-empty on every grant created or revoked;
+absent, the request is refused with `authz.grant.reasonrequired`. Free text is 1 to
+1024 characters after trimming, the one rule for every free-text field (API-CONV-002).
+
 *Source: D-015*
 
 Expiry supports contractors, trials and temporary escalation. Free to add now; a
@@ -263,7 +267,7 @@ A derived grant is only as fast as the join it performs into the host's tables.
 **Acceptance criteria**
 1. A derivation naming an unindexed column fails startup validation.
 2. Query plans for derived rules use indexes rather than sequential scans at
-   production-scale volume.
+   production-scale volume: the AUTHZ-TEST-002 fixture.
 
 ---
 
@@ -328,7 +332,9 @@ graph-based systems materialise.
 1. The administrative "who can access this?" view reports stored and derived grants
    distinctly.
 2. Where derivations make reverse lookup unbounded, the view states the limitation
-   rather than returning a partial answer silently.
+   rather than returning a partial answer silently: when evaluation exceeds
+   `authz.reverselookup.budget` the response carries `partial: true` and `unevaluated`,
+   the names of the derivations not evaluated (D-153).
 
 ---
 
@@ -421,7 +427,10 @@ identifier validation in `02-authentication`.
 
 **Acceptance criteria**
 1. Each listed condition produces a distinct named error identifying the offending
-   declaration.
+   declaration: `model.containment.cycle`, `model.type.noorganizationpath`,
+   `model.type.undeclaredreference`, `model.role.undeclaredpermission`,
+   `model.derivation.undeclaredreference`, `model.derivation.unindexed` (`10` section
+   1.5, D-153).
 2. Validation runs before any request is served.
 3. A new entity added without a policy fails the build via test, not only at
    startup.
@@ -502,6 +511,11 @@ this SHALL be stated in the public contract.
 **AUTHZ-GATE-004** — The gate SHALL provide an explanation operation returning **why**
 access was granted or denied, naming the matched or missing grant.
 
+**Values (D-153).** The explanation is `{ outcome: allowed · denied, permission, principal:
+{ acting, effective }, grant }` where `grant` is `{ id, kind, subjectType, subjectId,
+role, deny, inheritedFrom: { resourceType, resourceId } or null }` for the grant that
+decided, or null when none matched.
+
 *Source: P-003*
 
 Costs little and answers "why can't I see this record?" without a debugger. Also the
@@ -540,6 +554,9 @@ per-row grant query evaluates.
 The frontend renders the control and prompts for what is needed, rather than hiding a
 control the person is entitled to use or showing one that will fail with no
 explanation.
+
+**Values (D-153).** `requires` carries members of the closed set in `10` section 5.20:
+`stepup` · `reauthenticate` · `restricted` · `consent` · `accountstate`.
 
 *Source: D-015, D-078*
 
@@ -592,7 +609,9 @@ the answer regardless of its content.
 
 **Acceptance criteria**
 1. Response bodies are byte-identical.
-2. Timing distributions for concealed and genuine not-found overlap within noise.
+2. Timing distributions for concealed and genuine not-found overlap within noise:
+   verified by construction (one code path, identical bytes), asserted by criterion 1,
+   named in the report as verified by construction (CONV-TEST-007, D-153).
 
 ---
 
@@ -737,7 +756,9 @@ The nested existence check is where the cost lives; the partial index on live gr
 is what keeps it cheap.
 
 **Acceptance criteria**
-1. A query plan is captured for the primary list query at production-scale volume.
+1. A query plan is captured for the primary list query at production-scale volume: the
+   fixture seeds 1,000,000 resources, 1,000,000 grants of which 10% are revoked,
+   100,000 principals and 10,000 groups (D-153).
 2. The permission predicate uses an index rather than a sequential scan.
 
 ---
