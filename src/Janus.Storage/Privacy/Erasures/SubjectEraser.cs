@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Identity.Accounts;
 using Janus.Privacy.Erasures;
@@ -18,6 +19,7 @@ namespace Janus.Storage.Privacy.Erasures;
 /// The erasure, over every table that holds a personal field of one subject.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
+/// <param name="sessions">Where the subject's sessions are held.</param>
 /// <remarks>
 /// Implements PRIV-RIGHT-005, PRIV-RIGHT-005a, PRIV-RIGHT-005c, IDN-LIFE-003b,
 /// IDN-LIFE-014, IDN-ACCT-002 and IDN-PRIN-003. Every write here is made on one
@@ -25,8 +27,10 @@ namespace Janus.Storage.Privacy.Erasures;
 /// erasures row reach the database together or not at all. No row is removed: the
 /// photo's bytes are held under the same key as every other personal field, so
 /// destroying it leaves them unreadable where they are (IDN-ATTR-003, IDN-PRIN-003).
+/// The sessions go first (AUTH-SESS-010): a request arriving on one of them after the
+/// key is gone would read fields it can no longer decrypt.
 /// </remarks>
-internal sealed class SubjectEraser(JanusDbContext context) : ISubjectEraser
+internal sealed class SubjectEraser(JanusDbContext context, ISessionStore sessions) : ISubjectEraser
 {
     /// <inheritdoc/>
     public async ValueTask<Erasure> EraseAsync(
@@ -41,6 +45,7 @@ internal sealed class SubjectEraser(JanusDbContext context) : ISubjectEraser
             throw new InvalidOperationException("The subject has already been erased.");
         }
 
+        await sessions.EndAccountAsync(subject, at, cancellationToken).ConfigureAwait(false);
         await MarkErasedAsync(subject, cancellationToken).ConfigureAwait(false);
         await DestroyKeyAsync(subject, cancellationToken).ConfigureAwait(false);
         await NeutraliseFingerprintsAsync(subject, cancellationToken).ConfigureAwait(false);
