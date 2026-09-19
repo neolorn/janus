@@ -154,7 +154,12 @@ model and SHALL refuse to start if it does not.
 rights used only by the migration step, and one for the application with row-level
 access only.
 
-*Source: D-018*
+**Values (D-157).** The roles are `janus_migrate`, `janus_app` and, for OPS-MIG-003a,
+`janus_maintenance`. The migration creates the two runtime roles if absent (`NOLOGIN`;
+the deployment attaches credentials, INF-HOST-003) and writes every `GRANT` and `REVOKE`
+against those names.
+
+*Source: D-018, D-157*
 
 Nothing in production can alter schema. Same reasoning as the protected-settings
 configuration list — controls that would catch a compromise must not be reachable by

@@ -217,7 +217,10 @@ pool, NOT a tenancy or isolation boundary.
 
 One deployment, one database, one identity pool. Organization #1 is the
 **administrative organization**; its members are what would elsewhere be called
-staff.
+staff. It is identified by a boolean `administrative` on the organization, set only
+by bootstrap (OPS-BOOT-001) and never through the application, with a unique partial
+index guaranteeing exactly one such row; the domain reads `Organization.IsAdministrative`
+(D-157).
 
 **Acceptance criteria**
 1. No query filters by organization for isolation purposes; organization scoping is

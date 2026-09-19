@@ -8249,6 +8249,37 @@ to Tier 1 so it never ends a run again.
 
 ---
 
+## D-157 — Phase 1 questions, fourth stop: the photo is unreadable, the administrative flag, the role names, retention by argument
+
+**Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-060 (AC wording), D-038, D-018, D-118 · **Extends:** D-156
+
+**TL;DR.** Three small gaps at the end of phase 1, one of them a genuine wording
+contradiction of my own making.
+
+1. **The photo.** IDN-ATTR-003 says the photo row survives erasure with its bytes
+   unreadable; PRIV-RIGHT-005 AC4 said the photo is "removed". The first is the design
+   (D-060, IDN-PRIN-003: nothing is deleted, keys are destroyed); the second was loose
+   wording. AC4 now says unreadable, row persists, and `GET /account/photo` answers as
+   for an account with no photo. The eraser touches no photo row and is correct.
+2. **The administrative organization** is a boolean `administrative` on the
+   organization row, set by bootstrap only, with a unique partial index so exactly one
+   exists; `Organization.IsAdministrative` is what IDN-ORG-004 checks. Rejected: a
+   well-known fixed identifier (leaks structure into an opaque id) and a settings key
+   (a domain invariant does not live in configuration).
+3. **Database roles** are `janus_migrate`, `janus_app`, `janus_maintenance`; the
+   migration creates the runtime roles `NOLOGIN` if absent and the deployment attaches
+   credentials.
+4. **`audit_drop_expired_partitions` takes the two retention periods as arguments**,
+   passed by the worker from the catalogue's effective values, since a key at its
+   default has no settings row for the database to read. The function refuses an
+   argument below the PRIV-RET-001 floor, written into it by the migration, so the
+   maintenance role cannot shorten retention by argument.
+
+**Propagated to:** `01` IDN-ORG-001 · `04` PRIV-RIGHT-005 AC4, PRIV-RET-002 · `06`
+OPS-MIG-003.
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -8415,6 +8446,7 @@ to Tier 1 so it never ends a run again.
 | Phase 1 questions: generated Unicode tables at a pinned version, PRECIS as validation, CA1515 in tests, the visibility test | D-154 |
 | Phase 1 questions, second stop: persistence records and the port encrypt; kind detection; collation scope | D-155 |
 | Phase 1 questions, third stop: area grants to Storage.Tests; test infrastructure is Tier 1 | D-156 |
+| Phase 1 questions, fourth stop: photo unreadable not removed; administrative flag; role names; retention by argument | D-157 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
