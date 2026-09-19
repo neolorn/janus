@@ -1,6 +1,8 @@
 using System;
+using Janus.Storage.Authentication.Alerting;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Passwords;
+using Janus.Storage.Authentication.Sending;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Authorization.Grants;
 using Janus.Storage.Authorization.Groups;
@@ -188,6 +190,53 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     /// </summary>
     public DbSet<DeviceRecord> Devices => Set<DeviceRecord>();
 
+    /// <summary>
+    /// What each restriction key has had counted against it.
+    /// </summary>
+    public DbSet<SendCounterRecord> SendCounters => Set<SendCounterRecord>();
+
+    /// <summary>
+    /// The credit support has added to a restriction key.
+    /// </summary>
+    public DbSet<SendGrantRecord> SendGrants => Set<SendGrantRecord>();
+
+    /// <summary>
+    /// The messages a transport took, until a delivery report can no longer change
+    /// what they counted.
+    /// </summary>
+    public DbSet<SendRecord> Sends => Set<SendRecord>();
+
+    /// <summary>
+    /// What each throttle scope has accumulated.
+    /// </summary>
+    public DbSet<ThrottleRecord> ThrottleCounters => Set<ThrottleRecord>();
+
+    /// <summary>
+    /// What the messaging gateway said its account stood at.
+    /// </summary>
+    public DbSet<BalanceReadingRecord> SmsBalanceReadings => Set<BalanceReadingRecord>();
+
+    /// <summary>
+    /// The addresses told that no account holds them.
+    /// </summary>
+    public DbSet<NoticeRecord> NonexistenceNotices => Set<NoticeRecord>();
+
+    /// <summary>
+    /// The inbound callbacks, counted per source.
+    /// </summary>
+    public DbSet<CallbackRecord> Callbacks => Set<CallbackRecord>();
+
+    /// <summary>
+    /// The registration sessions, counted per source.
+    /// </summary>
+    public DbSet<RegistrationSourceRecord> RegistrationSources =>
+        Set<RegistrationSourceRecord>();
+
+    /// <summary>
+    /// The conditions already raised, within their deduplication window.
+    /// </summary>
+    public DbSet<AlertRecord> Alerts => Set<AlertRecord>();
+
     /// <inheritdoc/>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -232,5 +281,14 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration<RecoveryCodeSetRecord>(new RecoveryCodeConfiguration());
         modelBuilder.ApplyConfiguration<RecoveryCodeRecord>(new RecoveryCodeConfiguration());
         modelBuilder.ApplyConfiguration(new DeviceConfiguration());
+        modelBuilder.ApplyConfiguration(new SendCounterConfiguration());
+        modelBuilder.ApplyConfiguration(new SendGrantConfiguration());
+        modelBuilder.ApplyConfiguration(new SendConfiguration());
+        modelBuilder.ApplyConfiguration(new ThrottleConfiguration());
+        modelBuilder.ApplyConfiguration(new BalanceReadingConfiguration());
+        modelBuilder.ApplyConfiguration(new NoticeConfiguration());
+        modelBuilder.ApplyConfiguration(new CallbackConfiguration());
+        modelBuilder.ApplyConfiguration(new RegistrationSourceConfiguration());
+        modelBuilder.ApplyConfiguration(new AlertConfiguration());
     }
 }

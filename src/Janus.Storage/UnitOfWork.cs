@@ -20,12 +20,19 @@ internal sealed class UnitOfWork(JanusDbContext context) : IUnitOfWork
 {
     private IDbContextTransaction? _transaction;
 
+    private int _depth;
+
     /// <inheritdoc/>
     public async ValueTask BeginAsync(CancellationToken cancellationToken)
     {
+        // An operation that calls another does not start a second transaction: the
+        // outermost one is the one transaction the whole operation runs in, and the
+        // inner call commits nothing of its own (CONV-DESIGN-003).
         if (_transaction is not null)
         {
-            throw new InvalidOperationException("The operation's transaction is already open.");
+            _depth++;
+
+            return;
         }
 
         _transaction = await context.Database
@@ -39,6 +46,13 @@ internal sealed class UnitOfWork(JanusDbContext context) : IUnitOfWork
         if (_transaction is null)
         {
             throw new InvalidOperationException("The operation has no transaction to commit.");
+        }
+
+        if (_depth > 0)
+        {
+            _depth--;
+
+            return;
         }
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -61,5 +75,6 @@ internal sealed class UnitOfWork(JanusDbContext context) : IUnitOfWork
         await _transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
         await _transaction.DisposeAsync().ConfigureAwait(false);
         _transaction = null;
+        _depth = 0;
     }
 }

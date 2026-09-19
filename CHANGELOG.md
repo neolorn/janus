@@ -32,6 +32,10 @@ against the public contract of LIB-API-001.
 - A text message is refused before it is sent when the gateway balance is at the floor,
   alerts excepted, and a balance that is draining faster than it has been raises its own
   alert.
+- The library's schema gains the tables the sending restrictions, the progressive
+  delay, the alerting and the delivery reports are kept in, so a deployment applies
+  one new migration. No plain address, account or source is in any of them: each is
+  held under the deployment's fingerprint key.
 
 - The message catalogue, the mail and text transports, the addresses the deployment
   calls out to, the recipients its data reaches and the keys a sending restriction

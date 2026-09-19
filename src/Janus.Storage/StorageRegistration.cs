@@ -1,8 +1,10 @@
 using System;
 using System.Security.Cryptography;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authorization.Gate;
 using Janus.Authorization.Grants;
@@ -20,9 +22,11 @@ using Janus.Identity.Preferences;
 using Janus.Identity.Profiles;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Authentication.Alerting;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Passwords;
 using Janus.Storage.Authentication.Policies;
+using Janus.Storage.Authentication.Sending;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Authorization.Gate;
 using Janus.Storage.Authorization.Grants;
@@ -140,6 +144,26 @@ internal static class StorageRegistration
         services.AddScoped<IIndexCatalogue, IndexCatalogue>();
         services.AddScoped<ISubjectRestrictions, SubjectRestrictions>();
         services.AddScoped<IAccessAudit, AccessAudit>();
+
+        services.AddScoped<ISendLedger>(provider => new SendLedger(
+            provider.GetRequiredService<JanusDbContext>(),
+            fingerprintKey));
+        services.AddScoped<IThrottleLedger>(provider => new ThrottleLedger(
+            provider.GetRequiredService<JanusDbContext>(),
+            fingerprintKey));
+        services.AddScoped<INoticeLedger>(provider => new NoticeLedger(
+            provider.GetRequiredService<JanusDbContext>(),
+            fingerprintKey));
+        services.AddScoped<ICallbackLedger>(provider => new CallbackLedger(
+            provider.GetRequiredService<JanusDbContext>(),
+            fingerprintKey));
+        services.AddScoped<IRegistrationSources>(provider => new RegistrationSourceLedger(
+            provider.GetRequiredService<JanusDbContext>(),
+            fingerprintKey));
+        services.AddScoped<ISmsBalanceLedger, SmsBalanceLedger>();
+        services.AddScoped<IAlertLedger, AlertLedger>();
+        services.AddScoped<ISendAudit, SendAudit>();
+        services.AddScoped<IBotDefenceAudit, BotDefenceAudit>();
 
         return services;
     }
