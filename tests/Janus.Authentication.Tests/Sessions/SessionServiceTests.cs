@@ -73,6 +73,23 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTHZ-SCOPE-001 AC1: no session field names an organization, so an evaluation
+    /// has nowhere to read one from but the resource.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_SCOPE_001_AC1_NoSessionFieldNamesAnOrganization()
+    {
+        IEnumerable<Type> held = typeof(Session)
+            .GetProperties()
+            .Select(property => Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType);
+
+        Assert.DoesNotContain(typeof(OrganizationId), held);
+        Assert.DoesNotContain(
+            typeof(Session).GetProperties(),
+            property => property.Name.Contains("Organization", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// AUTH-SESS-002 AC2: the audit record for the authentication does name the
     /// factor.
     /// </summary>
