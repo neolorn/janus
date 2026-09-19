@@ -165,6 +165,12 @@ against the public contract of LIB-API-001.
   organization and reaches no other; the other exists for pool-wide work, runs only
   the operations it names and acts for nobody. Neither can be constructed without a
   stated reason.
+- The erasure, as one operation and one transaction. The account reaches `deleted`,
+  the subject's wrapped key is overwritten with the irreversible value, its
+  fingerprints are neutralised, its photo is removed and an erasures row records why
+  and how far the host-side work has got. A transaction that does not commit leaves no
+  row and erases nothing; there is no third state. Erasure progress is on that row and
+  on no column of the account, and every outstanding erasure is read in one query.
 
 ### Changed
 

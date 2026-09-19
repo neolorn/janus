@@ -5,6 +5,7 @@ using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Identity.Profiles;
+using Janus.Storage.Privacy.Erasures;
 using Janus.Storage.Privacy.SubjectKeys;
 using Janus.Storage.Settings;
 using Microsoft.EntityFrameworkCore;
@@ -86,6 +87,11 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     public DbSet<PreferenceRecord> AccountPreferences => Set<PreferenceRecord>();
 
     /// <summary>
+    /// The erasures, each carrying the host-side work outstanding for one subject.
+    /// </summary>
+    public DbSet<ErasureRecord> Erasures => Set<ErasureRecord>();
+
+    /// <summary>
     /// The wrapped per-subject data keys.
     /// </summary>
     public DbSet<SubjectKeyRecord> SubjectKeys => Set<SubjectKeyRecord>();
@@ -125,6 +131,7 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new ProfileConfiguration());
         modelBuilder.ApplyConfiguration(new ProfilePhotoConfiguration());
         modelBuilder.ApplyConfiguration(new PreferenceConfiguration());
+        modelBuilder.ApplyConfiguration(new ErasureConfiguration());
         modelBuilder.ApplyConfiguration(new SubjectKeyConfiguration());
         modelBuilder.ApplyConfiguration(new AuditConfiguration());
         modelBuilder.ApplyConfiguration(new SettingConfiguration());
