@@ -42,6 +42,7 @@ public sealed class ErrorCodesTests
         "model.containment.cycle",
         "model.derivation.undeclaredreference",
         "model.derivation.unindexed",
+        "model.purpose.missingassessment",
         "model.role.undeclaredpermission",
         "model.startup.declarationmissing",
         "model.startup.governinglanguage",

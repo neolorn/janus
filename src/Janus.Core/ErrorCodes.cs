@@ -95,6 +95,13 @@ public static class ErrorCodes
     public static ErrorCode StartupNoOrganizationPath { get; } = ErrorCode.Parse("model.type.noorganizationpath");
 
     /// <summary>
+    /// Startup: a purpose rests on a basis that requires an assessment and names
+    /// none. Name the legitimate interest assessment, or rest the purpose elsewhere.
+    /// </summary>
+    /// <remarks>Implements PRIV-BASIS-002, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupMissingAssessment { get; } = ErrorCode.Parse("model.purpose.missingassessment");
+
+    /// <summary>
     /// Startup: a resource type references a type the model does not declare. Declare
     /// the referenced type or drop the reference.
     /// </summary>

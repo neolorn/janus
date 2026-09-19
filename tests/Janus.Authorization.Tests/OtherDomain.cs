@@ -1,0 +1,100 @@
+using System;
+using Janus.Core;
+
+namespace Janus.Authorization.Tests;
+
+/// <summary>
+/// A second host's domain, sharing nothing with the first: a depot owning vehicles,
+/// and journeys made in them.
+/// </summary>
+/// <remarks>
+/// AUTHZ-MODEL-001 AC2: two projects with entirely different domains declare against
+/// the same library binary, which is what having no host type name in the library
+/// buys.
+/// </remarks>
+internal static class OtherDomain
+{
+    /// <summary>
+    /// The outermost container, which names the organization owning it.
+    /// </summary>
+    internal sealed class Depot
+    {
+        /// <summary>The depot.</summary>
+        public Guid Id { get; init; }
+
+        /// <summary>The organization owning it.</summary>
+        public Guid OrganizationId { get; init; }
+    }
+
+    /// <summary>
+    /// A vehicle kept at a depot, which may name the person keeping it.
+    /// </summary>
+    internal sealed class Vehicle
+    {
+        /// <summary>The vehicle.</summary>
+        public Guid Id { get; init; }
+
+        /// <summary>The depot it is kept at.</summary>
+        public Guid DepotId { get; init; }
+
+        /// <summary>The person keeping it, where one is named.</summary>
+        public SubjectId Keeper { get; init; }
+    }
+
+    /// <summary>
+    /// A journey made in a vehicle.
+    /// </summary>
+    internal sealed class Journey
+    {
+        /// <summary>The journey.</summary>
+        public Guid Id { get; init; }
+
+        /// <summary>The vehicle it was made in.</summary>
+        public Guid VehicleId { get; init; }
+    }
+
+    /// <summary>
+    /// A depot of one organization.
+    /// </summary>
+    /// <param name="organization">The organization owning it.</param>
+    /// <returns>The depot.</returns>
+    public static Depot NewDepot(Guid organization) =>
+        new() { Id = Guid.CreateVersion7(), OrganizationId = organization };
+
+    /// <summary>
+    /// A vehicle kept at a depot.
+    /// </summary>
+    /// <param name="depot">The depot it is kept at.</param>
+    /// <param name="keeper">The person keeping it.</param>
+    /// <returns>The vehicle.</returns>
+    public static Vehicle NewVehicle(Guid depot, SubjectId keeper) =>
+        new() { Id = Guid.CreateVersion7(), DepotId = depot, Keeper = keeper };
+
+    /// <summary>
+    /// A journey made in a vehicle.
+    /// </summary>
+    /// <param name="vehicle">The vehicle it was made in.</param>
+    /// <returns>The journey.</returns>
+    public static Journey NewJourney(Guid vehicle) =>
+        new() { Id = Guid.CreateVersion7(), VehicleId = vehicle };
+
+    /// <summary>
+    /// A declaration of the whole domain, valid as it stands.
+    /// </summary>
+    /// <returns>The builder.</returns>
+    public static AuthorizationDeclarationBuilder Declared() =>
+        new AuthorizationDeclarationBuilder()
+            .LawfulBasis(new LawfulBasisDeclaration("contract", false, false, false, false))
+            .Permission("journey:read")
+            .Relationship<Vehicle>("keeper", "vehicle", "vehicles", vehicle => vehicle.Keeper)
+            .Resource<Depot>("depot", depot => depot
+                .BelongsToOrganization()
+                .Purpose("haulage", "contract"))
+            .Resource<Vehicle>("vehicle", vehicle => vehicle
+                .ContainedIn("depot")
+                .Purpose("haulage", "contract")
+                .Derivation("keeper", "keeper"))
+            .Resource<Journey>("journey", journey => journey
+                .ContainedIn("vehicle")
+                .Purpose("haulage", "contract"));
+}

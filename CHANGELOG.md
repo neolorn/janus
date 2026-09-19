@@ -10,6 +10,17 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `AuthorizationDeclarationBuilder` in `Janus.Core`: a host declares its own kinds of
+  thing, their containment, what they are processed for, which fields are encrypted and
+  under whose key, and the relationships in its own data that confer a role. Every
+  reference to one of the host's fields is an expression the compiler checks.
+- The authorization model is built and checked once, at startup: a containment cycle, a
+  reference to a type that was never declared, a type that reaches no organization, a
+  type with no purpose, a purpose whose basis needs an assessment and names none, and a
+  derivation from a relationship that was never declared each stop the deployment with
+  their own code.
+- The built model is written to `model.json` in one order, so two runs of one
+  configuration produce the same bytes and a change to the model is a diff in review.
 - `Permission` and `Permissions` in `Janus.Core`: a permission is a lowercase
   `resource:action` that cannot be constructed in another shape, and the library's own
   twenty-two are listed where a host can read them.
