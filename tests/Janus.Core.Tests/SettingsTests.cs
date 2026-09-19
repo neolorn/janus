@@ -241,6 +241,21 @@ public sealed class SettingsTests
             "stepup.enforcement.acme",
             Settings.OrganizationStepUpEnforcement.For("acme").ToString());
 
+    /// <summary>
+    /// Chapter 10 section 4 and the <c>policy.&lt;organization&gt;</c> row: the
+    /// identifier a family key carries is a version 7 value, so the segment begins
+    /// with a digit as often as with a letter.
+    /// </summary>
+    [Fact]
+    public void For_OrganizationIdentifierBeginningWithADigit_NamesTheMembersKey()
+    {
+        var organization = new OrganizationId(new Guid("019bdf22-0000-7000-8000-000000000001"));
+
+        Assert.Equal(
+            "policy.019bdf22-0000-7000-8000-000000000001",
+            Settings.OrganizationPolicy.For(organization.ToString()).ToString());
+    }
+
     private static ErrorCode? Code<TValue>(Result<TValue> outcome) =>
         outcome.Match(_ => (ErrorCode?)null, failure => failure.Code);
 }
