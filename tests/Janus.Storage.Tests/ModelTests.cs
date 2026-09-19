@@ -274,6 +274,7 @@ public sealed class ModelTests
             "sessions.attained",
             "sessions.attained_at",
             "sessions.created_at",
+            "sessions.csrf_fingerprint",
             "sessions.ended_at",
             "sessions.id",
             "sessions.idle_expiry",

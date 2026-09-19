@@ -16,6 +16,7 @@ internal sealed class SessionStoreInMemory : ISessionStore
 {
     private readonly Dictionary<SessionId, Session> _sessions = [];
     private readonly Dictionary<string, SessionId> _secrets = [];
+    private readonly Dictionary<SessionId, byte[]> _csrf = [];
 
     /// <summary>
     /// Every session the store holds, ended ones among them.
@@ -48,12 +49,17 @@ internal sealed class SessionStoreInMemory : ISessionStore
     }
 
     /// <inheritdoc/>
-    public ValueTask AddAsync(Session session, byte[] fingerprint, CancellationToken cancellationToken)
+    public ValueTask AddAsync(
+        Session session,
+        byte[] fingerprint,
+        byte[] csrfFingerprint,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
 
         _sessions[session.Id] = session;
         _secrets[Key(fingerprint)] = session.Id;
+        _csrf[session.Id] = csrfFingerprint;
 
         return ValueTask.CompletedTask;
     }
@@ -72,6 +78,7 @@ internal sealed class SessionStoreInMemory : ISessionStore
     public ValueTask ReplaceSecretAsync(
         SessionId id,
         byte[] fingerprint,
+        byte[] csrfFingerprint,
         CancellationToken cancellationToken)
     {
         foreach (string held in _secrets.Where(pair => pair.Value == id).Select(pair => pair.Key))
@@ -80,9 +87,14 @@ internal sealed class SessionStoreInMemory : ISessionStore
         }
 
         _secrets[Key(fingerprint)] = id;
+        _csrf[id] = csrfFingerprint;
 
         return ValueTask.CompletedTask;
     }
+
+    /// <inheritdoc/>
+    public ValueTask<byte[]?> CsrfFingerprintAsync(SessionId id, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_csrf.GetValueOrDefault(id));
 
     /// <inheritdoc/>
     public ValueTask<IReadOnlyList<Session>> LiveOfAsync(

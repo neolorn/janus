@@ -30,13 +30,18 @@ internal interface ISessionStore
     ValueTask<Session?> FindByFingerprintAsync(byte[] fingerprint, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Records a session and the fingerprint of the secret issued with it.
+    /// Records a session and the fingerprints of the two values issued with it.
     /// </summary>
     /// <param name="session">The session.</param>
     /// <param name="fingerprint">The fingerprint of its secret.</param>
+    /// <param name="csrfFingerprint">The fingerprint of its synchronizer token.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of recording it.</returns>
-    ValueTask AddAsync(Session session, byte[] fingerprint, CancellationToken cancellationToken);
+    ValueTask AddAsync(
+        Session session,
+        byte[] fingerprint,
+        byte[] csrfFingerprint,
+        CancellationToken cancellationToken);
 
     /// <summary>
     /// Carries a change the session made onto its row.
@@ -47,14 +52,29 @@ internal interface ISessionStore
     ValueTask RecordAsync(Session session, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Replaces the secret a session answers to, invalidating the one before it
-    /// rather than leaving it orphaned.
+    /// Replaces the secret a session answers to and the token bound to it,
+    /// invalidating both of the values before them rather than leaving either
+    /// orphaned.
     /// </summary>
     /// <param name="id">Which session.</param>
     /// <param name="fingerprint">The fingerprint of the new secret.</param>
+    /// <param name="csrfFingerprint">The fingerprint of the new synchronizer token.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The work of replacing it.</returns>
-    ValueTask ReplaceSecretAsync(SessionId id, byte[] fingerprint, CancellationToken cancellationToken);
+    /// <returns>The work of replacing them.</returns>
+    ValueTask ReplaceSecretAsync(
+        SessionId id,
+        byte[] fingerprint,
+        byte[] csrfFingerprint,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The fingerprint of the synchronizer token bound to a session, which is what a
+    /// presented token is compared against.
+    /// </summary>
+    /// <param name="id">Which session.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The fingerprint, or nothing where there is no such session.</returns>
+    ValueTask<byte[]?> CsrfFingerprintAsync(SessionId id, CancellationToken cancellationToken);
 
     /// <summary>
     /// Every session of an account that has not ended.

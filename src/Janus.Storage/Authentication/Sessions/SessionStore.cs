@@ -58,10 +58,12 @@ internal sealed class SessionStore(
     public async ValueTask AddAsync(
         Session session,
         byte[] fingerprint,
+        byte[] csrfFingerprint,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(fingerprint);
+        ArgumentNullException.ThrowIfNull(csrfFingerprint);
 
         byte[] dataKey = await DataKeyAsync(session.Subject, cancellationToken).ConfigureAwait(false);
 
@@ -74,6 +76,7 @@ internal sealed class SessionStore(
                 Type = session.Type,
                 Subject = session.Subject,
                 SecretFingerprint = fingerprint,
+                CsrfFingerprint = csrfFingerprint,
                 CreatedAt = session.CreatedAt,
                 LastSeenAt = session.LastSeenAt,
                 Attained = session.Attained,
@@ -145,9 +148,11 @@ internal sealed class SessionStore(
     public async ValueTask ReplaceSecretAsync(
         SessionId id,
         byte[] fingerprint,
+        byte[] csrfFingerprint,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(fingerprint);
+        ArgumentNullException.ThrowIfNull(csrfFingerprint);
 
         SessionRecord record = await context.Sessions
             .FindAsync([id], cancellationToken)
@@ -155,6 +160,19 @@ internal sealed class SessionStore(
             ?? throw new InvalidOperationException("The session has no row to carry the new secret.");
 
         record.SecretFingerprint = fingerprint;
+        record.CsrfFingerprint = csrfFingerprint;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<byte[]?> CsrfFingerprintAsync(
+        SessionId id,
+        CancellationToken cancellationToken)
+    {
+        SessionRecord? record = await context.Sessions
+            .FindAsync([id], cancellationToken)
+            .ConfigureAwait(false);
+
+        return record?.CsrfFingerprint;
     }
 
     /// <inheritdoc/>

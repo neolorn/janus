@@ -163,6 +163,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
             await Store(writing).AddAsync(
                 record,
                 secret.Fingerprint(),
+                OpaqueToken.Draw(_deployment.Randomness).Fingerprint(),
                 TestContext.Current.CancellationToken);
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
@@ -198,7 +199,11 @@ public sealed class SessionStoreTests(DatabaseFixture database)
 
         await using (JanusDbContext writing = database.Context())
         {
-            await Store(writing).AddAsync(record, first, TestContext.Current.CancellationToken);
+            await Store(writing).AddAsync(
+                record,
+                first,
+                OpaqueToken.Draw(_deployment.Randomness).Fingerprint(),
+                TestContext.Current.CancellationToken);
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
@@ -207,6 +212,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
             await Store(rotating).ReplaceSecretAsync(
                 record.Id,
                 second,
+                OpaqueToken.Draw(_deployment.Randomness).Fingerprint(),
                 TestContext.Current.CancellationToken);
             await rotating.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
@@ -219,6 +225,57 @@ public sealed class SessionStoreTests(DatabaseFixture database)
         Assert.NotNull(await Store(reading).FindByFingerprintAsync(
             second,
             TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// BFF-CSRF-001 and BFF-CSRF-006: the synchronizer token is held as a fingerprint
+    /// on the session row, and rotation replaces it with the one issued alongside the
+    /// new secret rather than leaving the previous token usable.
+    /// </summary>
+    [Fact]
+    public async Task BFF_CSRF_001_AC1_TheRowCarriesTheTokenBoundToTheSessionAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        Session record = Record(subject);
+        var first = OpaqueToken.Draw(_deployment.Randomness);
+        var second = OpaqueToken.Draw(_deployment.Randomness);
+
+        await using (JanusDbContext writing = database.Context())
+        {
+            await Store(writing).AddAsync(
+                record,
+                OpaqueToken.Draw(_deployment.Randomness).Fingerprint(),
+                first.Fingerprint(),
+                TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (JanusDbContext bound = database.Context())
+        {
+            SessionRecord stored = await bound.Sessions
+                .SingleAsync(session => session.Id == record.Id, TestContext.Current.CancellationToken);
+
+            Assert.Equal(first.Fingerprint(), stored.CsrfFingerprint);
+            Assert.Equal(
+                -1,
+                stored.CsrfFingerprint.AsSpan().IndexOf(Encoding.UTF8.GetBytes(first.Value)));
+        }
+
+        await using (JanusDbContext rotating = database.Context())
+        {
+            await Store(rotating).ReplaceSecretAsync(
+                record.Id,
+                OpaqueToken.Draw(_deployment.Randomness).Fingerprint(),
+                second.Fingerprint(),
+                TestContext.Current.CancellationToken);
+            await rotating.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using JanusDbContext reading = database.Context();
+
+        Assert.Equal(
+            second.Fingerprint(),
+            await Store(reading).CsrfFingerprintAsync(record.Id, TestContext.Current.CancellationToken));
     }
 
     /// <summary>
@@ -367,6 +424,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
         {
             await Store(writing).AddAsync(
                 session,
+                OpaqueToken.Draw(_deployment.Randomness).Fingerprint(),
                 OpaqueToken.Draw(_deployment.Randomness).Fingerprint(),
                 TestContext.Current.CancellationToken);
         }

@@ -395,14 +395,15 @@ public sealed class SessionServiceTests : IAsyncDisposable
         SubjectId subject = Subject();
         IssuedSession issued = await BegunAsync(subject, [Factor.Password]);
 
-        OpaqueToken rotated = Value(await Service.PresentAsync(
+        IssuedSession rotated = Value(await Service.PresentAsync(
             _sessions.Behind(issued.Secret)!,
             [Factor.Totp],
             TestContext.Current.CancellationToken));
 
-        Assert.NotEqual(issued.Secret.Value, rotated.Value);
+        Assert.NotEqual(issued.Secret.Value, rotated.Secret.Value);
+        Assert.NotEqual(issued.CsrfToken.Value, rotated.CsrfToken.Value);
         Assert.Equal(ErrorCodes.SessionExpired, await RefusalAsync(issued.Secret));
-        Assert.Null(await RefusalAsync(rotated));
+        Assert.Null(await RefusalAsync(rotated.Secret));
     }
 
     /// <summary>
@@ -415,12 +416,12 @@ public sealed class SessionServiceTests : IAsyncDisposable
         IssuedSession issued = await BegunAsync(Subject(), [Factor.Passkey]);
         Session session = _sessions.Behind(issued.Secret)!;
 
-        OpaqueToken rotated = Value(await Service.RotateAsync(
+        IssuedSession rotated = Value(await Service.RotateAsync(
             session,
             TestContext.Current.CancellationToken));
 
-        Assert.NotEqual(issued.Secret.Value, rotated.Value);
-        Assert.Equal(AssuranceLevel.Aal2, _sessions.Behind(rotated)!.Attained);
+        Assert.NotEqual(issued.Secret.Value, rotated.Secret.Value);
+        Assert.Equal(AssuranceLevel.Aal2, _sessions.Behind(rotated.Secret)!.Attained);
         Assert.Equal(ErrorCodes.SessionExpired, await RefusalAsync(issued.Secret));
     }
 

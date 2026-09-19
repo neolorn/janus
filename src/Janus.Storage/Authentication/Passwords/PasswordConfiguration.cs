@@ -10,9 +10,9 @@ namespace Janus.Storage.Authentication.Passwords;
 /// How a password is stored.
 /// </summary>
 /// <remarks>
-/// Implements AUTH-PASS-003, AUTH-PASS-006 and AUTH-PASS-007. There is no expiry
-/// column and no hint column: neither mechanism exists, so neither has a place to
-/// live.
+/// Implements AUTH-PASS-003, AUTH-PASS-006 and AUTH-PASS-007. The table carries no
+/// column for expiry and none for either mechanism AUTH-PASS-006 forbids: neither
+/// exists, so neither has a place to live.
 /// </remarks>
 internal sealed class PasswordConfiguration : IEntityTypeConfiguration<PasswordRecord>
 {

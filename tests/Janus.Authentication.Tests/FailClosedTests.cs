@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -58,26 +59,83 @@ public sealed class FailClosedTests
     }
 
     /// <summary>
-    /// AUTH-PRIN-001 AC3: no code path returns an allow on an exception, there being
-    /// no path in the library that catches one.
+    /// AUTH-PRIN-001 AC3: no code path returns an allow on an exception. An exception
+    /// is caught only where an outage has to become a refusal (INT-PWD-002 AC1), and
+    /// every such block answers with a failure or throws; JAN0006 forbids the rest.
     /// </summary>
     [Fact]
-    public void AUTH_PRIN_001_AC3_NoPathReturnsAnAllowOnAnException() =>
-        Assert.Empty(Files(line => line.Contains("catch", StringComparison.Ordinal)));
+    public void AUTH_PRIN_001_AC3_NoPathReturnsAnAllowOnAnException() => Assert.Empty(Allowing());
+
+    // The catch blocks that answer with anything but a refusal or an exception.
+    private static string[] Allowing() =>
+    [
+        .. Catches().Where(caught =>
+            caught.Contains("Result.Success", StringComparison.Ordinal)
+            || !(caught.Contains("Result.Failure", StringComparison.Ordinal)
+                || caught.Contains("throw", StringComparison.Ordinal))),
+    ];
 
     // The shipped files in which a line says something, as the repository lays them
-    // out. The analyser project is not shipped and reasons about the construct it
-    // forbids elsewhere (JAN0001, CONV-ERR-002).
+    // out.
     private static string[] Files(Func<string, bool> says) =>
+    [
+        .. Shipped()
+            .Where(file => File.ReadLines(file).Any(says))
+            .Select(file => Path.GetRelativePath(Path.Combine(Root(), "src"), file))
+            .Order(StringComparer.Ordinal),
+    ];
+
+    // Every catch block the shipped files hold, as the text its braces enclose.
+    private static IEnumerable<string> Catches()
+    {
+        foreach (string file in Shipped())
+        {
+            string text = File.ReadAllText(file);
+
+            for (int at = text.IndexOf("catch", StringComparison.Ordinal); at >= 0;)
+            {
+                int opened = text.IndexOf('{', at);
+                int closed = Closing(text, opened);
+
+                yield return text[opened..closed];
+
+                at = text.IndexOf("catch", closed, StringComparison.Ordinal);
+            }
+        }
+    }
+
+    // Where the brace that closes the one at this position is.
+    private static int Closing(string text, int opened)
+    {
+        int depth = 0;
+
+        for (int at = opened; at < text.Length; at++)
+        {
+            depth += text[at] switch
+            {
+                '{' => 1,
+                '}' => -1,
+                _ => 0,
+            };
+
+            if (depth is 0)
+            {
+                return at;
+            }
+        }
+
+        throw new InvalidOperationException("The catch block is not closed.");
+    }
+
+    // The files the packages ship. The analyser project is not among them and reasons
+    // about the constructs it forbids elsewhere (JAN0001, CONV-ERR-002).
+    private static string[] Shipped() =>
     [
         .. Directory
             .GetFiles(Path.Combine(Root(), "src"), "*.cs", SearchOption.AllDirectories)
             .Where(file => !file.Contains(
                 Path.Combine("src", "Janus.Analyzers"),
-                StringComparison.Ordinal))
-            .Where(file => File.ReadLines(file).Any(says))
-            .Select(file => Path.GetRelativePath(Path.Combine(Root(), "src"), file))
-            .Order(StringComparer.Ordinal),
+                StringComparison.Ordinal)),
     ];
 
     private static string Root()
