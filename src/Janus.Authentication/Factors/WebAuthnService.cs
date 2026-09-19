@@ -49,7 +49,9 @@ internal sealed class WebAuthnService(
         Factor kind,
         CancellationToken cancellationToken)
     {
-        if (kind is not (Factor.Passkey or Factor.SecurityKey))
+        FactorProperties entry = FactorCatalogue.Of(kind);
+
+        if (!entry.IsWebAuthn)
         {
             return Result.Failure<WebAuthnCeremony>(Error.From(ErrorCodes.FactorRejected));
         }
@@ -60,7 +62,7 @@ internal sealed class WebAuthnService(
         return Result.Success(new WebAuthnCeremony(
             party.Id,
             party.Algorithms,
-            kind is Factor.Passkey,
+            entry.IsDiscoverable,
             OpaqueToken.Draw(randomness).Value));
     }
 
@@ -131,24 +133,24 @@ internal sealed class WebAuthnService(
         Authenticator? upgrading = await authenticators.FindAsync(id, cancellationToken)
             .ConfigureAwait(false);
 
-        if (upgrading is null
-            || upgrading.Subject != subject
-            || upgrading.Factor is not Factor.SecurityKey)
+        if (upgrading is null || upgrading.Subject != subject || !IsSecondFactorKey(upgrading))
         {
             return Result.Failure<AuthenticatorId>(Error.From(ErrorCodes.FactorRejected));
         }
 
+        Factor discoverable = FactorCatalogue.Discoverable;
+
         RelyingParty party = await RelyingParty.ForAsync(configuration, cancellationToken)
             .ConfigureAwait(false);
 
-        Error? refusal = Admits(party, Factor.Passkey, registration);
+        Error? refusal = Admits(party, discoverable, registration);
 
         if (refusal is not null)
         {
             return Result.Failure<AuthenticatorId>(refusal);
         }
 
-        Authenticator enrolled = Enrolled(subject, Factor.Passkey, label, registration, party);
+        Authenticator enrolled = Enrolled(subject, discoverable, label, registration, party);
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
@@ -251,12 +253,17 @@ internal sealed class WebAuthnService(
 
     private static bool Kept(uint? counter) => counter is > 0;
 
+    // The credential an upgrade moves from: a WebAuthn credential the ceremony did
+    // not make discoverable, which is what a second step holds (AUTH-FACT-002b).
+    private static bool IsSecondFactorKey(Authenticator credential) =>
+        FactorCatalogue.Of(credential.Factor) is { IsWebAuthn: true, IsDiscoverable: false };
+
     // Attestation is not required of any of this: what the ceremony has to reach is
     // an algorithm the deployment admits, the relying party in force, and a person
     // the authenticator verified (AUTH-FACT-014).
     private static Error? Admits(RelyingParty party, Factor kind, WebAuthnRegistration registration)
     {
-        if (kind is not (Factor.Passkey or Factor.SecurityKey))
+        if (!FactorCatalogue.Of(kind).IsWebAuthn)
         {
             return Error.From(ErrorCodes.FactorRejected);
         }

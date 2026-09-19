@@ -31,6 +31,18 @@ public sealed class FactorCatalogueTests
     public void AUTH_FACT_001_AC1_NoConditionalTestsForAFactorByName() =>
         Assert.Equal([Path.Combine("Janus.Core", "Policy.cs")], BranchingOnAFactor());
 
+    /// <summary>
+    /// AUTH-STEP-008 invariants 1 and 2: no rule about a step-up gate names a factor,
+    /// and none reads what the account has enrolled by name; the one file that tests
+    /// for an entry is the policy object, which chapter 10 section 4.1a states by
+    /// name.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_008_NoGateRuleNamesAFactor() =>
+        Assert.DoesNotContain(
+            Path.Combine("Janus.Authentication", "Factors", "StepUp.cs"),
+            BranchingOnAFactor());
+
     // The files of the library in which a catalogue entry is named inside a construct
     // that chooses between two paths, as the repository lays them out.
     private static string[] BranchingOnAFactor() =>
