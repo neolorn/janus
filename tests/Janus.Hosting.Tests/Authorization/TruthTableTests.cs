@@ -143,6 +143,32 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     }
 
     /// <summary>
+    /// AUTHZ-TEST-001 AC3, AUTHZ-DERIVE-005: the same deployment with the derivation
+    /// materialised decides every case of the table the same way, through the check,
+    /// the expression and the fragment alike.
+    /// </summary>
+    /// <param name="scenario">The case.</param>
+    /// <param name="allowed">What it decides.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [MemberData(nameof(Cases))]
+    public async Task AUTHZ_TEST_001_AC3_EveryCaseDecidesTheSameWayMaterialisedAsync(
+        string scenario,
+        bool allowed)
+    {
+        Case written = await WriteAsync(scenario);
+
+        Assert.Equal(allowed, await ChecksAsync(written));
+
+        await using ServiceProvider materialised = Materialised();
+        await RefreshAsync(materialised, written);
+
+        Assert.Equal(allowed, await ChecksAsync(written, materialised));
+        Assert.Equal(allowed, await ExpressionAdmitsAsync(written, materialised));
+        Assert.Equal(allowed, await FragmentAdmitsAsync(written, materialised));
+    }
+
+    /// <summary>
     /// AUTHZ-GATE-002 AC3: the fragment carries every value as a parameter, so nothing
     /// a caller supplied reaches its text.
     /// </summary>
@@ -273,9 +299,10 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
     private static async Task<Expression<Func<HostDocument, bool>>> ExpressionAsync(
         Case written,
-        HostContext reading)
+        HostContext reading,
+        IServiceProvider? deployment = null)
     {
-        await using AsyncServiceScope scope = written.Host.Services.CreateAsyncScope();
+        await using AsyncServiceScope scope = (deployment ?? written.Host.Services).CreateAsyncScope();
 
         return Rendered(await scope.ServiceProvider.GetRequiredService<IAccessGate>()
             .FilterAsync(
@@ -301,9 +328,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     private static ResourceReference Reference(ResourceType type) =>
         new(type, ResourceId.Parse(Guid.NewGuid().ToString()));
 
-    private async Task<bool> ChecksAsync(Case written)
+    private async Task<bool> ChecksAsync(Case written, IServiceProvider? deployment = null)
     {
-        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using AsyncServiceScope scope = (deployment ?? host.Services).CreateAsyncScope();
         await using HostContext reading = host.Context();
 
         Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
@@ -317,22 +344,22 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         return outcome.Match(() => true, _ => false);
     }
 
-    private async Task<bool> ExpressionAdmitsAsync(Case written)
+    private async Task<bool> ExpressionAdmitsAsync(Case written, IServiceProvider? deployment = null)
     {
         await using HostContext reading = host.Context();
 
         return await reading.Documents
-            .Where(await ExpressionAsync(written, reading))
+            .Where(await ExpressionAsync(written, reading, deployment))
             .AnyAsync(
                 document => document.Id == written.Record.Id.ToString(),
                 TestContext.Current.CancellationToken);
     }
 
-    private async Task<bool> FragmentAdmitsAsync(Case written)
+    private async Task<bool> FragmentAdmitsAsync(Case written, IServiceProvider? deployment = null)
     {
         SqlFilter fragment;
 
-        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        await using (AsyncServiceScope scope = (deployment ?? host.Services).CreateAsyncScope())
         {
             fragment = Rendered(await scope.ServiceProvider.GetRequiredService<IAccessGate>()
                 .FragmentAsync(
@@ -394,7 +421,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         await GrantAsync(deployment, scenario, role, account, record, inner, outer, sibling);
         await ReviewAsync(deployment, scenario, account, inner, outer);
 
-        return new Case(host, deployment, account, record, sibling);
+        return new Case(host, deployment, account, record, sibling, inner, outer);
     }
 
     private async Task GrantAsync(
@@ -539,6 +566,51 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         await deployment.ReviewAsync(workspace, account, cancellationToken);
     }
 
+    // The same deployment with the one derivation precomputed into grant rows, which
+    // is what AUTHZ-TEST-001 AC3 asks the table of a second time.
+    private ServiceProvider Materialised()
+    {
+        var services = new ServiceCollection();
+
+        services.AddSingleton<TimeProvider>(new FixedTime(Deployment.Noon));
+        services.AddJanus(
+            host.ConnectionString,
+            new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
+            new byte[32],
+            HostFixture.Declaration(materialised: true));
+
+        return services.BuildServiceProvider();
+    }
+
+    // AUTHZ-DERIVE-005: the host refreshes the derivation from the operation that
+    // changed the relationship, inside its own unit of work. The case writes its facts
+    // on one of the two workspaces, and a refresh of the other writes nothing.
+    private async Task RefreshAsync(IServiceProvider deployment, Case written)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using AsyncServiceScope scope = deployment.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        IDerivationMaterialiser materialiser =
+            scope.ServiceProvider.GetRequiredService<IDerivationMaterialiser>();
+
+        await work.BeginAsync(cancellationToken);
+
+        foreach (ResourceReference workspace in new[] { written.Outer, written.Inner })
+        {
+            Rendered(await materialiser.RefreshAsync(
+                AccessContext.Of(written.Deployment.Granter),
+                "reviewer",
+                workspace.Id,
+                Sources(reading),
+                cancellationToken));
+        }
+
+        await work.CommitAsync(cancellationToken);
+    }
+
     private async Task<OrganizationId> ElsewhereAsync()
     {
         var elsewhere = new Deployment(host);
@@ -622,5 +694,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         Deployment Deployment,
         SubjectId Account,
         ResourceReference Record,
-        ResourceReference Sibling);
+        ResourceReference Sibling,
+        ResourceReference Inner,
+        ResourceReference Outer);
 }

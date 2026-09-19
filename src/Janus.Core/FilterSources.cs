@@ -9,7 +9,8 @@ namespace Janus.Core;
 /// What the host supplies from its own context so that a permission filter composes
 /// into its own query: the two contract tables, the rows of every relationship a
 /// derivation follows from, and how a row of its table names the record the library
-/// registered.
+/// registered. The same object serves the check, the capability page and the refresh of
+/// a materialised derivation (D-161).
 /// </summary>
 /// <typeparam name="TResource">The host's row.</typeparam>
 /// <remarks>
@@ -86,18 +87,31 @@ public sealed class FilterSources<TResource>
         // value behind a reference rather than as a literal of the provider's type.
         Expression<Func<IQueryable<TRelationship>>> source = () => rows;
 
-        RelationshipRows any = predicate => Expression.Call(
-            typeof(Queryable),
-            nameof(Queryable.Any),
-            [typeof(TRelationship)],
-            source.Body,
-            Expression.Quote(predicate));
+        var supplied = new RelationshipRows(
+            predicate => Expression.Call(
+                typeof(Queryable),
+                nameof(Queryable.Any),
+                [typeof(TRelationship)],
+                source.Body,
+                Expression.Quote(predicate)),
+            (predicate, holder) => Held(rows
+                .Where((Expression<Func<TRelationship, bool>>)predicate)
+                .Select((Expression<Func<TRelationship, SubjectId>>)holder)
+                .Distinct()));
 
-        if (!_relationships.TryAdd(name, any))
+        if (!_relationships.TryAdd(name, supplied))
         {
             throw new ArgumentException("The relationship " + name + " is supplied twice.", nameof(name));
         }
 
         return this;
     }
+
+    // LIB-HOST-002: the query is the host's own and carries the host's own provider, so
+    // reading it issues nothing of the library's against a host table. A provider that
+    // cannot be read asynchronously is one the contract tables could not be mapped into.
+    private static IAsyncEnumerable<SubjectId> Held(IQueryable<SubjectId> holders) =>
+        holders as IAsyncEnumerable<SubjectId>
+        ?? throw new InvalidOperationException(
+            "The rows the host supplied are not read asynchronously, which the contract tables mapped into the host's own context are.");
 }

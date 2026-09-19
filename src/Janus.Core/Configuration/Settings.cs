@@ -498,6 +498,17 @@ public static class Settings
     public static DurationSetting AuthzReverseLookupBudget { get; } =
         new("authz.reverselookup.budget", SettingScope.Runtime, "PT2S");
 
+    /// <summary>
+    /// How often every materialised derivation is re-evaluated against the host's own
+    /// relation, a difference corrected and the degradation condition raised.
+    /// </summary>
+    public static DurationSetting DerivationMaterialisedDriftCheck { get; } =
+        new(
+            "derivation.materialised.driftcheck",
+            SettingScope.Runtime,
+            "P1D",
+            loosening: SettingDirection.Increase);
+
     /// <summary>How long an organization's deletion stays cancellable.</summary>
     public static DurationSetting OrganizationDeletionGrace { get; } =
         new("organization.deletion.grace", SettingScope.Runtime, "P30D", floor: "P7D");

@@ -192,3 +192,150 @@ derived tests of `GateBehaviourTests`.
 
 *Chapter text that should change.* None. This entry records a design that was chosen to
 avoid changing one.
+
+---
+
+## 6. A refresh takes the host's rows and the context, as every other operation does
+
+**Phase 2 · 2026-09-19 · Tier 2 · AUTHZ-DERIVE-005, D-161 decision 2**
+
+*The question.* D-161 gives the signature as
+`IDerivationMaterialiser.RefreshAsync(derivationName, resourceId)`. Recomputing the
+grants means reading the rows of the relationship for that record, and LIB-HOST-002
+forbids the library from querying a host table, so something has to carry the rows.
+Every grant also records who granted it and why (AUTHZ-GRANT-002), and `granted_by` is
+not nullable.
+
+*The readings.*
+
+1. Take the two arguments literally and find the rows another way: a port the host
+   implements, or a queryable registered at startup. Both are a second shape for what
+   `FilterSources` already is, and the first is a port the library calls into.
+2. Take the same host-supplied sources object decision 1 gives the check and the page,
+   and the `AccessContext` every other operation of the library takes, so the refresh is
+   `RefreshAsync(context, derivation, resource, sources, cancellationToken)`.
+
+*Chosen: 2.* Decision 1 settled that the rows a derivation is evaluated over are
+supplied by the host as `FilterSources`; a second mechanism for the same rows would be
+the larger surface and could come apart from the first. The context is not a widening
+either: AUTHZ-GATE-001 AC2 has every operation name who is asking, and the grants the
+refresh writes record that subject. A context naming no subject is a fault, because the
+row it would write cannot be recorded against anybody. The resource is a `ResourceId`
+and not a reference, as D-161 has it: the type is the relationship's own.
+
+*Tests that pin it.*
+`MaterialisationTests.AUTHZ_DERIVE_005_AC1_TheRowsTheRefreshWroteConferTheRoleAsync`,
+`MaterialisationTests.AUTHZ_DERIVE_005_AC3_ARefreshRolledBackLeavesNoGrantAsync`.
+
+*Chapter text that should change.* `03` AUTHZ-DERIVE-005, the Values paragraph:
+"`IDerivationMaterialiser.RefreshAsync(context, derivationName, resourceId, sources)`,
+which the host calls from the operation that changes the relationship, inside the same
+unit of work, with the same sources object the filter takes."
+
+---
+
+## 7. A materialised derivation writes one grant per record of the type it is declared on
+
+**Phase 2 · 2026-09-19 · Tier 2 · AUTHZ-DERIVE-005 AC1, AUTHZ-DERIVE-002**
+
+*The question.* A derivation is declared on a resource type and follows a relationship
+that is about a resource type, and the two need not be the same one. Evaluated, it
+reaches records of the declared type that sit at or under the record the relationship
+names. Precomputed "as ordinary grants", what record does the grant sit on?
+
+*The readings.*
+
+1. One grant on the record the relationship names. Cheapest, and exact where the
+   derivation is declared on the type that relationship is about. Where it is declared
+   on a narrower type, the grant reaches records of every other type under that record
+   as well, which is more than the derivation confers.
+2. One grant on every registered record of the declared type that the relationship's
+   record reaches. Exact in both cases, and where the two types are the same it is the
+   one grant of reading 1, because a record is its own ancestor at depth zero.
+3. Refuse at startup to materialise a derivation declared on a narrower type than its
+   relationship, and take reading 1 for the rest.
+
+*Chosen: 2.* Reading 1 confers more than evaluating the derivation would, which is not
+failing closed. Reading 3 fails closed but refuses a configuration the evaluated path
+supports today, and needs a startup code `10` does not carry. Reading 2 confers exactly
+what the derivation confers in both shapes, needs no new code and no refusal, and the
+rows it writes are as many as the optimisation ladder says materialisation costs
+(AUTHZ-DERIVE-006: a synchronisation problem). Inheritance then carries each grant
+exactly as far as it carries the derivation, which is AUTHZ-DERIVE-002.
+
+*Tests that pin it.*
+`TruthTableTests.AUTHZ_TEST_001_AC3_EveryCaseDecidesTheSameWayMaterialisedAsync`, which
+runs the whole table against the same deployment with the derivation materialised,
+including the case whose fact sits on a container above the record.
+
+*Chapter text that should change.* `03` AUTHZ-DERIVE-005: "the grants are written on
+each registered record of the type the derivation is declared on that the record the
+relationship names reaches".
+
+---
+
+## 8. What AUTHZ-DERIVE-005 AC3 is proved by
+
+**Phase 2 · 2026-09-19 · Tier 2 · AUTHZ-DERIVE-005 AC3, D-161 decision 2**
+
+*The question.* AC3 reads "Refresh occurs in the same transaction as the change that
+triggers it, or drift is detected and reported." The change that triggers it is a write
+to a host table, which the library neither makes nor can enlist: the host's context and
+the library's hold their own connections. The sweep D-161 describes cannot supply the
+host's rows by itself either, for the same reason the check cannot.
+
+*The readings.*
+
+1. Prove the first clause literally, which needs the library to take part in the host's
+   own transaction: a public seam onto the library's connection, or an ambient
+   transaction the host's context enlists in. Both are a new public mechanism, and the
+   second is a distributed transaction in all but name.
+2. Prove what the library can hold itself to: the refresh writes inside the caller's
+   unit of work, so a unit of work that is not committed leaves no grant; and a refresh
+   run after the relation changed reports the difference and corrects it in the same
+   run. The host putting its own write in that unit of work is the host's part, and the
+   contract states it.
+
+*Chosen: 2.* AC3 is a disjunction and both of its clauses are now tested. The library
+cannot write the host's row (LIB-HOST-002), so "the same transaction" can only mean the
+unit of work the host runs the operation in, which is what `IUnitOfWork` already is.
+Reading 1 would add a public mechanism for something the host already controls.
+
+*What is left for phase 9.* The sweep itself: something has to run the refresh every
+`derivation.materialised.driftcheck` and raise the degradation condition with the
+derivation's name in `details`. It needs the host's rows, so it is a job the host hands
+its own sources to, and background jobs, named principals and the alert conditions are
+phases 4 and 9 of the implementation plan. The setting exists and the refresh reports
+the drift; no criterion of AUTHZ-DERIVE-005 waits on it.
+
+*Tests that pin it.*
+`MaterialisationTests.AUTHZ_DERIVE_005_AC3_ARefreshRolledBackLeavesNoGrantAsync`,
+`MaterialisationTests.AUTHZ_DERIVE_005_AC3_ARefreshFindsTheDriftAndCorrectsItAsync`.
+
+*Chapter text that should change.* `03` AUTHZ-DERIVE-005 AC3: "Refresh occurs in the
+unit of work the host runs the change in, or the next refresh detects the difference,
+reports it and corrects it."
+
+---
+
+## 9. Reverse lookup over derivations is built in phase 8 and nothing of it now
+
+**Phase 2 · 2026-09-19 · Tier 2 · AUTHZ-DERIVE-007, D-161 decision 3**
+
+*The question.* Phase 2 builds "`03` all", and AUTHZ-DERIVE-007 is in `03`. D-161
+decision 3 says the reverse lookup over derivations is the phase 8 view and that nothing
+of it is built now. This entry records the one item of `03` that phase 2 leaves unbuilt,
+because the ledger has to stand alone.
+
+*The readings.* None: the owner settled it in D-161.
+
+*Chosen.* Nothing of the reverse lookup over derived grants is built in phase 2. The
+Values paragraph on AUTHZ-DERIVE-007 states how the view will answer, and the view is
+phase 8. `authz.reverselookup.budget` exists as a setting from phase 0, which is what
+the migration trigger of AUTHZ-SEAM-001 is measured against.
+
+*Tests that pin it.* None of the view. The item's own criteria are the cache criteria,
+and those are tested: nothing is keyed on a subject-action-resource triple, a revocation
+takes effect on the next request, and an expired grant confers nothing without a sweep.
+
+*Chapter text that should change.* None.

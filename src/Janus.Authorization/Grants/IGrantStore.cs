@@ -80,6 +80,26 @@ internal interface IGrantStore
     ValueTask<long> VersionAsync(SubjectId subject, CancellationToken cancellationToken);
 
     /// <summary>
+    /// The live grants a materialised derivation wrote for one role on a set of
+    /// records, whoever holds them. Nothing is inherited here: a refresh reconciles
+    /// the rows it wrote itself, and a grant on a container is not one of them.
+    /// </summary>
+    /// <param name="role">The role the derivation confers.</param>
+    /// <param name="type">The kind of thing the records are.</param>
+    /// <param name="resources">The records the refresh is reconciling.</param>
+    /// <param name="organization">The organization the records belong to.</param>
+    /// <param name="at">The instant liveness is read at.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The grants, revoked and expired ones left out.</returns>
+    ValueTask<IReadOnlyList<Grant>> MaterialisedAsync(
+        RoleName role,
+        ResourceType type,
+        IReadOnlyList<ResourceId> resources,
+        OrganizationId organization,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// The live grants on one record, on anything containing it, or on the whole
     /// organization, whoever holds them. This is what the "who can access this?" view
     /// reads for stored grants.

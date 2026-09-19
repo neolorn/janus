@@ -99,6 +99,30 @@ internal sealed class GrantsInMemory : IGrantStore
     }
 
     /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<Grant>> MaterialisedAsync(
+        RoleName role,
+        ResourceType type,
+        IReadOnlyList<ResourceId> resources,
+        OrganizationId organization,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(resources);
+
+        return ValueTask.FromResult<IReadOnlyList<Grant>>(
+        [
+            .. _grants.Values.Where(grant =>
+                grant.Kind == GrantKind.Materialised
+                && grant.Role == role
+                && grant.Organization == organization
+                && grant.IsLive(at)
+                && grant.ResourceType == type
+                && grant.ResourceId is ResourceId record
+                && resources.Contains(record)),
+        ]);
+    }
+
+    /// <inheritdoc/>
     public ValueTask<IReadOnlyList<Grant>> OnAsync(
         ResourceReference reference,
         OrganizationId organization,
