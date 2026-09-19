@@ -1,8 +1,12 @@
 using System;
+using Janus.Authentication.Alerting;
+using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authorization.Gate;
 using Janus.Authorization.Model;
 using Janus.Core;
+using Janus.Core.Configuration;
+using Janus.Hosting.Alerting;
 using Janus.Hosting.Bff;
 using Janus.Storage;
 using Microsoft.Extensions.DependencyInjection;
@@ -81,6 +85,34 @@ public static class JanusRegistration
         services.AddScoped<OriginValidation>();
         services.AddScoped<SynchronizerToken>();
 
+        // LIB-HOST-001: what the host declares about its own messaging is the host's;
+        // a deployment that declares none of it starts, and the checks that would have
+        // read a declaration find nothing to read.
+        services.TryAddSingleton(RestrictionKeySuppliers.None);
+        services.TryAddSingleton(IntegrationEndpoints.None);
+        services.TryAddSingleton(Recipients.Shipped);
+
+        // AUTH-ABUSE-004, OPS-ALERT-001: the one path every message takes, and what
+        // decides whether it goes.
+        services.AddScoped<SmsBalance>();
+        services.AddScoped<SendingService>();
+        services.AddScoped<SendingValidation>();
+        services.AddScoped<RestrictionAdministration>();
+        services.AddScoped<ThrottleService>();
+        services.AddScoped<NonExistenceNotice>();
+        services.AddScoped<DeliveryReports>();
+        services.AddScoped(services => new BotDefence(
+            services.GetRequiredService<IConfigurationStore>(),
+            services.GetRequiredService<IDatacenterRanges>(),
+            services.GetRequiredService<IRegistrationSources>(),
+            services.GetRequiredService<IBotDefenceAudit>(),
+            services.GetRequiredService<IUnitOfWork>(),
+            services.GetService<ChallengeVerifier>(),
+            services.GetRequiredService<TimeProvider>()));
+        services.AddScoped<AlertRouter>();
+        services.AddScoped<AlertDestinationChange>();
+        services.AddScoped<IAlertLog, AlertLog>();
+
         services.AddScoped<Derivations>();
         services.AddScoped<IAccessGate, AccessGate>();
         services.AddScoped<IDerivationMaterialiser, DerivationMaterialiser>();
@@ -90,6 +122,7 @@ public static class JanusRegistration
         // registered after it, and the web server is one, so the checks that read the
         // database go at the head of the collection.
         services.Insert(0, ServiceDescriptor.Singleton<IHostedService, ModelValidationService>());
+        services.Insert(1, ServiceDescriptor.Singleton<IHostedService, SendingValidationService>());
 
         return services;
     }

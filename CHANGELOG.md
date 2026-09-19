@@ -36,6 +36,10 @@ against the public contract of LIB-API-001.
   delay, the alerting and the delivery reports are kept in, so a deployment applies
   one new migration. No plain address, account or source is in any of them: each is
   held under the deployment's fingerprint key.
+- A deployment whose catalogue is missing a message in a configured language, whose
+  text message is longer than one message in it, whose restriction names a key
+  supplier nothing supplies, or that declares an endpoint reached over plain HTTP now
+  fails to start, rather than at the moment someone is waiting for a code.
 
 - The message catalogue, the mail and text transports, the addresses the deployment
   calls out to, the recipients its data reaches and the keys a sending restriction
