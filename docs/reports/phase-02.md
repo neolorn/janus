@@ -12,7 +12,7 @@ grants each wait on a question in section 4.
 
 | Item | Criteria | Tests |
 |---|---|---|
-| AUTHZ-PRIN-001 | AC1, AC2 | `TruthTableTests.AUTHZ_PRIN_001_AC1_TheCheckAndTheFilterAgreeOnEveryCaseAsync`, `PermissionRuleTests.AUTHZ_PRIN_001_AC2_NoPredicateIsReachableByOnlyOneOfThePaths` |
+| AUTHZ-PRIN-001 | AC1, AC2 over a type without derivations | `TruthTableTests.AUTHZ_PRIN_001_AC1_TheCheckAndTheFilterAgreeOnEveryCaseAsync`, `PermissionRuleTests.AUTHZ_PRIN_001_AC2_NoPredicateIsReachableByOnlyOneOfThePaths` |
 | AUTHZ-PRIN-002 | AC1, AC2 | `TruthTableTests.AUTHZ_PRIN_002_AC1_TheExpressionTranslatesToOneCorrelatedQueryAsync`, `PermissionRuleTests.AUTHZ_PRIN_002_AC2_NoRenderingSelectsTheRecordsAPrincipalMayReach` |
 | AUTHZ-PRIN-003 | AC1, AC2, AC3 | `GateBehaviourTests.AUTHZ_PRIN_003_AC1_AnUndeclaredResourceTypeRaisesAsync`, `GateBehaviourTests.AUTHZ_PRIN_003_AC2_APrincipalThatResolvesToNoAccountIsRefusedAsync`, `SubjectSetsTests.AUTHZ_PRIN_003_AC2_APrincipalWithNoAccountResolvesToNothingAsync`, `AccessSeamTests.AUTHZ_PRIN_003_AC3_NoPathTurnsAFailureIntoAnAllow` |
 | AUTHZ-GRANT-001 | AC2, AC3, AC4 | `GrantTests.AUTHZ_GRANT_001_AC2_AGrantWithNoResourceScopesToTheOrganization`, `GrantStoreTests.AUTHZ_GRANT_001_AC2_AGrantWithNoResourceScopesToTheOrganizationAsync`, `ExplanationTests.AUTHZ_GRANT_001_AC2_AGrantOnARecordConfersNothingOverTheOrganizationAsync`, `PermissionRuleTests.AUTHZ_GRANT_001_AC2_TheOrganizationRenderingReadsNoAncestry`, `GrantTests.AUTHZ_GRANT_001_AC3_OneShapeCarriesAccountAndGroupGrants`, `GrantStoreTests.AUTHZ_GRANT_001_AC3_TheSameTableServesAccountAndGroupGrantsAsync`, `GateBehaviourTests.AUTHZ_GRANT_001_AC4_AStoredAndADerivedGrantAnswerAlikeAsync` |
@@ -83,7 +83,8 @@ Criteria no test can decide, and how each was verified:
 
 | Item | Reason | Waits on |
 |---|---|---|
-| AUTHZ-DERIVE-002 AC3, AUTHZ-TEST-001 AC1 for the three derived cases and AC2 for them | The table runs every case through the single check and the list filter; on a type with a derivation the two paths answer differently, and what the check path answers is question 1 | Question 1 |
+| AUTHZ-PRIN-001 AC1 and AC2 over a type with derivations | The derived clause is in the two renderings the host runs and in neither of the two the library runs, so it is permission logic reachable by one path only | Question 1 |
+| AUTHZ-DERIVE-002 AC3, AUTHZ-TEST-001 AC1 for the three derived cases and AC2 for them | The table runs every case through the single check and the list filter, and on a type with a derivation the two answer differently | Question 1 |
 | AUTHZ-DERIVE-005 AC3 | The change that triggers a refresh is a write to the host's own relation, which the library never sees | Question 2 |
 | AUTHZ-TEST-001 AC3 | No derivation the repository declares is materialised, so the table has one side of the comparison; materialising one needs the refresh of AUTHZ-DERIVE-005 AC3 | Question 2 |
 | AUTHZ-DERIVE-007 AC1, AC2 | There is no reverse-lookup operation and no administrative view to report through | Question 3 |
@@ -117,8 +118,8 @@ assurance provider is registered and `auth.stepup.unavailable` where none is.
 
 ### Question 1. What a check and a capability page answer on a type with derivations
 
-*Item.* AUTHZ-PRIN-001 AC1 and AC2, AUTHZ-GATE-005 AC1 and AC2, AUTHZ-DERIVE-002 AC3,
-AUTHZ-TEST-001 AC1 and AC2, with D-160 decision 1.
+*Item.* AUTHZ-PRIN-001 AC1 and AC2, AUTHZ-DERIVE-002 AC3, AUTHZ-TEST-001 AC1 and AC2,
+with AUTHZ-GATE-005 and D-160 decision 1.
 
 *What the code needs.* Under D-160 a derivation is evaluated in the two renderings the
 host executes: the LINQ expression and the SQL fragment, over rows the host passes from
@@ -134,9 +135,12 @@ and the page path has no filter equivalent at all.
 
 *What the specification says.* AUTHZ-PRIN-001: one rule serves both a single check and a
 list filter, AC2 "No permission logic exists that is reachable by only one of the two
-paths". AUTHZ-GATE-005: one query answers, for a page of records, what the caller may do
-on each. AUTHZ-DERIVE-002 AC3: the truth table covers derived cases "through both check
+paths". AUTHZ-DERIVE-002 AC3: the truth table covers derived cases "through both check
 and filter". LIB-HOST-002 AC1 and D-160: the library queries no host table.
+AUTHZ-GATE-005 states neither criterion over a capability a page does not carry, so its
+four criteria are met as written; a page that omits what a derived grant confers hides a
+control the person may use, which is the reason the item gives for computing capabilities
+at all.
 
 *The readings.*
 
@@ -159,6 +163,10 @@ LIB-HOST-002 for the seam that runs them. For reading 3: a sentence in `03`
 AUTHZ-DERIVE-001 and AUTHZ-PRIN-001 stating that on a type with derivations the check and
 the capability page report stored grants only, and that a single check on such a type is
 the filter over one record.
+
+*What stands until it is answered.* The two library-side operations answer from stored
+grants alone, which refuses where a derived grant would allow and never the other way, so
+the deployment is closed rather than open while the question stands.
 
 *What is built ahead of the answer.* The filter path is complete and green:
 `AUTHZ_DERIVE_001_AC2`, `AUTHZ_DERIVE_001_AC3`, `AUTHZ_DERIVE_002_AC1`, the two
