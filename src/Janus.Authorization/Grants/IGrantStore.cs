@@ -70,16 +70,27 @@ internal interface IGrantStore
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// The live grants on one record or on anything containing it, whoever holds them.
-    /// This is what the "who can access this?" view reads for stored grants.
+    /// The counter a principal's cached grant rows and group set are keyed by. It goes
+    /// up in the same transaction as any grant or membership change reaching the
+    /// account, which is what orphans the entry rather than expiring it.
     /// </summary>
-    /// <param name="ancestry">The record and everything containing it.</param>
+    /// <param name="subject">Whose counter.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The counter, zero where nothing has ever changed for the account.</returns>
+    ValueTask<long> VersionAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The live grants on one record, on anything containing it, or on the whole
+    /// organization, whoever holds them. This is what the "who can access this?" view
+    /// reads for stored grants.
+    /// </summary>
+    /// <param name="reference">The record in question.</param>
     /// <param name="organization">The organization the record belongs to.</param>
     /// <param name="at">The instant liveness is read at.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The grants.</returns>
+    /// <returns>The grants, nearest container first.</returns>
     ValueTask<IReadOnlyList<Grant>> OnAsync(
-        IReadOnlyList<ResourceReference> ancestry,
+        ResourceReference reference,
         OrganizationId organization,
         DateTimeOffset at,
         CancellationToken cancellationToken);

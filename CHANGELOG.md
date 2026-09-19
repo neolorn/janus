@@ -10,6 +10,16 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Inheritance is resolved through an ancestry closure maintained in the same
+  transaction as the create or the move that changes it, so a permission query joins
+  one table rather than walking the tree, and permission data and business data cannot
+  diverge. Moving a record carries everything beneath it.
+- Groups nest to any depth, and the groups a principal belongs to are read once per
+  request from a closure maintained beside the memberships. Adding or removing a
+  member, or writing a grant to a group, raises the counter of every account it
+  reaches, in the same transaction.
+- `AncestryEntry` and `EffectiveGrant` in `Janus.Core`: the two rows a host maps into
+  its own context so that a permission filter is one query against its own tables.
 - A grant is one sentence, subject has role on resource, and one row carries every kind
   of it: an account's and a group's, an allow and a deny, a grant on one record and a
   grant on a whole organization. What a role allows is read where a grant naming it is

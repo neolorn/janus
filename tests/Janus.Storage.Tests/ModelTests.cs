@@ -77,6 +77,15 @@ public sealed class ModelTests
             "accounts.subject",
             "accounts.suspended_by",
 
+            // Authorization: the ancestry closure of AUTHZ-INHERIT-002, which is what a
+            // permission query joins instead of walking the tree.
+            "ancestry.ancestor_id",
+            "ancestry.ancestor_type",
+            "ancestry.depth",
+            "ancestry.organization",
+            "ancestry.resource_id",
+            "ancestry.resource_type",
+
             // Standing: the event record of IDN-AUD-001, with the attribute column
             // PRIV-RET-002 puts an event's personal field in.
             "audit_records.acting_subject",
@@ -95,6 +104,49 @@ public sealed class ModelTests
             "erasures.requested_at",
             "erasures.status",
             "erasures.subject",
+
+            // Authorization: the counter of AUTHZ-CACHE-001, raised in the transaction of
+            // the change that orphans an entry.
+            "grant_versions.subject",
+            "grant_versions.version",
+
+            // Authorization: the one sentence of AUTHZ-GRANT-001, with the audit fields
+            // AUTHZ-GRANT-003 requires of a grant and of its revocation.
+            "grants.deny",
+            "grants.expires_at",
+            "grants.granted_at",
+            "grants.granted_by",
+            "grants.id",
+            "grants.kind",
+            "grants.organization",
+            "grants.reason",
+            "grants.resource_id",
+            "grants.resource_type",
+            "grants.revocation_reason",
+            "grants.revoked_at",
+            "grants.revoked_by",
+            "grants.role",
+            "grants.subject_id",
+            "grants.subject_type",
+
+            // Authorization: the group closure of AUTHZ-GROUP-001, read once per request
+            // rather than walked per check.
+            "group_closure.depth",
+            "group_closure.group_id",
+            "group_closure.member_id",
+            "group_closure.member_type",
+
+            // Authorization: the memberships of AUTHZ-GROUP-001, which the closure is
+            // rebuilt from.
+            "group_members.group_id",
+            "group_members.member_id",
+            "group_members.member_type",
+
+            // Authorization: the group of AUTHZ-GROUP-001, which holds grants on behalf
+            // of its members.
+            "groups.id",
+            "groups.name",
+            "groups.organization",
 
             // Identifiers: the backup setting of `10` section 5.17.
             "identifier_backup_settings.kind",
@@ -143,6 +195,20 @@ public sealed class ModelTests
             "profiles.enc_display_name",
             "profiles.enc_legal_name",
             "profiles.subject",
+
+            // Authorization: the host's records as AUTHZ-INHERIT-001 registers them, and
+            // the one containing each.
+            "resources.contained_in_id",
+            "resources.contained_in_type",
+            "resources.organization",
+            "resources.resource_id",
+            "resources.resource_type",
+
+            // Authorization: what a role allows (AUTHZ-GRANT-004), read live so that
+            // editing it takes effect at once.
+            "role_permissions.permission",
+            "role_permissions.role",
+            "roles.name",
 
             // Not an account field: the runtime configuration of OPS-CFG-008.
             "settings.key",

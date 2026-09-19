@@ -1,4 +1,8 @@
 using System;
+using Janus.Storage.Authorization.Grants;
+using Janus.Storage.Authorization.Groups;
+using Janus.Storage.Authorization.Resources;
+using Janus.Storage.Authorization.Roles;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Audit;
 using Janus.Storage.Identity.Identifiers;
@@ -106,6 +110,51 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     /// </summary>
     public DbSet<SettingRecord> Settings => Set<SettingRecord>();
 
+    /// <summary>
+    /// The roles a grant may name.
+    /// </summary>
+    public DbSet<RoleRecord> Roles => Set<RoleRecord>();
+
+    /// <summary>
+    /// What each role allows.
+    /// </summary>
+    public DbSet<RolePermissionRecord> RolePermissions => Set<RolePermissionRecord>();
+
+    /// <summary>
+    /// The grants: subject, role, resource or organization.
+    /// </summary>
+    public DbSet<GrantRecord> Grants => Set<GrantRecord>();
+
+    /// <summary>
+    /// How many times what an account may do has changed.
+    /// </summary>
+    public DbSet<GrantVersionRecord> GrantVersions => Set<GrantVersionRecord>();
+
+    /// <summary>
+    /// The groups that hold grants on their members' behalf.
+    /// </summary>
+    public DbSet<GroupRecord> Groups => Set<GroupRecord>();
+
+    /// <summary>
+    /// What each group holds directly.
+    /// </summary>
+    public DbSet<GroupMemberRecord> GroupMembers => Set<GroupMemberRecord>();
+
+    /// <summary>
+    /// Every group a subject belongs to, at any depth.
+    /// </summary>
+    public DbSet<GroupClosureRecord> GroupClosure => Set<GroupClosureRecord>();
+
+    /// <summary>
+    /// The host's records the library knows of, and what contains each.
+    /// </summary>
+    public DbSet<ResourceRecord> Resources => Set<ResourceRecord>();
+
+    /// <summary>
+    /// Every record beside everything containing it.
+    /// </summary>
+    public DbSet<AncestryRecord> Ancestry => Set<AncestryRecord>();
+
     /// <inheritdoc/>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -135,5 +184,14 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new SubjectKeyConfiguration());
         modelBuilder.ApplyConfiguration(new AuditConfiguration());
         modelBuilder.ApplyConfiguration(new SettingConfiguration());
+        modelBuilder.ApplyConfiguration(new RoleConfiguration());
+        modelBuilder.ApplyConfiguration(new RolePermissionConfiguration());
+        modelBuilder.ApplyConfiguration(new GrantConfiguration());
+        modelBuilder.ApplyConfiguration(new GrantVersionConfiguration());
+        modelBuilder.ApplyConfiguration(new GroupConfiguration());
+        modelBuilder.ApplyConfiguration(new GroupMemberConfiguration());
+        modelBuilder.ApplyConfiguration(new GroupClosureConfiguration());
+        modelBuilder.ApplyConfiguration(new ResourceConfiguration());
+        modelBuilder.ApplyConfiguration(new AncestryConfiguration());
     }
 }

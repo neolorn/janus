@@ -1,5 +1,9 @@
 using System;
 using System.Security.Cryptography;
+using Janus.Authorization.Grants;
+using Janus.Authorization.Groups;
+using Janus.Authorization.Resources;
+using Janus.Authorization.Roles;
 using Janus.Core;
 using Janus.Identity.Accounts;
 using Janus.Identity.Audit;
@@ -9,6 +13,10 @@ using Janus.Identity.Preferences;
 using Janus.Identity.Profiles;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Authorization.Grants;
+using Janus.Storage.Authorization.Groups;
+using Janus.Storage.Authorization.Resources;
+using Janus.Storage.Authorization.Roles;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Audit;
 using Janus.Storage.Identity.Identifiers;
@@ -91,6 +99,11 @@ internal static class StorageRegistration
             provider.GetRequiredService<JanusDbContext>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
+
+        services.AddScoped<IRoleStore, RoleStore>();
+        services.AddScoped<IGrantStore, GrantStore>();
+        services.AddScoped<IGroupStore, GroupStore>();
+        services.AddScoped<IResourceStore, ResourceStore>();
 
         return services;
     }

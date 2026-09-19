@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Identity.Accounts;
+using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -97,6 +99,29 @@ internal sealed class Deployment(DatabaseFixture database) : IDisposable
         }
 
         return subject;
+    }
+
+    /// <summary>
+    /// Writes an organization for the rows that belong to one.
+    /// </summary>
+    /// <param name="at">The instant it was created.</param>
+    /// <returns>The organization.</returns>
+    public async Task<OrganizationId> OrganizationAsync(DateTimeOffset at)
+    {
+        var organization = new OrganizationId(Guid.NewGuid());
+
+        await using JanusDbContext context = database.Context();
+
+        context.Organizations.Add(new OrganizationRecord
+        {
+            Id = organization,
+            Name = "Organization " + organization.Value.ToString("n", CultureInfo.InvariantCulture),
+            CreatedAt = at,
+        });
+
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        return organization;
     }
 
     /// <summary>

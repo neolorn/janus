@@ -48,6 +48,23 @@ Janus.Core.AlertCondition.StepUpPolicyWeakened = 7 -> Janus.Core.AlertCondition
 Janus.Core.AlertSeverity
 Janus.Core.AlertSeverity.High = 1 -> Janus.Core.AlertSeverity
 Janus.Core.AlertSeverity.Normal = 0 -> Janus.Core.AlertSeverity
+Janus.Core.AncestryEntry
+Janus.Core.AncestryEntry.<Clone>$() -> Janus.Core.AncestryEntry!
+Janus.Core.AncestryEntry.AncestorId.get -> string!
+Janus.Core.AncestryEntry.AncestorId.init -> void
+Janus.Core.AncestryEntry.AncestorType.get -> string!
+Janus.Core.AncestryEntry.AncestorType.init -> void
+Janus.Core.AncestryEntry.AncestryEntry(string! ResourceType, string! ResourceId, string! AncestorType, string! AncestorId, int Depth, System.Guid Organization) -> void
+Janus.Core.AncestryEntry.Deconstruct(out string! ResourceType, out string! ResourceId, out string! AncestorType, out string! AncestorId, out int Depth, out System.Guid Organization) -> void
+Janus.Core.AncestryEntry.Depth.get -> int
+Janus.Core.AncestryEntry.Depth.init -> void
+Janus.Core.AncestryEntry.Equals(Janus.Core.AncestryEntry? other) -> bool
+Janus.Core.AncestryEntry.Organization.get -> System.Guid
+Janus.Core.AncestryEntry.Organization.init -> void
+Janus.Core.AncestryEntry.ResourceId.get -> string!
+Janus.Core.AncestryEntry.ResourceId.init -> void
+Janus.Core.AncestryEntry.ResourceType.get -> string!
+Janus.Core.AncestryEntry.ResourceType.init -> void
 Janus.Core.AssuranceLevel
 Janus.Core.AssuranceLevel.Aal1 = 1 -> Janus.Core.AssuranceLevel
 Janus.Core.AssuranceLevel.Aal2 = 2 -> Janus.Core.AssuranceLevel
@@ -219,6 +236,35 @@ Janus.Core.DisplayName
 Janus.Core.DisplayName.DisplayName() -> void
 Janus.Core.DisplayName.Equals(Janus.Core.DisplayName other) -> bool
 Janus.Core.DisplayName.Value.get -> string!
+Janus.Core.EffectiveGrant
+Janus.Core.EffectiveGrant.<Clone>$() -> Janus.Core.EffectiveGrant!
+Janus.Core.EffectiveGrant.Deconstruct(out System.Guid GrantId, out string! SubjectType, out System.Guid SubjectId, out string! Role, out string! Permission, out string? ResourceType, out string? ResourceId, out bool Deny, out string! Kind, out System.Guid Organization, out System.DateTimeOffset? ExpiresAt, out System.DateTimeOffset? RevokedAt) -> void
+Janus.Core.EffectiveGrant.Deny.get -> bool
+Janus.Core.EffectiveGrant.Deny.init -> void
+Janus.Core.EffectiveGrant.EffectiveGrant(System.Guid GrantId, string! SubjectType, System.Guid SubjectId, string! Role, string! Permission, string? ResourceType, string? ResourceId, bool Deny, string! Kind, System.Guid Organization, System.DateTimeOffset? ExpiresAt, System.DateTimeOffset? RevokedAt) -> void
+Janus.Core.EffectiveGrant.Equals(Janus.Core.EffectiveGrant? other) -> bool
+Janus.Core.EffectiveGrant.ExpiresAt.get -> System.DateTimeOffset?
+Janus.Core.EffectiveGrant.ExpiresAt.init -> void
+Janus.Core.EffectiveGrant.GrantId.get -> System.Guid
+Janus.Core.EffectiveGrant.GrantId.init -> void
+Janus.Core.EffectiveGrant.Kind.get -> string!
+Janus.Core.EffectiveGrant.Kind.init -> void
+Janus.Core.EffectiveGrant.Organization.get -> System.Guid
+Janus.Core.EffectiveGrant.Organization.init -> void
+Janus.Core.EffectiveGrant.Permission.get -> string!
+Janus.Core.EffectiveGrant.Permission.init -> void
+Janus.Core.EffectiveGrant.ResourceId.get -> string?
+Janus.Core.EffectiveGrant.ResourceId.init -> void
+Janus.Core.EffectiveGrant.ResourceType.get -> string?
+Janus.Core.EffectiveGrant.ResourceType.init -> void
+Janus.Core.EffectiveGrant.RevokedAt.get -> System.DateTimeOffset?
+Janus.Core.EffectiveGrant.RevokedAt.init -> void
+Janus.Core.EffectiveGrant.Role.get -> string!
+Janus.Core.EffectiveGrant.Role.init -> void
+Janus.Core.EffectiveGrant.SubjectId.get -> System.Guid
+Janus.Core.EffectiveGrant.SubjectId.init -> void
+Janus.Core.EffectiveGrant.SubjectType.get -> string!
+Janus.Core.EffectiveGrant.SubjectType.init -> void
 Janus.Core.EmailAddress
 Janus.Core.EmailAddress.EmailAddress() -> void
 Janus.Core.EmailAddress.Equals(Janus.Core.EmailAddress other) -> bool
@@ -633,6 +679,9 @@ const Janus.Core.LegalName.MinimumLength = 1 -> int
 const Janus.Core.PhoneNumber.MaximumDigits = 15 -> int
 const Janus.Core.Username.MaximumLength = 32 -> int
 const Janus.Core.Username.MinimumLength = 3 -> int
+override Janus.Core.AncestryEntry.Equals(object? obj) -> bool
+override Janus.Core.AncestryEntry.GetHashCode() -> int
+override Janus.Core.AncestryEntry.ToString() -> string!
 override Janus.Core.AuditAction.GetHashCode() -> int
 override Janus.Core.AuditAction.ToString() -> string!
 override Janus.Core.AuditRecordId.GetHashCode() -> int
@@ -664,6 +713,9 @@ override Janus.Core.DerivationDeclaration.GetHashCode() -> int
 override Janus.Core.DerivationDeclaration.ToString() -> string!
 override Janus.Core.DisplayName.GetHashCode() -> int
 override Janus.Core.DisplayName.ToString() -> string!
+override Janus.Core.EffectiveGrant.Equals(object? obj) -> bool
+override Janus.Core.EffectiveGrant.GetHashCode() -> int
+override Janus.Core.EffectiveGrant.ToString() -> string!
 override Janus.Core.EmailAddress.GetHashCode() -> int
 override Janus.Core.EmailAddress.ToString() -> string!
 override Janus.Core.EncryptedFieldDeclaration.Equals(object? obj) -> bool
@@ -738,6 +790,8 @@ override Janus.Core.Username.ToString() -> string!
 static Janus.Core.AccessContext.Of(Janus.Core.SubjectId acting, Janus.Core.SubjectId effective) -> Janus.Core.AccessContext!
 static Janus.Core.AccessContext.Of(Janus.Core.SubjectId subject) -> Janus.Core.AccessContext!
 static Janus.Core.AccessContext.Of(Janus.Core.SystemPrincipal! principal) -> Janus.Core.AccessContext!
+static Janus.Core.AncestryEntry.operator !=(Janus.Core.AncestryEntry? left, Janus.Core.AncestryEntry? right) -> bool
+static Janus.Core.AncestryEntry.operator ==(Janus.Core.AncestryEntry? left, Janus.Core.AncestryEntry? right) -> bool
 static Janus.Core.AuditAction.Parse(string! value) -> Janus.Core.AuditAction
 static Janus.Core.AuditAction.operator !=(Janus.Core.AuditAction left, Janus.Core.AuditAction right) -> bool
 static Janus.Core.AuditAction.operator ==(Janus.Core.AuditAction left, Janus.Core.AuditAction right) -> bool
@@ -901,6 +955,8 @@ static Janus.Core.DerivationDeclaration.operator ==(Janus.Core.DerivationDeclara
 static Janus.Core.DisplayName.TryParse(string! entered, out Janus.Core.DisplayName name) -> bool
 static Janus.Core.DisplayName.operator !=(Janus.Core.DisplayName left, Janus.Core.DisplayName right) -> bool
 static Janus.Core.DisplayName.operator ==(Janus.Core.DisplayName left, Janus.Core.DisplayName right) -> bool
+static Janus.Core.EffectiveGrant.operator !=(Janus.Core.EffectiveGrant? left, Janus.Core.EffectiveGrant? right) -> bool
+static Janus.Core.EffectiveGrant.operator ==(Janus.Core.EffectiveGrant? left, Janus.Core.EffectiveGrant? right) -> bool
 static Janus.Core.EmailAddress.TryParse(string! entered, out Janus.Core.EmailAddress address) -> bool
 static Janus.Core.EmailAddress.operator !=(Janus.Core.EmailAddress left, Janus.Core.EmailAddress right) -> bool
 static Janus.Core.EmailAddress.operator ==(Janus.Core.EmailAddress left, Janus.Core.EmailAddress right) -> bool
