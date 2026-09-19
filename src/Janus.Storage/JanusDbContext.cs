@@ -3,6 +3,7 @@ using Janus.Identity.Accounts;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Privacy.SubjectKeys;
+using Janus.Storage.Settings;
 using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage;
@@ -40,6 +41,11 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     /// </summary>
     public DbSet<SubjectKey> SubjectKeys => Set<SubjectKey>();
 
+    /// <summary>
+    /// The runtime-changeable configuration values in force.
+    /// </summary>
+    public DbSet<StoredSetting> Settings => Set<StoredSetting>();
+
     /// <inheritdoc/>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -59,5 +65,6 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
 
         modelBuilder.ApplyConfiguration(new AccountConfiguration());
         modelBuilder.ApplyConfiguration(new SubjectKeyConfiguration());
+        modelBuilder.ApplyConfiguration(new StoredSettingConfiguration());
     }
 }

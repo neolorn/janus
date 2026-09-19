@@ -91,6 +91,10 @@ against the public contract of LIB-API-001.
   mixed-script rule that holds within a word. Two addresses that differ only in how
   they are composed, in width or in case are one account, and a word that mixes
   scripts is refused while whole-word Arabic beside whole-word Latin is not.
+- The library's schema now carries a settings table. A runtime-changeable
+  configuration value lives there rather than in a file, so a change made through the
+  management application takes effect without a restart, and a key the deployment
+  never changed keeps the default the catalogue gives it.
 
 ### Changed
 

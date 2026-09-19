@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Dapper;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Xunit;
 
@@ -85,6 +86,7 @@ public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<Databa
         Assert.Contains(JanusDbContext.MigrationsHistoryTable, tables);
         Assert.Contains("accounts", tables);
         Assert.Contains("subject_keys", tables);
+        Assert.Contains("settings", tables);
     }
 
     /// <summary>
@@ -94,15 +96,21 @@ public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<Databa
     [Fact]
     public async Task OPS_MIG_007_AC1_TheMigrationsApplyASecondTimeAsync()
     {
-        await database.MigrateAsync();
+        await using JanusDbContext context = database.Context();
+        int declared = context.Database.GetMigrations().Count();
 
         await using NpgsqlConnection connection = await database.OpenAsync();
 
-        Assert.Equal(
-            1,
-            await connection.ExecuteScalarAsync<int>(
-                "SELECT count(*) FROM janus.\"" + JanusDbContext.MigrationsHistoryTable + "\""));
+        Assert.Equal(declared, await AppliedAsync(connection));
+
+        await database.MigrateAsync();
+
+        Assert.Equal(declared, await AppliedAsync(connection));
     }
+
+    private static async Task<int> AppliedAsync(NpgsqlConnection connection) =>
+        await connection.ExecuteScalarAsync<int>(
+            "SELECT count(*) FROM janus.\"" + JanusDbContext.MigrationsHistoryTable + "\"");
 
     /// <summary>
     /// CONV-ENUM-001 AC1: a value the code does not branch on is refused by the

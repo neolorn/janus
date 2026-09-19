@@ -11,7 +11,8 @@ namespace Janus.Core.Tests;
 /// The shape of the solution: which project may depend on which, what a project file
 /// may declare, and which packages the build may resolve
 /// (CONV-LAYOUT-001, CONV-LAYOUT-002, CONV-LAYOUT-003, CONV-SETUP-001, CONV-SETUP-002,
-/// CONV-DESIGN-008, CONV-CODE-008, LIB-PKG-001, LIB-PKG-002, OPS-DATA-001).
+/// CONV-DESIGN-008, CONV-CODE-008, LIB-PKG-001, LIB-PKG-002, OPS-DATA-001,
+/// OPS-DATA-002).
 /// </summary>
 [Trait("kind", "contract")]
 public sealed class LibraryStructureTests
@@ -44,6 +45,16 @@ public sealed class LibraryStructureTests
         "ExecuteSqlInterpolated",
         "ExecuteSqlInterpolatedAsync",
         "SqlQueryRaw",
+    ];
+
+    // OPS-DATA-002: the accessor is the one place a connection comes from. These are
+    // the ways a caller could get another one instead.
+    private static readonly string[] DirectConnections =
+    [
+        "GetDbConnection",
+        "new NpgsqlConnection",
+        "OpenConnectionAsync",
+        "OpenConnection(",
     ];
 
     private static readonly string[] Areas =
@@ -165,6 +176,24 @@ public sealed class LibraryStructureTests
     {
         IEnumerable<string> reaching = Sources()
             .Where(file => RawSql.Any(call =>
+                File.ReadAllText(file).Contains(call, StringComparison.Ordinal)));
+
+        Assert.Empty(reaching);
+    }
+
+    /// <summary>
+    /// OPS-DATA-002 AC2: nothing but the accessor retrieves a connection, so a
+    /// hand-written query can never run outside the operation's transaction.
+    /// </summary>
+    [Fact]
+    public void OPS_DATA_002_AC2_NoFileButTheAccessorRetrievesAConnection()
+    {
+        IEnumerable<string> reaching = Sources()
+            .Where(file => !string.Equals(
+                Path.GetFileName(file),
+                "DataConnections.cs",
+                StringComparison.Ordinal))
+            .Where(file => DirectConnections.Any(call =>
                 File.ReadAllText(file).Contains(call, StringComparison.Ordinal)));
 
         Assert.Empty(reaching);
