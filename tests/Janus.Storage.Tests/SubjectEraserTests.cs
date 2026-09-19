@@ -154,6 +154,37 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     }
 
     /// <summary>
+    /// PRIV-RIGHT-005 AC4: the photo is rendered unreadable by the same operation. Its
+    /// bytes are encrypted under the key that operation destroys, so the ciphertext the
+    /// row still holds is the ciphertext it held before, and nothing reads it.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_005_AC4_ThePhotoIsRenderedUnreadableByTheSameOperationAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        byte[] image = new byte[256];
+        _deployment.Randomness.GetBytes(image);
+
+        await using (JanusDbContext writing = database.Context())
+        {
+            await new ProfilePhotoStore(writing, _deployment.Keys, _deployment.Randomness)
+                .RecordAsync(ProfilePhoto.Of(subject, image, Noon), TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        byte[] before = await StoredImageAsync(subject);
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using JanusDbContext reading = database.Context();
+
+        Assert.Equal(before, await StoredImageAsync(subject));
+        await Assert.ThrowsAsync<CryptographicException>(async () =>
+            await new ProfilePhotoStore(reading, _deployment.Keys, _deployment.Randomness)
+                .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// IDN-ACCT-002 AC3, IDN-PRIN-003 AC2, AC3: the subject identifier still resolves
     /// after the erasure, the identifier rows are still there, and an audit record that
     /// names the subject still resolves to it.
@@ -310,6 +341,16 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await deleting.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         return subject;
+    }
+
+    private async ValueTask<byte[]> StoredImageAsync(SubjectId subject)
+    {
+        await using JanusDbContext reading = database.Context();
+
+        ProfilePhotoRecord record = await reading.ProfilePhotos
+            .SingleAsync(photo => photo.Subject == subject, TestContext.Current.CancellationToken);
+
+        return record.Image ?? [];
     }
 
     private async ValueTask EraseAsync(SubjectId subject, ErasureReason reason)
