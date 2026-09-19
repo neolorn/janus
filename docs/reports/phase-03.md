@@ -188,4 +188,14 @@ runs `dotnet test` unchanged. The local counts at the end of the phase:
 96, `Janus.Core.Tests` 384, `Janus.Hosting.Tests` 146, `Janus.Identity.Tests` 62,
 `Janus.Privacy.Tests` 13 and `Janus.Storage.Tests` 188, none failing.
 
-Full gate: to be recorded from the pipeline run on the pull request.
+Full gate: GitHub Actions runs `35474527532` (push) and `35474534453` (pull request)
+on branch `phase-03-sessions-2`, pull request #11, green on every job. `Integration
+tests`, `Double migration run`, `Destructive-operation detection report`, `Truth-table
+suite` and `Dependency vulnerability alerting` run on the pull-request event and
+`Secret scanning` on the push event, as CONV-GATE-002 states, so the two runs together
+are one pass of the table of CONV-GATE-001.
+
+Pull request #10 carried the same tree on branch `phase-03-sessions`; nine commit
+bodies ran over the 72-character bound of CONV-VCS-003, so the branch was replayed onto
+`main` with those bodies corrected and the pull request replaced. The commit after the
+two runs above changes this section alone.
