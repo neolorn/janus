@@ -18,6 +18,8 @@ public sealed class ErrorCodesTests
     private static readonly string[] Catalogue =
     [
         "auth.challenge.required",
+        "auth.stepup.required",
+        "auth.stepup.unavailable",
         "authz.denied",
         "authz.grant.duplicate",
         "authz.grant.expired",

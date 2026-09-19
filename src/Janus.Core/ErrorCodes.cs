@@ -181,7 +181,7 @@ public static class ErrorCodes
     /// <summary>
     /// The action is bound to a step-up gate and no assurance provider is registered,
     /// so nothing reports what the session has proved and the gate is unmet rather
-    /// than waived.
+    /// than waived. Register an assurance provider, or bind the action to no gate.
     /// </summary>
     /// <remarks>Implements AUTH-STEP-003, LIB-HOST-004, chapter 10 section 1.2.</remarks>
     public static ErrorCode StepUpUnavailable { get; } = ErrorCode.Parse("auth.stepup.unavailable");

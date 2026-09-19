@@ -14,6 +14,12 @@ namespace Janus.Core.Tests;
 [Trait("kind", "contract")]
 public sealed class PublicSurfaceTests
 {
+    // What the library declares, which is what its contract is made of. The members
+    // every delegate type inherits from the base class library are not the library's
+    // to shape, and a public delegate cannot be declared without them.
+    private const BindingFlags Declared =
+        BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
+
     // CONV-CODE-004 AC2 leaves reflection to the model builder. The converter of
     // CONV-ENUM-001 reads each vocabulary's own wire name once, at startup, so that a
     // column's spelling and its check constraint cannot drift from the wire, and the
@@ -71,10 +77,10 @@ public sealed class PublicSurfaceTests
         typeof(Result).Assembly
             .GetExportedTypes()
             .SelectMany(type => type
-                .GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static)
+                .GetProperties(Declared)
                 .Select(property => property.PropertyType)
                 .Concat(type
-                    .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static)
+                    .GetMethods(Declared)
                     .SelectMany(method => method.GetParameters().Select(parameter => parameter.ParameterType).Append(method.ReturnType))));
 
     private static bool Mutable(Type type)
