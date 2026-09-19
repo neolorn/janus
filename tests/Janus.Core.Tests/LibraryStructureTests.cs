@@ -11,7 +11,7 @@ namespace Janus.Core.Tests;
 /// The shape of the solution: which project may depend on which, what a project file
 /// may declare, and which packages the build may resolve
 /// (CONV-LAYOUT-001, CONV-LAYOUT-002, CONV-LAYOUT-003, CONV-SETUP-001, CONV-SETUP-002,
-/// CONV-DESIGN-008, CONV-CODE-008, LIB-PKG-001, LIB-PKG-002).
+/// CONV-DESIGN-008, CONV-CODE-008, LIB-PKG-001, LIB-PKG-002, OPS-DATA-001).
 /// </summary>
 [Trait("kind", "contract")]
 public sealed class LibraryStructureTests
@@ -29,6 +29,17 @@ public sealed class LibraryStructureTests
         ["Janus.Analyzers"] = [],
         ["Janus.Cli"] = ["Janus.Authentication", "Janus.Core", "Janus.Identity", "Janus.Storage"],
     };
+
+    private static readonly string[] RawSql =
+    [
+        "FromSqlRaw",
+        "FromSqlInterpolated",
+        "ExecuteSqlRaw",
+        "ExecuteSqlRawAsync",
+        "ExecuteSqlInterpolated",
+        "ExecuteSqlInterpolatedAsync",
+        "SqlQueryRaw",
+    ];
 
     private static readonly string[] Areas =
     [
@@ -138,6 +149,20 @@ public sealed class LibraryStructureTests
                 File.ReadAllText(file),
                 StringComparison.Ordinal);
         }
+    }
+
+    /// <summary>
+    /// OPS-DATA-001 AC1: hand-written SQL goes through Dapper, so the raw-SQL facility
+    /// of the other tool is not a second way of doing the same job.
+    /// </summary>
+    [Fact]
+    public void OPS_DATA_001_AC1_NoFileUsesEfCoresRawSqlExecution()
+    {
+        IEnumerable<string> reaching = Sources()
+            .Where(file => RawSql.Any(call =>
+                File.ReadAllText(file).Contains(call, StringComparison.Ordinal)));
+
+        Assert.Empty(reaching);
     }
 
     /// <summary>
