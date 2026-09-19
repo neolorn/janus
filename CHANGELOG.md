@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Time-based codes run on thirty-second steps at six digits, with a drift tolerance
+  the deployment sets and no code accepted twice: a code whose step has been spent is
+  refused as replayed, so an observer has no window to reuse one in. An enrolment
+  becomes usable only once a valid code has been presented, so a mis-scanned secret
+  locks nobody out, and an enrolment abandoned before that leaves nothing behind.
 - A session is a server-side record every credential derives from, holding the
   properties an authentication reached and never the factor names that reached them.
   Ending the record ends the per-application sessions and the tokens standing on it.
