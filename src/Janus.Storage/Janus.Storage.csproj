@@ -8,6 +8,16 @@
     <ProjectReference Include="..\Janus.Privacy\Janus.Privacy.csproj" />
   </ItemGroup>
 
+  <!-- OPS-DATA-001: LINQ for everything normal, Dapper for hand-written SQL.
+       CONV-DESIGN-003: the design package is this project's alone and builds the
+       migration bundle, so it ships with nothing. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+    <PackageReference Include="Dapper" />
+  </ItemGroup>
+
   <!-- CONV-CODE-008 AC2: referenced as an analyser, never as a library. -->
   <ItemGroup>
     <ProjectReference Include="..\Janus.Analyzers\Janus.Analyzers.csproj"

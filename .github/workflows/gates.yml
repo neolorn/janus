@@ -71,6 +71,52 @@ jobs:
       - run: dotnet restore Janus.slnx --locked-mode
       - run: dotnet test tests/Janus.Core.Tests --no-restore -- --filter-trait "kind=contract"
 
+  integration-tests:
+    name: Integration tests
+    # CONV-GATE-002: the containerised runs are for a pull request and the default
+    # branch, not for every push to a feature branch.
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - run: dotnet restore Janus.slnx --locked-mode
+      - run: dotnet test tests/Janus.Storage.Tests --no-restore -- --filter-trait "kind=integration"
+
+  double-migration:
+    name: Double migration run
+    # CONV-GATE-002: the containerised runs are for a pull request and the default
+    # branch, not for every push to a feature branch.
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGPASSWORD: postgres
+    steps:
+      # The second run starts from the previous release, so the tags have to be here.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - run: dotnet restore Janus.slnx --locked-mode
+      - run: dotnet tool restore
+      - run: ./.github/gates/double-migration.sh
+
   janus-analyzers:
     name: Janus.Analyzers rules JAN0001 to JAN0006
     runs-on: ubuntu-latest

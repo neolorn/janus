@@ -155,6 +155,45 @@ public sealed class VocabularyContractTests
         Assert.Equal(AlertConditions.Order(StringComparer.Ordinal), WireNames<AlertCondition>());
 
     /// <summary>
+    /// LIB-API-001 AC2: the account states of chapter 10 section 5.1, which every
+    /// account row carries and every reader of an account branches on.
+    /// </summary>
+    [Fact]
+    public void LIB_API_001_AC2_TheAccountStatesAreTheContract() =>
+        Assert.Equal(
+            ["active", "deleted", "deleting", "restricted", "suspended"],
+            WireNames<AccountState>());
+
+    /// <summary>
+    /// LIB-API-001 AC2: the origins of chapter 10 section 5.12b and the takedown
+    /// triggers of section 5.12d, recorded when a state is entered.
+    /// </summary>
+    [Fact]
+    public void LIB_API_001_AC2_TheSuspensionAndDeletionOriginsAreTheContract()
+    {
+        Assert.Equal(["administrator", "self"], WireNames<SuspensionOrigin>());
+        Assert.Equal(["oob-request", "self", "takedown"], WireNames<DeletionOrigin>());
+        Assert.Equal(
+            ["authority-request", "automated-signal", "customer-report", "staff-report"],
+            WireNames<TakedownTrigger>());
+    }
+
+    /// <summary>
+    /// LIB-API-001 AC2: the erasure status of chapter 10 section 5.12 and the reason of
+    /// section 5.12a, which the erasures table and the off-host ledger carry.
+    /// </summary>
+    [Fact]
+    public void LIB_API_001_AC2_TheErasureStatusAndReasonAreTheContract()
+    {
+        Assert.Equal(
+            ["awaiting-subscribers", "complete", "failed"],
+            WireNames<ErasureStatus>());
+        Assert.Equal(
+            ["erasure-request", "minor-takedown", "organization-erasure"],
+            WireNames<ErasureReason>());
+    }
+
+    /// <summary>
     /// LIB-API-001 AC2: the two members of the bot-defence signal set, which chapter
     /// 10 section 4.5 closes until a decision adds one.
     /// </summary>
@@ -181,6 +220,12 @@ public sealed class VocabularyContractTests
             typeof(AgeGroup),
             typeof(AlertCondition),
             typeof(BotDefenceSignal),
+            typeof(AccountState),
+            typeof(SuspensionOrigin),
+            typeof(DeletionOrigin),
+            typeof(ErasureStatus),
+            typeof(ErasureReason),
+            typeof(TakedownTrigger),
         ];
 
         foreach (Type vocabulary in vocabularies)

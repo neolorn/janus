@@ -8,9 +8,9 @@
   </PropertyGroup>
 
   <ItemGroup Label="Relational access">
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.4" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.4" />
     <PackageVersion Include="Dapper" Version="2.1.86" />
   </ItemGroup>
 

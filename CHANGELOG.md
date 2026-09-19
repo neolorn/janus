@@ -45,6 +45,41 @@ against the public contract of LIB-API-001.
   re-verification interval, the location database cadence, the restore-test
   objective and interval, the two identifier maximums, the two size caps and the
   bot-defence signal set.
+- `SubjectId` and `OrganizationId` in `Janus.Core`: an account's opaque identifier,
+  drawn from randomness alone so that it carries nothing about the person, and the
+  organization's, ordered by the instant it was issued.
+- `AccountState`, `SuspensionOrigin`, `DeletionOrigin`, `TakedownTrigger`,
+  `ErasureStatus` and `ErasureReason` in `Janus.Core`: the state an account is in,
+  why it entered the one it is in, and how far an erasure's host-side work has got.
+- `ISecretSource` and `KeyEncryptionKeys` in `Janus.Core`: the host supplies the
+  key-encryption key, the fingerprint key and the maintenance credential, and the
+  library ships no secrets-manager client and no default.
+- `IUnitOfWork` in `Janus.Core`: an operation runs in one transaction and commits
+  once, so a failure part way through leaves nothing written.
+- Per-subject encryption of personal fields: one data key per subject, wrapped in
+  the database under the deployment's key-encryption key, with every value bound to
+  the subject, table and column it was written to, so a value moved elsewhere no
+  longer decrypts. Erasure overwrites the wrapped key and everything encrypted
+  under it becomes unreadable at once, including values in the host's own tables.
+- Keyed fingerprints for searchable identifiers, computed under a key held outside
+  the database, neutralised by erasure and never matched once neutralised.
+- Account states and the transitions between them: an account is created active,
+  deactivated by its owner or suspended by an administrator, restricted at the
+  subject's request, and removed only through a grace window it can be brought
+  back from. A takedown passes through suspension into that window in one step
+  and is reversed, never cancelled. The record itself is never deleted, so an
+  audit trail keeps resolving after the personal data is gone.
+- The library's own database schema and its first migration: one schema the
+  library owns, with a migration history table of its own so a host's migrations
+  never collide with it, a case-insensitive ICU collation for the columns
+  identifiers are compared under, and every fixed vocabulary stored as the
+  spelling it carries on the wire and constrained by a check rather than a
+  native enum type, so the admitted set changes without a locking migration.
+- The transaction an operation runs in, and the one accessor hand-written SQL
+  takes its connection from: a query written by hand runs on the same connection
+  and inside the same transaction as the rest of the operation, so it can never
+  miss a write the operation has already made, and an operation that fails part
+  way through leaves nothing behind.
 
 ### Changed
 

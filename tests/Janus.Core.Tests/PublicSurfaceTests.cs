@@ -14,6 +14,11 @@ namespace Janus.Core.Tests;
 [Trait("kind", "contract")]
 public sealed class PublicSurfaceTests
 {
+    // CONV-CODE-004 AC2 leaves reflection to the model builder. The converter of
+    // CONV-ENUM-001 reads each vocabulary's own wire name once, at startup, so that a
+    // column's spelling and its check constraint cannot drift from the wire.
+    private static readonly string[] ModelBuilder = ["VocabularyConverter.cs"];
+
     /// <summary>
     /// CONV-CODE-003 AC1: a contract member hands out a read-only view, never a
     /// mutable collection the caller can change under the library.
@@ -55,6 +60,7 @@ public sealed class PublicSurfaceTests
             .EnumerateFiles(Path.Combine(Repository.Root, "src"), "*.cs", SearchOption.AllDirectories)
             .Where(file => !file.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar, StringComparison.Ordinal)
                 && !file.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            .Where(file => !ModelBuilder.Contains(Path.GetFileName(file), StringComparer.Ordinal))
             .Where(file => File.ReadAllText(file).Contains("System.Reflection", StringComparison.Ordinal));
 
         Assert.Empty(reaching);

@@ -1,4 +1,10 @@
 #nullable enable
+Janus.Core.AccountState
+Janus.Core.AccountState.Active = 0 -> Janus.Core.AccountState
+Janus.Core.AccountState.Deleted = 4 -> Janus.Core.AccountState
+Janus.Core.AccountState.Deleting = 3 -> Janus.Core.AccountState
+Janus.Core.AccountState.Restricted = 2 -> Janus.Core.AccountState
+Janus.Core.AccountState.Suspended = 1 -> Janus.Core.AccountState
 Janus.Core.AgeGroup
 Janus.Core.AgeGroup.Adult = 1 -> Janus.Core.AgeGroup
 Janus.Core.AgeGroup.Minor = 0 -> Janus.Core.AgeGroup
@@ -149,6 +155,18 @@ Janus.Core.ConsentMechanism.Registration = 0 -> Janus.Core.ConsentMechanism
 Janus.Core.CredentialRedundancy
 Janus.Core.CredentialRedundancy.Advisory = 0 -> Janus.Core.CredentialRedundancy
 Janus.Core.CredentialRedundancy.Enforced = 1 -> Janus.Core.CredentialRedundancy
+Janus.Core.DeletionOrigin
+Janus.Core.DeletionOrigin.OutOfBandRequest = 2 -> Janus.Core.DeletionOrigin
+Janus.Core.DeletionOrigin.Self = 0 -> Janus.Core.DeletionOrigin
+Janus.Core.DeletionOrigin.Takedown = 1 -> Janus.Core.DeletionOrigin
+Janus.Core.ErasureReason
+Janus.Core.ErasureReason.ErasureRequest = 0 -> Janus.Core.ErasureReason
+Janus.Core.ErasureReason.MinorTakedown = 1 -> Janus.Core.ErasureReason
+Janus.Core.ErasureReason.OrganizationErasure = 2 -> Janus.Core.ErasureReason
+Janus.Core.ErasureStatus
+Janus.Core.ErasureStatus.AwaitingSubscribers = 0 -> Janus.Core.ErasureStatus
+Janus.Core.ErasureStatus.Complete = 1 -> Janus.Core.ErasureStatus
+Janus.Core.ErasureStatus.Failed = 2 -> Janus.Core.ErasureStatus
 Janus.Core.Error
 Janus.Core.Error.<Clone>$() -> Janus.Core.Error!
 Janus.Core.Error.Code.get -> Janus.Core.ErrorCode
@@ -187,8 +205,32 @@ Janus.Core.GateLevel
 Janus.Core.GateLevel.Aal1 = 1 -> Janus.Core.GateLevel
 Janus.Core.GateLevel.Aal2 = 2 -> Janus.Core.GateLevel
 Janus.Core.GateLevel.Reachable = 0 -> Janus.Core.GateLevel
+Janus.Core.ISecretSource
+Janus.Core.ISecretSource.ReadFingerprintKeyAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.ReadOnlyMemory<byte>>
+Janus.Core.ISecretSource.ReadKeyEncryptionKeysAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.KeyEncryptionKeys!>
+Janus.Core.ISecretSource.ReadMaintenanceCredentialAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.ReadOnlyMemory<byte>>
+Janus.Core.IUnitOfWork
+Janus.Core.IUnitOfWork.BeginAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+Janus.Core.IUnitOfWork.CommitAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+Janus.Core.KeyEncryptionKeys
+Janus.Core.KeyEncryptionKeys.<Clone>$() -> Janus.Core.KeyEncryptionKeys!
+Janus.Core.KeyEncryptionKeys.Current.get -> System.ReadOnlyMemory<byte>
+Janus.Core.KeyEncryptionKeys.CurrentVersion.get -> int
+Janus.Core.KeyEncryptionKeys.CurrentVersion.init -> void
+Janus.Core.KeyEncryptionKeys.Deconstruct(out int CurrentVersion, out System.Collections.Generic.IReadOnlyDictionary<int, System.ReadOnlyMemory<byte>>! Versions) -> void
+Janus.Core.KeyEncryptionKeys.Equals(Janus.Core.KeyEncryptionKeys? other) -> bool
+Janus.Core.KeyEncryptionKeys.KeyEncryptionKeys(int CurrentVersion, System.Collections.Generic.IReadOnlyDictionary<int, System.ReadOnlyMemory<byte>>! Versions) -> void
+Janus.Core.KeyEncryptionKeys.Versions.get -> System.Collections.Generic.IReadOnlyDictionary<int, System.ReadOnlyMemory<byte>>!
+Janus.Core.KeyEncryptionKeys.Versions.init -> void
 Janus.Core.NeverLoggedAttribute
 Janus.Core.NeverLoggedAttribute.NeverLoggedAttribute() -> void
+Janus.Core.OrganizationId
+Janus.Core.OrganizationId.Deconstruct(out System.Guid Value) -> void
+Janus.Core.OrganizationId.Equals(Janus.Core.OrganizationId other) -> bool
+Janus.Core.OrganizationId.OrganizationId() -> void
+Janus.Core.OrganizationId.OrganizationId(System.Guid Value) -> void
+Janus.Core.OrganizationId.Value.get -> System.Guid
+Janus.Core.OrganizationId.Value.init -> void
 Janus.Core.Policies
 Janus.Core.Policy
 Janus.Core.Policy.<Clone>$() -> Janus.Core.Policy!
@@ -297,6 +339,21 @@ Janus.Core.StepUpAction.RecoveryCodesGenerate = 6 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.RestrictionEdit = 26 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.RestrictionGrant = 27 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.UsernameChange = 3 -> Janus.Core.StepUpAction
+Janus.Core.SubjectId
+Janus.Core.SubjectId.Deconstruct(out System.Guid Value) -> void
+Janus.Core.SubjectId.Equals(Janus.Core.SubjectId other) -> bool
+Janus.Core.SubjectId.SubjectId() -> void
+Janus.Core.SubjectId.SubjectId(System.Guid Value) -> void
+Janus.Core.SubjectId.Value.get -> System.Guid
+Janus.Core.SubjectId.Value.init -> void
+Janus.Core.SuspensionOrigin
+Janus.Core.SuspensionOrigin.Administrator = 1 -> Janus.Core.SuspensionOrigin
+Janus.Core.SuspensionOrigin.Self = 0 -> Janus.Core.SuspensionOrigin
+Janus.Core.TakedownTrigger
+Janus.Core.TakedownTrigger.AuthorityRequest = 3 -> Janus.Core.TakedownTrigger
+Janus.Core.TakedownTrigger.AutomatedSignal = 2 -> Janus.Core.TakedownTrigger
+Janus.Core.TakedownTrigger.CustomerReport = 1 -> Janus.Core.TakedownTrigger
+Janus.Core.TakedownTrigger.StaffReport = 0 -> Janus.Core.TakedownTrigger
 abstract Janus.Core.Configuration.Setting<TValue>.Accept(TValue value) -> Janus.Core.Result<TValue>
 override Janus.Core.Bucket.Equals(object? obj) -> bool
 override Janus.Core.Bucket.GetHashCode() -> int
@@ -325,6 +382,11 @@ override Janus.Core.ErrorCode.ToString() -> string!
 override Janus.Core.Gate.Equals(object? obj) -> bool
 override Janus.Core.Gate.GetHashCode() -> int
 override Janus.Core.Gate.ToString() -> string!
+override Janus.Core.KeyEncryptionKeys.Equals(object? obj) -> bool
+override Janus.Core.KeyEncryptionKeys.GetHashCode() -> int
+override Janus.Core.KeyEncryptionKeys.ToString() -> string!
+override Janus.Core.OrganizationId.GetHashCode() -> int
+override Janus.Core.OrganizationId.ToString() -> string!
 override Janus.Core.Policy.Equals(object? obj) -> bool
 override Janus.Core.Policy.GetHashCode() -> int
 override Janus.Core.Policy.ToString() -> string!
@@ -336,6 +398,8 @@ override Janus.Core.Restriction.GetHashCode() -> int
 override Janus.Core.Restriction.ToString() -> string!
 override Janus.Core.Result.GetHashCode() -> int
 override Janus.Core.Result<TValue>.GetHashCode() -> int
+override Janus.Core.SubjectId.GetHashCode() -> int
+override Janus.Core.SubjectId.ToString() -> string!
 static Janus.Core.Bucket.operator !=(Janus.Core.Bucket? left, Janus.Core.Bucket? right) -> bool
 static Janus.Core.Bucket.operator ==(Janus.Core.Bucket? left, Janus.Core.Bucket? right) -> bool
 static Janus.Core.Configuration.Argon2StrengthClass.operator !=(Janus.Core.Configuration.Argon2StrengthClass? left, Janus.Core.Configuration.Argon2StrengthClass? right) -> bool
@@ -510,6 +574,11 @@ static Janus.Core.ErrorCodes.StartupUndeclaredTypeReference.get -> Janus.Core.Er
 static Janus.Core.ErrorCodes.SystemFault.get -> Janus.Core.ErrorCode
 static Janus.Core.Gate.operator !=(Janus.Core.Gate? left, Janus.Core.Gate? right) -> bool
 static Janus.Core.Gate.operator ==(Janus.Core.Gate? left, Janus.Core.Gate? right) -> bool
+static Janus.Core.KeyEncryptionKeys.operator !=(Janus.Core.KeyEncryptionKeys? left, Janus.Core.KeyEncryptionKeys? right) -> bool
+static Janus.Core.KeyEncryptionKeys.operator ==(Janus.Core.KeyEncryptionKeys? left, Janus.Core.KeyEncryptionKeys? right) -> bool
+static Janus.Core.OrganizationId.New(System.TimeProvider! time) -> Janus.Core.OrganizationId
+static Janus.Core.OrganizationId.operator !=(Janus.Core.OrganizationId left, Janus.Core.OrganizationId right) -> bool
+static Janus.Core.OrganizationId.operator ==(Janus.Core.OrganizationId left, Janus.Core.OrganizationId right) -> bool
 static Janus.Core.Policies.AdministrativeOrganization.get -> Janus.Core.Policy!
 static Janus.Core.Policies.SystemDefault.get -> Janus.Core.Policy!
 static Janus.Core.Policy.operator !=(Janus.Core.Policy? left, Janus.Core.Policy? right) -> bool
@@ -527,9 +596,14 @@ static Janus.Core.Result.operator !=(Janus.Core.Result left, Janus.Core.Result r
 static Janus.Core.Result.operator ==(Janus.Core.Result left, Janus.Core.Result right) -> bool
 static Janus.Core.Result<TValue>.operator !=(Janus.Core.Result<TValue> left, Janus.Core.Result<TValue> right) -> bool
 static Janus.Core.Result<TValue>.operator ==(Janus.Core.Result<TValue> left, Janus.Core.Result<TValue> right) -> bool
+static Janus.Core.SubjectId.New(System.Security.Cryptography.RandomNumberGenerator! randomness) -> Janus.Core.SubjectId
+static Janus.Core.SubjectId.operator !=(Janus.Core.SubjectId left, Janus.Core.SubjectId right) -> bool
+static Janus.Core.SubjectId.operator ==(Janus.Core.SubjectId left, Janus.Core.SubjectId right) -> bool
 ~override Janus.Core.Configuration.ConfigurationKey.Equals(object obj) -> bool
 ~override Janus.Core.ErrorCode.Equals(object obj) -> bool
+~override Janus.Core.OrganizationId.Equals(object obj) -> bool
 ~override Janus.Core.Result.Equals(object obj) -> bool
 ~override Janus.Core.Result.ToString() -> string
 ~override Janus.Core.Result<TValue>.Equals(object obj) -> bool
 ~override Janus.Core.Result<TValue>.ToString() -> string
+~override Janus.Core.SubjectId.Equals(object obj) -> bool
