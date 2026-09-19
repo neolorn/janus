@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A sign-in link, whichever channel carries it, and an emailed code sign a person in
+  at AAL1 and count for nothing afterwards: neither is a second step, neither passes a
+  step-up gate, and neither restores a session that lapsed. The mailbox or the number
+  behind them is also the recovery channel, so one compromise would otherwise yield
+  both steps.
 - Passwords are held under Argon2id at the parameters the deployment configures, with
   the parameters carried by each hash, so raising them leaves every stored password
   verifiable and marks it for a silent rehash. The floor is fifteen characters where
