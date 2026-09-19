@@ -661,6 +661,24 @@ public sealed class StepUpTests : IDisposable
                 StepUp.On(Signed(reached), gate, held, Noon).Required));
     }
 
+    /// <summary>
+    /// AUTH-STEP-002 AC8: a gate is a tier, a resistance requirement and an age,
+    /// declared where the catalogue cannot be seen, so registering an entry reaches
+    /// no value any gate carries.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_002_AC8_RegisteringANewFactorTypeChangesNoGate()
+    {
+        Gate gate = Janus.Core.Policies.AdministrativeOrganization.Gates[StepUpAction.PrivacyExport];
+
+        Assert.Equal(GateLevel.Aal2, gate.Level);
+        Assert.True(gate.PhishingResistant);
+
+        Assert.DoesNotContain(
+            typeof(Gate).Assembly.GetReferencedAssemblies(),
+            referenced => referenced.Name!.StartsWith("Janus.", StringComparison.Ordinal));
+    }
+
     private static HashSet<Factor> Set(params Factor[] factors) => [.. factors];
 
     private static Gate Gate(GateLevel level, bool phishingResistant) =>
