@@ -8223,6 +8223,32 @@ REG-IDENT-009 · `10` section 1.1.
 
 ---
 
+## D-156 — Phase 1 questions, third stop: a port is tested against its aggregate; test infrastructure is Tier 1
+
+**Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-149 (CONV-LAYOUT-002 grants), the agent instructions (Tier 1) · **Extends:** D-155
+
+**TL;DR.** D-155 made the port implementation the one place encryption happens, and the
+grant list then left no project able to test it: Storage's tests could see the store but
+not the aggregate, an area's tests the reverse. The grant list gains one row. And because
+this stop was purely about where a test may live, that whole class of question is moved
+to Tier 1 so it never ends a run again.
+
+1. **Each area project grants `InternalsVisibleTo` to `Janus.Storage.Tests`.** A port
+   implementation is verified against the aggregate it translates, in Storage's own
+   test project, with the real database. Rejected: verifying ports only end to end from
+   `Janus.Hosting.Tests` once endpoints exist, which would leave every translation, and
+   the field cipher inside it, untested for four phases.
+2. **Test infrastructure is Tier 1.** A project reference, a grant to a test project, an
+   analyser scope in a test project or a fixture arrangement, when it touches no runtime
+   code and no shipped surface, is resolved by the agent with the least change,
+   including to the gate test that enforces the list, and recorded; the owner brings
+   `08` into line afterwards. Three of the last eight stops were of this kind, and none
+   of them had a second defensible answer.
+
+**Propagated to:** `08` CONV-LAYOUT-002 · the working guide section 3.
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -8388,6 +8414,7 @@ REG-IDENT-009 · `10` section 1.1.
 | Word-shaped values: one pass over every chapter; alert thresholds as keys, time zone, materiality, userinfo claims, host challenge, offline lists | D-153 |
 | Phase 1 questions: generated Unicode tables at a pinned version, PRECIS as validation, CA1515 in tests, the visibility test | D-154 |
 | Phase 1 questions, second stop: persistence records and the port encrypt; kind detection; collation scope | D-155 |
+| Phase 1 questions, third stop: area grants to Storage.Tests; test infrastructure is Tier 1 | D-156 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

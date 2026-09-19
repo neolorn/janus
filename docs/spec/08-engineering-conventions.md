@@ -75,9 +75,11 @@ Makes the public surface reviewable by reading one project.
 1. A public type outside `Janus.Core`, `Janus.Hosting`'s mounting types and
    `Janus.Conformance` fails the build (CONV-SETUP-003). The only `InternalsVisibleTo`
    grants permitted are: every non-Core project to its own test project; each area
-   project to `Janus.Storage` (persistence ports), to `Janus.Hosting` and to `Janus.Cli`
-   (service registration); `Janus.Core` and `Janus.Storage` to `Janus.Hosting` and to
-   `Janus.Cli` (registration). Any other grant fails the build (D-135, D-149).
+   project to `Janus.Storage` (persistence ports), to `Janus.Storage.Tests` (a port
+   implementation is tested against the aggregate it translates, D-156), to
+   `Janus.Hosting` and to `Janus.Cli` (service registration); `Janus.Core` and
+   `Janus.Storage` to `Janus.Hosting` and to `Janus.Cli` (registration). Any other
+   grant fails the build (D-135, D-149).
 2. The public surface is enumerable from `Janus.Core` plus the mounting types in
    `Janus.Hosting`.
 
