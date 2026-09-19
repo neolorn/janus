@@ -10,6 +10,19 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A session is a server-side record every credential derives from, holding the
+  properties an authentication reached and never the factor names that reached them.
+  Ending the record ends the per-application sessions and the tokens standing on it.
+  The browser carries thirty-two drawn bytes and the row holds their fingerprint, so a
+  dump of the table yields no usable session.
+- Session lifetimes follow the assurance the principal's policy requires and never the
+  level a particular sign-in happened to reach, so a customer who signs in with a
+  passkey keeps the customer lifetimes. A new secret is issued whenever a combination
+  is presented and on any privilege change, and the one before it stops working.
+- After an inactivity expiry inside the absolute window, a policy that requires two
+  factors accepts one factor bound to the session secret the browser still holds. The
+  allowance is not offered under the system policy, and a second factor alone, a
+  social credential and an email factor each restore nothing.
 - Authentication policy is resolved from the principal's organization membership and
   from nothing else: the system policy where there is no membership, the
   organization's where there is one, and the strictest of several where a principal
