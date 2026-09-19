@@ -346,6 +346,13 @@
           "Otp.NET": "[1.4.1, )"
         }
       },
+      "janus.authentication.tests": {
+        "type": "Project",
+        "dependencies": {
+          "Janus.Authentication": "[1.0.0, )",
+          "xunit.v3": "[4.0.1, )"
+        }
+      },
       "janus.authorization": {
         "type": "Project",
         "dependencies": {

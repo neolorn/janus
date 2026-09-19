@@ -292,30 +292,6 @@ internal sealed class SessionService(
     }
 
     /// <summary>
-    /// Whether the synchronizer token a request presented is the one bound to its
-    /// session.
-    /// </summary>
-    /// <param name="id">Which session.</param>
-    /// <param name="presented">The token the request carried.</param>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>
-    /// Whether it matches. A session with no token, and a request that presents the
-    /// wrong one, both answer no; the comparison does not depend on how much of the
-    /// value matched (BFF-CSRF-001).
-    /// </returns>
-    public async ValueTask<bool> CsrfMatchesAsync(
-        SessionId id,
-        OpaqueToken presented,
-        CancellationToken cancellationToken)
-    {
-        byte[]? bound = await sessions.CsrfFingerprintAsync(id, cancellationToken)
-            .ConfigureAwait(false);
-
-        return bound is not null
-            && CryptographicOperations.FixedTimeEquals(bound, presented.Fingerprint());
-    }
-
-    /// <summary>
     /// Issues a new secret for a session without changing what it proved, which is
     /// what a privilege change asks for.
     /// </summary>

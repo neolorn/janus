@@ -1,7 +1,9 @@
 using System;
+using Janus.Authentication.Sessions;
 using Janus.Authorization.Gate;
 using Janus.Authorization.Model;
 using Janus.Core;
+using Janus.Hosting.Bff;
 using Janus.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -37,6 +39,10 @@ public static class JanusRegistration
     /// and held outside the database (PRIV-RIGHT-005c).
     /// </param>
     /// <param name="declaration">What the host declared about its own domain.</param>
+    /// <param name="application">
+    /// Which of the deployment's applications this process serves, which decides the
+    /// one cookie attribute that differs between them (BFF-CSRF-005).
+    /// </param>
     /// <returns>The collection, for chaining.</returns>
     /// <exception cref="ArgumentNullException">The collection is absent.</exception>
     /// <exception cref="StartupException">The declaration does not hold together.</exception>
@@ -45,7 +51,8 @@ public static class JanusRegistration
         string connectionString,
         KeyEncryptionKeys keyEncryptionKeys,
         ReadOnlyMemory<byte> fingerprintKey,
-        AuthorizationDeclaration declaration)
+        AuthorizationDeclaration declaration,
+        JanusApplication application)
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -64,6 +71,15 @@ public static class JanusRegistration
         services.AddScoped(services => new StepUpGates(
             services.GetRequiredService<AuthorizationModel>(),
             services.GetService<IAssuranceProvider>()));
+
+        // BFF-OWN-001: the browser boundary is the library's, so what issues a cookie
+        // and what validates a token are registered here and not left to the host.
+        services.AddSingleton(new BrowserSessionCookies(application));
+        services.AddScoped<SynchronizerTokens>();
+        services.AddScoped<ResourceIsolation>();
+        services.AddScoped<CustomRequestHeader>();
+        services.AddScoped<OriginValidation>();
+        services.AddScoped<SynchronizerToken>();
 
         services.AddScoped<Derivations>();
         services.AddScoped<IAccessGate, AccessGate>();
