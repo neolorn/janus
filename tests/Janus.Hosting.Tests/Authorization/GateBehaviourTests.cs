@@ -232,6 +232,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             cancellationToken);
 
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
 
         IReadOnlyList<Capability> capabilities = Rendered(
             await scope.ServiceProvider.GetRequiredService<IAccessGate>()
@@ -240,6 +241,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
                     Document,
                     page,
                     [HostPermissions.Read, HostPermissions.Edit],
+                    Sources(reading),
                     cancellationToken));
 
         Assert.Equal(50, capabilities.Count);
@@ -294,6 +296,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             TestContext.Current.CancellationToken);
 
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
 
         Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
             .RequireAsync(
@@ -303,6 +306,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
                     nested.Deployment.Organization)),
                 HostPermissions.Read,
                 nested.Record,
+                Sources(reading),
                 TestContext.Current.CancellationToken);
 
         Assert.Equal(ErrorCodes.Denied, outcome.Match(
@@ -477,6 +481,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             cancellationToken);
 
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
 
         Capability capability = Assert.Single(Rendered(
             await scope.ServiceProvider.GetRequiredService<IAccessGate>()
@@ -485,6 +490,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
                     Document,
                     [nested.Record.Id],
                     [HostPermissions.Read, HostPermissions.Edit],
+                    Sources(reading),
                     cancellationToken)));
 
         Assert.Empty(capability.Requires);
@@ -519,6 +525,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             cancellationToken);
 
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
 
         Capability capability = Assert.Single(Rendered(
             await scope.ServiceProvider.GetRequiredService<IAccessGate>()
@@ -527,6 +534,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
                     Document,
                     [nested.Record.Id],
                     [HostPermissions.Read, HostPermissions.Publish],
+                    Sources(reading),
                     cancellationToken)));
 
         Assert.Contains(HostPermissions.Publish, capability.Can);
@@ -568,6 +576,121 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
                 await nested.Deployment.AccountAsync(cancellationToken),
                 nested.Record,
                 HostPermissions.Publish));
+    }
+
+    /// <summary>
+    /// AUTHZ-PRIN-001 AC2, AUTHZ-DERIVE-001 (D-161): a check on a type a derivation
+    /// reaches, asked without the rows the derivation is evaluated over, is a fault
+    /// rather than an answer read from the stored grants alone.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_PRIN_001_AC2_ACheckWithoutTheHostsRowsIsAFaultAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+
+        await nested.Deployment.NamedRoleAsync(
+            Reviewer,
+            [HostPermissions.Read, HostPermissions.ReadNote],
+            cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        IAccessGate gate = scope.ServiceProvider.GetRequiredService<IAccessGate>();
+
+        Result checking = await gate.RequireAsync(
+            AccessContext.Of(nested.Account),
+            HostPermissions.Read,
+            nested.Record,
+            cancellationToken);
+
+        Result<IReadOnlyList<Capability>> page = await gate.CapabilitiesAsync(
+            AccessContext.Of(nested.Account),
+            Document,
+            [nested.Record.Id],
+            [HostPermissions.Read],
+            cancellationToken);
+
+        Result<AccessExplanation> explaining = await gate.ExplainAsync(
+            AccessContext.Of(nested.Account),
+            HostPermissions.ReadNote,
+            nested.Note,
+            cancellationToken);
+
+        Assert.Equal(
+            ErrorCodes.DerivationSourcesMissing,
+            checking.Match(() => throw new InvalidOperationException("It was not a fault."), error => error.Code));
+        Assert.Equal(
+            ErrorCodes.DerivationSourcesMissing,
+            page.Match(_ => throw new InvalidOperationException("It was not a fault."), error => error.Code));
+        Assert.Equal(
+            ErrorCodes.DerivationSourcesMissing,
+            explaining.Match(_ => throw new InvalidOperationException("It was not a fault."), error => error.Code));
+    }
+
+    /// <summary>
+    /// AUTHZ-PRIN-001 AC2, AUTHZ-DERIVE-001 (D-161): where no derivation confers what
+    /// is being asked for, the stored grants are the whole of the answer and the path
+    /// without the host's rows answers it. The role the declaration's derivation confers
+    /// allows reading and not editing, so editing follows from no fact of the host's.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_PRIN_001_AC2_ACheckNoDerivationReachesNeedsNoRowsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Edit]);
+
+        await nested.Deployment.NamedRoleAsync(Reviewer, [HostPermissions.Read], cancellationToken);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+            .RequireAsync(
+                AccessContext.Of(nested.Account),
+                HostPermissions.Edit,
+                nested.Record,
+                cancellationToken);
+
+        Assert.True(outcome.Match(() => true, _ => false));
+    }
+
+    /// <summary>
+    /// AUTHZ-DERIVE-002 AC3, AUTHZ-GATE-005 AC1, AC2: a fact in the host's data reaches
+    /// the capability page as a stored grant does, and a deny on the record defeats it
+    /// there as it defeats it everywhere.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_005_AC2_ADerivedGrantReachesTheCapabilityPageAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+
+        await nested.Deployment.NamedRoleAsync(Reviewer, [HostPermissions.Read], cancellationToken);
+        await nested.Deployment.ReviewAsync(nested.Bottom, nested.Account, cancellationToken);
+
+        Assert.Equal([HostPermissions.Read], await ConferredAsync(nested));
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            true,
+            null,
+            null,
+            cancellationToken);
+
+        Assert.Empty(await ConferredAsync(nested));
     }
 
     /// <summary>
@@ -737,11 +860,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
                     HostPermissions.Read,
                     Document,
                     nested.Deployment.Organization,
-                    new FilterSources<HostDocument>(
-                        reading.Ancestry,
-                        reading.Grants,
-                        document => document.Id)
-                        .Relationship("reviewer", reading.Reviewers),
+                    Sources(reading),
                     TestContext.Current.CancellationToken));
 
         return await reading.Documents
@@ -749,6 +868,31 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             .Select(document => document.Id)
             .ToListAsync(TestContext.Current.CancellationToken);
     }
+
+    // What the capability page confers on the record, asked the way a host asks it.
+    private async Task<IReadOnlySet<Permission>> ConferredAsync(Nested nested)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        IReadOnlyList<Capability> page = Rendered(
+            await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .CapabilitiesAsync(
+                    AccessContext.Of(nested.Account),
+                    Document,
+                    [nested.Record.Id],
+                    [HostPermissions.Read],
+                    Sources(reading),
+                    TestContext.Current.CancellationToken));
+
+        return Assert.Single(page).Can;
+    }
+
+    // What the host supplies from its own context, the same object every path on a
+    // type with a derivation takes (D-161).
+    private static FilterSources<HostDocument> Sources(HostContext reading) =>
+        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, document => document.Id)
+            .Relationship("reviewer", reading.Reviewers);
 
     private static TRendering Rendered<TRendering>(Result<TRendering> outcome) =>
         outcome.Match(
@@ -822,12 +966,14 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
         Permission permission)
     {
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
 
         Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
             .RequireAsync(
                 AccessContext.Of(account),
                 permission,
                 resource,
+                Sources(reading),
                 TestContext.Current.CancellationToken);
 
         return outcome.Match(() => (ErrorCode?)null, error => error.Code);
@@ -839,12 +985,14 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
         Permission? permission = null)
     {
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
 
         Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
             .RequireAsync(
                 AccessContext.Of(account),
                 permission ?? HostPermissions.Read,
                 resource,
+                Sources(reading),
                 TestContext.Current.CancellationToken);
 
         return outcome.Match(() => true, _ => false);
@@ -869,14 +1017,16 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
         ResourceReference bottom = Reference(Workspace);
         ResourceReference elsewhere = Reference(Workspace);
         ResourceReference record = Reference(Document);
+        ResourceReference note = Reference(ResourceType.Parse("note"));
 
         await deployment.RegisterAsync(top, containedIn: null, cancellationToken);
         await deployment.RegisterAsync(middle, top, cancellationToken);
         await deployment.RegisterAsync(bottom, middle, cancellationToken);
         await deployment.RegisterAsync(elsewhere, containedIn: null, cancellationToken);
         await deployment.RegisterAsync(record, bottom, cancellationToken);
+        await deployment.RegisterAsync(note, bottom, cancellationToken);
 
-        return new Nested(deployment, account, role, top, bottom, elsewhere, record);
+        return new Nested(deployment, account, role, top, bottom, elsewhere, record, note);
     }
 
     // One case's rows.
@@ -887,5 +1037,6 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
         ResourceReference Top,
         ResourceReference Bottom,
         ResourceReference Elsewhere,
-        ResourceReference Record);
+        ResourceReference Record,
+        ResourceReference Note);
 }

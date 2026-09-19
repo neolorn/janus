@@ -21,6 +21,7 @@ public sealed class ErrorCodesTests
         "auth.stepup.required",
         "auth.stepup.unavailable",
         "authz.denied",
+        "authz.derivation.sourcesmissing",
         "authz.grant.duplicate",
         "authz.grant.expired",
         "authz.grant.notfound",

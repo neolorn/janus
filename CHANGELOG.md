@@ -49,6 +49,11 @@ against the public contract of LIB-API-001.
   A grant or a revocation stating no reason is refused with `authz.grant.reasonrequired`.
   An expired grant confers nothing at the instant it is read, whether or not a sweep
   has run.
+- A check and a capability page take the same host-supplied rows the filter takes, so a
+  type whose access follows in part from a fact in the host's own data answers the same
+  way whichever of them is asked. Asked without those rows, they refuse with
+  `authz.derivation.sourcesmissing`, a fault and not a denial, rather than answering from
+  the stored grants alone.
 - A derivation confers a role from a fact in the host's own data. The host declares the
   relationship and hands its rows to the filter beside the ancestry and the grants, and
   a listing then reaches everything that fact reaches, on the record or on anything

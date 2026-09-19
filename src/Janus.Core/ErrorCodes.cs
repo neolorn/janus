@@ -194,6 +194,19 @@ public static class ErrorCodes
     public static ErrorCode Denied { get; } = ErrorCode.Parse("authz.denied");
 
     /// <summary>
+    /// A check or a capability query was made on a type that declares a derivation
+    /// without the host-supplied sources it is evaluated over. Pass the same sources
+    /// the filter takes.
+    /// </summary>
+    /// <remarks>
+    /// Implements AUTHZ-DERIVE-001, D-161, chapter 10 section 1.3. A fault and not a
+    /// denial: the caller asked a question the library cannot answer, rather than one
+    /// whose answer is no.
+    /// </remarks>
+    public static ErrorCode DerivationSourcesMissing { get; } =
+        ErrorCode.Parse("authz.derivation.sourcesmissing");
+
+    /// <summary>
     /// An identical live grant exists. Revoke it, or change what this one says.
     /// </summary>
     /// <remarks>Implements AUTHZ-GRANT-003, chapter 10 section 1.3.</remarks>

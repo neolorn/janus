@@ -421,11 +421,13 @@ Janus.Core.GroupId.Value.get -> System.Guid
 Janus.Core.GroupId.Value.init -> void
 Janus.Core.IAccessGate
 Janus.Core.IAccessGate.CapabilitiesAsync(Janus.Core.AccessContext! context, Janus.Core.ResourceType type, System.Collections.Generic.IReadOnlyList<Janus.Core.ResourceId>! resources, System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! permissions, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.Capability!>!>>
+Janus.Core.IAccessGate.CapabilitiesAsync<TResource>(Janus.Core.AccessContext! context, Janus.Core.ResourceType type, System.Collections.Generic.IReadOnlyList<Janus.Core.ResourceId>! resources, System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! permissions, Janus.Core.FilterSources<TResource>! sources, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.Capability!>!>>
 Janus.Core.IAccessGate.ExplainAsync(Janus.Core.AccessContext! context, Janus.Core.Permission permission, Janus.Core.ResourceReference resource, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AccessExplanation!>>
 Janus.Core.IAccessGate.FilterAsync<TResource>(Janus.Core.AccessContext! context, Janus.Core.Permission permission, Janus.Core.ResourceType type, Janus.Core.OrganizationId organization, Janus.Core.FilterSources<TResource>! sources, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Linq.Expressions.Expression<System.Func<TResource, bool>!>!>>
 Janus.Core.IAccessGate.FragmentAsync(Janus.Core.AccessContext! context, Janus.Core.Permission permission, Janus.Core.ResourceType type, Janus.Core.OrganizationId organization, string! rowAlias, string! column, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.SqlFilter!>>
 Janus.Core.IAccessGate.RequireAsync(Janus.Core.AccessContext! context, Janus.Core.Permission permission, Janus.Core.OrganizationId organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAccessGate.RequireAsync(Janus.Core.AccessContext! context, Janus.Core.Permission permission, Janus.Core.ResourceReference resource, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IAccessGate.RequireAsync<TResource>(Janus.Core.AccessContext! context, Janus.Core.Permission permission, Janus.Core.ResourceReference resource, Janus.Core.FilterSources<TResource>! sources, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAccessGate.ResolveAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, Janus.Core.AuditRecordId correlation, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AccessExplanation!>>
 Janus.Core.IAssuranceProvider
 Janus.Core.IAssuranceProvider.LevelAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AssuranceLevel>>
@@ -1088,6 +1090,7 @@ static Janus.Core.ErrorCodes.ConfigurationValueAboveCeiling.get -> Janus.Core.Er
 static Janus.Core.ErrorCodes.ConfigurationValueBelowFloor.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ConfigurationValueNotAllowed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.Denied.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.DerivationSourcesMissing.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GrantDuplicate.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GrantExpired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GrantNotFound.get -> Janus.Core.ErrorCode
