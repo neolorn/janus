@@ -16,6 +16,17 @@ against the public contract of LIB-API-001.
   origins share rather than taken from the first of them. The related-origins
   document lists exactly the additional origins configured, and a set of them wider
   than a browser reads stops the deployment too.
+- A browser can be trusted after a two-factor sign-in, which spares it the second
+  factor and nothing else: the session that follows records only the password, the
+  offer is absent where the policy requires two factors or the password is too short
+  to stand alone, and the trust goes when it lapses, when the account signs out
+  everywhere, when the person removes it from their device list, or after enough
+  failed sign-ins on it in a row.
+- A sign-in to an account that can reach only one factor, from a browser the account
+  has not seen, is held until the person enters a code sent to their primary email;
+  the browser is then remembered and not held again for as long as the deployment
+  says. A sign-in that reached two factors is never held, and the check can be turned
+  off.
 - A step-up gate is answered from the session record and what the account can reach
   with the credentials it holds, and never from a list of what it has enrolled. Where
   the session falls short, every combination of the account's own factors that would

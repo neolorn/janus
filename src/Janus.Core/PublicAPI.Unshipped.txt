@@ -299,6 +299,31 @@ Janus.Core.DeviceDescription.DeviceDescription(string! Browser, string! Os) -> v
 Janus.Core.DeviceDescription.Equals(Janus.Core.DeviceDescription? other) -> bool
 Janus.Core.DeviceDescription.Os.get -> string!
 Janus.Core.DeviceDescription.Os.init -> void
+Janus.Core.DeviceId
+Janus.Core.DeviceId.Deconstruct(out System.Guid Value) -> void
+Janus.Core.DeviceId.DeviceId() -> void
+Janus.Core.DeviceId.DeviceId(System.Guid Value) -> void
+Janus.Core.DeviceId.Equals(Janus.Core.DeviceId other) -> bool
+Janus.Core.DeviceId.Value.get -> System.Guid
+Janus.Core.DeviceId.Value.init -> void
+Janus.Core.DeviceKind
+Janus.Core.DeviceKind.Remembered = 1 -> Janus.Core.DeviceKind
+Janus.Core.DeviceKind.Trusted = 0 -> Janus.Core.DeviceKind
+Janus.Core.DeviceSummary
+Janus.Core.DeviceSummary.<Clone>$() -> Janus.Core.DeviceSummary!
+Janus.Core.DeviceSummary.CreatedAt.get -> System.DateTimeOffset
+Janus.Core.DeviceSummary.CreatedAt.init -> void
+Janus.Core.DeviceSummary.Deconstruct(out Janus.Core.DeviceId Id, out Janus.Core.DeviceKind Kind, out Janus.Core.CredentialLabel Label, out System.DateTimeOffset CreatedAt, out System.DateTimeOffset LastUsedAt) -> void
+Janus.Core.DeviceSummary.DeviceSummary(Janus.Core.DeviceId Id, Janus.Core.DeviceKind Kind, Janus.Core.CredentialLabel Label, System.DateTimeOffset CreatedAt, System.DateTimeOffset LastUsedAt) -> void
+Janus.Core.DeviceSummary.Equals(Janus.Core.DeviceSummary? other) -> bool
+Janus.Core.DeviceSummary.Id.get -> Janus.Core.DeviceId
+Janus.Core.DeviceSummary.Id.init -> void
+Janus.Core.DeviceSummary.Kind.get -> Janus.Core.DeviceKind
+Janus.Core.DeviceSummary.Kind.init -> void
+Janus.Core.DeviceSummary.Label.get -> Janus.Core.CredentialLabel
+Janus.Core.DeviceSummary.Label.init -> void
+Janus.Core.DeviceSummary.LastUsedAt.get -> System.DateTimeOffset
+Janus.Core.DeviceSummary.LastUsedAt.init -> void
 Janus.Core.DisplayName
 Janus.Core.DisplayName.DisplayName() -> void
 Janus.Core.DisplayName.Equals(Janus.Core.DisplayName other) -> bool
@@ -909,6 +934,11 @@ override Janus.Core.DerivationRefresh.ToString() -> string!
 override Janus.Core.DeviceDescription.Equals(object? obj) -> bool
 override Janus.Core.DeviceDescription.GetHashCode() -> int
 override Janus.Core.DeviceDescription.ToString() -> string!
+override Janus.Core.DeviceId.GetHashCode() -> int
+override Janus.Core.DeviceId.ToString() -> string!
+override Janus.Core.DeviceSummary.Equals(object? obj) -> bool
+override Janus.Core.DeviceSummary.GetHashCode() -> int
+override Janus.Core.DeviceSummary.ToString() -> string!
 override Janus.Core.DisplayName.GetHashCode() -> int
 override Janus.Core.DisplayName.ToString() -> string!
 override Janus.Core.EffectiveGrant.Equals(object? obj) -> bool
@@ -1181,6 +1211,11 @@ static Janus.Core.DerivationRefresh.operator !=(Janus.Core.DerivationRefresh? le
 static Janus.Core.DerivationRefresh.operator ==(Janus.Core.DerivationRefresh? left, Janus.Core.DerivationRefresh? right) -> bool
 static Janus.Core.DeviceDescription.operator !=(Janus.Core.DeviceDescription? left, Janus.Core.DeviceDescription? right) -> bool
 static Janus.Core.DeviceDescription.operator ==(Janus.Core.DeviceDescription? left, Janus.Core.DeviceDescription? right) -> bool
+static Janus.Core.DeviceId.New(System.TimeProvider! time) -> Janus.Core.DeviceId
+static Janus.Core.DeviceId.operator !=(Janus.Core.DeviceId left, Janus.Core.DeviceId right) -> bool
+static Janus.Core.DeviceId.operator ==(Janus.Core.DeviceId left, Janus.Core.DeviceId right) -> bool
+static Janus.Core.DeviceSummary.operator !=(Janus.Core.DeviceSummary? left, Janus.Core.DeviceSummary? right) -> bool
+static Janus.Core.DeviceSummary.operator ==(Janus.Core.DeviceSummary? left, Janus.Core.DeviceSummary? right) -> bool
 static Janus.Core.DisplayName.TryParse(string! entered, out Janus.Core.DisplayName name) -> bool
 static Janus.Core.DisplayName.operator !=(Janus.Core.DisplayName left, Janus.Core.DisplayName right) -> bool
 static Janus.Core.DisplayName.operator ==(Janus.Core.DisplayName left, Janus.Core.DisplayName right) -> bool
@@ -1381,6 +1416,7 @@ static Janus.Core.Username.operator ==(Janus.Core.Username left, Janus.Core.User
 ~override Janus.Core.AuthenticatorId.Equals(object obj) -> bool
 ~override Janus.Core.Configuration.ConfigurationKey.Equals(object obj) -> bool
 ~override Janus.Core.CredentialLabel.Equals(object obj) -> bool
+~override Janus.Core.DeviceId.Equals(object obj) -> bool
 ~override Janus.Core.DisplayName.Equals(object obj) -> bool
 ~override Janus.Core.EmailAddress.Equals(object obj) -> bool
 ~override Janus.Core.ErrorCode.Equals(object obj) -> bool
