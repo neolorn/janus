@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -56,4 +57,44 @@ public sealed class MultipleChoiceSetting<TValue> : Setting<IReadOnlySet<TValue>
             : Result.Failure<IReadOnlySet<TValue>>(
                 Refused(ErrorCodes.ConfigurationValueNotAllowed, "unremovable", string.Join(", ", Unremovable)));
     }
+
+    /// <inheritdoc />
+    private protected override Result<IReadOnlySet<TValue>> Parse(string stored) =>
+        SettingText
+            .List<string>(stored, Malformed())
+            .Match(Members, Result.Failure<IReadOnlySet<TValue>>);
+
+    /// <inheritdoc />
+    private protected override string Render(IReadOnlySet<TValue> value) =>
+        SettingText.OfList(value.Select(member => SettingText.Of(member)));
+
+    private Result<IReadOnlySet<TValue>> Members(IReadOnlyList<string> written)
+    {
+        var read = new HashSet<TValue>();
+
+        foreach (string name in written)
+        {
+            bool found = false;
+
+            foreach (TValue candidate in Allowed)
+            {
+                if (string.Equals(SettingText.Of(candidate), name, StringComparison.Ordinal))
+                {
+                    read.Add(candidate);
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found)
+            {
+                return Result.Failure<IReadOnlySet<TValue>>(Malformed());
+            }
+        }
+
+        return Result.Success<IReadOnlySet<TValue>>(read);
+    }
+
+    private Error Malformed() =>
+        Refused(ErrorCodes.ConfigurationValueNotAllowed, "allowed", string.Join(", ", Allowed));
 }

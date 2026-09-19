@@ -44,6 +44,49 @@ public abstract class Setting<TValue> : Setting
     public abstract Result<TValue> Accept(TValue value);
 
     /// <summary>
+    /// Reads the value from the text the settings table holds for the key.
+    /// </summary>
+    /// <param name="stored">The stored text.</param>
+    /// <returns>
+    /// The value, or the failure naming what the text misses: a form the key does not
+    /// write, or a value a tightened constraint no longer admits.
+    /// </returns>
+    /// <remarks>Implements OPS-CFG-008, OPS-CFG-003.</remarks>
+    public Result<TValue> Read(string stored) =>
+        Parse(stored).Match(Accept, Result.Failure<TValue>);
+
+    /// <summary>
+    /// Writes the value as the settings table holds it.
+    /// </summary>
+    /// <param name="value">The value.</param>
+    /// <returns>The text to store.</returns>
+    /// <remarks>Implements OPS-CFG-008.</remarks>
+    public string Write(TValue value) => Render(value);
+
+    /// <summary>
+    /// Reads the key's own written form, before the constraints are applied to it.
+    /// </summary>
+    /// <param name="stored">The stored text.</param>
+    /// <returns>The value, or the failure where the text is not of the key's type.</returns>
+    private protected abstract Result<TValue> Parse(string stored);
+
+    /// <summary>
+    /// The value as the management application, the audit record and the settings
+    /// table write it.
+    /// </summary>
+    /// <param name="value">The value.</param>
+    /// <returns>The written form.</returns>
+    private protected abstract string Render(TValue value);
+
+    /// <summary>
+    /// The failure a text of the wrong form carries.
+    /// </summary>
+    /// <param name="expected">The form the key writes, as the chapter writes it.</param>
+    /// <returns>The failure.</returns>
+    private protected Result<TValue> NotOfTheType(string expected) =>
+        Result.Failure<TValue>(Refused(ErrorCodes.ConfigurationValueNotAllowed, "allowed", expected));
+
+    /// <summary>
     /// Reads a value the deployment named at startup, where a refused value is a fault
     /// the operator fixes rather than an outcome a caller handles.
     /// </summary>

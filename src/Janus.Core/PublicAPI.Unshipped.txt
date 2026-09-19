@@ -216,6 +216,7 @@ Janus.Core.Configuration.HostingLocation.Outside = 1 -> Janus.Core.Configuration
 Janus.Core.Configuration.IConfigurationStore
 Janus.Core.Configuration.IConfigurationStore.ReadAsync<TValue>(Janus.Core.Configuration.Setting<TValue>! setting, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<TValue>>
 Janus.Core.Configuration.IConfigurationStore.ReadAsync<TValue>(Janus.Core.Configuration.SettingFamily<TValue>! family, string! parameter, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<TValue>>
+Janus.Core.Configuration.IConfigurationStore.WriteAsync<TValue>(Janus.Core.Configuration.Setting<TValue>! setting, TValue value, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<TValue>>
 Janus.Core.Configuration.IntegerListSetting
 Janus.Core.Configuration.IntegerListSetting.Unremovable.get -> System.Collections.Generic.IReadOnlySet<int>!
 Janus.Core.Configuration.IntegerSetting
@@ -233,6 +234,8 @@ Janus.Core.Configuration.Setting.Scope.get -> Janus.Core.Configuration.SettingSc
 Janus.Core.Configuration.Setting<TValue>
 Janus.Core.Configuration.Setting<TValue>.AcceptAtStartup(TValue value) -> TValue
 Janus.Core.Configuration.Setting<TValue>.Default.get -> TValue
+Janus.Core.Configuration.Setting<TValue>.Read(string! stored) -> Janus.Core.Result<TValue>
+Janus.Core.Configuration.Setting<TValue>.Write(TValue value) -> string!
 Janus.Core.Configuration.SettingDirection
 Janus.Core.Configuration.SettingDirection.AnyChange = 2 -> Janus.Core.Configuration.SettingDirection
 Janus.Core.Configuration.SettingDirection.Decrease = 1 -> Janus.Core.Configuration.SettingDirection
@@ -245,6 +248,8 @@ Janus.Core.Configuration.SettingFamily.Scope.get -> Janus.Core.Configuration.Set
 Janus.Core.Configuration.SettingFamily<TValue>
 Janus.Core.Configuration.SettingFamily<TValue>.Default.get -> TValue
 Janus.Core.Configuration.SettingFamily<TValue>.HasDefault.get -> bool
+Janus.Core.Configuration.SettingFamily<TValue>.Read(string! parameter, string! stored) -> Janus.Core.Result<TValue>
+Janus.Core.Configuration.SettingFamily<TValue>.Write(TValue value) -> string!
 Janus.Core.Configuration.SettingScope
 Janus.Core.Configuration.SettingScope.Protected = 1 -> Janus.Core.Configuration.SettingScope
 Janus.Core.Configuration.SettingScope.Runtime = 0 -> Janus.Core.Configuration.SettingScope

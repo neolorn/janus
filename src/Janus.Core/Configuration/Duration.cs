@@ -19,18 +19,19 @@ internal static class Duration
     private const int DaysInAMonth = 31;
 
     /// <summary>
-    /// Reads a duration as chapter 10 section 4 writes it.
+    /// Reads a duration where a text that is not one is an outcome rather than a
+    /// fault: the settings table holds text a tightened key may no longer write.
     /// </summary>
     /// <param name="value">The duration, for example <c>P7Y</c>, <c>P30D</c>, <c>PT15M</c>.</param>
-    /// <returns>The length of time the library holds for it.</returns>
-    /// <exception cref="FormatException">The value is not a duration the section writes.</exception>
-    public static TimeSpan Parse(string value)
+    /// <param name="duration">The length of time, where the text is a duration.</param>
+    /// <returns>Whether the text is a duration the section writes.</returns>
+    public static bool TryParse(string value, out TimeSpan duration)
     {
-        ArgumentException.ThrowIfNullOrEmpty(value);
+        duration = TimeSpan.Zero;
 
-        if (value[0] != 'P')
+        if (string.IsNullOrEmpty(value) || value[0] != 'P')
         {
-            throw Malformed(value);
+            return false;
         }
 
         TimeSpan held = TimeSpan.Zero;
@@ -44,7 +45,7 @@ internal static class Duration
             {
                 if (afterT)
                 {
-                    throw Malformed(value);
+                    return false;
                 }
 
                 afterT = true;
@@ -61,29 +62,50 @@ internal static class Duration
 
             if (index == digits || index == value.Length)
             {
-                throw Malformed(value);
+                return false;
             }
 
             int quantity = int.Parse(value.AsSpan(digits, index - digits), CultureInfo.InvariantCulture);
 
-            held += value[index] switch
+            switch (value[index])
             {
-                'Y' when !afterT => TimeSpan.FromDays(quantity * DaysInAYear),
-                'M' when !afterT => TimeSpan.FromDays(quantity * DaysInAMonth),
-                'D' when !afterT => TimeSpan.FromDays(quantity),
-                'H' when afterT => TimeSpan.FromHours(quantity),
-                'M' when afterT => TimeSpan.FromMinutes(quantity),
-                'S' when afterT => TimeSpan.FromSeconds(quantity),
-                _ => throw Malformed(value),
-            };
+                case 'Y' when !afterT:
+                    held += TimeSpan.FromDays(quantity * DaysInAYear);
+                    break;
+                case 'M' when !afterT:
+                    held += TimeSpan.FromDays(quantity * DaysInAMonth);
+                    break;
+                case 'D' when !afterT:
+                    held += TimeSpan.FromDays(quantity);
+                    break;
+                case 'H' when afterT:
+                    held += TimeSpan.FromHours(quantity);
+                    break;
+                case 'M' when afterT:
+                    held += TimeSpan.FromMinutes(quantity);
+                    break;
+                case 'S' when afterT:
+                    held += TimeSpan.FromSeconds(quantity);
+                    break;
+                default:
+                    return false;
+            }
 
             anyComponent = true;
             index++;
         }
 
-        return anyComponent ? held : throw Malformed(value);
+        duration = held;
+        return anyComponent;
     }
 
-    private static FormatException Malformed(string value) =>
-        new("'" + value + "' is not a duration chapter 10 section 4 writes.");
+    /// <summary>
+    /// Reads a duration as chapter 10 section 4 writes it.
+    /// </summary>
+    /// <param name="value">The duration, for example <c>P7Y</c>, <c>P30D</c>, <c>PT15M</c>.</param>
+    /// <returns>The length of time the library holds for it.</returns>
+    /// <exception cref="FormatException">The value is not a duration the section writes.</exception>
+    public static TimeSpan Parse(string value) => TryParse(value, out TimeSpan duration)
+        ? duration
+        : throw new FormatException("'" + value + "' is not a duration chapter 10 section 4 writes.");
 }

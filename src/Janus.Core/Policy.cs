@@ -73,6 +73,16 @@ public sealed record Policy(
         init => field = WithoutTheEmergencyCredential(value);
     } = WithoutTheEmergencyCredential(LoginFactors);
 
+    /// <summary>
+    /// Whether a catalogue entry may stand among a policy's login factors. The
+    /// emergency credential may not: it satisfies every gate for the session's
+    /// lifetime, so a policy that admitted it would turn the emergency path into an
+    /// ordinary one (AUTH-FACT-002, AUTH-STEP-004).
+    /// </summary>
+    /// <param name="factor">The entry.</param>
+    /// <returns>Whether a policy may name it.</returns>
+    internal static bool Admits(Factor factor) => factor is not Factor.BreakGlass;
+
     // Chapter 10 section 4.1a states aal1 or aal2 for this field. A policy asking for
     // aal3 would state a floor the library cannot reach, and one asking for delegated
     // would state a floor below a single factor.

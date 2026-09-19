@@ -34,4 +34,13 @@ public sealed class TextListSetting : Setting<IReadOnlyList<string>>
             ? Result.Failure<IReadOnlyList<string>>(
                 Refused(ErrorCodes.ConfigurationValueNotAllowed, "minimum", Minimum.ToString(CultureInfo.InvariantCulture)))
             : Result.Success(value);
+
+    /// <inheritdoc />
+    private protected override Result<IReadOnlyList<string>> Parse(string stored) =>
+        SettingText.List<string>(
+            stored,
+            Refused(ErrorCodes.ConfigurationValueNotAllowed, "allowed", "a list of values"));
+
+    /// <inheritdoc />
+    private protected override string Render(IReadOnlyList<string> value) => SettingText.OfList(value);
 }

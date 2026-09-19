@@ -11,6 +11,7 @@ using Janus.Authorization.Model;
 using Janus.Authorization.Resources;
 using Janus.Authorization.Roles;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Janus.Identity.Accounts;
 using Janus.Identity.Audit;
 using Janus.Identity.Identifiers;
@@ -37,6 +38,7 @@ using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Identity.Profiles;
 using Janus.Storage.Privacy.Erasures;
 using Janus.Storage.Privacy.SubjectKeys;
+using Janus.Storage.Settings;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -83,6 +85,8 @@ internal static class StorageRegistration
         services.AddScoped<DataConnections>();
 
         services.AddSingleton<RandomNumberGenerator>(_ => RandomNumberGenerator.Create());
+
+        services.AddScoped<IConfigurationStore, ConfigurationStore>();
 
         services.AddScoped<IAccountStore, AccountStore>();
         services.AddScoped<ISubjectKeyStore, SubjectKeyStore>();

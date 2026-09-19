@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Every runtime-changeable configuration key is now read from the library's own
+  `settings` table, so a value changed anywhere in the deployment is in force for the
+  next read of it without a restart. A key the deployment never wrote reads as its
+  default, a stored value a tightened floor or ceiling no longer admits comes back as
+  a failure naming the constraint, and a key the application may not change is
+  refused whatever the caller asks.
+
 - The organizations a principal belongs to now are read from the database, so a
   policy resolves against live memberships and not against ended ones.
 - Erasing a subject ends every session they hold before the key their fields are

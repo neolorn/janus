@@ -34,4 +34,10 @@ public sealed class DecimalSetting : BoundedSetting<decimal>
 
     private protected override string Render(decimal value) =>
         value.ToString(CultureInfo.InvariantCulture);
+
+    /// <inheritdoc />
+    private protected override Result<decimal> Parse(string stored) =>
+        decimal.TryParse(stored, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal number)
+            ? Result.Success(number)
+            : NotOfTheType("a number");
 }

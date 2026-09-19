@@ -26,6 +26,25 @@ public interface IConfigurationStore
     ValueTask<Result<TValue>> ReadAsync<TValue>(Setting<TValue> setting, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Writes the value in force for a key the application may change, so the next
+    /// read of it anywhere in the deployment sees the change without a restart.
+    /// </summary>
+    /// <typeparam name="TValue">The type of the setting's value.</typeparam>
+    /// <param name="setting">The setting, from <see cref="Settings"/>.</param>
+    /// <param name="value">The value to put in force.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns>
+    /// What was in force before the write, or the failure where the key is one the
+    /// application cannot change (OPS-CFG-004) or the value is one it does not admit.
+    /// </returns>
+    /// <remarks>
+    /// Implements OPS-CFG-008 and OPS-CFG-004. The caller gates, audits and alerts on
+    /// the change; the store only puts it in force, and refuses a protected key
+    /// whatever the caller asks.
+    /// </remarks>
+    ValueTask<Result<TValue>> WriteAsync<TValue>(Setting<TValue> setting, TValue value, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Reads one member of a key that exists once per organization or once per
     /// host-declared category.
     /// </summary>
