@@ -321,6 +321,27 @@ public static class ErrorCodes
     public static ErrorCode WebAuthnUserVerificationRequired { get; } = ErrorCode.Parse("auth.webauthn.userverificationrequired");
 
     /// <summary>
+    /// A progressive delay is in force after repeated failures. Wait the period the
+    /// response states and try again; nothing about the account has changed.
+    /// </summary>
+    /// <remarks>Implements AUTH-ABUSE-001, AUTH-ABUSE-002, chapter 10 section 1.2.</remarks>
+    public static ErrorCode Throttled { get; } = ErrorCode.Parse("auth.throttled");
+
+    /// <summary>
+    /// A named restriction refused the send. The details carry <c>retryAt</c>, the
+    /// earliest time a bucket lifts; wait until then or ask support for credit.
+    /// </summary>
+    /// <remarks>Implements AUTH-ABUSE-004, AUTH-ABUSE-002, chapter 10 section 1.2.</remarks>
+    public static ErrorCode RestrictionExceeded { get; } = ErrorCode.Parse("auth.restriction.exceeded");
+
+    /// <summary>
+    /// A restriction grant, or an edit that loosens a restriction, arrived without a
+    /// written reason. State the reason and submit it again.
+    /// </summary>
+    /// <remarks>Implements AUTH-ABUSE-004, OPS-CFG-002, chapter 10 section 1.2.</remarks>
+    public static ErrorCode RestrictionReasonRequired { get; } = ErrorCode.Parse("auth.restriction.reasonrequired");
+
+    /// <summary>
     /// Permission is absent, on something whose existence is not concealed. Hold the
     /// permission, or ask someone who does.
     /// </summary>
@@ -392,6 +413,28 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements OPS-ALERT-004a, chapter 10 section 1.5.</remarks>
     public static ErrorCode ConfigurationLastDestination { get; } = ErrorCode.Parse("config.value.lastdestination");
+
+    /// <summary>
+    /// A callback carried an unknown correlation reference, or arrived faster than the
+    /// callback rate allows. Call again with the reference the send returned.
+    /// </summary>
+    /// <remarks>Implements INT-GEN-003, AUTH-ABUSE-007, chapter 10 section 1.6.</remarks>
+    public static ErrorCode CallbackRejected { get; } = ErrorCode.Parse("integration.callback.rejected");
+
+    /// <summary>
+    /// Startup: an integration endpoint is not TLS. The details name the integration
+    /// under <c>integration</c> and the setting under <c>key</c>; give it an
+    /// <c>https</c> endpoint.
+    /// </summary>
+    /// <remarks>Implements INT-GEN-001, chapter 10 section 1.6.</remarks>
+    public static ErrorCode EndpointInsecure { get; } = ErrorCode.Parse("integration.endpoint.insecure");
+
+    /// <summary>
+    /// The gateway balance is below the configured floor, so ordinary sends are
+    /// refused. Top the account up; alert-class messages continue meanwhile.
+    /// </summary>
+    /// <remarks>Implements INT-SMS-004, AUTH-ABUSE-006, chapter 10 section 1.6.</remarks>
+    public static ErrorCode SmsBalanceFloor { get; } = ErrorCode.Parse("integration.sms.balancefloor");
 
     /// <summary>
     /// An unhandled fault. The body carries the correlation identifier and nothing

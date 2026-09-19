@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The message catalogue, the mail and text transports, the addresses the deployment
+  calls out to, the recipients its data reaches and the keys a sending restriction
+  counts under are now the host's to declare, and a deployment that declares none of
+  them still starts.
+
 - Every runtime-changeable configuration key is now read from the library's own
   `settings` table, so a value changed anywhere in the deployment is in force for the
   next read of it without a restart. A key the deployment never wrote reads as its
