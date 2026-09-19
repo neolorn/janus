@@ -43,6 +43,25 @@ public sealed class SettingsTests
     }
 
     /// <summary>
+    /// AUTH-SESS-005 AC5: the absolute maximum of a session at the higher tier is a
+    /// day, so forty-eight hours is refused by name rather than clamped.
+    /// </summary>
+    [Fact]
+    public void AUTH_SESS_005_AC5_AnAal2AbsoluteOfFortyEightHoursIsRejected()
+    {
+        Result<TimeSpan> outcome = Settings.SessionAal2Absolute.Accept(TimeSpan.FromHours(48));
+
+        Assert.Equal(
+            ErrorCodes.ConfigurationValueAboveCeiling,
+            outcome.Match(_ => default, failure => failure.Code));
+        Assert.Equal(
+            "P1D",
+            outcome.Match(
+                _ => throw new InvalidOperationException(),
+                failure => failure.Details)["ceiling"].GetString());
+    }
+
+    /// <summary>
     /// OPS-CFG-003 AC1: the failure carries the key and the bound, so the management
     /// application can say which value would be accepted.
     /// </summary>
@@ -100,11 +119,15 @@ public sealed class SettingsTests
     }
 
     /// <summary>
-    /// A list that drops the one algorithm the chapter requires is refused.
+    /// AUTH-FACT-014 AC5: the default allow-list is exactly the three algorithms, in
+    /// the preference order the chapter states, and a list that drops the one it
+    /// holds in place is refused.
     /// </summary>
     [Fact]
-    public void Accept_DroppingTheRequiredAlgorithm_Refused()
+    public void AUTH_FACT_014_AC5_TheAllowListHoldsItsThreeAlgorithmsAndKeepsOne()
     {
+        Assert.Equal([-8, -7, -257], Settings.WebAuthnAlgorithms.Default);
+
         Result<IReadOnlyList<int>> outcome = Settings.WebAuthnAlgorithms.Accept([-8, -257]);
 
         Assert.Equal(
@@ -240,6 +263,21 @@ public sealed class SettingsTests
         Assert.Equal(
             "stepup.enforcement.acme",
             Settings.OrganizationStepUpEnforcement.For("acme").ToString());
+
+    /// <summary>
+    /// Chapter 10 section 4 and the <c>policy.&lt;organization&gt;</c> row: the
+    /// identifier a family key carries is a version 7 value, so the segment begins
+    /// with a digit as often as with a letter.
+    /// </summary>
+    [Fact]
+    public void For_OrganizationIdentifierBeginningWithADigit_NamesTheMembersKey()
+    {
+        var organization = new OrganizationId(new Guid("019bdf22-0000-7000-8000-000000000001"));
+
+        Assert.Equal(
+            "policy.019bdf22-0000-7000-8000-000000000001",
+            Settings.OrganizationPolicy.For(organization.ToString()).ToString());
+    }
 
     private static ErrorCode? Code<TValue>(Result<TValue> outcome) =>
         outcome.Match(_ => (ErrorCode?)null, failure => failure.Code);

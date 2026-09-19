@@ -10,6 +10,130 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The organizations a principal belongs to now are read from the database, so a
+  policy resolves against live memberships and not against ended ones.
+- Erasing a subject ends every session they hold before the key their fields are
+  under is destroyed, so no request survives on a session whose account is gone.
+- The browser-facing pipeline is mounted with one call and protects whatever the
+  host mounts after it: a cross-site state change, a state change without the custom
+  request header, one claiming another origin, and one whose synchronizer token is
+  absent or belongs to another session are each refused before any endpoint runs, and
+  no key, attribute or route excludes an endpoint from any of it. The session and its
+  token are set in two cookies whose attributes no configuration can weaken, strict
+  for the management application and lax elsewhere.
+- Every session carries a synchronizer token of its own, bound to that session and
+  to no other, and reissued whenever the session's secret is. Neither value is ever
+  read back: the record holds only what each fingerprints to.
+- A password is screened against the compromised-password corpus over the range
+  API, which is sent five characters of a hash and never the password or the whole
+  hash. Where the service cannot answer the deployment's offline list answers and
+  the fall back is logged; where neither can, the password is refused rather than
+  accepted unscreened, and so is one judged against a corpus older than the
+  deployment admits. Naming the self-hosted corpus is the whole of switching to it.
+- Sessions, passwords, enrolled credentials, recovery codes and known browsers
+  are stored in PostgreSQL. A session's record carries what it reached and the
+  fingerprint of its cookie, never the cookie, and where it was used from is held
+  under the person's key, so a database dump yields no location and erasure leaves
+  none readable. A code generator's shared secret is held under the same key, and
+  a recovery code is stored as a password is.
+- A second step is second to a password: a code generator or a security key under
+  two-step is refused to an account that holds none, and an account signing in with a
+  passkey alone is offered no second step to enrol. A set of recovery codes is not a
+  second step and stays available either way.
+- A password is set and presented through one path: the length floor that the
+  account's reachable assurance decides, the screening that never silently skips, the
+  hashing, and the silent rehash on the next sign-in after the parameters are raised.
+  A password that matches one of the person's own words only after it was set carries
+  a prompt to change into the sign-in that completes.
+- Raising the assurance floor or the redundancy requirement of a policy gives the
+  accounts already under it a run-up: their sign-ins carry the new requirement and
+  the date it falls due and continue until then, and stop at enrolment afterwards. A
+  run-up of nothing holds them at once, and an account created after the change was
+  created under the new requirement and is held at its first sign-in.
+- The relying party a passkey is bound to is settled when the deployment starts, not
+  at the first enrolment: an identifier that does not sit over every configured
+  origin stops the deployment, and one left unset is derived as the parent domain the
+  origins share rather than taken from the first of them. The related-origins
+  document lists exactly the additional origins configured, and a set of them wider
+  than a browser reads stops the deployment too.
+- A browser can be trusted after a two-factor sign-in, which spares it the second
+  factor and nothing else: the session that follows records only the password, the
+  offer is absent where the policy requires two factors or the password is too short
+  to stand alone, and the trust goes when it lapses, when the account signs out
+  everywhere, when the person removes it from their device list, or after enough
+  failed sign-ins on it in a row.
+- A sign-in to an account that can reach only one factor, from a browser the account
+  has not seen, is held until the person enters a code sent to their primary email;
+  the browser is then remembered and not held again for as long as the deployment
+  says. A sign-in that reached two factors is never held, and the check can be turned
+  off.
+- A step-up gate is answered from the session record and what the account can reach
+  with the credentials it holds, and never from a list of what it has enrolled. Where
+  the session falls short, every combination of the account's own factors that would
+  reach the gate is offered and the person chooses among them; where none would, the
+  answer is to enrol, to report the loss, or that the loss report already made
+  completes at a stated time. A reported loss lowers what an account reaches only
+  once its window has run, an emergency session passes every gate while it lasts, and
+  enrolling a credential costs the lower of what the account reaches and what the new
+  credential itself would contribute.
+- A WebAuthn credential records the relying party it was created under, whether it
+  may be synced and whether it currently is, so a credential left behind by a
+  configuration change is found from the account's own record rather than at a
+  sign-in that fails without explanation. Enrolment refuses an algorithm outside the
+  configured allow-list and a ceremony that verified nobody, asks for no attestation,
+  and a signature counter that fails to advance is refused and audited as the cloned
+  credential it indicates. A second-factor security key can be re-registered as a
+  passkey, which retires the entry it came from.
+- Recovery codes are issued ten at a time, each ten symbols of an alphabet that omits
+  the letters a reader confuses with digits, and are read back leniently: case,
+  spacing and those confusions make no difference to whether a code is accepted. Only
+  hashes are stored, a code is spent on first use, and generating a set retires the
+  previous one whole. The account shows how many remain and its owner is reminded
+  once when a set has gone a long time untouched.
+- Time-based codes run on thirty-second steps at six digits, with a drift tolerance
+  the deployment sets and no code accepted twice: a code whose step has been spent is
+  refused as replayed, so an observer has no window to reuse one in. An enrolment
+  becomes usable only once a valid code has been presented, so a mis-scanned secret
+  locks nobody out, and an enrolment abandoned before that leaves nothing behind.
+- A session is a server-side record every credential derives from, holding the
+  properties an authentication reached and never the factor names that reached them.
+  Ending the record ends the per-application sessions and the tokens standing on it.
+  The browser carries thirty-two drawn bytes and the row holds their fingerprint, so a
+  dump of the table yields no usable session.
+- Session lifetimes follow the assurance the principal's policy requires and never the
+  level a particular sign-in happened to reach, so a customer who signs in with a
+  passkey keeps the customer lifetimes. A new secret is issued whenever a combination
+  is presented and on any privilege change, and the one before it stops working.
+- After an inactivity expiry inside the absolute window, a policy that requires two
+  factors accepts one factor bound to the session secret the browser still holds. The
+  allowance is not offered under the system policy, and a second factor alone, a
+  social credential and an email factor each restore nothing.
+- Authentication policy is resolved from the principal's organization membership and
+  from nothing else: the system policy where there is no membership, the
+  organization's where there is one, and the strictest of several where a principal
+  belongs to more than one organization. An organization may tighten any field and a
+  value that would loosen one below the system default has no effect, whenever it was
+  written.
+- A sign-in link, whichever channel carries it, and an emailed code sign a person in
+  at AAL1 and count for nothing afterwards: neither is a second step, neither passes a
+  step-up gate, and neither restores a session that lapsed. The mailbox or the number
+  behind them is also the recovery channel, so one compromise would otherwise yield
+  both steps.
+- Passwords are held under Argon2id at the parameters the deployment configures, with
+  the parameters carried by each hash, so raising them leaves every stored password
+  verifiable and marks it for a silent rehash. The floor is fifteen characters where
+  the password could sign in alone and ten where it never could, and the shorter floor
+  is reached by holding a second factor rather than by choosing it. There are no
+  composition rules and no scheduled expiry.
+- Every password is screened before it is accepted. Only a five-character hash prefix
+  leaves the deployment and the range that comes back is matched locally, so neither
+  the password nor its full hash is ever sent. A corpus that cannot answer falls back
+  to the offline one and records the degradation; with nothing able to answer the
+  operation is refused rather than accepting a password nothing screened.
+- `ISessions` in `Janus.Core`: an account sees its live sessions with the time of
+  sign-in, the time of last use, the device and a city-level location, ends one of
+  them on its own, or signs out everywhere. An administrator ends one account's
+  sessions, and the emergency operation ends every session in the deployment.
 - `IAccessGate` in `Janus.Core`: the one place a permission is evaluated. A check and a
   list filter are the same rule rendered two ways, an expression a host composes into
   its own LINQ query and a parameterised PostgreSQL fragment a hand-written query
@@ -299,6 +423,12 @@ against the public contract of LIB-API-001.
   processing are generated, because `service.name` and `hosting.environment` are
   named only by a deployment that uses them. A missing declaration now fails with
   `model.startup.declarationmissing` naming the key.
+
+### Fixed
+
+- A per-organization configuration key is accepted whatever the organization
+  identifier begins with. A key such as `policy.<organization>` was refused whenever
+  the identifier began with a digit, which is about half of them.
 
 ### Removed
 

@@ -1,0 +1,62 @@
+using System;
+using Janus.Authentication.Sessions;
+using Microsoft.AspNetCore.Http;
+
+namespace Janus.Hosting.Bff;
+
+/// <summary>
+/// The two cookies a browser carries for a session, written together and cleared
+/// together.
+/// </summary>
+/// <param name="application">Which application this process serves.</param>
+/// <remarks>
+/// Implements BFF-SESS-001, BFF-SESS-002, BFF-SESS-004, BFF-SESS-005, BFF-CSRF-005
+/// and BFF-CSRF-006. The browser receives two opaque values and nothing else: no
+/// token, claim, permission or role name crosses in a cookie, and neither value is
+/// readable from the record, which holds only what each fingerprints to. Writing the
+/// pair again is what rotation looks like at the boundary, and the previous pair
+/// stops working because the record stopped answering to it.
+/// </remarks>
+internal sealed class BrowserSessionCookies(JanusApplication application)
+{
+    /// <summary>
+    /// Writes the pair a newly issued session answers to, replacing whatever the
+    /// browser carried before.
+    /// </summary>
+    /// <param name="response">The response the browser receives.</param>
+    /// <param name="issued">The session just issued.</param>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    public void Write(HttpResponse response, IssuedSession issued)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+        ArgumentNullException.ThrowIfNull(issued);
+
+        response.Cookies.Append(
+            BrowserCookies.Session,
+            issued.Secret.Value,
+            BrowserCookies.Options(application, readableByScript: false));
+
+        response.Cookies.Append(
+            BrowserCookies.Csrf,
+            issued.CsrfToken.Value,
+            BrowserCookies.Options(application, readableByScript: true));
+    }
+
+    /// <summary>
+    /// Clears the pair, which is what a sign-out leaves behind.
+    /// </summary>
+    /// <param name="response">The response the browser receives.</param>
+    /// <exception cref="ArgumentNullException">The response is absent.</exception>
+    public void Clear(HttpResponse response)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+
+        response.Cookies.Delete(
+            BrowserCookies.Session,
+            BrowserCookies.Options(application, readableByScript: false));
+
+        response.Cookies.Delete(
+            BrowserCookies.Csrf,
+            BrowserCookies.Options(application, readableByScript: true));
+    }
+}

@@ -123,6 +123,21 @@ public static class ErrorCodes
     public static ErrorCode StartupUndeclaredDerivationReference { get; } = ErrorCode.Parse("model.derivation.undeclaredreference");
 
     /// <summary>
+    /// Startup: the relying party identifier is not a registrable suffix of a
+    /// configured origin. Name an identifier every origin sits under, or leave it
+    /// unset and let the common parent domain stand.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-010, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupRelyingPartyId { get; } = ErrorCode.Parse("model.startup.rpid");
+
+    /// <summary>
+    /// Startup: the configured origins exceed the five-label limit a browser admits
+    /// in a related-origins allowlist. Serve fewer domains from one relying party.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-012, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupLabelLimit { get; } = ErrorCode.Parse("model.startup.labellimit");
+
+    /// <summary>
     /// The organization named is the administrative one, which is not deletable.
     /// Delete another organization, or none.
     /// </summary>
@@ -185,6 +200,125 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements AUTH-STEP-003, LIB-HOST-004, chapter 10 section 1.2.</remarks>
     public static ErrorCode StepUpUnavailable { get; } = ErrorCode.Parse("auth.stepup.unavailable");
+
+    /// <summary>
+    /// The verification code is past its lifetime. Ask for another, within the sending
+    /// restrictions.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-004, chapter 10 section 1.2.</remarks>
+    public static ErrorCode CodeExpired { get; } = ErrorCode.Parse("auth.code.expired");
+
+    /// <summary>
+    /// The verification code is not the one that was sent. Enter the one from the
+    /// message.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-004, chapter 10 section 1.2.</remarks>
+    public static ErrorCode CodeInvalid { get; } = ErrorCode.Parse("auth.code.invalid");
+
+    /// <summary>
+    /// The code was already consumed inside its own window. Wait for the next one.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-005, chapter 10 section 1.2.</remarks>
+    public static ErrorCode CodeReplayed { get; } = ErrorCode.Parse("auth.code.replayed");
+
+    /// <summary>
+    /// The factor is not one the principal's policy admits, or it proves control of a
+    /// channel and never authenticates. Present one the policy lists.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-002, chapter 10 section 1.2.</remarks>
+    public static ErrorCode FactorNotPermitted { get; } = ErrorCode.Parse("auth.factor.notpermitted");
+
+    /// <summary>
+    /// The factor was presented and refused. Present it again, or present another
+    /// the policy admits.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-001, chapter 10 section 1.2.</remarks>
+    public static ErrorCode FactorRejected { get; } = ErrorCode.Parse("auth.factor.rejected");
+
+    /// <summary>
+    /// Further factors are needed to reach the assurance required. Present one of the
+    /// combinations offered.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-001, chapter 10 section 1.2.</remarks>
+    public static ErrorCode FactorRequired { get; } = ErrorCode.Parse("auth.factor.required");
+
+    /// <summary>
+    /// The password matched one of the sources the deployment rejects on. Choose
+    /// another; length does not excuse a match.
+    /// </summary>
+    /// <remarks>Implements AUTH-PASS-004, chapter 10 section 1.2.</remarks>
+    public static ErrorCode PasswordBlocklisted { get; } = ErrorCode.Parse("auth.password.blocklisted");
+
+    /// <summary>
+    /// The password is below the floor that applies to it. The shorter floor is reached
+    /// by holding a second factor, not by choosing it.
+    /// </summary>
+    /// <remarks>Implements AUTH-PASS-001, chapter 10 section 1.2.</remarks>
+    public static ErrorCode PasswordTooShort { get; } = ErrorCode.Parse("auth.password.tooshort");
+
+    /// <summary>
+    /// No source the deployment screens against could answer, so the password was not
+    /// screened and the operation is refused rather than accepted unscreened. Restore
+    /// a corpus and repeat the operation.
+    /// </summary>
+    /// <remarks>Implements AUTH-PASS-004, chapter 10 section 1.2.</remarks>
+    public static ErrorCode ScreeningUnavailable { get; } = ErrorCode.Parse("auth.screening.unavailable");
+
+    /// <summary>
+    /// The session is past its idle or its absolute limit. The details say whether one
+    /// factor restores it or a full authentication is required.
+    /// </summary>
+    /// <remarks>Implements AUTH-SESS-005, chapter 10 section 1.2.</remarks>
+    public static ErrorCode SessionExpired { get; } = ErrorCode.Parse("auth.session.expired");
+
+    /// <summary>
+    /// The cross-site request forgery token is absent or was rejected. Obtain the
+    /// token the session carries and repeat the request.
+    /// </summary>
+    /// <remarks>Implements AUTH-SESS-007, chapter 10 section 1.2.</remarks>
+    public static ErrorCode SessionCsrfInvalid { get; } = ErrorCode.Parse("auth.session.csrfinvalid");
+
+    /// <summary>
+    /// The sign-in is held until the code sent to the account's primary email is
+    /// entered. A status, not a refusal.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-016, chapter 10 section 1.2.</remarks>
+    public static ErrorCode DeviceVerificationRequired { get; } = ErrorCode.Parse("auth.device.verificationrequired");
+
+    /// <summary>
+    /// The account does not meet a raised requirement and the run-up has elapsed. The
+    /// sign-in stops at enrolment.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-017, chapter 10 section 1.2.</remarks>
+    public static ErrorCode PolicyGraceExpired { get; } = ErrorCode.Parse("auth.policy.graceexpired");
+
+    /// <summary>
+    /// The credential's signature algorithm is outside the allow-list. Enrol an
+    /// authenticator that produces one the deployment admits.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-014, chapter 10 section 1.2.</remarks>
+    public static ErrorCode WebAuthnAlgorithmNotAllowed { get; } = ErrorCode.Parse("auth.webauthn.algorithmnotallowed");
+
+    /// <summary>
+    /// The signature counter moved backwards, which is what a cloned credential looks
+    /// like. Remove the credential and enrol again.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-014, chapter 10 section 1.2.</remarks>
+    public static ErrorCode WebAuthnCounterMismatch { get; } = ErrorCode.Parse("auth.webauthn.countermismatch");
+
+    /// <summary>
+    /// The credential was enrolled under a different relying party identifier. Enrol
+    /// again under the one in force.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-011, chapter 10 section 1.2.</remarks>
+    public static ErrorCode WebAuthnRelyingPartyChanged { get; } = ErrorCode.Parse("auth.webauthn.rpidchanged");
+
+    /// <summary>
+    /// User verification did not occur. Present the credential with the gesture the
+    /// authenticator asks for.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-014, chapter 10 section 1.2.</remarks>
+    public static ErrorCode WebAuthnUserVerificationRequired { get; } = ErrorCode.Parse("auth.webauthn.userverificationrequired");
 
     /// <summary>
     /// Permission is absent, on something whose existence is not concealed. Hold the

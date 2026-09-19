@@ -98,6 +98,41 @@ public sealed class ModelTests
             "audit_records.occurred_at",
             "audit_records.organization",
 
+            // Credentials: the enrolled authenticator of AUTH-FACT-001, the shared secret
+            // of AUTH-FACT-006 under the key, and the WebAuthn columns AUTH-FACT-011 and
+            // AUTH-FACT-012 read.
+            "authenticators.added_at",
+            "authenticators.algorithm",
+            "authenticators.backup_eligible",
+            "authenticators.backup_state",
+            "authenticators.confirmed",
+            "authenticators.counter",
+            "authenticators.credential_id",
+            "authenticators.factor",
+            "authenticators.id",
+            "authenticators.invalidates_at",
+            "authenticators.label",
+            "authenticators.last_used_at",
+            "authenticators.public_key",
+            "authenticators.relying_party",
+            "authenticators.state",
+            "authenticators.subject",
+            "authenticators.totp_consumed_step",
+            "authenticators.totp_secret",
+
+            // Credentials: the browser an account knows (AUTH-FACT-015, AUTH-FACT-016),
+            // held by the fingerprint of its token and never by the token.
+            "devices.consecutive_failures",
+            "devices.created_at",
+            "devices.expires_at",
+            "devices.id",
+            "devices.kind",
+            "devices.label",
+            "devices.last_used_at",
+            "devices.revoked",
+            "devices.subject",
+            "devices.token_fingerprint",
+
             // Standing: the host-side progress of an erasure (IDN-LIFE-003b).
             "erasures.attempts",
             "erasures.reason",
@@ -185,6 +220,13 @@ public sealed class ModelTests
             "organizations.id",
             "organizations.name",
 
+            // Credentials: the password hash of AUTH-PASS-007 and the floor flag
+            // AUTH-PASS-001a says cannot be recomputed from it.
+            "passwords.hash",
+            "passwords.meets_single_factor_floor",
+            "passwords.set_at",
+            "passwords.subject",
+
             // Profile: the photo, in a table of its own (IDN-ATTR-003).
             "profile_photos.enc_image",
             "profile_photos.subject",
@@ -195,6 +237,21 @@ public sealed class ModelTests
             "profiles.enc_display_name",
             "profiles.enc_legal_name",
             "profiles.subject",
+
+            // Credentials: the recovery-code set of AUTH-FACT-008, with the instants the
+            // account shows and the reminder reads.
+            "recovery_code_sets.exported_at",
+            "recovery_code_sets.generated_at",
+            "recovery_code_sets.reminded_at",
+            "recovery_code_sets.subject",
+            "recovery_code_sets.viewed_at",
+
+            // Credentials: the codes of that set, hashed as passwords are, in the order
+            // they were drawn.
+            "recovery_codes.hash",
+            "recovery_codes.ordinal",
+            "recovery_codes.subject",
+            "recovery_codes.used_at",
 
             // Authorization: the host's records as AUTHZ-INHERIT-001 registers them, and
             // the one containing each.
@@ -209,6 +266,32 @@ public sealed class ModelTests
             "role_permissions.permission",
             "role_permissions.role",
             "roles.name",
+
+            // Sessions: the spine of AUTH-SESS-001, what it reached (AUTH-SESS-002), the
+            // fingerprint of its secret (AUTH-SESS-003), and where it was used from with
+            // the place under the key (AUTH-SESS-013).
+            "sessions.absolute_expiry",
+            "sessions.attained",
+            "sessions.attained_at",
+            "sessions.created_at",
+            "sessions.csrf_fingerprint",
+            "sessions.ended_at",
+            "sessions.id",
+            "sessions.idle_expiry",
+            "sessions.last_seen_at",
+            "sessions.last_seen_browser",
+            "sessions.last_seen_os",
+            "sessions.last_seen_place",
+            "sessions.origin_browser",
+            "sessions.origin_os",
+            "sessions.origin_place",
+            "sessions.phishing_resistant",
+            "sessions.phishing_resistant_at",
+            "sessions.satisfies_every_gate",
+            "sessions.secret_fingerprint",
+            "sessions.spine",
+            "sessions.subject",
+            "sessions.type",
 
             // Not an account field: the runtime configuration of OPS-CFG-008.
             "settings.key",

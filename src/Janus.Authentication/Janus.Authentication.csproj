@@ -4,6 +4,11 @@
     <ProjectReference Include="..\Janus.Core\Janus.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Konscious.Security.Cryptography.Argon2" />
+    <PackageReference Include="Otp.NET" />
+  </ItemGroup>
+
   <!-- CONV-CODE-008 AC2: referenced as an analyser, never as a library. -->
   <ItemGroup>
     <ProjectReference Include="..\Janus.Analyzers\Janus.Analyzers.csproj"
@@ -16,6 +21,7 @@
     <InternalsVisibleTo Include="Janus.Storage" />
     <InternalsVisibleTo Include="Janus.Storage.Tests" />
     <InternalsVisibleTo Include="Janus.Hosting" />
+    <InternalsVisibleTo Include="Janus.Hosting.Tests" />
     <InternalsVisibleTo Include="Janus.Cli" />
   </ItemGroup>
 

@@ -42,7 +42,8 @@ public readonly partial record struct ConfigurationKey
     public override string ToString() => _value ?? string.Empty;
 
     // A family key carries the organization identifier or the host's category name as
-    // its last segment (D-151), and those are not confined to letters.
-    [GeneratedRegex("^[a-z][a-z0-9]*(\\.[a-z][a-z0-9-]*)*$", RegexOptions.CultureInvariant)]
+    // its last segment (D-151), and those are not confined to letters: an identifier is
+    // a version 7 value and begins with a digit as often as with a letter.
+    [GeneratedRegex("^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)*$", RegexOptions.CultureInvariant)]
     private static partial Regex Shape();
 }

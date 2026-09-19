@@ -1,5 +1,10 @@
 #nullable enable
+Janus.Hosting.Bff.JanusApplication
+Janus.Hosting.Bff.JanusApplication.Management = 0 -> Janus.Hosting.Bff.JanusApplication
+Janus.Hosting.Bff.JanusApplication.Public = 1 -> Janus.Hosting.Bff.JanusApplication
+Janus.Hosting.Bff.JanusPipeline
 Janus.Hosting.JanusAuthorizationModel
 Janus.Hosting.JanusRegistration
+static Janus.Hosting.Bff.JanusPipeline.UseJanusBrowserProfile(this Microsoft.AspNetCore.Builder.IApplicationBuilder! application) -> Microsoft.AspNetCore.Builder.IApplicationBuilder!
 static Janus.Hosting.JanusAuthorizationModel.MapJanusAuthorization(this Microsoft.EntityFrameworkCore.ModelBuilder! builder) -> Microsoft.EntityFrameworkCore.ModelBuilder!
-static Janus.Hosting.JanusRegistration.AddJanus(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! connectionString, Janus.Core.KeyEncryptionKeys! keyEncryptionKeys, System.ReadOnlyMemory<byte> fingerprintKey, Janus.Core.AuthorizationDeclaration! declaration) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Janus.Hosting.JanusRegistration.AddJanus(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! connectionString, Janus.Core.KeyEncryptionKeys! keyEncryptionKeys, System.ReadOnlyMemory<byte> fingerprintKey, Janus.Core.AuthorizationDeclaration! declaration, Janus.Hosting.Bff.JanusApplication application) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

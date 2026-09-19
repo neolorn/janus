@@ -3,11 +3,15 @@ using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Authentication;
+using Janus.Authentication.Factors;
+using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Identity.Accounts;
 using Janus.Identity.Profiles;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Profiles;
 using Janus.Storage.Privacy.Erasures;
@@ -29,6 +33,10 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
 
     private readonly Deployment _deployment = new(database);
+
+    private SubjectEraser Eraser(JanusDbContext context) => new(
+        context,
+        new SessionStore(context, _deployment.Keys, _deployment.Randomness));
 
     /// <summary>
     /// IDN-LIFE-003b AC4, PRIV-RIGHT-005a: the erasure commits as one thing. Afterwards
@@ -68,7 +76,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await using (var work = new UnitOfWork(erasing))
         {
             await work.BeginAsync(TestContext.Current.CancellationToken);
-            await new SubjectEraser(erasing).EraseAsync(
+            await Eraser(erasing).EraseAsync(
                 subject,
                 ErasureReason.ErasureRequest,
                 Noon,
@@ -225,7 +233,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await using JanusDbContext erasing = database.Context();
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await new SubjectEraser(erasing).EraseAsync(
+            await Eraser(erasing).EraseAsync(
                 subject,
                 ErasureReason.ErasureRequest,
                 Noon,
@@ -328,6 +336,56 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
     private static ErasureStore Store(JanusDbContext context) => new(context);
 
+    /// <summary>
+    /// AUTH-SESS-010 AC3: the subject's sessions end before anything of theirs is
+    /// made unreadable, so no request arrives on one afterwards.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_010_AC3_DeletionEndsSessionsBeforeThePersonalDataGoesAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+
+        await using (JanusDbContext writing = database.Context())
+        {
+            await new SessionStore(writing, _deployment.Keys, _deployment.Randomness).AddAsync(
+                Session.Begin(
+                    SessionId.New(TimeProvider.System),
+                    subject,
+                    new Assurance(AssuranceLevel.Aal1, PhishingResistant: false),
+                    new SessionOrigin(
+                        "198.51.100.7",
+                        new DeviceDescription("Firefox", "Linux"),
+                        null),
+                    Noon,
+                    TimeSpan.FromDays(1),
+                    TimeSpan.FromDays(30),
+                    satisfiesEveryGate: false),
+                OpaqueToken.Draw(_deployment.Randomness).Fingerprint(),
+                OpaqueToken.Draw(_deployment.Randomness).Fingerprint(),
+                TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (JanusDbContext erasing = database.Context())
+        await using (var work = new UnitOfWork(erasing))
+        {
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            await Eraser(erasing).EraseAsync(
+                subject,
+                ErasureReason.ErasureRequest,
+                Noon.AddHours(1),
+                TestContext.Current.CancellationToken);
+            await erasing.SaveChangesAsync(TestContext.Current.CancellationToken);
+            await work.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using JanusDbContext reading = database.Context();
+        SessionRecord ended = await reading.Sessions
+            .SingleAsync(session => session.Subject == subject, TestContext.Current.CancellationToken);
+
+        Assert.Equal(Noon.AddHours(1), ended.EndedAt);
+    }
+
     private async ValueTask<SubjectId> DeletingAccountAsync()
     {
         SubjectId subject = await _deployment.AccountAsync(Noon);
@@ -359,7 +417,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await using var work = new UnitOfWork(erasing);
 
         await work.BeginAsync(TestContext.Current.CancellationToken);
-        await new SubjectEraser(erasing).EraseAsync(
+        await Eraser(erasing).EraseAsync(
             subject,
             reason,
             Noon,

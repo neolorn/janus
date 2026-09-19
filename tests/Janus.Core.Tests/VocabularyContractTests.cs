@@ -160,6 +160,21 @@ public sealed class VocabularyContractTests
     }
 
     /// <summary>
+    /// LIB-API-001 AC2: the session types of chapter 10 section 5.2, the
+    /// authenticator states of section 5.3a and the reauthentication kinds of section
+    /// 1.2, which a session record, a credential row and an expiry each carry.
+    /// </summary>
+    [Fact]
+    public void LIB_API_001_AC2_TheSessionVocabulariesAreTheContract()
+    {
+        Assert.Equal(["auth", "oidc-token", "per-app"], WireNames<SessionType>());
+        Assert.Equal(["active", "invalidated", "suspended"], WireNames<AuthenticatorState>());
+        Assert.Equal(["full", "single-factor"], WireNames<ReauthenticationKind>());
+        Assert.Equal(["remembered", "trusted"], WireNames<DeviceKind>());
+        Assert.Equal(["credentialRedundancy", "requiredAssurance"], WireNames<PolicyField>());
+    }
+
+    /// <summary>
     /// LIB-API-001 AC2: the alert conditions of chapter 10 section 5.23, one per
     /// OPS-ALERT-001 row, which an alert carries and deduplicates on.
     /// </summary>
@@ -247,6 +262,11 @@ public sealed class VocabularyContractTests
             typeof(ErasureStatus),
             typeof(ErasureReason),
             typeof(TakedownTrigger),
+            typeof(SessionType),
+            typeof(AuthenticatorState),
+            typeof(ReauthenticationKind),
+            typeof(DeviceKind),
+            typeof(PolicyField),
         ];
 
         foreach (Type vocabulary in vocabularies)

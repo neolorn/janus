@@ -24,6 +24,378 @@ partial class JanusDbContextModelSnapshot : ModelSnapshot
 
         NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+        modelBuilder.Entity("Janus.Storage.Authentication.Factors.AuthenticatorRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<DateTimeOffset>("AddedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("added_at");
+
+                b.Property<int?>("Algorithm")
+                    .HasColumnType("integer")
+                    .HasColumnName("algorithm");
+
+                b.Property<bool?>("BackupEligible")
+                    .HasColumnType("boolean")
+                    .HasColumnName("backup_eligible");
+
+                b.Property<bool?>("BackupState")
+                    .HasColumnType("boolean")
+                    .HasColumnName("backup_state");
+
+                b.Property<bool>("Confirmed")
+                    .HasColumnType("boolean")
+                    .HasColumnName("confirmed");
+
+                b.Property<long?>("Counter")
+                    .HasColumnType("bigint")
+                    .HasColumnName("counter");
+
+                b.Property<byte[]>("CredentialId")
+                    .HasColumnType("bytea")
+                    .HasColumnName("credential_id");
+
+                b.Property<string>("Factor")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("factor");
+
+                b.Property<DateTimeOffset?>("InvalidatesAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("invalidates_at");
+
+                b.Property<string>("Label")
+                    .IsRequired()
+                    .HasMaxLength(64)
+                    .HasColumnType("character varying(64)")
+                    .HasColumnName("label");
+
+                b.Property<DateTimeOffset?>("LastUsedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("last_used_at");
+
+                b.Property<byte[]>("PublicKey")
+                    .HasColumnType("bytea")
+                    .HasColumnName("public_key");
+
+                b.Property<string>("RelyingParty")
+                    .HasColumnType("text")
+                    .HasColumnName("relying_party");
+
+                b.Property<string>("State")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("state");
+
+                b.Property<Guid>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
+
+                b.Property<long?>("TotpConsumedStep")
+                    .HasColumnType("bigint")
+                    .HasColumnName("totp_consumed_step");
+
+                b.Property<byte[]>("TotpSecret")
+                    .HasColumnType("bytea")
+                    .HasColumnName("totp_secret");
+
+                b.HasKey("Id")
+                    .HasName("pk_authenticators");
+
+                b.HasIndex("CredentialId")
+                    .IsUnique()
+                    .HasDatabaseName("ux_authenticators_credential_id")
+                    .HasFilter("credential_id IS NOT NULL");
+
+                b.HasIndex("Subject", "Factor", "Label")
+                    .IsUnique()
+                    .HasDatabaseName("ux_authenticators_label");
+
+                b.ToTable("authenticators", "janus", t =>
+                    {
+                        t.HasCheckConstraint("ck_authenticators_factor", "factor IN ('apple', 'breakGlass', 'emailCode', 'emailLink', 'google', 'passkey', 'password', 'phoneCode', 'phoneLink', 'recoveryCodes', 'securityKey', 'totp')");
+
+                        t.HasCheckConstraint("ck_authenticators_invalidates_at", "invalidates_at IS NULL OR state IN ('suspended')");
+
+                        t.HasCheckConstraint("ck_authenticators_state", "state IN ('active', 'invalidated', 'suspended')");
+
+                        t.HasCheckConstraint("ck_authenticators_webauthn", "(credential_id IS NULL) = (public_key IS NULL) AND (credential_id IS NULL) = (algorithm IS NULL) AND (credential_id IS NULL) = (relying_party IS NULL) AND (credential_id IS NULL) = (backup_eligible IS NULL) AND (credential_id IS NULL) = (backup_state IS NULL)");
+                    });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Factors.DeviceRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<int>("ConsecutiveFailures")
+                    .HasColumnType("integer")
+                    .HasColumnName("consecutive_failures");
+
+                b.Property<DateTimeOffset>("CreatedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("created_at");
+
+                b.Property<DateTimeOffset>("ExpiresAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("expires_at");
+
+                b.Property<string>("Kind")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("kind");
+
+                b.Property<string>("Label")
+                    .IsRequired()
+                    .HasMaxLength(64)
+                    .HasColumnType("character varying(64)")
+                    .HasColumnName("label");
+
+                b.Property<DateTimeOffset>("LastUsedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("last_used_at");
+
+                b.Property<bool>("Revoked")
+                    .HasColumnType("boolean")
+                    .HasColumnName("revoked");
+
+                b.Property<Guid>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
+
+                b.Property<byte[]>("TokenFingerprint")
+                    .IsRequired()
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("token_fingerprint");
+
+                b.HasKey("Id")
+                    .HasName("pk_devices");
+
+                b.HasIndex("Subject")
+                    .HasDatabaseName("ix_devices_subject");
+
+                b.HasIndex("TokenFingerprint")
+                    .IsUnique()
+                    .HasDatabaseName("ux_devices_token_fingerprint");
+
+                b.ToTable("devices", "janus", t =>
+                    {
+                        t.HasCheckConstraint("ck_devices_kind", "kind IN ('remembered', 'trusted')");
+                    });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Factors.RecoveryCodeRecord", b =>
+            {
+                b.Property<Guid>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
+
+                b.Property<int>("Ordinal")
+                    .HasColumnType("integer")
+                    .HasColumnName("ordinal");
+
+                b.Property<string>("Hash")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("hash");
+
+                b.Property<DateTimeOffset?>("UsedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("used_at");
+
+                b.HasKey("Subject", "Ordinal")
+                    .HasName("pk_recovery_codes");
+
+                b.ToTable("recovery_codes", "janus");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Factors.RecoveryCodeSetRecord", b =>
+            {
+                b.Property<Guid>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
+
+                b.Property<DateTimeOffset?>("ExportedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("exported_at");
+
+                b.Property<DateTimeOffset>("GeneratedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("generated_at");
+
+                b.Property<DateTimeOffset?>("RemindedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("reminded_at");
+
+                b.Property<DateTimeOffset?>("ViewedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("viewed_at");
+
+                b.HasKey("Subject")
+                    .HasName("pk_recovery_code_sets");
+
+                b.ToTable("recovery_code_sets", "janus");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Passwords.PasswordRecord", b =>
+            {
+                b.Property<Guid>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
+
+                b.Property<string>("Hash")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("hash");
+
+                b.Property<bool>("MeetsSingleFactorFloor")
+                    .HasColumnType("boolean")
+                    .HasColumnName("meets_single_factor_floor");
+
+                b.Property<DateTimeOffset>("SetAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("set_at");
+
+                b.HasKey("Subject")
+                    .HasName("pk_passwords");
+
+                b.ToTable("passwords", "janus");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Sessions.SessionRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<DateTimeOffset>("AbsoluteExpiry")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("absolute_expiry");
+
+                b.Property<string>("Attained")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("attained");
+
+                b.Property<DateTimeOffset>("AttainedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("attained_at");
+
+                b.Property<DateTimeOffset>("CreatedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("created_at");
+
+                b.Property<byte[]>("CsrfFingerprint")
+                    .IsRequired()
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("csrf_fingerprint");
+
+                b.Property<DateTimeOffset?>("EndedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("ended_at");
+
+                b.Property<DateTimeOffset>("IdleExpiry")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("idle_expiry");
+
+                b.Property<DateTimeOffset>("LastSeenAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("last_seen_at");
+
+                b.Property<string>("LastSeenBrowser")
+                    .IsRequired()
+                    .HasMaxLength(64)
+                    .HasColumnType("character varying(64)")
+                    .HasColumnName("last_seen_browser");
+
+                b.Property<string>("LastSeenOs")
+                    .IsRequired()
+                    .HasMaxLength(64)
+                    .HasColumnType("character varying(64)")
+                    .HasColumnName("last_seen_os");
+
+                b.Property<byte[]>("LastSeenPlace")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("last_seen_place");
+
+                b.Property<string>("OriginBrowser")
+                    .IsRequired()
+                    .HasMaxLength(64)
+                    .HasColumnType("character varying(64)")
+                    .HasColumnName("origin_browser");
+
+                b.Property<string>("OriginOs")
+                    .IsRequired()
+                    .HasMaxLength(64)
+                    .HasColumnType("character varying(64)")
+                    .HasColumnName("origin_os");
+
+                b.Property<byte[]>("OriginPlace")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("origin_place");
+
+                b.Property<bool>("PhishingResistant")
+                    .HasColumnType("boolean")
+                    .HasColumnName("phishing_resistant");
+
+                b.Property<DateTimeOffset?>("PhishingResistantAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("phishing_resistant_at");
+
+                b.Property<bool>("SatisfiesEveryGate")
+                    .HasColumnType("boolean")
+                    .HasColumnName("satisfies_every_gate");
+
+                b.Property<byte[]>("SecretFingerprint")
+                    .IsRequired()
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("secret_fingerprint");
+
+                b.Property<Guid>("Spine")
+                    .HasColumnType("uuid")
+                    .HasColumnName("spine");
+
+                b.Property<Guid>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
+
+                b.Property<string>("Type")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("type");
+
+                b.HasKey("Id")
+                    .HasName("pk_sessions");
+
+                b.HasIndex("SecretFingerprint")
+                    .IsUnique()
+                    .HasDatabaseName("ux_sessions_secret_fingerprint");
+
+                b.HasIndex("Spine")
+                    .HasDatabaseName("ix_sessions_spine");
+
+                b.HasIndex("Subject", "EndedAt")
+                    .HasDatabaseName("ix_sessions_subject");
+
+                b.ToTable("sessions", "janus", t =>
+                    {
+                        t.HasCheckConstraint("ck_sessions_attained", "attained IN ('aal1', 'aal2', 'aal3', 'delegated')");
+
+                        t.HasCheckConstraint("ck_sessions_phishing_resistant", "phishing_resistant = (phishing_resistant_at IS NOT NULL)");
+
+                        t.HasCheckConstraint("ck_sessions_type", "type IN ('auth', 'oidc-token', 'per-app')");
+                    });
+            });
+
         modelBuilder.Entity("Janus.Storage.Authorization.Grants.GrantRecord", b =>
             {
                 b.Property<Guid>("Id")
@@ -773,6 +1145,66 @@ partial class JanusDbContextModelSnapshot : ModelSnapshot
                     .HasName("pk_settings");
 
                 b.ToTable("settings", "janus");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Factors.AuthenticatorRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Subject")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_authenticators_subject");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Factors.DeviceRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Subject")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_devices_subject");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Factors.RecoveryCodeRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Authentication.Factors.RecoveryCodeSetRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Subject")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired()
+                    .HasConstraintName("fk_recovery_codes_set");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Factors.RecoveryCodeSetRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
+                    .WithOne()
+                    .HasForeignKey("Janus.Storage.Authentication.Factors.RecoveryCodeSetRecord", "Subject")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_recovery_code_sets_subject");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Passwords.PasswordRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
+                    .WithOne()
+                    .HasForeignKey("Janus.Storage.Authentication.Passwords.PasswordRecord", "Subject")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_passwords_subject");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Sessions.SessionRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Subject")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_sessions_subject");
             });
 
         modelBuilder.Entity("Janus.Storage.Authorization.Grants.GrantRecord", b =>
