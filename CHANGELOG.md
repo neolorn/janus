@@ -69,6 +69,10 @@ against the public contract of LIB-API-001.
   type with no purpose, a purpose whose basis needs an assessment and names none, and a
   derivation from a relationship that was never declared each stop the deployment with
   their own code.
+- The two checks the declaration alone cannot decide run as the deployment starts and
+  before it serves a request: a role someone wrote allowing a permission the model does
+  not declare, and a derivation naming a column no index reaches, each stop the process
+  with their own code.
 - The built model is written to `model.json` in one order, so two runs of one
   configuration produce the same bytes and a change to the model is a diff in review.
 - `Permission` and `Permissions` in `Janus.Core`: a permission is a lowercase

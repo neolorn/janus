@@ -1,5 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- AUTHZ-MODEL-004, D-160: the hosted service and the middleware pipeline are the
+       shared framework's, which is a reference and not a package (CONV-DESIGN-008). -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Janus.Core\Janus.Core.csproj" />
     <ProjectReference Include="..\Janus.Identity\Janus.Identity.csproj" />

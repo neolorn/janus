@@ -103,7 +103,12 @@ public sealed class HostFixture : IAsyncLifetime
         GC.SuppressFinalize(this);
     }
 
-    private static AuthorizationDeclaration Declaration() => new AuthorizationDeclarationBuilder()
+    /// <summary>
+    /// What this deployment declares about its own domain, which a test registering a
+    /// second collection over the same deployment declares in turn.
+    /// </summary>
+    /// <returns>The declaration.</returns>
+    internal static AuthorizationDeclaration Declaration() => new AuthorizationDeclarationBuilder()
         .LawfulBasis(new LawfulBasisDeclaration(
             "contract",
             IsConsent: false,

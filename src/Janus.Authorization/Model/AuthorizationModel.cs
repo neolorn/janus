@@ -461,7 +461,9 @@ internal sealed class AuthorizationModel
         }
     }
 
-    private static StartupException Refused(ErrorCode code, string name, string value, string why) =>
+    // What a refusal of the model reads as, wherever it is raised: the value at fault,
+    // why it is at fault, and the code of `10` section 1.5 that names the condition.
+    internal static StartupException Refused(ErrorCode code, string name, string value, string why) =>
         new(
             "The authorization model is refused: " + value + ", because " + why + ".",
             Error.From(code, name, JsonSerializer.SerializeToElement(value)));

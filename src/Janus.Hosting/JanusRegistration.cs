@@ -5,6 +5,7 @@ using Janus.Core;
 using Janus.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 
 namespace Janus.Hosting;
 
@@ -66,6 +67,12 @@ public static class JanusRegistration
 
         services.AddScoped<Derivations>();
         services.AddScoped<IAccessGate, AccessGate>();
+        services.AddScoped<ModelValidation>();
+
+        // AUTHZ-MODEL-004 AC2 (D-160): what a hosted service starts before is what was
+        // registered after it, and the web server is one, so the checks that read the
+        // database go at the head of the collection.
+        services.Insert(0, ServiceDescriptor.Singleton<IHostedService, ModelValidationService>());
 
         return services;
     }
