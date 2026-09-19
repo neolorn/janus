@@ -36,6 +36,7 @@ area**, published as a single package.
 | `Janus.Hosting` | Endpoints, middleware, wiring, the hosted background worker (INF-BG-001), the default mail and SMS transports and the mail-server adapter (chapter `05`, LIB-EXT-001 defaults) | all |
 | `Janus.Conformance` | The conformance suite a host runs (LIB-TEST-001); the one further project with public types, shipped as its own package | Core, Hosting |
 | `Janus.Analyzers` | The Roslyn analysers the gates rely on (CONV-CODE-008); targets `netstandard2.0` as analysers must, the one exemption to CONV-SETUP-001 AC1 | nothing (D-149) |
+| `tools/Janus.UnicodeTables` | The generator of the Unicode tables `Janus.Core` carries (IDN-ACCT-004, D-154): a console project outside the package, with the Unicode Character Database files of the pinned version vendored beside it under their licence. Its output is checked in; a gate regenerates and diffs | nothing |
 | `Janus.Cli` | Bootstrap and key rotation | Core, Storage, Identity, Authentication — it creates the first organization, administrator, enrolment link and the credential-less `emergency` account; **never the break-glass credential** (OPS-BOOT-001, D-133); it also carries the resumable key-encryption-key rotation of OPS-SEC-003, run under the maintenance credential (D-147) |
 
 Dependencies point **inward toward Core**. Nothing points outward. Storage is the one
@@ -157,7 +158,7 @@ and no others; any further deviation is a specification defect, not a local supp
 |---|---|---|---|
 | CA1812 (uninstantiated internal class) | none | source projects | every service is `internal sealed` and constructed by dependency injection (CONV-DESIGN-002) |
 | CA2007 (`ConfigureAwait`) | none | test projects, `Janus.Hosting`, `Janus.Cli` | required of library code only (CONV-CODE-002) |
-| CA1515 (make public types internal) | none | `Janus.Core`, `Janus.Hosting`, `Janus.Conformance` | these projects hold the contract |
+| CA1515 (make public types internal) | none | `Janus.Core`, `Janus.Hosting`, `Janus.Conformance`, test projects | these projects hold the contract; test fixtures and classes are instantiated by the test framework and must be public (D-154) |
 | CA1062 (validate public arguments) | none | all | guards are placed by CONV-CODE-006, not on every public member |
 | CA1707 (underscores in identifiers) | none | test projects | the test naming scheme of CONV-TEST-007 uses underscores by design (D-150) |
 
@@ -1002,6 +1003,7 @@ With one developer, the checks a reviewer would perform are mechanical.
 | `InternalsVisibleTo` allow-list | CONV-LAYOUT-002 |
 | Acceptance-criterion test names present for each item of the phase | CONV-TEST-007 |
 | `Janus.Analyzers` rules JAN0001 to JAN0006 | CONV-CODE-008 |
+| Unicode tables regenerate without a diff | IDN-ACCT-004, D-154 |
 
 **Acceptance criteria**
 1. Each runs on pull request.

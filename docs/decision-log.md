@@ -6288,7 +6288,9 @@ alone.
 - *NFC plus invariant lowercase.* Cheapest with .NET built-ins, but leaves fullwidth
   and compatibility lookalikes distinct — a weaker answer to the stated problem
 - *PRECIS `UsernameCaseMapped` (RFC 8265).* Well specified, NFC-based, forbids
-  rather than folds, and adds a dependency for little gain
+  rather than folds, and adds a dependency for little gain. *Rejected as the canonical
+  form only; D-146 later adopted PRECIS as the validation profile for usernames and
+  display names, and D-154 states that both hold*
 - *Leave it to the builder.* Costs nothing now; risks the recompute-everything
   scenario later
 
@@ -8148,6 +8150,43 @@ REG-PROF-001, 002, REG-PREF-001, REG-SESS-005.
 
 ---
 
+## D-154 — Phase 1 questions: the library carries its own Unicode tables
+
+**Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-115, D-149 (layout, `.editorconfig` table, gates) · **Extends:** D-153
+
+**TL;DR.** The identifier rules name three Unicode operations the base class library
+does not have. The right answer is not a package and not a weaker form: the library
+generates its own tables from the Unicode Character Database at a pinned version and
+ships them. Two smaller questions are settled alongside.
+
+1. **`NFKC_Casefold`, PRECIS and `Script_Extensions` come from generated tables.**
+   `string.Normalize` follows whatever ICU the machine has, so the version pin
+   IDN-ACCT-004 requires (and the fingerprint record depends on) was never real with
+   built-ins. No maintained .NET package implements PRECIS or `NFKC_Casefold`, and a
+   dependency for the operation that every fingerprint is derived from is the wrong
+   place to accept churn. A tool project outside the package, `tools/Janus.UnicodeTables`,
+   reads the vendored UCD files of Unicode 17.0.0 and writes the tables into
+   `Janus.Core`; a gate regenerates and fails on a diff. The library's NFC and NFKC are
+   its own, so the pinned version governs every step. Public types `CanonicalForm`,
+   `Precis`, `ScriptMixing` in `Janus.Core`, since two areas canonicalise. This is a
+   real piece of work (UAX #15 normalisation, RFC 8264 classes, the bidi rule of RFC
+   5893 for right-to-left usernames, UTS #39 §5.1), and it is the correct one.
+2. **PRECIS and D-115 are not in conflict.** D-115 rejected PRECIS as the canonical
+   comparison form for emails and names; D-146 adopted it as the validation profile
+   for usernames and display names. `NFKC_Casefold` remains the comparison key of every
+   identifier; PRECIS says what a username or display name must look like to be
+   accepted. D-115's rejected item now says so.
+3. **CA1515 is off in test projects.** Fixtures and test classes are instantiated by the
+   framework and must be public; a justified suppression on every fixture is noise, and
+   CONV-SETUP-004 says a recurring deviation is a specification defect, which this was.
+4. **OPS-DATA-002's visibility test** lives in `Janus.Storage.Tests` and uses an entity
+   Storage itself owns (a settings row), so no `InternalsVisibleTo` grant changes.
+
+**Propagated to:** `01` IDN-ACCT-004 · `06` OPS-DATA-002 · `08` CONV-LAYOUT-001,
+CONV-SETUP-004, CONV-GATE-001 · D-115 (rejected item annotated).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -8311,6 +8350,7 @@ REG-PROF-001, 002, REG-PREF-001, REG-SESS-005.
 | Phase 0 questions, second stop: gate names, factor identifiers, enum values, key types, families | D-151 |
 | Phase 0 questions, third stop: bytes, maximums, signals, floors, years, direction | D-152 |
 | Word-shaped values: one pass over every chapter; alert thresholds as keys, time zone, materiality, userinfo claims, host challenge, offline lists | D-153 |
+| Phase 1 questions: generated Unicode tables at a pinned version, PRECIS as validation, CA1515 in tests, the visibility test | D-154 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

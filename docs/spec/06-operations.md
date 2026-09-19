@@ -45,7 +45,10 @@ code.
 1. A hand-written query inside a transaction sees uncommitted writes from that
    transaction.
 2. Direct connection retrieval is unreachable from the service layer.
-3. A test asserts transaction visibility across both tools.
+3. A test asserts transaction visibility across both tools: it lives in
+   `Janus.Storage.Tests` and uses an entity `Janus.Storage` itself owns (a settings
+   row), written through the context and read through the accessor inside one
+   transaction (D-154).
 
 ---
 
