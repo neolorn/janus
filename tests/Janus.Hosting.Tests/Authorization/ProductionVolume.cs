@@ -111,6 +111,21 @@ internal sealed class ProductionVolume(HostFixture fixture)
     private static string Identifier(string kind, int at) =>
         string.Create(CultureInfo.InvariantCulture, $"{kind}-{at:D7}");
 
+    // A million rows go in while the rest of the suite holds its own containers, so
+    // the wait is the deployment's and not the thirty seconds a command has by default.
+    private static async Task<NpgsqlBinaryImporter> ImporterAsync(
+        NpgsqlConnection connection,
+        string copy,
+        CancellationToken cancellationToken)
+    {
+        NpgsqlBinaryImporter importer =
+            await connection.BeginBinaryImportAsync(copy, cancellationToken);
+
+        importer.Timeout = TimeSpan.FromSeconds(600);
+
+        return importer;
+    }
+
     private async Task FoundationAsync(
         NpgsqlConnection connection,
         CancellationToken cancellationToken)
@@ -138,7 +153,8 @@ internal sealed class ProductionVolume(HostFixture fixture)
         NpgsqlConnection connection,
         CancellationToken cancellationToken)
     {
-        await using NpgsqlBinaryImporter accounts = await connection.BeginBinaryImportAsync(
+        await using NpgsqlBinaryImporter accounts = await ImporterAsync(
+            connection,
             "COPY janus.accounts (subject, created_at, state) FROM STDIN (FORMAT BINARY)",
             cancellationToken);
 
@@ -157,7 +173,8 @@ internal sealed class ProductionVolume(HostFixture fixture)
 
     private async Task GroupsAsync(NpgsqlConnection connection, CancellationToken cancellationToken)
     {
-        await using (NpgsqlBinaryImporter groups = await connection.BeginBinaryImportAsync(
+        await using (NpgsqlBinaryImporter groups = await ImporterAsync(
+            connection,
             "COPY janus.groups (id, organization, name) FROM STDIN (FORMAT BINARY)",
             cancellationToken))
         {
@@ -176,7 +193,8 @@ internal sealed class ProductionVolume(HostFixture fixture)
 
         // Every account is in one group, each group holding ten of them, which is the
         // shape the closure is read by (AUTHZ-GROUP-002).
-        await using (NpgsqlBinaryImporter members = await connection.BeginBinaryImportAsync(
+        await using (NpgsqlBinaryImporter members = await ImporterAsync(
+            connection,
             "COPY janus.group_members (group_id, member_type, member_id) FROM STDIN (FORMAT BINARY)",
             cancellationToken))
         {
@@ -191,7 +209,8 @@ internal sealed class ProductionVolume(HostFixture fixture)
             await members.CompleteAsync(cancellationToken);
         }
 
-        await using NpgsqlBinaryImporter closure = await connection.BeginBinaryImportAsync(
+        await using NpgsqlBinaryImporter closure = await ImporterAsync(
+            connection,
             "COPY janus.group_closure (group_id, member_type, member_id, depth) FROM STDIN (FORMAT BINARY)",
             cancellationToken);
 
@@ -209,7 +228,8 @@ internal sealed class ProductionVolume(HostFixture fixture)
 
     private async Task RecordsAsync(NpgsqlConnection connection, CancellationToken cancellationToken)
     {
-        await using (NpgsqlBinaryImporter resources = await connection.BeginBinaryImportAsync(
+        await using (NpgsqlBinaryImporter resources = await ImporterAsync(
+            connection,
             "COPY janus.resources (resource_type, resource_id, organization, contained_in_type, "
             + "contained_in_id) FROM STDIN (FORMAT BINARY)",
             cancellationToken))
@@ -246,7 +266,8 @@ internal sealed class ProductionVolume(HostFixture fixture)
             await resources.CompleteAsync(cancellationToken);
         }
 
-        await using (NpgsqlBinaryImporter ancestry = await connection.BeginBinaryImportAsync(
+        await using (NpgsqlBinaryImporter ancestry = await ImporterAsync(
+            connection,
             "COPY janus.ancestry (resource_type, resource_id, ancestor_type, ancestor_id, depth, "
             + "organization) FROM STDIN (FORMAT BINARY)",
             cancellationToken))
@@ -273,7 +294,8 @@ internal sealed class ProductionVolume(HostFixture fixture)
             await ancestry.CompleteAsync(cancellationToken);
         }
 
-        await using NpgsqlBinaryImporter documents = await connection.BeginBinaryImportAsync(
+        await using NpgsqlBinaryImporter documents = await ImporterAsync(
+            connection,
             "COPY host.documents (id, title) FROM STDIN (FORMAT BINARY)",
             cancellationToken);
 
@@ -289,7 +311,8 @@ internal sealed class ProductionVolume(HostFixture fixture)
 
     private async Task GrantsAsync(NpgsqlConnection connection, CancellationToken cancellationToken)
     {
-        await using NpgsqlBinaryImporter grants = await connection.BeginBinaryImportAsync(
+        await using NpgsqlBinaryImporter grants = await ImporterAsync(
+            connection,
             "COPY janus.grants (id, subject_type, subject_id, role, organization, resource_type, "
             + "resource_id, deny, kind, expires_at, granted_by, granted_at, reason, revoked_by, "
             + "revoked_at, revocation_reason) FROM STDIN (FORMAT BINARY)",
