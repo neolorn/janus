@@ -1,0 +1,258 @@
+using System;
+using System.Collections.Generic;
+using Janus.Core;
+using Janus.Identity.Identifiers;
+using Xunit;
+
+namespace Janus.Identity.Tests.Identifiers;
+
+/// <summary>
+/// The rules that hold across an account's identifiers: one primary per kind, how many
+/// of a kind an account may hold, and who a security notice reaches
+/// (REG-IDENT-001, REG-IDENT-002, REG-IDENT-005).
+/// </summary>
+[Trait("kind", "unit")]
+public sealed class IdentifierSetTests
+{
+    private static readonly SubjectId Ahmed = new(Guid.Parse("11111111-1111-4111-8111-111111111111"));
+    private static readonly SubjectId Mona = new(Guid.Parse("22222222-2222-4222-8222-222222222222"));
+    private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
+
+    /// <summary>
+    /// REG-IDENT-002 AC1: a kind with no verified identifier has no primary, and the
+    /// first of the kind to verify takes the role.
+    /// </summary>
+    [Fact]
+    public void REG_IDENT_002_AC1_TheFirstVerifiedOfAKindBecomesItsPrimary()
+    {
+        IdentifierSet set = Empty();
+        Identifier first = Email(1, "ahmed@example.com");
+
+        set.Add(first, maximum: 10);
+
+        Assert.Null(set.Primary(IdentifierKind.Email));
+
+        set.Verify(first.Id, Noon);
+
+        Assert.Same(first, set.Primary(IdentifierKind.Email));
+    }
+
+    /// <summary>
+    /// REG-IDENT-002 AC1: exactly one primary exists per kind, so a second verified
+    /// identifier does not take the role and promoting it displaces the first.
+    /// </summary>
+    [Fact]
+    public void REG_IDENT_002_AC1_ExactlyOnePrimaryExistsPerKind()
+    {
+        IdentifierSet set = Empty();
+        Identifier first = Email(1, "ahmed@example.com");
+        Identifier second = Email(2, "ahmed@example.org");
+
+        set.Add(first, maximum: 10);
+        set.Add(second, maximum: 10);
+        set.Verify(first.Id, Noon);
+        set.Verify(second.Id, Noon);
+
+        Assert.True(first.IsPrimary);
+        Assert.False(second.IsPrimary);
+
+        set.MakePrimary(second.Id);
+
+        Assert.False(first.IsPrimary);
+        Assert.True(second.IsPrimary);
+    }
+
+    /// <summary>
+    /// REG-IDENT-002 AC1: each kind has its own primary, so verifying a phone leaves
+    /// the primary email where it was.
+    /// </summary>
+    [Fact]
+    public void REG_IDENT_002_AC1_EachKindCarriesItsOwnPrimary()
+    {
+        IdentifierSet set = Empty();
+        Identifier email = Email(1, "ahmed@example.com");
+        Identifier phone = Phone(2, "+201001234567");
+
+        set.Add(email, maximum: 10);
+        set.Add(phone, maximum: 10);
+        set.Verify(email.Id, Noon);
+        set.Verify(phone.Id, Noon);
+
+        Assert.Same(email, set.Primary(IdentifierKind.Email));
+        Assert.Same(phone, set.Primary(IdentifierKind.Phone));
+    }
+
+    /// <summary>
+    /// REG-IDENT-005 AC2: an identifier nobody has confirmed is not made primary.
+    /// </summary>
+    [Fact]
+    public void REG_IDENT_005_AC2_AnUnverifiedIdentifierIsNotMadePrimary()
+    {
+        IdentifierSet set = Empty();
+        Identifier email = Email(1, "ahmed@example.com");
+
+        set.Add(email, maximum: 10);
+
+        Assert.Throws<InvalidOperationException>(() => set.MakePrimary(email.Id));
+    }
+
+    /// <summary>
+    /// REG-IDENT-002: an account holds as many of a kind as its maximum allows and no
+    /// more, and never holds one value twice.
+    /// </summary>
+    [Fact]
+    public void REG_IDENT_002_AnAccountHoldsNoMoreOfAKindThanItsMaximum()
+    {
+        IdentifierSet set = Empty();
+
+        set.Add(Email(1, "ahmed@example.com"), maximum: 2);
+        set.Add(Email(2, "ahmed@example.org"), maximum: 2);
+
+        Assert.Throws<InvalidOperationException>(() => set.Add(Email(3, "ahmed@example.net"), maximum: 2));
+        Assert.Throws<InvalidOperationException>(() => set.Add(Email(4, "ahmed@example.com"), maximum: 10));
+    }
+
+    /// <summary>
+    /// REG-IDENT-002: the maximum is per kind, so a full set of emails leaves the
+    /// account free to add a phone.
+    /// </summary>
+    [Fact]
+    public void REG_IDENT_002_TheMaximumIsCountedPerKind()
+    {
+        IdentifierSet set = Empty();
+
+        set.Add(Email(1, "ahmed@example.com"), maximum: 1);
+        set.Add(Phone(2, "+201001234567"), maximum: 1);
+
+        Assert.Equal(2, set.All.Count);
+    }
+
+    /// <summary>
+    /// REG-IDENT-002 AC2: at the default setting a security notice reaches every
+    /// verified identifier of the kind, and nothing unverified.
+    /// </summary>
+    [Fact]
+    public void REG_IDENT_002_AC2_TheDefaultSettingReachesEveryVerifiedIdentifier()
+    {
+        IdentifierSet set = Empty();
+        Identifier first = Email(1, "ahmed@example.com");
+        Identifier second = Email(2, "ahmed@example.org");
+        Identifier unverified = Email(3, "ahmed@example.net");
+
+        set.Add(first, maximum: 10);
+        set.Add(second, maximum: 10);
+        set.Add(unverified, maximum: 10);
+        set.Verify(first.Id, Noon);
+        set.Verify(second.Id, Noon);
+
+        Assert.Equal([first, second], set.SecurityNoticeSet(IdentifierKind.Email));
+    }
+
+    /// <summary>
+    /// REG-IDENT-002 AC2: at the primary-only setting a security notice reaches the
+    /// primary and nothing else.
+    /// </summary>
+    [Fact]
+    public void REG_IDENT_002_AC2_ThePrimaryOnlySettingReachesThePrimaryAlone()
+    {
+        IdentifierSet set = Empty();
+        Identifier first = Email(1, "ahmed@example.com");
+        Identifier second = Email(2, "ahmed@example.org");
+
+        set.Add(first, maximum: 10);
+        set.Add(second, maximum: 10);
+        set.Verify(first.Id, Noon);
+        set.Verify(second.Id, Noon);
+        set.Backup(IdentifierKind.Email).UsePrimaryOnly();
+
+        Assert.Equal([first], set.SecurityNoticeSet(IdentifierKind.Email));
+    }
+
+    /// <summary>
+    /// REG-IDENT-002 AC2: a named setting reaches the primary and the one it names, and
+    /// leaves the rest out.
+    /// </summary>
+    [Fact]
+    public void REG_IDENT_002_AC2_ANamedSettingReachesThePrimaryAndTheOneItNames()
+    {
+        IdentifierSet set = Empty();
+        Identifier first = Email(1, "ahmed@example.com");
+        Identifier second = Email(2, "ahmed@example.org");
+        Identifier third = Email(3, "ahmed@example.net");
+
+        set.Add(first, maximum: 10);
+        set.Add(second, maximum: 10);
+        set.Add(third, maximum: 10);
+        set.Verify(first.Id, Noon);
+        set.Verify(second.Id, Noon);
+        set.Verify(third.Id, Noon);
+        set.Backup(IdentifierKind.Email).UseNamed(third.Id);
+
+        Assert.Equal([first, third], set.SecurityNoticeSet(IdentifierKind.Email));
+    }
+
+    /// <summary>
+    /// REG-IDENT-002: the security-notice set is per kind, so the setting for one kind
+    /// says nothing about another.
+    /// </summary>
+    [Fact]
+    public void REG_IDENT_002_TheSecurityNoticeSetIsPerKind()
+    {
+        IdentifierSet set = Empty();
+        Identifier email = Email(1, "ahmed@example.com");
+        Identifier first = Phone(2, "+201001234567");
+        Identifier second = Phone(3, "+201007654321");
+
+        set.Add(email, maximum: 10);
+        set.Add(first, maximum: 10);
+        set.Add(second, maximum: 10);
+        set.Verify(email.Id, Noon);
+        set.Verify(first.Id, Noon);
+        set.Verify(second.Id, Noon);
+        set.Backup(IdentifierKind.Email).UsePrimaryOnly();
+
+        Assert.Equal([email], set.SecurityNoticeSet(IdentifierKind.Email));
+        Assert.Equal([first, second], set.SecurityNoticeSet(IdentifierKind.Phone));
+    }
+
+    /// <summary>
+    /// An identifier of another account never joins this one's set, whether it is read
+    /// with the set or added to it.
+    /// </summary>
+    [Fact]
+    public void Of_IdentifierOfAnotherAccount_Throws()
+    {
+        var stranger = Identifier.Email(
+            Id(9),
+            Mona,
+            Address("mona@example.com"),
+            "mona@example.com",
+            Noon);
+
+        Assert.Throws<ArgumentException>(() => IdentifierSet.Of(Ahmed, [stranger], []));
+        Assert.Throws<ArgumentException>(() => Empty().Add(stranger, maximum: 10));
+    }
+
+    private static IdentifierSet Empty() =>
+        IdentifierSet.Of(Ahmed, [], new List<BackupSetting>());
+
+    private static Identifier Email(int number, string address) =>
+        Identifier.Email(Id(number), Ahmed, Address(address), address, Noon);
+
+    private static Identifier Phone(int number, string value)
+    {
+        Assert.True(PhoneNumber.TryParse(value, out PhoneNumber parsed));
+
+        return Identifier.Phone(Id(number), Ahmed, parsed, value, Noon);
+    }
+
+    private static EmailAddress Address(string value)
+    {
+        Assert.True(EmailAddress.TryParse(value, out EmailAddress parsed));
+
+        return parsed;
+    }
+
+    private static IdentifierId Id(int number) =>
+        new(new Guid(number, 0, 0, [0, 0, 0, 0, 0, 0, 0, 0]));
+}

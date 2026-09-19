@@ -99,6 +99,10 @@ against the public contract of LIB-API-001.
   `Janus.Core`: the three kinds of identifier an account holds, and the forms each is
   stored and compared under. An address, a number or a username that the rules of its
   kind do not admit cannot be constructed, so it never reaches a row.
+- An account's identifiers are modelled: each one keeps both the form the person
+  entered and the form it is compared under, exactly one identifier of a kind is
+  primary once the account has a verified one of that kind, and each kind's backup
+  setting decides who a security notice reaches beyond the primary.
 
 ### Changed
 
