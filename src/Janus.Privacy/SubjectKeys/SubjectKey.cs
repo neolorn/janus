@@ -72,6 +72,22 @@ internal sealed class SubjectKey
     }
 
     /// <summary>
+    /// The key as it already stands. This is the store's translation of a stored row
+    /// and no operation, so it takes the erased shape as readily as the live one.
+    /// </summary>
+    /// <param name="subject">Whose key it is.</param>
+    /// <param name="formatMarker">The scheme the wrapped key is written under.</param>
+    /// <param name="keyVersion">The key-encryption key version it is wrapped under.</param>
+    /// <param name="wrappedKey">The wrapped key.</param>
+    /// <returns>The key.</returns>
+    public static SubjectKey Existing(
+        SubjectId subject,
+        byte formatMarker,
+        int keyVersion,
+        ReadOnlyMemory<byte> wrappedKey) =>
+        new(subject, formatMarker, keyVersion, wrappedKey);
+
+    /// <summary>
     /// Replaces the wrapping with one under a newer key-encryption key version. No
     /// stored value changes.
     /// </summary>

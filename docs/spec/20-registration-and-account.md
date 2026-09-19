@@ -130,6 +130,13 @@ applies. `identifiers.email.max` and `identifiers.phone.max` default to ten per 
 `POST /auth/begin` SHALL take **one** `identifier` field, detect its kind, canonicalise it
 and answer identically whether or not it resolves to an account.
 
+**Kind detection (D-155).** After trimming: a value containing `@` is an email; a value
+that, with spaces, hyphens, dots and parentheses removed and a leading `+` or `00`
+allowed, is digits of any script is a phone; anything else is a username where
+`identifiers.username.enabled`, and otherwise an unknown identifier that takes the
+concealed path. A username therefore always contains at least one letter
+(REG-IDENT-009), so no value is both a phone and a username.
+
 *Source: D-146, AUTH-ABUSE-003*
 
 **Acceptance criteria**
@@ -263,6 +270,10 @@ action with a cooling-off of `identifiers.username.changecooloff` between change
 `identity.username.reserved`), throttled per source. After erasure of its account a
 username SHALL be **held** for the period of `retention.consent` and released
 afterwards.
+
+A username SHALL contain at least one letter, so that no username is also a phone
+number under REG-IDENT-003's detection; an all-digit choice is refused with
+`identity.username.invalid` (D-155).
 
 **Values (D-153).** The reserved list is the library's (`admin`, `administrator`, `root`,
 `support`, `security`, `postmaster`, `abuse`, `noreply`, `emergency`, `system`, `help`,

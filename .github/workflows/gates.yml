@@ -71,6 +71,18 @@ jobs:
       - run: dotnet restore Janus.slnx --locked-mode
       - run: dotnet test tests/Janus.Core.Tests --no-restore -- --filter-trait "kind=contract"
 
+  unicode-tables:
+    name: Unicode tables regenerate without a diff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - run: dotnet restore Janus.slnx --locked-mode
+      - run: dotnet run --project tools/Janus.UnicodeTables --no-restore
+      - run: git diff --exit-code -- src/Janus.Core/Unicode
+
   integration-tests:
     name: Integration tests
     # CONV-GATE-002: the containerised runs are for a pull request and the default

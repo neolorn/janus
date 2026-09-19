@@ -155,6 +155,14 @@ public sealed class VocabularyContractTests
         Assert.Equal(AlertConditions.Order(StringComparer.Ordinal), WireNames<AlertCondition>());
 
     /// <summary>
+    /// LIB-API-001 AC2: the identifier kinds of chapter 10 section 5.17, which every
+    /// identifier row carries and every identifier endpoint names.
+    /// </summary>
+    [Fact]
+    public void LIB_API_001_AC2_TheIdentifierKindsAreTheContract() =>
+        Assert.Equal(["email", "phone", "username"], WireNames<IdentifierKind>());
+
+    /// <summary>
     /// LIB-API-001 AC2: the account states of chapter 10 section 5.1, which every
     /// account row carries and every reader of an account branches on.
     /// </summary>

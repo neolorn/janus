@@ -6288,7 +6288,9 @@ alone.
 - *NFC plus invariant lowercase.* Cheapest with .NET built-ins, but leaves fullwidth
   and compatibility lookalikes distinct — a weaker answer to the stated problem
 - *PRECIS `UsernameCaseMapped` (RFC 8265).* Well specified, NFC-based, forbids
-  rather than folds, and adds a dependency for little gain
+  rather than folds, and adds a dependency for little gain. *Rejected as the canonical
+  form only; D-146 later adopted PRECIS as the validation profile for usernames and
+  display names, and D-154 states that both hold*
 - *Leave it to the builder.* Costs nothing now; risks the recompute-everything
   scenario later
 
@@ -8148,6 +8150,136 @@ REG-PROF-001, 002, REG-PREF-001, REG-SESS-005.
 
 ---
 
+## D-154 — Phase 1 questions: the library carries its own Unicode tables
+
+**Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-115, D-149 (layout, `.editorconfig` table, gates) · **Extends:** D-153
+
+**TL;DR.** The identifier rules name three Unicode operations the base class library
+does not have. The right answer is not a package and not a weaker form: the library
+generates its own tables from the Unicode Character Database at a pinned version and
+ships them. Two smaller questions are settled alongside.
+
+1. **`NFKC_Casefold`, PRECIS and `Script_Extensions` come from generated tables.**
+   `string.Normalize` follows whatever ICU the machine has, so the version pin
+   IDN-ACCT-004 requires (and the fingerprint record depends on) was never real with
+   built-ins. No maintained .NET package implements PRECIS or `NFKC_Casefold`, and a
+   dependency for the operation that every fingerprint is derived from is the wrong
+   place to accept churn. A tool project outside the package, `tools/Janus.UnicodeTables`,
+   reads the vendored UCD files of Unicode 17.0.0 and writes the tables into
+   `Janus.Core`; a gate regenerates and fails on a diff. The library's NFC and NFKC are
+   its own, so the pinned version governs every step. Public types `CanonicalForm`,
+   `Precis`, `ScriptMixing` in `Janus.Core`, since two areas canonicalise. This is a
+   real piece of work (UAX #15 normalisation, RFC 8264 classes, the bidi rule of RFC
+   5893 for right-to-left usernames, UTS #39 §5.1), and it is the correct one.
+2. **PRECIS and D-115 are not in conflict.** D-115 rejected PRECIS as the canonical
+   comparison form for emails and names; D-146 adopted it as the validation profile
+   for usernames and display names. `NFKC_Casefold` remains the comparison key of every
+   identifier; PRECIS says what a username or display name must look like to be
+   accepted. D-115's rejected item now says so.
+3. **CA1515 is off in test projects.** Fixtures and test classes are instantiated by the
+   framework and must be public; a justified suppression on every fixture is noise, and
+   CONV-SETUP-004 says a recurring deviation is a specification defect, which this was.
+4. **OPS-DATA-002's visibility test** lives in `Janus.Storage.Tests` and uses an entity
+   Storage itself owns (a settings row), so no `InternalsVisibleTo` grant changes.
+
+**Propagated to:** `01` IDN-ACCT-004 · `06` OPS-DATA-002 · `08` CONV-LAYOUT-001,
+CONV-SETUP-004, CONV-GATE-001 · D-115 (rejected item annotated).
+
+---
+
+## D-155 — Phase 1 questions, second stop: EF Core maps records, the port encrypts
+
+**Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-149 (CONV-DESIGN-003), D-153 (OPS-DB-001 value) · **Extends:** D-154
+
+**TL;DR.** Per-subject encryption needs the row's subject identifier, and EF Core's value
+converters cannot see the row. The answer is the one that also keeps domain entities
+plain: EF Core never maps a domain entity, it maps a persistence record owned by
+Storage, and the port implementation that translates between the two is where the
+field cipher runs.
+
+1. **Persistence records.** Each table is an `internal sealed class` in `Janus.Storage`
+   with one property per column, encrypted columns as `byte[]`, beside its
+   `IEntityTypeConfiguration<T>`. The port implementation maps aggregate to records and
+   back, calling the field cipher with the subject identifier from the record's declared
+   subject column and the table and column as associated data. Rejected: value
+   converters (no access to the row), `SaveChanges` and materialization interceptors
+   (an implicit security boundary that a reader of the port cannot see), and mapping
+   domain entities directly (forces setters or backing-field tricks onto types
+   CONV-DESIGN-004 wants plain). The cost is one mapping per aggregate, written by hand
+   and read in one place, which for a security boundary is the point.
+2. **Kind detection at `/auth/begin`** (REG-IDENT-003): `@` means email; digits of any
+   script with the usual separators and a `+` or `00` prefix mean phone; anything else is
+   a username where usernames are on, otherwise the concealed path. So that the second
+   and third never overlap, a username must contain a letter; an all-digit choice is
+   refused with `identity.username.invalid`, a code the profile's other refusals also
+   use.
+3. **`janus_ci` applies to what is plaintext and spelled by a person**: organization
+   names and locked domain names today. Identifiers are fingerprints and personal fields
+   are ciphertext; a collation cannot see through either, and D-153's wording that named
+   display names and usernames was wrong.
+
+**Propagated to:** `08` CONV-DESIGN-003 · `06` OPS-DB-001 · `20` REG-IDENT-003,
+REG-IDENT-009 · `10` section 1.1.
+
+---
+
+## D-156 — Phase 1 questions, third stop: a port is tested against its aggregate; test infrastructure is Tier 1
+
+**Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-149 (CONV-LAYOUT-002 grants), the agent instructions (Tier 1) · **Extends:** D-155
+
+**TL;DR.** D-155 made the port implementation the one place encryption happens, and the
+grant list then left no project able to test it: Storage's tests could see the store but
+not the aggregate, an area's tests the reverse. The grant list gains one row. And because
+this stop was purely about where a test may live, that whole class of question is moved
+to Tier 1 so it never ends a run again.
+
+1. **Each area project grants `InternalsVisibleTo` to `Janus.Storage.Tests`.** A port
+   implementation is verified against the aggregate it translates, in Storage's own
+   test project, with the real database. Rejected: verifying ports only end to end from
+   `Janus.Hosting.Tests` once endpoints exist, which would leave every translation, and
+   the field cipher inside it, untested for four phases.
+2. **Test infrastructure is Tier 1.** A project reference, a grant to a test project, an
+   analyser scope in a test project or a fixture arrangement, when it touches no runtime
+   code and no shipped surface, is resolved by the agent with the least change,
+   including to the gate test that enforces the list, and recorded; the owner brings
+   `08` into line afterwards. Three of the last eight stops were of this kind, and none
+   of them had a second defensible answer.
+
+**Propagated to:** `08` CONV-LAYOUT-002 · the working guide section 3.
+
+---
+
+## D-157 — Phase 1 questions, fourth stop: the photo is unreadable, the administrative flag, the role names, retention by argument
+
+**Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-060 (AC wording), D-038, D-018, D-118 · **Extends:** D-156
+
+**TL;DR.** Three small gaps at the end of phase 1, one of them a genuine wording
+contradiction of my own making.
+
+1. **The photo.** IDN-ATTR-003 says the photo row survives erasure with its bytes
+   unreadable; PRIV-RIGHT-005 AC4 said the photo is "removed". The first is the design
+   (D-060, IDN-PRIN-003: nothing is deleted, keys are destroyed); the second was loose
+   wording. AC4 now says unreadable, row persists, and `GET /account/photo` answers as
+   for an account with no photo. The eraser touches no photo row and is correct.
+2. **The administrative organization** is a boolean `administrative` on the
+   organization row, set by bootstrap only, with a unique partial index so exactly one
+   exists; `Organization.IsAdministrative` is what IDN-ORG-004 checks. Rejected: a
+   well-known fixed identifier (leaks structure into an opaque id) and a settings key
+   (a domain invariant does not live in configuration).
+3. **Database roles** are `janus_migrate`, `janus_app`, `janus_maintenance`; the
+   migration creates the runtime roles `NOLOGIN` if absent and the deployment attaches
+   credentials.
+4. **`audit_drop_expired_partitions` takes the two retention periods as arguments**,
+   passed by the worker from the catalogue's effective values, since a key at its
+   default has no settings row for the database to read. The function refuses an
+   argument below the PRIV-RET-001 floor, written into it by the migration, so the
+   maintenance role cannot shorten retention by argument.
+
+**Propagated to:** `01` IDN-ORG-001 · `04` PRIV-RIGHT-005 AC4, PRIV-RET-002 · `06`
+OPS-MIG-003.
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -8311,6 +8443,10 @@ REG-PROF-001, 002, REG-PREF-001, REG-SESS-005.
 | Phase 0 questions, second stop: gate names, factor identifiers, enum values, key types, families | D-151 |
 | Phase 0 questions, third stop: bytes, maximums, signals, floors, years, direction | D-152 |
 | Word-shaped values: one pass over every chapter; alert thresholds as keys, time zone, materiality, userinfo claims, host challenge, offline lists | D-153 |
+| Phase 1 questions: generated Unicode tables at a pinned version, PRECIS as validation, CA1515 in tests, the visibility test | D-154 |
+| Phase 1 questions, second stop: persistence records and the port encrypt; kind detection; collation scope | D-155 |
+| Phase 1 questions, third stop: area grants to Storage.Tests; test infrastructure is Tier 1 | D-156 |
+| Phase 1 questions, fourth stop: photo unreadable not removed; administrative flag; role names; retention by argument | D-157 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

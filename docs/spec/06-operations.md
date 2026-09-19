@@ -45,7 +45,10 @@ code.
 1. A hand-written query inside a transaction sees uncommitted writes from that
    transaction.
 2. Direct connection retrieval is unreachable from the service layer.
-3. A test asserts transaction visibility across both tools.
+3. A test asserts transaction visibility across both tools: it lives in
+   `Janus.Storage.Tests` and uses an entity `Janus.Storage` itself owns (a settings
+   row), written through the context and read through the accessor inside one
+   transaction (D-154).
 
 ---
 
@@ -70,7 +73,10 @@ collation for identifier columns.
 
 **Values (D-153).** Database locale `und-x-icu`. The case-insensitive collation is
 `janus_ci`, created as `(provider = icu, locale = 'und-u-ks-level2', deterministic = false)`
-and applied to the plaintext columns criterion 2 names.
+and applied to the plaintext text columns a person spells and the library compares or
+sorts: organization names and locked domain names today; a column added later that
+meets that description takes it (D-155). Identifiers and personal fields are
+fingerprints and ciphertext and take no collation.
 
 *Source: D-040*
 
@@ -148,7 +154,12 @@ model and SHALL refuse to start if it does not.
 rights used only by the migration step, and one for the application with row-level
 access only.
 
-*Source: D-018*
+**Values (D-157).** The roles are `janus_migrate`, `janus_app` and, for OPS-MIG-003a,
+`janus_maintenance`. The migration creates the two runtime roles if absent (`NOLOGIN`;
+the deployment attaches credentials, INF-HOST-003) and writes every `GRANT` and `REVOKE`
+against those names.
+
+*Source: D-018, D-157*
 
 Nothing in production can alter schema. Same reasoning as the protected-settings
 configuration list — controls that would catch a compromise must not be reachable by

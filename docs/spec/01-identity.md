@@ -81,11 +81,27 @@ mapped to ASCII and the result is stored as E.164. The **Unicode version** of th
 implementing library is pinned in the build and recorded as the canonicalisation
 version beside every fingerprint (PRIV-RIGHT-005c).
 
+**Implementation (D-154).** No base class library type implements `NFKC_Casefold`,
+PRECIS or `Script_Extensions`, and `string.Normalize` follows the machine's ICU rather
+than a pinned version. The library therefore carries its own tables, generated from the
+Unicode Character Database at the pinned version (**Unicode 17.0.0**) by
+`tools/Janus.UnicodeTables` (CONV-LAYOUT-001) and checked in under `Janus.Core`: the
+`NFKC_CF` mapping, canonical decompositions, combining classes and composition
+exclusions (so NFC and NFKC are the library's own), full case folding, general
+categories and the derived properties PRECIS needs, `Script` and `Script_Extensions`.
+The pinned version is a constant beside the tables and is the canonicalisation version
+recorded with every fingerprint. The public types are `CanonicalForm` (`NFKC_Casefold`,
+E.164 digit mapping), `Precis` (the two profiles below) and `ScriptMixing` (IDN-ACCT-005)
+in `Janus.Core`, because Identity and Authentication both canonicalise. No package.
+
 **Usernames** take the PRECIS UsernameCaseMapped profile (RFC 8265) and nothing else:
 letters and digits, no spaces, case-folded, NFC, 3 to 32 characters, checked against
 the reserved list (REG-IDENT-001, REG-IDENT-009). **Display names** are 1 to 64 bytes
 under the PRECIS Nickname profile (RFC 8266); the rules are stated once in
-REG-PROF-001 and are not repeated here.
+REG-PROF-001 and are not repeated here. D-115 rejected PRECIS as the *canonical form*
+for emails and names; D-146 adopted it as the *validation profile* for usernames and
+display names. Both hold: `NFKC_Casefold` is the comparison key of every identifier,
+PRECIS is what a username or display name must satisfy to be accepted (D-154).
 
 Multiple code-point sequences render identically. Without normalization, two
 accounts can hold visually identical addresses or names, indistinguishable to a
@@ -201,7 +217,10 @@ pool, NOT a tenancy or isolation boundary.
 
 One deployment, one database, one identity pool. Organization #1 is the
 **administrative organization**; its members are what would elsewhere be called
-staff.
+staff. It is identified by a boolean `administrative` on the organization, set only
+by bootstrap (OPS-BOOT-001) and never through the application, with a unique partial
+index guaranteeing exactly one such row; the domain reads `Organization.IsAdministrative`
+(D-157).
 
 **Acceptance criteria**
 1. No query filters by organization for isolation purposes; organization scoping is

@@ -23,6 +23,22 @@ internal sealed class Account
         State = AccountState.Active;
     }
 
+    private Account(
+        SubjectId subject,
+        DateTimeOffset createdAt,
+        AccountState state,
+        SuspensionOrigin? suspendedBy,
+        DeletionOrigin? deletingBy,
+        DateTimeOffset? deletingSince)
+    {
+        Subject = subject;
+        CreatedAt = createdAt;
+        State = state;
+        SuspendedBy = suspendedBy;
+        DeletingBy = deletingBy;
+        DeletingSince = deletingSince;
+    }
+
     /// <summary>
     /// The stable opaque identifier audit records, grants and tokens reference.
     /// </summary>
@@ -64,6 +80,27 @@ internal sealed class Account
     /// <returns>The account.</returns>
     public static Account Create(SubjectId subject, DateTimeOffset createdAt) =>
         new(subject, createdAt);
+
+    /// <summary>
+    /// The account as it already stands. This is the store's translation of a stored
+    /// row and no transition, so it takes the state it is given without asking how the
+    /// account reached it.
+    /// </summary>
+    /// <param name="subject">The identifier the account was issued.</param>
+    /// <param name="createdAt">The instant it was created.</param>
+    /// <param name="state">The state it is in.</param>
+    /// <param name="suspendedBy">Who suspended it, where it is suspended.</param>
+    /// <param name="deletingBy">Why its grace window began, where one is running.</param>
+    /// <param name="deletingSince">When that window began.</param>
+    /// <returns>The account.</returns>
+    public static Account Existing(
+        SubjectId subject,
+        DateTimeOffset createdAt,
+        AccountState state,
+        SuspensionOrigin? suspendedBy,
+        DeletionOrigin? deletingBy,
+        DateTimeOffset? deletingSince) =>
+        new(subject, createdAt, state, suspendedBy, deletingBy, deletingSince);
 
     /// <summary>
     /// The account's owner deactivates it. Grants are suspended, not removed, and the

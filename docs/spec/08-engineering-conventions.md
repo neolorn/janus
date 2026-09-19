@@ -36,6 +36,7 @@ area**, published as a single package.
 | `Janus.Hosting` | Endpoints, middleware, wiring, the hosted background worker (INF-BG-001), the default mail and SMS transports and the mail-server adapter (chapter `05`, LIB-EXT-001 defaults) | all |
 | `Janus.Conformance` | The conformance suite a host runs (LIB-TEST-001); the one further project with public types, shipped as its own package | Core, Hosting |
 | `Janus.Analyzers` | The Roslyn analysers the gates rely on (CONV-CODE-008); targets `netstandard2.0` as analysers must, the one exemption to CONV-SETUP-001 AC1 | nothing (D-149) |
+| `tools/Janus.UnicodeTables` | The generator of the Unicode tables `Janus.Core` carries (IDN-ACCT-004, D-154): a console project outside the package, with the Unicode Character Database files of the pinned version vendored beside it under their licence. Its output is checked in; a gate regenerates and diffs | nothing |
 | `Janus.Cli` | Bootstrap and key rotation | Core, Storage, Identity, Authentication — it creates the first organization, administrator, enrolment link and the credential-less `emergency` account; **never the break-glass credential** (OPS-BOOT-001, D-133); it also carries the resumable key-encryption-key rotation of OPS-SEC-003, run under the maintenance credential (D-147) |
 
 Dependencies point **inward toward Core**. Nothing points outward. Storage is the one
@@ -74,9 +75,11 @@ Makes the public surface reviewable by reading one project.
 1. A public type outside `Janus.Core`, `Janus.Hosting`'s mounting types and
    `Janus.Conformance` fails the build (CONV-SETUP-003). The only `InternalsVisibleTo`
    grants permitted are: every non-Core project to its own test project; each area
-   project to `Janus.Storage` (persistence ports), to `Janus.Hosting` and to `Janus.Cli`
-   (service registration); `Janus.Core` and `Janus.Storage` to `Janus.Hosting` and to
-   `Janus.Cli` (registration). Any other grant fails the build (D-135, D-149).
+   project to `Janus.Storage` (persistence ports), to `Janus.Storage.Tests` (a port
+   implementation is tested against the aggregate it translates, D-156), to
+   `Janus.Hosting` and to `Janus.Cli` (service registration); `Janus.Core` and
+   `Janus.Storage` to `Janus.Hosting` and to `Janus.Cli` (registration). Any other
+   grant fails the build (D-135, D-149).
 2. The public surface is enumerable from `Janus.Core` plus the mounting types in
    `Janus.Hosting`.
 
@@ -157,7 +160,7 @@ and no others; any further deviation is a specification defect, not a local supp
 |---|---|---|---|
 | CA1812 (uninstantiated internal class) | none | source projects | every service is `internal sealed` and constructed by dependency injection (CONV-DESIGN-002) |
 | CA2007 (`ConfigureAwait`) | none | test projects, `Janus.Hosting`, `Janus.Cli` | required of library code only (CONV-CODE-002) |
-| CA1515 (make public types internal) | none | `Janus.Core`, `Janus.Hosting`, `Janus.Conformance` | these projects hold the contract |
+| CA1515 (make public types internal) | none | `Janus.Core`, `Janus.Hosting`, `Janus.Conformance`, test projects | these projects hold the contract; test fixtures and classes are instantiated by the test framework and must be public (D-154) |
 | CA1062 (validate public arguments) | none | all | guards are placed by CONV-CODE-006, not on every public member |
 | CA1707 (underscores in identifiers) | none | test projects | the test naming scheme of CONV-TEST-007 uses underscores by design (D-150) |
 
@@ -237,7 +240,16 @@ in the aggregate's feature folder as an `internal interface` with intention-reve
 methods (`FindBySubjectAsync`, `AddAsync`, `MarkVerifiedAsync`), implemented in
 `Janus.Storage`. There SHALL be no generic repository, no `IQueryable` crossing a port,
 and no EF Core type in an area project. `Janus.Storage` SHALL hold one `DbContext` with
-one `IEntityTypeConfiguration<T>` per entity in a folder mirroring the area and feature.
+one `IEntityTypeConfiguration<T>` per **persistence record** in a folder mirroring the
+area and feature. **What EF Core maps is a persistence record, never a domain entity
+(D-155):** an `internal sealed class` in `Janus.Storage` with one property per column,
+encrypted columns as `byte[]`, beside its configuration. The port implementation
+translates between the aggregate and its records in both directions, and that
+translation is the one place per-subject encryption happens: it calls the field cipher
+with the subject identifier read from the record's declared subject column
+(PRIV-RIGHT-005a) and the table and column names as associated data. No value
+converter, interceptor or shadow state encrypts anything; a domain entity never holds
+ciphertext, a record never holds plaintext of an encrypted column.
 The **unit of work is the operation**: a service method runs inside one transaction
 opened by an `IUnitOfWork` port and committed once, at the end, after every write.
 Hand-written SQL (OPS-DATA-001) lives in `Janus.Storage` beside the port implementation
@@ -254,6 +266,8 @@ CONSTRAINT`; the serialized model of AUTHZ-MODEL-005 is JSON written by
 1. No area project references EF Core or Npgsql.
 2. No port method returns `IQueryable`.
 3. A service method with two writes and a failure between them leaves neither.
+4. No domain entity type appears in the `DbContext` model; every encrypted column is
+   written and read through the field cipher inside a port implementation (D-155).
 
 ---
 
@@ -1002,6 +1016,7 @@ With one developer, the checks a reviewer would perform are mechanical.
 | `InternalsVisibleTo` allow-list | CONV-LAYOUT-002 |
 | Acceptance-criterion test names present for each item of the phase | CONV-TEST-007 |
 | `Janus.Analyzers` rules JAN0001 to JAN0006 | CONV-CODE-008 |
+| Unicode tables regenerate without a diff | IDN-ACCT-004, D-154 |
 
 **Acceptance criteria**
 1. Each runs on pull request.

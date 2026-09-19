@@ -18,13 +18,13 @@ partial class JanusDbContextModelSnapshot : ModelSnapshot
 #pragma warning disable 612, 618
         modelBuilder
             .HasDefaultSchema("janus")
-            .HasAnnotation("Npgsql:CollationDefinition:janus.janus_ci", "und-u-ks-level2,und-u-ks-level2,icu,False")
+            .HasAnnotation("Npgsql:CollationDefinition:public.janus_ci", "und-u-ks-level2,und-u-ks-level2,icu,False")
             .HasAnnotation("ProductVersion", "10.0.4")
             .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
         NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-        modelBuilder.Entity("Janus.Identity.Accounts.Account", b =>
+        modelBuilder.Entity("Janus.Storage.Identity.Accounts.AccountRecord", b =>
             {
                 b.Property<Guid>("Subject")
                     .HasColumnType("uuid")
@@ -70,7 +70,360 @@ partial class JanusDbContextModelSnapshot : ModelSnapshot
                     });
             });
 
-        modelBuilder.Entity("Janus.Privacy.SubjectKeys.SubjectKey", b =>
+        modelBuilder.Entity("Janus.Storage.Identity.Audit.AuditRowRecord", b =>
+            {
+                b.Property<string>("Category")
+                    .HasColumnType("text")
+                    .HasColumnName("category");
+
+                b.Property<DateTimeOffset>("OccurredAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("occurred_at");
+
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<Guid>("ActingSubject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("acting_subject");
+
+                b.Property<string>("Action")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("action");
+
+                b.Property<string>("Details")
+                    .IsRequired()
+                    .HasColumnType("jsonb")
+                    .HasColumnName("details");
+
+                b.Property<Guid>("EffectiveSubject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("effective_subject");
+
+                b.Property<Guid?>("Organization")
+                    .HasColumnType("uuid")
+                    .HasColumnName("organization");
+
+                b.Property<byte[]>("PersonalDetails")
+                    .HasColumnType("bytea")
+                    .HasColumnName("enc_details");
+
+                b.HasKey("Category", "OccurredAt", "Id")
+                    .HasName("pk_audit_records");
+
+                b.HasIndex("EffectiveSubject", "OccurredAt")
+                    .HasDatabaseName("ix_audit_records_effective_subject");
+
+                b.ToTable("audit_records", "janus", t =>
+                    {
+                        t.ExcludeFromMigrations();
+                    });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Identity.Identifiers.BackupSettingRecord", b =>
+            {
+                b.Property<Guid>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
+
+                b.Property<string>("Kind")
+                    .HasColumnType("text")
+                    .HasColumnName("kind");
+
+                b.Property<Guid?>("Named")
+                    .HasColumnType("uuid")
+                    .HasColumnName("named");
+
+                b.Property<string>("Rule")
+                    .HasColumnType("text")
+                    .HasColumnName("rule");
+
+                b.HasKey("Subject", "Kind")
+                    .HasName("pk_identifier_backup_settings");
+
+                b.HasIndex("Named")
+                    .HasDatabaseName("ix_identifier_backup_settings_named");
+
+                b.ToTable("identifier_backup_settings", "janus", t =>
+                    {
+                        t.HasCheckConstraint("ck_identifier_backup_settings_kind", "kind IN ('email', 'phone', 'username')");
+
+                        t.HasCheckConstraint("ck_identifier_backup_settings_rule", "rule IN ('all-verified', 'primary-only') OR rule IS NULL");
+
+                        t.HasCheckConstraint("ck_identifier_backup_settings_setting", "(rule IS NULL) <> (named IS NULL)");
+                    });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Identity.Identifiers.IdentifierRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("identifier_id");
+
+                b.Property<DateTimeOffset>("AddedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("added_at");
+
+                b.Property<byte[]>("Canonical")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("enc_canonical");
+
+                b.Property<string>("CanonicalisationVersion")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("canonicalisation_version");
+
+                b.Property<byte[]>("Entered")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("enc_entered");
+
+                b.Property<byte[]>("Fingerprint")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("fingerprint");
+
+                b.Property<bool>("IsLocked")
+                    .HasColumnType("boolean")
+                    .HasColumnName("is_locked");
+
+                b.Property<bool>("IsPrimary")
+                    .HasColumnType("boolean")
+                    .HasColumnName("is_primary");
+
+                b.Property<string>("Kind")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("kind");
+
+                b.Property<Guid>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
+
+                b.Property<DateTimeOffset?>("VerifiedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("verified_at");
+
+                b.HasKey("Id")
+                    .HasName("pk_identifiers");
+
+                b.HasIndex("Kind", "Fingerprint")
+                    .IsUnique()
+                    .HasDatabaseName("ux_identifiers_fingerprint")
+                    .HasFilter("fingerprint <> decode(repeat('00', 32), 'hex')");
+
+                b.HasIndex("Subject", "Kind")
+                    .HasDatabaseName("ix_identifiers_subject");
+
+                b.ToTable("identifiers", "janus", t =>
+                    {
+                        t.HasCheckConstraint("ck_identifiers_fingerprint", "octet_length(fingerprint) = 32");
+
+                        t.HasCheckConstraint("ck_identifiers_kind", "kind IN ('email', 'phone', 'username')");
+
+                        t.HasCheckConstraint("ck_identifiers_primary", "NOT is_primary OR verified_at IS NOT NULL");
+                    });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Identity.Organizations.MembershipRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<DateTimeOffset>("CreatedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("created_at");
+
+                b.Property<DateTimeOffset?>("EndedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("ended_at");
+
+                b.Property<Guid>("Organization")
+                    .HasColumnType("uuid")
+                    .HasColumnName("organization");
+
+                b.Property<Guid>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
+
+                b.HasKey("Id")
+                    .HasName("pk_memberships");
+
+                b.HasIndex("Organization")
+                    .HasDatabaseName("ix_memberships_organization");
+
+                b.HasIndex("Subject")
+                    .HasDatabaseName("ix_memberships_subject");
+
+                b.ToTable("memberships", "janus", t =>
+                    {
+                        t.HasCheckConstraint("ck_memberships_ended", "ended_at IS NULL OR ended_at >= created_at");
+                    });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Identity.Organizations.OrganizationRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<DateTimeOffset>("CreatedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("created_at");
+
+                b.Property<DateTimeOffset?>("DeletionRequestedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("deletion_requested_at");
+
+                b.Property<DateTimeOffset?>("ErasedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("erased_at");
+
+                b.Property<bool>("IsAdministrative")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(false)
+                    .HasColumnName("administrative");
+
+                b.Property<string>("Name")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("name")
+                    .UseCollation("janus_ci");
+
+                b.HasKey("Id")
+                    .HasName("pk_organizations");
+
+                b.HasIndex("DeletionRequestedAt")
+                    .HasDatabaseName("ix_organizations_deletion_requested_at")
+                    .HasFilter("deletion_requested_at IS NOT NULL AND erased_at IS NULL");
+
+                b.HasIndex("IsAdministrative")
+                    .IsUnique()
+                    .HasDatabaseName("ux_organizations_administrative")
+                    .HasFilter("administrative");
+
+                b.ToTable("organizations", "janus", t =>
+                    {
+                        t.HasCheckConstraint("ck_organizations_erased", "erased_at IS NULL OR deletion_requested_at IS NOT NULL");
+                    });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Identity.Preferences.PreferenceRecord", b =>
+            {
+                b.Property<Guid>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
+
+                b.Property<string>("Language")
+                    .HasColumnType("text")
+                    .HasColumnName("language");
+
+                b.Property<string>("TimeZone")
+                    .HasColumnType("text")
+                    .HasColumnName("time_zone");
+
+                b.Property<byte[]>("Values")
+                    .HasColumnType("bytea")
+                    .HasColumnName("enc_values");
+
+                b.HasKey("Subject")
+                    .HasName("pk_account_preferences");
+
+                b.ToTable("account_preferences", "janus");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Identity.Profiles.ProfilePhotoRecord", b =>
+            {
+                b.Property<Guid>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
+
+                b.Property<byte[]>("Image")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("enc_image");
+
+                b.Property<DateTimeOffset>("UpdatedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("updated_at");
+
+                b.HasKey("Subject")
+                    .HasName("pk_profile_photos");
+
+                b.ToTable("profile_photos", "janus");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Identity.Profiles.ProfileRecord", b =>
+            {
+                b.Property<Guid>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
+
+                b.Property<byte[]>("DateOfBirth")
+                    .HasColumnType("bytea")
+                    .HasColumnName("enc_date_of_birth");
+
+                b.Property<byte[]>("DisplayName")
+                    .HasColumnType("bytea")
+                    .HasColumnName("enc_display_name");
+
+                b.Property<byte[]>("LegalName")
+                    .HasColumnType("bytea")
+                    .HasColumnName("enc_legal_name");
+
+                b.HasKey("Subject")
+                    .HasName("pk_profiles");
+
+                b.ToTable("profiles", "janus");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Privacy.Erasures.ErasureRecord", b =>
+            {
+                b.Property<Guid>("Subject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("subject");
+
+                b.Property<int>("Attempts")
+                    .HasColumnType("integer")
+                    .HasColumnName("attempts");
+
+                b.Property<string>("Reason")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("reason");
+
+                b.Property<DateTimeOffset>("RequestedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("requested_at");
+
+                b.Property<string>("Status")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("status");
+
+                b.HasKey("Subject")
+                    .HasName("pk_erasures");
+
+                b.HasIndex("RequestedAt")
+                    .HasDatabaseName("ix_erasures_outstanding")
+                    .HasFilter("status <> 'complete'");
+
+                b.ToTable("erasures", "janus", t =>
+                    {
+                        t.HasCheckConstraint("ck_erasures_attempts", "attempts >= 0");
+
+                        t.HasCheckConstraint("ck_erasures_reason", "reason IN ('erasure-request', 'minor-takedown', 'organization-erasure')");
+
+                        t.HasCheckConstraint("ck_erasures_status", "status IN ('awaiting-subscribers', 'complete', 'failed')");
+                    });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Privacy.SubjectKeys.SubjectKeyRecord", b =>
             {
                 b.Property<Guid>("Subject")
                     .HasColumnType("uuid")
@@ -101,6 +454,106 @@ partial class JanusDbContextModelSnapshot : ModelSnapshot
 
                         t.HasCheckConstraint("ck_subject_keys_version", "key_version >= 1");
                     });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Settings.SettingRecord", b =>
+            {
+                b.Property<string>("Key")
+                    .HasColumnType("text")
+                    .HasColumnName("key");
+
+                b.Property<string>("Value")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("value");
+
+                b.HasKey("Key")
+                    .HasName("pk_settings");
+
+                b.ToTable("settings", "janus");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Identity.Identifiers.BackupSettingRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Identity.Identifiers.IdentifierRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Named")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .HasConstraintName("fk_identifier_backup_settings_named");
+
+                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Subject")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_identifier_backup_settings_subject");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Identity.Identifiers.IdentifierRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Subject")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_identifiers_subject");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Identity.Organizations.MembershipRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Identity.Organizations.OrganizationRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Organization")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_memberships_organization");
+
+                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Subject")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_memberships_subject");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Identity.Preferences.PreferenceRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
+                    .WithOne()
+                    .HasForeignKey("Janus.Storage.Identity.Preferences.PreferenceRecord", "Subject")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_account_preferences_subject");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Identity.Profiles.ProfilePhotoRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
+                    .WithOne()
+                    .HasForeignKey("Janus.Storage.Identity.Profiles.ProfilePhotoRecord", "Subject")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_profile_photos_subject");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Identity.Profiles.ProfileRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
+                    .WithOne()
+                    .HasForeignKey("Janus.Storage.Identity.Profiles.ProfileRecord", "Subject")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_profiles_subject");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Privacy.Erasures.ErasureRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
+                    .WithOne()
+                    .HasForeignKey("Janus.Storage.Privacy.Erasures.ErasureRecord", "Subject")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_erasures_subject");
             });
 #pragma warning restore 612, 618
     }

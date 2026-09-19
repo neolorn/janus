@@ -36,6 +36,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `identity.invitation.identifiermismatch` **(new)** | An identifier bound to the invitation is verified on a different account than the one accepting | REG-INV-001, REG-INV-002, D-146 |
 | `identity.username.taken` **(new)** | The username belongs to another account, or is held after an erasure for `retention.consent`; disclosed by design, throttled per source | REG-IDENT-009, D-146 |
 | `identity.username.reserved` **(new)** | The username is on the reserved list | REG-IDENT-009, D-146 |
+| `identity.username.invalid` | The username fails the PRECIS UsernameCaseMapped profile, its length bounds, or holds no letter; 422 | REG-IDENT-009, D-155 |
 | `identity.username.coolingoff` **(new)** | A second username change inside `identifiers.username.changecooloff`; `details` carries the cooling-off end | REG-IDENT-009, D-146 |
 | `identity.profile.underage` **(new)** | The date of birth is under eighteen on a host with `registration.adultaffirmation` = `required`; the registration session ends | REG-PROF-002, D-146 |
 | `identity.preference.undeclared` **(new)** | A preference key the host did not declare at startup | REG-PREF-001, D-146 |

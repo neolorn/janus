@@ -11,14 +11,15 @@ namespace Janus.Storage.Privacy.SubjectKeys;
 /// How a subject's wrapped data key is stored.
 /// </summary>
 /// <remarks>
-/// Implements PRIV-RIGHT-005a and OPS-SEC-003. The key-encryption key itself is never
+/// Implements PRIV-RIGHT-005a, OPS-SEC-003 and CONV-DESIGN-003. The key-encryption key
+/// itself is never
 /// here: it is fetched from the secrets manager at startup, so a dump of this table
 /// yields nothing.
 /// </remarks>
-internal sealed class SubjectKeyConfiguration : IEntityTypeConfiguration<SubjectKey>
+internal sealed class SubjectKeyConfiguration : IEntityTypeConfiguration<SubjectKeyRecord>
 {
     /// <inheritdoc/>
-    public void Configure(EntityTypeBuilder<SubjectKey> builder)
+    public void Configure(EntityTypeBuilder<SubjectKeyRecord> builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
 
@@ -50,11 +51,7 @@ internal sealed class SubjectKeyConfiguration : IEntityTypeConfiguration<Subject
 
         builder.Property(key => key.KeyVersion).HasColumnName("key_version");
 
-        builder.Property(key => key.WrappedKey)
-            .HasColumnName("wrapped_key")
-            .HasConversion(
-                wrapped => wrapped.ToArray(),
-                stored => new ReadOnlyMemory<byte>(stored));
+        builder.Property(key => key.WrappedKey).HasColumnName("wrapped_key");
 
         // OPS-SEC-003: the rotation reads the keys still under the previous version.
         builder.HasIndex(key => key.KeyVersion).HasDatabaseName("ix_subject_keys_key_version");

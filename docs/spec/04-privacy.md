@@ -765,7 +765,10 @@ singling-out test applies to these records.
    their declared basis and period are unaffected.
 2. Audit records still show which actions occurred and when.
 3. The identifier is never reissued.
-4. A profile photo is removed by the same operation (D-060).
+4. A profile photo is rendered unreadable by the same operation (D-060): its bytes are
+   encrypted under the subject key that operation destroys, the row persists
+   (IDN-ATTR-003, IDN-PRIN-003), and `GET /account/photo` answers as for an account
+   with no photo (D-157).
 5. Order counts, revenue totals and product analysis are unchanged by an erasure.
 6. Declared preferences and declared profile values are unreadable after erasure.
 7. A username freed by erasure cannot be claimed until `retention.consent` has elapsed
@@ -1203,6 +1206,12 @@ expired partitions are dropped by a scheduled background job (INF-BG-001) callin
 single `SECURITY DEFINER` function, `audit_drop_expired_partitions()`, created by the
 migration step and executable only by a dedicated **maintenance role** whose
 credential the worker fetches from the secrets manager (OPS-MIG-003a, D-118). The
+function takes the two effective retention periods as arguments,
+`audit_drop_expired_partitions(security_retention interval, routine_retention interval)`,
+because a key at its default has no settings row the database could read; the worker
+passes the catalogue's effective values, and the function refuses an argument below the
+PRIV-RET-001 floor (five years, thirty days), written into it by the migration, so the
+caller cannot shorten retention by argument (D-157). The
 drop is itself audited as the job's action (INF-BG-002). The application cannot
 delete rows, and no credential with schema rights leaves the pipeline; the function
 can do exactly one thing.

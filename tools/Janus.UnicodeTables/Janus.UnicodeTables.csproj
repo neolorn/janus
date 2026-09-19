@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- CONV-CODE-008 AC2: referenced as an analyser, never as a library. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Janus.Analyzers\Janus.Analyzers.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

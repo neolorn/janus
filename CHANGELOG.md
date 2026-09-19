@@ -80,9 +80,119 @@ against the public contract of LIB-API-001.
   and inside the same transaction as the rest of the operation, so it can never
   miss a write the operation has already made, and an operation that fails part
   way through leaves nothing behind.
+- The package now carries its own Unicode tables, at a pinned version. Composition,
+  decomposition, case folding, the PRECIS properties and the script data all come
+  from those tables rather than from whichever library the machine happens to have,
+  so a canonical form computed on one host is the canonical form computed on every
+  other, and the version the fingerprints were derived under is recorded.
+- `CanonicalForm`, `Precis` and `ScriptMixing` in `Janus.Core`: the canonical form an
+  identifier is stored and compared under, the digit mapping a phone number takes
+  instead, the two PRECIS profiles a username and a display name must satisfy, and the
+  mixed-script rule that holds within a word. Two addresses that differ only in how
+  they are composed, in width or in case are one account, and a word that mixes
+  scripts is refused while whole-word Arabic beside whole-word Latin is not.
+- The library's schema now carries a settings table. A runtime-changeable
+  configuration value lives there rather than in a file, so a change made through the
+  management application takes effect without a restart, and a key the deployment
+  never changed keeps the default the catalogue gives it.
+- `IdentifierKind`, `IdentifierId`, `EmailAddress`, `PhoneNumber` and `Username` in
+  `Janus.Core`: the three kinds of identifier an account holds, and the forms each is
+  stored and compared under. An address, a number or a username that the rules of its
+  kind do not admit cannot be constructed, so it never reaches a row.
+- An account's identifiers are modelled: each one keeps both the form the person
+  entered and the form it is compared under, exactly one identifier of a kind is
+  primary once the account has a verified one of that kind, and each kind's backup
+  setting decides who a security notice reaches beyond the primary.
+- An account and its per-subject data key are now written and read back through
+  ports of their own, so the account a caller holds carries the transitions and the
+  row carries the columns, and neither knows the other's shape.
+- The schema now carries an account's identifiers and each kind's backup setting.
+  Both forms of an identifier are encrypted under the subject's own key, what is
+  looked up is the keyed fingerprint of the canonical form, and the Unicode version
+  that form was computed under is recorded beside it. One live fingerprint of a kind
+  exists across the deployment, so an identifier belongs to at most one account;
+  erasure neutralises the fingerprint and leaves the row, and a neutralised one is
+  outside that rule.
+- `IdentifierKinds` in `Janus.Core`: one field takes every identifier and the kind is
+  read from the value. An address carries the sign, a number is digits once the
+  separators a person writes are taken out, in whichever script they were typed, and
+  anything else is a username where the deployment admits one. A username now holds at
+  least one letter, so that no value is both a number and a username, and an all-digit
+  choice is refused with `identity.username.invalid`.
+- A subject key now carries its re-wrapping to the row. A rotation of the
+  key-encryption key changes the wrapping and no stored value, and an erasure of the
+  key leaves every field written under it unreadable wherever that field is held.
+- An account's identifiers are now written and read back through a port of their own.
+  Both forms are encrypted under the subject's own key, the canonical form is
+  fingerprinted under the deployment's fingerprint key, and a lookup by value matches
+  on that fingerprint, so an address entered in another casing finds the account that
+  already holds it and a neutralised fingerprint finds nobody. Reading an account's
+  identifiers unwraps its key once however many columns it decrypts, and reading them
+  after erasure refuses rather than yielding anything.
+- `DisplayName` and `LegalName` in `Janus.Core`: the two names of a profile, each in
+  the form it is held in. A display name takes the Nickname profile and is bounded in
+  bytes; a legal name takes Normalization Form C and is bounded in scalar values; both
+  are of one script per word.
+- The schema now carries an account's profile, and the profile is written and read
+  back through a port of its own. The display name, the legal name and the date of
+  birth are each held under the subject's own key, so a dump yields none of them and
+  erasure leaves none of them readable; a field the account gives up clears its column,
+  and a field it did not touch is not written again.
+- An account's photo is now held in a table and a port of its own, under the subject's
+  own key. Nothing that reads an account reads image bytes, a dump yields no
+  photograph, and erasure of the key leaves the image unrecoverable.
+- An account carries a language, a time zone and the values of the preference keys the
+  host declares at startup. A declaration names a type, a default and whether only an
+  administrator may set the key; a malformed one fails startup with
+  `model.startup.preferencedeclaration`. The declared values are stored under the
+  subject key as one document, capped by `preferences.maxsize`; the language and the
+  time zone are not, so a notice still reaches an erased account in a language it
+  reads.
+- Organizations and memberships. An organization is an entity in the one identity
+  pool and no isolation boundary; its deletion suspends it at once, runs for
+  `organization.deletion.grace` and is cancellable until the window closes, after
+  which the row stays and the identifier goes on resolving. A membership is a record
+  of its own that ends without touching either side, and an account may hold more
+  than one. Nothing in the schema separates staff from customers.
+- An audit trail. Every record names who acted, whose identity the action was taken
+  under, the instant it occurred and the organization where one applies; an event about
+  a principal holding no membership carries none, and the absence is the recorded fact.
+  What happened is a code and never a sentence. The table is partitioned by retention
+  category and then by calendar month, three months kept open ahead by
+  `audit_ensure_partitions`, and an attribute an event must record is held under the
+  subject's own key, so erasure reaches it without a row being touched.
+- Named principals for background jobs, imports and webhooks. One acts for a single
+  organization and reaches no other; the other exists for pool-wide work, runs only
+  the operations it names and acts for nobody. Neither can be constructed without a
+  stated reason.
+- The erasure, as one operation and one transaction. The account reaches `deleted`,
+  the subject's wrapped key is overwritten with the irreversible value, its
+  fingerprints are neutralised, and an erasures row records why and how far the
+  host-side work has got. The photo row stays where it is and its bytes stop being
+  readable with everything else the key covered. A transaction that does not commit leaves no
+  row and erases nothing; there is no third state. Erasure progress is on that row and
+  on no column of the account, and every outstanding erasure is read in one query.
+- The administrative organization is marked on its own row, set once when the
+  deployment is bootstrapped and by nothing else, and the database holds the mark to
+  exactly one organization. Requesting its deletion is refused with
+  `identity.organization.protected`; every other organization takes the window as
+  before.
+- The three database roles the deployment attaches credentials to. `janus_migrate`
+  owns the schema and is the only role that alters it, `janus_app` reads and writes
+  rows, and `janus_maintenance` executes the two audit partition functions and reads
+  and updates the wrapped keys. The migration creates the two runtime roles where they
+  are absent and writes every grant, so an audit row cannot be updated or deleted by
+  the application at all, and no credential that alters schema reaches the running
+  system.
+- `audit_drop_expired_partitions`: the scheduled job drops a month of one retention
+  category once its end has passed that category's retention. The two retention
+  periods are passed in, because a key left at its default has no stored row the
+  database could read, and either below the floor its key carries is refused.
 
 ### Changed
 
+- The case-insensitive collation is created in the default schema, because a column
+  names a collation by one identifier and cannot reach one held in another schema.
 - A configuration key loosens the way its row states. Where a row states nothing, a
   key with only a ceiling loosens upward, a key with only a floor loosens downward,
   and a flag loosens away from its default, so a tightening no longer costs the
