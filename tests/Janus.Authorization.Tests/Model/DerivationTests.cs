@@ -9,11 +9,30 @@ namespace Janus.Authorization.Tests.Model;
 
 /// <summary>
 /// What a declared derivation carries, read from the built model
-/// (AUTHZ-DERIVE-003, AUTHZ-DERIVE-005).
+/// (AUTHZ-DERIVE-001, AUTHZ-DERIVE-003, AUTHZ-DERIVE-005).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class DerivationTests
 {
+    /// <summary>
+    /// AUTHZ-DERIVE-001 AC1: a derivation is declared where containment and sensitivity
+    /// are declared, on the resource type itself, so a host adds one by writing a line
+    /// of its own declaration and not by changing the library.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_DERIVE_001_AC1_ADerivationIsDeclaredWhereContainmentIs()
+    {
+        AuthorizationDeclaration declared = HostDomain.Declared().Build();
+
+        ResourceTypeDeclaration folder = declared.ResourceTypes.Single(
+            type => type.Name == ResourceType.Parse("folder"));
+
+        Assert.Equal(ResourceType.Parse("workspace"), folder.ContainedIn);
+        Assert.Equal(
+            new DerivationDeclaration("reviewer", RoleName.Parse("reader"), Materialised: false),
+            folder.Derivations.Single());
+    }
+
     /// <summary>
     /// AUTHZ-DERIVE-003 AC1: a derivation names a fact in the host's own data, and
     /// that fact names the table and the column it is read from, so a derivation that
