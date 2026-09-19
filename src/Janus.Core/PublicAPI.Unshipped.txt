@@ -62,6 +62,7 @@ Janus.Core.Bucket.Window.init -> void
 Janus.Core.BucketWindow
 Janus.Core.BucketWindow.Fixed = 1 -> Janus.Core.BucketWindow
 Janus.Core.BucketWindow.Sliding = 0 -> Janus.Core.BucketWindow
+Janus.Core.CanonicalForm
 Janus.Core.CapabilityResidual
 Janus.Core.CapabilityResidual.AccountState = 4 -> Janus.Core.CapabilityResidual
 Janus.Core.CapabilityResidual.Consent = 3 -> Janus.Core.CapabilityResidual
@@ -266,6 +267,7 @@ Janus.Core.PolicyOverride.RequiredAssurance.get -> Janus.Core.AssuranceLevel?
 Janus.Core.PolicyOverride.RequiredAssurance.init -> void
 Janus.Core.PolicyOverride.SelfServiceRecovery.get -> bool?
 Janus.Core.PolicyOverride.SelfServiceRecovery.init -> void
+Janus.Core.Precis
 Janus.Core.Restriction
 Janus.Core.Restriction.<Clone>$() -> Janus.Core.Restriction!
 Janus.Core.Restriction.Buckets.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Bucket!>!
@@ -303,6 +305,7 @@ Janus.Core.Result<TValue>.Equals(Janus.Core.Result<TValue> other) -> bool
 Janus.Core.Result<TValue>.Match<TOutcome>(System.Func<TValue, TOutcome>! onSuccess, System.Func<Janus.Core.Error!, TOutcome>! onFailure) -> TOutcome
 Janus.Core.Result<TValue>.Result() -> void
 Janus.Core.Result<TValue>.Switch(System.Action<TValue>! onSuccess, System.Action<Janus.Core.Error!>! onFailure) -> void
+Janus.Core.ScriptMixing
 Janus.Core.StartupException
 Janus.Core.StartupException.Failure.get -> Janus.Core.Error?
 Janus.Core.StartupException.StartupException() -> void
@@ -402,6 +405,9 @@ override Janus.Core.SubjectId.GetHashCode() -> int
 override Janus.Core.SubjectId.ToString() -> string!
 static Janus.Core.Bucket.operator !=(Janus.Core.Bucket? left, Janus.Core.Bucket? right) -> bool
 static Janus.Core.Bucket.operator ==(Janus.Core.Bucket? left, Janus.Core.Bucket? right) -> bool
+static Janus.Core.CanonicalForm.AsciiDigits(string! value) -> string!
+static Janus.Core.CanonicalForm.Of(string! value) -> string!
+static Janus.Core.CanonicalForm.UnicodeVersion.get -> string!
 static Janus.Core.Configuration.Argon2StrengthClass.operator !=(Janus.Core.Configuration.Argon2StrengthClass? left, Janus.Core.Configuration.Argon2StrengthClass? right) -> bool
 static Janus.Core.Configuration.Argon2StrengthClass.operator ==(Janus.Core.Configuration.Argon2StrengthClass? left, Janus.Core.Configuration.Argon2StrengthClass? right) -> bool
 static Janus.Core.Configuration.ConfigurationKey.Parse(string! value) -> Janus.Core.Configuration.ConfigurationKey
@@ -586,6 +592,8 @@ static Janus.Core.Policy.operator ==(Janus.Core.Policy? left, Janus.Core.Policy?
 static Janus.Core.PolicyOverride.None.get -> Janus.Core.PolicyOverride!
 static Janus.Core.PolicyOverride.operator !=(Janus.Core.PolicyOverride? left, Janus.Core.PolicyOverride? right) -> bool
 static Janus.Core.PolicyOverride.operator ==(Janus.Core.PolicyOverride? left, Janus.Core.PolicyOverride? right) -> bool
+static Janus.Core.Precis.TryEnforceNickname(string! value, out string! enforced) -> bool
+static Janus.Core.Precis.TryEnforceUsername(string! value, out string! enforced) -> bool
 static Janus.Core.Restriction.operator !=(Janus.Core.Restriction? left, Janus.Core.Restriction? right) -> bool
 static Janus.Core.Restriction.operator ==(Janus.Core.Restriction? left, Janus.Core.Restriction? right) -> bool
 static Janus.Core.Result.Failure(Janus.Core.Error! error) -> Janus.Core.Result
@@ -596,6 +604,7 @@ static Janus.Core.Result.operator !=(Janus.Core.Result left, Janus.Core.Result r
 static Janus.Core.Result.operator ==(Janus.Core.Result left, Janus.Core.Result right) -> bool
 static Janus.Core.Result<TValue>.operator !=(Janus.Core.Result<TValue> left, Janus.Core.Result<TValue> right) -> bool
 static Janus.Core.Result<TValue>.operator ==(Janus.Core.Result<TValue> left, Janus.Core.Result<TValue> right) -> bool
+static Janus.Core.ScriptMixing.IsSingleScriptPerWord(string! value) -> bool
 static Janus.Core.SubjectId.New(System.Security.Cryptography.RandomNumberGenerator! randomness) -> Janus.Core.SubjectId
 static Janus.Core.SubjectId.operator !=(Janus.Core.SubjectId left, Janus.Core.SubjectId right) -> bool
 static Janus.Core.SubjectId.operator ==(Janus.Core.SubjectId left, Janus.Core.SubjectId right) -> bool

@@ -85,6 +85,12 @@ against the public contract of LIB-API-001.
   from those tables rather than from whichever library the machine happens to have,
   so a canonical form computed on one host is the canonical form computed on every
   other, and the version the fingerprints were derived under is recorded.
+- `CanonicalForm`, `Precis` and `ScriptMixing` in `Janus.Core`: the canonical form an
+  identifier is stored and compared under, the digit mapping a phone number takes
+  instead, the two PRECIS profiles a username and a display name must satisfy, and the
+  mixed-script rule that holds within a word. Two addresses that differ only in how
+  they are composed, in width or in case are one account, and a word that mixes
+  scripts is refused while whole-word Arabic beside whole-word Latin is not.
 
 ### Changed
 
