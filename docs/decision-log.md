@@ -8333,6 +8333,39 @@ tools for a reason.
 
 ---
 
+## D-160 — Phase 2 questions, second stop: derivations are host-supplied relations; reading and modifying; the gate binding; database-backed validation
+
+**Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-043, D-037, D-078, D-015 (startup) · **Extends:** D-159
+
+**TL;DR.** Four gaps in the authorization chapter, one of them a real contradiction.
+
+1. **Derivations do not break LIB-HOST-002.** The library never queries a host table;
+   the host supplies the relationship as a queryable from its own context, exactly as it
+   supplies the ancestry and grant sets under D-159, and the composed `EXISTS` runs in
+   the host's query. The declaration carries the selectors for the LINQ side and the
+   relation and column names for the SQL side. A single check on a derived type is the
+   filter applied to one resource through the host's query. Rejected: a library-side
+   join into host tables (what AUTHZ-DERIVE-004's wording implied), which would be the
+   one thing LIB-HOST-002 exists to forbid.
+2. **Reading or modifying** is a property of every action: `read`, `list` and `export`
+   are reading by name, everything else is modifying unless declared reading. Fail
+   closed: an unclassified action is modifying. Restriction allows the account's own
+   reading actions and refuses the rest.
+3. **The `stepup` residual comes from the gate bound to the action**, declared in the
+   model builder for host actions and listed in section 5a for library actions. A gate
+   name was never a permission string (D-151); LIB-HOST-004's wording is corrected.
+4. **Startup validation that reads the database** runs in a hosted service registered
+   before the web server, failing the process before it serves; `IHostedService` is in
+   the shared framework, so no package. `Janus.Cli` runs the same validation first.
+   Rejected: a blocking call in `AddJanus` (synchronous database access at registration)
+   and a public `ValidateAsync` the host must remember to await (a startup check the
+   host can forget is not a startup check).
+
+**Propagated to:** `03` AUTHZ-DERIVE-001, AUTHZ-GATE-005, AUTHZ-GATE-006, AUTHZ-MODEL-004
+· `07` LIB-HOST-004.
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -8502,6 +8535,7 @@ tools for a reason.
 | Phase 1 questions, fourth stop: photo unreadable not removed; administrative flag; role names; retention by argument | D-157 |
 | Phase 1, fifth stop: merge commits outside CONV-VCS-003; a gate's own defect is Tier 1 | D-158 |
 | Phase 2 question: the filter is a same-context EXISTS over the contract tables; subject set first | D-159 |
+| Phase 2, second stop: host-supplied relations; reading vs modifying; gate binding; hosted-service validation | D-160 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

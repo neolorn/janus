@@ -262,8 +262,8 @@ SHALL fail closed.
 
 **Acceptance criteria**
 1. Authorization alone compiles and runs.
-2. Without an assurance provider, a step-up permission is denied, and the denial is
-   distinguishable in diagnostics.
+2. Without an assurance provider, an action bound to a step-up gate is denied, and the
+   denial is distinguishable in diagnostics.
 
 ---
 

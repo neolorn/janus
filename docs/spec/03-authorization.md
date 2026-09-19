@@ -209,6 +209,19 @@ they should not, silently. No choice of registry syntax makes it easier or harde
 stating that whoever holds a named relationship in the host's own data holds a given
 role on a given resource type.
 
+**Values (D-160).** A derivation names a **relationship the host supplies**: in the model
+builder, the relationship's name, its resource type, the role it confers, and two
+selectors over the host's relationship row (the holder's subject identifier, the
+resource identifier), plus the SQL relation name and the two column names for the SQL
+rendering. At filter time the host passes an `IQueryable` of that relationship row from
+its own context, beside the ancestry and grant sets (AUTHZ-GATE-002); the LINQ rendering
+composes it into the same `EXISTS` (a grant **or** a relationship row for one of the
+principal's subjects, on the resource or an ancestor), and the SQL rendering names the
+declared relation. The library issues no query of its own against a host table
+(LIB-HOST-002): the host's context executes the composed query. A single check on a
+type with derivations therefore runs as the filter applied to the one resource, through
+the host's query, never as a library-side read.
+
 *Source: D-043*
 
 A stored grant exists because someone wrote it. A derived grant exists because a
@@ -408,7 +421,12 @@ and compliance records all derive from it.
 
 ### 3.2 Validation
 
-**AUTHZ-MODEL-004** — The model SHALL be validated at startup, failing loudly. The
+**AUTHZ-MODEL-004** — The model SHALL be validated at startup, failing loudly. Checks
+that need only the declaration run inside `AddJanus`; checks that read the database
+(an undeclared permission granted by a stored role, an unindexed derivation column) run
+in a hosted service `Janus.Hosting` registers before the web server, so the process
+exits non-zero before a request is served; `Janus.Cli` runs the same validation before
+any command (D-160). The
 following SHALL fail:
 
 - A containment cycle
@@ -574,6 +592,12 @@ explanation.
 **Values (D-153).** `requires` carries members of the closed set in `10` section 5.20:
 `stepup` · `reauthenticate` · `restricted` · `consent` · `accountstate`.
 
+**Values (D-160).** The `stepup` residual comes from the **gate bound to the action**, not
+from the permission string: the model builder binds a host-declared action to a step-up
+gate name (`10` section 5a or a host-declared gate), and the library-owned actions carry
+their bindings in section 5a. `requires` lists `stepup` for an action whose bound gate
+the session does not currently satisfy.
+
 *Source: D-015, D-078*
 
 The frontend must never infer permissions from role names; that is how a button
@@ -590,6 +614,12 @@ produces N+1 queries.
 
 **AUTHZ-GATE-006** — A processing restriction (`01-identity`, state `restricted`)
 SHALL be evaluated wherever the gate is evaluated.
+
+**Values (D-160).** Every permission action is classified **reading** or **modifying**. An
+action named `read`, `list` or `export` is reading; every other action is modifying
+unless the model builder declares it reading. Under restriction the gate allows the
+account's own reading actions and refuses every modifying one with `authz.restricted`.
+The library-owned actions of `10` section 2.1 follow the same rule.
 
 *Source: D-037*
 
