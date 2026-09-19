@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `Permission` and `Permissions` in `Janus.Core`: a permission is a lowercase
+  `resource:action` that cannot be constructed in another shape, and the library's own
+  twenty-two are listed where a host can read them.
+- `SubjectType`, `GrantKind` and `ConcealmentBehaviour` in `Janus.Core`: what a grant
+  is held by, where it came from, and what a denial on a record discloses.
+- The authorization error codes: a denial, the four grant refusals, a group that would
+  contain itself, an entity with no registered policy, a restricted subject, and the
+  three model validations a startup fails on.
 - `JAN0006`: a caught exception that is neither handled nor reported now fails the
   build.
 - `Result`, `Result<T>`, `Error` and `ErrorCode` in `Janus.Core`: an expected outcome

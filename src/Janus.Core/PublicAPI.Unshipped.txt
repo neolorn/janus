@@ -82,6 +82,9 @@ Janus.Core.CapabilityResidual.Consent = 3 -> Janus.Core.CapabilityResidual
 Janus.Core.CapabilityResidual.Reauthenticate = 1 -> Janus.Core.CapabilityResidual
 Janus.Core.CapabilityResidual.Restricted = 2 -> Janus.Core.CapabilityResidual
 Janus.Core.CapabilityResidual.StepUp = 0 -> Janus.Core.CapabilityResidual
+Janus.Core.ConcealmentBehaviour
+Janus.Core.ConcealmentBehaviour.Conceal = 0 -> Janus.Core.ConcealmentBehaviour
+Janus.Core.ConcealmentBehaviour.Disclose = 1 -> Janus.Core.ConcealmentBehaviour
 Janus.Core.Configuration.Argon2StrengthClass
 Janus.Core.Configuration.Argon2StrengthClass.<Clone>$() -> Janus.Core.Configuration.Argon2StrengthClass!
 Janus.Core.Configuration.Argon2StrengthClass.Argon2StrengthClass(int Memory, int Iterations) -> void
@@ -227,6 +230,10 @@ Janus.Core.GateLevel
 Janus.Core.GateLevel.Aal1 = 1 -> Janus.Core.GateLevel
 Janus.Core.GateLevel.Aal2 = 2 -> Janus.Core.GateLevel
 Janus.Core.GateLevel.Reachable = 0 -> Janus.Core.GateLevel
+Janus.Core.GrantKind
+Janus.Core.GrantKind.Derived = 1 -> Janus.Core.GrantKind
+Janus.Core.GrantKind.Materialised = 2 -> Janus.Core.GrantKind
+Janus.Core.GrantKind.Stored = 0 -> Janus.Core.GrantKind
 Janus.Core.ISecretSource
 Janus.Core.ISecretSource.ReadFingerprintKeyAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.ReadOnlyMemory<byte>>
 Janus.Core.ISecretSource.ReadKeyEncryptionKeysAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.KeyEncryptionKeys!>
@@ -276,6 +283,12 @@ Janus.Core.OrganizationId.OrganizationId() -> void
 Janus.Core.OrganizationId.OrganizationId(System.Guid Value) -> void
 Janus.Core.OrganizationId.Value.get -> System.Guid
 Janus.Core.OrganizationId.Value.init -> void
+Janus.Core.Permission
+Janus.Core.Permission.Action.get -> string!
+Janus.Core.Permission.Equals(Janus.Core.Permission other) -> bool
+Janus.Core.Permission.Permission() -> void
+Janus.Core.Permission.Resource.get -> string!
+Janus.Core.Permissions
 Janus.Core.PhoneNumber
 Janus.Core.PhoneNumber.Equals(Janus.Core.PhoneNumber other) -> bool
 Janus.Core.PhoneNumber.PhoneNumber() -> void
@@ -421,6 +434,9 @@ Janus.Core.SubjectId.SubjectId() -> void
 Janus.Core.SubjectId.SubjectId(System.Guid Value) -> void
 Janus.Core.SubjectId.Value.get -> System.Guid
 Janus.Core.SubjectId.Value.init -> void
+Janus.Core.SubjectType
+Janus.Core.SubjectType.Group = 1 -> Janus.Core.SubjectType
+Janus.Core.SubjectType.User = 0 -> Janus.Core.SubjectType
 Janus.Core.SuspensionOrigin
 Janus.Core.SuspensionOrigin.Administrator = 1 -> Janus.Core.SuspensionOrigin
 Janus.Core.SuspensionOrigin.Self = 0 -> Janus.Core.SuspensionOrigin
@@ -502,6 +518,8 @@ override Janus.Core.MembershipId.GetHashCode() -> int
 override Janus.Core.MembershipId.ToString() -> string!
 override Janus.Core.OrganizationId.GetHashCode() -> int
 override Janus.Core.OrganizationId.ToString() -> string!
+override Janus.Core.Permission.GetHashCode() -> int
+override Janus.Core.Permission.ToString() -> string!
 override Janus.Core.PhoneNumber.GetHashCode() -> int
 override Janus.Core.PhoneNumber.ToString() -> string!
 override Janus.Core.Policy.Equals(object? obj) -> bool
@@ -699,18 +717,28 @@ static Janus.Core.ErrorCodes.ConfigurationPolicyBelowSystem.get -> Janus.Core.Er
 static Janus.Core.ErrorCodes.ConfigurationValueAboveCeiling.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ConfigurationValueBelowFloor.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ConfigurationValueNotAllowed.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.Denied.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.GrantDuplicate.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.GrantExpired.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.GrantNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GrantReasonRequired.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.GroupCycle.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.OrganizationProtected.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.PolicyUnregistered.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PreferenceAdministratorOnly.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PreferenceTooLarge.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PreferenceUndeclared.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PreferenceWrongType.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.Restricted.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.StartupContainmentCycle.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupDeclarationMissing.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupGoverningLanguage.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.StartupNoOrganizationPath.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupPreferenceDeclaration.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupUndeclaredDerivationReference.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupUndeclaredPermission.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupUndeclaredTypeReference.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.StartupUnindexedDerivation.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.SystemFault.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.UsernameInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.Gate.operator !=(Janus.Core.Gate? left, Janus.Core.Gate? right) -> bool
@@ -730,6 +758,33 @@ static Janus.Core.MembershipId.operator ==(Janus.Core.MembershipId left, Janus.C
 static Janus.Core.OrganizationId.New(System.TimeProvider! time) -> Janus.Core.OrganizationId
 static Janus.Core.OrganizationId.operator !=(Janus.Core.OrganizationId left, Janus.Core.OrganizationId right) -> bool
 static Janus.Core.OrganizationId.operator ==(Janus.Core.OrganizationId left, Janus.Core.OrganizationId right) -> bool
+static Janus.Core.Permission.Parse(string! value) -> Janus.Core.Permission
+static Janus.Core.Permission.TryParse(string? value, out Janus.Core.Permission permission) -> bool
+static Janus.Core.Permission.operator !=(Janus.Core.Permission left, Janus.Core.Permission right) -> bool
+static Janus.Core.Permission.operator ==(Janus.Core.Permission left, Janus.Core.Permission right) -> bool
+static Janus.Core.Permissions.AccountManage.get -> Janus.Core.Permission
+static Janus.Core.Permissions.All.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>!
+static Janus.Core.Permissions.AuditRead.get -> Janus.Core.Permission
+static Janus.Core.Permissions.ComplianceManage.get -> Janus.Core.Permission
+static Janus.Core.Permissions.ConfigurationManage.get -> Janus.Core.Permission
+static Janus.Core.Permissions.ConfigurationRead.get -> Janus.Core.Permission
+static Janus.Core.Permissions.DomainManage.get -> Janus.Core.Permission
+static Janus.Core.Permissions.GrantManage.get -> Janus.Core.Permission
+static Janus.Core.Permissions.GrantRead.get -> Janus.Core.Permission
+static Janus.Core.Permissions.GroupManage.get -> Janus.Core.Permission
+static Janus.Core.Permissions.MembershipManage.get -> Janus.Core.Permission
+static Janus.Core.Permissions.NoticePublish.get -> Janus.Core.Permission
+static Janus.Core.Permissions.OrganizationManage.get -> Janus.Core.Permission
+static Janus.Core.Permissions.PrivacyRequestManage.get -> Janus.Core.Permission
+static Janus.Core.Permissions.RecordsOfProcessingRead.get -> Janus.Core.Permission
+static Janus.Core.Permissions.RecoveryApprove.get -> Janus.Core.Permission
+static Janus.Core.Permissions.RestrictionEdit.get -> Janus.Core.Permission
+static Janus.Core.Permissions.RestrictionGrant.get -> Janus.Core.Permission
+static Janus.Core.Permissions.RoleManage.get -> Janus.Core.Permission
+static Janus.Core.Permissions.SessionRevoke.get -> Janus.Core.Permission
+static Janus.Core.Permissions.SessionRevokeAccount.get -> Janus.Core.Permission
+static Janus.Core.Permissions.SystemAdminister.get -> Janus.Core.Permission
+static Janus.Core.Permissions.TakedownExecute.get -> Janus.Core.Permission
 static Janus.Core.PhoneNumber.TryParse(string! entered, out Janus.Core.PhoneNumber number) -> bool
 static Janus.Core.PhoneNumber.operator !=(Janus.Core.PhoneNumber left, Janus.Core.PhoneNumber right) -> bool
 static Janus.Core.PhoneNumber.operator ==(Janus.Core.PhoneNumber left, Janus.Core.PhoneNumber right) -> bool
@@ -775,6 +830,7 @@ static Janus.Core.Username.operator ==(Janus.Core.Username left, Janus.Core.User
 ~override Janus.Core.LegalName.Equals(object obj) -> bool
 ~override Janus.Core.MembershipId.Equals(object obj) -> bool
 ~override Janus.Core.OrganizationId.Equals(object obj) -> bool
+~override Janus.Core.Permission.Equals(object obj) -> bool
 ~override Janus.Core.PhoneNumber.Equals(object obj) -> bool
 ~override Janus.Core.Result.Equals(object obj) -> bool
 ~override Janus.Core.Result.ToString() -> string
