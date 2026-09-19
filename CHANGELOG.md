@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A password is set and presented through one path: the length floor that the
+  account's reachable assurance decides, the screening that never silently skips, the
+  hashing, and the silent rehash on the next sign-in after the parameters are raised.
+  A password that matches one of the person's own words only after it was set carries
+  a prompt to change into the sign-in that completes.
 - Raising the assurance floor or the redundancy requirement of a policy gives the
   accounts already under it a run-up: their sign-ins carry the new requirement and
   the date it falls due and continue until then, and stop at enrolment afterwards. A
