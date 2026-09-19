@@ -884,14 +884,17 @@ after the type for any change that breaks LIB-API-001. One logical change per co
 A body is present only when the diff cannot explain itself and SHALL consist of
 fragments, one per line, each beginning with a dash and at most 72 characters, stating
 a reason or a non-obvious consequence; a body SHALL NOT describe what the diff shows
-and SHALL NOT contain sentences of prose (D-150).
+and SHALL NOT contain sentences of prose (D-150). A commit with two parents (the merge
+commit the platform writes when a pull request is merged) carries no change of its own
+and is outside this item: the gate inspects single-parent commits only (D-158).
 
-*Source: D-149*
+*Source: D-149, D-158*
 
 **Acceptance criteria**
 1. A commit message that does not parse under Conventional Commits 1.0.0, whose
    description exceeds 72 characters, or whose body has a line that does not begin
-   with a dash or exceeds 72 characters, fails a check on push and on pull request.
+   with a dash or exceeds 72 characters, fails a check on push and on pull request;
+   commits with two parents are skipped by the check.
 2. Every breaking change to the contract carries the breaking marker.
 
 ---
