@@ -95,6 +95,10 @@ against the public contract of LIB-API-001.
   configuration value lives there rather than in a file, so a change made through the
   management application takes effect without a restart, and a key the deployment
   never changed keeps the default the catalogue gives it.
+- `IdentifierKind`, `IdentifierId`, `EmailAddress`, `PhoneNumber` and `Username` in
+  `Janus.Core`: the three kinds of identifier an account holds, and the forms each is
+  stored and compared under. An address, a number or a username that the rules of its
+  kind do not admit cannot be constructed, so it never reaches a row.
 
 ### Changed
 
