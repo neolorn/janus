@@ -197,6 +197,50 @@ internal sealed class PermissionRule
     }
 
     /// <summary>
+    /// The records of a page that a derivation admits, as a query over the host's own
+    /// relations for the host's context to run.
+    /// </summary>
+    /// <typeparam name="TResource">The host's row.</typeparam>
+    /// <param name="sources">The contract tables and the rows of each relationship.</param>
+    /// <param name="resources">The records being asked about.</param>
+    /// <returns>
+    /// The query, or nothing where the rule follows from no derivation and the stored
+    /// grants are the whole of the answer.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The sources or the records are absent.</exception>
+    /// <remarks>
+    /// AUTHZ-PRIN-001, D-161: this is the one rule's derived clause read the other way
+    /// round, from the record to the relationship rather than from the row, so that a
+    /// check and a page decide what the filter decides.
+    /// </remarks>
+    public IQueryable<string>? ToAdmitted<TResource>(
+        FilterSources<TResource> sources,
+        IReadOnlyList<ResourceId> resources)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+        ArgumentNullException.ThrowIfNull(resources);
+
+        if (_derivations.Count == 0 || resources.Count == 0)
+        {
+            return null;
+        }
+
+        string[] page = [.. resources.Select(resource => resource.ToString())];
+        IQueryable<AncestryEntry> ancestry = sources.Ancestry;
+        string type = Type.ToString();
+        IQueryable<string>? admitted = null;
+
+        foreach (RelationshipDeclaration relationship in _derivations)
+        {
+            IQueryable<string> one = Admits(sources, ancestry, type, page, relationship);
+
+            admitted = admitted is null ? one : admitted.Union(one);
+        }
+
+        return admitted?.Distinct();
+    }
+
+    /// <summary>
     /// The rule as a fragment a hand-written query composes into its <c>WHERE</c>
     /// clause, with every value carried as a parameter.
     /// </summary>
@@ -342,6 +386,50 @@ internal sealed class PermissionRule
                 Holds(relationship.Holder.Body),
                 new Substitution(above.Parameters[1], named).Visit(held)),
             row));
+    }
+
+    // The same clause as Derived, asked from the ancestry rather than from the host's
+    // row: the records of the page with a container the relationship names, held by one
+    // of the principal's subjects. One query per derivation, whatever the page's size
+    // (AUTHZ-GATE-005 AC1).
+    private IQueryable<string> Admits<TResource>(
+        FilterSources<TResource> sources,
+        IQueryable<AncestryEntry> ancestry,
+        string type,
+        string[] page,
+        RelationshipDeclaration relationship)
+    {
+        if (!sources.Relationships.TryGetValue(relationship.Name, out RelationshipRows? rows))
+        {
+            throw new InvalidOperationException(string.Create(
+                CultureInfo.InvariantCulture,
+                $"A derivation follows from the relationship '{relationship.Name}', whose rows the filter was not given."));
+        }
+
+        string on = relationship.On.ToString();
+
+        Expression<Func<AncestryEntry, bool>> scoped = entry =>
+            entry.ResourceType == type
+            && page.Contains(entry.ResourceId)
+            && entry.AncestorType == on;
+
+        ParameterExpression above = scoped.Parameters[0];
+        ParameterExpression row = relationship.Holder.Parameters[0];
+
+        Expression names = Expression.Equal(
+            new Substitution(relationship.Resource.Parameters[0], row)
+                .Visit(relationship.Resource.Body),
+            Expression.Property(above, nameof(AncestryEntry.AncestorId)));
+
+        Expression held = rows(Expression.Lambda(
+            Expression.AndAlso(Holds(relationship.Holder.Body), names),
+            row));
+
+        return ancestry
+            .Where(Expression.Lambda<Func<AncestryEntry, bool>>(
+                Expression.AndAlso(scoped.Body, held),
+                above))
+            .Select(entry => entry.ResourceId);
     }
 
     // Whether the row is held by one of the principal's subjects. The column is the

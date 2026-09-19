@@ -39,6 +39,36 @@ public interface IAccessGate
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Whether the caller may do this to this record, on a type whose access follows
+    /// in part from a fact in the host's own data.
+    /// </summary>
+    /// <typeparam name="TResource">The host's row.</typeparam>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="permission">What they are asking to do.</param>
+    /// <param name="resource">Which record.</param>
+    /// <param name="sources">
+    /// The same contract tables and relationship rows the filter takes, from the host's
+    /// own context.
+    /// </param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The same answer as the overload without sources, with every declared derivation
+    /// evaluated beside the stored grants.
+    /// </returns>
+    /// <remarks>
+    /// AUTHZ-DERIVE-001, AUTHZ-PRIN-001 AC2, D-161: a type that declares a derivation
+    /// is asked through this overload, and the one without sources is refused with
+    /// <c>authz.derivation.sourcesmissing</c>, so no path answers from stored grants
+    /// alone.
+    /// </remarks>
+    ValueTask<Result> RequireAsync<TResource>(
+        AccessContext context,
+        Permission permission,
+        ResourceReference resource,
+        FilterSources<TResource> sources,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Whether the caller may do this at all, where what is being asked for is not
     /// tied to one record.
     /// </summary>
@@ -156,5 +186,36 @@ public interface IAccessGate
         ResourceType type,
         IReadOnlyList<ResourceId> resources,
         IReadOnlyList<Permission> permissions,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// What the caller may do to each of these records, on a type whose access follows
+    /// in part from a fact in the host's own data.
+    /// </summary>
+    /// <typeparam name="TResource">The host's row.</typeparam>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="type">The kind of thing the records are.</param>
+    /// <param name="resources">The records of the page.</param>
+    /// <param name="permissions">The permissions the caller's surface offers on them.</param>
+    /// <param name="sources">
+    /// The same contract tables and relationship rows the filter takes, from the host's
+    /// own context.
+    /// </param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// One capability per record, in the order the records were given, with every
+    /// declared derivation evaluated beside the stored grants.
+    /// </returns>
+    /// <remarks>
+    /// AUTHZ-DERIVE-001, AUTHZ-GATE-005 AC1, D-161: each derivation costs one further
+    /// query for the whole page, whatever the page's size, and the overload without
+    /// sources is refused on a type that declares one.
+    /// </remarks>
+    ValueTask<Result<IReadOnlyList<Capability>>> CapabilitiesAsync<TResource>(
+        AccessContext context,
+        ResourceType type,
+        IReadOnlyList<ResourceId> resources,
+        IReadOnlyList<Permission> permissions,
+        FilterSources<TResource> sources,
         CancellationToken cancellationToken);
 }

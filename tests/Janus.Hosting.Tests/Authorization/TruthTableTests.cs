@@ -51,6 +51,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a grant that was revoked", false),
         ("a grant in another organization", false),
         ("a grant whose role does not allow the permission", false),
+        ("a fact in the host's data conferring a role", true),
+        ("a deny over a fact in the host's data", false),
+        ("a fact in the host's data on a container above", true),
     ];
 
     /// <summary>
@@ -280,13 +283,15 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 HostPermissions.Read,
                 Document,
                 written.Deployment.Organization,
-                new FilterSources<HostDocument>(
-                    reading.Ancestry,
-                    reading.Grants,
-                    document => document.Id)
-                    .Relationship("reviewer", reading.Reviewers),
+                Sources(reading),
                 TestContext.Current.CancellationToken));
     }
+
+    // What the host supplies from its own context, the same object every path on a type
+    // with a derivation takes (D-161).
+    private static FilterSources<HostDocument> Sources(HostContext reading) =>
+        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, document => document.Id)
+            .Relationship("reviewer", reading.Reviewers);
 
     private static TRendering Rendered<TRendering>(Result<TRendering> outcome) =>
         outcome.Match(
@@ -299,12 +304,14 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     private async Task<bool> ChecksAsync(Case written)
     {
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
 
         Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
             .RequireAsync(
                 AccessContext.Of(written.Account),
                 HostPermissions.Read,
                 written.Record,
+                Sources(reading),
                 TestContext.Current.CancellationToken);
 
         return outcome.Match(() => true, _ => false);
@@ -385,6 +392,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         await deployment.RegisterAsync(sibling, inner, cancellationToken);
 
         await GrantAsync(deployment, scenario, role, account, record, inner, outer, sibling);
+        await ReviewAsync(deployment, scenario, account, inner, outer);
 
         return new Case(host, deployment, account, record, sibling);
     }
@@ -484,9 +492,51 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                     holder, role, record, false, null, await ElsewhereAsync(), cancellationToken);
                 break;
 
+            case "a fact in the host's data conferring a role":
+            case "a fact in the host's data on a container above":
+                break;
+
+            case "a deny over a fact in the host's data":
+                await deployment.GrantAsync(
+                    holder, role, record, true, null, null, cancellationToken);
+                break;
+
             default:
                 throw new ArgumentOutOfRangeException(nameof(scenario), scenario, "No such case.");
         }
+    }
+
+    // AUTHZ-DERIVE-001, AUTHZ-DERIVE-002: the fact is the host's own row, and the role
+    // it confers is read where the derivation is evaluated, so the role exists only for
+    // the cases that follow from one.
+    private static async Task ReviewAsync(
+        Deployment deployment,
+        string scenario,
+        SubjectId account,
+        ResourceReference inner,
+        ResourceReference outer)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        ResourceReference? reviewed = scenario switch
+        {
+            "a fact in the host's data conferring a role" => inner,
+            "a deny over a fact in the host's data" => inner,
+            "a fact in the host's data on a container above" => outer,
+            _ => null,
+        };
+
+        if (reviewed is not ResourceReference workspace)
+        {
+            return;
+        }
+
+        await deployment.NamedRoleAsync(
+            RoleName.Parse("reviewer"),
+            [HostPermissions.Read],
+            cancellationToken);
+
+        await deployment.ReviewAsync(workspace, account, cancellationToken);
     }
 
     private async Task<OrganizationId> ElsewhereAsync()
