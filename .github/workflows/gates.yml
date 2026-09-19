@@ -95,7 +95,36 @@ jobs:
         with:
           global-json-file: global.json
       - run: dotnet restore Janus.slnx --locked-mode
-      - run: dotnet test tests/Janus.Storage.Tests --no-restore -- --filter-trait "kind=integration"
+      - run: dotnet test Janus.slnx --no-restore -- --filter-trait "kind=integration"
+
+  policy-coverage:
+    name: Policy coverage test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - run: dotnet restore Janus.slnx --locked-mode
+      - run: >
+          dotnet test tests/Janus.Authorization.Tests --no-restore --
+          --filter-method "*AUTHZ_GATE_001*"
+
+  truth-table:
+    name: Truth-table suite
+    # CONV-GATE-002: the containerised runs are for a pull request and the default
+    # branch, not for every push to a feature branch.
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - run: dotnet restore Janus.slnx --locked-mode
+      - run: >
+          dotnet test tests/Janus.Hosting.Tests --no-restore --
+          --filter-class "*TruthTableTests"
 
   double-migration:
     name: Double migration run
