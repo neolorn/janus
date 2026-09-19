@@ -115,6 +115,37 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
     }
 
     /// <summary>
+    /// OPS-MIG-003a AC2: each maintenance function is created by a migration, owned by
+    /// the role that ran it, and runs with that role's rights under a search path of
+    /// its own, so nothing the caller sets decides what the function resolves.
+    /// </summary>
+    /// <param name="name">The function.</param>
+    [Theory]
+    [InlineData("audit_ensure_partitions")]
+    [InlineData("audit_drop_expired_partitions")]
+    public async Task OPS_MIG_003a_AC2_EachMaintenanceFunctionIsTheMigrationRolesOwnAsync(
+        string name)
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        (string owner, bool definer, string[] settings) =
+            await connection.QuerySingleAsync<(string, bool, string[])>(
+                """
+                SELECT proowner::regrole::text, prosecdef, proconfig
+                FROM pg_proc
+                JOIN pg_namespace ON pg_namespace.oid = pg_proc.pronamespace
+                WHERE nspname = 'janus' AND proname = @name
+                """,
+                new { name });
+
+        Assert.Equal(
+            await connection.ExecuteScalarAsync<string>("SELECT current_user"),
+            owner);
+        Assert.True(definer);
+        Assert.Equal(["search_path=pg_catalog, pg_temp"], settings);
+    }
+
+    /// <summary>
     /// OPS-MIG-003a AC3: the application role executes no maintenance function, the
     /// sweep that creates the months no more than the drop that removes them.
     /// </summary>
