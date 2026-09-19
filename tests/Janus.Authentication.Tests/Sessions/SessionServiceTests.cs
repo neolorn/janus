@@ -749,6 +749,44 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-002 AC3: disabling an entry blocks the sign-in and deletes nothing,
+    /// so naming it again admits the same account with no re-enrolment in between.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002_AC3_DisablingAnEntryDeletesNoEnrolmentAsync()
+    {
+        var organization = OrganizationId.New(_clock);
+        SubjectId subject = Subject();
+
+        _memberships.Place(subject, organization);
+        Admits(organization, Factor.Password, Factor.Totp);
+
+        Assert.Null(Refusal(await Service.BeginAsync(
+            subject,
+            [Factor.Password, Factor.Totp],
+            Somewhere,
+            TestContext.Current.CancellationToken)));
+
+        Admits(organization, Factor.Password);
+
+        Assert.Equal(
+            ErrorCodes.FactorNotPermitted,
+            Refusal(await Service.BeginAsync(
+                subject,
+                [Factor.Password, Factor.Totp],
+                Somewhere,
+                TestContext.Current.CancellationToken)));
+
+        Admits(organization, Factor.Password, Factor.Totp);
+
+        Assert.Null(Refusal(await Service.BeginAsync(
+            subject,
+            [Factor.Password, Factor.Totp],
+            Somewhere,
+            TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
     /// AUTH-FACT-002a AC1: a provider's word is the whole of the sign-in, so the
     /// session is usable at once and nothing further is asked.
     /// </summary>

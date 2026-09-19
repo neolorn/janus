@@ -482,6 +482,50 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken)));
     }
 
+    /// <summary>
+    /// AUTH-FACT-011 AC2: what a change of identifier made stale is answered from the
+    /// records in one query, so nothing compares the identifier in force against a
+    /// credential at a sign-in: the query runs with no ceremony and no authentication
+    /// behind it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_011_AC2_WhatIsStaleIsAnsweredFromTheRecordsAloneAsync()
+    {
+        SubjectId subject = Subject();
+        await EnrolledAsync(subject, Registration());
+
+        Assert.Empty(await Service.StaleAsync(subject, TestContext.Current.CancellationToken));
+
+        _configuration.Set(
+            Settings.WebAuthnOrigins,
+            (IReadOnlyList<string>)["https://app.example.net"]);
+
+        Assert.Single(await Service.StaleAsync(subject, TestContext.Current.CancellationToken));
+        Assert.Empty(_audit.Records);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-013 AC2: after registration the two are told apart by the flag the
+    /// redundancy rule reads, and by nothing about the authenticator's make.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_013_AC2_ASyncedCredentialIsToldApartFromADeviceBoundOneAsync()
+    {
+        SubjectId subject = Subject();
+
+        AuthenticatorId synced = await EnrolledAsync(
+            subject,
+            Registration() with { BackupEligible = true, BackupState = true });
+        AuthenticatorId bound = await EnrolledAsync(
+            subject,
+            Registration() with { CredentialId = new byte[] { 9, 9, 9 } });
+
+        Assert.True(await SyncedAsync(synced));
+        Assert.False(await SyncedAsync(bound));
+    }
+
     private static WebAuthnRegistration Registration() =>
         new(
             new byte[] { 1, 2, 3 },
@@ -526,6 +570,10 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
     }
 
     private SubjectId Without() => SubjectId.New(_randomness);
+
+    private async ValueTask<bool> SyncedAsync(AuthenticatorId id) =>
+        (await _authenticators.FindAsync(id, TestContext.Current.CancellationToken))!
+            .WebAuthn!.BackupState;
 
     private async ValueTask<AuthenticatorId> EnrolledAsync(
         SubjectId subject,

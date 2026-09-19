@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using Janus.Authentication.Policies;
 using Janus.Core;
 using Xunit;
@@ -130,6 +131,32 @@ public sealed class PolicyGraceTests
 
     private static PolicyRaise Raise() =>
         new(PolicyField.RequiredAssurance, "aal2", Noon);
+
+    /// <summary>
+    /// AUTH-SESS-009 AC4: the run-up ending is a fact about the next sign-in and not
+    /// about the sessions already standing: the decision takes no session and returns
+    /// none, and what it yields after the deadline stops that sign-in at enrolment.
+    /// </summary>
+    [Fact]
+    public void AUTH_SESS_009_AC4_TheEndOfTheRunUpEndsNoSession()
+    {
+        Assert.True(Held(
+                TimeSpan.FromDays(30),
+                complies: false,
+                Noon - TimeSpan.FromDays(400),
+                Noon + TimeSpan.FromDays(31))
+            .Expired);
+
+        Assert.Empty(typeof(PolicyGrace)
+            .GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly)
+            .SelectMany(method => method
+                .GetParameters()
+                .Select(parameter => parameter.ParameterType)
+                .Append(method.ReturnType))
+            .Where(type => (type.FullName ?? type.Name).Contains("Session", StringComparison.Ordinal))
+            .Select(type => type.Name)
+            .Order(StringComparer.Ordinal));
+    }
 
     private static PolicyHold Held(
         TimeSpan grace,

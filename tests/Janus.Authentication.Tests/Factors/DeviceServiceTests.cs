@@ -131,6 +131,24 @@ public sealed class DeviceServiceTests : IAsyncDisposable
             passwordMeetsSingleFactorFloor: false));
 
     /// <summary>
+    /// AUTH-PASS-001a AC4: a password below the floor a password standing alone has
+    /// to meet is offered no trusted device, that offer being what would let it
+    /// stand alone.
+    /// </summary>
+    [Fact]
+    public void AUTH_PASS_001a_AC4_TheOfferIsAbsentBelowTheFloor()
+    {
+        Assert.False(DeviceService.MayTrust(
+            Janus.Core.Policies.SystemDefault,
+            TwoFactors,
+            passwordMeetsSingleFactorFloor: false));
+        Assert.True(DeviceService.MayTrust(
+            Janus.Core.Policies.SystemDefault,
+            TwoFactors,
+            passwordMeetsSingleFactorFloor: true));
+    }
+
+    /// <summary>
     /// AUTH-FACT-015: the offer follows a sign-in that reached two factors and no
     /// other.
     /// </summary>
