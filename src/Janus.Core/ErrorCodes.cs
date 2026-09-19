@@ -123,6 +123,21 @@ public static class ErrorCodes
     public static ErrorCode StartupUndeclaredDerivationReference { get; } = ErrorCode.Parse("model.derivation.undeclaredreference");
 
     /// <summary>
+    /// Startup: the relying party identifier is not a registrable suffix of a
+    /// configured origin. Name an identifier every origin sits under, or leave it
+    /// unset and let the common parent domain stand.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-010, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupRelyingPartyId { get; } = ErrorCode.Parse("model.startup.rpid");
+
+    /// <summary>
+    /// Startup: the configured origins exceed the five-label limit a browser admits
+    /// in a related-origins allowlist. Serve fewer domains from one relying party.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-012, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupLabelLimit { get; } = ErrorCode.Parse("model.startup.labellimit");
+
+    /// <summary>
     /// The organization named is the administrative one, which is not deletable.
     /// Delete another organization, or none.
     /// </summary>

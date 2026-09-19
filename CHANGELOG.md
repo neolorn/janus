@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The relying party a passkey is bound to is settled when the deployment starts, not
+  at the first enrolment: an identifier that does not sit over every configured
+  origin stops the deployment, and one left unset is derived as the parent domain the
+  origins share rather than taken from the first of them. The related-origins
+  document lists exactly the additional origins configured, and a set of them wider
+  than a browser reads stops the deployment too.
 - Recovery codes are issued ten at a time, each ten symbols of an alphabet that omits
   the letters a reader confuses with digits, and are read back leniently: case,
   spacing and those confusions make no difference to whether a code is accepted. Only
