@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Authentication policy is resolved from the principal's organization membership and
+  from nothing else: the system policy where there is no membership, the
+  organization's where there is one, and the strictest of several where a principal
+  belongs to more than one organization. An organization may tighten any field and a
+  value that would loosen one below the system default has no effect, whenever it was
+  written.
 - A sign-in link, whichever channel carries it, and an emailed code sign a person in
   at AAL1 and count for nothing afterwards: neither is a second step, neither passes a
   step-up gate, and neither restores a session that lapsed. The mailbox or the number
