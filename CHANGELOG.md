@@ -129,6 +129,10 @@ against the public contract of LIB-API-001.
   already holds it and a neutralised fingerprint finds nobody. Reading an account's
   identifiers unwraps its key once however many columns it decrypts, and reading them
   after erasure refuses rather than yielding anything.
+- `DisplayName` and `LegalName` in `Janus.Core`: the two names of a profile, each in
+  the form it is held in. A display name takes the Nickname profile and is bounded in
+  bytes; a legal name takes Normalization Form C and is bounded in scalar values; both
+  are of one script per word.
 
 ### Changed
 

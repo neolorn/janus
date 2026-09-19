@@ -160,6 +160,10 @@ Janus.Core.DeletionOrigin
 Janus.Core.DeletionOrigin.OutOfBandRequest = 2 -> Janus.Core.DeletionOrigin
 Janus.Core.DeletionOrigin.Self = 0 -> Janus.Core.DeletionOrigin
 Janus.Core.DeletionOrigin.Takedown = 1 -> Janus.Core.DeletionOrigin
+Janus.Core.DisplayName
+Janus.Core.DisplayName.DisplayName() -> void
+Janus.Core.DisplayName.Equals(Janus.Core.DisplayName other) -> bool
+Janus.Core.DisplayName.Value.get -> string!
 Janus.Core.EmailAddress
 Janus.Core.EmailAddress.EmailAddress() -> void
 Janus.Core.EmailAddress.Equals(Janus.Core.EmailAddress other) -> bool
@@ -239,6 +243,10 @@ Janus.Core.KeyEncryptionKeys.Equals(Janus.Core.KeyEncryptionKeys? other) -> bool
 Janus.Core.KeyEncryptionKeys.KeyEncryptionKeys(int CurrentVersion, System.Collections.Generic.IReadOnlyDictionary<int, System.ReadOnlyMemory<byte>>! Versions) -> void
 Janus.Core.KeyEncryptionKeys.Versions.get -> System.Collections.Generic.IReadOnlyDictionary<int, System.ReadOnlyMemory<byte>>!
 Janus.Core.KeyEncryptionKeys.Versions.init -> void
+Janus.Core.LegalName
+Janus.Core.LegalName.Equals(Janus.Core.LegalName other) -> bool
+Janus.Core.LegalName.LegalName() -> void
+Janus.Core.LegalName.Value.get -> string!
 Janus.Core.NeverLoggedAttribute
 Janus.Core.NeverLoggedAttribute.NeverLoggedAttribute() -> void
 Janus.Core.OrganizationId
@@ -382,8 +390,12 @@ Janus.Core.Username.Equals(Janus.Core.Username other) -> bool
 Janus.Core.Username.Username() -> void
 Janus.Core.Username.Value.get -> string!
 abstract Janus.Core.Configuration.Setting<TValue>.Accept(TValue value) -> Janus.Core.Result<TValue>
+const Janus.Core.DisplayName.MaximumBytes = 64 -> int
+const Janus.Core.DisplayName.MinimumBytes = 1 -> int
 const Janus.Core.EmailAddress.MaximumLocalPartOctets = 64 -> int
 const Janus.Core.EmailAddress.MaximumOctets = 254 -> int
+const Janus.Core.LegalName.MaximumLength = 200 -> int
+const Janus.Core.LegalName.MinimumLength = 1 -> int
 const Janus.Core.PhoneNumber.MaximumDigits = 15 -> int
 const Janus.Core.Username.MaximumLength = 32 -> int
 const Janus.Core.Username.MinimumLength = 3 -> int
@@ -406,6 +418,8 @@ override Janus.Core.Configuration.RestrictionSetSetting.Accept(System.Collection
 override Janus.Core.Configuration.TextListSetting.Accept(System.Collections.Generic.IReadOnlyList<string!>! value) -> Janus.Core.Result<System.Collections.Generic.IReadOnlyList<string!>!>
 override Janus.Core.Configuration.TextSetSetting.Accept(System.Collections.Generic.IReadOnlySet<string!>! value) -> Janus.Core.Result<System.Collections.Generic.IReadOnlySet<string!>!>
 override Janus.Core.Configuration.TextSetting.Accept(string! value) -> Janus.Core.Result<string!>
+override Janus.Core.DisplayName.GetHashCode() -> int
+override Janus.Core.DisplayName.ToString() -> string!
 override Janus.Core.EmailAddress.GetHashCode() -> int
 override Janus.Core.EmailAddress.ToString() -> string!
 override Janus.Core.Error.Equals(object? obj) -> bool
@@ -421,6 +435,8 @@ override Janus.Core.IdentifierId.ToString() -> string!
 override Janus.Core.KeyEncryptionKeys.Equals(object? obj) -> bool
 override Janus.Core.KeyEncryptionKeys.GetHashCode() -> int
 override Janus.Core.KeyEncryptionKeys.ToString() -> string!
+override Janus.Core.LegalName.GetHashCode() -> int
+override Janus.Core.LegalName.ToString() -> string!
 override Janus.Core.OrganizationId.GetHashCode() -> int
 override Janus.Core.OrganizationId.ToString() -> string!
 override Janus.Core.PhoneNumber.GetHashCode() -> int
@@ -590,6 +606,9 @@ static Janus.Core.Configuration.Settings.WebAuthnAlgorithms.get -> Janus.Core.Co
 static Janus.Core.Configuration.Settings.WebAuthnOrigins.get -> Janus.Core.Configuration.TextListSetting!
 static Janus.Core.Configuration.Settings.WebAuthnRelatedOrigins.get -> Janus.Core.Configuration.TextListSetting!
 static Janus.Core.Configuration.Settings.WebAuthnRelyingPartyId.get -> Janus.Core.Configuration.TextSetting!
+static Janus.Core.DisplayName.TryParse(string! entered, out Janus.Core.DisplayName name) -> bool
+static Janus.Core.DisplayName.operator !=(Janus.Core.DisplayName left, Janus.Core.DisplayName right) -> bool
+static Janus.Core.DisplayName.operator ==(Janus.Core.DisplayName left, Janus.Core.DisplayName right) -> bool
 static Janus.Core.EmailAddress.TryParse(string! entered, out Janus.Core.EmailAddress address) -> bool
 static Janus.Core.EmailAddress.operator !=(Janus.Core.EmailAddress left, Janus.Core.EmailAddress right) -> bool
 static Janus.Core.EmailAddress.operator ==(Janus.Core.EmailAddress left, Janus.Core.EmailAddress right) -> bool
@@ -627,6 +646,9 @@ static Janus.Core.IdentifierId.operator ==(Janus.Core.IdentifierId left, Janus.C
 static Janus.Core.IdentifierKinds.Detect(string! entered, bool usernamesEnabled) -> Janus.Core.IdentifierKind?
 static Janus.Core.KeyEncryptionKeys.operator !=(Janus.Core.KeyEncryptionKeys? left, Janus.Core.KeyEncryptionKeys? right) -> bool
 static Janus.Core.KeyEncryptionKeys.operator ==(Janus.Core.KeyEncryptionKeys? left, Janus.Core.KeyEncryptionKeys? right) -> bool
+static Janus.Core.LegalName.TryParse(string! entered, out Janus.Core.LegalName name) -> bool
+static Janus.Core.LegalName.operator !=(Janus.Core.LegalName left, Janus.Core.LegalName right) -> bool
+static Janus.Core.LegalName.operator ==(Janus.Core.LegalName left, Janus.Core.LegalName right) -> bool
 static Janus.Core.OrganizationId.New(System.TimeProvider! time) -> Janus.Core.OrganizationId
 static Janus.Core.OrganizationId.operator !=(Janus.Core.OrganizationId left, Janus.Core.OrganizationId right) -> bool
 static Janus.Core.OrganizationId.operator ==(Janus.Core.OrganizationId left, Janus.Core.OrganizationId right) -> bool
@@ -660,9 +682,11 @@ static Janus.Core.Username.TryParse(string! entered, out Janus.Core.Username use
 static Janus.Core.Username.operator !=(Janus.Core.Username left, Janus.Core.Username right) -> bool
 static Janus.Core.Username.operator ==(Janus.Core.Username left, Janus.Core.Username right) -> bool
 ~override Janus.Core.Configuration.ConfigurationKey.Equals(object obj) -> bool
+~override Janus.Core.DisplayName.Equals(object obj) -> bool
 ~override Janus.Core.EmailAddress.Equals(object obj) -> bool
 ~override Janus.Core.ErrorCode.Equals(object obj) -> bool
 ~override Janus.Core.IdentifierId.Equals(object obj) -> bool
+~override Janus.Core.LegalName.Equals(object obj) -> bool
 ~override Janus.Core.OrganizationId.Equals(object obj) -> bool
 ~override Janus.Core.PhoneNumber.Equals(object obj) -> bool
 ~override Janus.Core.Result.Equals(object obj) -> bool
