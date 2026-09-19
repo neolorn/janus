@@ -29,6 +29,7 @@ public sealed class ErrorCodesTests
         "identity.preference.administratoronly",
         "identity.preference.toolarge",
         "identity.preference.wrongtype",
+        "identity.username.invalid",
         "model.derivation.undeclaredreference",
         "model.role.undeclaredpermission",
         "model.startup.declarationmissing",

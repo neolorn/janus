@@ -88,6 +88,13 @@ public static class ErrorCodes
     public static ErrorCode StartupUndeclaredDerivationReference { get; } = ErrorCode.Parse("model.derivation.undeclaredreference");
 
     /// <summary>
+    /// The username fails the PRECIS UsernameCaseMapped profile, its length bounds, or
+    /// holds no letter. Choose one the profile admits that is not all digits.
+    /// </summary>
+    /// <remarks>Implements REG-IDENT-009, chapter 10 section 1.1.</remarks>
+    public static ErrorCode UsernameInvalid { get; } = ErrorCode.Parse("identity.username.invalid");
+
+    /// <summary>
     /// A preference value is of a type other than its declaration. Send a value of the
     /// declared type.
     /// </summary>

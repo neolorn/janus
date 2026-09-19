@@ -228,6 +228,7 @@ Janus.Core.IdentifierKind
 Janus.Core.IdentifierKind.Email = 0 -> Janus.Core.IdentifierKind
 Janus.Core.IdentifierKind.Phone = 1 -> Janus.Core.IdentifierKind
 Janus.Core.IdentifierKind.Username = 2 -> Janus.Core.IdentifierKind
+Janus.Core.IdentifierKinds
 Janus.Core.KeyEncryptionKeys
 Janus.Core.KeyEncryptionKeys.<Clone>$() -> Janus.Core.KeyEncryptionKeys!
 Janus.Core.KeyEncryptionKeys.Current.get -> System.ReadOnlyMemory<byte>
@@ -617,11 +618,13 @@ static Janus.Core.ErrorCodes.StartupUndeclaredDerivationReference.get -> Janus.C
 static Janus.Core.ErrorCodes.StartupUndeclaredPermission.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupUndeclaredTypeReference.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.SystemFault.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.UsernameInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.Gate.operator !=(Janus.Core.Gate? left, Janus.Core.Gate? right) -> bool
 static Janus.Core.Gate.operator ==(Janus.Core.Gate? left, Janus.Core.Gate? right) -> bool
 static Janus.Core.IdentifierId.New(System.TimeProvider! time) -> Janus.Core.IdentifierId
 static Janus.Core.IdentifierId.operator !=(Janus.Core.IdentifierId left, Janus.Core.IdentifierId right) -> bool
 static Janus.Core.IdentifierId.operator ==(Janus.Core.IdentifierId left, Janus.Core.IdentifierId right) -> bool
+static Janus.Core.IdentifierKinds.Detect(string! entered, bool usernamesEnabled) -> Janus.Core.IdentifierKind?
 static Janus.Core.KeyEncryptionKeys.operator !=(Janus.Core.KeyEncryptionKeys? left, Janus.Core.KeyEncryptionKeys? right) -> bool
 static Janus.Core.KeyEncryptionKeys.operator ==(Janus.Core.KeyEncryptionKeys? left, Janus.Core.KeyEncryptionKeys? right) -> bool
 static Janus.Core.OrganizationId.New(System.TimeProvider! time) -> Janus.Core.OrganizationId

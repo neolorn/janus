@@ -106,6 +106,12 @@ against the public contract of LIB-API-001.
 - An account and its per-subject data key are now written and read back through
   ports of their own, so the account a caller holds carries the transitions and the
   row carries the columns, and neither knows the other's shape.
+- `IdentifierKinds` in `Janus.Core`: one field takes every identifier and the kind is
+  read from the value. An address carries the sign, a number is digits once the
+  separators a person writes are taken out, in whichever script they were typed, and
+  anything else is a username where the deployment admits one. A username now holds at
+  least one letter, so that no value is both a number and a username, and an all-digit
+  choice is refused with `identity.username.invalid`.
 
 ### Changed
 

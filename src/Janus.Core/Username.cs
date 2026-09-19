@@ -10,8 +10,10 @@ namespace Janus.Core;
 /// <remarks>
 /// Implements REG-IDENT-001, REG-IDENT-009, IDN-ACCT-004 and IDN-ACCT-005. The profile
 /// is UsernameCaseMapped and nothing else, narrowed to letters and digits: no space, no
-/// punctuation and no symbol. Whether a well-formed username is free, reserved or held
-/// after an erasure is not this type's business.
+/// punctuation and no symbol. At least one of those characters is a letter, so that no
+/// username is also a phone number under the kind detection of REG-IDENT-003 (D-155).
+/// Whether a well-formed username is free, reserved or held after an erasure is not
+/// this type's business.
 /// </remarks>
 public readonly record struct Username
 {
@@ -50,6 +52,7 @@ public readonly record struct Username
 
         if (!Precis.TryEnforceUsername(entered, out string enforced)
             || !IsLettersAndDigits(enforced)
+            || !HoldsALetter(enforced)
             || !ScriptMixing.IsSingleScriptPerWord(enforced))
         {
             return false;
@@ -74,6 +77,25 @@ public readonly record struct Username
 
     /// <inheritdoc/>
     public override string ToString() => Value;
+
+    // REG-IDENT-009: an all-digit choice is a phone number to the kind detection, so it
+    // is not a username. A mark is not a letter on its own; it is written with one.
+    private static bool HoldsALetter(string enforced)
+    {
+        foreach (Rune rune in enforced.EnumerateRunes())
+        {
+            if (StringClass.CategoryOf(rune.Value) is GeneralCategory.Ll
+                or GeneralCategory.Lm
+                or GeneralCategory.Lo
+                or GeneralCategory.Lt
+                or GeneralCategory.Lu)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     // Letters and digits as RFC 8264 section 9.1 counts them: the letter categories,
     // the decimal digits, and the marks a letter is written with in the scripts that

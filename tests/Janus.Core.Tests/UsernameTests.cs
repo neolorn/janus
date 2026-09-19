@@ -85,6 +85,21 @@ public sealed class UsernameTests
     }
 
     /// <summary>
+    /// REG-IDENT-009: a username holds at least one letter, so that the kind detection
+    /// of REG-IDENT-003 never reads one value as both a phone number and a username.
+    /// Digits of a script other than the Latin one are digits too.
+    /// </summary>
+    /// <param name="entered">The value as it was entered.</param>
+    /// <param name="accepted">Whether it is a username.</param>
+    [Theory]
+    [InlineData("01001234567", false)]
+    [InlineData("\u0660\u0661\u0660\u0660\u0661", false)]
+    [InlineData("a01001234567", true)]
+    [InlineData("\u0645\u0660\u0661\u0660", true)]
+    public void REG_IDENT_009_AUsernameHoldsALetter(string entered, bool accepted) =>
+        Assert.Equal(accepted, Username.TryParse(entered, out _));
+
+    /// <summary>
     /// An unset value reads as an empty string rather than throwing.
     /// </summary>
     [Fact]
