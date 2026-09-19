@@ -94,6 +94,46 @@ internal sealed class PasswordScreening(
                 : Result.Success();
     }
 
+    /// <summary>
+    /// Whether a password the account already holds now matches one of the person's
+    /// own words. Asked at a sign-in, where a match is a prompt to change and never a
+    /// refusal (AUTH-PASS-004).
+    /// </summary>
+    /// <param name="password">The password, in UTF-8. The caller clears it.</param>
+    /// <param name="ownWords">
+    /// The person's own identifiers and profile fields, and the service name.
+    /// </param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Whether one appears in it, which is always false where the deployment does not
+    /// reject on them.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    public async ValueTask<Result<bool>> ContextMatchesAsync(
+        byte[] password,
+        IReadOnlyCollection<string> ownWords,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(password);
+        ArgumentNullException.ThrowIfNull(ownWords);
+
+        Error? failure = null;
+
+        IReadOnlySet<BlocklistRejectionSource> enabled =
+            (await configuration.ReadAsync(Settings.PasswordBlocklistSources, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<IReadOnlySet<BlocklistRejectionSource>>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<bool>(failure);
+        }
+
+        return Result.Success(
+            enabled.Contains(BlocklistRejectionSource.Context)
+            && PasswordAdvice.Appearing(Encoding.UTF8.GetString(password), ownWords).Any());
+    }
+
     private static Result Refused() => Result.Failure(Error.From(ErrorCodes.PasswordBlocklisted));
 
     private static TValue Held<TValue>(Error error, ref Error? failure)
