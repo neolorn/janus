@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A deployment can now publish its legal documents through the library: the privacy
+  notice, the terms of service and anything else it holds. Each version carries one
+  governing language, defaulting to the one the deployment configured, and the text
+  that binds in it. Translations attach to a published version and correct it without
+  making a new one, and a read returns the governing text together with every
+  translation so a screen can show either without changing the interface language. A
+  version submitted without its governing text does not publish, and the condition is
+  raised for an operator to see.
 - The error catalogue now carries the privacy codes: a consent that is required,
   superseded or has to be written; a purpose whose basis carries no right to object; a
   document version submitted without its governing text; a duplicate request; a

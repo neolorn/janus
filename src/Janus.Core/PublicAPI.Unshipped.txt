@@ -552,6 +552,47 @@ Janus.Core.DisplayName
 Janus.Core.DisplayName.DisplayName() -> void
 Janus.Core.DisplayName.Equals(Janus.Core.DisplayName other) -> bool
 Janus.Core.DisplayName.Value.get -> string!
+Janus.Core.DocumentPublication
+Janus.Core.DocumentPublication.<Clone>$() -> Janus.Core.DocumentPublication!
+Janus.Core.DocumentPublication.Deconstruct(out string! DocumentName, out string! Text, out string? GoverningLanguage, out System.Collections.Generic.IReadOnlyList<Janus.Core.DocumentTranslation!>! Translations, out bool Material) -> void
+Janus.Core.DocumentPublication.DocumentName.get -> string!
+Janus.Core.DocumentPublication.DocumentName.init -> void
+Janus.Core.DocumentPublication.DocumentPublication(string! DocumentName, string! Text, string? GoverningLanguage, System.Collections.Generic.IReadOnlyList<Janus.Core.DocumentTranslation!>! Translations, bool Material) -> void
+Janus.Core.DocumentPublication.Equals(Janus.Core.DocumentPublication? other) -> bool
+Janus.Core.DocumentPublication.GoverningLanguage.get -> string?
+Janus.Core.DocumentPublication.GoverningLanguage.init -> void
+Janus.Core.DocumentPublication.Material.get -> bool
+Janus.Core.DocumentPublication.Material.init -> void
+Janus.Core.DocumentPublication.Text.get -> string!
+Janus.Core.DocumentPublication.Text.init -> void
+Janus.Core.DocumentPublication.Translations.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.DocumentTranslation!>!
+Janus.Core.DocumentPublication.Translations.init -> void
+Janus.Core.DocumentTranslation
+Janus.Core.DocumentTranslation.<Clone>$() -> Janus.Core.DocumentTranslation!
+Janus.Core.DocumentTranslation.Deconstruct(out string! Language, out string! Text) -> void
+Janus.Core.DocumentTranslation.DocumentTranslation(string! Language, string! Text) -> void
+Janus.Core.DocumentTranslation.Equals(Janus.Core.DocumentTranslation? other) -> bool
+Janus.Core.DocumentTranslation.Language.get -> string!
+Janus.Core.DocumentTranslation.Language.init -> void
+Janus.Core.DocumentTranslation.Text.get -> string!
+Janus.Core.DocumentTranslation.Text.init -> void
+Janus.Core.DocumentVersion
+Janus.Core.DocumentVersion.<Clone>$() -> Janus.Core.DocumentVersion!
+Janus.Core.DocumentVersion.Deconstruct(out string! DocumentName, out string! Version, out string! GoverningLanguage, out string! Text, out System.Collections.Generic.IReadOnlyList<Janus.Core.DocumentTranslation!>! Translations, out System.DateTimeOffset PublishedAt) -> void
+Janus.Core.DocumentVersion.DocumentName.get -> string!
+Janus.Core.DocumentVersion.DocumentName.init -> void
+Janus.Core.DocumentVersion.DocumentVersion(string! DocumentName, string! Version, string! GoverningLanguage, string! Text, System.Collections.Generic.IReadOnlyList<Janus.Core.DocumentTranslation!>! Translations, System.DateTimeOffset PublishedAt) -> void
+Janus.Core.DocumentVersion.Equals(Janus.Core.DocumentVersion? other) -> bool
+Janus.Core.DocumentVersion.GoverningLanguage.get -> string!
+Janus.Core.DocumentVersion.GoverningLanguage.init -> void
+Janus.Core.DocumentVersion.PublishedAt.get -> System.DateTimeOffset
+Janus.Core.DocumentVersion.PublishedAt.init -> void
+Janus.Core.DocumentVersion.Text.get -> string!
+Janus.Core.DocumentVersion.Text.init -> void
+Janus.Core.DocumentVersion.Translations.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.DocumentTranslation!>!
+Janus.Core.DocumentVersion.Translations.init -> void
+Janus.Core.DocumentVersion.Version.get -> string!
+Janus.Core.DocumentVersion.Version.init -> void
 Janus.Core.EffectiveGrant
 Janus.Core.EffectiveGrant.<Clone>$() -> Janus.Core.EffectiveGrant!
 Janus.Core.EffectiveGrant.Deconstruct(out System.Guid GrantId, out string! SubjectType, out System.Guid SubjectId, out string! Role, out string! Permission, out string? ResourceType, out string? ResourceId, out bool Deny, out string! Kind, out System.Guid Organization, out System.DateTimeOffset? ExpiresAt, out System.DateTimeOffset? RevokedAt) -> void
@@ -824,6 +865,10 @@ Janus.Core.IIdentifiers.SetBackupAsync(Janus.Core.AccessContext! context, Janus.
 Janus.Core.IIdentifiers.UndoAsync(string! linkToken, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IIdentifiers.VerifyAsync(Janus.Core.AccessContext! context, Janus.Core.IdentifierId identifier, string! code, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IIdentifiers.VerifyAsync(Janus.Core.EnrolmentSessionId enrolment, Janus.Core.IdentifierId identifier, string! code, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.ILegalDocuments
+Janus.Core.ILegalDocuments.PublishAsync(Janus.Core.AccessContext! context, Janus.Core.DocumentPublication! publication, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.DocumentVersion!>>
+Janus.Core.ILegalDocuments.ReadAsync(string! document, string? version, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.DocumentVersion!>>
+Janus.Core.ILegalDocuments.TranslateAsync(Janus.Core.AccessContext! context, string! document, string! version, Janus.Core.DocumentTranslation! translation, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IMailTransport
 Janus.Core.IMailTransport.SendAsync(Janus.Core.MailMessage! mail, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IMessageTemplates
@@ -1907,6 +1952,15 @@ override Janus.Core.DeviceVerified.GetHashCode() -> int
 override Janus.Core.DeviceVerified.ToString() -> string!
 override Janus.Core.DisplayName.GetHashCode() -> int
 override Janus.Core.DisplayName.ToString() -> string!
+override Janus.Core.DocumentPublication.Equals(object? obj) -> bool
+override Janus.Core.DocumentPublication.GetHashCode() -> int
+override Janus.Core.DocumentPublication.ToString() -> string!
+override Janus.Core.DocumentTranslation.Equals(object? obj) -> bool
+override Janus.Core.DocumentTranslation.GetHashCode() -> int
+override Janus.Core.DocumentTranslation.ToString() -> string!
+override Janus.Core.DocumentVersion.Equals(object? obj) -> bool
+override Janus.Core.DocumentVersion.GetHashCode() -> int
+override Janus.Core.DocumentVersion.ToString() -> string!
 override Janus.Core.EffectiveGrant.Equals(object? obj) -> bool
 override Janus.Core.EffectiveGrant.GetHashCode() -> int
 override Janus.Core.EffectiveGrant.ToString() -> string!
@@ -2376,6 +2430,12 @@ static Janus.Core.DeviceVerified.operator ==(Janus.Core.DeviceVerified? left, Ja
 static Janus.Core.DisplayName.TryParse(string! entered, out Janus.Core.DisplayName name) -> bool
 static Janus.Core.DisplayName.operator !=(Janus.Core.DisplayName left, Janus.Core.DisplayName right) -> bool
 static Janus.Core.DisplayName.operator ==(Janus.Core.DisplayName left, Janus.Core.DisplayName right) -> bool
+static Janus.Core.DocumentPublication.operator !=(Janus.Core.DocumentPublication? left, Janus.Core.DocumentPublication? right) -> bool
+static Janus.Core.DocumentPublication.operator ==(Janus.Core.DocumentPublication? left, Janus.Core.DocumentPublication? right) -> bool
+static Janus.Core.DocumentTranslation.operator !=(Janus.Core.DocumentTranslation? left, Janus.Core.DocumentTranslation? right) -> bool
+static Janus.Core.DocumentTranslation.operator ==(Janus.Core.DocumentTranslation? left, Janus.Core.DocumentTranslation? right) -> bool
+static Janus.Core.DocumentVersion.operator !=(Janus.Core.DocumentVersion? left, Janus.Core.DocumentVersion? right) -> bool
+static Janus.Core.DocumentVersion.operator ==(Janus.Core.DocumentVersion? left, Janus.Core.DocumentVersion? right) -> bool
 static Janus.Core.EffectiveGrant.operator !=(Janus.Core.EffectiveGrant? left, Janus.Core.EffectiveGrant? right) -> bool
 static Janus.Core.EffectiveGrant.operator ==(Janus.Core.EffectiveGrant? left, Janus.Core.EffectiveGrant? right) -> bool
 static Janus.Core.EmailAddress.TryParse(string! entered, out Janus.Core.EmailAddress address) -> bool
