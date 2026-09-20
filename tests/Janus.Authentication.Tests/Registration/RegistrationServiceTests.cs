@@ -1211,4 +1211,165 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
 
     private static TValue Throw<TValue>(Error error) =>
         throw new Xunit.Sdk.XunitException(error.Code.ToString());
+
+    /// <summary>
+    /// AUTH-PASS-001a AC1: a password below the single-factor floor with nothing
+    /// beside it leaves the registration where it was, so no account is written.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_PASS_001a_AC1_AShortPasswordAloneNeverCreatesTheAccountAsync()
+    {
+        RegistrationSessionId session = await SecuredAsync(Short);
+
+        Assert.Equal(
+            ErrorCodes.RegistrationIncomplete,
+            Refused(await AcceptedAsync(session)));
+
+        Assert.Empty(_directory.Created);
+        Assert.Empty(_live.All);
+    }
+
+    /// <summary>
+    /// FE-REG-003 AC4: the second step is enrolled beside the password and not
+    /// instead of it, so the password the person set stands afterwards.
+    /// </summary>
+    [Fact]
+    public async Task FE_REG_003_AC4_ASecondStepAfterAPasswordLeavesItStandingAsync()
+    {
+        RegistrationSessionId session = await SecuredAsync(Short);
+
+        RegistrationState settled = Ok(await Service.EnrolAsync(
+            session,
+            SecondStepCredential(),
+            TestContext.Current.CancellationToken));
+
+        Assert.True(settled.Security.Password);
+
+        RegistrationCompleted completed = Ok(await AcceptedAsync(session));
+        NewAccount written = Assert.Single(_directory.Created);
+
+        Assert.Equal(completed.Subject, written.Subject);
+        Assert.NotNull(await _passwords.FindAsync(completed.Subject, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-004 AC2: a verification code is held on the registration session
+    /// under a lifetime of its own, and nothing about it reaches the credential
+    /// store an authentication code would answer from.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_004_AC2_TheVerificationCodeIsTheSessionsAndLivesItsOwnLifetimeAsync()
+    {
+        _configuration.Set(Settings.CodeVerificationLifetime, TimeSpan.FromMinutes(5));
+
+        RegistrationSessionId session = await AwaitingAsync();
+
+        Assert.NotNull(Identity(session, IdentifierKind.Email).Code);
+        Assert.Empty(_authenticators.All);
+
+        _clock.Advance(TimeSpan.FromMinutes(6));
+
+        Assert.Equal(
+            ErrorCodes.CodeExpired,
+            Refused(await Service.VerifyAsync(
+                session,
+                Identity(session, IdentifierKind.Email).Id,
+                Code(session, IdentifierKind.Email),
+                TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-004 AC3: the attempt after the cap is refused, the right code is
+    /// refused with it, and the replacement the person asks for leaves the dead one
+    /// dead.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_004_AC3_TheCapKillsTheCodeAndAReplacementReplacesItAsync()
+    {
+        _configuration.Set(Settings.CodeVerificationAttempts, 5);
+
+        RegistrationSessionId session = await AwaitingAsync();
+        IdentifierId staged = Identity(session, IdentifierKind.Email).Id;
+        string right = Code(session, IdentifierKind.Email);
+
+        for (int attempt = 0; attempt < 6; attempt++)
+        {
+            Assert.Equal(
+                ErrorCodes.CodeInvalid,
+                Refused(await Service.VerifyAsync(
+                    session,
+                    staged,
+                    "000000",
+                    TestContext.Current.CancellationToken)));
+        }
+
+        Assert.True(Identity(session, IdentifierKind.Email).CodeSpent);
+
+        Assert.Equal(
+            ErrorCodes.CodeInvalid,
+            Refused(await Service.VerifyAsync(
+                session,
+                staged,
+                right,
+                TestContext.Current.CancellationToken)));
+
+        Later();
+
+        _ = Ok(await Service.ChangeAsync(
+            session,
+            staged,
+            Address,
+            TestContext.Current.CancellationToken));
+
+        Assert.NotEqual(right, Code(session, IdentifierKind.Email));
+
+        Assert.Equal(
+            ErrorCodes.CodeInvalid,
+            Refused(await Service.VerifyAsync(
+                session,
+                Identity(session, IdentifierKind.Email).Id,
+                right,
+                TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-016 AC7: the browser the terms step was completed in is seen, so the
+    /// first sign-in after registration is not held for a code until the remembering
+    /// runs out.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_016_AC7_TheRegisteringBrowserIsSeenForTheLifetimeAsync()
+    {
+        _configuration.Set(Settings.DeviceVerificationLifetime, TimeSpan.FromDays(90));
+
+        RegistrationSessionId session = await SecuredAsync(Floor);
+
+        RegistrationOutcome completed = Ok(await Service.CompleteAsync(
+            session,
+            Terms,
+            Notice,
+            Unticked,
+            Browser,
+            location: null,
+            TestContext.Current.CancellationToken));
+
+        var single = new Assurance(AssuranceLevel.Aal1, PhishingResistant: false);
+        var devices = new DeviceService(_devices, _configuration, _work, _events, _clock, _randomness);
+
+        Assert.False(Ok(await devices.ChecksAsync(
+            completed.Subject,
+            single,
+            single,
+            completed.Browser.Value,
+            TestContext.Current.CancellationToken)));
+
+        _clock.Advance(TimeSpan.FromDays(91));
+
+        Assert.True(Ok(await devices.ChecksAsync(
+            completed.Subject,
+            single,
+            single,
+            completed.Browser.Value,
+            TestContext.Current.CancellationToken)));
+    }
 }
