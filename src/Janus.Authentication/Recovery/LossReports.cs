@@ -199,10 +199,15 @@ internal sealed class LossReports(
         LossReport? report = await reports.FindAsync(credential, cancellationToken)
             .ConfigureAwait(false);
 
+        // LIB-SEAM-002: the effective identity is read once and compared as a value,
+        // which is the one way a feature asks whose account it is.
+        bool holder = report is not null
+            && context?.Effective is SubjectId subject
+            && report.Subject == subject;
+
         // One refusal answers an unknown credential, a report that is not running and
         // a token that is not the one: none of them tells the caller which it was.
-        if (report is null
-            || !(context?.Effective == report.Subject || report.Matches(cancelToken)))
+        if (report is null || !(holder || report.Matches(cancelToken)))
         {
             return Result.Failure(Error.From(ErrorCodes.CredentialNotFound));
         }
