@@ -17,6 +17,8 @@ internal interface ISendAudit
     /// Records an edit to one restriction.
     /// </summary>
     /// <param name="restriction">Which restriction.</param>
+    /// <param name="before">What it was, and absent where the edit adds it.</param>
+    /// <param name="after">What it became, and absent where the edit deletes it.</param>
     /// <param name="loosening">Whether the edit lets more through than before.</param>
     /// <param name="reason">The written reason, which a loosening requires.</param>
     /// <param name="actor">Who made it.</param>
@@ -25,6 +27,8 @@ internal interface ISendAudit
     /// <returns>The work of recording it.</returns>
     ValueTask EditedAsync(
         string restriction,
+        Restriction? before,
+        Restriction? after,
         bool loosening,
         string? reason,
         SubjectId actor,

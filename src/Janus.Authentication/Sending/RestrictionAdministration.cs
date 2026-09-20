@@ -130,7 +130,7 @@ internal sealed class RestrictionAdministration(
         DateTimeOffset now = time.GetUtcNow();
 
         await audit
-            .EditedAsync(name, loosening, reason, actor, now, cancellationToken)
+            .EditedAsync(name, before, replacement, loosening, reason, actor, now, cancellationToken)
             .ConfigureAwait(false);
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);

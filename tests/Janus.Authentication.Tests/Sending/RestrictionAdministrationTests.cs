@@ -125,13 +125,44 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
 
         await EditedAsync("sms.destination", Tightened(), reason: null, actor);
 
-        Assert.Equal(("sms.destination", false, null, actor), Assert.Single(_audit.Edits));
+        SendAuditInMemory.Edit written = Assert.Single(_audit.Edits);
+
+        Assert.Equal("sms.destination", written.Name);
+        Assert.False(written.Loosening);
+        Assert.Null(written.Reason);
+        Assert.Equal(actor, written.Actor);
 
         SendingRestrictionChanged announced = Assert.Single(_events.Of<SendingRestrictionChanged>());
 
         Assert.Equal("sms.destination", announced.Restriction);
         Assert.False(announced.Loosening);
         Assert.Equal(actor, announced.Actor);
+    }
+
+    /// <summary>
+    /// OPS-CFG-008 AC4: an edit to a restriction is a runtime change like any other.
+    /// It reaches the next send with nothing restarted, the entry carries what the
+    /// restriction was and what it became, and a loosening raises the Normal alert.
+    /// </summary>
+    [Fact]
+    public async Task OPS_CFG_008_AC4_AnEditIsLiveAuditedWithBothValuesAndAlertedAsync()
+    {
+        Restriction shipped = Settings.Restrictions.Default[0];
+
+        await EditedAsync("sms.destination", Loosened(), "a carrier dropped the codes");
+
+        for (int sent = 0; sent < 4; sent++)
+        {
+            await SentAsync();
+            _clock.Advance(TimeSpan.FromHours(1));
+        }
+
+        SendAuditInMemory.Edit written = Assert.Single(_audit.Edits);
+
+        Assert.Equal(shipped.Buckets, written.Before!.Buckets);
+        Assert.Equal(Loosened().Buckets, written.After!.Buckets);
+        Assert.True(written.Loosening);
+        Assert.Equal(AlertCondition.RestrictionLoosened, Assert.Single(_events.Of<AlertRaised>()).Condition);
     }
 
     /// <summary>

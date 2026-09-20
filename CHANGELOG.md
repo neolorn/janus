@@ -52,6 +52,10 @@ against the public contract of LIB-API-001.
   them from its own container. Passing the new-device check is announced as
   `DeviceVerified`, carrying the browser and nothing about the person.
 
+- The audit entry for a restriction change now carries what the restriction was and
+  what it became, so an operator reading the trail sees the change and not only that
+  one was made.
+
 - Every runtime-changeable configuration key is now read from the library's own
   `settings` table, so a value changed anywhere in the deployment is in force for the
   next read of it without a restart. A key the deployment never wrote reads as its
