@@ -8,11 +8,13 @@ using Janus.Authentication.Factors;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Identity.Accounts;
+using Janus.Identity.Audit;
 using Janus.Identity.Profiles;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Identity.Accounts;
+using Janus.Storage.Identity.Audit;
 using Janus.Storage.Identity.Profiles;
 using Janus.Storage.Privacy.Erasures;
 using Janus.Storage.Privacy.SubjectKeys;
@@ -426,5 +428,74 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             TestContext.Current.CancellationToken);
         await erasing.SaveChangesAsync(TestContext.Current.CancellationToken);
         await work.CommitAsync(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-014 AC2: the trail survives the deletion. What happened and when it
+    /// happened are columns of the row, so they read as they did; only what the
+    /// subject's key protected is gone.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_014_AC2_TheTrailStillShowsWhatHappenedAndWhenAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        var suspended = AuditAction.Parse("identity.account.suspended");
+        DateTimeOffset occurred = Noon.AddHours(-3);
+
+        await using (JanusDbContext writing = database.Context())
+        {
+            await new AuditStore(writing, _deployment.Keys, _deployment.Randomness).AppendAsync(
+                AuditRecord.Of(
+                    new AuditRecordId(Guid.CreateVersion7()),
+                    AuditCategory.Security,
+                    suspended,
+                    occurred,
+                    subject,
+                    subject,
+                    organization: null),
+                TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        string? action = await connection.ExecuteScalarAsync<string>(
+            "SELECT action FROM janus.audit_records WHERE effective_subject = @subject",
+            new { subject = subject.Value });
+
+        DateTime at = await connection.ExecuteScalarAsync<DateTime>(
+            "SELECT occurred_at FROM janus.audit_records WHERE effective_subject = @subject",
+            new { subject = subject.Value });
+
+        Assert.Equal(suspended.ToString(), action);
+        Assert.Equal(
+            occurred.UtcDateTime,
+            DateTime.SpecifyKind(at, DateTimeKind.Utc),
+            TimeSpan.FromMilliseconds(1));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-014 AC3: the account row outlives its own erasure, so the identifier
+    /// it was known by is held against every later account and never handed out a
+    /// second time.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_014_AC3_TheSubjectIdentifierIsNotReissuedAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        PostgresException refusal = await Assert.ThrowsAsync<PostgresException>(async () =>
+            await connection.ExecuteAsync(
+                "INSERT INTO janus.accounts (subject, state, created_at) "
+                    + "VALUES (@subject, 'active', @at)",
+                new { subject = subject.Value, at = Noon }));
+
+        Assert.Equal("23505", refusal.SqlState);
     }
 }
