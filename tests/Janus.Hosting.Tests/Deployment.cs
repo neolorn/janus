@@ -51,9 +51,11 @@ internal sealed class Deployment : IAsyncDisposable
     /// </summary>
     /// <param name="application">Which application this process serves.</param>
     /// <param name="addresses">The frontend addresses the host declared.</param>
+    /// <param name="prefix">The path the host mounts the library under.</param>
     public Deployment(
         JanusApplication application = JanusApplication.Public,
-        PasskeyAddresses? addresses = null)
+        PasskeyAddresses? addresses = null,
+        string prefix = "")
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
@@ -67,7 +69,7 @@ internal sealed class Deployment : IAsyncDisposable
         // here the pipeline is built by hand, so they are named by hand.
         _ = ((IApplicationBuilder)_application).UseRouting();
         _ = _application.UseJanusBrowserProfile();
-        _ = _application.MapJanus();
+        _ = _application.MapGroup(prefix).MapJanus();
         _ = _application.MapJanusWellKnown();
         _ = ((IApplicationBuilder)_application).UseEndpoints(_ => { });
 

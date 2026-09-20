@@ -20,15 +20,6 @@ namespace Janus.Hosting.Tests.Registration;
 [Trait("kind", "unit")]
 public sealed class RegistrationFlowTests : IAsyncDisposable
 {
-    private const string Client = "web";
-    private const string Address = "person@example.test";
-    private const string Number = "+441632960011";
-    private const string Password = "orangemarmalade";
-
-    private const StringComparison Comparison = StringComparison.Ordinal;
-    private const IdentifierKind Sms = IdentifierKind.Phone;
-    private const string Language = "en";
-
     private const string Begin = "{\"clientId\":\"web\"}";
 
     // The steps a browser that carries nothing tries in turn.
@@ -46,19 +37,7 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
     /// A deployment whose messages carry the code and the link token, as the
     /// shipped templates do.
     /// </summary>
-    public RegistrationFlowTests()
-    {
-        _deployment.Configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
-
-        foreach (SendKind kind in new[] { SendKind.Email, SendKind.Sms })
-        {
-            _deployment.Templates.Set(
-                MessageKind.VerificationCode,
-                kind,
-                Language,
-                new MessageTemplate(kind is SendKind.Email ? "code" : null, "{code} {token}"));
-        }
-    }
+    public RegistrationFlowTests() => Flow.Prepare(_deployment);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync() => await _deployment.DisposeAsync();
@@ -99,7 +78,7 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
             header: true,
             token: false);
 
-        Answer with = await browser.SendAsync("POST", "/register", ("clientId", Client));
+        Answer with = await browser.SendAsync("POST", "/register", ("clientId", "web"));
 
         Assert.Equal(StatusCodes.Status403Forbidden, without.Status);
         Assert.Equal(StatusCodes.Status201Created, with.Status);
@@ -131,7 +110,7 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
     [Fact]
     public async Task BFF_CSRF_005b_AC1_AnotherBrowserReachesNoneOfTheRegistrationAsync()
     {
-        Browser started = await BegunAsync();
+        Browser started = await Flow.BegunAsync(_deployment);
         var elsewhere = new Browser(_deployment);
 
         Answer state = await elsewhere.SendAsync("GET", "/register");
@@ -155,7 +134,7 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
     [Fact]
     public async Task REG_SESS_001_AC2_EveryStepIsRefusedWithoutTheFirstContactAsync()
     {
-        _ = await BegunAsync();
+        _ = await Flow.BegunAsync(_deployment);
 
         var elsewhere = new Browser(_deployment);
 
@@ -163,7 +142,7 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
 
         foreach (string step in Steps)
         {
-            Answer refused = await elsewhere.SendAsync("POST", step, ("value", Address));
+            Answer refused = await elsewhere.SendAsync("POST", step, ("value", Flow.Address));
 
             Assert.Equal(StatusCodes.Status401Unauthorized, refused.Status);
         }
@@ -177,7 +156,7 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
     [Fact]
     public async Task BFF_CSRF_005a_AC3_AuthenticationRotatesTheFirstContactAsync()
     {
-        Browser browser = await SecuredAsync();
+        Browser browser = await Flow.SecuredAsync(_deployment);
 
         Answer completed = await browser.SendAsync(
             "POST",
@@ -201,7 +180,7 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
     [Fact]
     public async Task BFF_CSRF_005b_AC2_NoTokenTravelsInAUrlAsync()
     {
-        Browser browser = await AwaitingAsync();
+        Browser browser = await Flow.AwaitingAsync(_deployment);
 
         Assert.All(
             Routes(),
@@ -227,14 +206,14 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
     [Fact]
     public async Task BFF_CSRF_005b_AC3_TheStreamAndThePollCarryTheSameStateAsync()
     {
-        Browser browser = await AwaitingAsync();
+        Browser browser = await Flow.AwaitingAsync(_deployment);
 
         using var abort = new CancellationTokenSource();
 
         (Task running, ResponseBody written) = browser.Open("/register/events", abort.Token);
 
         await SettledAsync(written);
-        await VerifiedAsync(browser);
+        await Flow.VerifiedAsync(_deployment, browser, IdentifierKind.Email);
 
         string streamed = await SentAsync(written);
 
@@ -262,10 +241,10 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
     [Fact]
     public async Task BFF_CSRF_005b_AC4_OnlyAPressFromTheOriginatingBrowserVerifiesAsync()
     {
-        Browser browser = await AwaitingAsync();
+        Browser browser = await Flow.AwaitingAsync(_deployment);
 
-        string token = Token();
-        string identifier = Staged(await browser.SendAsync("GET", "/register"));
+        string token = Flow.Token(_deployment, IdentifierKind.Email);
+        string identifier = Flow.Waiting(await browser.SendAsync("GET", "/register"), IdentifierKind.Email);
 
         Answer opened = await browser.SendAsync(
             "POST",
@@ -274,7 +253,7 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
             ("press", false));
 
         Assert.Equal(StatusCodes.Status200OK, opened.Status);
-        Assert.False(Verified(await browser.SendAsync("GET", "/register")));
+        Assert.Equal(identifier, Flow.Waiting(await browser.SendAsync("GET", "/register"), IdentifierKind.Email));
 
         var elsewhere = new Browser(_deployment);
 
@@ -289,7 +268,7 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status200OK, pressed.Status);
         Assert.False(pressed.Json().GetProperty("sameBrowser").GetBoolean());
         Assert.Equal(6, pressed.Text("code").Length);
-        Assert.False(Verified(await browser.SendAsync("GET", "/register")));
+        Assert.Equal(identifier, Flow.Waiting(await browser.SendAsync("GET", "/register"), IdentifierKind.Email));
 
         Answer press = await browser.SendAsync(
             "POST",
@@ -298,8 +277,12 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
             ("press", true));
 
         Assert.Equal(StatusCodes.Status204NoContent, press.Status);
-        Assert.True(Verified(await browser.SendAsync("GET", "/register")));
+        Assert.True(Proved(await browser.SendAsync("GET", "/register")));
     }
+
+    // Whether the one staged identifier stands verified.
+    private static bool Proved(Answer state) =>
+        state.Json().GetProperty("identifiers")[0].GetProperty("verified").GetBoolean();
 
     // Every route the registration group mounts, as the endpoint table holds them.
     private List<string> Routes()
@@ -319,39 +302,7 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
         return patterns;
     }
 
-    // The link token the message carried, which never touches the state document.
-    private string Token() => _deployment.Mail.Taken[^1].Body.Split(' ')[1];
-
-    private string Code(IdentifierKind kind = IdentifierKind.Email) =>
-        (kind is IdentifierKind.Email
-            ? _deployment.Mail.Taken[^1].Body
-            : _deployment.Sms.Taken[^1].Text).Split(' ')[0];
-
-    // The identifier of a kind that is still waiting for its code.
-    private static string Waiting(Answer state, IdentifierKind kind)
-    {
-        foreach (JsonElement staged in state.Json().GetProperty("identifiers").EnumerateArray())
-        {
-            if (string.Equals(staged.GetProperty("kind").GetString(), Named(kind), Comparison)
-                && !staged.GetProperty("verified").GetBoolean())
-            {
-                return staged.GetProperty("id").GetString()!;
-            }
-        }
-
-        throw new InvalidOperationException("Nothing of that kind is waiting.");
-    }
-
-    private static string Named(IdentifierKind kind) => kind is IdentifierKind.Email ? "email" : "phone";
-
     private static string Carried(Browser browser) => browser.Cookies["__Host-janus-preauth"];
-
-    private static string Staged(Answer state) =>
-        state.Json().GetProperty("identifiers")[0].GetProperty("id").GetString()!;
-
-
-    private static bool Verified(Answer state) =>
-        state.Json().GetProperty("identifiers")[0].GetProperty("verified").GetBoolean();
 
     // The stream's first reading, after which it is parked on its interval and the
     // fakes are the test's alone again.
@@ -378,64 +329,5 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
         Assert.True(at >= 0, "The stream sent no state: [" + sent + "]");
 
         return sent[(at + 6)..].TrimEnd('\n');
-    }
-
-    // A browser that has begun a registration, which is a first contact plus the
-    // session the endpoint carried onto it.
-    private async Task<Browser> BegunAsync()
-    {
-        var browser = new Browser(_deployment);
-
-        _ = await browser.SendAsync("GET", "/register");
-        _ = await browser.SendAsync("POST", "/register", ("clientId", Client));
-
-        return browser;
-    }
-
-    // A browser that has answered the age step and staged an address.
-    private async Task<Browser> AwaitingAsync()
-    {
-        Browser browser = await BegunAsync();
-
-        _ = await browser.SendAsync("PUT", "/register/age", ("dateOfBirth", "1990-01-01"));
-        _ = await browser.SendAsync("PUT", "/register/email", ("value", Address));
-
-        return browser;
-    }
-
-    // A browser that has reached the terms step: both identifiers verified, the
-    // confirm step passed and a password that stands alone set.
-    private async Task<Browser> SecuredAsync()
-    {
-        Browser browser = await AwaitingAsync();
-
-        await VerifiedAsync(browser);
-
-        _ = await browser.SendAsync("PUT", "/register/phone", ("value", Number));
-
-        await VerifiedAsync(browser, Sms);
-
-        Assert.Equal(
-            StatusCodes.Status200OK,
-            (await browser.SendAsync("POST", "/register/confirm")).Status);
-
-        Assert.Equal(
-            StatusCodes.Status200OK,
-            (await browser.SendAsync("PUT", "/register/security", ("password", Password))).Status);
-
-        return browser;
-    }
-
-    private async Task VerifiedAsync(Browser browser, IdentifierKind kind = IdentifierKind.Email)
-    {
-        Answer state = await browser.SendAsync("GET", "/register");
-        string identifier = Waiting(state, kind);
-
-        Answer verified = await browser.SendAsync(
-            "POST",
-            "/register/verify/" + identifier,
-            ("code", Code(kind)));
-
-        Assert.Equal(StatusCodes.Status204NoContent, verified.Status);
     }
 }
