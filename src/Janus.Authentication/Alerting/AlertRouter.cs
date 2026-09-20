@@ -137,7 +137,10 @@ internal sealed class AlertRouter(
             }
         }
 
-        bool unreachable = bySms && sms == 0;
+        // A channel the audience names no destination for was not asked to carry
+        // anything, so it is not the residual case of a gateway that carries nothing
+        // (OPS-ALERT-003). A destination change names one channel (OPS-ALERT-004a).
+        bool unreachable = bySms && sms == 0 && audience.Sms.Count > 0;
 
         if (unreachable)
         {
