@@ -70,6 +70,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
     private readonly SessionStoreInMemory _live = new();
     private readonly SessionAuditInMemory _audit = new();
     private readonly MembershipLookupInMemory _memberships = new();
+    private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly AccessGateInMemory _gate = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly UnitOfWorkInMemory _work = new();
@@ -133,11 +134,11 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
                 _randomness),
             _sets,
             _authenticators,
-            new PolicyResolution(_memberships, _configuration),
+            new PolicyResolution(_memberships, _configuration, _raises),
             new SessionService(
                 _live,
                 _audit,
-                new PolicyResolution(_memberships, _configuration),
+                new PolicyResolution(_memberships, _configuration, _raises),
                 _configuration,
                 _gate,
                 _work,

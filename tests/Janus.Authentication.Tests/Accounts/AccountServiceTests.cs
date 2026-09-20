@@ -55,6 +55,7 @@ public sealed class AccountServiceTests : IAsyncDisposable
     private readonly SessionStoreInMemory _sessions = new();
     private readonly PasswordStoreInMemory _passwords = new();
     private readonly MembershipLookupInMemory _memberships = new();
+    private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
@@ -84,7 +85,7 @@ public sealed class AccountServiceTests : IAsyncDisposable
                 _sessions,
                 _authenticators,
                 _passwords,
-                new PolicyResolution(_memberships, _configuration),
+                new PolicyResolution(_memberships, _configuration, _raises),
                 _clock),
             ReservedUsernames.Default,
             Declared,

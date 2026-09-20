@@ -38,6 +38,13 @@ internal sealed class AccountDirectory(
         (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false))?.State;
 
     /// <inheritdoc/>
+    public async ValueTask<DateTimeOffset?> CreatedAtAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken) =>
+        (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false))
+        ?.CreatedAt;
+
+    /// <inheritdoc/>
     public async ValueTask<HeldProfile> ProfileAsync(
         SubjectId subject,
         CancellationToken cancellationToken)

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -25,6 +26,15 @@ internal interface IAccountDirectory
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The state, or nothing where no account bears the subject.</returns>
     ValueTask<AccountState?> StateAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// When an account came into being, which decides whether a raised requirement
+    /// gives it a run-up or holds it at once (AUTH-FACT-017).
+    /// </summary>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The instant, or nothing where no account bears the subject.</returns>
+    ValueTask<DateTimeOffset?> CreatedAtAsync(SubjectId subject, CancellationToken cancellationToken);
 
     /// <summary>
     /// One account's profile as it stands.

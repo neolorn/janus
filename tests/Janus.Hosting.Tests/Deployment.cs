@@ -227,6 +227,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IDeviceStore, DeviceStoreInMemory>();
         _ = services.AddSingleton<ISessionAudit, SessionAuditInMemory>();
         _ = services.AddSingleton<IMembershipLookup, MembershipLookupInMemory>();
+        _ = services.AddSingleton<IPolicyRaiseStore, PolicyRaiseStoreInMemory>();
         _ = services.AddSingleton<IAccessGate, AccessGateInMemory>();
         _ = services.AddSingleton<IAccountAudit, AccountAuditInMemory>();
 

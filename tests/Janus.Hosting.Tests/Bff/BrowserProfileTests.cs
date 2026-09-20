@@ -738,6 +738,7 @@ public sealed class BrowserProfileTests : IDisposable
         services.AddSingleton<ISessionStore>(_sessions);
         services.AddSingleton<ISessionAudit>(_audit);
         services.AddSingleton<IMembershipLookup>(_memberships);
+        services.AddSingleton<IPolicyRaiseStore, PolicyRaiseStoreInMemory>();
         services.AddSingleton<IAccessGate>(_gate);
         services.AddSingleton<IPreAuthenticationStore>(_contacts);
         services.AddSingleton<IConfigurationStore>(_configuration);

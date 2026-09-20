@@ -18,6 +18,7 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
     private readonly Dictionary<SubjectId, AccountState> _states = [];
     private readonly Dictionary<SubjectId, HeldProfile> _profiles = [];
     private readonly Dictionary<SubjectId, HeldPreferences> _preferences = [];
+    private readonly Dictionary<SubjectId, DateTimeOffset> _created = [];
 
     /// <summary>
     /// Puts an account in a state, which is what makes it exist here at all.
@@ -25,6 +26,13 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
     /// <param name="subject">Whose account.</param>
     /// <param name="state">Where it stands.</param>
     public void Stands(SubjectId subject, AccountState state) => _states[subject] = state;
+
+    /// <summary>
+    /// Says when an account came into being.
+    /// </summary>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="at">When it was registered.</param>
+    public void Registered(SubjectId subject, DateTimeOffset at) => _created[subject] = at;
 
     /// <summary>
     /// Puts a profile on an account as support would have left it.
@@ -38,6 +46,14 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
         ValueTask.FromResult(_states.TryGetValue(subject, out AccountState state)
             ? state
             : (AccountState?)null);
+
+    /// <inheritdoc/>
+    public ValueTask<DateTimeOffset?> CreatedAtAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_created.TryGetValue(subject, out DateTimeOffset at)
+            ? at
+            : (DateTimeOffset?)null);
 
     /// <inheritdoc/>
     public ValueTask<HeldProfile> ProfileAsync(SubjectId subject, CancellationToken cancellationToken) =>
