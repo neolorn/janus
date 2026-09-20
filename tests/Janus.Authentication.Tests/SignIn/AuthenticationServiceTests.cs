@@ -388,6 +388,78 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// INT-SMS-001 AC1: a code that proved control of a channel is no credential, so
+    /// presenting it as one is refused; only the entry the sign-in issued completes it.
+    /// </summary>
+    [Fact]
+    public async Task INT_SMS_001_AC1_NothingSentBySmsButTheSignInsOwnEntryIsAcceptedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneLink);
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Number);
+
+        _ = await Service.SendLinkAsync(
+            Number,
+            Language,
+            Source,
+            browser: null,
+            TestContext.Current.CancellationToken);
+
+        string carried = _sms.Taken[^1].Text.Split(' ')[1];
+
+        Assert.NotNull(await _pending.FindAsync(
+            subject,
+            Factor.PhoneLink,
+            TestContext.Current.CancellationToken));
+
+        // The value a text carried is the entry the sign-in issued and nothing else,
+        // so it opens neither another entry nor another sign-in.
+        Assert.NotNull(Refused(await PresentAsync(began.Challenge, Factor.PhoneCode, carried)));
+        Assert.NotNull(Refused(await PresentAsync(
+            (await BeganAsync(Number)).Challenge,
+            Factor.PhoneLink,
+            carried)));
+    }
+
+    /// <summary>
+    /// INT-SMS-001 AC2: with the two SMS entries off in the policy, asking for a link
+    /// at a number sends nothing and leaves no sign-in in flight.
+    /// </summary>
+    [Fact]
+    public async Task INT_SMS_001_AC2_WithTheSmsEntriesOffNothingIsSentToANumberAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Assert.True((await Service.SendLinkAsync(
+                Number,
+                Language,
+                Source,
+                browser: null,
+                TestContext.Current.CancellationToken))
+            .Match(() => true, _ => false));
+
+        Assert.Empty(_sms.Taken);
+        Assert.Null(await _pending.FindAsync(
+            subject,
+            Factor.PhoneLink,
+            TestContext.Current.CancellationToken));
+
+        Enables(Factor.PhoneLink);
+
+        _ = await Service.SendLinkAsync(
+            Number,
+            Language,
+            Source,
+            browser: null,
+            TestContext.Current.CancellationToken);
+
+        Assert.NotEmpty(_sms.Taken);
+    }
+
+    /// <summary>
     /// AUTH-FACT-015: a browser the account has trusted is not asked for the second
     /// step, and the session still records what was presented on it.
     /// </summary>

@@ -535,6 +535,31 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// INT-SMS-001 AC3: the enrolment link reaches the number only behind an approval
+    /// that carries the confirmation and the written reason; without the reason nothing
+    /// is sent and nothing is recorded.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_SMS_001_AC3_TheEnrolmentLinkGoesByTextOnlyBehindAnApprovalAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        (SubjectId approver, SessionId session) = await ApproverAsync();
+
+        Assert.Equal(
+            ErrorCodes.RecoveryReasonRequired,
+            Refused(await Approving(approver, session, subject, "  ", Number)));
+        Assert.Empty(_sms.Taken);
+        Assert.Empty(_approvals.All);
+
+        _ = await Approving(approver, session, subject, Reason, Number);
+
+        Assert.NotEmpty(_sms.Taken);
+        Assert.Equal(IdentifierKind.Phone, Assert.Single(_recorded.Written).Channel);
+        Assert.Equal(Reason, _recorded.Written[^1].Reason);
+    }
+
+    /// <summary>
     /// AUTH-RECOV-002a AC2: an approval an interface could find nothing wrong with,
     /// carrying a live session that passed the gate, a recorded channel and a written
     /// reason, is still refused because the approver is the subject.
