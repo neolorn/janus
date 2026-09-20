@@ -25,14 +25,16 @@ public static class JanusPipeline
     {
         ArgumentNullException.ThrowIfNull(application);
 
-        // BFF-ORDER-001 stages 2, 3 and 6. The cheap rejections come first, before
-        // anything reads the session; the token, which needs it, comes after.
+        // BFF-ORDER-001 stages 2 and 3. The cheap rejections come first, before
+        // anything reads the session.
         _ = application.UseMiddleware<ResourceIsolation>();
         _ = application.UseMiddleware<CustomRequestHeader>();
         _ = application.UseMiddleware<OriginValidation>();
 
-        // BFF-CSRF-005a: the token's binding target has to exist before the token is
-        // checked, so a browser arriving for the first time is given one here.
+        // Stage 5, then stage 6, which needs what stage 5 established. BFF-CSRF-005a:
+        // the token's binding target has to exist before the token is checked, so a
+        // browser that resolved to neither is given one in between.
+        _ = application.UseMiddleware<SessionResolution>();
         _ = application.UseMiddleware<FirstContact>();
         _ = application.UseMiddleware<SynchronizerToken>();
 

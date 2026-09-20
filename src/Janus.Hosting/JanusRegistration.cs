@@ -92,8 +92,10 @@ public static class JanusRegistration
         services.AddScoped<ResourceIsolation>();
         services.AddScoped<CustomRequestHeader>();
         services.AddScoped<OriginValidation>();
-        services.AddScoped<SynchronizerToken>();
+        services.AddScoped<RequestSession>();
+        services.AddScoped<SessionResolution>();
         services.AddScoped<FirstContact>();
+        services.AddScoped<SynchronizerToken>();
 
         // LIB-HOST-001: what the host declares about its own messaging is the host's.
         // A deployment that declares none of it starts, and the checks that would have
