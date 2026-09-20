@@ -1,4 +1,5 @@
 using System;
+using System.Buffers.Text;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
@@ -173,6 +174,97 @@ internal sealed class WebAuthnService(
     }
 
     /// <summary>
+    /// Enrols what an enrolment ceremony answered, reading and checking the ceremony
+    /// before anything about it is believed.
+    /// </summary>
+    /// <param name="subject">Whose credential.</param>
+    /// <param name="kind">Which kind is being created.</param>
+    /// <param name="label">What the person calls it.</param>
+    /// <param name="answered">What the browser sent back.</param>
+    /// <param name="challenge">The value the ceremony was opened with.</param>
+    /// <param name="upgrading">
+    /// The second-factor entry being replaced, where this is an upgrade, and nothing
+    /// otherwise.
+    /// </param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The credential's identifier, or the refusal.</returns>
+    public async ValueTask<Result<AuthenticatorId>> EnrolAsync(
+        SubjectId subject,
+        Factor kind,
+        CredentialLabel label,
+        AuthenticatorAttestation answered,
+        string challenge,
+        AuthenticatorId? upgrading,
+        CancellationToken cancellationToken)
+    {
+        RelyingParty party = await RelyingParty.ForAsync(configuration, cancellationToken)
+            .ConfigureAwait(false);
+
+        Error? refusal = null;
+
+        WebAuthnRegistration registration = WebAuthnCeremonies
+            .Created(answered, challenge, party.Origins, party.Id)
+            .Match(read => read, error => Withheld<WebAuthnRegistration>(error, ref refusal));
+
+        if (refusal is not null)
+        {
+            return Result.Failure<AuthenticatorId>(refusal);
+        }
+
+        return upgrading is AuthenticatorId retiring
+            ? await UpgradeAsync(subject, retiring, label, registration, cancellationToken)
+                .ConfigureAwait(false)
+            : await CompleteAsync(subject, kind, label, registration, cancellationToken)
+                .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Judges what a sign-in ceremony answered against the credential it names,
+    /// reading and checking the ceremony first.
+    /// </summary>
+    /// <param name="answered">What the browser sent back.</param>
+    /// <param name="challenge">The value the sign-in was opened with.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The credential that answered, or the refusal.</returns>
+    /// <exception cref="ArgumentNullException">The answer is absent.</exception>
+    public async ValueTask<Result<Authenticator>> AssertAsync(
+        AuthenticatorAssertion answered,
+        string challenge,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(answered);
+
+        byte[]? credentialId = Read(answered.CredentialId);
+
+        if (credentialId is null)
+        {
+            return Result.Failure<Authenticator>(Error.From(ErrorCodes.FactorRejected));
+        }
+
+        Authenticator? held = await authenticators
+            .ByCredentialAsync(credentialId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (held?.WebAuthn is null)
+        {
+            return Result.Failure<Authenticator>(Error.From(ErrorCodes.FactorRejected));
+        }
+
+        RelyingParty party = await RelyingParty.ForAsync(configuration, cancellationToken)
+            .ConfigureAwait(false);
+
+        Error? refusal = null;
+
+        WebAuthnAssertion assertion = WebAuthnCeremonies
+            .Asserted(answered, challenge, party.Origins, held.WebAuthn)
+            .Match(read => read, error => Withheld<WebAuthnAssertion>(error, ref refusal));
+
+        return refusal is not null
+            ? Result.Failure<Authenticator>(refusal)
+            : await PresentAsync(assertion, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Judges an assertion against the credential it names.
     /// </summary>
     /// <param name="assertion">What the ceremony produced.</param>
@@ -262,6 +354,16 @@ internal sealed class WebAuthnService(
     }
 
     private static bool Kept(uint? counter) => counter is > 0;
+
+    private static byte[]? Read(string value) =>
+        value is not null && Base64Url.IsValid(value) ? Base64Url.DecodeFromChars(value) : null;
+
+    private static TValue Withheld<TValue>(Error error, ref Error? refusal)
+    {
+        refusal = error;
+
+        return default!;
+    }
 
     // The credential an upgrade moves from: a WebAuthn credential the ceremony did
     // not make discoverable, which is what a second step holds (AUTH-FACT-002b).
