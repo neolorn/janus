@@ -534,11 +534,10 @@ Janus.Core.IMessageTemplates
 Janus.Core.IMessageTemplates.Find(Janus.Core.MessageKind message, Janus.Core.SendKind kind, string! language) -> Janus.Core.Result<Janus.Core.MessageTemplate!>
 Janus.Core.IRegistration
 Janus.Core.IRegistration.AbandonAsync(Janus.Core.RegistrationSessionId? session, string? linkToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
-Janus.Core.IRegistration.AcceptTermsAsync(Janus.Core.RegistrationSessionId session, string! termsVersion, string! noticeVersion, System.Collections.Generic.IReadOnlyDictionary<string!, bool>! consents, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationCompleted!>>
+Janus.Core.IRegistration.AcceptTermsAsync(Janus.Core.RegistrationSessionId session, string! termsVersion, string! noticeVersion, System.Collections.Generic.IReadOnlyDictionary<string!, bool>! consents, Janus.Core.DeviceDescription! device, Janus.Core.SessionLocation? location, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationCompleted!>>
 Janus.Core.IRegistration.AddAsync(Janus.Core.RegistrationSessionId session, Janus.Core.IdentifierKind kind, string! value, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationState!>>
 Janus.Core.IRegistration.BeginAsync(string! client, string! language, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationSessionId>>
 Janus.Core.IRegistration.ChangeAsync(Janus.Core.RegistrationSessionId session, Janus.Core.IdentifierId identifier, string! value, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationState!>>
-Janus.Core.IRegistration.CompleteSecurityAsync(Janus.Core.RegistrationSessionId session, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationState!>>
 Janus.Core.IRegistration.ConfirmAsync(Janus.Core.RegistrationSessionId session, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationState!>>
 Janus.Core.IRegistration.DiscardAsync(Janus.Core.RegistrationSessionId session, Janus.Core.IdentifierId identifier, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationState!>>
 Janus.Core.IRegistration.LandAsync(Janus.Core.RegistrationSessionId? session, string! linkToken, bool press, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.LinkLanding!>>
@@ -863,11 +862,13 @@ Janus.Core.RegistrationCompleted.Subject.get -> Janus.Core.SubjectId
 Janus.Core.RegistrationCompleted.Subject.init -> void
 Janus.Core.RegistrationSecurity
 Janus.Core.RegistrationSecurity.<Clone>$() -> Janus.Core.RegistrationSecurity!
-Janus.Core.RegistrationSecurity.Deconstruct(out bool Password, out System.Collections.Generic.IReadOnlyList<Janus.Core.Factor>! SecondStep) -> void
+Janus.Core.RegistrationSecurity.Deconstruct(out bool Password, out System.Collections.Generic.IReadOnlyList<Janus.Core.Factor>! SecondStep, out System.Collections.Generic.IReadOnlyList<string!>? RecoveryCodes) -> void
 Janus.Core.RegistrationSecurity.Equals(Janus.Core.RegistrationSecurity? other) -> bool
 Janus.Core.RegistrationSecurity.Password.get -> bool
 Janus.Core.RegistrationSecurity.Password.init -> void
-Janus.Core.RegistrationSecurity.RegistrationSecurity(bool Password, System.Collections.Generic.IReadOnlyList<Janus.Core.Factor>! SecondStep) -> void
+Janus.Core.RegistrationSecurity.RecoveryCodes.get -> System.Collections.Generic.IReadOnlyList<string!>?
+Janus.Core.RegistrationSecurity.RecoveryCodes.init -> void
+Janus.Core.RegistrationSecurity.RegistrationSecurity(bool Password, System.Collections.Generic.IReadOnlyList<Janus.Core.Factor>! SecondStep, System.Collections.Generic.IReadOnlyList<string!>? RecoveryCodes) -> void
 Janus.Core.RegistrationSecurity.SecondStep.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Factor>!
 Janus.Core.RegistrationSecurity.SecondStep.init -> void
 Janus.Core.RegistrationSessionId

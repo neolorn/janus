@@ -181,26 +181,20 @@ public interface IRegistration
 
     /// <summary>
     /// Sets the password of the security step. A password below the single-factor
-    /// floor leaves a second step mandatory; lengthening it lifts that in place.
+    /// floor leaves a second step mandatory; lengthening it lifts that in place. The
+    /// step is complete, and the terms step reachable, as soon as the account would
+    /// reach a primary sign-in method with nothing outstanding.
     /// </summary>
     /// <param name="session">Which session.</param>
     /// <param name="password">The password, cleared by the caller after the call.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The state, or the refusal the floor or the blocklist produced.</returns>
+    /// <returns>
+    /// The state, carrying the recovery codes where setting the password is what put
+    /// a second step beside one, or the refusal the floor or the blocklist produced.
+    /// </returns>
     ValueTask<Result<RegistrationState>> SetPasswordAsync(
         RegistrationSessionId session,
         string password,
-        CancellationToken cancellationToken);
-
-    /// <summary>
-    /// Completes the security step, which the account has to reach at least one
-    /// primary sign-in method for.
-    /// </summary>
-    /// <param name="session">Which session.</param>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The state at the terms step, or the refusal.</returns>
-    ValueTask<Result<RegistrationState>> CompleteSecurityAsync(
-        RegistrationSessionId session,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -212,6 +206,11 @@ public interface IRegistration
     /// <param name="termsVersion">The version of the terms accepted.</param>
     /// <param name="noticeVersion">The version of the privacy notice presented.</param>
     /// <param name="consents">The consent controls, by purpose.</param>
+    /// <param name="device">What the registering browser says it is.</param>
+    /// <param name="location">
+    /// Where the request came from, no finer than a city, and absent where the local
+    /// database could not say.
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The account and the session it is signed in on, or the refusal.</returns>
     ValueTask<Result<RegistrationCompleted>> AcceptTermsAsync(
@@ -219,6 +218,8 @@ public interface IRegistration
         string termsVersion,
         string noticeVersion,
         IReadOnlyDictionary<string, bool> consents,
+        DeviceDescription device,
+        SessionLocation? location,
         CancellationToken cancellationToken);
 
     /// <summary>
