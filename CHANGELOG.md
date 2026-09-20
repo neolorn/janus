@@ -525,6 +525,12 @@ against the public contract of LIB-API-001.
   after it, the sign-in stops at enrolment. An account created after the raise is held
   at enrolment at its first sign-in, and lowering a requirement starts no run-up.
 
+- The library's schema gains the tables a sign-in in flight, a link or code sent for
+  one, and a requirement a policy raised are kept in, so a deployment applies one new
+  migration. Neither the handle a browser carries nor the link it was sent is held as
+  it was issued: each is kept as its fingerprint, and the code beside it is held under
+  the account's own key, where an erasure leaves it unreadable.
+
 ### Changed
 
 - The case-insensitive collation is created in the default schema, because a column

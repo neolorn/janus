@@ -283,6 +283,15 @@ public sealed class ModelTests
             "passwords.set_at",
             "passwords.subject",
 
+            // Not an account field: a requirement a scope's policy raised and when the
+            // run-up to it began, one row per scope per field, which a sign-in that does
+            // not yet meet it is told of (AUTH-FACT-017).
+            "policy_raises.field",
+            "policy_raises.id",
+            "policy_raises.organization",
+            "policy_raises.raised_at",
+            "policy_raises.value",
+
             // Not an account field: what a browser carries before it holds a session,
             // keyed as the session table is and carrying the registration session in
             // flight (BFF-CSRF-005a, BFF-CSRF-005b).
@@ -399,6 +408,29 @@ public sealed class ModelTests
             // Not an account field: the runtime configuration of OPS-CFG-008.
             "settings.key",
             "settings.value",
+
+            // Not an account field: a sign-in in flight, keyed by what the caller's handle
+            // hashes to and carrying what it has presented so far (AUTH-FACT-001).
+            "signin_challenges.created_at",
+            "signin_challenges.device_attempts",
+            "signin_challenges.device_code",
+            "signin_challenges.expires_at",
+            "signin_challenges.handle",
+            "signin_challenges.presented",
+            "signin_challenges.subject",
+            "signin_challenges.webauthn",
+
+            // Not an account field: a link or a code the library sent for a sign-in,
+            // one per account per catalogue entry, spent on presentation
+            // (AUTH-FACT-016, REG-SESS-003).
+            "signin_links.browser",
+            "signin_links.enc_code",
+            "signin_links.expires_at",
+            "signin_links.factor",
+            "signin_links.issued_at",
+            "signin_links.subject",
+            "signin_links.token",
+            "signin_links.wrong_attempts",
 
             // Not an account field: what the gateway last said its prepaid account stood
             // at (INT-SMS-004, AUTH-ABUSE-006).

@@ -3,9 +3,11 @@ using Janus.Storage.Authentication.Alerting;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Identifiers;
 using Janus.Storage.Authentication.Passwords;
+using Janus.Storage.Authentication.Policies;
 using Janus.Storage.Authentication.Registration;
 using Janus.Storage.Authentication.Sending;
 using Janus.Storage.Authentication.Sessions;
+using Janus.Storage.Authentication.SignIn;
 using Janus.Storage.Authorization.Grants;
 using Janus.Storage.Authorization.Groups;
 using Janus.Storage.Authorization.Resources;
@@ -273,6 +275,21 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     public DbSet<PendingVerificationRecord> IdentifierVerifications =>
         Set<PendingVerificationRecord>();
 
+    /// <summary>
+    /// The sign-ins in progress.
+    /// </summary>
+    public DbSet<ChallengeRecord> SignInChallenges => Set<ChallengeRecord>();
+
+    /// <summary>
+    /// The sign-in links and codes that have gone out.
+    /// </summary>
+    public DbSet<PendingSignInRecord> SignInLinks => Set<PendingSignInRecord>();
+
+    /// <summary>
+    /// The requirements the policies in force have raised.
+    /// </summary>
+    public DbSet<PolicyRaiseRecord> PolicyRaises => Set<PolicyRaiseRecord>();
+
     /// <inheritdoc/>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -332,5 +349,8 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new RegistrationLinkConfiguration());
         modelBuilder.ApplyConfiguration(new PreAuthenticationConfiguration());
         modelBuilder.ApplyConfiguration(new PendingVerificationConfiguration());
+        modelBuilder.ApplyConfiguration(new ChallengeConfiguration());
+        modelBuilder.ApplyConfiguration(new PendingSignInConfiguration());
+        modelBuilder.ApplyConfiguration(new PolicyRaiseConfiguration());
     }
 }

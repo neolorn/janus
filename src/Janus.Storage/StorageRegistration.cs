@@ -9,6 +9,7 @@ using Janus.Authentication.Policies;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
+using Janus.Authentication.SignIn;
 using Janus.Authorization.Gate;
 using Janus.Authorization.Grants;
 using Janus.Authorization.Groups;
@@ -34,6 +35,7 @@ using Janus.Storage.Authentication.Policies;
 using Janus.Storage.Authentication.Registration;
 using Janus.Storage.Authentication.Sending;
 using Janus.Storage.Authentication.Sessions;
+using Janus.Storage.Authentication.SignIn;
 using Janus.Storage.Authorization.Gate;
 using Janus.Storage.Authorization.Grants;
 using Janus.Storage.Authorization.Groups;
@@ -159,6 +161,12 @@ internal static class StorageRegistration
         services.AddScoped<IDeviceStore, DeviceStore>();
         services.AddScoped<IMembershipLookup, MembershipLookup>();
         services.AddScoped<IPreAuthenticationStore, PreAuthenticationStore>();
+        services.AddScoped<IChallengeStore, ChallengeStore>();
+        services.AddScoped<IPendingSignInStore>(provider => new PendingSignInStore(
+            provider.GetRequiredService<JanusDbContext>(),
+            keyEncryptionKeys,
+            provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<IPolicyRaiseStore, PolicyRaiseStore>();
         services.AddScoped<ISessionAudit, SessionAudit>();
         services.AddScoped<ICredentialAudit, CredentialAudit>();
 
