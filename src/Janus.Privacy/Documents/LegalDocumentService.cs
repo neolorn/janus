@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Privacy.Consents;
 using Janus.Privacy.Policies;
 
 namespace Janus.Privacy.Documents;
@@ -17,6 +18,7 @@ namespace Janus.Privacy.Documents;
 /// </summary>
 /// <param name="store">Where the published versions are.</param>
 /// <param name="scope">Whether the caller may publish at all.</param>
+/// <param name="supersession">What a material revision does to the consents given.</param>
 /// <param name="configuration">Where the default governing language is read.</param>
 /// <param name="audit">Where a publication is written down.</param>
 /// <param name="alerts">Where a refused publication is raised.</param>
@@ -30,6 +32,7 @@ namespace Janus.Privacy.Documents;
 internal sealed class LegalDocumentService(
     ILegalDocumentStore store,
     AdministrativeScope scope,
+    Supersession supersession,
     IConfigurationStore configuration,
     IPrivacyAudit audit,
     IPrivacyAlerts alerts,
@@ -164,13 +167,15 @@ internal sealed class LegalDocumentService(
 
     private static Dictionary<string, JsonElement> Named(
         DocumentVersion version,
-        bool material) =>
-        new Dictionary<string, JsonElement>(capacity: 5, StringComparer.Ordinal)
+        bool material,
+        int superseded) =>
+        new Dictionary<string, JsonElement>(capacity: 6, StringComparer.Ordinal)
         {
             ["document"] = JsonSerializer.SerializeToElement(version.DocumentName),
             ["version"] = JsonSerializer.SerializeToElement(version.Version),
             ["governingLanguage"] = JsonSerializer.SerializeToElement(version.GoverningLanguage),
             ["material"] = JsonSerializer.SerializeToElement(material),
+            ["superseded"] = JsonSerializer.SerializeToElement(superseded),
             ["translations"] = JsonSerializer.SerializeToElement(
                 version.Translations.Select(translation => translation.Language).ToArray()),
         };
@@ -195,13 +200,23 @@ internal sealed class LegalDocumentService(
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await store.AddAsync(version, cancellationToken).ConfigureAwait(false);
+
+        // PRIV-CONS-007: only the notice is what a consent record names the version
+        // of, so a material revision of anything else ends no consent.
+        int superseded =
+            publication.Material && string.Equals(version.DocumentName, ConsentService.Notice, StringComparison.Ordinal)
+                ? await supersession
+                    .OfAsync(version.Version, version.PublishedAt, cancellationToken)
+                    .ConfigureAwait(false)
+                : 0;
+
         await audit
             .RecordedAsync(
                 Published,
                 context.Acting,
                 subject: null,
                 version.PublishedAt,
-                Named(version, publication.Material),
+                Named(version, publication.Material, superseded),
                 cancellationToken)
             .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);

@@ -140,6 +140,18 @@ public sealed class ModelTests
             "callbacks.rejected",
             "callbacks.source",
 
+            // Not an account field: what the subject consented to, against which version
+            // of the notice and where they said it (PRIV-CONS-001). Nothing here is
+            // deleted: a withdrawal is a timestamp, because the record is the evidence.
+            "consents.granted_at",
+            "consents.kind",
+            "consents.mechanism",
+            "consents.notice_version",
+            "consents.purpose",
+            "consents.subject",
+            "consents.superseded_at",
+            "consents.withdrawn_at",
+
             // Credentials: the browser an account knows (AUTH-FACT-015, AUTH-FACT-016),
             // held by the fingerprint of its token and never by the token.
             "devices.consecutive_failures",
@@ -300,6 +312,15 @@ public sealed class ModelTests
             "nonexistence_notices.at",
             "nonexistence_notices.destination",
             "nonexistence_notices.id",
+
+            // Not an account field: the purposes on an objectable basis the subject has
+            // objected to (PRIV-RIGHT-001a).
+            "objections.mechanism",
+            "objections.notice_version",
+            "objections.purpose",
+            "objections.recorded_at",
+            "objections.subject",
+            "objections.withdrawn_at",
 
             // Not an account field: the clients the deployment registered with the
             // provider, the codes waiting to be exchanged and the refresh tokens of

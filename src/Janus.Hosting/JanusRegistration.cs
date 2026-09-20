@@ -31,6 +31,7 @@ using Janus.Hosting.Privacy;
 using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
 using Janus.Privacy;
+using Janus.Privacy.Consents;
 using Janus.Privacy.Documents;
 using Janus.Privacy.Policies;
 using Janus.Storage;
@@ -238,6 +239,14 @@ public static class JanusRegistration
         services.AddScoped<IPrivacyAlerts, PrivacyAlerts>();
         services.AddScoped<ILegalDocuments, LegalDocumentService>();
         services.AddScoped<AdministrativeScope>();
+        services.AddScoped<Supersession>();
+        services.AddScoped<IConsents, ConsentService>();
+
+        // AUTHZ-MODEL-001: what may be processed for what is part of the one
+        // declaration the host makes, so the privacy side reads it from there rather
+        // than asking the host a second time.
+        services.AddSingleton(provider =>
+            provider.GetRequiredService<AuthorizationModel>().Processing);
 
         services.AddScoped<Derivations>();
         services.AddScoped<IAccessGate, AccessGate>();

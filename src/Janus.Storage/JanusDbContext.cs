@@ -21,6 +21,7 @@ using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Identity.Profiles;
+using Janus.Storage.Privacy.Consents;
 using Janus.Storage.Privacy.Documents;
 using Janus.Storage.Privacy.Erasures;
 using Janus.Storage.Privacy.SubjectKeys;
@@ -117,6 +118,16 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     /// The erasures, each carrying the host-side work outstanding for one subject.
     /// </summary>
     public DbSet<ErasureRecord> Erasures => Set<ErasureRecord>();
+
+    /// <summary>
+    /// The consents the subjects gave, withdrew or had superseded.
+    /// </summary>
+    public DbSet<ConsentRecordRow> Consents => Set<ConsentRecordRow>();
+
+    /// <summary>
+    /// The objections the subjects recorded.
+    /// </summary>
+    public DbSet<ObjectionRecordRow> Objections => Set<ObjectionRecordRow>();
 
     /// <summary>
     /// The published versions of the deployment's legal documents.
@@ -417,5 +428,7 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new SigningKeyConfiguration());
         modelBuilder.ApplyConfiguration(new DocumentVersionConfiguration());
         modelBuilder.ApplyConfiguration(new DocumentTranslationConfiguration());
+        modelBuilder.ApplyConfiguration(new ConsentConfiguration());
+        modelBuilder.ApplyConfiguration(new ObjectionConfiguration());
     }
 }

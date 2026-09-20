@@ -4,8 +4,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Privacy.Consents;
 using Janus.Privacy.Documents;
 using Janus.Privacy.Policies;
+using Janus.Privacy.Tests.Consents;
 using Xunit;
 
 namespace Janus.Privacy.Tests.Documents;
@@ -33,6 +35,8 @@ public sealed class LegalDocumentTests : IAsyncDisposable
     private readonly LegalDocumentStoreInMemory _store = new();
     private readonly PrivacyAuditInMemory _audit = new();
     private readonly PrivacyAlertsInMemory _alerts = new();
+    private readonly ConsentStoreInMemory _consents = new();
+    private readonly EventsInMemory _events = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
 
@@ -50,6 +54,7 @@ public sealed class LegalDocumentTests : IAsyncDisposable
         new LegalDocumentService(
             _store,
             new AdministrativeScope(_gate, _memberships),
+            new Supersession(_consents, _events),
             _configuration,
             _audit,
             _alerts,

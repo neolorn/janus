@@ -27,6 +27,7 @@ using Janus.Identity.Identifiers;
 using Janus.Identity.Organizations;
 using Janus.Identity.Preferences;
 using Janus.Identity.Profiles;
+using Janus.Privacy.Consents;
 using Janus.Privacy.Documents;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
@@ -56,6 +57,7 @@ using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Identity.Profiles;
 using Janus.Storage.Privacy;
+using Janus.Storage.Privacy.Consents;
 using Janus.Storage.Privacy.Documents;
 using Janus.Storage.Privacy.Erasures;
 using Janus.Storage.Privacy.Policies;
@@ -198,6 +200,7 @@ internal static class StorageRegistration
         services.AddScoped<ISessionAudit, SessionAudit>();
         services.AddScoped<ICredentialAudit, CredentialAudit>();
         services.AddScoped<ILegalDocumentStore, LegalDocumentStore>();
+        services.AddScoped<IConsentStore, ConsentStore>();
         services.AddScoped<Janus.Privacy.IPrivacyAudit, PrivacyAudit>();
         services.AddScoped<Janus.Privacy.Policies.IMembershipLookup, PrivacyMembershipLookup>();
 

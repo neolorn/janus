@@ -10,6 +10,17 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A subject can now read and change their own consents and objections through a
+  privacy dashboard: `GET /privacy/consents`, `POST /privacy/consents/{purpose}/grant`
+  and `.../withdraw`, `GET /privacy/objections`, `POST /privacy/objections/{purpose}`
+  and `DELETE /privacy/objections/{purpose}`. Each record names the purpose, the
+  version of the privacy notice that was shown, where the decision was made and when.
+  Withdrawal takes the one request granting took and nothing stands in its way. A
+  purpose that rests on a basis other than consent takes no consent record, and one
+  whose basis carries no right to object refuses the objection by name. Publishing a
+  materially revised privacy notice ends every live consent given against an earlier
+  version, so the subject is asked again, and leaves the records standing as evidence.
+
 - The privacy notice and every other legal document a deployment publishes are now
   served over `GET /privacy/notice` and `GET /privacy/documents/{document}`, public
   and without a sign-in, each answer carrying the governing language, the text that

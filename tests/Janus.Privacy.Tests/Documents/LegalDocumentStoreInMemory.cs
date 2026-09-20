@@ -42,10 +42,16 @@ internal sealed class LegalDocumentStoreInMemory : ILegalDocumentStore
         ValueTask.FromResult(_versions.Count(held =>
             string.Equals(held.DocumentName, document, StringComparison.Ordinal)));
 
+    /// <summary>
+    /// Puts a published version there, as a deployment that had published it would.
+    /// </summary>
+    /// <param name="version">The version.</param>
+    public void Hold(DocumentVersion version) => _versions.Add(version);
+
     /// <inheritdoc/>
     public ValueTask AddAsync(DocumentVersion version, CancellationToken cancellationToken)
     {
-        _versions.Add(version);
+        Hold(version);
 
         return ValueTask.CompletedTask;
     }

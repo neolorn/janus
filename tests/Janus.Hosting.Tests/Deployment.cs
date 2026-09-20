@@ -41,7 +41,9 @@ using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
 using Janus.Hosting.Tests.Bff;
 using Janus.Privacy;
+using Janus.Privacy.Consents;
 using Janus.Privacy.Documents;
+using Janus.Privacy.Tests.Consents;
 using Janus.Privacy.Tests.Documents;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -211,6 +213,11 @@ internal sealed class Deployment : IAsyncDisposable
     /// The legal documents the deployment published.
     /// </summary>
     public LegalDocumentStoreInMemory Documents { get; } = new();
+
+    /// <summary>
+    /// The consent and objection records the deployment holds.
+    /// </summary>
+    public ConsentStoreInMemory Consents { get; } = new();
 
     /// <summary>
     /// The authorization codes outstanding.
@@ -389,6 +396,10 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IPrivacyAlerts, PrivacyAlerts>();
         _ = services.AddScoped<Janus.Privacy.Policies.AdministrativeScope>();
         _ = services.AddScoped<ILegalDocuments, LegalDocumentService>();
+        _ = services.AddSingleton<IConsentStore>(Consents);
+        _ = services.AddSingleton(Janus.Privacy.Tests.Declaration.Processing);
+        _ = services.AddScoped<Supersession>();
+        _ = services.AddScoped<IConsents, ConsentService>();
         _ = services.AddScoped<SigningKeys>();
         _ = services.AddScoped<OidcService>();
         _ = services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
