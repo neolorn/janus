@@ -94,6 +94,10 @@ public sealed class HostFixture : IAsyncLifetime
             Declaration(),
             JanusApplication.Public);
 
+        // PRIV-RIGHT-005b: the deployment declares its documents sensitive, so it
+        // registers what does the host-side work for them.
+        services.AddSingleton<ISubjectEventSubscriber>(new HostSubjectEvents());
+
         _services = services.BuildServiceProvider();
     }
 

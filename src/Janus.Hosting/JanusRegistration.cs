@@ -238,6 +238,12 @@ public static class JanusRegistration
         services.AddScoped<OidcService>();
         services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
 
+        // LIB-HOST-001, PRIV-RIGHT-005b: what the host declared is read back at
+        // startup against the handlers it registered, so the declaration is here as
+        // the host wrote it and not only as the model rebuilt it.
+        services.AddSingleton(declaration);
+        services.AddScoped<HandlerCoverage>();
+
         services.AddScoped<IPrivacyAlerts, PrivacyAlerts>();
         services.AddScoped<ILegalDocuments, LegalDocumentService>();
         services.AddScoped<AdministrativeScope>();
@@ -266,6 +272,7 @@ public static class JanusRegistration
         // database go at the head of the collection.
         services.Insert(0, ServiceDescriptor.Singleton<IHostedService, ModelValidationService>());
         services.Insert(1, ServiceDescriptor.Singleton<IHostedService, SendingValidationService>());
+        services.Insert(2, ServiceDescriptor.Singleton<IHostedService, HandlerValidationService>());
 
         return services;
     }

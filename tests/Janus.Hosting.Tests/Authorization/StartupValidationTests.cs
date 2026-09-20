@@ -92,6 +92,26 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// PRIV-RIGHT-005b AC3: the deployment declares its documents sensitive, so a
+    /// deployment that registered nothing to do the host-side work for them is
+    /// stopped as it starts rather than at the erasure that would reach no one.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_005b_AC3_ADeploymentWithNoHandlerForItsSensitiveTypeIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using IHost deployment = Deployed(handlers: false);
+
+        StartupException refused = await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(cancellationToken));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        Assert.Equal("document", refused.Failure?.Details["handler"].GetString());
+    }
+
+    /// <summary>
     /// AUTHZ-MODEL-004 AC2: the web server is a hosted service of the host's, and
     /// hosted services start in the order they were registered, so the checks that read
     /// the database stand at the head of the collection and no request is served
@@ -113,17 +133,25 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         Assert.Equal(typeof(ModelValidationService), first.ImplementationType);
     }
 
-    private IHost Deployed(bool catalogue = true) => new HostBuilder()
-        .ConfigureServices(services => Declared(services, catalogue))
+    private IHost Deployed(bool catalogue = true, bool handlers = true) => new HostBuilder()
+        .ConfigureServices(services => Declared(services, catalogue, handlers))
         .Build();
 
     // The library registered over this deployment, as the host's own code registers
     // it, with the messages the deployment has written (LIB-HOST-001).
-    private IServiceCollection Declared(IServiceCollection services, bool catalogue = true)
+    private IServiceCollection Declared(
+        IServiceCollection services,
+        bool catalogue = true,
+        bool handlers = true)
     {
         if (catalogue)
         {
             services.AddSingleton<IMessageTemplates>(new MessageTemplatesInMemory());
+        }
+
+        if (handlers)
+        {
+            services.AddSingleton<ISubjectEventSubscriber>(new HostSubjectEvents());
         }
 
         return services.AddJanus(

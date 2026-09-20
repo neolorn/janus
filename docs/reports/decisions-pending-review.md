@@ -2884,3 +2884,74 @@ identifier stays internal.
 
 *Chapter text that should change.* LIB-API-001 should list `PrivacyRequestId` among
 the identifiers the contract carries.
+
+---
+
+## 96. A handler names what it covers, and the check reads the declaration against it
+
+**Phase 7 · 2026-09-20 · Tier 2 · PRIV-RIGHT-005b AC3, PRIV-RIGHT-001a AC3, LIB-HOST-001**
+
+*The question.* Startup fails where a resource type declared sensitive has no
+registered handler, and where a purpose on an objectable basis has none. No chapter
+says how the library learns which handler covers which type or which purpose.
+`ISubjectEventSubscriber` carried a name and whether a delivery waits for it;
+`ConsentChanged` and `ObjectionChanged` reach their handlers through the host's own
+`IEvents`, which the library never resolves.
+
+*The readings.*
+
+1. One required subject-event subscriber registered anywhere satisfies every
+   sensitive type, and one handler registered anywhere satisfies every objectable
+   purpose.
+2. A subject-event subscriber names the resource types it does the work for, a
+   purpose handler names its purposes, and a type or purpose that no registration
+   names stops the deployment.
+
+*Chosen: 2.* LIB-HOST-001 requires the handlers "per sensitive resource type" and
+D-068 that "a resource type declared sensitive must have a handler registered", so
+reading 1 leaves the words "a resource type" carrying nothing and admits deployments
+reading 2 refuses. The surface added is the least that lets the check mean what the
+chapters say: one member on the interface that already existed
+(`ISubjectEventSubscriber.Covers`) and one interface with one member
+(`IPurposeHandler.Purposes`). The purpose handler is a registration the library
+verifies at startup and never calls, because the event reaches it through the host's
+own `IEvents`.
+
+*Tests that pin what is built.*
+`HandlerCoverageTests.PRIV_RIGHT_005b_AC3_ASensitiveTypeWithNoRegisteredHandlerFailsStartup`,
+`HandlerCoverageTests.PRIV_RIGHT_001a_AC3_AnObjectablePurposeWithNoRegisteredHandlerFailsStartup`,
+`StartupValidationTests.PRIV_RIGHT_005b_AC3_ADeploymentWithNoHandlerForItsSensitiveTypeIsRefusedAsync`.
+
+*Chapter text that should change.* LIB-API-001 should list `IPurposeHandler` and the
+`Covers` member beside `ISubjectEventSubscriber`, and LIB-HOST-001's subject-event
+row should say that the handler names the types it covers.
+
+---
+
+## 97. A handler that faults is a handler that did not confirm
+
+**Phase 7 · 2026-09-20 · Tier 2 · IDN-LIFE-003a, CONV-ERR-002, CONV-ERR-003**
+
+*The question.* The subscriber contract says a handler that did not do its work says
+so rather than throwing. No chapter says what the publisher does with one that throws
+anyway.
+
+*The readings.*
+
+1. The fault leaves the pass, and the worker's next run offers the delivery again.
+2. The fault is caught at the boundary, the handler counts as one that did not
+   confirm, and the attempt, the backoff and the budget are recorded as for a refusal.
+
+*Chosen: 2.* Under reading 1 the attempt is never counted, so the delivery is offered
+again at every `outbox.poll.interval` with no backoff, never reaches `failed` and
+never raises the exhaustion the item requires; and one faulting handler holds up every
+other person's delivery in the same pass. The catch returns a failure result and
+nothing permitted or successful, so CONV-ERR-002 and CONV-ERR-003 hold and JAN0006
+passes on its own terms.
+
+*Tests that pin what is built.*
+`OutboxPublisherTests.PRIV_RIGHT_005b_AC2_ASubscriberThatFaultsIsRetriedRatherThanConfirmedAsync`.
+
+*Chapter text that should change.* IDN-LIFE-003a should say, beside the requirement
+that subscribers be idempotent, that a handler which faults is one that did not
+confirm.

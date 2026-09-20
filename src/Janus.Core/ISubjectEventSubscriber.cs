@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -27,6 +28,13 @@ public interface ISubjectEventSubscriber
     /// subscriber failing holds nothing up.
     /// </summary>
     bool Required { get; }
+
+    /// <summary>
+    /// Which of the host's declared resource types this subscriber does the work
+    /// for. A type declared sensitive that no registered subscriber covers stops the
+    /// deployment, because an erasure reaching no handler is one that half happened.
+    /// </summary>
+    IReadOnlyCollection<ResourceType> Covers { get; }
 
     /// <summary>
     /// Does this subscriber's work for one event.

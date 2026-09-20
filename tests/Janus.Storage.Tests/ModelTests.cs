@@ -42,6 +42,21 @@ public sealed class ModelTests
             entity => Assert.Equal(JanusDbContext.Schema, entity.GetSchema()));
 
     /// <summary>
+    /// PRIV-RIGHT-005b AC4: an erasure, a restriction and an export reach the host's
+    /// own tables through its handlers and never through the library, which maps no
+    /// table outside its own schema and no type but its own.
+    /// </summary>
+    [Fact]
+    public void PRIV_RIGHT_005b_AC4_NoWriteOfTheLibraryReachesAHostTable() =>
+        Assert.All(
+            Model().GetEntityTypes(),
+            entity =>
+            {
+                Assert.Equal(JanusDbContext.Schema, entity.GetSchema());
+                Assert.Equal(typeof(JanusDbContext).Assembly, entity.ClrType.Assembly);
+            });
+
+    /// <summary>
     /// IDN-ORG-002 AC1: nothing in the schema says which kind of person a row is
     /// about. Staff are the members of the administrative organization, so a flag
     /// separating them from customers would be a second answer to a question the

@@ -104,10 +104,31 @@ internal sealed class OutboxPublisher(
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await outbox.RecordAsync(held, cancellationToken).ConfigureAwait(false);
-        await ErasedAsync(held, cancellationToken).ConfigureAwait(false);
+        await ClosedAsync(held, cancellationToken).ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success();
+    }
+
+    // A subscriber that throws is a subscriber that did not confirm. Letting the
+    // fault out would leave the attempt uncounted, so the delivery would be offered
+    // again at every poll, never back off and never spend its budget.
+    private static async ValueTask<Result> HandledAsync(
+        ISubjectEventSubscriber subscriber,
+        SubjectEvent raised,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await subscriber.HandleAsync(raised, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception fault) when (fault is not OperationCanceledException)
+        {
+            return Result.Failure(Error.From(
+                ErrorCodes.SystemFault,
+                "handler",
+                JsonSerializer.SerializeToElement(subscriber.Name)));
+        }
     }
 
     private static IReadOnlyList<string> Required(
@@ -132,7 +153,7 @@ internal sealed class OutboxPublisher(
                 continue;
             }
 
-            if ((await subscriber.HandleAsync(raised, cancellationToken).ConfigureAwait(false))
+            if ((await HandledAsync(subscriber, raised, cancellationToken).ConfigureAwait(false))
                 .Match(() => true, _ => false))
             {
                 delivery.Confirm(subscriber.Name);
@@ -199,6 +220,23 @@ internal sealed class OutboxPublisher(
         {
             erasure.Fail();
         }
+
+        await erasures.RecordAsync(erasure, cancellationToken).ConfigureAwait(false);
+    }
+
+    // The erasure's own row is closed by the same hand: it followed the delivery
+    // into failure, so it follows it out rather than describing work that is done.
+    private async ValueTask ClosedAsync(Delivery delivery, CancellationToken cancellationToken)
+    {
+        if (delivery.Kind is not SubjectEventKind.ErasureRequested
+            || await erasures.FindBySubjectAsync(delivery.Subject, cancellationToken)
+                .ConfigureAwait(false) is not Erasure erasure
+            || erasure.Status is not ErasureStatus.Failed)
+        {
+            return;
+        }
+
+        erasure.CompleteManually();
 
         await erasures.RecordAsync(erasure, cancellationToken).ConfigureAwait(false);
     }

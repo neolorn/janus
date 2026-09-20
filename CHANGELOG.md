@@ -10,6 +10,22 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The outbox worker now publishes erasure, restriction and export to every handler a
+  host registers, keeps each confirmation on the delivery's own row, and closes the
+  delivery only when every required handler has confirmed. A handler that refuses, or
+  whose own store fails it, is offered the event again on an exponentially growing
+  delay with full jitter (`outbox.retry.initial`, `outbox.retry.factor`) until
+  `outbox.retry.maxattempts` is spent, at which point the delivery is marked failed
+  and the exhaustion is alerted; an operator who has done the work by hand closes it,
+  and the erasure's own row is closed with it. A handler already confirmed is never
+  offered the event twice, and a retry carries the key the first attempt carried.
+
+- A host now declares which of its resource types each subject-event handler does the
+  work for, and which purposes each consent and objection handler covers. A
+  deployment that declares a resource type sensitive, or a purpose on an objectable
+  basis, and registers nothing that names it does not start: the failure is
+  `model.startup.declarationmissing` with `details.handler` naming what is missing.
+
 - A data subject request now enters a queue with a statutory clock on it. A subject
   submits a restriction or a rectification for themselves at `POST /privacy/requests`
   and is answered with the request identifier, the receipt timestamp and the date the
