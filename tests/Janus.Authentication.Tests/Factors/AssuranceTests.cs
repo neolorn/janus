@@ -83,6 +83,7 @@ public sealed class AssuranceTests
             SignInOnly: false,
             IsWebAuthn: false,
             IsDiscoverable: false,
+            Channel: null,
             SingleUse: false);
 
         Assert.Null(Assurance.Reached([channel]));
@@ -191,6 +192,7 @@ public sealed class AssuranceTests
             SignInOnly: false,
             IsWebAuthn: false,
             IsDiscoverable: true,
+            Channel: null,
             SingleUse: false);
 
         Assert.Equal(
