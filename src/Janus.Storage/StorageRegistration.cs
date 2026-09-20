@@ -30,6 +30,7 @@ using Janus.Identity.Profiles;
 using Janus.Privacy.Consents;
 using Janus.Privacy.Documents;
 using Janus.Privacy.Erasures;
+using Janus.Privacy.Requests;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Accounts;
 using Janus.Storage.Authentication.Alerting;
@@ -60,7 +61,9 @@ using Janus.Storage.Privacy;
 using Janus.Storage.Privacy.Consents;
 using Janus.Storage.Privacy.Documents;
 using Janus.Storage.Privacy.Erasures;
+using Janus.Storage.Privacy.Outbox;
 using Janus.Storage.Privacy.Policies;
+using Janus.Storage.Privacy.Requests;
 using Janus.Storage.Privacy.SubjectKeys;
 using Janus.Storage.Settings;
 using Microsoft.EntityFrameworkCore;
@@ -119,6 +122,9 @@ internal static class StorageRegistration
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IErasureStore, ErasureStore>();
         services.AddScoped<ISubjectEraser, SubjectEraser>();
+        services.AddScoped<Janus.Privacy.Outbox.IOutboxStore, OutboxStore>();
+        services.AddScoped<IPrivacyRequestStore, PrivacyRequestStore>();
+        services.AddScoped<IAccountStates, AccountStates>();
         services.AddScoped<IOrganizationStore, OrganizationStore>();
         services.AddScoped<IMembershipStore, MembershipStore>();
         services.AddScoped<IIdentifierStore>(provider => new IdentifierStore(

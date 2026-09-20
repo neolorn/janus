@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -26,6 +27,8 @@ internal static class PrivacyEndpoints
 
     private static readonly IResult Nothing = TypedResults.NoContent();
 
+    private static readonly IResult Malformed = TypedResults.BadRequest();
+
     /// <summary>
     /// Mounts them.
     /// </summary>
@@ -48,6 +51,15 @@ internal static class PrivacyEndpoints
         _ = group.MapGet("/objections", ObjectionsAsync);
         _ = group.MapPost("/objections/{purpose}", ObjectAsync);
         _ = group.MapDelete("/objections/{purpose}", WithdrawObjectionAsync);
+
+        _ = group.MapPost("/requests", SubmitAsync);
+
+        RouteGroupBuilder queue = endpoints.MapGroup("/admin/privacy/requests");
+
+        _ = queue.MapGet("/", QueueAsync);
+        _ = queue.MapPost("/", EnterAsync);
+        _ = queue.MapPost("/{request:guid}/fulfil", FulfilAsync);
+        _ = queue.MapPost("/{request:guid}/refuse", RefuseAsync);
 
         return endpoints;
     }
@@ -145,6 +157,172 @@ internal static class PrivacyEndpoints
                     .ConfigureAwait(false),
                 Nothing);
     }
+
+    // PRIV-RIGHT-001: the subject asks for themselves, and the receipt tells them
+    // when the decision is due, which is the one thing the statute gives them.
+    private static async Task<IResult> SubmitAsync(
+        PrivacyRequestBody body,
+        IPrivacyRequests requests,
+        RequestSession browser,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        ArgumentNullException.ThrowIfNull(requests);
+
+        if (Asked(body.Type) is not PrivacyRequestType type)
+        {
+            return Malformed;
+        }
+
+        return Asking(browser) is not AccessContext holder
+            ? Nobody()
+            : Answers.Of(
+                await requests
+                    .SubmitAsync(holder, type, body.Detail ?? string.Empty, cancellationToken)
+                    .ConfigureAwait(false),
+                Receipted);
+    }
+
+    private static async Task<IResult> QueueAsync(
+        IPrivacyRequests requests,
+        RequestSession browser,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(requests);
+
+        return Asking(browser) is not AccessContext holder
+            ? Nobody()
+            : Answers.Of(
+                await requests.QueueAsync(holder, cancellationToken).ConfigureAwait(false),
+                Queued);
+    }
+
+    // 09 section 8a, D-113: the human entering it records the channel, what they did
+    // to confirm the requester is the subject, and the date it reached the company.
+    private static async Task<IResult> EnterAsync(
+        PrivacyEntryBody body,
+        IPrivacyRequests requests,
+        RequestSession browser,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        ArgumentNullException.ThrowIfNull(requests);
+
+        if (Asked(body.Type) is not PrivacyRequestType type
+            || !Guid.TryParse(body.Subject, out Guid subject)
+            || !DateOnly.TryParseExact(
+                body.ReceivedAt,
+                "yyyy-MM-dd",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out DateOnly receivedAt)
+            || body.Channel is not { Length: > 0 } channel
+            || body.IdentityConfirmation is not { Length: > 0 } confirmation)
+        {
+            return Malformed;
+        }
+
+        return Asking(browser) is not AccessContext holder
+            ? Nobody()
+            : Answers.Of(
+                await requests
+                    .EnterAsync(
+                        holder,
+                        new PrivacyRequestEntry(
+                            new SubjectId(subject),
+                            type,
+                            body.Detail ?? string.Empty,
+                            receivedAt,
+                            channel,
+                            confirmation),
+                        cancellationToken)
+                    .ConfigureAwait(false),
+                Receipted);
+    }
+
+    private static async Task<IResult> FulfilAsync(
+        IPrivacyRequests requests,
+        RequestSession browser,
+        Guid request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(requests);
+
+        return Asking(browser) is not AccessContext holder
+            ? Nobody()
+            : Answers.Of(
+                await requests
+                    .FulfilAsync(holder, new PrivacyRequestId(request), cancellationToken)
+                    .ConfigureAwait(false),
+                Nothing);
+    }
+
+    private static async Task<IResult> RefuseAsync(
+        PrivacyDecisionBody body,
+        IPrivacyRequests requests,
+        RequestSession browser,
+        Guid request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        ArgumentNullException.ThrowIfNull(requests);
+
+        if (body.Reason is not { Length: > 0 } reason)
+        {
+            return Malformed;
+        }
+
+        return Asking(browser) is not AccessContext holder
+            ? Nobody()
+            : Answers.Of(
+                await requests
+                    .RefuseAsync(holder, new PrivacyRequestId(request), reason, cancellationToken)
+                    .ConfigureAwait(false),
+                Nothing);
+    }
+
+    // 10 section 5.12c gives the three spellings, and a body carrying anything else
+    // is malformed rather than a request for something the library does not do.
+    private static PrivacyRequestType? Asked(string? type) => type switch
+    {
+        "restriction" => PrivacyRequestType.Restriction,
+        "rectification" => PrivacyRequestType.Rectification,
+        "erasure" => PrivacyRequestType.Erasure,
+        _ => null,
+    };
+
+    private static IResult Receipted(PrivacyRequestReceipt receipt) =>
+        TypedResults.Json(
+            new PrivacyReceiptView(
+                receipt.RequestId.Value,
+                receipt.ReceiptSentAt,
+                receipt.DecisionDue),
+            PrivacyJson.Default.PrivacyReceiptView,
+            contentType: null,
+            StatusCodes.Status202Accepted);
+
+    private static IResult Queued(IReadOnlyList<PrivacyRequest> queue) =>
+        TypedResults.Json(
+            (IReadOnlyList<PrivacyRequestView>)
+            [
+                .. queue.Select(request => new PrivacyRequestView(
+                    request.Id.Value,
+                    request.Subject.Value,
+                    request.Type,
+                    request.Detail,
+                    request.ReceivedAt,
+                    request.CreatedAt,
+                    request.ReceiptSentAt,
+                    request.DecisionDue,
+                    request.Status,
+                    request.DecidedAt,
+                    request.DecisionReason,
+                    request.Channel,
+                    request.IdentityConfirmation)),
+            ],
+            PrivacyJson.Default.IReadOnlyListPrivacyRequestView,
+            contentType: null,
+            StatusCodes.Status200OK);
 
     private static Task<IResult> NoticeAsync(
         ILegalDocuments documents,

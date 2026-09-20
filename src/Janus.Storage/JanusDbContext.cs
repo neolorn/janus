@@ -24,6 +24,8 @@ using Janus.Storage.Identity.Profiles;
 using Janus.Storage.Privacy.Consents;
 using Janus.Storage.Privacy.Documents;
 using Janus.Storage.Privacy.Erasures;
+using Janus.Storage.Privacy.Outbox;
+using Janus.Storage.Privacy.Requests;
 using Janus.Storage.Privacy.SubjectKeys;
 using Janus.Storage.Settings;
 using Microsoft.EntityFrameworkCore;
@@ -128,6 +130,22 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     /// The objections the subjects recorded.
     /// </summary>
     public DbSet<ObjectionRecordRow> Objections => Set<ObjectionRecordRow>();
+
+    /// <summary>
+    /// The facts about a subject the host has its own half of, one row a delivery.
+    /// </summary>
+    public DbSet<DeliveryRecord> Outbox => Set<DeliveryRecord>();
+
+    /// <summary>
+    /// One subscriber's confirmation of one delivery.
+    /// </summary>
+    public DbSet<DeliveryConfirmationRecord> OutboxConfirmations =>
+        Set<DeliveryConfirmationRecord>();
+
+    /// <summary>
+    /// The data subject requests on the queue, decided ones included.
+    /// </summary>
+    public DbSet<PrivacyRequestRecord> PrivacyRequests => Set<PrivacyRequestRecord>();
 
     /// <summary>
     /// The published versions of the deployment's legal documents.
@@ -430,5 +448,8 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new DocumentTranslationConfiguration());
         modelBuilder.ApplyConfiguration(new ConsentConfiguration());
         modelBuilder.ApplyConfiguration(new ObjectionConfiguration());
+        modelBuilder.ApplyConfiguration(new DeliveryConfiguration());
+        modelBuilder.ApplyConfiguration(new DeliveryConfirmationConfiguration());
+        modelBuilder.ApplyConfiguration(new PrivacyRequestConfiguration());
     }
 }

@@ -14,4 +14,6 @@ namespace Janus.Hosting.Privacy;
 [JsonSerializable(typeof(DocumentVersionView))]
 [JsonSerializable(typeof(IReadOnlyList<ConsentView>))]
 [JsonSerializable(typeof(IReadOnlyList<ObjectionView>))]
+[JsonSerializable(typeof(PrivacyReceiptView))]
+[JsonSerializable(typeof(IReadOnlyList<PrivacyRequestView>))]
 internal sealed partial class PrivacyJson : JsonSerializerContext;

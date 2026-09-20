@@ -33,7 +33,9 @@ using Janus.Hosting.Registration;
 using Janus.Privacy;
 using Janus.Privacy.Consents;
 using Janus.Privacy.Documents;
+using Janus.Privacy.Outbox;
 using Janus.Privacy.Policies;
+using Janus.Privacy.Requests;
 using Janus.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -241,6 +243,12 @@ public static class JanusRegistration
         services.AddScoped<AdministrativeScope>();
         services.AddScoped<Supersession>();
         services.AddScoped<IConsents, ConsentService>();
+        services.AddScoped<ISubjectNotices, SubjectNotices>();
+        services.AddScoped<WorkingCalendar>();
+        services.AddScoped<RestrictionGrant>();
+        services.AddScoped<DeadlineSweep>();
+        services.AddScoped<IPrivacyRequests, PrivacyRequestService>();
+        services.AddScoped<OutboxPublisher>();
 
         // AUTHZ-MODEL-001: what may be processed for what is part of the one
         // declaration the host makes, so the privacy side reads it from there rather

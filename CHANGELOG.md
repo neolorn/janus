@@ -10,6 +10,23 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A data subject request now enters a queue with a statutory clock on it. A subject
+  submits a restriction or a rectification for themselves at `POST /privacy/requests`
+  and is answered with the request identifier, the receipt timestamp and the date the
+  decision is due by; an authorised human enters a request that arrived out of band at
+  `POST /admin/privacy/requests`, recording how it arrived, what confirmed the
+  requester is the subject, and the date it reached the company. The deadline is six
+  working days counted on the deployment's own week (`privacy.workingdays`), its
+  holidays as currently listed (`privacy.holidays`) and its zone
+  (`privacy.calendar.timezone`), never on a Monday to Friday assumption. Undecided
+  requests raise a Normal alert `privacy.request.warninglead` before the deadline and
+  a High alert on the deadline day, without anyone watching; a restriction still
+  undecided when the deadline passes is granted and the account is restricted, and a
+  request the system cannot grant by itself is recorded as deemed refused by lapse,
+  with the subject told honestly and the record kept. Fulfilling a restriction
+  restricts the account and tells the registered subscribers; fulfilling an
+  out-of-band erasure starts the deletion grace window.
+
 - A host can now bind one of its actions to the purpose it is done for, and where
   that purpose rests on consent the gate refuses the action until the subject has
   consented to it: missing, withdrawn, superseded or of the ordinary kind where the

@@ -104,4 +104,18 @@ public enum MessageKind
     /// </summary>
     [JsonStringEnumMemberName("recovery-link")]
     RecoveryLink = 14,
+
+    /// <summary>
+    /// The automatic receipt a data subject request gets the moment it enters the
+    /// queue, which is not a decision and starts nothing (PRIV-RIGHT-002).
+    /// </summary>
+    [JsonStringEnumMemberName("privacy-request-received")]
+    PrivacyRequestReceived = 15,
+
+    /// <summary>
+    /// The honest word to a subject whose out-of-band erasure request reached its
+    /// deadline undecided (PRIV-RIGHT-002).
+    /// </summary>
+    [JsonStringEnumMemberName("privacy-request-lapsed")]
+    PrivacyRequestLapsed = 16,
 }

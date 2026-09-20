@@ -275,6 +275,8 @@ public sealed class VocabularyContractTests
                 "identifier-removed",
                 "identifier-settings-changed",
                 "no-account",
+                "privacy-request-lapsed",
+                "privacy-request-received",
                 "recovery-link",
                 "secondstep-code",
                 "security-notice",

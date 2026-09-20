@@ -3,6 +3,7 @@ using System;
 using Janus.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Janus.Storage.Migrations;
 
 [DbContext(typeof(JanusDbContext))]
-partial class JanusDbContextModelSnapshot : ModelSnapshot
+[Migration("20260920123349_AddSubjectEventOutbox")]
+partial class AddSubjectEventOutbox
 {
-    protected override void BuildModel(ModelBuilder modelBuilder)
+    /// <inheritdoc />
+    protected override void BuildTargetModel(ModelBuilder modelBuilder)
     {
 #pragma warning disable 612, 618
         modelBuilder
@@ -2490,93 +2493,6 @@ partial class JanusDbContextModelSnapshot : ModelSnapshot
                     });
             });
 
-        modelBuilder.Entity("Janus.Storage.Privacy.Requests.PrivacyRequestRecord", b =>
-            {
-                b.Property<Guid>("Id")
-                    .HasColumnType("uuid")
-                    .HasColumnName("id");
-
-                b.Property<string>("Channel")
-                    .HasColumnType("text")
-                    .HasColumnName("channel");
-
-                b.Property<DateTimeOffset>("CreatedAt")
-                    .HasColumnType("timestamp with time zone")
-                    .HasColumnName("created_at");
-
-                b.Property<DateTimeOffset?>("DecidedAt")
-                    .HasColumnType("timestamp with time zone")
-                    .HasColumnName("decided_at");
-
-                b.Property<DateTimeOffset>("DecisionDue")
-                    .HasColumnType("timestamp with time zone")
-                    .HasColumnName("decision_due");
-
-                b.Property<string>("DecisionReason")
-                    .HasColumnType("text")
-                    .HasColumnName("decision_reason");
-
-                b.Property<string>("Detail")
-                    .IsRequired()
-                    .HasColumnType("text")
-                    .HasColumnName("detail");
-
-                b.Property<DateTimeOffset>("EscalateAt")
-                    .HasColumnType("timestamp with time zone")
-                    .HasColumnName("escalate_at");
-
-                b.Property<DateTimeOffset?>("EscalatedAt")
-                    .HasColumnType("timestamp with time zone")
-                    .HasColumnName("escalated_at");
-
-                b.Property<string>("IdentityConfirmation")
-                    .HasColumnType("text")
-                    .HasColumnName("identity_confirmation");
-
-                b.Property<DateOnly>("ReceivedAt")
-                    .HasColumnType("date")
-                    .HasColumnName("received_at");
-
-                b.Property<string>("Status")
-                    .IsRequired()
-                    .HasColumnType("text")
-                    .HasColumnName("status");
-
-                b.Property<Guid>("Subject")
-                    .HasColumnType("uuid")
-                    .HasColumnName("subject");
-
-                b.Property<string>("Type")
-                    .IsRequired()
-                    .HasColumnType("text")
-                    .HasColumnName("type");
-
-                b.Property<DateTimeOffset>("WarnAt")
-                    .HasColumnType("timestamp with time zone")
-                    .HasColumnName("warn_at");
-
-                b.Property<DateTimeOffset?>("WarnedAt")
-                    .HasColumnType("timestamp with time zone")
-                    .HasColumnName("warned_at");
-
-                b.HasKey("Id")
-                    .HasName("pk_privacy_requests");
-
-                b.HasIndex("Subject")
-                    .HasDatabaseName("ix_privacy_requests_subject");
-
-                b.HasIndex("WarnAt")
-                    .HasDatabaseName("ix_privacy_requests_open")
-                    .HasFilter("status = 'open'");
-
-                b.ToTable("privacy_requests", "janus", t =>
-                    {
-                        t.HasCheckConstraint("ck_privacy_requests_status", "status IN ('deemed-refused-by-lapse', 'fulfilled', 'granted-by-lapse', 'open', 'refused')");
-
-                        t.HasCheckConstraint("ck_privacy_requests_type", "type IN ('erasure', 'rectification', 'restriction')");
-                    });
-            });
-
         modelBuilder.Entity("Janus.Storage.Privacy.SubjectKeys.SubjectKeyRecord", b =>
             {
                 b.Property<Guid>("Subject")
@@ -3076,16 +2992,6 @@ partial class JanusDbContextModelSnapshot : ModelSnapshot
                     .OnDelete(DeleteBehavior.Restrict)
                     .IsRequired()
                     .HasConstraintName("fk_outbox_subject");
-            });
-
-        modelBuilder.Entity("Janus.Storage.Privacy.Requests.PrivacyRequestRecord", b =>
-            {
-                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
-                    .WithMany()
-                    .HasForeignKey("Subject")
-                    .OnDelete(DeleteBehavior.Restrict)
-                    .IsRequired()
-                    .HasConstraintName("fk_privacy_requests_subject");
             });
 
         modelBuilder.Entity("Janus.Storage.Privacy.Documents.DocumentVersionRecord", b =>

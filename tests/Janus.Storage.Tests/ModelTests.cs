@@ -362,6 +362,21 @@ public sealed class ModelTests
             "organizations.id",
             "organizations.name",
 
+            // Not an account field: one fact about a subject the host has its own half
+            // of, and each subscriber's confirmation of it (IDN-LIFE-003a).
+            "outbox.attempts",
+            "outbox.id",
+            "outbox.kind",
+            "outbox.next_attempt_at",
+            "outbox.raised_at",
+            "outbox.reason",
+            "outbox.restricted",
+            "outbox.status",
+            "outbox.subject",
+            "outbox_confirmations.confirmed_at",
+            "outbox_confirmations.delivery",
+            "outbox_confirmations.subscriber",
+
             // Credentials: the password hash of AUTH-PASS-007 and the floor flag
             // AUTH-PASS-001a says cannot be recomputed from it.
             "passwords.change_required",
@@ -388,6 +403,25 @@ public sealed class ModelTests
             "preauthentication_sessions.expires_at",
             "preauthentication_sessions.fingerprint",
             "preauthentication_sessions.registration",
+
+            // Not an account field: the data subject requests of PRIV-RIGHT-001 with
+            // the three instants the working-day clock gives each one (PRIV-RIGHT-002).
+            "privacy_requests.channel",
+            "privacy_requests.created_at",
+            "privacy_requests.decided_at",
+            "privacy_requests.decision_due",
+            "privacy_requests.decision_reason",
+            "privacy_requests.detail",
+            "privacy_requests.escalate_at",
+            "privacy_requests.escalated_at",
+            "privacy_requests.id",
+            "privacy_requests.identity_confirmation",
+            "privacy_requests.received_at",
+            "privacy_requests.status",
+            "privacy_requests.subject",
+            "privacy_requests.type",
+            "privacy_requests.warn_at",
+            "privacy_requests.warned_at",
 
             // Profile: the photo, in a table of its own (IDN-ATTR-003).
             "profile_photos.enc_image",

@@ -39,6 +39,8 @@ internal static class MessageChannels
         MessageKind.CredentialEnrolled,
         MessageKind.IdentifierChangeConfirm,
         MessageKind.RecoveryLink,
+        MessageKind.PrivacyRequestReceived,
+        MessageKind.PrivacyRequestLapsed,
     ];
 
     /// <summary>

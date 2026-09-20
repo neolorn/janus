@@ -2640,3 +2640,247 @@ guess. A host that raises the prompt calls the contract and names `reconsent`.
 *Chapter text that should change.* `09` section 7 should say that the dashboard endpoints
 record the `dashboard` mechanism and that `reconsent` is written by a host calling the
 contract.
+
+---
+
+## 88. An action is bound to the purpose it is done for
+
+**Phase 7 · 2026-09-20 · Tier 2 · PRIV-SENS-002, PRIV-SENS-002a, AUTHZ-GATE-005, D-160**
+
+*The question.* PRIV-SENS-002 AC1 refuses processing of a sensitive type for a
+consent-based purpose without recorded consent, and PRIV-SENS-002a requires the refusal
+to reach the purpose and not the record. The gate evaluates a permission, and nothing
+tells it which purpose a permission is exercised for.
+
+*The readings.*
+
+1. Add a purpose to the gate's own calls, so every caller states what it is doing.
+2. Refuse the action wherever the type carries any consent-based purpose the subject
+   has not consented to.
+3. The model builder binds an action to the purpose it serves, as D-160 already binds
+   an action to a step-up gate, and the gate reads the purpose from the permission.
+
+*Chosen: 3.* Reading 2 is the record gating D-066 replaced: a customer who never wanted
+recommendations would stop their own order. Reading 1 changes the gate's four public
+signatures for a fact that is fixed at declaration time and never varies per call, and
+phase 2 settled those signatures. Reading 3 is the pattern D-160 set for the `stepup`
+residual, word for word: the residual comes from what the model binds to the action and
+not from the permission string. A binding to a purpose no type declares fails startup,
+so the gate never asks about a consent nobody could give.
+
+*Tests that pin what is built.*
+`ConsentGateTests.PRIV_SENS_002_AC1_AConsentBasedPurposeWithoutAConsentIsRefusedAsync`,
+`ConsentGateTests.PRIV_SENS_002a_AC1_AnotherPurposeOnTheSameRecordIsUntouchedAsync`,
+`ConsentGateTests.AUTHZ_GATE_005_AC3_ACapabilityCarriesTheConsentItStillRequiresAsync`.
+
+*Chapter text that should change.* `03` should carry the binding beside the step-up one
+of AUTHZ-GATE-005, and `10` should list it with the rest of the declaration surface.
+
+---
+
+## 89. The consent the gate reads is the caller's own
+
+**Phase 7 · 2026-09-20 · Tier 3 · PRIV-SENS-002 AC1, AUTHZ-GATE-005, `10` section 5.20**
+
+*The question.* A consent belongs to a data subject. The gate evaluates a caller. Where
+staff act on a customer's record, the two differ, and PRIV-SENS-002 AC1 does not say
+whose consent is read.
+
+*The readings.*
+
+1. The record's data subject, resolved from the record the action is on.
+2. The caller, as every other residual of `10` section 5.20 is about the caller.
+
+*Chosen: 2, the strictest reading of what is settled.* `10` section 5.20 lists `consent`
+beside `stepup`, `reauthenticate`, `restricted` and `accountstate`, and each of those
+four is a fact about the caller's own session or account; reading the fifth differently
+would make one member of a closed set mean something else. Reading 1 also needs a data
+subject on a record, which nothing in `03` declares: the library knows a record's
+organization and never its subject. The narrower reading refuses the self-service case,
+which is the case PRIV-CONS-011's dashboard is about, and leaves the staff case to the
+host, which knows whose record it is. Background work asking as a system principal holds
+no account and therefore no consent, so the binding asks nothing of it; the grant it
+needs is refused on its own terms (AUTHZ-PRIN-003).
+
+*Tests that pin what is built.*
+`ConsentGateTests.PRIV_SENS_002_AC1_AWrittenConsentAdmitsTheActionAsync`,
+`ConsentGateTests.PRIV_SENS_002a_AC2_WithdrawingStopsThePurposeOnTheNextRequestAsync`.
+
+*Chapter text that should change.* PRIV-SENS-002 AC1 should say whose consent is read,
+and `03` should say what a host does where the caller is not the subject.
+
+---
+
+## 90. A consent control for a purpose taking no consent refuses the terms step
+
+**Phase 7 · 2026-09-20 · Tier 2 · REG-SESS-007 AC1, PRIV-CONS-001, PRIV-CONS-008a**
+
+*The question.* The terms step takes one boolean per consent control. REG-SESS-007 AC1
+says no consent control blocks registration. A control naming a purpose the deployment
+takes no consent for cannot produce a record, and the item does not say what happens.
+
+*The readings.*
+
+1. Record what can be recorded, ignore the rest, and complete the registration.
+2. Refuse the step, since a control that should not exist is a malformed request rather
+   than a consent decision.
+
+*Chosen: 2.* AC1 is about a control left **unticked**, which writes nothing and stops
+nothing, and that is what is built and tested. A tick the library cannot honour is
+different: reading 1 would tell the person they had consented and keep no record of it,
+which is the one outcome PRIV-CONS-001 exists to prevent. Fail closed. Nothing of the
+registration is written, because the step is the one transaction of REG-SESS-001.
+
+*Tests that pin what is built.*
+`RegistrationServiceTests.PRIV_CONS_003_AC1_NoConsentIsRecordedForAControlLeftUntickedAsync`,
+`RegistrationServiceTests.PRIV_CONS_001_AC1_AControlForAPurposeTakingNoConsentIsRefusedAsync`.
+
+*Chapter text that should change.* `09` section 2's row for `POST /register/terms`
+should carry the refusal, and `10` section 1.4 the code it answers with (entry 83).
+
+---
+
+## 91. The sweep that fires a deadline is built here and scheduled in phase 9
+
+**Phase 7 · 2026-09-20 · Tier 2 · PRIV-RIGHT-002 AC2, the plan's phase 7 and 9 rows**
+
+*The question.* PRIV-RIGHT-002 AC2 requires the two deadline alerts to fire "without
+human monitoring", which needs something to run on a timer. The plan puts background
+jobs in phase 9 and the rights queue in phase 7.
+
+*The readings.*
+
+1. Build a timer in phase 7 so the criterion is met end to end now.
+2. Build the pass the timer will call, with its own tests, and leave the schedule to
+   the one place the plan puts schedules.
+
+*Chosen: 2.* Entry 23 already settled that the outbox publisher's schedule belongs to
+phase 9; a second scheduling mechanism built here would be the second way of doing
+something that already has one. `DeadlineSweep.SweepAsync` decides everything the
+criterion describes and is tested against the clock; phase 9 calls it on
+`sweep.interval`.
+
+*Tests that pin what is built.*
+`DeadlineSweepTests.PRIV_RIGHT_002_AC2_TheNormalAlertFiresTwoWorkingDaysBeforeAsync`,
+`DeadlineSweepTests.PRIV_RIGHT_002_AC2_TheHighAlertFiresOnTheDeadlineDayAsync`,
+`DeadlineSweepTests.PRIV_RIGHT_002_AC3_ARestrictionUndecidedAtTheDeadlineIsGrantedAsync`.
+
+*Chapter text that should change.* The plan's phase 9 row should name the privacy
+deadline sweep beside the outbox publisher, or PRIV-RIGHT-002 should say which phase
+runs it.
+
+---
+
+## 92. The receipt and the lapse notice are two new message kinds
+
+**Phase 7 · 2026-09-20 · Tier 2 · PRIV-RIGHT-002, `10` section 5b, CONV-CONTENT-001**
+
+*The question.* PRIV-RIGHT-002 requires an automatic receipt the moment a request
+enters the queue, and an honest notice to a subject whose erasure request reached its
+deadline undecided. The library asks for a message by naming a `MessageKind`, and no
+member of that vocabulary stands for either message.
+
+*The readings.*
+
+1. Send one of the existing kinds, which would have the deployment catalogue answer
+   with words written for something else.
+2. Add `privacy-request-received` and `privacy-request-lapsed`, and record that `10`
+   needs the two rows.
+
+*Chosen: 2.* Reading 1 puts the wrong sentence in front of the person, which is the
+one thing CONV-CONTENT-001 exists to prevent; the chapter requires both messages, so
+neither can go unsent. The two names are the chapter's own words for what they are.
+
+*Tests that pin what is built.*
+`PrivacyRequestTests.PRIV_RIGHT_002_AC1_TheSubjectIsSentAReceiptOnEntryAsync`,
+`DeadlineSweepTests.PRIV_RIGHT_002_AC4_AnErasureUndecidedAtTheDeadlineIsDeemedRefusedAsync`,
+`VocabularyContractTests.WireNames_TheKeysTheCatalogueIsAskedBy_AreWritten`.
+
+*Chapter text that should change.* The message vocabulary needs the two kinds, and
+`18` should say which screens the deployment writes the two texts for.
+
+---
+
+## 93. A request the caller may not decide is refused as denied, whatever the reason
+
+**Phase 7 · 2026-09-20 · Tier 2 · PRIV-RIGHT-001, AUTHZ-CONCEAL-005, `10` section 1.4**
+
+*The question.* Three refusals of the decision endpoints have no code in `10` section
+1.4: a request identifier that names no row, a request already decided, and a caller
+without `privacyrequest:manage`.
+
+*The readings.*
+
+1. Tell the three apart on the wire, which needs two codes `10` does not carry.
+2. Answer all three with `authz.denied`.
+
+*Chosen: 2*, following entry 83. Telling a missing identifier from an existing one
+answers a question the caller has no permission to ask (AUTHZ-CONCEAL-005), and a code
+`10` does not carry is a code the frontend cannot write words for.
+
+*Tests that pin what is built.*
+`PrivacyRequestTests.PRIV_RIGHT_002_AC5_ARequestIsDecidedOnceAsync`,
+`PrivacyRequestTests.PRIV_RIGHT_001_AC2_EnteringWithoutThePermissionIsRefusedAsync`,
+`PrivacyRequestTests.PRIV_RIGHT_001_AC2_TheQueueIsReadByTheHumanWhoWorksItAsync`.
+
+*Chapter text that should change.* `10` section 1.4 needs a row for a request that
+cannot be decided, or `09` section 8a should say the three answer alike.
+
+---
+
+## 94. A rectification that lapses is deemed refused, as an erasure is
+
+**Phase 7 · 2026-09-20 · Tier 3 · PRIV-RIGHT-002**
+
+*The question.* PRIV-RIGHT-002 says the lapse of the six working days is deemed a
+rejection, then names what happens for a restriction (granted by lapse) and for an
+out-of-band erasure (deemed refused, subject notified). It says nothing about a
+rectification, which is the third type `10` section 5.12c carries.
+
+*The readings.*
+
+1. Leave a lapsed rectification open, since the item does not name it.
+2. Record it as deemed refused by lapse and tell the subject, which is what the
+   statute's default and the erasure path both say.
+
+*Chosen: 2, the strictest reading.* Leaving it open would have the clock pass with no
+decision and no word to the subject, which is the outcome the whole item exists to
+prevent; the statute deems the lapse a rejection for every request, and only
+restriction is carved out of that because granting it is always safe. Nothing is
+granted, nothing is erased, and the record persists.
+
+*Tests that pin what is built.*
+`DeadlineSweepTests.PRIV_RIGHT_002_AC4_AnErasureUndecidedAtTheDeadlineIsDeemedRefusedAsync`,
+`DeadlineSweepTests.PRIV_RIGHT_002_AC4_TheLapseOfAnErasureErasesNothingAsync`.
+
+*Chapter text that should change.* PRIV-RIGHT-002 should name the rectification case
+beside the other two.
+
+---
+
+## 95. The request and the delivery carry typed identifiers
+
+**Phase 7 · 2026-09-20 · Tier 2 · CONV-DESIGN-004, LIB-API-001**
+
+*The question.* CONV-DESIGN-004 AC2 forbids a method outside the type that gives a
+value its rules from taking that value as the type it is stored in, and the contract
+test enforces it over every area. A request identifier and an outbox delivery
+identifier are both stored as a `Guid`.
+
+*The readings.*
+
+1. Pass the `Guid`, which the contract test refuses.
+2. Add `PrivacyRequestId` to the public contract, as `GrantId` and `SessionId` already
+   are, and `DeliveryId` internal to the privacy area.
+
+*Chosen: 2.* The convention is settled and the pattern already has thirteen instances;
+`PrivacyRequestId` is public because `IPrivacyRequests` takes it, and the wire carries
+its value rather than the type. The delivery never crosses the boundary, so its
+identifier stays internal.
+
+*Tests that pin what is built.*
+`LibraryStructureTests.CONV_DESIGN_004_AC2_NoMethodTakesAValueAsItsUnderlyingType`,
+`PrivacyRequestStoreTests.PRIV_RIGHT_002_AC1_ARequestReadsBackEveryFieldItWasWrittenWithAsync`.
+
+*Chapter text that should change.* LIB-API-001 should list `PrivacyRequestId` among
+the identifiers the contract carries.
