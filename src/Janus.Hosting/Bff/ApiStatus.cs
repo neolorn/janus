@@ -53,6 +53,7 @@ internal static class ApiStatus
         [ErrorCodes.ConfigurationKeyProtected] = StatusCodes.Status403Forbidden,
         [ErrorCodes.ConfigurationChangeStepUpRequired] = StatusCodes.Status403Forbidden,
         [ErrorCodes.PolicyGraceExpired] = StatusCodes.Status403Forbidden,
+        [ErrorCodes.ConsentRequired] = StatusCodes.Status403Forbidden,
 
         // Not found, and the concealed denial that answers the same way.
         [ErrorCodes.CredentialNotFound] = StatusCodes.Status404NotFound,
@@ -74,6 +75,8 @@ internal static class ApiStatus
         [ErrorCodes.LossReportPending] = StatusCodes.Status409Conflict,
         [ErrorCodes.LossReportNotPermitted] = StatusCodes.Status409Conflict,
         [ErrorCodes.CredentialNotUpgradable] = StatusCodes.Status409Conflict,
+        [ErrorCodes.RequestDuplicate] = StatusCodes.Status409Conflict,
+        [ErrorCodes.ErasureNotFailed] = StatusCodes.Status409Conflict,
 
         // Well formed, and refused on what it says.
         [ErrorCodes.AffirmationRequired] = StatusCodes.Status422UnprocessableEntity,
@@ -120,6 +123,11 @@ internal static class ApiStatus
         [ErrorCodes.CallbackRejected] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.EndpointInsecure] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.SmsBalanceFloor] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.PurposeNotObjectable] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.NoticeGoverningTextMissing] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.RequestReceivedFuture] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.ConsentSuperseded] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.ConsentWrittenRequired] = StatusCodes.Status422UnprocessableEntity,
 
         // What 10 section 1.2 calls a status and not a refusal: the removal is
         // accepted and the window it takes is what the answer carries, and the

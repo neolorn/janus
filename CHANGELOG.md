@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The error catalogue now carries the privacy codes: a consent that is required,
+  superseded or has to be written; a purpose whose basis carries no right to object; a
+  document version submitted without its governing text; a duplicate request; a
+  received date in the future; and an erasure that has not exhausted its retries. Each
+  answers the status its endpoint states.
 - Which capture path a consent runs through now follows from the lawful basis and the
   sensitivity of the type: a consent-based purpose over sensitive data, on a basis that
   requires it, takes the written path with nothing further to configure. A deployment

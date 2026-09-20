@@ -2412,6 +2412,9 @@ static Janus.Core.ErrorCodes.ConfigurationPolicyBelowSystem.get -> Janus.Core.Er
 static Janus.Core.ErrorCodes.ConfigurationValueAboveCeiling.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ConfigurationValueBelowFloor.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ConfigurationValueNotAllowed.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.ConsentRequired.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.ConsentSuperseded.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.ConsentWrittenRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.CredentialLabelInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.CredentialLastSecondFactor.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.CredentialNotFound.get -> Janus.Core.ErrorCode
@@ -2422,6 +2425,7 @@ static Janus.Core.ErrorCodes.DerivationSourcesMissing.get -> Janus.Core.ErrorCod
 static Janus.Core.ErrorCodes.DeviceVerificationRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.EndpointInsecure.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.EnrolmentTokenInvalid.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.ErasureNotFailed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.FactorNotPermitted.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.FactorRejected.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.FactorRequired.get -> Janus.Core.ErrorCode
@@ -2438,6 +2442,7 @@ static Janus.Core.ErrorCodes.IdentifierMixedScript.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierPrimary.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.LossReportNotPermitted.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.LossReportPending.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.NoticeGoverningTextMissing.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.OrganizationProtected.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PasswordBlocklisted.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PasswordTooShort.get -> Janus.Core.ErrorCode
@@ -2450,12 +2455,15 @@ static Janus.Core.ErrorCodes.PreferenceWrongType.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ProfileInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ProfileNotAccepted.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ProfileUnderage.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.PurposeNotObjectable.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RecoveryChannelNotOnAccount.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RecoveryReasonRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RecoverySelfApproval.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RecoveryTokenExpired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RecoveryTokenInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RegistrationIncomplete.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.RequestDuplicate.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.RequestReceivedFuture.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.Restricted.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RestrictionExceeded.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RestrictionReasonRequired.get -> Janus.Core.ErrorCode

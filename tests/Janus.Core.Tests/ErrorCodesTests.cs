@@ -107,6 +107,14 @@ public sealed class ErrorCodesTests
         "model.startup.rpid",
         "model.type.noorganizationpath",
         "model.type.undeclaredreference",
+        "privacy.consent.required",
+        "privacy.consent.superseded",
+        "privacy.consent.writtenrequired",
+        "privacy.erasure.notfailed",
+        "privacy.notice.governingtextmissing",
+        "privacy.purpose.notobjectable",
+        "privacy.request.duplicate",
+        "privacy.request.receivedfuture",
         "system.fault",
     ];
 
