@@ -1231,11 +1231,15 @@ internal sealed class IdentifierService(
         var undo = OpaqueToken.Draw(randomness);
 
         await directory
-            .GiveUpAsync(waiting.Subject, displaced.Id, now, now + window, undo.Fingerprint(), cancellationToken)
-            .ConfigureAwait(false);
-
-        await directory
-            .SwapAsync(waiting.Subject, staged.Id, staged.Entered, staged.Canonical, now, cancellationToken)
+            .ReplaceAsync(
+                waiting.Subject,
+                staged.Id,
+                staged.Entered,
+                staged.Canonical,
+                now,
+                now + window,
+                undo.Fingerprint(),
+                cancellationToken)
             .ConfigureAwait(false);
 
         // REG-IDENT-007: the undo goes to the channels the account still has, which

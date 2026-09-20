@@ -152,6 +152,38 @@ internal sealed class IdentifierDirectory(
     }
 
     /// <inheritdoc/>
+    public async ValueTask ReplaceAsync(
+        SubjectId subject,
+        IdentifierId id,
+        string entered,
+        string canonical,
+        DateTimeOffset at,
+        DateTimeOffset expiresAt,
+        byte[] undo,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(entered);
+        ArgumentNullException.ThrowIfNull(canonical);
+        ArgumentNullException.ThrowIfNull(undo);
+
+        IdentifierSet set = await identifiers.FindBySubjectAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        Identifier displaced = Required(set, id);
+
+        // The removal is taken before the value moves, because what the undo puts back
+        // is the value the row carried and not the row itself: a replace keeps the
+        // identity and the role, so nothing that names the identifier is disturbed.
+        var removal = IdentifierRemoval.Of(displaced, at, expiresAt, undo);
+
+        displaced.Replace(entered, canonical, at);
+
+        await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
+
+        await identifiers.RecordRemovalAsync(removal, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask PromoteAsync(
         SubjectId subject,
         IdentifierId id,
@@ -281,7 +313,16 @@ internal sealed class IdentifierDirectory(
             .FindBySubjectAsync(removal.Subject, cancellationToken)
             .ConfigureAwait(false);
 
-        set.Add(removal.Restored(), maximum);
+        // A replace left the row standing under its new value, so the undo moves the
+        // old value back onto it; a removal took the row away, so the undo adds it.
+        if (set.Find(id) is Identifier standing)
+        {
+            standing.Replace(removal.Entered, removal.Canonical, removal.VerifiedAt);
+        }
+        else
+        {
+            set.Add(removal.Restored(), maximum);
+        }
 
         await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
 

@@ -133,6 +133,31 @@ internal interface IIdentifierDirectory
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Puts a new value in the place of the old one on the same identifier and holds
+    /// the displaced value for as long as the undo is good for. This is the replace of
+    /// single-address mode, where the row keeps its identity and its role and only the
+    /// value moves.
+    /// </summary>
+    /// <param name="subject">Whose it is.</param>
+    /// <param name="id">Which identifier.</param>
+    /// <param name="entered">The new value as the person entered it.</param>
+    /// <param name="canonical">The new value in its canonical form.</param>
+    /// <param name="at">When the new value was proved.</param>
+    /// <param name="expiresAt">When the undo stops working.</param>
+    /// <param name="undo">The fingerprint of the undo link's token.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of replacing it.</returns>
+    ValueTask ReplaceAsync(
+        SubjectId subject,
+        IdentifierId id,
+        string entered,
+        string canonical,
+        DateTimeOffset at,
+        DateTimeOffset expiresAt,
+        byte[] undo,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Makes a verified identifier the primary of its kind.
     /// </summary>
     /// <param name="subject">Whose it is.</param>
