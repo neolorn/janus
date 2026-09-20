@@ -525,6 +525,10 @@ against the public contract of LIB-API-001.
   after it, the sign-in stops at enrolment. An account created after the raise is held
   at enrolment at its first sign-in, and lowering a requirement starts no run-up.
 
+- The account lists the browsers it knows, the ones it trusts for the second step and
+  the ones the new-device check remembers, and forgets any of them: a trusted browser
+  is asked for the second step again, a remembered one faces the check again.
+
 - The library's schema gains the tables a sign-in in flight, a link or code sent for
   one, and a requirement a policy raised are kept in, so a deployment applies one new
   migration. Neither the handle a browser carries nor the link it was sent is held as

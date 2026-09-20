@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -163,6 +164,30 @@ public interface IAuthentication
         DeviceDescription device,
         SessionLocation? location,
         string source,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The browsers the account knows: the ones it trusts for the second step and the
+    /// ones the new-device check remembers.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The browsers, or the refusal where nobody is asking.</returns>
+    ValueTask<Result<IReadOnlyList<DeviceSummary>>> ListDevicesAsync(
+        AccessContext context,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Forgets one browser: a trusted one is asked for the second step again, a
+    /// remembered one faces the new-device check again.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="device">Which browser.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Nothing, or the refusal where it is not theirs to forget.</returns>
+    ValueTask<Result> ForgetDeviceAsync(
+        AccessContext context,
+        DeviceId device,
         CancellationToken cancellationToken);
 
     /// <summary>

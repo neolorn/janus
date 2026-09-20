@@ -12,6 +12,7 @@ using Janus.Authentication.Policies;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
+using Janus.Authentication.SignIn;
 using Janus.Authentication.Tests;
 using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Factors;
@@ -21,9 +22,11 @@ using Janus.Authentication.Tests.Policies;
 using Janus.Authentication.Tests.Registration;
 using Janus.Authentication.Tests.Sending;
 using Janus.Authentication.Tests.Sessions;
+using Janus.Authentication.Tests.SignIn;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Accounts;
+using Janus.Hosting.Authentication;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Registration;
 using Microsoft.AspNetCore.Builder;
@@ -66,6 +69,11 @@ internal sealed class Deployment : IAsyncDisposable
 
         Declared = preferences ?? PreferenceDeclarations.None;
         Accounts = new AccountDirectoryInMemory(Declared);
+
+        // Two of the keys a deployment names or does not start, which a ceremony and
+        // the challenge every sign-in carries are read from (OPS-CFG-001).
+        Configuration.Set(Settings.WebAuthnRelyingPartyId, "janus.example.test");
+        Configuration.Set(Settings.WebAuthnOrigins, ["https://janus.example.test"]);
 
         Register(builder.Services, application, addresses ?? PasskeyAddresses.None);
 
@@ -228,6 +236,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<ISessionAudit, SessionAuditInMemory>();
         _ = services.AddSingleton<IMembershipLookup, MembershipLookupInMemory>();
         _ = services.AddSingleton<IPolicyRaiseStore, PolicyRaiseStoreInMemory>();
+        _ = services.AddSingleton<IChallengeStore, ChallengeStoreInMemory>();
+        _ = services.AddSingleton<IPendingSignInStore, PendingSignInStoreInMemory>();
         _ = services.AddSingleton<IAccessGate, AccessGateInMemory>();
         _ = services.AddSingleton<IAccountAudit, AccountAuditInMemory>();
 
@@ -238,6 +248,10 @@ internal sealed class Deployment : IAsyncDisposable
 
         _ = services.AddScoped<SmsBalance>();
         _ = services.AddScoped<SendingService>();
+        _ = services.AddScoped<NonExistenceNotice>();
+        _ = services.AddScoped<ThrottleService>();
+        _ = services.AddSingleton<IThrottleLedger, ThrottleLedgerInMemory>();
+        _ = services.AddSingleton<ICredentialAudit, CredentialAuditInMemory>();
         _ = services.AddSingleton<Argon2idHasher>();
         _ = services.AddScoped<PasswordScreening>();
         _ = services.AddScoped<PasswordService>();
@@ -256,6 +270,12 @@ internal sealed class Deployment : IAsyncDisposable
             provider.GetRequiredService<IdentifierService>());
         _ = services.AddScoped<AccountService>();
         _ = services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
+        _ = services.AddScoped<TotpService>();
+        _ = services.AddScoped<WebAuthnService>();
+        _ = services.AddScoped<SignInLinks>();
+        _ = services.AddScoped<AuthenticationService>();
+        _ = services.AddScoped<IAuthentication>(provider =>
+            provider.GetRequiredService<AuthenticationService>());
 
         _ = services.AddSingleton(new BrowserSessionCookies(application));
         _ = services.AddScoped<SynchronizerTokens>();
@@ -273,7 +293,9 @@ internal sealed class Deployment : IAsyncDisposable
             // read through these options rather than through a context, so the same
             // converter stands here (API-CONV-002).
             options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<IdentifierKind>());
+            options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<Factor>());
             options.SerializerOptions.TypeInfoResolverChain.Add(RegistrationJson.Default);
+            options.SerializerOptions.TypeInfoResolverChain.Add(AuthenticationJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(AccountJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(WellKnownJson.Default);
         });

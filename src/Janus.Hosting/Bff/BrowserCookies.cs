@@ -37,6 +37,12 @@ internal static class BrowserCookies
     public const string Browser = "__Host-janus-browser";
 
     /// <summary>
+    /// What a browser the account trusts carries, which stands in for the second step
+    /// of a sign-in from it and for nothing else (D-153, AUTH-FACT-015).
+    /// </summary>
+    public const string Device = "__Host-janus-device";
+
+    /// <summary>
     /// The header a state-changing request carries, whose presence is checked and
     /// whose value is ignored (D-153).
     /// </summary>

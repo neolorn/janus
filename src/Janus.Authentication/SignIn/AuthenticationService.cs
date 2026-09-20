@@ -216,6 +216,19 @@ internal sealed class AuthenticationService(
             Result.Failure<SignInLanding>);
 
     /// <inheritdoc/>
+    public ValueTask<Result<IReadOnlyList<DeviceSummary>>> ListDevicesAsync(
+        AccessContext context,
+        CancellationToken cancellationToken) =>
+        devices.ListAsync(context, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> ForgetDeviceAsync(
+        AccessContext context,
+        DeviceId device,
+        CancellationToken cancellationToken) =>
+        devices.RemoveAsync(context, device, cancellationToken);
+
+    /// <inheritdoc/>
     public ValueTask<Result> AbandonLinkAsync(string linkToken, CancellationToken cancellationToken) =>
         links.AbandonAsync(linkToken, cancellationToken);
 

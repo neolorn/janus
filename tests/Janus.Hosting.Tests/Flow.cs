@@ -149,6 +149,7 @@ internal static class Flow
         NewAccount created = deployment.Directory.Created[^1];
 
         deployment.Accounts.Stands(created.Subject, AccountState.Active);
+        deployment.Identifiers.Reads(created.Subject, Language);
 
         foreach (NewIdentifier identifier in created.Identifiers)
         {

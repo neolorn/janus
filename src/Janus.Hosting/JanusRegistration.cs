@@ -11,12 +11,14 @@ using Janus.Authentication.Policies;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
+using Janus.Authentication.SignIn;
 using Janus.Authorization.Gate;
 using Janus.Authorization.Model;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Accounts;
 using Janus.Hosting.Alerting;
+using Janus.Hosting.Authentication;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Passwords;
 using Janus.Hosting.Registration;
@@ -179,7 +181,9 @@ public static class JanusRegistration
             // read through these options rather than through a context, so the same
             // converter stands here (API-CONV-002).
             options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<IdentifierKind>());
+            options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<Factor>());
             options.SerializerOptions.TypeInfoResolverChain.Add(RegistrationJson.Default);
+            options.SerializerOptions.TypeInfoResolverChain.Add(AuthenticationJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(AccountJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(WellKnownJson.Default);
         });
@@ -189,6 +193,10 @@ public static class JanusRegistration
         services.AddScoped<IIdentifiers>(provider => provider.GetRequiredService<IdentifierService>());
         services.AddScoped<AccountService>();
         services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
+        services.AddScoped<SignInLinks>();
+        services.AddScoped<AuthenticationService>();
+        services.AddScoped<IAuthentication>(provider =>
+            provider.GetRequiredService<AuthenticationService>());
 
         services.AddScoped<Derivations>();
         services.AddScoped<IAccessGate, AccessGate>();

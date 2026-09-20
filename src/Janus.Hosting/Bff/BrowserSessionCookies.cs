@@ -100,6 +100,24 @@ internal sealed class BrowserSessionCookies(JanusApplication application)
     }
 
     /// <summary>
+    /// Writes what a browser the account trusts carries, so the second step is not
+    /// asked for again from it (AUTH-FACT-015).
+    /// </summary>
+    /// <param name="response">The response the browser receives.</param>
+    /// <param name="token">The token the record answers to.</param>
+    /// <param name="until">When the browser is to forget it.</param>
+    /// <exception cref="ArgumentNullException">The response is absent.</exception>
+    public void Trusted(HttpResponse response, OpaqueToken token, DateTimeOffset until)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+
+        response.Cookies.Append(
+            BrowserCookies.Device,
+            token.Value,
+            BrowserCookies.Lasting(application, until));
+    }
+
+    /// <summary>
     /// Clears the pair, which is what a sign-out leaves behind.
     /// </summary>
     /// <param name="response">The response the browser receives.</param>

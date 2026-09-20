@@ -53,6 +53,23 @@ internal static class RequestOrigin
         return request.HttpContext.Connection.RemoteIpAddress?.ToString() ?? Unknown;
     }
 
+    /// <summary>
+    /// The language the person is reading in, which is the first tag of the header
+    /// and nothing the account holds (CONV-CONTENT-001).
+    /// </summary>
+    /// <param name="request">The request.</param>
+    /// <returns>The tag, or nothing where the header carried none.</returns>
+    /// <exception cref="ArgumentNullException">The request is absent.</exception>
+    public static string Language(HttpRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        string accepted = request.Headers.AcceptLanguage.ToString();
+        int ends = accepted.IndexOfAny([',', ';']);
+
+        return (ends < 0 ? accepted : accepted[..ends]).Trim();
+    }
+
     // Order matters: the engines that name themselves after the ones they replaced
     // come first, so a browser is called what its user calls it.
     private static string Browser(string agent) =>
