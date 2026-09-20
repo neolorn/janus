@@ -77,6 +77,11 @@ public sealed class ModelTests
             "accounts.subject",
             "accounts.suspended_by",
 
+            // Not an account field: the alert ledger of OPS-ALERT-002, holding one row
+            // per condition told and when it last went out.
+            "alerts.at",
+            "alerts.key",
+
             // Authorization: the ancestry closure of AUTHZ-INHERIT-002, which is what a
             // permission query joins instead of walking the tree.
             "ancestry.ancestor_id",
@@ -119,6 +124,13 @@ public sealed class ModelTests
             "authenticators.subject",
             "authenticators.totp_consumed_step",
             "authenticators.totp_secret",
+
+            // Not an account field: the inbound callbacks counted per source
+            // (INT-GEN-003, BFF-MACH-003), the source held by its hash.
+            "callbacks.at",
+            "callbacks.id",
+            "callbacks.rejected",
+            "callbacks.source",
 
             // Credentials: the browser an account knows (AUTH-FACT-015, AUTH-FACT-016),
             // held by the fingerprint of its token and never by the token.
@@ -211,6 +223,12 @@ public sealed class ModelTests
             "memberships.organization",
             "memberships.subject",
 
+            // Not an account field: the tellings of AUTH-ABUSE-003 that no account holds
+            // an address, counted against the hash of the address.
+            "nonexistence_notices.at",
+            "nonexistence_notices.destination",
+            "nonexistence_notices.id",
+
             // The organization of IDN-ORG-001, with the mark IDN-ORG-004 reads and
             // the deletion window of IDN-ORG-003.
             "organizations.administrative",
@@ -253,6 +271,12 @@ public sealed class ModelTests
             "recovery_codes.subject",
             "recovery_codes.used_at",
 
+            // Not an account field: the registration sessions of AUTH-ABUSE-008, counted
+            // against the hash of the source they were started from.
+            "registration_sources.at",
+            "registration_sources.id",
+            "registration_sources.source",
+
             // Authorization: the host's records as AUTHZ-INHERIT-001 registers them, and
             // the one containing each.
             "resources.contained_in_id",
@@ -266,6 +290,23 @@ public sealed class ModelTests
             "role_permissions.permission",
             "role_permissions.role",
             "roles.name",
+
+            // Not an account field: the sending counters of AUTH-ABUSE-004, an HMAC of the
+            // restriction key with the times counted against it, and the credit support
+            // kept apart from them.
+            "send_counters.key",
+            "send_counters.sent_at",
+            "send_counters.settles_at",
+            "send_grants.credit",
+            "send_grants.key",
+
+            // Not an account field: the message a transport took (AUTH-ABUSE-004,
+            // INT-SMS-005), held by the hash of its correlation reference so that a
+            // delivery report can take its counts back out.
+            "sends.counted",
+            "sends.reference",
+            "sends.sent_at",
+            "sends.settles_at",
 
             // Sessions: the spine of AUTH-SESS-001, what it reached (AUTH-SESS-002), the
             // fingerprint of its secret (AUTH-SESS-003), and where it was used from with
@@ -297,12 +338,25 @@ public sealed class ModelTests
             "settings.key",
             "settings.value",
 
+            // Not an account field: what the gateway last said its prepaid account stood
+            // at (INT-SMS-004, AUTH-ABUSE-006).
+            "sms_balance_readings.balance",
+            "sms_balance_readings.read_at",
+
             // Not an account field: the wrapped key of PRIV-RIGHT-005a, which every
             // column marked Key is written under.
             "subject_keys.format_marker",
             "subject_keys.key_version",
             "subject_keys.subject",
             "subject_keys.wrapped_key",
+
+            // Not an account field: the failures of AUTH-ABUSE-001 by scope, each key an
+            // HMAC, so an identifier no account holds leaves no readable trace of having
+            // been typed.
+            "throttle_counters.at",
+            "throttle_counters.failures",
+            "throttle_counters.key",
+            "throttle_counters.scope",
         ];
 
         Assert.Equal(expected, Columns().OrderBy(name => name, StringComparer.Ordinal));
