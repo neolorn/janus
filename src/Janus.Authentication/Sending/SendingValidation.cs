@@ -15,17 +15,20 @@ namespace Janus.Authentication.Sending;
 /// key has a supplier, and no declared endpoint is plaintext.
 /// </summary>
 /// <param name="configuration">Where the languages and the restrictions come from.</param>
-/// <param name="templates">The catalogue of the deployment.</param>
+/// <param name="templates">
+/// The catalogue of the deployment, absent where it has declared none.
+/// </param>
 /// <param name="suppliers">The host-registered key suppliers.</param>
 /// <param name="endpoints">The declared outbound addresses.</param>
 /// <remarks>
 /// Implements AUTH-ABUSE-005, INT-SMS-003, INT-SMS-005a, INT-GEN-001 and
 /// LIB-HOST-001. A recipient is never resolved to a language the catalogue cannot
-/// answer in, because startup refuses that deployment.
+/// answer in, because startup refuses that deployment; a deployment that declared no
+/// catalogue at all answers in none of them and is refused the same way.
 /// </remarks>
 internal sealed class SendingValidation(
     IConfigurationStore configuration,
-    IMessageTemplates templates,
+    IMessageTemplates? templates,
     RestrictionKeySuppliers suppliers,
     IntegrationEndpoints endpoints)
 {
@@ -124,7 +127,7 @@ internal sealed class SendingValidation(
             {
                 foreach (string language in languages)
                 {
-                    MessageTemplate? template = templates
+                    MessageTemplate? template = templates?
                         .Find(message, kind, language)
                         .Match(found => (MessageTemplate?)found, _ => null);
 

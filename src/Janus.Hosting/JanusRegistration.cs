@@ -1,5 +1,10 @@
 using System;
+using System.IO;
+using System.Net.Http;
 using Janus.Authentication.Alerting;
+using Janus.Authentication.Factors;
+using Janus.Authentication.Passwords;
+using Janus.Authentication.Policies;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authorization.Gate;
@@ -8,6 +13,7 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Alerting;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Passwords;
 using Janus.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -96,7 +102,11 @@ public static class JanusRegistration
         // decides whether it goes.
         services.AddScoped<SmsBalance>();
         services.AddScoped<SendingService>();
-        services.AddScoped<SendingValidation>();
+        services.AddScoped(provider => new SendingValidation(
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetService<IMessageTemplates>(),
+            provider.GetRequiredService<RestrictionKeySuppliers>(),
+            provider.GetRequiredService<IntegrationEndpoints>()));
         services.AddScoped<RestrictionAdministration>();
         services.AddScoped<ThrottleService>();
         services.AddScoped<NonExistenceNotice>();
@@ -113,6 +123,36 @@ public static class JanusRegistration
         services.AddScoped<AlertDestinationChange>();
         services.AddScoped<IAlertLog, AlertLog>();
 
+        // AUTH-SESS-001, AUTH-PASS-004, AUTH-FACT-005: the authentication services,
+        // each of which reads the settings table for what it enforces.
+        services.AddScoped<PolicyResolution>();
+        services.AddSingleton<Argon2idHasher>();
+        services.AddScoped<IScreeningLog, ScreeningLog>();
+        services.AddSingleton<IWordList>(_ => new WordList(Corpus));
+
+        // INT-PWD-001: the range API is reached over the framework's client, which
+        // rotates its connections; the corpus files beside the application answer
+        // when it cannot (INT-PWD-002).
+        services.AddHttpClient<ILeakedPasswordCorpus, LeakedPasswordCorpus>((requests, provider) =>
+        {
+            requests.BaseAddress = LeakedPasswordCorpus.Provider;
+
+            return new LeakedPasswordCorpus(
+                requests,
+                provider.GetRequiredService<IConfigurationStore>(),
+                provider.GetRequiredService<TimeProvider>(),
+                Corpus);
+        });
+
+        services.AddScoped<PasswordScreening>();
+        services.AddScoped<PasswordService>();
+        services.AddScoped<SessionService>();
+        services.AddScoped<ISessions>(provider => provider.GetRequiredService<SessionService>());
+        services.AddScoped<TotpService>();
+        services.AddScoped<WebAuthnService>();
+        services.AddScoped<RecoveryCodeService>();
+        services.AddScoped<DeviceService>();
+
         services.AddScoped<Derivations>();
         services.AddScoped<IAccessGate, AccessGate>();
         services.AddScoped<IDerivationMaterialiser, DerivationMaterialiser>();
@@ -126,4 +166,9 @@ public static class JanusRegistration
 
         return services;
     }
+
+    // The corpus and the word list are files a deployment holds beside the
+    // application (AUTH-PASS-004, INT-PWD-003).
+    private static string Corpus =>
+        Path.Combine(AppContext.BaseDirectory, LeakedPasswordCorpus.Directory);
 }

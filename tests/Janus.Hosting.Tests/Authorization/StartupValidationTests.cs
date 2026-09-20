@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Dapper;
 using Janus.Core;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Tests.Sending;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Npgsql;
@@ -72,6 +73,25 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// AUTH-ABUSE-005 AC3 and LIB-HOST-001: a deployment that has declared no
+    /// message catalogue can answer in no language, and is stopped as it starts
+    /// rather than at the first message a person waits for.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_005_AC3_ADeploymentThatDeclaredNoMessagesIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using IHost deployment = Deployed(catalogue: false);
+
+        StartupException refused = await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(cancellationToken));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+    }
+
+    /// <summary>
     /// AUTHZ-MODEL-004 AC2: the web server is a hosted service of the host's, and
     /// hosted services start in the order they were registered, so the checks that read
     /// the database stand at the head of the collection and no request is served
@@ -93,17 +113,26 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         Assert.Equal(typeof(ModelValidationService), first.ImplementationType);
     }
 
-    private IHost Deployed() => new HostBuilder()
-        .ConfigureServices(services => Declared(services))
+    private IHost Deployed(bool catalogue = true) => new HostBuilder()
+        .ConfigureServices(services => Declared(services, catalogue))
         .Build();
 
-    // The library registered over this deployment, as the host's own code registers it.
-    private IServiceCollection Declared(IServiceCollection services) => services.AddJanus(
-        host.ConnectionString,
-        new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-        new byte[32],
-        HostFixture.Declaration(),
-        JanusApplication.Public);
+    // The library registered over this deployment, as the host's own code registers
+    // it, with the messages the deployment has written (LIB-HOST-001).
+    private IServiceCollection Declared(IServiceCollection services, bool catalogue = true)
+    {
+        if (catalogue)
+        {
+            services.AddSingleton<IMessageTemplates>(new MessageTemplatesInMemory());
+        }
+
+        return services.AddJanus(
+            host.ConnectionString,
+            new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
+            new byte[32],
+            HostFixture.Declaration(),
+            JanusApplication.Public);
+    }
 
     private async Task WriteAsync(string statement, CancellationToken cancellationToken)
     {

@@ -43,8 +43,14 @@ against the public contract of LIB-API-001.
 
 - The message catalogue, the mail and text transports, the addresses the deployment
   calls out to, the recipients its data reaches and the keys a sending restriction
-  counts under are now the host's to declare, and a deployment that declares none of
-  them still starts.
+  counts under are now the host's to declare. A deployment that has declared no
+  catalogue cannot answer in any language and does not start; the rest are optional,
+  and a deployment that declares none of them starts.
+
+- Registering the library now registers the sessions, passwords, factors, trusted
+  browsers and policies of the authentication chapter as well, so a host resolves
+  them from its own container. Passing the new-device check is announced as
+  `DeviceVerified`, carrying the browser and nothing about the person.
 
 - Every runtime-changeable configuration key is now read from the library's own
   `settings` table, so a value changed anywhere in the deployment is in force for the

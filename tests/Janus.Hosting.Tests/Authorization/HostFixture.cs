@@ -60,8 +60,13 @@ public sealed class HostFixture : IAsyncLifetime
 
         await using (NpgsqlConnection connection = await _database.OpenAsync())
         {
+            // LIB-HOST-001: the deployment names the keys the library cannot guess,
+            // and the check that runs before anything is served reads them.
             await connection.ExecuteAsync(
                 """
+                INSERT INTO janus.settings (key, value)
+                VALUES ('notification.languages', '["en"]');
+
                 CREATE SCHEMA host;
                 CREATE TABLE host.documents (id text PRIMARY KEY, title text NOT NULL);
                 CREATE TABLE host.reviewers (
