@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Registration;
 using Janus.Core;
@@ -475,4 +476,95 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
 
         return browser;
     }
+
+    /// <summary>
+    /// FE-VER-001 AC2: the press in the originating browser verifies, and the state
+    /// the waiting screen reads has moved on, whether it reads it from the stream or
+    /// by asking again.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_VER_001_AC2_ThePressAdvancesWhatTheWaitingScreenReadsAsync()
+    {
+        Browser browser = await Flow.AwaitingAsync(_deployment);
+
+        using var abort = new CancellationTokenSource();
+
+        (Task running, ResponseBody written) = browser.Open("/register/events", abort.Token);
+
+        await Task.Delay(TimeSpan.FromMilliseconds(250), TestContext.Current.CancellationToken);
+
+        await Flow.VerifiedAsync(_deployment, browser, IdentifierKind.Email);
+
+        DateTime giveUp = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+
+        while (DateTime.UtcNow < giveUp && written.Length is 0)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken);
+        }
+
+        string streamed = written.Taken();
+
+        await abort.CancelAsync();
+
+        try
+        {
+            await running;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        Answer polled = await browser.SendAsync("GET", "/register");
+
+        Assert.Contains("\"verified\":true", streamed, StringComparison.Ordinal);
+        Assert.True(Proved(polled, IdentifierKind.Email));
+    }
+
+    /// <summary>
+    /// FE-VER-001 AC4: the identifier link of an account behaves as the registration
+    /// link does, and the control it offers elsewhere is the abandon that matches it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task FE_VER_001_AC4_AnAccountsIdentifierLinkBehavesTheSameAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        Answer added = await browser.SendAsync(
+            "POST",
+            "/account/identifiers",
+            ("kind", "email"),
+            ("value", Second));
+
+        Assert.Equal(StatusCodes.Status202Accepted, added.Status);
+
+        string staged = Pending();
+        string token = Flow.Token(_deployment, IdentifierKind.Email);
+
+        var elsewhere = new Browser(_deployment);
+
+        _ = await elsewhere.SendAsync("GET", "/register");
+
+        Answer landed = await elsewhere.SendAsync(
+            "POST",
+            "/account/identifiers/" + staged + "/verify",
+            ("linkToken", token),
+            ("press", true));
+
+        Assert.Equal(StatusCodes.Status200OK, landed.Status);
+        Assert.False(landed.Json().GetProperty("sameBrowser").GetBoolean());
+        Assert.Equal(6, landed.Text("code").Length);
+
+        Answer ended = await elsewhere.SendAsync(
+            "POST",
+            "/account/identifiers/" + staged + "/abandon",
+            ("linkToken", token));
+
+        Assert.Equal(StatusCodes.Status204NoContent, ended.Status);
+        Assert.Empty(_deployment.Pending.All);
+    }
+
+    // The identifier the account is waiting on, which is the one just staged.
+    private string Pending() => _deployment.Pending.All.Single().Identifier.Value.ToString();
 }

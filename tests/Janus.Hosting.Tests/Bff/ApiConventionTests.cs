@@ -2,10 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Janus.Core;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Bff;
@@ -19,6 +23,17 @@ namespace Janus.Hosting.Tests.Bff;
 public sealed class ApiConventionTests
 {
     private const string Prefix = "/identity/v1";
+    private const string Elsewhere = "unknown@example.test";
+    private const string Another = "somebody@example.test";
+
+    // Subjects that stand for accounts no test of this class looks at again.
+    private static readonly RandomNumberGenerator Randomness = RandomNumberGenerator.Create();
+
+    // The identifier of a staged row, which is drawn fresh for every request.
+    private static readonly Regex Identifiers = new(
+        "\"id\":\"[0-9a-fA-F-]{36}\"",
+        RegexOptions.None,
+        TimeSpan.FromSeconds(1));
 
     /// <summary>
     /// API-CONV-001 AC1: the host decides the prefix by where it mounts the library,
@@ -147,4 +162,141 @@ public sealed class ApiConventionTests
 
         return named;
     }
+
+    /// <summary>
+    /// API-CONV-005 AC1, AUTH-ABUSE-003 AC1: the answer to an address another
+    /// account holds is the answer to one nobody holds, byte for byte but for the
+    /// correlation identifier every answer differs by.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_CONV_005_AC1_ADuplicateAddressAnswersAsAFreshOneDoesAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Flow.Prepare(deployment);
+
+        // Both are begun at the same instant, so that the wait the shipped
+        // restriction imposes between two messages to one address does not move the
+        // expiry the state carries.
+        Browser fresh = await Flow.BegunAsync(deployment);
+        Browser held = await Flow.BegunAsync(deployment);
+
+        _ = await fresh.SendAsync("PUT", "/register/age", ("dateOfBirth", "1990-01-01"));
+        _ = await held.SendAsync("PUT", "/register/age", ("dateOfBirth", "1990-01-01"));
+
+        Answer unknown = await fresh.SendAsync("PUT", "/register/email", ("value", Elsewhere));
+
+        deployment.Directory.Held(IdentifierKind.Email, Elsewhere, SubjectId.New(Randomness));
+        deployment.Clock.Advance(TimeSpan.FromMinutes(2));
+
+        Answer known = await held.SendAsync("PUT", "/register/email", ("value", Elsewhere));
+
+        Assert.Equal(unknown.Status, known.Status);
+        Assert.Equal(Anonymous(unknown), Anonymous(known));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-003 AC1: adding an identifier to an account answers the same way
+    /// whether or not another account holds it, which is the other endpoint
+    /// API-CONV-005 names.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_003_AC1_AddingAHeldIdentifierAnswersAsAFreshOneDoesAsync()
+    {
+        Answer unknown = await AddedAsync(held: false);
+        Answer known = await AddedAsync(held: true);
+
+        Assert.Equal(StatusCodes.Status202Accepted, unknown.Status);
+        Assert.Equal(unknown.Status, known.Status);
+        Assert.Equal(Anonymous(unknown), Anonymous(known));
+    }
+
+    // One account adding the same address, in a deployment where somebody else holds
+    // it and in one where nobody does.
+    private static async Task<Answer> AddedAsync(bool held)
+    {
+        await using var deployment = new Deployment();
+
+        Flow.Prepare(deployment);
+
+        Browser browser = await Flow.SignedInAsync(deployment);
+
+        if (held)
+        {
+            _ = deployment.Identifiers.Verified(SubjectId.New(Randomness), IdentifierKind.Email, Another);
+        }
+
+        return await browser.SendAsync(
+            "POST",
+            "/account/identifiers",
+            ("kind", "email"),
+            ("value", Another));
+    }
+
+    // The body with the one field that differs between any two answers taken out
+    // (API-CONV-002 AC2), and the staged identifier's own value with it, which is
+    // drawn per request and says nothing about existence.
+    private static string Anonymous(Answer answer)
+    {
+        var written = new StringBuilder(answer.Body);
+
+        if (answer.Body.Length is not 0 && answer.Json().ValueKind is JsonValueKind.Object)
+        {
+            foreach (JsonProperty property in answer.Json().EnumerateObject())
+            {
+                if (property.Name is "correlationId")
+                {
+                    _ = written.Replace(property.Value.GetString()!, string.Empty);
+                }
+            }
+        }
+
+        return Identifiers.Replace(written.ToString(), "\"id\":\"\"");
+    }
+
+    /// <summary>
+    /// IDN-ACCT-003 AC1: nothing the library mounts takes two accounts, so no surface
+    /// of it could combine them.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ACCT_003_AC1_NoSurfaceTakesTwoAccountsAsync()
+    {
+        foreach (Type request in Requests())
+        {
+            IEnumerable<string> subjects = request
+                .GetProperties()
+                .Select(property => property.Name)
+                .Where(Names);
+
+            Assert.True(
+                subjects.Count() <= 1,
+                request.Name + " names more than one account");
+        }
+
+        await using var deployment = new Deployment();
+
+        foreach (Endpoint endpoint in deployment.Endpoints)
+        {
+            if (endpoint is RouteEndpoint route && route.RoutePattern.RawText is { } pattern)
+            {
+                Assert.True(
+                    route.RoutePattern.Parameters.Count(parameter => Names(parameter.Name)) <= 1,
+                    pattern + " names more than one account");
+            }
+        }
+    }
+
+    // Whether a field or a route parameter names an account rather than a record of
+    // one kind or another.
+    private static bool Names(string named) =>
+        named.Contains("subject", StringComparison.OrdinalIgnoreCase)
+        || named.Contains("account", StringComparison.OrdinalIgnoreCase);
+
+    private static IEnumerable<Type> Requests() =>
+        typeof(JanusEndpoints).Assembly
+            .GetTypes()
+            .Where(request => request.Name.EndsWith("Request", StringComparison.Ordinal));
 }

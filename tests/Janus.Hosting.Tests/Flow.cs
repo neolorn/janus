@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Authentication.Registration;
@@ -228,8 +230,22 @@ internal static class Flow
 
     private static string Named(IdentifierKind kind) => kind is IdentifierKind.Email ? "email" : "phone";
 
-    private static string Sent(Deployment deployment, IdentifierKind kind) =>
-        kind is IdentifierKind.Email
-            ? deployment.Mail.Taken[^1].Body
-            : deployment.Sms.Taken[^1].Text;
+    // The last message written from the verification template, which is the one
+    // carrying a code and a token; the notices that follow a change carry neither.
+    private static string Sent(Deployment deployment, IdentifierKind kind)
+    {
+        IEnumerable<string> written = kind is IdentifierKind.Email
+            ? deployment.Mail.Taken.Select(sent => sent.Body)
+            : deployment.Sms.Taken.Select(sent => sent.Text);
+
+        foreach (string body in written.Reverse())
+        {
+            if (body.Split(' ') is [{ Length: 6 } code, { Length: > 0 }] && code.All(char.IsAsciiDigit))
+            {
+                return body;
+            }
+        }
+
+        throw new InvalidOperationException("No message carrying a code went out.");
+    }
 }

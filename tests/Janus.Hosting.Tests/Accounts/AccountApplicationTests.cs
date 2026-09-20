@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Authentication;
+using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
@@ -254,6 +255,18 @@ public sealed class AccountApplicationTests : IAsyncDisposable
         throw new InvalidOperationException("No removal notice went out.");
     }
 
+    // What an account already holds in the two fields the policies gate.
+    private static HeldProfile Held(string legalName, DateOnly dateOfBirth)
+    {
+        if (!DisplayName.TryParse("Kestrel", out DisplayName shown)
+            || !LegalName.TryParse(legalName, out LegalName named))
+        {
+            throw new InvalidOperationException("The profile does not parse.");
+        }
+
+        return new HeldProfile(shown, named, dateOfBirth, null);
+    }
+
     // The account the flow registered, which the endpoints answer for.
     private SubjectId Registered() => _deployment.Directory.Created[^1].Subject;
 
@@ -383,5 +396,31 @@ public sealed class AccountApplicationTests : IAsyncDisposable
         }
 
         return string.Join("; ", kept);
+    }
+
+    /// <summary>
+    /// IDN-ATTR-007 AC2: while the two keys are off, neither field is taken from a
+    /// request and neither is carried in an answer, whatever the account holds.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ATTR_007_AC2_TheSwitchedOffFieldsAreNeitherTakenNorCarriedAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _deployment.Accounts.Holds(Registered(), Held("Kestrel Ismail", new DateOnly(1990, 1, 1)));
+
+        JsonElement profile = Profile(await browser.SendAsync("GET", "/account"));
+
+        Assert.Equal(JsonValueKind.Null, profile.GetProperty("legalName").ValueKind);
+        Assert.Equal(JsonValueKind.Null, profile.GetProperty("dateOfBirth").ValueKind);
+
+        Assert.Equal(
+            ErrorCodes.ProfileNotAccepted.ToString(),
+            (await browser.SendAsync("PUT", "/account/profile", ("legalName", "Someone Else"))).Text("code"));
+
+        Assert.Equal(
+            ErrorCodes.ProfileNotAccepted.ToString(),
+            (await browser.SendAsync("PUT", "/account/profile", ("dateOfBirth", "1990-01-01"))).Text("code"));
     }
 }
