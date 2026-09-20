@@ -3,6 +3,7 @@ using Janus.Storage.Authentication.Alerting;
 using Janus.Storage.Authentication.Credentials;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Identifiers;
+using Janus.Storage.Authentication.Oidc;
 using Janus.Storage.Authentication.Passwords;
 using Janus.Storage.Authentication.Policies;
 using Janus.Storage.Authentication.Recovery;
@@ -312,6 +313,26 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     /// </summary>
     public DbSet<LossReportRecord> LossReports => Set<LossReportRecord>();
 
+    /// <summary>
+    /// The clients the deployment registered with the provider.
+    /// </summary>
+    public DbSet<OidcClientRecord> OidcClients => Set<OidcClientRecord>();
+
+    /// <summary>
+    /// The authorization codes waiting to be exchanged.
+    /// </summary>
+    public DbSet<AuthorizationCodeRecord> AuthorizationCodes => Set<AuthorizationCodeRecord>();
+
+    /// <summary>
+    /// The refresh tokens, by family.
+    /// </summary>
+    public DbSet<RefreshTokenRecord> RefreshTokens => Set<RefreshTokenRecord>();
+
+    /// <summary>
+    /// The keys the provider signs tokens with.
+    /// </summary>
+    public DbSet<SigningKeyRecord> SigningKeys => Set<SigningKeyRecord>();
+
     /// <inheritdoc/>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -378,5 +399,9 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new RecoveryLinkConfiguration());
         modelBuilder.ApplyConfiguration(new RecoveryApprovalConfiguration());
         modelBuilder.ApplyConfiguration(new LossReportConfiguration());
+        modelBuilder.ApplyConfiguration(new OidcClientConfiguration());
+        modelBuilder.ApplyConfiguration(new AuthorizationCodeConfiguration());
+        modelBuilder.ApplyConfiguration(new RefreshTokenConfiguration());
+        modelBuilder.ApplyConfiguration(new SigningKeyConfiguration());
     }
 }

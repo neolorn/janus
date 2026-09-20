@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The library's schema gains the tables the OpenID Connect provider keeps its
+  registered clients, its authorization codes, its refresh-token families and its
+  signing keys in, so a deployment applies one new migration. A code and a refresh
+  token are held as what they hash to and never as themselves, and a signing key's
+  private half is wrapped under the deployment's key-encryption key.
 - Every message the library sends now goes down one path, and the named restrictions
   decide whether it goes: a fourth text message to one number inside a day is refused
   with the time the restriction lifts, a message a transport would not take is not

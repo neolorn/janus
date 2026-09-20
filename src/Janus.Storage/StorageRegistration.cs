@@ -5,6 +5,7 @@ using Janus.Authentication.Alerting;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
+using Janus.Authentication.Oidc;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Recovery;
@@ -33,6 +34,7 @@ using Janus.Storage.Authentication.Alerting;
 using Janus.Storage.Authentication.Credentials;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Identifiers;
+using Janus.Storage.Authentication.Oidc;
 using Janus.Storage.Authentication.Passwords;
 using Janus.Storage.Authentication.Policies;
 using Janus.Storage.Authentication.Recovery;
@@ -181,6 +183,13 @@ internal static class StorageRegistration
             provider.GetRequiredService<JanusDbContext>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<IOidcClientStore, OidcClientStore>();
+        services.AddScoped<IAuthorizationCodeStore, AuthorizationCodeStore>();
+        services.AddScoped<IRefreshTokenStore, RefreshTokenStore>();
+        services.AddScoped<ISigningKeyStore>(provider => new SigningKeyStore(
+            provider.GetRequiredService<JanusDbContext>(),
+            keyEncryptionKeys));
+        services.AddScoped<IOidcAudit, OidcAudit>();
         services.AddScoped<IRecoveryAudit, RecoveryAudit>();
         services.AddScoped<ISessionAudit, SessionAudit>();
         services.AddScoped<ICredentialAudit, CredentialAudit>();

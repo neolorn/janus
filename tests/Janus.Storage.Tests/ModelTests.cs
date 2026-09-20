@@ -288,6 +288,37 @@ public sealed class ModelTests
             "nonexistence_notices.destination",
             "nonexistence_notices.id",
 
+            // Not an account field: the clients the deployment registered with the
+            // provider, the codes waiting to be exchanged and the refresh tokens of
+            // AUTH-OIDC-001, AUTH-OIDC-003 and AUTH-SESS-012.
+            "oidc_clients.client_id",
+            "oidc_clients.kind",
+            "oidc_clients.name",
+            "oidc_clients.redirect",
+            "oidc_clients.scopes",
+            "oidc_clients.secret",
+            "oidc_codes.challenge",
+            "oidc_codes.challenge_method",
+            "oidc_codes.client_id",
+            "oidc_codes.expires_at",
+            "oidc_codes.fingerprint",
+            "oidc_codes.issued_at",
+            "oidc_codes.nonce",
+            "oidc_codes.redirect",
+            "oidc_codes.scope",
+            "oidc_codes.session",
+            "oidc_codes.spent_at",
+            "oidc_codes.subject",
+            "oidc_refresh_tokens.client_id",
+            "oidc_refresh_tokens.consumed_at",
+            "oidc_refresh_tokens.expires_at",
+            "oidc_refresh_tokens.family",
+            "oidc_refresh_tokens.fingerprint",
+            "oidc_refresh_tokens.issued_at",
+            "oidc_refresh_tokens.scope",
+            "oidc_refresh_tokens.session",
+            "oidc_refresh_tokens.subject",
+
             // The organization of IDN-ORG-001, with the mark IDN-ORG-004 reads and
             // the deletion window of IDN-ORG-003.
             "organizations.administrative",
@@ -475,6 +506,18 @@ public sealed class ModelTests
             "signin_links.subject",
             "signin_links.token",
             "signin_links.wrong_attempts",
+
+            // Not an account field: the keys the provider signs tokens with, whose
+            // private material is wrapped under the key-encryption key (AUTH-KEY-001,
+            // AUTH-KEY-002).
+            "signing_keys.algorithm",
+            "signing_keys.created_at",
+            "signing_keys.key_id",
+            "signing_keys.key_version",
+            "signing_keys.private_key",
+            "signing_keys.public_key",
+            "signing_keys.retires_at",
+            "signing_keys.superseded_at",
 
             // Not an account field: what the gateway last said its prepaid account stood
             // at (INT-SMS-004, AUTH-ABUSE-006).
