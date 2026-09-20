@@ -121,6 +121,13 @@ internal sealed class RegistrationSession
     /// </summary>
     public bool PhoneSkipped { get; private set; }
 
+    /// <summary>
+    /// The set of recovery codes drawn at the security step, where a second step was
+    /// enrolled beside a password (AUTH-RECOV-006). They are hashes: the codes
+    /// themselves left the library once, when they were shown.
+    /// </summary>
+    public IReadOnlyList<PasswordHash>? RecoveryCodes { get; private set; }
+
     /// <summary>The version of the terms accepted, where they have been.</summary>
     public string? TermsVersion { get; private set; }
 
@@ -224,6 +231,7 @@ internal sealed class RegistrationSession
     /// <param name="password">The password hash staged.</param>
     /// <param name="passwordStandsAlone">Whether it reaches the single-factor floor.</param>
     /// <param name="phoneSkipped">Whether the phone step was passed over.</param>
+    /// <param name="recoveryCodes">The set drawn at the security step.</param>
     /// <param name="termsVersion">The terms version accepted.</param>
     /// <param name="noticeVersion">The notice version presented.</param>
     public void Restore(
@@ -236,6 +244,7 @@ internal sealed class RegistrationSession
         PasswordHash? password,
         bool passwordStandsAlone,
         bool phoneSkipped,
+        IReadOnlyList<PasswordHash>? recoveryCodes,
         string? termsVersion,
         string? noticeVersion)
     {
@@ -248,6 +257,7 @@ internal sealed class RegistrationSession
         Password = password;
         PasswordStandsAlone = passwordStandsAlone;
         PhoneSkipped = phoneSkipped;
+        RecoveryCodes = recoveryCodes;
         TermsVersion = termsVersion;
         NoticeVersion = noticeVersion;
     }
@@ -263,11 +273,14 @@ internal sealed class RegistrationSession
     /// Records the age answer and moves to the email step. The affirmation is derived
     /// here; the date is kept only where the deployment retains it.
     /// </summary>
-    /// <param name="adult">Whether the date makes the person an adult.</param>
+    /// <param name="adult">
+    /// Whether the date makes the person an adult, and nothing where the deployment
+    /// takes no affirmation.
+    /// </param>
     /// <param name="retained">The date, where the deployment retains it.</param>
     /// <param name="group">The band, where the deployment records one.</param>
     /// <param name="at">When the screen was answered.</param>
-    public void AnswerAge(bool adult, DateOnly? retained, AgeGroup? group, DateTimeOffset at)
+    public void AnswerAge(bool? adult, DateOnly? retained, AgeGroup? group, DateTimeOffset at)
     {
         AdultAffirmed = adult;
         DateOfBirth = retained;
@@ -425,6 +438,19 @@ internal sealed class RegistrationSession
         ArgumentNullException.ThrowIfNull(credential);
 
         _credentials.Add(credential);
+    }
+
+    /// <summary>
+    /// Stages the set of recovery codes the security step drew, replacing whatever
+    /// was staged.
+    /// </summary>
+    /// <param name="codes">The hashes, in the order the codes were drawn.</param>
+    /// <exception cref="ArgumentNullException">The set is absent.</exception>
+    public void StageRecoveryCodes(IReadOnlyList<PasswordHash> codes)
+    {
+        ArgumentNullException.ThrowIfNull(codes);
+
+        RecoveryCodes = codes;
     }
 
     /// <summary>

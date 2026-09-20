@@ -1,4 +1,5 @@
 using System;
+using System.Security.Cryptography;
 using Janus.Core;
 
 namespace Janus.Authentication.Registration;
@@ -63,7 +64,8 @@ internal sealed class StagedIdentity
     public bool IsExtra { get; }
 
     /// <summary>
-    /// The fingerprint of the code last sent, absent where none is outstanding.
+    /// The code last sent, absent where none is outstanding. It is held rather than
+    /// fingerprinted because a link opened elsewhere shows it (REG-SESS-003).
     /// </summary>
     public byte[]? Code { get; private set; }
 
@@ -133,7 +135,7 @@ internal sealed class StagedIdentity
     /// <param name="canonical">The value in its canonical form.</param>
     /// <param name="isLocked">Whether it is fixed against change.</param>
     /// <param name="isExtra">Whether it was added at the confirm step.</param>
-    /// <param name="code">The fingerprint of the code outstanding.</param>
+    /// <param name="code">The code outstanding.</param>
     /// <param name="codeExpiresAt">When that code stops being accepted.</param>
     /// <param name="link">The fingerprint of the link token outstanding.</param>
     /// <param name="wrongAttempts">How many wrong codes have been presented.</param>
@@ -173,14 +175,16 @@ internal sealed class StagedIdentity
     /// Records the code and the link a message has just carried, replacing whatever
     /// was outstanding.
     /// </summary>
-    /// <param name="code">The fingerprint of the code.</param>
+    /// <param name="code">The code sent.</param>
     /// <param name="link">The fingerprint of the link token.</param>
     /// <param name="expiresAt">When both stop being accepted.</param>
-    /// <exception cref="ArgumentNullException">Either fingerprint is absent.</exception>
+    /// <exception cref="ArgumentNullException">Either is absent.</exception>
     public void Sent(byte[] code, byte[] link, DateTimeOffset expiresAt)
     {
         ArgumentNullException.ThrowIfNull(code);
         ArgumentNullException.ThrowIfNull(link);
+
+        Forget();
 
         Code = code;
         Link = link;
@@ -217,9 +221,7 @@ internal sealed class StagedIdentity
         }
 
         VerifiedAt = at;
-        Code = null;
-        Link = null;
-        CodeExpiresAt = null;
+        Forget();
     }
 
     /// <summary>
@@ -243,10 +245,21 @@ internal sealed class StagedIdentity
         Entered = entered;
         Canonical = canonical;
         VerifiedAt = null;
+        WrongAttempts = 0;
+        CodeSpent = false;
+        Forget();
+    }
+
+    // The code is a secret for as long as it is outstanding and no longer.
+    private void Forget()
+    {
+        if (Code is not null)
+        {
+            CryptographicOperations.ZeroMemory(Code);
+        }
+
         Code = null;
         Link = null;
         CodeExpiresAt = null;
-        WrongAttempts = 0;
-        CodeSpent = false;
     }
 }
