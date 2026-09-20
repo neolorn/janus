@@ -1,10 +1,13 @@
 using System;
 using System.IO;
 using System.Net.Http;
+using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Identifiers;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authorization.Gate;
@@ -152,6 +155,16 @@ public static class JanusRegistration
         services.AddScoped<WebAuthnService>();
         services.AddScoped<RecoveryCodeService>();
         services.AddScoped<DeviceService>();
+        services.AddScoped<StepUpGuard>();
+
+        services.TryAddSingleton(PreferenceDeclarations.None);
+        services.TryAddSingleton(ReservedUsernames.Default);
+        services.AddScoped<RegistrationService>();
+        services.AddScoped<IRegistration>(provider => provider.GetRequiredService<RegistrationService>());
+        services.AddScoped<IdentifierService>();
+        services.AddScoped<IIdentifiers>(provider => provider.GetRequiredService<IdentifierService>());
+        services.AddScoped<AccountService>();
+        services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
 
         services.AddScoped<Derivations>();
         services.AddScoped<IAccessGate, AccessGate>();

@@ -168,32 +168,19 @@ internal sealed class IdentifierStore(
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        if (row is null)
-        {
-            return null;
-        }
+        return row is null ? null : await ReadAsync(row, cancellationToken).ConfigureAwait(false);
+    }
 
-        byte[] dataKey = await DataKeyAsync(row.Subject, cancellationToken).ConfigureAwait(false);
+    /// <inheritdoc/>
+    public async ValueTask<IdentifierRemoval?> FindRemovalAsync(
+        IdentifierId id,
+        CancellationToken cancellationToken)
+    {
+        IdentifierRemovalRecord? row = await context.IdentifierRemovals
+            .FindAsync([id], cancellationToken)
+            .ConfigureAwait(false);
 
-        try
-        {
-            return IdentifierRemoval.Existing(
-                row.Id,
-                row.Subject,
-                row.Kind,
-                Given(dataKey, row, IdentifierRemovalConfiguration.EnteredColumn, row.Entered),
-                Given(dataKey, row, IdentifierRemovalConfiguration.CanonicalColumn, row.Canonical),
-                row.IsLocked,
-                row.AddedAt,
-                row.VerifiedAt,
-                row.RemovedAt,
-                row.ExpiresAt,
-                row.Undo);
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(dataKey);
-        }
+        return row is null ? null : await ReadAsync(row, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -418,6 +405,33 @@ internal sealed class IdentifierStore(
             .Where(settled => settled.Subject == subject)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+
+    private async ValueTask<IdentifierRemoval> ReadAsync(
+        IdentifierRemovalRecord row,
+        CancellationToken cancellationToken)
+    {
+        byte[] dataKey = await DataKeyAsync(row.Subject, cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            return IdentifierRemoval.Existing(
+                row.Id,
+                row.Subject,
+                row.Kind,
+                Given(dataKey, row, IdentifierRemovalConfiguration.EnteredColumn, row.Entered),
+                Given(dataKey, row, IdentifierRemovalConfiguration.CanonicalColumn, row.Canonical),
+                row.IsLocked,
+                row.AddedAt,
+                row.VerifiedAt,
+                row.RemovedAt,
+                row.ExpiresAt,
+                row.Undo);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(dataKey);
+        }
+    }
 
     private async ValueTask<byte[]> DataKeyAsync(SubjectId subject, CancellationToken cancellationToken)
     {

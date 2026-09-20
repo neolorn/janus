@@ -16,6 +16,7 @@ using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Profiles;
 using Janus.Storage.Privacy.Erasures;
 using Janus.Storage.Privacy.SubjectKeys;
+using Janus.Storage.Settings;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Xunit;
@@ -36,7 +37,8 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
     private SubjectEraser Eraser(JanusDbContext context) => new(
         context,
-        new SessionStore(context, _deployment.Keys, _deployment.Randomness));
+        new SessionStore(context, _deployment.Keys, _deployment.Randomness),
+        new ConfigurationStore(context));
 
     /// <summary>
     /// IDN-LIFE-003b AC4, PRIV-RIGHT-005a: the erasure commits as one thing. Afterwards

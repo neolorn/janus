@@ -1,6 +1,7 @@
 using System;
 using Janus.Storage.Authentication.Alerting;
 using Janus.Storage.Authentication.Factors;
+using Janus.Storage.Authentication.Identifiers;
 using Janus.Storage.Authentication.Passwords;
 using Janus.Storage.Authentication.Registration;
 using Janus.Storage.Authentication.Sending;
@@ -260,6 +261,12 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     public DbSet<RegistrationLinkRecord> RegistrationLinks =>
         Set<RegistrationLinkRecord>();
 
+    /// <summary>
+    /// The identifiers of live accounts waiting to be proved.
+    /// </summary>
+    public DbSet<PendingVerificationRecord> IdentifierVerifications =>
+        Set<PendingVerificationRecord>();
+
     /// <inheritdoc/>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -317,5 +324,6 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new AlertConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationSessionConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationLinkConfiguration());
+        modelBuilder.ApplyConfiguration(new PendingVerificationConfiguration());
     }
 }

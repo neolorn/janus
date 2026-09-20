@@ -1,7 +1,9 @@
 using System;
 using System.Security.Cryptography;
+using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Identifiers;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Registration;
@@ -23,8 +25,10 @@ using Janus.Identity.Preferences;
 using Janus.Identity.Profiles;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Authentication.Accounts;
 using Janus.Storage.Authentication.Alerting;
 using Janus.Storage.Authentication.Factors;
+using Janus.Storage.Authentication.Identifiers;
 using Janus.Storage.Authentication.Passwords;
 using Janus.Storage.Authentication.Policies;
 using Janus.Storage.Authentication.Registration;
@@ -143,6 +147,13 @@ internal static class StorageRegistration
             provider.GetRequiredService<IIdentifierStore>(),
             provider.GetRequiredService<IProfileStore>(),
             provider.GetRequiredService<ISubjectKeyStore>()));
+        services.AddScoped<IPendingVerificationStore>(provider => new PendingVerificationStore(
+            provider.GetRequiredService<JanusDbContext>(),
+            keyEncryptionKeys,
+            provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<IIdentifierDirectory, IdentifierDirectory>();
+        services.AddScoped<IAccountDirectory, AccountDirectory>();
+        services.AddScoped<IAccountAudit, AccountAudit>();
         services.AddScoped<IPasswordStore, PasswordStore>();
         services.AddScoped<IRecoveryCodeStore, RecoveryCodeStore>();
         services.AddScoped<IDeviceStore, DeviceStore>();

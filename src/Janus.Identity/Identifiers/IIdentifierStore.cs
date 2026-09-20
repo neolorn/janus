@@ -67,6 +67,17 @@ internal interface IIdentifierStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Finds the removal of one identifier, which is what an undo reads once the link
+    /// has named it.
+    /// </summary>
+    /// <param name="id">Which identifier's removal.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The removal, or nothing where the identifier was not given up.</returns>
+    ValueTask<IdentifierRemoval?> FindRemovalAsync(
+        IdentifierId id,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Records that an account gave an identifier up, which holds the value out of
     /// reach for as long as the undo is good for.
     /// </summary>
