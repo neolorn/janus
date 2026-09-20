@@ -48,7 +48,9 @@ public sealed class PasswordStoreTests(DatabaseFixture database)
             WHERE table_schema = 'janus' AND table_name = 'passwords'
             """);
 
-        Assert.Equal(["hash", "meets_single_factor_floor", "set_at", "subject"], columns.Order());
+        Assert.Equal(
+            ["change_required", "hash", "meets_single_factor_floor", "set_at", "subject"],
+            columns.Order());
     }
 
     /// <summary>

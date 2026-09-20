@@ -389,6 +389,15 @@ public sealed class SessionStoreTests(DatabaseFixture database)
         Session expired = Record(subject, absolute: TimeSpan.FromDays(1));
         Session live = Record(subject, absolute: TimeSpan.FromDays(30));
 
+        await using (JanusDbContext clearing = database.Context())
+        {
+            // The rows the other tests of this class left are taken first, so what the
+            // sweep below counts is this test's own expired session and nothing else.
+            _ = await Store(clearing).SweepAsync(
+                Noon + TimeSpan.FromDays(2),
+                TestContext.Current.CancellationToken);
+        }
+
         await WrittenAsync(expired, live);
 
         await using JanusDbContext sweeping = database.Context();
