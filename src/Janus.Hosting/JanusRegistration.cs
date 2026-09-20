@@ -24,6 +24,7 @@ using Janus.Hosting.Alerting;
 using Janus.Hosting.Authentication;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Credentials;
+using Janus.Hosting.Oidc;
 using Janus.Hosting.Passwords;
 using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
@@ -106,6 +107,7 @@ public static class JanusRegistration
         services.AddScoped<SessionResolution>();
         services.AddScoped<FirstContact>();
         services.AddScoped<SynchronizerToken>();
+        services.AddScoped<MachineProfile>();
 
         // LIB-HOST-001: what the host declares about its own messaging is the host's.
         // A deployment that declares none of it starts, and the checks that would have
@@ -210,6 +212,7 @@ public static class JanusRegistration
         services.AddScoped<IRecovery>(provider => provider.GetRequiredService<RecoveryService>());
         services.AddScoped<ICredentials, CredentialService>();
         services.AddScoped<SigningKeys>();
+        services.AddOidc();
         services.AddScoped<OidcService>();
         services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
 

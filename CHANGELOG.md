@@ -10,6 +10,16 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The deployment is now an OpenID Connect provider for the clients it registers
+  itself: it advertises what it answers, publishes the keys a relying party validates
+  against, hands a browser that already holds a session a code without asking anyone
+  anything, and exchanges that code over the back channel for tokens signed with a key
+  that rotates on its own. A client registered as a browser application is handed no
+  refresh token; a protocol client is handed one that rotates on use, and presenting a
+  spent one ends the session everything stood on. A destination that is not the
+  client's registered one is replaced by it rather than refused. The token and
+  userinfo routes are carried on a second pipeline profile that reads no cookie and
+  asks for no synchronizer token, and refuses a request that arrives with one.
 - The library's schema gains the tables the OpenID Connect provider keeps its
   registered clients, its authorization codes, its refresh-token families and its
   signing keys in, so a deployment applies one new migration. A code and a refresh

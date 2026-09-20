@@ -74,4 +74,16 @@ internal static partial class BrowserProfileLog
         Level = LogLevel.Warning,
         Message = "A browser was given no pre-authentication session: {Code} ({CorrelationId}).")]
     public static partial void FirstContactRefused(ILogger log, string correlationId, string code);
+
+    /// <summary>
+    /// A request to a machine endpoint that carried a session cookie.
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    /// <param name="method">What it asked for.</param>
+    [LoggerMessage(
+        EventId = 6,
+        Level = LogLevel.Warning,
+        Message = "A {Method} on the machine profile carried a session cookie and was refused ({CorrelationId}).")]
+    public static partial void CookieOnMachineProfile(ILogger log, string correlationId, string method);
 }
