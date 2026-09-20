@@ -208,6 +208,13 @@ public static class ErrorCodes
     public static ErrorCode IdentifierPrimary { get; } = ErrorCode.Parse("identity.identifier.primary");
 
     /// <summary>
+    /// The account or the registration holds as many of the kind as it may. Remove one
+    /// of them first, or, where the maximum is one, replace it in one operation.
+    /// </summary>
+    /// <remarks>Implements REG-IDENT-002, REG-IDENT-007, chapter 10 section 1.1.</remarks>
+    public static ErrorCode IdentifierMaximum { get; } = ErrorCode.Parse("identity.identifier.maximum");
+
+    /// <summary>
     /// Removal would leave fewer than the required minimum of the kind. Add another of
     /// the kind and verify it first.
     /// </summary>
@@ -220,6 +227,14 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements IDN-ACCT-005, chapter 10 section 1.1.</remarks>
     public static ErrorCode IdentifierMixedScript { get; } = ErrorCode.Parse("identity.identifier.mixedscript");
+
+    /// <summary>
+    /// The step the request is for is not the step the registration has reached: its
+    /// predecessor is incomplete, or it is complete already. Read the session's state
+    /// and answer the step it names.
+    /// </summary>
+    /// <remarks>Implements REG-SESS-002, REG-SESS-004, chapter 10 section 1.1.</remarks>
+    public static ErrorCode RegistrationIncomplete { get; } = ErrorCode.Parse("identity.registration.incomplete");
 
     /// <summary>
     /// The date of birth is under eighteen where the deployment takes an adult
