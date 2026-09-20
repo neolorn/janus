@@ -1,0 +1,136 @@
+using System.Collections.Frozen;
+using System.Collections.Generic;
+using Janus.Core;
+using Microsoft.AspNetCore.Http;
+
+namespace Janus.Hosting.Bff;
+
+/// <summary>
+/// What status each code answers with.
+/// </summary>
+/// <remarks>
+/// Implements API-CONV-003, BFF-ERR-002 and BFF-ERR-003. The mapping is one table
+/// rather than a decision taken at each endpoint, so that one failure cannot answer
+/// 409 in one place and 422 in another, and so that a code added without a status is
+/// a failing test rather than a surprise in production. A code the table does not
+/// name answers as a fault, which discloses nothing the table did not decide.
+/// </remarks>
+internal static class ApiStatus
+{
+    private static readonly FrozenDictionary<ErrorCode, int> Statuses = new Dictionary<ErrorCode, int>
+    {
+        // Startup validation never crosses the boundary: a host is refused its model
+        // before it serves anything, so arriving here would be a fault. So is a
+        // missing policy or a missing derivation source, which 10 calls a fault
+        // rather than a denial.
+        [ErrorCodes.StartupGoverningLanguage] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupDeclarationMissing] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupPreferenceDeclaration] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupContainmentCycle] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupUnindexedDerivation] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupNoOrganizationPath] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupMissingAssessment] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupUndeclaredTypeReference] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupUndeclaredPermission] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupUndeclaredDerivationReference] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupRelyingPartyId] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupLabelLimit] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.PolicyUnregistered] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.DerivationSourcesMissing] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.SystemFault] = StatusCodes.Status500InternalServerError,
+
+        // Session death, and nothing else.
+        [ErrorCodes.SessionExpired] = StatusCodes.Status401Unauthorized,
+
+        // Allowed to ask, not allowed to have, and existence is not concealed.
+        [ErrorCodes.SessionCsrfInvalid] = StatusCodes.Status403Forbidden,
+        [ErrorCodes.StepUpRequired] = StatusCodes.Status403Forbidden,
+        [ErrorCodes.StepUpUnavailable] = StatusCodes.Status403Forbidden,
+        [ErrorCodes.ChallengeRequired] = StatusCodes.Status403Forbidden,
+        [ErrorCodes.Denied] = StatusCodes.Status403Forbidden,
+        [ErrorCodes.Restricted] = StatusCodes.Status403Forbidden,
+        [ErrorCodes.ConfigurationKeyProtected] = StatusCodes.Status403Forbidden,
+        [ErrorCodes.ConfigurationChangeStepUpRequired] = StatusCodes.Status403Forbidden,
+
+        // Not found, and the concealed denial that answers the same way.
+        [ErrorCodes.CredentialNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.GrantNotFound] = StatusCodes.Status404NotFound,
+
+        // A conflict with what is already there, or a precondition the state fails.
+        [ErrorCodes.ChangePending] = StatusCodes.Status409Conflict,
+        [ErrorCodes.IdentifierPrimary] = StatusCodes.Status409Conflict,
+        [ErrorCodes.IdentifierLastOfKind] = StatusCodes.Status409Conflict,
+        [ErrorCodes.IdentifierLocked] = StatusCodes.Status409Conflict,
+        [ErrorCodes.IdentifierMaximum] = StatusCodes.Status409Conflict,
+        [ErrorCodes.UsernameTaken] = StatusCodes.Status409Conflict,
+        [ErrorCodes.UsernameReserved] = StatusCodes.Status409Conflict,
+        [ErrorCodes.UsernameCoolingOff] = StatusCodes.Status409Conflict,
+        [ErrorCodes.OrganizationProtected] = StatusCodes.Status409Conflict,
+        [ErrorCodes.GrantDuplicate] = StatusCodes.Status409Conflict,
+        [ErrorCodes.GrantExpired] = StatusCodes.Status409Conflict,
+        [ErrorCodes.GroupCycle] = StatusCodes.Status409Conflict,
+        [ErrorCodes.DeviceVerificationRequired] = StatusCodes.Status409Conflict,
+        [ErrorCodes.PolicyGraceExpired] = StatusCodes.Status409Conflict,
+
+        // Well formed, and refused on what it says.
+        [ErrorCodes.AffirmationRequired] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.ChangeWindowElapsed] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.IdentifierInvalid] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.IdentifierMixedScript] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.ProfileInvalid] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.ProfileNotAccepted] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.ProfileUnderage] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.RegistrationIncomplete] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.UsernameInvalid] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.PreferenceUndeclared] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.PreferenceWrongType] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.PreferenceTooLarge] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.PreferenceAdministratorOnly] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.CodeExpired] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.CodeInvalid] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.CodeReplayed] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.CredentialLabelInvalid] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.FactorNotPermitted] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.FactorRejected] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.FactorRequired] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.PasswordBlocklisted] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.PasswordTooShort] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.ScreeningUnavailable] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.WebAuthnAlgorithmNotAllowed] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.WebAuthnCounterMismatch] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.WebAuthnRelyingPartyChanged] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.WebAuthnUserVerificationRequired] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.RestrictionExceeded] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.RestrictionReasonRequired] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.GrantReasonRequired] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.ConfigurationValueBelowFloor] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.ConfigurationValueAboveCeiling] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.ConfigurationValueNotAllowed] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.ConfigurationLastDestination] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.ConfigurationPolicyBelowSystem] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.CallbackRejected] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.EndpointInsecure] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.SmsBalanceFloor] = StatusCodes.Status422UnprocessableEntity,
+
+        // Throttled, which carries the interval and not the reason.
+        [ErrorCodes.Throttled] = StatusCodes.Status429TooManyRequests,
+    }.ToFrozenDictionary();
+
+    /// <summary>
+    /// The status a code answers with.
+    /// </summary>
+    /// <param name="code">The code.</param>
+    /// <returns>The status.</returns>
+    public static int Of(ErrorCode code) =>
+        Statuses.TryGetValue(code, out int status)
+            ? status
+            : StatusCodes.Status500InternalServerError;
+
+    /// <summary>
+    /// Whether the table names the code, which every code the library raises is
+    /// (BFF-ERR-001 AC3).
+    /// </summary>
+    /// <param name="code">The code.</param>
+    /// <returns>Whether it is named.</returns>
+    public static bool Names(ErrorCode code) => Statuses.ContainsKey(code);
+}
