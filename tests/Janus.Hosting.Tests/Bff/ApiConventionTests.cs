@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Janus.Core;
+using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Xunit;
@@ -98,6 +99,74 @@ public sealed class ApiConventionTests
 
         Assert.NotEqual(string.Empty, first.Text("correlationId"));
         Assert.NotEqual(first.Text("correlationId"), second.Text("correlationId"));
+    }
+
+    /// <summary>
+    /// BFF-ERR-001 AC1: no body the pipeline or an endpoint writes carries a sentence
+    /// for a person to read, whichever of them refused the request.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ERR_001_AC1_NoBodyCarriesASentenceAsync()
+    {
+        await using var deployment = new Deployment();
+        var browser = new Browser(deployment);
+
+        Answer stage = await browser.SendAsync(
+            "POST",
+            "/register",
+            "{\"clientId\":\"web\"}",
+            header: false);
+
+        Answer endpoint = await browser.SendAsync("GET", "/account");
+
+        foreach (Answer refused in new[] { stage, endpoint })
+        {
+            Assert.Equal(
+                ["code", "correlationId", "details"],
+                [.. refused.Json().EnumerateObject().Select(property => property.Name).Order(StringComparer.Ordinal)]);
+
+            Assert.DoesNotContain(" ", refused.Text("code"), StringComparison.Ordinal);
+
+            foreach (JsonProperty detail in refused.Json().GetProperty("details").EnumerateObject())
+            {
+                Assert.DoesNotContain(" ", detail.Value.ToString(), StringComparison.Ordinal);
+            }
+        }
+    }
+
+    /// <summary>
+    /// BFF-ERR-001 AC2: the identifier a refusal carries is the one the request is
+    /// traced under, which is what resolves it in the log and the trail.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ERR_001_AC2_TheIdentifierIsTheOneTheRequestIsTracedUnderAsync()
+    {
+        await using var deployment = new Deployment();
+
+        var context = new DefaultHttpContext { TraceIdentifier = "0HN000000000A:00000001" };
+
+        context.Request.Method = "GET";
+        context.Request.Scheme = "https";
+        context.Request.Host = new HostString("janus.example.test");
+        context.Request.Path = new PathString("/account");
+        context.Request.Headers["Sec-Fetch-Site"] = "same-origin";
+        context.Request.Headers.AcceptLanguage = "en";
+        context.Request.Headers[BrowserCookies.RequestHeader] = "1";
+        context.Request.Headers.Origin = "https://janus.example.test";
+
+        var written = new ResponseBody();
+
+        context.Response.Body = written;
+
+        await deployment.SendAsync(context);
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
+        Assert.Contains(
+            "\"correlationId\":\"" + context.TraceIdentifier + "\"",
+            written.Taken(),
+            StringComparison.Ordinal);
     }
 
     /// <summary>
