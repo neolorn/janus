@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sessions;
 using Janus.Core;
@@ -310,6 +311,7 @@ internal static class RegistrationEndpoints
         TermsRequest request,
         RegistrationService registration,
         RequestSession browser,
+        PreAuthenticationService contacts,
         BrowserSessionCookies cookies,
         IConfigurationStore configuration,
         TimeProvider time,
@@ -318,6 +320,7 @@ internal static class RegistrationEndpoints
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(registration);
+        ArgumentNullException.ThrowIfNull(contacts);
         ArgumentNullException.ThrowIfNull(cookies);
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(time);
@@ -365,7 +368,14 @@ internal static class RegistrationEndpoints
         }
 
         // BFF-CSRF-005a AC3: the pre-authentication session becomes the real one
-        // rather than standing beside it.
+        // rather than standing beside it, so it ends here and not at its expiry.
+        if (context.Request.Cookies[BrowserCookies.PreAuthentication] is { Length: > 0 } first)
+        {
+            await contacts
+                .RotateAsync(OpaqueToken.Of(first), cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         cookies.Write(context.Response, completed.Session);
         cookies.ClearFirstContact(context.Response);
         cookies.Remembered(
