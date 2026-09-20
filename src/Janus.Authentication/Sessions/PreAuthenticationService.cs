@@ -100,7 +100,9 @@ internal sealed class PreAuthenticationService(
 
         preAuthentication.Carry(registration, expiresAt);
 
+        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await store.RecordAsync(preAuthentication, cancellationToken).ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -119,7 +121,9 @@ internal sealed class PreAuthenticationService(
 
         preAuthentication.Release();
 
+        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await store.RecordAsync(preAuthentication, cancellationToken).ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -129,8 +133,12 @@ internal sealed class PreAuthenticationService(
     /// <param name="secret">The token the cookie carried.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of ending it.</returns>
-    public async ValueTask RotateAsync(OpaqueToken secret, CancellationToken cancellationToken) =>
+    public async ValueTask RotateAsync(OpaqueToken secret, CancellationToken cancellationToken)
+    {
+        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await store.RemoveAsync(secret.Fingerprint(), cancellationToken).ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)
     {
