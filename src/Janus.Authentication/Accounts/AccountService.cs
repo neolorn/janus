@@ -240,13 +240,16 @@ internal sealed class AccountService(
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
+        // The account application's own endpoint, where the person is always the
+        // caller: what an administrator may set is set from the management
+        // application, which is its own operation (09 section 6, REG-PREF-001).
         Result recorded = await directory
             .RecordPreferencesAsync(
                 subject,
                 language,
                 timeZone,
                 declared,
-                context.Acting != subject,
+                asAdministrator: false,
                 maximumSize,
                 cancellationToken)
             .ConfigureAwait(false);
