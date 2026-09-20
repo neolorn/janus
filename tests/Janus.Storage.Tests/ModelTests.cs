@@ -262,6 +262,19 @@ public sealed class ModelTests
             "key_ceremonies.subject",
             "key_ceremonies.upgrading",
 
+            // Not an account field: the legal documents the deployment publishes, each
+            // version binding in the one language it names (PRIV-CONS-005,
+            // PRIV-CONS-006).
+            "legal_document_translations.document",
+            "legal_document_translations.language",
+            "legal_document_translations.translated_text",
+            "legal_document_translations.version",
+            "legal_document_versions.document",
+            "legal_document_versions.governing_language",
+            "legal_document_versions.governing_text",
+            "legal_document_versions.published_at",
+            "legal_document_versions.version",
+
             // Not an account field: a credential its holder reported lost, the window
             // AUTH-RECOV-007 invalidates it at the end of, and what the notices across
             // that window have reached.

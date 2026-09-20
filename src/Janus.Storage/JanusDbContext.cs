@@ -21,6 +21,7 @@ using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Identity.Profiles;
+using Janus.Storage.Privacy.Documents;
 using Janus.Storage.Privacy.Erasures;
 using Janus.Storage.Privacy.SubjectKeys;
 using Janus.Storage.Settings;
@@ -116,6 +117,17 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     /// The erasures, each carrying the host-side work outstanding for one subject.
     /// </summary>
     public DbSet<ErasureRecord> Erasures => Set<ErasureRecord>();
+
+    /// <summary>
+    /// The published versions of the deployment's legal documents.
+    /// </summary>
+    public DbSet<DocumentVersionRecord> LegalDocumentVersions => Set<DocumentVersionRecord>();
+
+    /// <summary>
+    /// The translations attached to those versions.
+    /// </summary>
+    public DbSet<DocumentTranslationRecord> LegalDocumentTranslations =>
+        Set<DocumentTranslationRecord>();
 
     /// <summary>
     /// The wrapped per-subject data keys.
@@ -403,5 +415,7 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new AuthorizationCodeConfiguration());
         modelBuilder.ApplyConfiguration(new RefreshTokenConfiguration());
         modelBuilder.ApplyConfiguration(new SigningKeyConfiguration());
+        modelBuilder.ApplyConfiguration(new DocumentVersionConfiguration());
+        modelBuilder.ApplyConfiguration(new DocumentTranslationConfiguration());
     }
 }

@@ -27,8 +27,12 @@ using Janus.Hosting.Bff;
 using Janus.Hosting.Credentials;
 using Janus.Hosting.Oidc;
 using Janus.Hosting.Passwords;
+using Janus.Hosting.Privacy;
 using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
+using Janus.Privacy;
+using Janus.Privacy.Documents;
+using Janus.Privacy.Policies;
 using Janus.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -230,6 +234,10 @@ public static class JanusRegistration
         services.AddOidc();
         services.AddScoped<OidcService>();
         services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
+
+        services.AddScoped<IPrivacyAlerts, PrivacyAlerts>();
+        services.AddScoped<ILegalDocuments, LegalDocumentService>();
+        services.AddScoped<AdministrativeScope>();
 
         services.AddScoped<Derivations>();
         services.AddScoped<IAccessGate, AccessGate>();

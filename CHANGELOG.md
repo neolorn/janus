@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The privacy notice and every other legal document a deployment publishes are now
+  served over `GET /privacy/notice` and `GET /privacy/documents/{document}`, public
+  and without a sign-in, each answer carrying the governing language, the text that
+  binds and every attached translation. A version is named in the query to read the
+  text that was shown at the time.
 - A deployment can now publish its legal documents through the library: the privacy
   notice, the terms of service and anything else it holds. Each version carries one
   governing language, defaulting to the one the deployment configured, and the text

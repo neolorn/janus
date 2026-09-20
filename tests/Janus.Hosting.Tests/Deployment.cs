@@ -36,9 +36,13 @@ using Janus.Hosting.Authentication;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Credentials;
 using Janus.Hosting.Oidc;
+using Janus.Hosting.Privacy;
 using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
 using Janus.Hosting.Tests.Bff;
+using Janus.Privacy;
+using Janus.Privacy.Documents;
+using Janus.Privacy.Tests.Documents;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -202,6 +206,11 @@ internal sealed class Deployment : IAsyncDisposable
     /// The clients the deployment registered.
     /// </summary>
     public OidcClientStoreInMemory Clients { get; } = new();
+
+    /// <summary>
+    /// The legal documents the deployment published.
+    /// </summary>
+    public LegalDocumentStoreInMemory Documents { get; } = new();
 
     /// <summary>
     /// The authorization codes outstanding.
@@ -373,6 +382,13 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<RecoveryService>();
         _ = services.AddScoped<IRecovery>(provider => provider.GetRequiredService<RecoveryService>());
         _ = services.AddScoped<ICredentials, CredentialService>();
+        _ = services.AddSingleton<ILegalDocumentStore>(Documents);
+        _ = services.AddSingleton<IPrivacyAudit, Janus.Privacy.Tests.PrivacyAuditInMemory>();
+        _ = services.AddSingleton<Janus.Privacy.Policies.IMembershipLookup>(
+            new Janus.Privacy.Tests.MembershipLookupInMemory());
+        _ = services.AddScoped<IPrivacyAlerts, PrivacyAlerts>();
+        _ = services.AddScoped<Janus.Privacy.Policies.AdministrativeScope>();
+        _ = services.AddScoped<ILegalDocuments, LegalDocumentService>();
         _ = services.AddScoped<SigningKeys>();
         _ = services.AddScoped<OidcService>();
         _ = services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
