@@ -588,6 +588,13 @@ against the public contract of LIB-API-001.
   the server issued, what it is upgrading where it upgrades anything, and when it
   stops answering.
 
+- The credential endpoints answer: setting a password, opening and completing a key
+  ceremony, upgrading a security key, enrolling and confirming a generator, taking a
+  set of recovery codes, and removing a credential. Each answers to the session the
+  browser holds or to the enrolment session an approved link opened, and to nothing
+  else; which of the two it is, is what the request's own session resolution
+  established and never what the request says.
+
 ### Changed
 
 - A sign-in whose password an invalidation left below the single-factor floor now

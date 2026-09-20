@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Text.Json.Serialization;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
+using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Passwords;
@@ -21,6 +22,7 @@ using Janus.Hosting.Accounts;
 using Janus.Hosting.Alerting;
 using Janus.Hosting.Authentication;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Credentials;
 using Janus.Hosting.Passwords;
 using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
@@ -188,6 +190,7 @@ public static class JanusRegistration
             options.SerializerOptions.TypeInfoResolverChain.Add(AuthenticationJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(AccountJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(RecoveryJson.Default);
+            options.SerializerOptions.TypeInfoResolverChain.Add(CredentialsJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(WellKnownJson.Default);
         });
         services.AddScoped<RegistrationService>();
@@ -203,6 +206,7 @@ public static class JanusRegistration
         services.AddScoped<LossReports>();
         services.AddScoped<RecoveryService>();
         services.AddScoped<IRecovery>(provider => provider.GetRequiredService<RecoveryService>());
+        services.AddScoped<ICredentials, CredentialService>();
 
         services.AddScoped<Derivations>();
         services.AddScoped<IAccessGate, AccessGate>();

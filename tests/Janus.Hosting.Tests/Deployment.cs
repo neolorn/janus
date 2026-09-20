@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Accounts;
+using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Passwords;
@@ -16,6 +17,7 @@ using Janus.Authentication.Sessions;
 using Janus.Authentication.SignIn;
 using Janus.Authentication.Tests;
 using Janus.Authentication.Tests.Accounts;
+using Janus.Authentication.Tests.Credentials;
 using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Identifiers;
 using Janus.Authentication.Tests.Passwords;
@@ -30,6 +32,7 @@ using Janus.Core.Configuration;
 using Janus.Hosting.Accounts;
 using Janus.Hosting.Authentication;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Credentials;
 using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
 using Microsoft.AspNetCore.Builder;
@@ -252,6 +255,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IRecoveryApprovalStore, RecoveryApprovalStoreInMemory>();
         _ = services.AddSingleton<ILossReportStore, LossReportStoreInMemory>();
         _ = services.AddSingleton<IRecoveryAudit, RecoveryAuditInMemory>();
+        _ = services.AddSingleton<IKeyCeremonyStore, KeyCeremonyStoreInMemory>();
 
         _ = services.AddSingleton(RestrictionKeySuppliers.None);
         _ = services.AddSingleton(Declared);
@@ -291,6 +295,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<LossReports>();
         _ = services.AddScoped<RecoveryService>();
         _ = services.AddScoped<IRecovery>(provider => provider.GetRequiredService<RecoveryService>());
+        _ = services.AddScoped<ICredentials, CredentialService>();
 
         _ = services.AddSingleton(new BrowserSessionCookies(application));
         _ = services.AddScoped<SynchronizerTokens>();
@@ -313,6 +318,7 @@ internal sealed class Deployment : IAsyncDisposable
             options.SerializerOptions.TypeInfoResolverChain.Add(AuthenticationJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(AccountJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(RecoveryJson.Default);
+            options.SerializerOptions.TypeInfoResolverChain.Add(CredentialsJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(WellKnownJson.Default);
         });
     }
