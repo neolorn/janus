@@ -572,6 +572,9 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- A sign-in whose password an invalidation left below the single-factor floor now
+  completes and says so, so the person is asked for a new password at the next
+  sign-in rather than being locked out.
 - The case-insensitive collation is created in the default schema, because a column
   names a collation by one identifier and cannot reach one held in another schema.
 - A configuration key loosens the way its row states. Where a row states nothing, a

@@ -250,6 +250,30 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-RECOV-007a AC2: a password an invalidation left below the single-factor
+    /// floor signs in and is told to change it, rather than being locked out.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_RECOV_007a_AC2_ABelowFloorPasswordSignsInAndIsToldToChangeItAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Remembered(subject);
+
+        Password held = await _passwords.FindAsync(subject, TestContext.Current.CancellationToken)
+            ?? throw new InvalidOperationException("The account holds no password.");
+
+        held.RequireChange();
+
+        await _passwords.SetAsync(held, TestContext.Current.CancellationToken);
+
+        SignInProgress reached = await SignedInAsync(subject, Factor.Password, Secret);
+
+        Assert.Equal(SignInStatus.Complete, reached.Status);
+        Assert.True(reached.PasswordChangeRequired);
+    }
+
+    /// <summary>
     /// AUTH-FACT-002b AC2: an account holding no second step reaches its session with
     /// the password alone, because there is nothing for a second step to be second to.
     /// </summary>
