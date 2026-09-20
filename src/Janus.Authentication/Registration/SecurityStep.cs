@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Janus.Authentication.Factors;
 using Janus.Core;
@@ -39,6 +40,32 @@ internal static class SecurityStep
         && !session.PasswordStandsAlone
         && !Primary(WithoutThePassword(session), permitted)
         && !Seconded(session);
+
+    /// <summary>
+    /// What the account presents when the step is done: everything the session can
+    /// present that the policy admits, which is what the session's assurance is
+    /// derived from and nothing beyond it.
+    /// </summary>
+    /// <param name="session">The session as it stands.</param>
+    /// <param name="permitted">The policy's login factors.</param>
+    /// <returns>The entries the sign-in is credited with (REG-SESS-007 AC3).</returns>
+    /// <exception cref="ArgumentNullException">The login factors are absent.</exception>
+    public static List<Factor> Presented(RegistrationSession session, IReadOnlySet<Factor> permitted)
+    {
+        ArgumentNullException.ThrowIfNull(permitted);
+
+        var presented = new List<Factor>();
+
+        foreach (Factor factor in Reachable(session))
+        {
+            if (permitted.Contains(factor))
+            {
+                presented.Add(factor);
+            }
+        }
+
+        return presented;
+    }
 
     /// <summary>
     /// Whether a second step stands beside a password, which is what recovery codes

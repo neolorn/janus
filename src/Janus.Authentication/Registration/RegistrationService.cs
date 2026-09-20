@@ -544,10 +544,10 @@ internal sealed class RegistrationService(
 
         live.Reached(RegistrationStep.Security);
 
-        await sessions.RecordAsync(live, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
-        return Result.Success(State(live));
+        // The security step is settled on arrival too: where the policy admits a
+        // factor that rides a verified identifier, there is nothing left to collect
+        // on that screen (REG-SESS-006 AC2).
+        return await SettledAsync(live, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -577,11 +577,12 @@ internal sealed class RegistrationService(
         {
             Error? failure = null;
 
-            // A registration reaches no assurance of its own, so the floor applied is
-            // the single-factor one; a password below it leaves a second step
-            // mandatory rather than refusing the password (AUTH-PASS-001a).
+            // The lower floor applies because the session cannot complete with a
+            // password that stands alone below the single-factor one: the second step
+            // is the price of the shorter password, and the security step, not the
+            // floor, is what collects it (AUTH-PASS-001a, REG-SESS-006).
             PreparedPassword prepared = (await passwords
-                    .PrepareAsync(presented, OwnWords(live), AssuranceLevel.Aal1, cancellationToken)
+                    .PrepareAsync(presented, OwnWords(live), AssuranceLevel.Aal2, cancellationToken)
                     .ConfigureAwait(false))
                 .Match(value => value, error => Held<PreparedPassword>(error, ref failure));
 
@@ -713,7 +714,7 @@ internal sealed class RegistrationService(
         IssuedSession issued = (await issuing
                 .BeginAsync(
                     live.Provisional,
-                    Presented(live),
+                    SecurityStep.Presented(live, policy.LoginFactors),
                     new SessionOrigin(live.Source, device, location),
                     cancellationToken)
                 .ConfigureAwait(false))
@@ -897,23 +898,6 @@ internal sealed class RegistrationService(
         }
 
         return words;
-    }
-
-    private static List<Factor> Presented(RegistrationSession session)
-    {
-        var presented = new List<Factor>(session.Credentials.Count + 1);
-
-        if (session.Password is not null)
-        {
-            presented.Add(FactorCatalogue.Password);
-        }
-
-        foreach (StagedCredential staged in session.Credentials)
-        {
-            presented.Add(staged.Factor);
-        }
-
-        return presented;
     }
 
     private static NewAccount Created(
