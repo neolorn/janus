@@ -897,6 +897,28 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// API-REDIR-002 AC4: the return is resolved from the client the session stored,
+    /// so a deployment holding several clients returns the person to the one that
+    /// began the registration.
+    /// </summary>
+    [Fact]
+    public async Task API_REDIR_002_AC4_TheReturnIsTheStoredClientsAndNoOthersAsync()
+    {
+        await RegisteredAsync();
+        await _clients.RecordAsync(
+            new OidcClient(
+                "another",
+                "another",
+                OidcClientKind.BrowserApplication,
+                "https://elsewhere.example.test/welcome",
+                ["openid"]),
+            [4, 5, 6],
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(Registered, Ok(await AcceptedAsync(await SecuredAsync())).Landing);
+    }
+
+    /// <summary>
     /// API-REDIR-002 AC3: no step after the first takes a destination, so there is
     /// nothing at the end to validate and nothing a later request could replace.
     /// </summary>

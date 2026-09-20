@@ -380,6 +380,91 @@ public sealed class OidcServiceTests : IAsyncDisposable
         where TValue : class =>
         result.Match<TValue?>(value => value, _ => null);
 
+    /// <summary>
+    /// BFF-SESS-006 AC1: what the provider owes the silent flow is a code issued
+    /// against the live record with nobody asked anything; the per-app session built
+    /// from it is the deployment's own layer (section 4, decision 66).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_SESS_006_AC1_ALiveRecordIssuesTheCodeWithNobodyAskedAsync()
+    {
+        SessionId session = await SignedInAsync();
+
+        Assert.Equal(
+            session,
+            Value(await Service.RedeemCodeAsync(
+                Redemption(await CodeAsync(Application, session), Application),
+                Cancellation))!.Session);
+    }
+
+    /// <summary>
+    /// BFF-SESS-006 AC2: the exchange is the back channel's, so what it hands back is
+    /// what a browser never sees and what the browser was sent back with opens nothing
+    /// on its own.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_SESS_006_AC2_TheCodeAloneIsWhatTheBrowserCarriesAsync()
+    {
+        SessionId session = await SignedInAsync();
+        IssuedCode issued = Value(await Service.IssueCodeAsync(
+            Intent(Application),
+            session,
+            Cancellation))!;
+
+        Assert.NotEmpty(issued.Code);
+        Assert.DoesNotContain(
+            typeof(IssuedCode).GetProperties(),
+            property => property.Name.Contains("Token", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// BFF-SESS-006 AC3: a code presented twice and a verifier that is not the one the
+    /// challenge was made from are each refused; the state the flow carries is the
+    /// deployment's own and is judged there.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_SESS_006_AC3_AReusedCodeAndAWrongVerifierAreRefusedAsync()
+    {
+        string spent = await CodeAsync(Application);
+
+        Assert.NotNull(Value(await Service.RedeemCodeAsync(Redemption(spent, Application), Cancellation)));
+        Assert.Equal(
+            ErrorCodes.CodeInvalid,
+            Refused(await Service.RedeemCodeAsync(Redemption(spent, Application), Cancellation)));
+        Assert.Equal(
+            ErrorCodes.CodeInvalid,
+            Refused(await Service.RedeemCodeAsync(
+                Redemption(await CodeAsync(Application), Application) with
+                {
+                    CodeVerifier = Verifier + "x",
+                },
+                Cancellation)));
+    }
+
+    /// <summary>
+    /// BFF-SESS-006 AC5: the per-app session stands on the record, so a revoked record
+    /// leaves nothing for the next request to exchange or to stand on.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_SESS_006_AC5_ARevokedRecordLeavesNothingStandingAsync()
+    {
+        SessionId session = await SignedInAsync();
+        string code = await CodeAsync(Application, session);
+
+        await _sessions.EndSpineAsync(session, _clock.GetUtcNow(), Cancellation);
+
+        Assert.Equal(
+            ErrorCodes.SessionExpired,
+            Refused(await Service.RedeemCodeAsync(Redemption(code, Application), Cancellation)));
+        Assert.Equal(
+            ErrorCodes.SessionExpired,
+            Refused(await Service.IssueCodeAsync(Intent(Application), session, Cancellation)));
+    }
+
     private static AuthorizationIntent Intent(string clientId) =>
         new(clientId, Destination, Scope, Challenge, "S256", Nonce: null, Silent: false);
 
