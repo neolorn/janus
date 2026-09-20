@@ -708,3 +708,411 @@ fails the test.
 
 *Chapter text that should change.* AUTH-PRIN-002 AC1 should say that a vocabulary of
 `10` naming what raised a report is not a property of a principal.
+
+---
+
+## 22. Sending, restrictions and alerting are built in `Janus.Authentication`
+
+**Phase 4 · 2026-09-20 · Tier 2 · CONV-LAYOUT-001, AUTH-ABUSE-004, OPS-ALERT-001**
+
+*The question.* CONV-LAYOUT-001 fixes the project list and what each holds:
+`Janus.Authentication` holds "factors, sessions, flows". The sending path, the named
+restrictions and the alert router are none of those words, and registration
+(`Janus.Identity`) and the operations code will both send. No project is named for
+them, and adding one is a change to the table.
+
+*The readings.*
+
+1. `Janus.Core`, because every area sends. Core holds contracts and no behaviour, so
+   this would put the first behaviour there.
+2. A new project. CONV-LAYOUT-001 states the list; adding to it is not the agent's.
+3. `Janus.Authentication`, because the items are `02` section 7 and the chapter the
+   restrictions are stated in is the authentication chapter.
+
+*Chosen: 3.* The items governing every one of these types (AUTH-ABUSE-001 to 008) are
+in `02`, which is `Janus.Authentication`'s chapter, and the alert conditions of `06`
+are raised by that code. Core keeps the contracts a host implements
+(`IMailTransport`, `ISmsTransport`, `IMessageTemplates`, `Recipients`,
+`IntegrationEndpoints`, `RestrictionKeySuppliers`) and the vocabularies, which is what
+Core is for.
+
+*The consequence the owner should see.* `Janus.Identity` depends on Core alone, so it
+cannot call the sending service. Registration's own sends, in phase 5, reach it either
+through a port declared in Core or through `Janus.Hosting`, which references
+everything. Phase 5 decides which; nothing in phase 4 forecloses it.
+
+*Tests that pin it.*
+`LibraryStructureTests.CONV_LAYOUT_001_AC3_DependenciesAreExactlyTheOnesTheTableGives`.
+
+*Chapter text that should change.* CONV-LAYOUT-001's `Janus.Authentication` row should
+read "factors, sessions, flows, and the sending path the flows use".
+
+---
+
+## 23. A transport that would not take a message is a refusal to the caller; the durable retry is the outbox publisher's
+
+**Phase 4 · 2026-09-20 · Tier 2 · AUTH-ABUSE-004, IDN-LIFE-003a, the plan's phase 4 row**
+
+*The question.* The plan's phase 4 row says "notification pipeline with retry". No item
+of `02`, `05` or `06` states a retry schedule for a send. The only retry schedule in
+the specification is the transactional outbox's (`outbox.poll.interval`,
+`outbox.retry.initial`, `outbox.retry.factor`, `outbox.retry.maxattempts`,
+IDN-LIFE-003a), whose publisher the plan places with the background jobs in phase 9.
+
+*The readings.*
+
+1. Build a second retry mechanism for sends now, with a schedule no chapter states.
+2. Return the transport's refusal to the caller, count nothing against any
+   restriction, and leave the durable retry to the one mechanism the specification
+   describes.
+
+*Chosen: 2.* A schedule no chapter gives is a decision about behaviour, and a second
+retrying mechanism beside the outbox is a second way of doing something that already
+has one. AUTH-ABUSE-004 states what a refused transport means for the counting (a
+failed delivery does not count), which is built and tested; nothing states that the
+library itself re-attempts.
+
+*Tests that pin it.*
+`SendingServiceTests.AUTH_ABUSE_004_AC2_ATransportRefusalCountsNothingAsync`.
+
+*Chapter text that should change.* The plan's phase 4 row should say that the retry of
+a send is the outbox publisher's, built in phase 9, or an item should state the
+schedule.
+
+---
+
+## 24. A refused send carries `retryAt` and nothing else
+
+**Phase 4 · 2026-09-20 · Tier 2 · AUTH-ABUSE-004, CONV-CONTENT-001, LIB-API-003**
+
+*The question.* A send refused by a restriction strands a person who is waiting for a
+code, and the remedy the chapter provides is a support grant. Whether the refusal
+should carry a route to support (an address, a link, a flag) is not stated; `09` says
+the refusal carries `retryAt` in `details`.
+
+*The readings.*
+
+1. Carry a support route in the failure, so the frontend need not know one.
+2. Carry `retryAt` alone, as `09` states, and let the frontend write whatever it
+   shows.
+
+*Chosen: 2.* CONV-CONTENT-001 puts every user-facing sentence on the frontend, and
+LIB-API-003 keeps prose out of a failure. A support route is either a sentence or a
+deployment's own address; neither is the library's. What `09` says the refusal carries
+is exhaustive as written.
+
+*Tests that pin it.*
+`SendingServiceTests.AUTH_ABUSE_004_AC1_AFourthTextMessageInsideADayIsRefusedWithTheLiftAsync`,
+`SendingServiceTests.AUTH_ABUSE_002_AC3_ARefusedSendAnswersTheSameForEitherAddressAsync`.
+
+*Chapter text that should change.* None.
+
+---
+
+## 25. A restriction change is a loosening unless every bucket it keeps is at least as strict
+
+**Phase 4 · 2026-09-20 · Tier 2 · AUTH-ABUSE-004 AC3, OPS-CFG-002, OPS-CFG-008**
+
+*The question.* AUTH-ABUSE-004 names four loosenings: a higher max, a shorter interval,
+a removed bucket, a deleted restriction. It does not say what a change of key, of host
+key name, of purpose, or a replacement of one bucket set by an unrelated one is.
+
+*The readings.*
+
+1. Only the four named changes are loosenings; everything else is a tightening and
+   needs no reason and raises no alert.
+2. A change is a loosening unless it is provably a tightening: every bucket that stood
+   before is still answered by a bucket at least as strict, the key and the host key
+   name are unchanged, and the purpose is not narrowed.
+
+*Chosen: 2.* OPS-CFG-002 classifies a change with no direction as a loosening, which is
+the specification's own rule for exactly this case, and the strictest reading of
+AUTH-ABUSE-004 AC3 is the one that asks for a reason and raises an alert wherever the
+direction cannot be shown. Narrowing a purpose (from `any` to `notification`) leaves
+sends ungoverned and is a loosening; broadening it governs more and is not.
+
+*Tests that pin it.*
+`RestrictionAdministrationTests.AUTH_ABUSE_004_AC3_ALooseningRaisesANormalAlertAsync`,
+`RestrictionAdministrationTests.AUTH_ABUSE_004_AC3_ALooseningWithoutAReasonIsRefusedAsync`,
+`RestrictionAdministrationTests.OPS_CFG_008_AC4_AnEditIsLiveAuditedWithBothValuesAndAlertedAsync`.
+
+*Chapter text that should change.* AUTH-ABUSE-004 should say that its four are examples
+and that any change not provably a tightening is a loosening.
+
+---
+
+## 26. The text-message budget is measured over the template as the catalogue holds it
+
+**Phase 4 · 2026-09-20 · Tier 2 · AUTH-ABUSE-005, INT-SMS-003, INT-SMS-005a**
+
+*The question.* INT-SMS-003 says a test fails if any **rendered** template exceeds its
+language's budget. A template is rendered with the values of one send (a code, a name),
+which exist only at send time, and INT-SMS-005a says failures surface at startup rather
+than at send.
+
+*The readings.*
+
+1. Measure at send time, where the rendered text is known, and refuse or split there.
+2. Measure at startup over the template as the catalogue holds it, placeholders and
+   all.
+
+*Chosen: 2.* INT-SMS-005a states the invariant as a startup one, and AUTH-ABUSE-005 AC3
+says an over-budget message stops the deployment. Measuring at send time would surface
+the fault to the person waiting for a code, which is the outcome both items exist to
+prevent. The placeholder is counted as written, which states a rule a deployment can
+write to.
+
+*Tests that pin it.*
+`SendingValidationTests.AUTH_ABUSE_005_AC3_AnOverBudgetTextMessageStopsStartupAsync`,
+`SendingValidationTests.INT_SMS_003_AC1_ALatinMessageOverItsBudgetStopsStartupAsync`,
+`SendingValidationTests.INT_SMS_003_AC2_EveryTextMessageIsMeasuredInEveryLanguageAsync`.
+
+*Chapter text that should change.* INT-SMS-003 AC1 should say "any template" rather
+than "any rendered template", and should state how a placeholder is counted.
+
+---
+
+## 27. A plaintext endpoint is caught through a register the host declares, not a setting for each integration
+
+**Phase 4 · 2026-09-20 · Tier 2 · INT-GEN-001, INT-SMS-006, LIB-HOST-001**
+
+*The question.* INT-GEN-001 says a configuration specifying a plaintext endpoint is
+rejected at startup, and its criteria say the error names which integration and which
+setting. `10` section 4 carries no key for any integration's base address, and
+INT-SMS-006 forbids naming a provider anywhere in the library.
+
+*The readings.*
+
+1. Add a settings key per integration, which would put provider-shaped keys in `10`
+   and a list of integrations in the library.
+2. Have the host declare its outbound endpoints as a register of integration, key and
+   address, and refuse a plaintext one at startup. The key in the error is the name the
+   host gives, so the error names the host's own setting.
+
+*Chosen: 2.* It adds no key to `10`, names no provider, and answers both criteria. A
+deployment that declares none starts, as LIB-HOST-001 requires of everything outside
+the declarations.
+
+*Tests that pin it.*
+`SendingValidationTests.INT_GEN_001_AC1_APlaintextEndpointStopsStartupAsync`,
+`IntegrationEndpointsTests.INT_GEN_001_AC2_APlaintextAddressIsNamedWithItsIntegrationAndKey`,
+`IntegrationBoundaryTests.INT_SMS_006_AC1_NoProviderNameAppearsInTheLibrary`.
+
+*Chapter text that should change.* INT-GEN-001 AC2 should say the error names the
+integration and the key the host declared it under.
+
+---
+
+## 28. The restriction administration is built as an operation; its endpoints wait for the phase that mounts the administrative surface
+
+**Phase 4 · 2026-09-20 · Tier 2 · AUTH-ABUSE-004 AC3 and AC4, OPS-CFG-008**
+
+*The question.* AUTH-ABUSE-004 states the restriction edits and the grant as HTTP
+endpoints (`GET/PUT/DELETE /admin/restrictions/{name}`,
+`POST /admin/restrictions/{name}/grant`). No phase of the plan builds an administrative
+HTTP surface, and phase 4 is not a phase that mounts endpoints.
+
+*The readings.*
+
+1. Mount the endpoints here, which would put the first administrative routes in the
+   library in a phase whose chapters name none.
+2. Build the operation behind them, gated, audited and alerted exactly as the item
+   says, and leave the routes to the phase that mounts the administrative surface.
+
+*Chosen: 2.* Everything the criteria decide (the gate, the reason, the audit entry, the
+alert, the edit reaching the next send, the credit being spent) is the operation's, and
+each is tested against it. A route is a thin call onto the operation and belongs with
+the rest of the administrative surface.
+
+*Tests that pin it.* The five `RestrictionAdministrationTests.AUTH_ABUSE_004_AC3_*`
+tests and the three `RestrictionAdministrationTests.AUTH_ABUSE_004_AC4_*` tests.
+
+*Chapter text that should change.* The plan should name the phase that mounts the
+administrative routes, and AUTH-ABUSE-004's criteria should be readable against the
+operation.
+
+---
+
+## 29. The event port publishes without an outcome; the consumer returns one
+
+**Phase 4 · 2026-09-20 · Tier 2 · CONV-DESIGN-005 AC1, LIB-API-001, IDN-LIFE-003a**
+
+*The question.* CONV-DESIGN-005 AC1 says every method on a public contract returns an
+outcome. `IEvents.PublishAsync` is called after the transaction the event describes has
+committed, so a caller cannot act on a failure: the event is already true.
+
+*The readings.*
+
+1. `PublishAsync` returns an outcome, which every call site must then handle, and the
+   only honest handling is to ignore it.
+2. `IEvents` is a port, not an operation contract, and is exempt as `ISecretSource` and
+   `IUnitOfWork` already are; `IEventConsumer.HandleAsync` returns an outcome, because
+   delivery is at least once and a consumer that did not do its work has to say so.
+
+*Chosen: 2.* CONV-DESIGN-005 is about the service contracts of LIB-API-005, the
+operations the library performs, and the exemption list already exists with the same
+reasoning. The consumer side keeps the outcome, which is where a failure means
+something.
+
+*Tests that pin it.*
+`ResultContractTests.CONV_DESIGN_005_AC1_EveryContractMethodReturnsAnOutcome`.
+
+*Chapter text that should change.* CONV-DESIGN-005 should name the ports its AC1 does
+not reach, or `07` should state that a publication port is not an operation contract.
+
+---
+
+## 30. The message catalogue answers with an outcome, not with a missing template
+
+**Phase 4 · 2026-09-20 · Tier 2 · CONV-DESIGN-005 AC2, AUTH-ABUSE-005, LIB-EXT-001**
+
+*The question.* `IMessageTemplates.Find` is asked for a message in a language. A
+deployment whose catalogue has no answer is a startup fault, but the port is also
+called at send time.
+
+*The readings.*
+
+1. Return the template or null, and let each caller decide what a missing one means.
+2. Return an outcome, so a catalogue that cannot answer says so in one shape that
+   startup and the send path both read.
+
+*Chosen: 2.* CONV-DESIGN-005 AC2 forbids reporting "not found" by returning null. The
+startup check then names the first message key the catalogue cannot answer, which is
+what AUTH-ABUSE-005 AC3 asks for, and a host implementing the port has one way to
+refuse.
+
+*Tests that pin it.*
+`SendingValidationTests.AUTH_ABUSE_005_AC3_ALanguageTheCatalogueCannotAnswerInStopsStartupAsync`,
+`ResultContractTests.CONV_DESIGN_005_AC2_NoContractReturnsNullForNotFound`.
+
+*Chapter text that should change.* None.
+
+---
+
+## 31. A send counter is swept by the time its longest bucket settles at
+
+**Phase 4 · 2026-09-20 · Tier 2 · AUTH-ABUSE-004 AC6, INT-SMS-005**
+
+*The question.* AUTH-ABUSE-004 AC6 says the per-destination record is absent once every
+bucket for that key is empty. A record whose key is never sent to again is reached by
+nothing: the recording path prunes the key it is writing, and the release path prunes
+the key a delivery report names. Neither touches a key nobody mentions again.
+
+*The readings.*
+
+1. Prune only on the paths that already read a key, and accept that a key sent to once
+   stands in the table for ever.
+2. Keep, on each row, the time at which the last send counted there ages out of the
+   longest bucket it was counted against, and delete every row past that time as part
+   of the next recording.
+
+*Chosen: 2.* AC6 states the absence as a fact about the table, not about a path, and the
+strictest reading is the one under which a dump of the table at any time holds no row
+that decides nothing. The column is derived from the restriction the send was counted
+against, so it needs no schedule and no background job; the sweep is one indexed delete
+before the counters of the next send are read.
+
+*Tests that pin it.*
+`SendLedgerTests.AUTH_ABUSE_004_AC6_TheRecordIsGoneOnceItsBucketsAreEmptyAsync`,
+`SendLedgerTests.AUTH_ABUSE_004_AC6_TheRecordHoldsAHashAndTimesAndNothingElseAsync`.
+
+*Chapter text that should change.* AUTH-ABUSE-004's last sentence should say when the
+record is deleted, not only that it is.
+
+---
+
+## 32. A deployment that declares no message catalogue is refused at startup
+
+**Phase 4 · 2026-09-20 · Tier 2 · AUTH-ABUSE-005 AC3, LIB-HOST-001, CONV-ERR-001**
+
+*The question.* Every message the library sends comes from the host's catalogue. A
+deployment that registers none has nothing to send, which is a fault; but a missing
+registration surfaces as a container exception when the first service that needs it is
+resolved, which names a type and not a key.
+
+*The readings.*
+
+1. Require the catalogue at registration, so the container refuses to build. The
+   failure is an exception naming a .NET type, which LIB-HOST-001 AC2 does not accept.
+2. Treat the catalogue as absent, and let the startup check refuse with
+   `model.startup.declarationmissing` naming the first message key it could not be
+   asked for.
+
+*Chosen: 2.* LIB-HOST-001 AC2 says a missing declaration names the key. The deployment
+still does not start, so nothing is loosened, and the operator is told what to write
+rather than which constructor failed.
+
+*Tests that pin it.*
+`StartupValidationTests.AUTH_ABUSE_005_AC3_ADeploymentThatDeclaredNoMessagesIsRefusedAsync`.
+
+*Chapter text that should change.* AUTH-ABUSE-005 AC3 should name the missing
+declaration beside the over-budget and the untranslated message.
+
+---
+
+## 33. The authentication services deferred from phase 3 are registered in this phase
+
+**Phase 4 · 2026-09-20 · Tier 2 · LIB-HOST-001, decision 19**
+
+*The question.* Decision 19 held the registration of the phase 3 services because every
+one of them reads `IConfigurationStore`, which had no implementation. The store is built
+in this phase.
+
+*The readings.*
+
+1. Leave the registration to phase 5, keeping phase 3's area unreachable from a host
+   for another phase.
+2. Register them now: policies, passwords and their screening, sessions, the factor
+   services, recovery codes and the trusted browsers.
+
+*Chosen: 2.* The reason for the deferral is gone. The leaked-password corpus is
+registered as a typed client over the host's own base address, and the word list and
+the hasher as singletons, which is what their construction costs make them.
+
+*Tests that pin it.* The `Janus.Hosting.Tests` registration and startup suites, which
+resolve each service from the host's container.
+
+*Chapter text that should change.* None.
+
+---
+
+## 34. OPS-CFG-008 is completed here except its general audit criterion, which waits with OPS-CFG-002 and OPS-CFG-005
+
+**Phase 4 · 2026-09-20 · Tier 3 · OPS-CFG-002, OPS-CFG-005, OPS-CFG-008**
+
+*The question.* The plan gives the OPS-CFG items of `06` to no phase: phase 4 takes
+OPS-ALERT-001 to 004a and phase 9 takes OPS-BOOT, OPS-SEC, OPS-MAINT, OPS-OBS and
+OPS-ENV. The runtime settings table those items govern is built in this phase, and one
+OPS-CFG-008 criterion (AC4) is about restrictions, which are this phase's subject.
+OPS-CFG-002 AC3 and AC4 and OPS-CFG-005 ask for a written reason and an audit entry for
+every runtime change with no direction, which includes the alert-destination change of
+OPS-ALERT-004a, built here.
+
+*The readings.*
+
+1. Build a general configuration audit now. Every runtime change passes through
+   `IConfigurationStore.WriteAsync`, so auditing there means that port takes an actor
+   and a reason: a public-surface change in a phase whose chapters do not name the
+   items that would justify it.
+2. Complete what is restriction-shaped (OPS-CFG-008 AC4: the edit reaches the next send
+   with nothing restarted, the entry carries the restriction before and after, and a
+   loosening raises the Normal alert) and leave the general mechanism, with OPS-CFG-002
+   AC3 and AC4 and OPS-CFG-005, to the phase that builds it.
+
+*Chosen: 2*, with the gap stated rather than papered over. The strictest reading of the
+smaller public surface rules out widening `IConfigurationStore` on the strength of items
+this phase's chapter list does not carry. **What is therefore not met today:** changing
+the alert destinations is stepped up (OPS-ALERT-004a, tested) but takes no written
+reason and writes no audit entry, which OPS-CFG-002 AC3 and AC4 require of a change with
+no direction. Nothing is loosened by the gap: the change already requires step-up and
+already tells every previous destination.
+
+*Tests that pin what is built.*
+`RestrictionAdministrationTests.OPS_CFG_008_AC4_AnEditIsLiveAuditedWithBothValuesAndAlertedAsync`,
+`ConfigurationStoreTests.OPS_CFG_008_AC1_AChangedSettingIsInForceForTheNextReadAsync`,
+`ConfigurationStoreTests.OPS_CFG_008_AC3_NoBootstrapValueIsAKeyOfTheTable`,
+`AlertDestinationChangeTests.ChangeAsync_AGateTheSessionDoesNotMeet_ChangesNothingAsync`.
+
+*Chapter text that should change.* The plan should name the phase that builds
+OPS-CFG-002, OPS-CFG-005 and the remaining OPS-CFG-008 criteria, and that phase should
+add the reason and the audit entry to the alert-destination change.
