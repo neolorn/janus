@@ -2301,3 +2301,342 @@ standard puts them.
 *Chapter text that should change.* `07` LIB-HOST-003 should say that the prefix is the
 path base the host mounts under, so a host does not reach for a route group and leave
 the provider behind.
+
+---
+
+## 77. A purpose declares the data and subject categories it requires
+
+**Phase 7 · 2026-09-20 · Tier 2 · PRIV-PRIN-001, PRIV-ROPA-001, AUTHZ-MODEL-003**
+
+*The question.* PRIV-PRIN-001 AC1 requires each purpose to name the categories of data
+and of subject it requires, and AC2 requires a field held by no declared purpose to fail
+validation. Chapter 03's declaration surface carries a purpose's name, basis and
+assessment, and nothing that names a category. Nothing in `10` lists a category type
+either, so the categories are either a new declared thing or a reading of something that
+already exists.
+
+*The readings.*
+
+1. Read the categories off the resource type: the type a purpose is declared on is the
+   data, and the subject is whoever the type belongs to. Nothing new is declared.
+2. Let a purpose declare its own lists of data and subject categories, which the RoPA
+   then prints and which validation reads.
+
+*Chosen: 2.* PRIV-ROPA-001 requires the record of processing to carry the categories per
+purpose, and a purpose is declared once and gathered from every type that names it, so
+reading 1 would give one purpose as many category sets as it has types and no way to
+print the one the register asks for. AC1 says the purpose names them, not the type.
+AC2 is satisfied by the refusal that already exists: a resource type declared with no
+purpose fails startup (AUTHZ-MODEL-003 AC1), and a field belongs to a type, so a field
+held by no declared purpose is a type held by no declared purpose.
+
+*Tests that pin what is built.*
+`ProcessingTests.PRIV_PRIN_001_AC1_EachPurposeNamesTheCategoriesItRequires`,
+`ProcessingTests.PRIV_PRIN_001_AC2_AFieldHeldByNoDeclaredPurposeFailsValidation`.
+
+*Chapter text that should change.* `03`'s purpose declaration should carry the two
+category lists, and `10` should list them with the rest of the declaration surface.
+PRIV-PRIN-001 AC2 should say that the refusal is the type-level one AUTHZ-MODEL-003
+already states.
+
+---
+
+## 78. The capture path is derived from the basis and the sensitivity
+
+**Phase 7 · 2026-09-20 · Tier 2 · PRIV-BASIS-003, PRIV-SENS-002, AUTHZ-MODEL-003 AC2**
+
+*The question.* PRIV-BASIS-003 forbids the ordinary consent path over sensitive data.
+Whether a purpose captures consent the ordinary way or the written way is therefore a
+consequence of two things the host already declares, the purpose's basis and the
+sensitivity of the type it is declared on, but a host could also state the path itself,
+and the two could then disagree.
+
+*The readings.*
+
+1. The host declares the path, and a declaration that states the ordinary path over
+   sensitive data fails startup.
+2. The library derives the path, and a declaration may only tighten it: a host may ask
+   for the written path where the ordinary one would do, never the reverse.
+
+*Chosen: 2.* AUTHZ-MODEL-003 AC2 requires that declaring a type sensitive changes what
+its consent-based purposes ask for with nothing else edited, which reading 1 does not
+give: it would leave the two statements to be kept in step by hand. Fail closed on the
+disagreement, so the derived path is a floor a host may raise and cannot lower. The
+startup refusal PRIV-BASIS-003 asks for still exists, for the declaration that tries to
+lower it.
+
+*Tests that pin what is built.*
+`ProcessingTests.PRIV_BASIS_003_AC1_TheOrdinaryPathOverSensitiveDataFailsValidation`,
+`ProcessingTests.AUTHZ_MODEL_003_AC2_DeclaringATypeSensitiveChangesWhatItsConsentAsksFor`.
+
+*Chapter text that should change.* PRIV-BASIS-003 should say that the path is derived
+and that a declaration may only tighten it, so a reader does not look for a path field
+in `10`.
+
+---
+
+## 79. What the deployment processes is read from Core
+
+**Phase 7 · 2026-09-20 · Tier 2 · CONV-LAYOUT-001, CONV-LAYOUT-002, LIB-API-001**
+
+*The question.* The declared purposes are read by the authorization model, which
+validates them, and by the privacy area, which records consent against them. Neither
+project may reference the other (CONV-LAYOUT-001), so the type that carries them lives
+in one of the two areas and is unreachable from the other, or in Core.
+
+*The readings.*
+
+1. Each area holds its own reading of the declaration, the authorization side for
+   validation and the privacy side for the consent kind.
+2. `DeclaredProcessing`, `DeclaredPurpose` and `ConsentKind` are Core types, read once
+   from the declaration and shared.
+
+*Chosen: 2.* Reading 1 is two implementations of one rule, and the rule is the derivation
+of 78: the two would drift and the drift would be a purpose that validates one way and
+records another. Core is where the contract types are (LIB-API-001), a purpose is part of
+what the host declares, and the privacy dashboard has to print the purposes to the
+subject, so they are public either way.
+
+*Tests that pin what is built.*
+`ProcessingTests.PRIV_BASIS_001_AC3_APurposeWithoutABasisIsRefusedWhereItIsDeclared`,
+`ConsentTests.PRIV_SENS_002a_AC4_APurposeOnAnotherBasisTakesNoConsentAsync`.
+
+*Chapter text that should change.* `10` section 5 should list `DeclaredProcessing`,
+`DeclaredPurpose` and `ConsentKind` among the public types, and `07` LIB-API-001 should
+name them.
+
+---
+
+## 80. The privacy area raises its alerts through its own port
+
+**Phase 7 · 2026-09-20 · Tier 2 · CONV-DESIGN-003, CONV-LAYOUT-001, OPS-ALERT-001**
+
+*The question.* PRIV-CONS-006 requires the missing-governing-text condition to be raised
+on OPS-ALERT-001. The type that builds an alert is internal to the authentication area,
+which the privacy area may not reference.
+
+*The readings.*
+
+1. Move the alert builder to Core so every area can raise one.
+2. The privacy area declares `IPrivacyAlerts`, its own port, and the hosting project
+   implements it over the builder that exists.
+
+*Chosen: 2.* CONV-DESIGN-003 says each area declares the ports it needs and the outer
+projects implement them, which is what every other cross-area need in this repository
+already does. Reading 1 would widen the public surface for an internal concern.
+
+*Tests that pin what is built.*
+`LegalDocumentTests.PRIV_CONS_006_AC3_AVersionWithoutGoverningTextIsRefusedAndRaisedAsync`.
+
+*Chapter text that should change.* None. `08` already settles this; the entry records
+that the port was added rather than the builder moved.
+
+---
+
+## 81. A document version is numbered by how many came before it
+
+**Phase 7 · 2026-09-20 · Tier 2 · PRIV-CONS-005, PRIV-CONS-006**
+
+*The question.* A consent record names the version of the notice that was displayed
+(PRIV-CONS-001 AC2) and a version is addressable afterwards (PRIV-CONS-006 AC2), so a
+version needs an identity. No chapter says what it looks like and `10` carries no
+default for it.
+
+*The readings.*
+
+1. The publisher names the version, and the library refuses a name already used.
+2. The library numbers it: the count of versions of that document plus one, rendered
+   decimal.
+
+*Chosen: 2.* Reading 1 puts a user-facing string in the host's hands and then has the
+library compare strings to decide which is current, which PRIV-CONS-006 AC1 needs to be
+unambiguous. The ordinal is total, is decided by the library, and answers which version
+is current without parsing. The wire carries it as a string, so a host that later wants
+its own naming does not break the shape.
+
+*Tests that pin what is built.*
+`LegalDocumentTests.PRIV_CONS_006_AC1_ChangingTheGoverningTextCreatesANewVersionAsync`,
+`LegalDocumentTests.PRIV_CONS_006_AC1_CorrectingATranslationCreatesNoVersionAsync`.
+
+*Chapter text that should change.* PRIV-CONS-005 should say that the library numbers
+versions and that the number is the count of publications of that document.
+
+---
+
+## 82. Supersession is keyed to the privacy notice
+
+**Phase 7 · 2026-09-20 · Tier 2 · PRIV-CONS-001 AC2, PRIV-CONS-007**
+
+*The question.* PRIV-CONS-007 says a material change supersedes every live consent on
+the purposes the document covers (`09` section 8a). Nothing declares which purposes a
+document covers, and no chapter gives a place to declare it.
+
+*The readings.*
+
+1. Add a declaration: a document names the purposes it covers, and a material revision
+   supersedes the consents on those.
+2. A consent record names the version of the **privacy notice**, in PRIV-CONS-001 AC2's
+   own words, so a material revision of the privacy notice supersedes every live consent
+   given against an earlier version of it, and a revision of any other document
+   supersedes none.
+
+*Chosen: 2.* PRIV-CONS-001 AC2 names the notice and nothing else, so the record already
+carries the one document that governs it and reading 1 would add a second, overlapping
+statement of the same thing. The smaller surface: no new declaration, no new public type.
+A deployment that wants a consent text to govern a purpose publishes it and revises the
+notice that points at it.
+
+*Tests that pin what is built.*
+`SupersessionTests.PRIV_CONS_007_AC1_AMaterialChangeIdentifiesWhoMustBeAskedAgainAsync`,
+`SupersessionTests.PRIV_CONS_007_AC2_AMaterialRevisionOfAnotherDocumentEndsNoConsentAsync`,
+`ConsentStoreTests.PRIV_CONS_007_AC1_OnlyLiveConsentsAgainstAnEarlierVersionAreFoundAsync`.
+
+*Chapter text that should change.* `09` section 8a should say that `material` supersedes
+the consents given against an earlier version of the privacy notice, and PRIV-CONS-007
+should drop the phrase naming the purposes the document covers.
+
+---
+
+## 83. A refusal `10` gives no code for is refused as denied
+
+**Phase 7 · 2026-09-20 · Tier 3 · REF-001, `10` section 1.4**
+
+*The question.* Three refusals in this phase have no code in `10` section 1.4: reading a
+document that was never published, granting or withdrawing consent for a purpose that is
+undeclared or rests on another basis, and granting consent when no privacy notice has
+been published. Each is a real refusal the library has to make.
+
+*The readings.*
+
+1. Add a code to the catalogue for each and implement it.
+2. Refuse with `privacy.denied`, the general refusal, and record that `10` is missing
+   three rows.
+
+*Chosen: 2, the strictest reading.* REF-001 makes `10` authoritative for the error
+catalogue, and adding a code without changing `10` would put a code on the wire that the
+specification does not carry, which a frontend cannot write words for (CONV-CONTENT-001).
+Refusing is what both readings agree on; only the name differs, so the general code
+grants least and keeps most. The owner adds the rows and the refusals take their names.
+
+*Tests that pin what is built.*
+`ConsentTests.PRIV_SENS_002a_AC4_APurposeOnAnotherBasisTakesNoConsentAsync`,
+`LegalDocumentEndpointTests.PRIV_CONS_005_AC1_AnUnpublishedDocumentIsRefusedAsync`,
+`ConsentEndpointTests.PRIV_CONS_008a_AC3_APurposeOnAnotherBasisTakesNoConsentAsync`.
+
+*Chapter text that should change.* `10` section 1.4 needs three rows: a document version
+that does not exist, a purpose that is not the subject's to consent to, and a consent
+asked for before any notice was published.
+
+---
+
+## 84. A consent record carries when it was superseded
+
+**Phase 7 · 2026-09-20 · Tier 2 · PRIV-CONS-007 AC4, `09` section 7**
+
+*The question.* `09` section 7 lists a consent record on the wire as `{ purpose,
+noticeVersion, mechanism, grantedAt, withdrawnAt }`. PRIV-CONS-007 AC4 requires a
+superseded consent to prompt rather than block, which the dashboard cannot do unless it
+can tell a superseded consent from a live one.
+
+*The readings.*
+
+1. Keep the listed shape and let the frontend compare the record's `noticeVersion`
+   against the current notice.
+2. Carry `supersededAt` beside `withdrawnAt`.
+
+*Chosen: 2.* Reading 1 makes every screen re-derive a decision the library already took
+and wrote down, and it is wrong whenever a revision was published and called immaterial:
+the versions differ and the consent stands. The field is the answer, not a hint.
+
+*Tests that pin what is built.*
+`SupersessionTests.PRIV_CONS_007_AC4_ASupersededConsentPromptsRatherThanWithdrawsAsync`,
+`ConsentEndpointTests.PRIV_CONS_011_AC1_EveryConsentHeldIsVisibleToItsSubjectAsync`.
+
+*Chapter text that should change.* `09` section 7 should list `supersededAt` in the
+consent record.
+
+---
+
+## 85. The consent event names which way the consent changed
+
+**Phase 7 · 2026-09-20 · Tier 2 · PRIV-CONS-008, `10` section 5**
+
+*The question.* `ConsentChanged` is raised on a grant, on a withdrawal and on a
+supersession. A subscriber that erases the data held solely for a purpose (PRIV-CONS-008
+AC4) must act on one of the three and not the others, and `10` section 5 lists no type
+that distinguishes them.
+
+*The readings.*
+
+1. Raise a separate event for each of the three.
+2. Carry a `ConsentChange` on the one event: granted, withdrawn, superseded.
+
+*Chosen: 2.* PRIV-CONS-008 names one event, `ConsentChanged`, as what handlers subscribe
+to, so three events would break the item's own text. One enum of three values is the
+smaller surface and the one a handler can switch on.
+
+*Tests that pin what is built.*
+`ConsentTests.PRIV_CONS_008_AC4_WithdrawalAnnouncesTheChangeForThePurposeAsync`,
+`SupersessionTests.PRIV_CONS_007_AC4_ASupersededConsentPromptsRatherThanWithdrawsAsync`.
+
+*Chapter text that should change.* `10` section 5 should list `ConsentChange` and the
+`ConsentChanged` payload that carries it.
+
+---
+
+## 86. Privacy records are audited under the security category
+
+**Phase 7 · 2026-09-20 · Tier 2 · CONV-LOG-002, `10` section 5**
+
+*The question.* Every consent, objection and publication is written to the audit trail.
+`AuditCategory` has no privacy value and `10` lists none.
+
+*The readings.*
+
+1. Add a `Privacy` category.
+2. Write them under `Security`, the category the existing gated administrative actions
+   use.
+
+*Chosen: 2.* Adding a value to a public enum `10` fixes is a change to the reference, and
+the actions are already distinguishable by their action codes
+(`privacy.consent.granted` and the rest), which is what a reader filters on. The smaller
+surface.
+
+*Tests that pin what is built.*
+`ConsentTests.PRIV_CONS_001_AC1_EveryChangeIsAuditedByCodeAsync`,
+`LegalDocumentTests.PRIV_CONS_007_AC1_TheAuditRecordCarriesTheAnswerOnMaterialityAsync`.
+
+*Chapter text that should change.* `10` should either add a `privacy` audit category or
+say that privacy actions are recorded under `security`.
+
+---
+
+## 87. The dashboard records the mechanism it is
+
+**Phase 7 · 2026-09-20 · Tier 2 · PRIV-CONS-001 AC1, PRIV-CONS-007, `10` section 5.21**
+
+*The question.* `09` section 7 gives the grant and objection endpoints no body, so the
+mechanism written on the record is the library's to choose. One of the four values,
+`reconsent`, is the prompt raised after a material revision, and the same endpoint serves
+it.
+
+*The readings.*
+
+1. Derive it: where the subject holds a superseded consent for that purpose, the grant
+   that follows is re-consent.
+2. Record `dashboard`, which `10` section 5.21 defines as the subject's own privacy
+   pages, and leave `reconsent` to the in-process contract, which takes the mechanism
+   from its caller.
+
+*Chosen: 2.* Reading 1 has the library infer which screen the person was on from state in
+its own store, and a host may raise its re-consent prompt anywhere or not at all. Which
+surface asked is the frontend's fact, and the record should carry what it is told, not a
+guess. A host that raises the prompt calls the contract and names `reconsent`.
+
+*Tests that pin what is built.*
+`ConsentEndpointTests.PRIV_CONS_011_AC1_EveryConsentHeldIsVisibleToItsSubjectAsync`,
+`ConsentTests.PRIV_CONS_001_AC1_TheRecordCarriesTheMechanismAsync`.
+
+*Chapter text that should change.* `09` section 7 should say that the dashboard endpoints
+record the `dashboard` mechanism and that `reconsent` is written by a host calling the
+contract.

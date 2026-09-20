@@ -10,6 +10,18 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A host can now bind one of its actions to the purpose it is done for, and where
+  that purpose rests on consent the gate refuses the action until the subject has
+  consented to it: missing, withdrawn, superseded or of the ordinary kind where the
+  written one is required, each answered by the code that names what is wanted. The
+  capability carries `consent` as something the action still requires, so a control
+  prompts rather than failing silently. Consent gates the purpose and not the record,
+  so an action on the same record done for a purpose resting on another basis is
+  untouched.
+- The terms step of registration now records one consent per control the person
+  ticked, naming the purpose, the version of the notice presented and the registration
+  mechanism. A control left unticked records nothing and holds nothing up.
+
 - A subject can now read and change their own consents and objections through a
   privacy dashboard: `GET /privacy/consents`, `POST /privacy/consents/{purpose}/grant`
   and `.../withdraw`, `GET /privacy/objections`, `POST /privacy/objections/{purpose}`

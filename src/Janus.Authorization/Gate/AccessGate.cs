@@ -23,10 +23,12 @@ namespace Janus.Authorization.Gate;
 /// <param name="subjects">Who the principal is, resolved once per operation.</param>
 /// <param name="gates">What an action's step-up gate still asks of the session.</param>
 /// <param name="derived">Which of the host's relationships confer what is being asked.</param>
+/// <param name="consents">What the caller has consented to, for the purpose the action serves.</param>
 /// <param name="time">The clock liveness is read against.</param>
 /// <remarks>
 /// Implements AUTHZ-SEAM-001, AUTHZ-PRIN-001, AUTHZ-PRIN-003, AUTHZ-GATE-002,
-/// AUTHZ-GATE-004, AUTHZ-GATE-005, AUTHZ-SCOPE-001, AUTHZ-CONCEAL-004 and LIB-SEAM-001.
+/// AUTHZ-GATE-004, AUTHZ-GATE-005, AUTHZ-SCOPE-001, AUTHZ-CONCEAL-004, PRIV-SENS-002,
+/// PRIV-SENS-002a and LIB-SEAM-001.
 /// A check and a filter are the one rule rendered two ways, so neither can come to
 /// answer what the other would refuse. Every path that cannot resolve what it needs
 /// denies.
@@ -39,6 +41,7 @@ internal sealed class AccessGate(
     SubjectSets subjects,
     StepUpGates gates,
     Derivations derived,
+    IRecordedConsents consents,
     TimeProvider time) : IAccessGate
 {
     private static readonly ResourceType OrganizationWide = ResourceType.Parse("organization");
@@ -84,7 +87,7 @@ internal sealed class AccessGate(
                 cancellationToken).ConfigureAwait(false);
         }
 
-        return Outstanding(permission);
+        return await OutstandingAsync(context, permission, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -107,7 +110,7 @@ internal sealed class AccessGate(
 
         if (decided.Grant is { Deny: false })
         {
-            return Outstanding(permission);
+            return await OutstandingAsync(context, permission, cancellationToken).ConfigureAwait(false);
         }
 
         // AUTHZ-DERIVE-002 AC1: a deny defeats a derived grant as it defeats a stored
@@ -123,7 +126,7 @@ internal sealed class AccessGate(
                 [resource.Id],
                 cancellationToken).ConfigureAwait(false)).Contains(resource.Id.ToString()))
         {
-            return Outstanding(permission);
+            return await OutstandingAsync(context, permission, cancellationToken).ConfigureAwait(false);
         }
 
         return await RefusedAsync(
@@ -161,7 +164,7 @@ internal sealed class AccessGate(
                 cancellationToken).ConfigureAwait(false);
         }
 
-        return Outstanding(permission);
+        return await OutstandingAsync(context, permission, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -367,11 +370,35 @@ internal sealed class AccessGate(
         IReadOnlyDictionary<Permission, IReadOnlySet<string>> derivedRows =
             await derivedBy(first.Organization, cancellationToken).ConfigureAwait(false);
 
+        // AUTHZ-GATE-005 AC1: what a consent is outstanding for is the same answer for
+        // every record on the page, so it is read once for the page and not per row.
+        IReadOnlySet<Permission> unconsented =
+            await UnconsentedAsync(context, permissions, cancellationToken).ConfigureAwait(false);
+
         return Result.Success<IReadOnlyList<Capability>>(
         [
             .. resources.Select(resource =>
-                Held(resource, conferred, derivedRows, set.Restricted)),
+                Held(resource, conferred, derivedRows, set.Restricted, unconsented)),
         ]);
+    }
+
+    private async ValueTask<IReadOnlySet<Permission>> UnconsentedAsync(
+        AccessContext context,
+        IReadOnlyList<Permission> permissions,
+        CancellationToken cancellationToken)
+    {
+        var outstanding = new HashSet<Permission>();
+
+        foreach (Permission permission in permissions)
+        {
+            if (await UnconsentedAsync(context, permission, cancellationToken).ConfigureAwait(false)
+                is not null)
+            {
+                _ = outstanding.Add(permission);
+            }
+        }
+
+        return outstanding;
     }
 
     // A derivation confers a role, and what that role allows is not what another
@@ -475,7 +502,8 @@ internal sealed class AccessGate(
         ResourceId resource,
         IReadOnlyList<PageCapability> conferred,
         IReadOnlyDictionary<Permission, IReadOnlySet<string>> derivedRows,
-        bool restricted)
+        bool restricted,
+        IReadOnlySet<Permission> unconsented)
     {
         string named = resource.ToString();
 
@@ -518,6 +546,11 @@ internal sealed class AccessGate(
                 outstanding.Add(CapabilityResidual.StepUp);
             }
 
+            if (unconsented.Contains(permission))
+            {
+                outstanding.Add(CapabilityResidual.Consent);
+            }
+
             if (outstanding.Count > 0)
             {
                 requires.Add(permission, outstanding.ToFrozenSet());
@@ -527,13 +560,55 @@ internal sealed class AccessGate(
         return new Capability(resource, can, requires.Count == 0 ? NoResiduals : requires);
     }
 
-    // AUTHZ-GATE-005: what the grants confer is still subject to the session's gates,
-    // so an action the grants allow and the gate does not is refused with what it is
-    // waiting for rather than with a denial (AUTH-STEP-001).
-    private Result Outstanding(Permission permission) =>
-        gates.OutstandingOn(permission) is ErrorCode code
-            ? Result.Failure(Error.From(code))
+    // AUTHZ-GATE-005: what the grants confer is still subject to the session's gates
+    // and to what the caller consented to, so an action the grants allow and one of
+    // those does not is refused with what it is waiting for rather than with a denial
+    // (AUTH-STEP-001, PRIV-SENS-002).
+    private async ValueTask<Result> OutstandingAsync(
+        AccessContext context,
+        Permission permission,
+        CancellationToken cancellationToken)
+    {
+        if (gates.OutstandingOn(permission) is ErrorCode code)
+        {
+            return Result.Failure(Error.From(code));
+        }
+
+        return await UnconsentedAsync(context, permission, cancellationToken).ConfigureAwait(false)
+            is ErrorCode missing
+            ? Result.Failure(Error.From(missing))
             : Result.Success();
+    }
+
+    // PRIV-SENS-002 AC1, PRIV-SENS-002a: the action is refused for the one purpose it
+    // is done for, and for no other purpose the record carries. A purpose resting on
+    // another basis is nobody's to consent to, so it asks nothing here; the written
+    // path admits no ordinary record.
+    private async ValueTask<ErrorCode?> UnconsentedAsync(
+        AccessContext context,
+        Permission permission,
+        CancellationToken cancellationToken)
+    {
+        if (context.Effective is not SubjectId subject
+            || model.PurposeOf(permission) is not string purpose
+            || model.Processing.Find(purpose) is not { Consent: ConsentKind required })
+        {
+            return null;
+        }
+
+        ConsentRecord? held = await consents
+            .OfAsync(subject, purpose, cancellationToken)
+            .ConfigureAwait(false);
+
+        return held switch
+        {
+            null or { WithdrawnAt: not null } => ErrorCodes.ConsentRequired,
+            { SupersededAt: not null } => ErrorCodes.ConsentSuperseded,
+            { Kind: ConsentKind.Ordinary } when required is ConsentKind.Written =>
+                ErrorCodes.ConsentWrittenRequired,
+            _ => null,
+        };
+    }
 
     private static Result<IReadOnlyList<Capability>> Nothing(IReadOnlyList<ResourceId> resources) =>
         Result.Success<IReadOnlyList<Capability>>(

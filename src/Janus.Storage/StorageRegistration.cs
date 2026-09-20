@@ -212,6 +212,7 @@ internal static class StorageRegistration
         services.AddScoped<IAccessEvaluator, AccessEvaluator>();
         services.AddScoped<IIndexCatalogue, IndexCatalogue>();
         services.AddScoped<ISubjectRestrictions, SubjectRestrictions>();
+        services.AddScoped<IRecordedConsents, RecordedConsents>();
         services.AddScoped<IAccessAudit, AccessAudit>();
 
         services.AddScoped<ISendLedger>(provider => new SendLedger(

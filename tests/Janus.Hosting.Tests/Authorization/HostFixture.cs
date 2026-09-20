@@ -127,11 +127,20 @@ public sealed class HostFixture : IAsyncLifetime
                 RequiresWrittenConsentForSensitive: false,
                 RequiresAssessment: false,
                 IsObjectable: false))
+            .LawfulBasis(new LawfulBasisDeclaration(
+                "agreement",
+                IsConsent: true,
+                RequiresWrittenConsentForSensitive: true,
+                RequiresAssessment: false,
+                IsObjectable: false))
+            .SensitiveCategory("financial")
             .Permission(HostPermissions.Read.ToString())
             .Permission(HostPermissions.Edit.ToString())
             .Permission(HostPermissions.Publish.ToString())
             .Permission(HostPermissions.ReadNote.ToString())
+            .Permission(HostPermissions.Recommend.ToString())
             .StepUpGate(HostPermissions.Publish.ToString(), "document:publish")
+            .ServesPurpose(HostPermissions.Recommend.ToString(), "recommendations")
             .Relationship<HostReviewer>(
                 "reviewer",
                 "workspace",
@@ -146,7 +155,13 @@ public sealed class HostFixture : IAsyncLifetime
                 .Purpose("running the host", "contract", data: ["identity"], subjects: ["members"]))
             .Resource<HostDocument>("document", type => type
                 .ContainedIn("workspace")
-                .Purpose("running the host", "contract", data: ["identity"], subjects: ["members"]))
+                .Sensitive("financial")
+                .Purpose("running the host", "contract", data: ["identity"], subjects: ["members"])
+                .Purpose(
+                    "recommendations",
+                    "agreement",
+                    data: ["history"],
+                    subjects: ["members"]))
             .Resource<HostNote>("note", type => type
                 .ContainedIn("workspace")
                 .Discloses()

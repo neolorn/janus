@@ -30,6 +30,7 @@ internal sealed class AuthorizationModel
     private readonly DeclaredProcessing _processing;
     private readonly IReadOnlyList<string> _sensitiveCategories;
     private readonly IReadOnlyDictionary<Permission, string> _stepUpGates;
+    private readonly IReadOnlyDictionary<Permission, string> _actionPurposes;
     private readonly Dictionary<ResourceType, ResourceTypeDeclaration> _types;
 
     private AuthorizationModel(
@@ -39,6 +40,7 @@ internal sealed class AuthorizationModel
         HashSet<Permission> permissions,
         HashSet<string> readingActions,
         IReadOnlyDictionary<Permission, string> stepUpGates,
+        IReadOnlyDictionary<Permission, string> actionPurposes,
         Dictionary<string, LawfulBasisDeclaration> bases,
         IReadOnlyList<string> sensitiveCategories,
         DeclaredProcessing processing)
@@ -49,6 +51,7 @@ internal sealed class AuthorizationModel
         _permissions = permissions;
         _readingActions = readingActions;
         _stepUpGates = stepUpGates;
+        _actionPurposes = actionPurposes;
         _bases = bases;
         _sensitiveCategories = sensitiveCategories;
         _processing = processing;
@@ -114,6 +117,8 @@ internal sealed class AuthorizationModel
             }
         }
 
+        var processing = DeclaredProcessing.Of(declaration);
+
         return new AuthorizationModel(
             types,
             entities,
@@ -121,9 +126,10 @@ internal sealed class AuthorizationModel
             Permissions(declaration),
             new HashSet<string>([.. Reading, .. declaration.ReadingActions], StringComparer.Ordinal),
             declaration.StepUpGates,
+            Purposes(declaration, processing),
             bases,
             declaration.SensitiveCategories,
-            DeclaredProcessing.Of(declaration));
+            processing);
     }
 
     /// <summary>
@@ -157,6 +163,19 @@ internal sealed class AuthorizationModel
     /// </remarks>
     public string? GateOf(Permission permission) =>
         _stepUpGates.TryGetValue(permission, out string? gate) ? gate : null;
+
+    /// <summary>
+    /// The purpose the action is done for, or nothing where it names none.
+    /// </summary>
+    /// <param name="permission">The permission being asked for.</param>
+    /// <returns>The purpose, or nothing.</returns>
+    /// <remarks>
+    /// Implements PRIV-SENS-002 and PRIV-SENS-002a. Consent gates purposes and not
+    /// records, so an action on a record carrying several purposes is refused only
+    /// for the one it is done for.
+    /// </remarks>
+    public string? PurposeOf(Permission permission) =>
+        _actionPurposes.TryGetValue(permission, out string? purpose) ? purpose : null;
 
     /// <summary>
     /// The declaration of a resource type, or nothing where the model declares none.
@@ -326,6 +345,28 @@ internal sealed class AuthorizationModel
         }
 
         return types;
+    }
+
+    // AUTHZ-MODEL-004: an action bound to a purpose no type declares would leave
+    // the gate asking about a consent nobody can give, so the binding is checked at
+    // startup and not at the first request that would have been refused.
+    private static IReadOnlyDictionary<Permission, string> Purposes(
+        AuthorizationDeclaration declaration,
+        DeclaredProcessing processing)
+    {
+        foreach ((Permission permission, string purpose) in declaration.ActionPurposes)
+        {
+            if (processing.Find(purpose) is null)
+            {
+                throw Refused(
+                    ErrorCodes.StartupUndeclaredTypeReference,
+                    "permission",
+                    permission.ToString(),
+                    "it is bound to the purpose " + purpose + ", which no resource type declares");
+            }
+        }
+
+        return declaration.ActionPurposes;
     }
 
     private static Dictionary<string, LawfulBasisDeclaration> Bases(

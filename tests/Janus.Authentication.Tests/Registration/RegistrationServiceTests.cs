@@ -70,6 +70,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
     private readonly AuthenticatorStoreInMemory _authenticators = new();
     private readonly OidcClientStoreInMemory _clients = new();
     private readonly DeviceStoreInMemory _devices = new();
+    private readonly ConsentsInMemory _consents = new();
     private readonly SessionStoreInMemory _live = new();
     private readonly SessionAuditInMemory _audit = new();
     private readonly MembershipLookupInMemory _memberships = new();
@@ -150,6 +151,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
                 _clock,
                 _randomness),
             new DeviceService(_devices, _configuration, _work, _events, _clock, _randomness),
+            _consents,
             _configuration,
             _work,
             _events,
@@ -720,6 +722,100 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken));
 
         Assert.Equal(Assert.Single(_directory.Created).Subject, completed.Subject);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-003 AC1, AC2: nothing is ticked for the person, so a step submitted
+    /// with every control as it was drawn records no consent, and a purpose the
+    /// person was never shown a control for records none either.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_CONS_003_AC1_NoConsentIsRecordedForAControlLeftUntickedAsync()
+    {
+        _consents.Take("marketing");
+        _consents.Take("analytics");
+
+        RegistrationSessionId session = await SecuredAsync();
+
+        Dictionary<string, bool> untouched = new(StringComparer.Ordinal)
+        {
+            ["analytics"] = false,
+            ["marketing"] = false,
+        };
+
+        RegistrationCompleted completed = Ok(await Service.AcceptTermsAsync(
+            session,
+            Terms,
+            Notice,
+            untouched,
+            Browser,
+            location: null,
+            TestContext.Current.CancellationToken));
+
+        Assert.Empty(_consents.Of(completed.Subject));
+    }
+
+    /// <summary>
+    /// PRIV-CONS-001 AC1, PRIV-CONS-002 AC1: each control the person ticked is its
+    /// own record naming its own purpose, and the mechanism says where it was given.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_CONS_002_AC1_EachTickedControlIsItsOwnRecordAsync()
+    {
+        _consents.Take("marketing");
+        _consents.Take("analytics");
+
+        RegistrationSessionId session = await SecuredAsync();
+
+        Dictionary<string, bool> ticked = new(StringComparer.Ordinal)
+        {
+            ["analytics"] = true,
+            ["marketing"] = true,
+        };
+
+        RegistrationCompleted completed = Ok(await Service.AcceptTermsAsync(
+            session,
+            Terms,
+            Notice,
+            ticked,
+            Browser,
+            location: null,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            ["analytics", "marketing"],
+            _consents.Of(completed.Subject).Select(record => record.Purpose));
+        Assert.All(
+            _consents.Of(completed.Subject),
+            record => Assert.Equal(ConsentMechanism.Registration, record.Mechanism));
+    }
+
+    /// <summary>
+    /// PRIV-CONS-001 AC1: a record names a purpose the deployment takes consent for,
+    /// so a control naming anything else is a request that should not have been made
+    /// and the step refuses rather than recording a consent to nothing.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_CONS_001_AC1_AControlForAPurposeTakingNoConsentIsRefusedAsync()
+    {
+        RegistrationSessionId session = await SecuredAsync();
+
+        Dictionary<string, bool> ticked = new(StringComparer.Ordinal)
+        {
+            ["fulfilment"] = true,
+        };
+
+        Result<RegistrationCompleted> refused = await Service.AcceptTermsAsync(
+            session,
+            Terms,
+            Notice,
+            ticked,
+            Browser,
+            location: null,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.Denied, Refused(refused));
+        Assert.Equal(0, _consents.Recorded);
     }
 
     /// <summary>
