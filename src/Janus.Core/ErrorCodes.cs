@@ -379,6 +379,14 @@ public static class ErrorCodes
         ErrorCode.Parse("auth.credential.labelinvalid");
 
     /// <summary>
+    /// The credential is not a second-factor security key, so there is nothing for an
+    /// upgrade to replace. Name a security key the credential list carries.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-002b, chapter 10 section 1.2.</remarks>
+    public static ErrorCode CredentialNotUpgradable { get; } =
+        ErrorCode.Parse("auth.credential.notupgradable");
+
+    /// <summary>
     /// The credential is reported lost and stands suspended. Cancel the report from
     /// the link a notification carried, or from any session of the account.
     /// </summary>

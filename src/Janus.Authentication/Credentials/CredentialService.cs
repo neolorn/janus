@@ -185,7 +185,8 @@ internal sealed class CredentialService(
         // with one it does, so an entry that is not such a key has nothing to upgrade.
         if (FactorCatalogue.Of(upgrading.Factor) is not { IsWebAuthn: true, IsDiscoverable: false })
         {
-            return Result.Failure<CredentialCeremony>(Error.From(ErrorCodes.FactorRejected));
+            return Result.Failure<CredentialCeremony>(
+                Error.From(ErrorCodes.CredentialNotUpgradable));
         }
 
         Factor discoverable = FactorCatalogue.Discoverable;

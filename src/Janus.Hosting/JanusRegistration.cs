@@ -130,6 +130,11 @@ public static class JanusRegistration
         // decides whether it goes.
         services.AddScoped<SmsBalance>();
         services.AddScoped<SendingService>();
+        services.AddScoped(services => new PhoneSignals(
+            services.GetService<PhoneSignalProvider>(),
+            services.GetRequiredService<IPhoneSignalAudit>(),
+            services.GetRequiredService<IUnitOfWork>(),
+            services.GetRequiredService<TimeProvider>()));
         services.AddScoped(provider => new SendingValidation(
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetService<IMessageTemplates>(),

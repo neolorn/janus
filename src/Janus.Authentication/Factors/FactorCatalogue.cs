@@ -31,12 +31,15 @@ internal static class FactorCatalogue
                 discoverable: true),
             [Factor.EmailLink] = AtSignIn(AssuranceLevel.Aal1, IdentifierKind.Email),
             [Factor.EmailCode] = AtSignIn(AssuranceLevel.Aal1, IdentifierKind.Email),
-            [Factor.PhoneLink] = AtSignIn(AssuranceLevel.Aal1, IdentifierKind.Phone),
+            [Factor.PhoneLink] = AtSignIn(
+                AssuranceLevel.Aal1,
+                IdentifierKind.Phone,
+                restricted: true),
             [Factor.Google] = Primary(AssuranceLevel.Delegated, phishingResistant: false),
             [Factor.Apple] = Primary(AssuranceLevel.Delegated, phishingResistant: false),
             [Factor.Totp] = Second(phishingResistant: false),
             [Factor.SecurityKey] = Second(phishingResistant: true, webAuthn: true),
-            [Factor.PhoneCode] = Second(phishingResistant: false),
+            [Factor.PhoneCode] = Second(phishingResistant: false, restricted: true),
             [Factor.RecoveryCodes] = Second(phishingResistant: false, singleUse: true),
             [Factor.BreakGlass] = Primary(AssuranceLevel.Aal1, phishingResistant: false),
         }.ToFrozenDictionary();
@@ -106,12 +109,16 @@ internal static class FactorCatalogue
             webAuthn,
             discoverable,
             Channel: null,
+            Restricted: false,
             SingleUse: false);
 
     // An entry whose contribution is to a sign-in and to nothing afterwards: the
     // mailbox or the number behind it is also the recovery channel, so counting it
     // later would make one compromise both steps (AUTH-FACT-003).
-    private static FactorProperties AtSignIn(AssuranceLevel level, IdentifierKind channel) =>
+    private static FactorProperties AtSignIn(
+        AssuranceLevel level,
+        IdentifierKind channel,
+        bool restricted = false) =>
         new(
             CanBePrimary: true,
             CanBeSecondFactor: false,
@@ -122,12 +129,14 @@ internal static class FactorCatalogue
             IsWebAuthn: false,
             IsDiscoverable: false,
             channel,
+            restricted,
             SingleUse: false);
 
     // An entry that is never a first step and lifts a sign-in beside one.
     private static FactorProperties Second(
         bool phishingResistant,
         bool webAuthn = false,
+        bool restricted = false,
         bool singleUse = false) =>
         new(
             CanBePrimary: false,
@@ -139,5 +148,6 @@ internal static class FactorCatalogue
             webAuthn,
             IsDiscoverable: false,
             Channel: null,
+            restricted,
             singleUse);
 }

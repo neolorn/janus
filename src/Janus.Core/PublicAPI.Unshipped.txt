@@ -1119,6 +1119,17 @@ Janus.Core.PhoneNumber
 Janus.Core.PhoneNumber.Equals(Janus.Core.PhoneNumber other) -> bool
 Janus.Core.PhoneNumber.PhoneNumber() -> void
 Janus.Core.PhoneNumber.Value.get -> string!
+Janus.Core.PhoneSignal
+Janus.Core.PhoneSignal.Clear = 1 -> Janus.Core.PhoneSignal
+Janus.Core.PhoneSignal.None = 0 -> Janus.Core.PhoneSignal
+Janus.Core.PhoneSignal.Risk = 2 -> Janus.Core.PhoneSignal
+Janus.Core.PhoneSignalProvider
+Janus.Core.PhoneSignalProvider.<Clone>$() -> Janus.Core.PhoneSignalProvider!
+Janus.Core.PhoneSignalProvider.Deconstruct(out System.Func<string!, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<Janus.Core.PhoneSignal>>! Signal) -> void
+Janus.Core.PhoneSignalProvider.Equals(Janus.Core.PhoneSignalProvider? other) -> bool
+Janus.Core.PhoneSignalProvider.PhoneSignalProvider(System.Func<string!, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<Janus.Core.PhoneSignal>>! Signal) -> void
+Janus.Core.PhoneSignalProvider.Signal.get -> System.Func<string!, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<Janus.Core.PhoneSignal>>!
+Janus.Core.PhoneSignalProvider.Signal.init -> void
 Janus.Core.Policies
 Janus.Core.Policy
 Janus.Core.Policy.<Clone>$() -> Janus.Core.Policy!
@@ -1971,6 +1982,9 @@ override Janus.Core.Permission.GetHashCode() -> int
 override Janus.Core.Permission.ToString() -> string!
 override Janus.Core.PhoneNumber.GetHashCode() -> int
 override Janus.Core.PhoneNumber.ToString() -> string!
+override Janus.Core.PhoneSignalProvider.Equals(object? obj) -> bool
+override Janus.Core.PhoneSignalProvider.GetHashCode() -> int
+override Janus.Core.PhoneSignalProvider.ToString() -> string!
 override Janus.Core.Policy.Equals(object? obj) -> bool
 override Janus.Core.Policy.GetHashCode() -> int
 override Janus.Core.Policy.ToString() -> string!
@@ -2360,6 +2374,7 @@ static Janus.Core.ErrorCodes.ConfigurationValueNotAllowed.get -> Janus.Core.Erro
 static Janus.Core.ErrorCodes.CredentialLabelInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.CredentialLastSecondFactor.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.CredentialNotFound.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.CredentialNotUpgradable.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.CredentialSuspended.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.Denied.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.DerivationSourcesMissing.get -> Janus.Core.ErrorCode
@@ -2536,6 +2551,8 @@ static Janus.Core.Permissions.TakedownExecute.get -> Janus.Core.Permission
 static Janus.Core.PhoneNumber.TryParse(string! entered, out Janus.Core.PhoneNumber number) -> bool
 static Janus.Core.PhoneNumber.operator !=(Janus.Core.PhoneNumber left, Janus.Core.PhoneNumber right) -> bool
 static Janus.Core.PhoneNumber.operator ==(Janus.Core.PhoneNumber left, Janus.Core.PhoneNumber right) -> bool
+static Janus.Core.PhoneSignalProvider.operator !=(Janus.Core.PhoneSignalProvider? left, Janus.Core.PhoneSignalProvider? right) -> bool
+static Janus.Core.PhoneSignalProvider.operator ==(Janus.Core.PhoneSignalProvider? left, Janus.Core.PhoneSignalProvider? right) -> bool
 static Janus.Core.Policies.AdministrativeOrganization.get -> Janus.Core.Policy!
 static Janus.Core.Policies.SystemDefault.get -> Janus.Core.Policy!
 static Janus.Core.Policy.operator !=(Janus.Core.Policy? left, Janus.Core.Policy? right) -> bool

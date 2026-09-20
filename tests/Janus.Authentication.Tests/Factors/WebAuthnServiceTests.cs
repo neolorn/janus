@@ -48,8 +48,48 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-FACT-002b AC1: a passkey ceremony asks for a discoverable credential and
-    /// a security-key ceremony does not, both under the identifier in force.
+    /// AUTH-FACT-002b AC1: a passkey ceremony asks for a credential the authenticator
+    /// keeps and a security-key ceremony asks for one it does not, which is what the
+    /// two dialogs turn into their resident-key values (`18` FE-SEC-001).
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC1_OnlyThePasskeyCeremonyIsDiscoverableAsync()
+    {
+        WebAuthnCeremony passkey = Value(await Service.BeginAsync(
+            Factor.Passkey,
+            TestContext.Current.CancellationToken));
+        WebAuthnCeremony key = Value(await Service.BeginAsync(
+            Factor.SecurityKey,
+            TestContext.Current.CancellationToken));
+
+        Assert.True(passkey.DiscoverableCredential);
+        Assert.False(key.DiscoverableCredential);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC1: neither ceremony admits a credential the person did not
+    /// prove themselves to, so neither dialog can ask for less than verification.
+    /// </summary>
+    /// <param name="kind">The kind being created.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData(Factor.Passkey)]
+    [InlineData(Factor.SecurityKey)]
+    public async Task AUTH_FACT_002b_AC1_NeitherKindIsCreatedWithoutUserVerificationAsync(
+        Factor kind) =>
+        Assert.Equal(
+            ErrorCodes.WebAuthnUserVerificationRequired,
+            Refusal(await Service.CompleteAsync(
+                Subject(),
+                kind,
+                Label(),
+                Registration() with { UserVerified = false },
+                TestContext.Current.CancellationToken)));
+
+    /// <summary>
+    /// AUTH-FACT-014: both ceremonies run under the identifier in force and over the
+    /// algorithms it admits, and no two carry the same challenge.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -63,9 +103,8 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken));
 
         Assert.Equal("example.com", passkey.RelyingPartyId);
+        Assert.Equal("example.com", key.RelyingPartyId);
         Assert.Equal([-8, -7, -257], passkey.Algorithms);
-        Assert.True(passkey.DiscoverableCredential);
-        Assert.False(key.DiscoverableCredential);
         Assert.NotEqual(passkey.Challenge, key.Challenge);
     }
 
@@ -407,7 +446,8 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-FACT-014: a credential a ceremony never created is not one to upgrade.
+    /// AUTH-FACT-014: a credential a ceremony never created is not one to upgrade,
+    /// and one of another account answers as one that does not exist.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -421,7 +461,7 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken));
 
         Assert.Equal(
-            ErrorCodes.FactorRejected,
+            ErrorCodes.CredentialNotFound,
             Refusal(await Service.UpgradeAsync(
                 Subject(),
                 key,

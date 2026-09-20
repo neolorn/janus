@@ -313,6 +313,12 @@ internal sealed class Deployment : IAsyncDisposable
 
         _ = services.AddScoped<SmsBalance>();
         _ = services.AddScoped<SendingService>();
+        _ = services.AddSingleton<IPhoneSignalAudit, PhoneSignalAuditInMemory>();
+        _ = services.AddScoped(provider => new PhoneSignals(
+            provider.GetService<PhoneSignalProvider>(),
+            provider.GetRequiredService<IPhoneSignalAudit>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>()));
         _ = services.AddScoped<NonExistenceNotice>();
         _ = services.AddScoped<ThrottleService>();
         _ = services.AddSingleton<IThrottleLedger, ThrottleLedgerInMemory>();

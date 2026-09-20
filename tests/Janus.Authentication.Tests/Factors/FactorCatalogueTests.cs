@@ -45,6 +45,20 @@ public sealed class FactorCatalogueTests
             BranchingOnAFactor());
 
     /// <summary>
+    /// AUTH-FACT-002b AC5: the entries the standard treats as restricted are the two
+    /// a text message carries and no others, which is the fact every list naming one
+    /// of them is flagged from (`18` FE-SEC-001).
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_002b_AC5_TheRestrictedEntriesAreTheOnesCarriedByText() =>
+        Assert.Equal(
+            [Factor.PhoneLink, Factor.PhoneCode],
+            FactorCatalogue.Entries
+                .Where(entry => entry.Value.Restricted)
+                .Select(entry => entry.Key)
+                .Order());
+
+    /// <summary>
     /// AUTH-FACT-004 AC1 and AUTH-FACT-002 AC4: a channel verification code is no
     /// entry of the catalogue, so no sign-in path can be handed one: the only thing
     /// a sign-in takes is an entry, and none of them verifies a channel.
@@ -70,6 +84,7 @@ public sealed class FactorCatalogueTests
             IsWebAuthn: false,
             IsDiscoverable: false,
             Channel: null,
+            Restricted: false,
             SingleUse: false);
 
         Assert.Null(Assurance.Reached([code]));

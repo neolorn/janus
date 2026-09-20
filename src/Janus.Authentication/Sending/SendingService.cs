@@ -21,14 +21,15 @@ namespace Janus.Authentication.Sending;
 /// <param name="mail">What carries a mail.</param>
 /// <param name="sms">What carries a text message.</param>
 /// <param name="suppliers">The host-registered key suppliers.</param>
+/// <param name="signals">What is known about a number a restricted factor goes to.</param>
 /// <param name="balance">What the gateway account stands at.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="events">Where the emitted events go.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where a correlation reference is drawn from.</param>
 /// <remarks>
-/// Implements AUTH-ABUSE-004, AUTH-ABUSE-002, AUTH-ABUSE-006, INT-SMS-001,
-/// INT-GEN-005 and CONV-CONTENT-001. The refusal a restriction produces is the same
+/// Implements AUTH-ABUSE-004, AUTH-ABUSE-002, AUTH-ABUSE-006, AUTH-FACT-002b,
+/// INT-SMS-001, INT-GEN-005 and CONV-CONTENT-001. The refusal a restriction produces is the same
 /// whether or not the destination belongs to an account: nothing on this path reads
 /// the account to decide it.
 /// </remarks>
@@ -39,6 +40,7 @@ internal sealed class SendingService(
     IMailTransport mail,
     ISmsTransport sms,
     RestrictionKeySuppliers suppliers,
+    PhoneSignals signals,
     SmsBalance balance,
     IUnitOfWork work,
     IEvents events,
@@ -98,6 +100,11 @@ internal sealed class SendingService(
                     "retryAt",
                     JsonSerializer.SerializeToElement(retryAt)));
         }
+
+        // AUTH-FACT-002b: the restricted entries ride a number, so what the deployment
+        // knows about the number is considered here, once the restrictions have let the
+        // send through and before a transport takes it.
+        await signals.ConsiderAsync(request, cancellationToken).ConfigureAwait(false);
 
         SendReference reference = (await CarryAsync(request, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Held<SendReference>(error, ref failure));

@@ -144,9 +144,15 @@ internal sealed class WebAuthnService(
         Authenticator? upgrading = await authenticators.FindAsync(id, cancellationToken)
             .ConfigureAwait(false);
 
-        if (upgrading is null || upgrading.Subject != subject || !IsSecondFactorKey(upgrading))
+        if (upgrading is null || upgrading.Subject != subject)
         {
-            return Result.Failure<AuthenticatorId>(Error.From(ErrorCodes.FactorRejected));
+            return Result.Failure<AuthenticatorId>(Error.From(ErrorCodes.CredentialNotFound));
+        }
+
+        if (!IsSecondFactorKey(upgrading))
+        {
+            return Result.Failure<AuthenticatorId>(
+                Error.From(ErrorCodes.CredentialNotUpgradable));
         }
 
         Factor discoverable = FactorCatalogue.Discoverable;

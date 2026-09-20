@@ -15,7 +15,8 @@ namespace Janus.Authentication.Tests.Sending;
 /// The one path every message takes: what the named restrictions decide, what a
 /// refusal says, what a send counts against, and what a transport that would not
 /// take it leaves behind (AUTH-ABUSE-002, AUTH-ABUSE-004, AUTH-ABUSE-006,
-/// INT-SMS-001, INT-SMS-004, INT-GEN-005, OPS-ALERT-003).
+/// INT-SMS-001, INT-SMS-004, INT-GEN-005, OPS-ALERT-003), and what is considered
+/// about a number before a restricted factor goes to it (AUTH-FACT-002b).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class SendingServiceTests : IAsyncDisposable
@@ -32,12 +33,15 @@ public sealed class SendingServiceTests : IAsyncDisposable
     private readonly MailTransportInMemory _mail = new();
     private readonly SmsTransportInMemory _sms = new();
     private readonly SmsBalanceLedgerInMemory _balances = new();
+    private readonly PhoneSignalAuditInMemory _signals = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
 
     private RestrictionKeySuppliers _suppliers = RestrictionKeySuppliers.None;
+
+    private PhoneSignalProvider? _provider;
 
     /// <summary>
     /// A deployment that has named the one key with no default.
@@ -52,6 +56,7 @@ public sealed class SendingServiceTests : IAsyncDisposable
             _mail,
             _sms,
             _suppliers,
+            new PhoneSignals(_provider, _signals, _work, _clock),
             new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
             _work,
             _events,
@@ -105,6 +110,65 @@ public sealed class SendingServiceTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.RestrictionExceeded, Refusal(second));
         Assert.Equal(Noon + TimeSpan.FromSeconds(60), RetryAt(second));
         Assert.Single(_mail.Taken);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC6: what the deployment can learn about the number is asked for
+    /// before a restricted factor is carried to it, and the answer is written down
+    /// against the entry it was asked for.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC6_TheSignalIsConsideredBeforeARestrictedFactorGoesAsync()
+    {
+        var subject = new SubjectId(Guid.NewGuid());
+        var asked = new List<string>();
+
+        _provider = new PhoneSignalProvider((number, _) =>
+        {
+            asked.Add(number);
+
+            Assert.Empty(_sms.Taken);
+
+            return ValueTask.FromResult(PhoneSignal.Risk);
+        });
+
+        _ = await SentAsync(Link(subject));
+
+        Assert.Equal([Phone.Value], asked);
+        Assert.Equal([(Factor.PhoneLink, PhoneSignal.Risk, subject)], _signals.Records);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC6: where the deployment registered nothing to answer, the
+    /// absence is what the record says and the send goes on.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC6_AnAbsentProviderIsItselfRecordedAsync()
+    {
+        _ = await SentAsync(Link());
+
+        Assert.Single(_sms.Taken);
+        Assert.Equal([(Factor.PhoneLink, (PhoneSignal?)null, (SubjectId?)null)], _signals.Records);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC6: nothing is asked about a number a message that is no factor
+    /// goes to, and nothing about an address, so a verification code and a notice
+    /// leave the provider alone.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC6_NothingIsConsideredForAMessageThatIsNoFactorAsync()
+    {
+        _provider = new PhoneSignalProvider((_, _) =>
+            throw new Xunit.Sdk.XunitException("The provider was asked about a message that is no factor."));
+
+        _ = await SentAsync(Texted());
+        _ = await SentAsync(Mailed());
+
+        Assert.Empty(_signals.Records);
     }
 
     /// <summary>
@@ -450,6 +514,17 @@ public sealed class SendingServiceTests : IAsyncDisposable
             RestrictionPurpose.Verification,
             "198.51.100.7",
             "en");
+
+    private static SendRequest Link(SubjectId? subject = null) =>
+        new(
+            SendDestination.Of(Phone),
+            MessageKind.SignInLink,
+            RestrictionPurpose.SignIn,
+            "198.51.100.7",
+            "en")
+        {
+            Subject = subject,
+        };
 
     private static SendRequest Mailed() =>
         new(

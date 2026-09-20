@@ -73,6 +73,7 @@ internal static class ApiStatus
         [ErrorCodes.GroupCycle] = StatusCodes.Status409Conflict,
         [ErrorCodes.LossReportPending] = StatusCodes.Status409Conflict,
         [ErrorCodes.LossReportNotPermitted] = StatusCodes.Status409Conflict,
+        [ErrorCodes.CredentialNotUpgradable] = StatusCodes.Status409Conflict,
 
         // Well formed, and refused on what it says.
         [ErrorCodes.AffirmationRequired] = StatusCodes.Status422UnprocessableEntity,

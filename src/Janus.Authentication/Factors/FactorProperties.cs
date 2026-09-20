@@ -34,6 +34,11 @@ namespace Janus.Authentication.Factors;
 /// identifier is what makes the entry available, and nothing else does. Nothing
 /// where the entry rides no identifier.
 /// </param>
+/// <param name="Restricted">
+/// Whether the channel the entry rides is one the standard treats as restricted, so
+/// that the limitation is shown before it is enrolled and what the deployment can
+/// learn about the number is considered before it is used (AUTH-FACT-002b).
+/// </param>
 /// <param name="SingleUse">
 /// Whether presenting it spends it. What an account can reach counts none of these:
 /// a dwindling set of one-use secrets would be spent at every gate that read it as
@@ -55,4 +60,5 @@ internal sealed record FactorProperties(
     bool IsWebAuthn,
     bool IsDiscoverable,
     IdentifierKind? Channel,
+    bool Restricted,
     bool SingleUse);

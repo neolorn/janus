@@ -223,6 +223,7 @@ internal static class StorageRegistration
         services.AddScoped<IAlertLedger, AlertLedger>();
         services.AddScoped<ISendAudit, SendAudit>();
         services.AddScoped<IBotDefenceAudit, BotDefenceAudit>();
+        services.AddScoped<IPhoneSignalAudit, PhoneSignalAudit>();
 
         return services;
     }

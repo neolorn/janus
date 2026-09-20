@@ -10,6 +10,15 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A deployment can now register a callback that says what its gateway knows about a
+  phone number. Before a sign-in link or a second-step code goes to a number, the
+  callback is asked and the answer is written to the audit trail against the factor it
+  was asked for; where no callback is registered the absence is recorded instead. The
+  send goes either way.
+- A second-factor security key offered for upgrade when it is not one now answers with
+  its own code rather than the one a refused factor answers with, and a credential of
+  another account answers as one that does not exist.
+
 - A deployment that cannot reach its secrets manager now stops as it starts, with the
   code that says which of the two values was not there, rather than failing at the
   first request that would have read a person's field. A fingerprint key shorter than

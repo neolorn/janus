@@ -489,12 +489,12 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-FACT-002b: the upgrade replaces a second-factor security key and refuses
-    /// anything else, so a passkey has nothing to be upgraded from.
+    /// AUTH-FACT-002b AC3: the upgrade replaces a second-factor security key and
+    /// refuses anything else, so a passkey has nothing to be upgraded from.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_FACT_002b_OnlyASecurityKeyIsUpgradedAsync()
+    public async Task AUTH_FACT_002b_AC3_OnlyASecurityKeyIsUpgradedAsync()
     {
         (SubjectId subject, SessionId session) = await SignedInAsync();
 
@@ -503,11 +503,77 @@ public sealed class CredentialServiceTests : IAsyncDisposable
         await PresentedAsync(subject, session);
 
         Assert.Equal(
-            ErrorCodes.FactorRejected,
+            ErrorCodes.CredentialNotUpgradable,
             Refused(await Service.UpgradeKeyAsync(
                 Authority(subject, session),
                 key.Credential,
                 TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC3: the upgrade completes a passkey registration on the same
+    /// hardware; the passkey is listed and the entry it came from is retired.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC3_AnUpgradedSecurityKeyIsListedAndTheEntryRetiresAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+
+        EnrolledCredential key = await SecurityKeyAsync(subject, session);
+
+        await PresentedAsync(subject, session);
+
+        CredentialCeremony ceremony = Value(await Service.UpgradeKeyAsync(
+            Authority(subject, session),
+            key.Credential,
+            TestContext.Current.CancellationToken));
+
+        Assert.True(ceremony.DiscoverableCredential);
+
+        EnrolledCredential upgraded = Value(await Service.CompleteKeyAsync(
+            Authority(subject, session),
+            Attestation(ceremony.Challenge, synced: true),
+            "This phone",
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(Factor.Passkey, Held(upgraded.Credential).Factor);
+        Assert.Equal(AuthenticatorState.Active, Held(upgraded.Credential).State);
+        Assert.Equal(AuthenticatorState.Invalidated, Held(key.Credential).State);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC3: an upgrade whose ceremony is refused leaves the account as
+    /// it was, so the security key is still the account's and still a second step.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC3_AFailedUpgradeChangesNothingAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+
+        EnrolledCredential key = await SecurityKeyAsync(subject, session);
+
+        await PresentedAsync(subject, session);
+
+        CredentialCeremony ceremony = Value(await Service.UpgradeKeyAsync(
+            Authority(subject, session),
+            key.Credential,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            Refused(await Service.CompleteKeyAsync(
+                Authority(subject, session),
+                Attestation(OpaqueToken.Draw(_randomness).Value, synced: true),
+                "This phone",
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.NotEqual(ceremony.Challenge, string.Empty);
+        Assert.Equal(AuthenticatorState.Active, Held(key.Credential).State);
+        Assert.Single(_authenticators.All);
     }
 
     private CredentialService Service =>
@@ -608,6 +674,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             _mail,
             _sms,
             RestrictionKeySuppliers.None,
+            Considered.Nothing(_work, _clock),
             new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
             _work,
             _events,
@@ -674,6 +741,26 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             Authority(subject, session),
             Attestation(ceremony.Challenge, synced),
             "This phone",
+            Source,
+            TestContext.Current.CancellationToken));
+    }
+
+    private Authenticator Held(AuthenticatorId credential) =>
+        _authenticators.All.Single(held => held.Id == credential);
+
+    private async ValueTask<EnrolledCredential> SecurityKeyAsync(
+        SubjectId subject,
+        SessionId session)
+    {
+        CredentialCeremony ceremony = Value(await Service.BeginKeyAsync(
+            Authority(subject, session),
+            Factor.SecurityKey,
+            TestContext.Current.CancellationToken));
+
+        return Value(await Service.CompleteKeyAsync(
+            Authority(subject, session),
+            Attestation(ceremony.Challenge, synced: false),
+            "This key",
             Source,
             TestContext.Current.CancellationToken));
     }
