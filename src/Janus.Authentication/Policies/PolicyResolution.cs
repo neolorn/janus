@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -13,10 +14,12 @@ namespace Janus.Authentication.Policies;
 /// </summary>
 /// <param name="memberships">Which organizations a principal belongs to.</param>
 /// <param name="configuration">Where the system policy and the overrides are read from.</param>
-/// <remarks>Implements AUTH-PRIN-002 and AUTH-STEP-002a.</remarks>
+/// <param name="raises">Where the requirements a policy has raised are kept.</param>
+/// <remarks>Implements AUTH-PRIN-002, AUTH-STEP-002a and AUTH-FACT-017.</remarks>
 internal sealed class PolicyResolution(
     IMembershipLookup memberships,
-    IConfigurationStore configuration)
+    IConfigurationStore configuration,
+    IPolicyRaiseStore raises)
 {
     /// <summary>
     /// The policy in force for a principal.
@@ -72,6 +75,73 @@ internal sealed class PolicyResolution(
 
         return Result.Success(organizations ?? system);
     }
+
+    /// <summary>
+    /// What the policies in force over a principal have raised and the principal may
+    /// not yet meet.
+    /// </summary>
+    /// <param name="subject">The principal.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The raises of the deployment's own policy and of every organization the
+    /// principal belongs to.
+    /// </returns>
+    public async ValueTask<IReadOnlyList<PolicyRaise>> RaisesAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        List<PolicyRaise> raised =
+            [.. await raises.OfAsync(null, cancellationToken).ConfigureAwait(false)];
+
+        foreach (OrganizationId organization in
+            await memberships.OfAsync(subject, cancellationToken).ConfigureAwait(false))
+        {
+            raised.AddRange(
+                await raises.OfAsync(organization, cancellationToken).ConfigureAwait(false));
+        }
+
+        return raised;
+    }
+
+    /// <summary>
+    /// Records what a change to one scope's policy raised. A field the change lowers
+    /// or restores stops being raised, because a run-up towards a requirement that no
+    /// longer stands would hold a sign-in for nothing (AUTH-FACT-017 AC4).
+    /// </summary>
+    /// <param name="organization">
+    /// Whose policy changed, or nothing for the deployment's own.
+    /// </param>
+    /// <param name="before">What was in force.</param>
+    /// <param name="after">What is in force now.</param>
+    /// <param name="at">When the change was made.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>What the change raised, which may be nothing.</returns>
+    /// <exception cref="ArgumentNullException">A policy is absent.</exception>
+    public async ValueTask<IReadOnlyList<PolicyRaise>> RaisedAsync(
+        OrganizationId? organization,
+        Policy before,
+        Policy after,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<PolicyRaise> raised = PolicyGrace.Raised(before, after, at);
+
+        foreach (PolicyField field in Fields)
+        {
+            if (!raised.Any(raise => raise.Field == field))
+            {
+                await raises.RemoveAsync(organization, field, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        await raises.RecordAsync(organization, raised, cancellationToken).ConfigureAwait(false);
+
+        return raised;
+    }
+
+    private static readonly PolicyField[] Fields =
+        [PolicyField.RequiredAssurance, PolicyField.CredentialRedundancy];
 
     private static TValue Held<TValue>(Error error, ref Error? failure)
     {

@@ -34,4 +34,13 @@ internal interface IRecoveryCodeStore
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of recording it.</returns>
     ValueTask RecordAsync(RecoveryCodeSet set, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Removes the account's set, which invalidating the last second factor does: the
+    /// codes have nothing left to stand in for (AUTH-RECOV-007).
+    /// </summary>
+    /// <param name="subject">Whose set.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of removing it.</returns>
+    ValueTask RemoveAsync(SubjectId subject, CancellationToken cancellationToken);
 }

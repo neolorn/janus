@@ -32,6 +32,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
     private readonly SessionStoreInMemory _sessions = new();
     private readonly SessionAuditInMemory _audit = new();
     private readonly MembershipLookupInMemory _memberships = new();
+    private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly AccessGateInMemory _gate = new();
     private readonly UnitOfWorkInMemory _work = new();
@@ -42,7 +43,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
         new(
             _sessions,
             _audit,
-            new PolicyResolution(_memberships, _configuration),
+            new PolicyResolution(_memberships, _configuration, _raises),
             _configuration,
             _gate,
             _work,

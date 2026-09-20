@@ -16,6 +16,21 @@ namespace Janus.Core;
 public interface ISessions
 {
     /// <summary>
+    /// What the session the request arrived on says about itself.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="session">The session the request arrived on.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The session's assurance and expiry, or the failure where it is not the
+    /// account's or no longer lives.
+    /// </returns>
+    ValueTask<Result<SessionDetail>> ReadAsync(
+        AccessContext context,
+        SessionId session,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// The account's live sessions, with the one asking marked.
     /// </summary>
     /// <param name="context">Who is asking.</param>

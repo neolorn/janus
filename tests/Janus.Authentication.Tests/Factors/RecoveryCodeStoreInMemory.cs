@@ -39,4 +39,12 @@ internal sealed class RecoveryCodeStoreInMemory : IRecoveryCodeStore
 
         return ValueTask.CompletedTask;
     }
+
+    /// <inheritdoc/>
+    public ValueTask RemoveAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        _ = _held.Remove(subject);
+
+        return ValueTask.CompletedTask;
+    }
 }

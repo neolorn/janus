@@ -65,6 +65,7 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
             _mail,
             _sms,
             RestrictionKeySuppliers.None,
+            Considered.Nothing(_work, _clock),
             new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
             _work,
             _events,

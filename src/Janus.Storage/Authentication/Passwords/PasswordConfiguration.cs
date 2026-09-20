@@ -36,6 +36,8 @@ internal sealed class PasswordConfiguration : IEntityTypeConfiguration<PasswordR
 
         builder.Property(password => password.SetAt).HasColumnName("set_at");
 
+        builder.Property(password => password.ChangeRequired).HasColumnName("change_required");
+
         builder.HasOne<AccountRecord>()
             .WithOne()
             .HasForeignKey<PasswordRecord>(password => password.Subject)

@@ -228,7 +228,10 @@ internal sealed class PasswordService(
             await work.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        return Result.Success(new PasswordVerification(matches));
+        // AUTH-RECOV-007a: an invalidation that left the account on this password
+        // alone marked it below the floor it now has to meet, and the mark stands
+        // until a new password clears it.
+        return Result.Success(new PasswordVerification(matches || held.ChangeRequired));
     }
 
     // Argon2id costs memory by iterations; a hash computed for less work than the

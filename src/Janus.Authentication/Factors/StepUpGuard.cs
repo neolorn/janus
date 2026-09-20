@@ -38,10 +38,37 @@ internal sealed class StepUpGuard(
     /// <param name="action">Which action.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Nothing where it has, and the refusal where it has not.</returns>
-    public async ValueTask<Error?> PassedAsync(
+    public ValueTask<Error?> PassedAsync(
         SubjectId subject,
         SessionId session,
         StepUpAction action,
+        CancellationToken cancellationToken) =>
+        JudgedAsync(subject, session, action, enrolling: null, cancellationToken);
+
+    /// <summary>
+    /// Whether a session has proved what enrolling a credential costs, which is the
+    /// lower of what the account can reach and what the credential itself would
+    /// contribute (AUTH-STEP-007).
+    /// </summary>
+    /// <param name="subject">Whose account the enrolment is on.</param>
+    /// <param name="session">The session the request arrived on.</param>
+    /// <param name="action">Which action, which is enrolment or the upgrade of one.</param>
+    /// <param name="enrolling">The catalogue entry being created.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Nothing where it has, and the refusal where it has not.</returns>
+    public ValueTask<Error?> PassedToEnrolAsync(
+        SubjectId subject,
+        SessionId session,
+        StepUpAction action,
+        Factor enrolling,
+        CancellationToken cancellationToken) =>
+        JudgedAsync(subject, session, action, enrolling, cancellationToken);
+
+    private async ValueTask<Error?> JudgedAsync(
+        SubjectId subject,
+        SessionId session,
+        StepUpAction action,
+        Factor? enrolling,
         CancellationToken cancellationToken)
     {
         Session? live = await sessions.FindAsync(session, cancellationToken).ConfigureAwait(false);
@@ -73,11 +100,12 @@ internal sealed class StepUpGuard(
         Password? password = await passwords.FindAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        StepUpChallenge challenge = StepUp.On(
-            live,
-            gate,
-            HeldFactors.Of(enrolled, password is not null),
-            time.GetUtcNow());
+        var held = HeldFactors.Of(enrolled, password is not null);
+        DateTimeOffset now = time.GetUtcNow();
+
+        StepUpChallenge challenge = enrolling is Factor creating
+            ? StepUp.ToEnrol(live, gate, held, creating, now)
+            : StepUp.On(live, gate, held, now);
 
         return challenge.Outcome is StepUpOutcome.Satisfied
             ? null

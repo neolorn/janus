@@ -33,6 +33,7 @@ internal static class ApiStatus
         [ErrorCodes.StartupUndeclaredTypeReference] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupUndeclaredPermission] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupUndeclaredDerivationReference] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupKeyUnavailable] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupRelyingPartyId] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupLabelLimit] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.PolicyUnregistered] = StatusCodes.Status500InternalServerError,
@@ -51,6 +52,7 @@ internal static class ApiStatus
         [ErrorCodes.Restricted] = StatusCodes.Status403Forbidden,
         [ErrorCodes.ConfigurationKeyProtected] = StatusCodes.Status403Forbidden,
         [ErrorCodes.ConfigurationChangeStepUpRequired] = StatusCodes.Status403Forbidden,
+        [ErrorCodes.PolicyGraceExpired] = StatusCodes.Status403Forbidden,
 
         // Not found, and the concealed denial that answers the same way.
         [ErrorCodes.CredentialNotFound] = StatusCodes.Status404NotFound,
@@ -69,8 +71,9 @@ internal static class ApiStatus
         [ErrorCodes.GrantDuplicate] = StatusCodes.Status409Conflict,
         [ErrorCodes.GrantExpired] = StatusCodes.Status409Conflict,
         [ErrorCodes.GroupCycle] = StatusCodes.Status409Conflict,
-        [ErrorCodes.DeviceVerificationRequired] = StatusCodes.Status409Conflict,
-        [ErrorCodes.PolicyGraceExpired] = StatusCodes.Status409Conflict,
+        [ErrorCodes.LossReportPending] = StatusCodes.Status409Conflict,
+        [ErrorCodes.LossReportNotPermitted] = StatusCodes.Status409Conflict,
+        [ErrorCodes.CredentialNotUpgradable] = StatusCodes.Status409Conflict,
 
         // Well formed, and refused on what it says.
         [ErrorCodes.AffirmationRequired] = StatusCodes.Status422UnprocessableEntity,
@@ -93,6 +96,13 @@ internal static class ApiStatus
         [ErrorCodes.FactorNotPermitted] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.FactorRejected] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.FactorRequired] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.CredentialSuspended] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.EnrolmentTokenInvalid] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.RecoveryTokenInvalid] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.RecoveryTokenExpired] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.RecoveryReasonRequired] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.RecoveryChannelNotOnAccount] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.RecoverySelfApproval] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.PasswordBlocklisted] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.PasswordTooShort] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ScreeningUnavailable] = StatusCodes.Status422UnprocessableEntity,
@@ -110,6 +120,12 @@ internal static class ApiStatus
         [ErrorCodes.CallbackRejected] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.EndpointInsecure] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.SmsBalanceFloor] = StatusCodes.Status422UnprocessableEntity,
+
+        // What 10 section 1.2 calls a status and not a refusal: the removal is
+        // accepted and the window it takes is what the answer carries, and the
+        // held sign-in is answered with what it still needs.
+        [ErrorCodes.CredentialLastSecondFactor] = StatusCodes.Status202Accepted,
+        [ErrorCodes.DeviceVerificationRequired] = StatusCodes.Status200OK,
 
         // Throttled, which carries the interval and not the reason. A send a
         // restriction refused is the same answer: 09 gives it 429 wherever it names

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -25,6 +26,36 @@ internal interface IAccountDirectory
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The state, or nothing where no account bears the subject.</returns>
     ValueTask<AccountState?> StateAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Who suspended an account, where it is suspended: what a self-deactivated
+    /// account is reversed by is not what an administratively suspended one is
+    /// (IDN-LIFE-013).
+    /// </summary>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Who suspended it, or nothing where it is not suspended.</returns>
+    ValueTask<SuspensionOrigin?> SuspendedByAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Stands a self-deactivated account back up, which completing recovery does
+    /// (D-140).
+    /// </summary>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of standing it up.</returns>
+    ValueTask ReinstateAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// When an account came into being, which decides whether a raised requirement
+    /// gives it a run-up or holds it at once (AUTH-FACT-017).
+    /// </summary>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The instant, or nothing where no account bears the subject.</returns>
+    ValueTask<DateTimeOffset?> CreatedAtAsync(SubjectId subject, CancellationToken cancellationToken);
 
     /// <summary>
     /// One account's profile as it stands.

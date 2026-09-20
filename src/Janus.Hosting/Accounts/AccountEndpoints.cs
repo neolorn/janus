@@ -212,18 +212,27 @@ internal static class AccountEndpoints
                 Landed);
         }
 
-        if (Asking(browser) is not AccessContext holder)
+        if (request.Code is not { Length: > 0 } code)
         {
-            return Nobody();
+            return Malformed;
         }
 
-        return request.Code is not { Length: > 0 } code
-            ? Malformed
-            : Answers.Of(
-                await identifiers
-                    .VerifyAsync(holder, new IdentifierId(id), code, source, cancellationToken)
-                    .ConfigureAwait(false),
-                Nothing);
+        if (Asking(browser) is not AccessContext holder)
+        {
+            return Opened(browser) is not EnrolmentSessionId enrolment
+                ? Nobody()
+                : Answers.Of(
+                    await identifiers
+                        .VerifyAsync(enrolment, new IdentifierId(id), code, source, cancellationToken)
+                        .ConfigureAwait(false),
+                    Nothing);
+        }
+
+        return Answers.Of(
+            await identifiers
+                .VerifyAsync(holder, new IdentifierId(id), code, source, cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
     }
 
     private static async Task<IResult> MakePrimaryAsync(
@@ -341,24 +350,42 @@ internal static class AccountEndpoints
         ArgumentNullException.ThrowIfNull(identifiers);
         ArgumentNullException.ThrowIfNull(context);
 
-        if (Asking(browser) is not AccessContext holder || browser.Live is null)
+        if (request.Value is not { Length: > 0 } value)
         {
-            return Nobody();
+            return Malformed;
         }
 
-        return request.Value is not { Length: > 0 } value
-            ? Malformed
-            : Answers.Of(
-                await identifiers
-                    .ReplaceAsync(
-                        holder,
-                        browser.Live.Id,
-                        new IdentifierId(id),
-                        value,
-                        RequestOrigin.Source(context.Request),
-                        cancellationToken)
-                    .ConfigureAwait(false),
-                Accepted);
+        string source = RequestOrigin.Source(context.Request);
+
+        // AUTH-RECOV-002: the enrolment session an approver opened for a lost mailbox
+        // reaches this endpoint, where the new address confirms alone (REG-IDENT-007).
+        if (Asking(browser) is not AccessContext holder || browser.Live is null)
+        {
+            return Opened(browser) is not EnrolmentSessionId enrolment
+                ? Nobody()
+                : Answers.Of(
+                    await identifiers
+                        .ReplaceAsync(
+                            enrolment,
+                            new IdentifierId(id),
+                            value,
+                            source,
+                            cancellationToken)
+                        .ConfigureAwait(false),
+                    Accepted);
+        }
+
+        return Answers.Of(
+            await identifiers
+                .ReplaceAsync(
+                    holder,
+                    browser.Live.Id,
+                    new IdentifierId(id),
+                    value,
+                    source,
+                    cancellationToken)
+                .ConfigureAwait(false),
+            Accepted);
     }
 
     // REG-SESS-003: the ending control of a link opened in another browser, which
@@ -519,6 +546,11 @@ internal static class AccountEndpoints
 
         return browser.Context;
     }
+
+    // D-148: the enrolment session the browser's first contact carries, which reaches
+    // the two operations chapter 09 section 3 names and nothing else here.
+    private static EnrolmentSessionId? Opened(RequestSession browser) =>
+        browser.FirstContact?.Enrolment;
 
     private static IResult Landed(LinkLanding landing)
     {

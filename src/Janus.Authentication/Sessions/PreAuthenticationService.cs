@@ -106,8 +106,32 @@ internal sealed class PreAuthenticationService(
     }
 
     /// <summary>
-    /// Forgets the registration a browser had in flight, which is what abandoning one
-    /// leaves behind.
+    /// Binds an enrolment to the browser that opened it (AUTH-RECOV-002).
+    /// </summary>
+    /// <param name="preAuthentication">The browser's pre-authentication session.</param>
+    /// <param name="enrolment">The enrolment it has in flight.</param>
+    /// <param name="expiresAt">When both stop answering, which is one instant.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of binding them.</returns>
+    /// <exception cref="ArgumentNullException">The session is absent.</exception>
+    public async ValueTask CarryAsync(
+        PreAuthentication preAuthentication,
+        EnrolmentSessionId enrolment,
+        DateTimeOffset expiresAt,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(preAuthentication);
+
+        preAuthentication.Carry(enrolment, expiresAt);
+
+        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        await store.RecordAsync(preAuthentication, cancellationToken).ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Forgets what a browser had in flight, which is what abandoning a registration
+    /// or finishing an enrolment leaves behind.
     /// </summary>
     /// <param name="preAuthentication">The browser's pre-authentication session.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>

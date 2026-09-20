@@ -253,6 +253,27 @@ public sealed class ModelTests
             "identifiers.subject",
             "identifiers.verified_at",
 
+            // Not an account field: the creation ceremony one account has open, and
+            // the value AUTH-FACT-014 has the authenticator sign over.
+            "key_ceremonies.challenge",
+            "key_ceremonies.expires_at",
+            "key_ceremonies.issued_at",
+            "key_ceremonies.kind",
+            "key_ceremonies.subject",
+            "key_ceremonies.upgrading",
+
+            // Not an account field: a credential its holder reported lost, the window
+            // AUTH-RECOV-007 invalidates it at the end of, and what the notices across
+            // that window have reached.
+            "loss_reports.any_delivered",
+            "loss_reports.credential",
+            "loss_reports.enc_cancel",
+            "loss_reports.held_at",
+            "loss_reports.invalidates_at",
+            "loss_reports.notified_at",
+            "loss_reports.reported_at",
+            "loss_reports.subject",
+
             // Standing: the membership record of IDN-MEM-001, with its own beginning
             // and end.
             "memberships.created_at",
@@ -267,6 +288,37 @@ public sealed class ModelTests
             "nonexistence_notices.destination",
             "nonexistence_notices.id",
 
+            // Not an account field: the clients the deployment registered with the
+            // provider, the codes waiting to be exchanged and the refresh tokens of
+            // AUTH-OIDC-001, AUTH-OIDC-003 and AUTH-SESS-012.
+            "oidc_clients.client_id",
+            "oidc_clients.kind",
+            "oidc_clients.name",
+            "oidc_clients.redirect",
+            "oidc_clients.scopes",
+            "oidc_clients.secret",
+            "oidc_codes.challenge",
+            "oidc_codes.challenge_method",
+            "oidc_codes.client_id",
+            "oidc_codes.expires_at",
+            "oidc_codes.fingerprint",
+            "oidc_codes.issued_at",
+            "oidc_codes.nonce",
+            "oidc_codes.redirect",
+            "oidc_codes.scope",
+            "oidc_codes.session",
+            "oidc_codes.spent_at",
+            "oidc_codes.subject",
+            "oidc_refresh_tokens.client_id",
+            "oidc_refresh_tokens.consumed_at",
+            "oidc_refresh_tokens.expires_at",
+            "oidc_refresh_tokens.family",
+            "oidc_refresh_tokens.fingerprint",
+            "oidc_refresh_tokens.issued_at",
+            "oidc_refresh_tokens.scope",
+            "oidc_refresh_tokens.session",
+            "oidc_refresh_tokens.subject",
+
             // The organization of IDN-ORG-001, with the mark IDN-ORG-004 reads and
             // the deletion window of IDN-ORG-003.
             "organizations.administrative",
@@ -278,16 +330,27 @@ public sealed class ModelTests
 
             // Credentials: the password hash of AUTH-PASS-007 and the floor flag
             // AUTH-PASS-001a says cannot be recomputed from it.
+            "passwords.change_required",
             "passwords.hash",
             "passwords.meets_single_factor_floor",
             "passwords.set_at",
             "passwords.subject",
+
+            // Not an account field: a requirement a scope's policy raised and when the
+            // run-up to it began, one row per scope per field, which a sign-in that does
+            // not yet meet it is told of (AUTH-FACT-017).
+            "policy_raises.field",
+            "policy_raises.id",
+            "policy_raises.organization",
+            "policy_raises.raised_at",
+            "policy_raises.value",
 
             // Not an account field: what a browser carries before it holds a session,
             // keyed as the session table is and carrying the registration session in
             // flight (BFF-CSRF-005a, BFF-CSRF-005b).
             "preauthentication_sessions.created_at",
             "preauthentication_sessions.csrf_fingerprint",
+            "preauthentication_sessions.enrolment",
             "preauthentication_sessions.expires_at",
             "preauthentication_sessions.fingerprint",
             "preauthentication_sessions.registration",
@@ -303,6 +366,15 @@ public sealed class ModelTests
             "profiles.enc_legal_name",
             "profiles.subject",
 
+            // Not an account field: one approver standing behind one re-enrolment, on
+            // the channel they confirmed the person on, which is held under the
+            // account's key (AUTH-RECOV-002, AUTH-RECOV-003).
+            "recovery_approvals.approved_at",
+            "recovery_approvals.approver",
+            "recovery_approvals.enc_channel",
+            "recovery_approvals.spent_at",
+            "recovery_approvals.subject",
+
             // Credentials: the recovery-code set of AUTH-FACT-008, with the instants the
             // account shows and the reminder reads.
             "recovery_code_sets.exported_at",
@@ -317,6 +389,18 @@ public sealed class ModelTests
             "recovery_codes.ordinal",
             "recovery_codes.subject",
             "recovery_codes.used_at",
+
+            // Not an account field: a recovery link, answered to by what it fingerprints
+            // to, and, once spent, the enrolment session it opened (AUTH-RECOV-002).
+            "recovery_links.approver",
+            "recovery_links.expires_at",
+            "recovery_links.issued_at",
+            "recovery_links.mailbox_lost",
+            "recovery_links.purpose",
+            "recovery_links.session",
+            "recovery_links.spent_at",
+            "recovery_links.subject",
+            "recovery_links.token",
 
             // Not an account field: the link a registration session sent, answered to
             // by what it fingerprints to (REG-SESS-003).
@@ -399,6 +483,41 @@ public sealed class ModelTests
             // Not an account field: the runtime configuration of OPS-CFG-008.
             "settings.key",
             "settings.value",
+
+            // Not an account field: a sign-in in flight, keyed by what the caller's handle
+            // hashes to and carrying what it has presented so far (AUTH-FACT-001).
+            "signin_challenges.created_at",
+            "signin_challenges.device_attempts",
+            "signin_challenges.device_code",
+            "signin_challenges.expires_at",
+            "signin_challenges.handle",
+            "signin_challenges.presented",
+            "signin_challenges.subject",
+            "signin_challenges.webauthn",
+
+            // Not an account field: a link or a code the library sent for a sign-in,
+            // one per account per catalogue entry, spent on presentation
+            // (AUTH-FACT-016, REG-SESS-003).
+            "signin_links.browser",
+            "signin_links.enc_code",
+            "signin_links.expires_at",
+            "signin_links.factor",
+            "signin_links.issued_at",
+            "signin_links.subject",
+            "signin_links.token",
+            "signin_links.wrong_attempts",
+
+            // Not an account field: the keys the provider signs tokens with, whose
+            // private material is wrapped under the key-encryption key (AUTH-KEY-001,
+            // AUTH-KEY-002).
+            "signing_keys.algorithm",
+            "signing_keys.created_at",
+            "signing_keys.key_id",
+            "signing_keys.key_version",
+            "signing_keys.private_key",
+            "signing_keys.public_key",
+            "signing_keys.retires_at",
+            "signing_keys.superseded_at",
 
             // Not an account field: what the gateway last said its prepaid account stood
             // at (INT-SMS-004, AUTH-ABUSE-006).

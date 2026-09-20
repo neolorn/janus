@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -341,12 +342,17 @@ public sealed class BrowserProfileTests : IDisposable
     [Fact]
     public void BFF_OWN_001_AC1_MountingTakesNoSecurityRelevantConfiguration()
     {
-        MethodInfo mounting = Assert.Single(typeof(JanusPipeline).GetMethods(
-            BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly));
+        MethodInfo[] mounting = typeof(JanusPipeline).GetMethods(
+            BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
 
-        ParameterInfo only = Assert.Single(mounting.GetParameters());
+        Assert.NotEmpty(mounting);
 
-        Assert.Equal(typeof(IApplicationBuilder), only.ParameterType);
+        foreach (MethodInfo mount in mounting)
+        {
+            ParameterInfo only = Assert.Single(mount.GetParameters());
+
+            Assert.Equal(typeof(IApplicationBuilder), only.ParameterType);
+        }
     }
 
     /// <summary>
@@ -458,19 +464,38 @@ public sealed class BrowserProfileTests : IDisposable
     }
 
     /// <summary>
-    /// BFF-CSRF-001 AC2: no endpoint can be excluded by configuration or attribute,
-    /// the pipeline reading neither the endpoint nor its metadata.
+    /// BFF-CSRF-001 AC2 and BFF-MACH-001 AC1: no endpoint can be excluded by
+    /// configuration or attribute, the pipeline reading neither the endpoint nor its
+    /// metadata; the one thing a path decides is which profile carries a request, and
+    /// that is settled in the one place the library names the routes.
     /// </summary>
     [Fact]
-    public void BFF_CSRF_001_AC2_NoEndpointCanBeExcludedByConfigurationOrAttribute() => Assert.Empty(
-        Repository
-            .Sources()
-            .Where(file => File.ReadLines(file).Any(line =>
-                line.Contains("GetEndpoint", StringComparison.Ordinal)
-                || line.Contains("Metadata", StringComparison.Ordinal)
-                || line.Contains("Request.Path", StringComparison.Ordinal)))
-            .Select(Path.GetFileName)
-            .Order(StringComparer.Ordinal));
+    public void BFF_CSRF_001_AC2_NoEndpointCanBeExcludedByConfigurationOrAttribute()
+    {
+        Assert.Empty(Reading("GetEndpoint", "Metadata"));
+
+        Assert.Equal(["JanusPipeline.cs"], Reading("Request.Path"));
+    }
+
+    /// <summary>
+    /// BFF-MACH-001 AC1: which routes the machine profile governs is settled in one
+    /// place in the library, and nothing a deployment writes reaches it, so a browser
+    /// endpoint cannot be moved onto it by configuration or by an attribute.
+    /// </summary>
+    [Fact]
+    public void BFF_MACH_001_AC1_NoBrowserEndpointCanBeMovedOntoTheMachineProfile()
+    {
+        Assert.Empty(Reading("MachineRoutes.Governs").Except(["JanusPipeline.cs"]));
+        Assert.Equal(["MachineRoutes.cs"], Reading("PathString[] Governed"));
+
+        MethodInfo governs = typeof(MachineRoutes).GetMethod(
+            "Governs",
+            BindingFlags.Public | BindingFlags.Static)!;
+
+        ParameterInfo only = Assert.Single(governs.GetParameters());
+
+        Assert.Equal(typeof(PathString), only.ParameterType);
+    }
 
     /// <summary>
     /// BFF-CSRF-001 AC3 and BFF-OWN-001 AC2: whatever the host mounts after the
@@ -708,6 +733,16 @@ public sealed class BrowserProfileTests : IDisposable
         return Task.CompletedTask;
     }
 
+    private static IReadOnlyList<string> Reading(params string[] what) =>
+    [
+        .. Repository
+            .Sources()
+            .Where(file => File.ReadLines(file).Any(line =>
+                what.Any(named => line.Contains(named, StringComparison.Ordinal))))
+            .Select(file => Path.GetFileName(file)!)
+            .Order(StringComparer.Ordinal),
+    ];
+
     private SynchronizerTokens Tokens() => new(_sessions, _contacts, _clock);
 
     // The layer that needs the session, as the layer before it hands a request on.
@@ -730,6 +765,12 @@ public sealed class BrowserProfileTests : IDisposable
         var services = new ServiceCollection();
 
         services.AddTransient<IMiddlewareFactory, MiddlewareFactory>();
+
+        // The profile ends at the stage the authorization endpoint is answered from,
+        // which the host's own registration brings; here nothing answers, and the
+        // stage has to be able to stand for the layers before it to be reached.
+        _ = services.AddAuthentication();
+
         services.AddSingleton(isolation);
         services.AddSingleton(header);
         services.AddSingleton(origin);
@@ -738,6 +779,7 @@ public sealed class BrowserProfileTests : IDisposable
         services.AddSingleton<ISessionStore>(_sessions);
         services.AddSingleton<ISessionAudit>(_audit);
         services.AddSingleton<IMembershipLookup>(_memberships);
+        services.AddSingleton<IPolicyRaiseStore, PolicyRaiseStoreInMemory>();
         services.AddSingleton<IAccessGate>(_gate);
         services.AddSingleton<IPreAuthenticationStore>(_contacts);
         services.AddSingleton<IConfigurationStore>(_configuration);

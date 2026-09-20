@@ -38,6 +38,36 @@ internal sealed class AccountDirectory(
         (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false))?.State;
 
     /// <inheritdoc/>
+    public async ValueTask<SuspensionOrigin?> SuspendedByAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken) =>
+        (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false))
+        ?.SuspendedBy;
+
+    /// <inheritdoc/>
+    public async ValueTask ReinstateAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        Account? account = await accounts.FindBySubjectAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (account is null)
+        {
+            return;
+        }
+
+        account.Reactivate();
+
+        await accounts.RecordTransitionAsync(account, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<DateTimeOffset?> CreatedAtAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken) =>
+        (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false))
+        ?.CreatedAt;
+
+    /// <inheritdoc/>
     public async ValueTask<HeldProfile> ProfileAsync(
         SubjectId subject,
         CancellationToken cancellationToken)

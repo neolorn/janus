@@ -47,6 +47,12 @@ internal sealed class Password
     public DateTimeOffset SetAt { get; private set; }
 
     /// <summary>
+    /// Whether the next sign-in collects a new password before it completes, which an
+    /// invalidation that left this one below its floor sets (AUTH-RECOV-007a).
+    /// </summary>
+    public bool ChangeRequired { get; private set; }
+
+    /// <summary>
     /// A password just set.
     /// </summary>
     /// <param name="subject">Whose it is.</param>
@@ -74,17 +80,22 @@ internal sealed class Password
     /// <param name="hash">The hash.</param>
     /// <param name="meetsSingleFactorFloor">Whether it stands on its own.</param>
     /// <param name="setAt">When it was set.</param>
+    /// <param name="changeRequired">Whether the next sign-in collects a new one.</param>
     /// <returns>The password.</returns>
     /// <exception cref="ArgumentNullException">The hash is absent.</exception>
     public static Password Existing(
         SubjectId subject,
         PasswordHash hash,
         bool meetsSingleFactorFloor,
-        DateTimeOffset setAt)
+        DateTimeOffset setAt,
+        bool changeRequired = false)
     {
         ArgumentNullException.ThrowIfNull(hash);
 
-        return new Password(subject, hash, meetsSingleFactorFloor, setAt);
+        return new Password(subject, hash, meetsSingleFactorFloor, setAt)
+        {
+            ChangeRequired = changeRequired,
+        };
     }
 
     /// <summary>
@@ -101,7 +112,14 @@ internal sealed class Password
         Hash = hash;
         MeetsSingleFactorFloor = meetsSingleFactorFloor;
         SetAt = at;
+        ChangeRequired = false;
     }
+
+    /// <summary>
+    /// The password is below the floor that now applies to it, so the next sign-in
+    /// collects a new one rather than refusing this one (AUTH-RECOV-007a).
+    /// </summary>
+    public void RequireChange() => ChangeRequired = true;
 
     /// <summary>
     /// The same password, hashed again at raised parameters after it verified. The

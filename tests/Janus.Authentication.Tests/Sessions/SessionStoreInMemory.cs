@@ -149,5 +149,22 @@ internal sealed class SessionStoreInMemory : ISessionStore
         return ValueTask.CompletedTask;
     }
 
+    /// <inheritdoc/>
+    public ValueTask<int> SweepAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        int gone = 0;
+
+        foreach (Session session in _sessions.Values.ToList())
+        {
+            if (session.AbsoluteExpiry <= now)
+            {
+                _ = _sessions.Remove(session.Id);
+                gone++;
+            }
+        }
+
+        return ValueTask.FromResult(gone);
+    }
+
     private static string Key(byte[] fingerprint) => Convert.ToHexString(fingerprint);
 }

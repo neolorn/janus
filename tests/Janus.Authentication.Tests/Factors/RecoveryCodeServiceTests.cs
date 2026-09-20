@@ -127,6 +127,27 @@ public sealed class RecoveryCodeServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-RECOV-006 AC2: copy, download and print are three names for one thing the
+    /// library is told about, and each of them sets the export against the set; the
+    /// first one stands, so a second does not move it.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_RECOV_006_AC2_EachWayOfTakingTheCodesAwaySetsTheExportAsync()
+    {
+        SubjectId subject = Subject();
+        await GeneratedAsync(subject);
+
+        await Service.ShownAsync(subject, exported: true, TestContext.Current.CancellationToken);
+
+        Assert.Equal(Noon, (await SetAsync(subject)).ExportedAt);
+
+        _clock.Advance(TimeSpan.FromMinutes(1));
+        await Service.ShownAsync(subject, exported: true, TestContext.Current.CancellationToken);
+
+        Assert.Equal(Noon, (await SetAsync(subject)).ExportedAt);
+    }
+
+    /// <summary>
     /// AUTH-FACT-008 AC5: a set older than the reminder age produces one reminder and
     /// no further reminder until the set is regenerated.
     /// </summary>
@@ -243,6 +264,10 @@ public sealed class RecoveryCodeServiceTests : IAsyncDisposable
         result.Match<ErrorCode?>(() => null, error => error.Code);
 
     private SubjectId Subject() => SubjectId.New(_randomness);
+
+    private async ValueTask<RecoveryCodeSet> SetAsync(SubjectId subject) =>
+        (await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!;
+
 
     private async ValueTask<IReadOnlyList<string>> GeneratedAsync(SubjectId subject)
     {

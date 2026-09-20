@@ -240,6 +240,13 @@ internal sealed class SessionStore(
                 cancellationToken)
             .ConfigureAwait(false);
 
+    /// <inheritdoc/>
+    public async ValueTask<int> SweepAsync(DateTimeOffset now, CancellationToken cancellationToken) =>
+        await context.Sessions
+            .Where(session => session.AbsoluteExpiry <= now)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
+
     private byte[] Written(
         ReadOnlySpan<byte> dataKey,
         SubjectId subject,

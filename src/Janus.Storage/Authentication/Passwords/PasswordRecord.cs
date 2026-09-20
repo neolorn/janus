@@ -33,4 +33,10 @@ internal sealed class PasswordRecord
     /// The <c>set_at</c> column.
     /// </summary>
     public DateTimeOffset SetAt { get; set; }
+
+    /// <summary>
+    /// The <c>change_required</c> column: whether the next sign-in has to set a new
+    /// password before it goes anywhere (AUTH-RECOV-007a).
+    /// </summary>
+    public bool ChangeRequired { get; set; }
 }

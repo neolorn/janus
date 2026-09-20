@@ -5,27 +5,40 @@ using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Accounts;
+using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
+using Janus.Authentication.Oidc;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Recovery;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
+using Janus.Authentication.SignIn;
 using Janus.Authentication.Tests;
 using Janus.Authentication.Tests.Accounts;
+using Janus.Authentication.Tests.Credentials;
 using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Identifiers;
+using Janus.Authentication.Tests.Oidc;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
+using Janus.Authentication.Tests.Recovery;
 using Janus.Authentication.Tests.Registration;
 using Janus.Authentication.Tests.Sending;
 using Janus.Authentication.Tests.Sessions;
+using Janus.Authentication.Tests.SignIn;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Accounts;
+using Janus.Hosting.Authentication;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Credentials;
+using Janus.Hosting.Oidc;
+using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
+using Janus.Hosting.Tests.Bff;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -54,11 +67,13 @@ internal sealed class Deployment : IAsyncDisposable
     /// <param name="addresses">The frontend addresses the host declared.</param>
     /// <param name="prefix">The path the host mounts the library under.</param>
     /// <param name="preferences">The preference keys the host declared.</param>
+    /// <param name="signIn">Where the host's own sign-in screen is.</param>
     public Deployment(
         JanusApplication application = JanusApplication.Public,
         PasskeyAddresses? addresses = null,
         string prefix = "",
-        PreferenceDeclarations? preferences = null)
+        PreferenceDeclarations? preferences = null,
+        AuthenticationAddresses? signIn = null)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
@@ -67,15 +82,36 @@ internal sealed class Deployment : IAsyncDisposable
         Declared = preferences ?? PreferenceDeclarations.None;
         Accounts = new AccountDirectoryInMemory(Declared);
 
-        Register(builder.Services, application, addresses ?? PasskeyAddresses.None);
+        // Two of the keys a deployment names or does not start, which a ceremony and
+        // the challenge every sign-in carries are read from (OPS-CFG-001).
+        Configuration.Set(Settings.WebAuthnRelyingPartyId, "janus.example.test");
+        Configuration.Set(Settings.WebAuthnOrigins, ["https://janus.example.test"]);
+
+        Register(
+            builder.Services,
+            application,
+            addresses ?? PasskeyAddresses.None,
+            signIn ?? AuthenticationAddresses.None);
 
         _application = builder.Build();
 
         // The web server composes these two around the middleware when it starts;
         // here the pipeline is built by hand, so they are named by hand.
+        if (prefix.Length > 0)
+        {
+            // A host that mounts the library under a prefix mounts all of it there,
+            // the provider's endpoints with the rest, so every path the library
+            // answers and every address its document publishes carries the prefix
+            // (API-CONV-001, LIB-HOST-003). The two documents of REG-PM-001 are the
+            // exception: they belong to the site and stay at its root.
+            _ = ((IApplicationBuilder)_application).Map(prefix, Mounted);
+        }
+        else
+        {
+            Mounted(_application);
+        }
+
         _ = ((IApplicationBuilder)_application).UseRouting();
-        _ = _application.UseJanusBrowserProfile();
-        _ = _application.MapGroup(prefix).MapJanus();
         _ = _application.MapJanusWellKnown();
         _ = ((IApplicationBuilder)_application).UseEndpoints(_ => { });
 
@@ -158,6 +194,41 @@ internal sealed class Deployment : IAsyncDisposable
     public PasswordStoreInMemory Passwords { get; } = new();
 
     /// <summary>
+    /// The recovery links that have gone out.
+    /// </summary>
+    public RecoveryLinkStoreInMemory Links { get; } = new();
+
+    /// <summary>
+    /// The clients the deployment registered.
+    /// </summary>
+    public OidcClientStoreInMemory Clients { get; } = new();
+
+    /// <summary>
+    /// The authorization codes outstanding.
+    /// </summary>
+    public AuthorizationCodeStoreInMemory Codes { get; } = new();
+
+    /// <summary>
+    /// The refresh tokens outstanding.
+    /// </summary>
+    public RefreshTokenStoreInMemory Tokens { get; } = new();
+
+    /// <summary>
+    /// The signing keys the deployment holds.
+    /// </summary>
+    public SigningKeyStoreInMemory Keys { get; } = new();
+
+    /// <summary>
+    /// What the provider recorded.
+    /// </summary>
+    public OidcAuditInMemory OidcAudit { get; } = new();
+
+    /// <summary>
+    /// What the provider logged about a request it refused or corrected.
+    /// </summary>
+    public LogInMemory<AuthorizationValidation> OidcLog { get; } = new();
+
+    /// <summary>
     /// Every endpoint the library mounted.
     /// </summary>
     public IReadOnlyList<Endpoint> Endpoints =>
@@ -191,12 +262,23 @@ internal sealed class Deployment : IAsyncDisposable
         await _pipeline(context);
     }
 
+    // What a host mounts: the two profiles around the library's endpoints, with
+    // routing named by hand because no web server composes it here.
+    private static void Mounted(IApplicationBuilder mount)
+    {
+        _ = mount.UseRouting();
+        _ = mount.UseJanusMachineProfile();
+        _ = mount.UseJanusBrowserProfile();
+        _ = mount.UseEndpoints(endpoints => endpoints.MapJanus());
+    }
+
     // Everything AddJanus registers, over the area's own fakes instead of the
     // database: the ports, the services built on them and the browser boundary.
     private void Register(
         IServiceCollection services,
         JanusApplication application,
-        PasskeyAddresses addresses)
+        PasskeyAddresses addresses,
+        AuthenticationAddresses signIn)
     {
         _ = services.AddSingleton<TimeProvider>(Clock);
         _ = services.AddSingleton(_randomness);
@@ -227,16 +309,41 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IDeviceStore, DeviceStoreInMemory>();
         _ = services.AddSingleton<ISessionAudit, SessionAuditInMemory>();
         _ = services.AddSingleton<IMembershipLookup, MembershipLookupInMemory>();
+        _ = services.AddSingleton<IPolicyRaiseStore, PolicyRaiseStoreInMemory>();
+        _ = services.AddSingleton<IChallengeStore, ChallengeStoreInMemory>();
+        _ = services.AddSingleton<IPendingSignInStore, PendingSignInStoreInMemory>();
         _ = services.AddSingleton<IAccessGate, AccessGateInMemory>();
         _ = services.AddSingleton<IAccountAudit, AccountAuditInMemory>();
+        _ = services.AddSingleton<IRecoveryLinkStore>(Links);
+        _ = services.AddSingleton<IRecoveryApprovalStore, RecoveryApprovalStoreInMemory>();
+        _ = services.AddSingleton<ILossReportStore, LossReportStoreInMemory>();
+        _ = services.AddSingleton<IRecoveryAudit, RecoveryAuditInMemory>();
+        _ = services.AddSingleton<IKeyCeremonyStore, KeyCeremonyStoreInMemory>();
+        _ = services.AddSingleton<IOidcClientStore>(Clients);
+        _ = services.AddSingleton<IAuthorizationCodeStore>(Codes);
+        _ = services.AddSingleton<IRefreshTokenStore>(Tokens);
+        _ = services.AddSingleton<ISigningKeyStore>(Keys);
+        _ = services.AddSingleton<IOidcAudit>(OidcAudit);
+        _ = services.AddSingleton<ILogger<AuthorizationValidation>>(OidcLog);
 
         _ = services.AddSingleton(RestrictionKeySuppliers.None);
         _ = services.AddSingleton(Declared);
         _ = services.AddSingleton(ReservedUsernames.Default);
         _ = services.AddSingleton(addresses);
+        _ = services.AddSingleton(signIn);
 
         _ = services.AddScoped<SmsBalance>();
         _ = services.AddScoped<SendingService>();
+        _ = services.AddSingleton<IPhoneSignalAudit, PhoneSignalAuditInMemory>();
+        _ = services.AddScoped(provider => new PhoneSignals(
+            provider.GetService<PhoneSignalProvider>(),
+            provider.GetRequiredService<IPhoneSignalAudit>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>()));
+        _ = services.AddScoped<NonExistenceNotice>();
+        _ = services.AddScoped<ThrottleService>();
+        _ = services.AddSingleton<IThrottleLedger, ThrottleLedgerInMemory>();
+        _ = services.AddSingleton<ICredentialAudit, CredentialAuditInMemory>();
         _ = services.AddSingleton<Argon2idHasher>();
         _ = services.AddScoped<PasswordScreening>();
         _ = services.AddScoped<PasswordService>();
@@ -255,6 +362,21 @@ internal sealed class Deployment : IAsyncDisposable
             provider.GetRequiredService<IdentifierService>());
         _ = services.AddScoped<AccountService>();
         _ = services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
+        _ = services.AddScoped<TotpService>();
+        _ = services.AddScoped<WebAuthnService>();
+        _ = services.AddScoped<SignInLinks>();
+        _ = services.AddScoped<AuthenticationService>();
+        _ = services.AddScoped<IAuthentication>(provider =>
+            provider.GetRequiredService<AuthenticationService>());
+        _ = services.AddScoped<LossReports>();
+        _ = services.AddScoped<EnrolmentSessions>();
+        _ = services.AddScoped<RecoveryService>();
+        _ = services.AddScoped<IRecovery>(provider => provider.GetRequiredService<RecoveryService>());
+        _ = services.AddScoped<ICredentials, CredentialService>();
+        _ = services.AddScoped<SigningKeys>();
+        _ = services.AddScoped<OidcService>();
+        _ = services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
+        _ = services.AddOidc();
 
         _ = services.AddSingleton(new BrowserSessionCookies(application));
         _ = services.AddScoped<SynchronizerTokens>();
@@ -265,6 +387,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<SessionResolution>();
         _ = services.AddScoped<FirstContact>();
         _ = services.AddScoped<SynchronizerToken>();
+        _ = services.AddScoped<MachineProfile>();
 
         _ = services.ConfigureHttpJsonOptions(options =>
         {
@@ -272,8 +395,12 @@ internal sealed class Deployment : IAsyncDisposable
             // read through these options rather than through a context, so the same
             // converter stands here (API-CONV-002).
             options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<IdentifierKind>());
+            options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<Factor>());
             options.SerializerOptions.TypeInfoResolverChain.Add(RegistrationJson.Default);
+            options.SerializerOptions.TypeInfoResolverChain.Add(AuthenticationJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(AccountJson.Default);
+            options.SerializerOptions.TypeInfoResolverChain.Add(RecoveryJson.Default);
+            options.SerializerOptions.TypeInfoResolverChain.Add(CredentialsJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(WellKnownJson.Default);
         });
     }

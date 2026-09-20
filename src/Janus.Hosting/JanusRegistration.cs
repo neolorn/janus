@@ -1,24 +1,33 @@
 using System;
 using System.IO;
 using System.Net.Http;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
+using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
+using Janus.Authentication.Oidc;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Recovery;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
+using Janus.Authentication.SignIn;
 using Janus.Authorization.Gate;
 using Janus.Authorization.Model;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Accounts;
 using Janus.Hosting.Alerting;
+using Janus.Hosting.Authentication;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Credentials;
+using Janus.Hosting.Oidc;
 using Janus.Hosting.Passwords;
+using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
 using Janus.Storage;
 using Microsoft.Extensions.DependencyInjection;
@@ -61,7 +70,10 @@ public static class JanusRegistration
     /// </param>
     /// <returns>The collection, for chaining.</returns>
     /// <exception cref="ArgumentNullException">The collection is absent.</exception>
-    /// <exception cref="StartupException">The declaration does not hold together.</exception>
+    /// <exception cref="StartupException">
+    /// The key material is not there to be had, or the declaration does not hold
+    /// together.
+    /// </exception>
     public static IServiceCollection AddJanus(
         this IServiceCollection services,
         string connectionString,
@@ -71,6 +83,12 @@ public static class JanusRegistration
         JanusApplication application)
     {
         ArgumentNullException.ThrowIfNull(services);
+
+        // AUTH-KEY-002 and OPS-SEC-001: both values come from the secrets manager and
+        // the library holds no fallback for either, so a deployment that reached
+        // neither stops here with the code that names why, not at the first request
+        // that would have read a person's field.
+        Present(keyEncryptionKeys, fingerprintKey);
 
         // CONV-DESIGN-007: time is injected, and a host that has its own clock keeps it.
         services.TryAddSingleton(TimeProvider.System);
@@ -99,6 +117,7 @@ public static class JanusRegistration
         services.AddScoped<SessionResolution>();
         services.AddScoped<FirstContact>();
         services.AddScoped<SynchronizerToken>();
+        services.AddScoped<MachineProfile>();
 
         // LIB-HOST-001: what the host declares about its own messaging is the host's.
         // A deployment that declares none of it starts, and the checks that would have
@@ -111,6 +130,11 @@ public static class JanusRegistration
         // decides whether it goes.
         services.AddScoped<SmsBalance>();
         services.AddScoped<SendingService>();
+        services.AddScoped(services => new PhoneSignals(
+            services.GetService<PhoneSignalProvider>(),
+            services.GetRequiredService<IPhoneSignalAudit>(),
+            services.GetRequiredService<IUnitOfWork>(),
+            services.GetRequiredService<TimeProvider>()));
         services.AddScoped(provider => new SendingValidation(
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetService<IMessageTemplates>(),
@@ -179,8 +203,12 @@ public static class JanusRegistration
             // read through these options rather than through a context, so the same
             // converter stands here (API-CONV-002).
             options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<IdentifierKind>());
+            options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<Factor>());
             options.SerializerOptions.TypeInfoResolverChain.Add(RegistrationJson.Default);
+            options.SerializerOptions.TypeInfoResolverChain.Add(AuthenticationJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(AccountJson.Default);
+            options.SerializerOptions.TypeInfoResolverChain.Add(RecoveryJson.Default);
+            options.SerializerOptions.TypeInfoResolverChain.Add(CredentialsJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(WellKnownJson.Default);
         });
         services.AddScoped<RegistrationService>();
@@ -189,6 +217,19 @@ public static class JanusRegistration
         services.AddScoped<IIdentifiers>(provider => provider.GetRequiredService<IdentifierService>());
         services.AddScoped<AccountService>();
         services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
+        services.AddScoped<SignInLinks>();
+        services.AddScoped<AuthenticationService>();
+        services.AddScoped<IAuthentication>(provider =>
+            provider.GetRequiredService<AuthenticationService>());
+        services.AddScoped<LossReports>();
+        services.AddScoped<EnrolmentSessions>();
+        services.AddScoped<RecoveryService>();
+        services.AddScoped<IRecovery>(provider => provider.GetRequiredService<RecoveryService>());
+        services.AddScoped<ICredentials, CredentialService>();
+        services.AddScoped<SigningKeys>();
+        services.AddOidc();
+        services.AddScoped<OidcService>();
+        services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
 
         services.AddScoped<Derivations>();
         services.AddScoped<IAccessGate, AccessGate>();
@@ -208,4 +249,24 @@ public static class JanusRegistration
     // application (AUTH-PASS-004, INT-PWD-003).
     private static string Corpus =>
         Path.Combine(AppContext.BaseDirectory, LeakedPasswordCorpus.Directory);
+
+    // The fingerprint key computes an HMAC-SHA256, so anything shorter than that hash
+    // is a key that weakens the code it is used by and is not a key the library runs on.
+    private static void Present(KeyEncryptionKeys keyEncryptionKeys, ReadOnlyMemory<byte> fingerprintKey)
+    {
+        if (keyEncryptionKeys is null)
+        {
+            throw new StartupException(
+                "The key-encryption key was not supplied; the library reads it from the secrets manager and holds no fallback.",
+                Error.From(ErrorCodes.StartupKeyUnavailable, "key", JsonSerializer.SerializeToElement("keyEncryptionKeys")));
+        }
+
+        if (fingerprintKey.Length < 32)
+        {
+            throw new StartupException(
+                "The fingerprint key was not supplied, or is shorter than the hash it computes.",
+                Error.From(ErrorCodes.StartupKeyUnavailable, "key", JsonSerializer.SerializeToElement("fingerprintKey")));
+        }
+    }
+
 }

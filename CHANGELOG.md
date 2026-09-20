@@ -10,6 +10,42 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A deployment can now register a callback that says what its gateway knows about a
+  phone number. Before a sign-in link or a second-step code goes to a number, the
+  callback is asked and the answer is written to the audit trail against the factor it
+  was asked for; where no callback is registered the absence is recorded instead. The
+  send goes either way.
+- A second-factor security key offered for upgrade when it is not one now answers with
+  its own code rather than the one a refused factor answers with, and a credential of
+  another account answers as one that does not exist.
+- Registration now resolves the client identifier it is given against the registry as
+  it takes it, and what a completed registration reports as the return is the address
+  that client registered. An identifier the registry does not hold registers the person
+  exactly as a registered one does and leaves the return to the deployment's own
+  default; no step after the first takes a destination at all.
+
+- A deployment that cannot reach its secrets manager now stops as it starts, with the
+  code that says which of the two values was not there, rather than failing at the
+  first request that would have read a person's field. A fingerprint key shorter than
+  the hash it computes is refused as an absent one is.
+- What has expired is now removable without anyone's attention: a session past its
+  absolute expiry, an authorization code past its lifetime, a refresh token past the
+  expiry its session gave it and a signing key past its overlap each go in one call.
+- The deployment is now an OpenID Connect provider for the clients it registers
+  itself: it advertises what it answers, publishes the keys a relying party validates
+  against, hands a browser that already holds a session a code without asking anyone
+  anything, and exchanges that code over the back channel for tokens signed with a key
+  that rotates on its own. A client registered as a browser application is handed no
+  refresh token; a protocol client is handed one that rotates on use, and presenting a
+  spent one ends the session everything stood on. A destination that is not the
+  client's registered one is replaced by it rather than refused. The token and
+  userinfo routes are carried on a second pipeline profile that reads no cookie and
+  asks for no synchronizer token, and refuses a request that arrives with one.
+- The library's schema gains the tables the OpenID Connect provider keeps its
+  registered clients, its authorization codes, its refresh-token families and its
+  signing keys in, so a deployment applies one new migration. A code and a refresh
+  token are held as what they hash to and never as themselves, and a signing key's
+  private half is wrapped under the deployment's key-encryption key.
 - Every message the library sends now goes down one path, and the named restrictions
   decide whether it goes: a fourth text message to one number inside a day is refused
   with the time the restriction lifts, a message a transport would not take is not
@@ -501,8 +537,113 @@ against the public contract of LIB-API-001.
   displaced is asked to confirm the change, so a deployment declares a template for
   `identifier-change-confirm` in every language it configures or it does not start.
 
+- A person can sign in. A sign-in is begun against an identifier and answered with the
+  entries the deployment enables, never with what the account holds, so an identifier
+  nobody holds answers as one somebody holds does. A password, a passkey, a security
+  key, a generated code, a recovery code and a link or a code the library sends are
+  each judged by the service that owns them, and the answer carries the assurance the
+  attempt has reached, whether it is phishing-resistant, and what it still needs. A
+  second step is asked for whenever the account holds one, whatever the policy floor
+  is, and a device the account has trusted is remembered for as long as the policy
+  allows.
+
+- A sign-in that would complete at a single factor from a browser the account has not
+  been seen on is held, a code goes to the account's primary address, and the sign-in
+  completes when that code is typed. A passkey sign-in and a sign-in that already took
+  two steps are never held this way.
+
+- A sign-in link completes the sign-in in the browser that asked for it. Opened in any
+  other browser it changes nothing and shows the code to type back where the sign-in
+  was begun, and a link the account abandons is spent at once.
+
+- An account that does not yet meet a requirement its organization raised is told the
+  requirement and the deadline and signs in as it did before until the run-up ends;
+  after it, the sign-in stops at enrolment. An account created after the raise is held
+  at enrolment at its first sign-in, and lowering a requirement starts no run-up.
+
+- The account lists the browsers it knows, the ones it trusts for the second step and
+  the ones the new-device check remembers, and forgets any of them: a trusted browser
+  is asked for the second step again, a remembered one faces the check again.
+
+- The library's schema gains the tables a sign-in in flight, a link or code sent for
+  one, and a requirement a policy raised are kept in, so a deployment applies one new
+  migration. Neither the handle a browser carries nor the link it was sent is held as
+  it was issued: each is kept as its fingerprint, and the code beside it is held under
+  the account's own key, where an erasure leaves it unreadable.
+
+- An account whose policy allows it can recover a forgotten password from a link sent
+  to the address or number it holds, and an address no account holds is answered the
+  same way as one that does. Completing the recovery sets the password, stands a
+  self-suspended account back up and ends every session the account held, and it
+  clears no second step: the account still passes one at the next sign-in.
+
+- An account that can no longer be recovered by itself is re-enrolled by approvers,
+  who must each write a reason, pass step-up, and confirm the person on a channel the
+  account already holds; the number required is configurable, nobody can approve their
+  own recovery, and an approver recovering many accounts, or many approvals of one
+  account, is surfaced to the operator. The link the last approval sends is the only
+  one that opens an enrolment session, and where the mailbox is the thing that was
+  lost, that session may replace the address it is held on.
+
+- The holder of a lost credential can report it, which refuses it from that instant
+  without ending anything else the account can do, and invalidates it only after a
+  window in which every notice sent carries a link that cancels the report. A window
+  whose notices reached nobody holds the invalidation rather than completing it, an
+  invalidation that leaves the account on a password alone requires that password to
+  be changed at the next sign-in where it does not meet the single-factor floor, and
+  one that takes the last second step takes the recovery codes with it.
+
+- The library's schema gains the tables a recovery link, an approval standing behind a
+  re-enrolment and a running loss report are kept in, and the passwords table gains the
+  mark that the next sign-in has to set a new one, so a deployment applies one new
+  migration. The link is held as its fingerprint; the channel an approver confirmed on
+  and the token the loss notices carry are each held under the account's own key, where
+  an erasure leaves them unreadable.
+
+- The recovery endpoints answer: asking for a link, completing one, reporting a
+  credential lost and cancelling that report, approving a re-enrolment, and opening
+  the enrolment session an approved link stands for. That session is bound to the
+  browser that opened the link exactly as a registration is, so nothing else reaches
+  what it may do.
+
+- A person can now manage their own credentials: setting or changing a password,
+  enrolling a passkey or a security key against a challenge the server issued,
+  upgrading a security key to one the authenticator keeps, enrolling a generator and
+  confirming it with a code, taking a fresh set of recovery codes, and removing a
+  credential. A second step is refused on an account that holds no password, a second
+  step beside a password brings a set of recovery codes with it, an enrolment that
+  leaves the account on one credential says whether a second is asked for or required,
+  and a removal that would lower what the account reaches runs the notified window
+  instead of taking effect at once. Each of these reaches every recorded channel, and
+  each is gated at the lower of what the action asks for and what the account can
+  reach. The enrolment session an approved link opens reaches the same operations
+  without a session, and ends when the enrolment completes.
+
+- The library's schema gains the table a key ceremony in flight is kept in, one row
+  per account, so a deployment applies one new migration. The row holds the challenge
+  the server issued, what it is upgrading where it upgrades anything, and when it
+  stops answering.
+
+- The credential endpoints answer: setting a password, opening and completing a key
+  ceremony, upgrading a security key, enrolling and confirming a generator, taking a
+  set of recovery codes, and removing a credential. Each answers to the session the
+  browser holds or to the enrolment session an approved link opened, and to nothing
+  else; which of the two it is, is what the request's own session resolution
+  established and never what the request says.
+
+- A customer whose mailbox is gone can move their account to a new address from the
+  enrolment session an approver opened for them: the new address confirms alone, the
+  displaced one is not asked, and the approver's confirmation on a channel the account
+  already holds is what stands in its place. Everywhere else the rule is unchanged, so
+  an address is still displaced only by a session that has stepped up, and still asks
+  the old address where the account has no other channel at all. A deployment applies
+  one further migration, which lets a staged verification record no browser.
+
 ### Changed
 
+- A sign-in whose password an invalidation left below the single-factor floor now
+  completes and says so, so the person is asked for a new password at the next
+  sign-in rather than being locked out.
 - The case-insensitive collation is created in the default schema, because a column
   names a collation by one identifier and cannot reach one held in another schema.
 - A configuration key loosens the way its row states. Where a row states nothing, a

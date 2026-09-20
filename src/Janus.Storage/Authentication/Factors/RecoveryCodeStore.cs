@@ -48,6 +48,23 @@ internal sealed class RecoveryCodeStore(JanusDbContext context) : IRecoveryCodeS
     }
 
     /// <inheritdoc/>
+    public async ValueTask RemoveAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        RecoveryCodeSetRecord? record = await context.RecoveryCodeSets
+            .FindAsync([subject], cancellationToken)
+            .ConfigureAwait(false);
+
+        if (record is null)
+        {
+            return;
+        }
+
+        context.RecoveryCodes.RemoveRange(
+            await CodesAsync(subject, cancellationToken).ConfigureAwait(false));
+        context.RecoveryCodeSets.Remove(record);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask ReplaceAsync(RecoveryCodeSet set, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(set);

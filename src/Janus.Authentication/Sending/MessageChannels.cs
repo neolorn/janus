@@ -37,6 +37,8 @@ internal static class MessageChannels
         MessageKind.IdentifierDetached,
         MessageKind.IdentifierSettingsChanged,
         MessageKind.CredentialEnrolled,
+        MessageKind.IdentifierChangeConfirm,
+        MessageKind.RecoveryLink,
     ];
 
     /// <summary>
@@ -55,6 +57,19 @@ internal static class MessageChannels
         MessageKind.IdentifierSettingsChanged,
         MessageKind.CredentialEnrolled,
     ]);
+
+    /// <summary>
+    /// The messages that carry a factor rather than tell an account something, and
+    /// whether each carries a link. Which entry one amounts to follows from that and
+    /// the channel it goes out on (AUTH-FACT-016); no property tells a message that
+    /// authenticates from one that verifies, so the one place that is written is here.
+    /// </summary>
+    public static FrozenDictionary<MessageKind, bool> Factors { get; } = FrozenDictionary
+        .ToFrozenDictionary<MessageKind, bool>(
+        [
+            new KeyValuePair<MessageKind, bool>(MessageKind.SignInLink, true),
+            new KeyValuePair<MessageKind, bool>(MessageKind.SecondStepCode, false),
+        ]);
 
     /// <summary>
     /// The channels one message goes out on.

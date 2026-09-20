@@ -275,6 +275,7 @@ public sealed class VocabularyContractTests
                 "identifier-removed",
                 "identifier-settings-changed",
                 "no-account",
+                "recovery-link",
                 "secondstep-code",
                 "security-notice",
                 "signin-link",

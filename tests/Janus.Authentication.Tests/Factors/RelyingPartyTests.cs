@@ -209,6 +209,17 @@ public sealed class RelyingPartyTests
         Assert.Equal([-8, -7, -257], party.Algorithms);
     }
 
+    /// <summary>
+    /// API-REDIR-001 AC3: the list of known application origins is read at startup, and
+    /// an entry that is not an absolute origin stops the deployment rather than being
+    /// carried as something a destination could later be matched against.
+    /// </summary>
+    [Fact]
+    public void API_REDIR_001_AC3_AnEntryThatIsNotAnAbsoluteOriginFails() =>
+        Assert.Equal(
+            ErrorCodes.StartupRelyingPartyId,
+            Refusal("example.com", ["https://app.example.com", "/signin/callback"]));
+
     private static RelyingParty Settled(string identifier, IReadOnlyList<string> origins) =>
         RelyingParty.Of(identifier, origins, [], Algorithms);
 

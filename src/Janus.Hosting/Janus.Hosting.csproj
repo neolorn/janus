@@ -6,6 +6,14 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
+  <!-- AUTH-OIDC-001, CONV-DESIGN-008: the protocol, the formats and the signatures are
+       the library's, never hand-written; the stores behind them are. -->
+  <ItemGroup>
+    <PackageReference Include="OpenIddict.AspNetCore" />
+    <PackageReference Include="OpenIddict.Server" />
+    <PackageReference Include="OpenIddict.Validation" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Janus.Core\Janus.Core.csproj" />
     <ProjectReference Include="..\Janus.Identity\Janus.Identity.csproj" />

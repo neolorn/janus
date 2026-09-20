@@ -1,0 +1,158 @@
+using System;
+using System.Collections.Generic;
+using Janus.Core;
+
+namespace Janus.Authentication.SignIn;
+
+/// <summary>
+/// One sign-in in progress: who it resolved to, what has been presented so far, the
+/// WebAuthn challenge it issued, and the code the new-device check may be holding it
+/// for.
+/// </summary>
+/// <remarks>
+/// Implements AUTH-ABUSE-003, AUTH-FACT-014 and AUTH-FACT-016. A challenge exists for
+/// an identifier that resolves to nothing exactly as for one that resolves to an
+/// account, because the two answers have to be the same; it simply never accepts a
+/// factor.
+/// </remarks>
+internal sealed class Challenge
+{
+    private readonly List<Factor> _presented;
+
+    private Challenge(
+        byte[] fingerprint,
+        SubjectId? subject,
+        string webAuthn,
+        DateTimeOffset createdAt,
+        DateTimeOffset expiresAt,
+        List<Factor> presented)
+    {
+        Fingerprint = fingerprint;
+        Subject = subject;
+        WebAuthn = webAuthn;
+        CreatedAt = createdAt;
+        ExpiresAt = expiresAt;
+        _presented = presented;
+    }
+
+    /// <summary>What the handle the caller holds hashes to.</summary>
+    public byte[] Fingerprint { get; }
+
+    /// <summary>
+    /// Whose sign-in, or nothing where the identifier resolved to no account.
+    /// </summary>
+    public SubjectId? Subject { get; }
+
+    /// <summary>The value an assertion against this challenge has to sign over.</summary>
+    public string WebAuthn { get; }
+
+    /// <summary>When it opened.</summary>
+    public DateTimeOffset CreatedAt { get; }
+
+    /// <summary>When it stops being answerable.</summary>
+    public DateTimeOffset ExpiresAt { get; }
+
+    /// <summary>What has been presented against it and accepted.</summary>
+    public IReadOnlyList<Factor> Presented => _presented;
+
+    /// <summary>The new-device code sent, absent while none is outstanding.</summary>
+    public byte[]? DeviceCode { get; private set; }
+
+    /// <summary>How many wrong codes have been entered against it.</summary>
+    public int DeviceAttempts { get; private set; }
+
+    /// <summary>Whether the new-device check is holding it.</summary>
+    public bool IsHeld => DeviceCode is not null;
+
+    /// <summary>
+    /// Opens one.
+    /// </summary>
+    /// <param name="handle">The secret the caller presents at every later step.</param>
+    /// <param name="subject">Whose sign-in, or nothing.</param>
+    /// <param name="webAuthn">The WebAuthn challenge issued with it.</param>
+    /// <param name="at">Now.</param>
+    /// <param name="lifetime">How long it answers for.</param>
+    /// <returns>The challenge.</returns>
+    public static Challenge Open(
+        OpaqueToken handle,
+        SubjectId? subject,
+        string webAuthn,
+        DateTimeOffset at,
+        TimeSpan lifetime) =>
+        new(handle.Fingerprint(), subject, webAuthn, at, at + lifetime, []);
+
+    /// <summary>
+    /// The challenge as the store holds it.
+    /// </summary>
+    /// <param name="fingerprint">What the handle hashes to.</param>
+    /// <param name="subject">Whose sign-in, or nothing.</param>
+    /// <param name="webAuthn">The WebAuthn challenge issued with it.</param>
+    /// <param name="createdAt">When it opened.</param>
+    /// <param name="expiresAt">When it stops answering.</param>
+    /// <param name="presented">What has been accepted against it.</param>
+    /// <param name="deviceCode">The outstanding new-device code, or nothing.</param>
+    /// <param name="deviceAttempts">Wrong codes entered against it.</param>
+    /// <returns>The challenge.</returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    public static Challenge Existing(
+        byte[] fingerprint,
+        SubjectId? subject,
+        string webAuthn,
+        DateTimeOffset createdAt,
+        DateTimeOffset expiresAt,
+        IReadOnlyCollection<Factor> presented,
+        byte[]? deviceCode,
+        int deviceAttempts)
+    {
+        ArgumentNullException.ThrowIfNull(fingerprint);
+        ArgumentNullException.ThrowIfNull(presented);
+
+        return new Challenge(fingerprint, subject, webAuthn, createdAt, expiresAt, [.. presented])
+        {
+            DeviceCode = deviceCode,
+            DeviceAttempts = deviceAttempts,
+        };
+    }
+
+    /// <summary>
+    /// Whether it has stopped answering.
+    /// </summary>
+    /// <param name="now">Now.</param>
+    /// <returns>Whether it has expired.</returns>
+    public bool HasExpired(DateTimeOffset now) => now >= ExpiresAt;
+
+    /// <summary>
+    /// Records a factor accepted against it.
+    /// </summary>
+    /// <param name="factor">What was accepted.</param>
+    public void Accepted(Factor factor)
+    {
+        if (!_presented.Contains(factor))
+        {
+            _presented.Add(factor);
+        }
+    }
+
+    /// <summary>
+    /// Holds the sign-in for a code sent to the account's primary email.
+    /// </summary>
+    /// <param name="code">What was sent, held as it is compared.</param>
+    /// <exception cref="ArgumentNullException">The code is absent.</exception>
+    public void Holding(byte[] code)
+    {
+        ArgumentNullException.ThrowIfNull(code);
+
+        DeviceCode = code;
+        DeviceAttempts = 0;
+    }
+
+    /// <summary>
+    /// A wrong code was entered against the hold.
+    /// </summary>
+    public void Missed() => DeviceAttempts++;
+
+    /// <summary>
+    /// The code is spent, whether it was right or its attempts ran out.
+    /// </summary>
+    public void Spent() => DeviceCode = null;
+}

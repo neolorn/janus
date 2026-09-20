@@ -18,6 +18,7 @@ namespace Janus.Authentication.Tests.Policies;
 public sealed class PolicyResolutionTests : IDisposable
 {
     private readonly MembershipLookupInMemory _memberships = new();
+    private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
 
@@ -25,7 +26,7 @@ public sealed class PolicyResolutionTests : IDisposable
     // section 4.1a is named here rather than qualified at every use.
     private static Policy SystemPolicy => Janus.Core.Policies.SystemDefault;
 
-    private PolicyResolution Resolution => new(_memberships, _configuration);
+    private PolicyResolution Resolution => new(_memberships, _configuration, _raises);
 
     /// <inheritdoc/>
     public void Dispose() => _randomness.Dispose();

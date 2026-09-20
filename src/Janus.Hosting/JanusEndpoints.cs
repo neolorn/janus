@@ -1,5 +1,8 @@
 using System;
 using Janus.Hosting.Accounts;
+using Janus.Hosting.Authentication;
+using Janus.Hosting.Credentials;
+using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
 using Microsoft.AspNetCore.Routing;
 
@@ -17,7 +20,8 @@ namespace Janus.Hosting;
 public static class JanusEndpoints
 {
     /// <summary>
-    /// Mounts the registration and account endpoints under the caller's group.
+    /// Mounts the registration, authentication, account, credential and recovery
+    /// endpoints under the caller's group.
     /// </summary>
     /// <param name="endpoints">Where they are to be mounted.</param>
     /// <returns>The builder, for chaining.</returns>
@@ -27,7 +31,10 @@ public static class JanusEndpoints
         ArgumentNullException.ThrowIfNull(endpoints);
 
         _ = endpoints.MapRegistration();
+        _ = endpoints.MapAuthentication();
         _ = endpoints.MapAccount();
+        _ = endpoints.MapCredentials();
+        _ = endpoints.MapRecovery();
 
         return endpoints;
     }

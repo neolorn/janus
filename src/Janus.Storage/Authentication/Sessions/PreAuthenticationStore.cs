@@ -37,7 +37,8 @@ internal sealed class PreAuthenticationStore(JanusDbContext context) : IPreAuthe
                 record.CsrfFingerprint,
                 record.CreatedAt,
                 record.ExpiresAt,
-                record.Registration);
+                record.Registration,
+                record.Enrolment);
     }
 
     /// <inheritdoc/>
@@ -56,6 +57,7 @@ internal sealed class PreAuthenticationStore(JanusDbContext context) : IPreAuthe
                     CreatedAt = preAuthentication.CreatedAt,
                     ExpiresAt = preAuthentication.ExpiresAt,
                     Registration = preAuthentication.Registration,
+                    Enrolment = preAuthentication.Enrolment,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -75,6 +77,7 @@ internal sealed class PreAuthenticationStore(JanusDbContext context) : IPreAuthe
 
         record.ExpiresAt = preAuthentication.ExpiresAt;
         record.Registration = preAuthentication.Registration;
+        record.Enrolment = preAuthentication.Enrolment;
     }
 
     /// <inheritdoc/>

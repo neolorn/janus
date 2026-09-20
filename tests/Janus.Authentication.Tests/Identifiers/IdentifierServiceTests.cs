@@ -6,12 +6,14 @@ using System.Threading.Tasks;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Recovery;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
+using Janus.Authentication.Tests.Recovery;
 using Janus.Authentication.Tests.Sending;
 using Janus.Authentication.Tests.Sessions;
 using Janus.Core;
@@ -46,6 +48,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
     private readonly IdentifierDirectoryInMemory _directory = new();
     private readonly PendingVerificationStoreInMemory _pending = new();
+    private readonly RecoveryLinkStoreInMemory _links = new();
     private readonly SendLedgerInMemory _ledger = new();
     private readonly NoticeLedgerInMemory _notices = new();
     private readonly MessageTemplatesInMemory _templates = new();
@@ -56,6 +59,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     private readonly AuthenticatorStoreInMemory _authenticators = new();
     private readonly PasswordStoreInMemory _passwords = new();
     private readonly MembershipLookupInMemory _memberships = new();
+    private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
@@ -94,6 +98,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
                 _mail,
                 _sms,
                 RestrictionKeySuppliers.None,
+                Considered.Nothing(_work, _clock),
                 new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
                 _work,
                 _events,
@@ -105,8 +110,9 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
                 _sessions,
                 _authenticators,
                 _passwords,
-                new PolicyResolution(_memberships, _configuration),
+                new PolicyResolution(_memberships, _configuration, _raises),
                 _clock),
+            new EnrolmentSessions(_links, _work, _clock),
             _configuration,
             _work,
             _events,
@@ -576,6 +582,81 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
         Assert.Equal(Second, Named(await HeldAsync(), Second).Canonical);
     }
 
+    /// <summary>
+    /// REG-IDENT-007 AC3 and AUTH-RECOV-002: within the enrolment session an approver
+    /// opened for a lost mailbox, the swap applies when the new address verifies and
+    /// the displaced one is never asked.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC3_AnEnrolmentSessionSwapsOnTheNewAddressAloneAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        EnrolmentSessionId opened = Enrolling(mailboxLost: true);
+
+        Accepted(await Service.ReplaceAsync(
+            opened,
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.DoesNotContain(_mail.Taken, message => message.Subject is "confirm");
+
+        Accepted(await Service.VerifyAsync(
+            opened,
+            email,
+            VerificationCode.Read(Waiting(email).Staged.Code!),
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(Second, Named(await HeldAsync(), Second).Canonical);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 and AUTH-RECOV-002: an enrolment session opened for an account
+    /// whose mailbox still answers reaches the replacement no more than a session
+    /// that has not stepped up does.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AnEnrolmentSessionWithAReachableMailboxIsRefusedAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        Assert.Equal(
+            ErrorCodes.Denied,
+            Refused(await Service.ReplaceAsync(
+                Enrolling(mailboxLost: false),
+                email,
+                Second,
+                Source,
+                TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// D-148: an enrolment session that has lapsed reaches nothing, and what it is
+    /// told says only that the token opens nothing.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_ALapsedEnrolmentSessionReachesNoReplacementAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        Assert.Equal(
+            ErrorCodes.EnrolmentTokenInvalid,
+            Refused(await Service.ReplaceAsync(
+                EnrolmentSessionId.New(_clock),
+                email,
+                Second,
+                Source,
+                TestContext.Current.CancellationToken)));
+    }
+
     // What the account is asking as, and the sessions it asks through: one that has
     // just presented what it holds, and one whose evidence is too old for a gate.
     private AccessContext Acting => AccessContext.Of(_person);
@@ -624,6 +705,32 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
             Source,
             TestContext.Current.CancellationToken));
     }
+
+    // The session an approved link opened, which is the spent link itself (D-147).
+    private EnrolmentSessionId Enrolling(bool mailboxLost)
+    {
+        var opened = EnrolmentSessionId.New(_clock);
+        var link = RecoveryLink.Issue(
+            OpaqueToken.Of("the-approver-sent-this-one"),
+            _person,
+            RecoveryPurpose.Enrolment,
+            _clock.GetUtcNow(),
+            TimeSpan.FromHours(1),
+            approver: SubjectId.New(_randomness),
+            mailboxLost);
+
+        link.Spend(opened, _clock.GetUtcNow());
+
+        _links.ReplaceAsync(link, TestContext.Current.CancellationToken)
+            .AsTask()
+            .GetAwaiter()
+            .GetResult();
+
+        return opened;
+    }
+
+    private PendingVerification Waiting(IdentifierId identifier) =>
+        _pending.All.Single(pending => pending.Identifier == identifier);
 
     private async Task VerifiedAsync(IdentifierId identifier)
     {

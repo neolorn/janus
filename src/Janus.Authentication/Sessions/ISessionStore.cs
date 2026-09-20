@@ -115,4 +115,13 @@ internal interface ISessionStore
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of ending them.</returns>
     ValueTask EndEveryAsync(DateTimeOffset at, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Removes the sessions that have passed their absolute expiry, which no request
+    /// can revive and which nothing reads again (AUTH-KEY-003).
+    /// </summary>
+    /// <param name="now">The instant to judge against.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>How many went.</returns>
+    ValueTask<int> SweepAsync(DateTimeOffset now, CancellationToken cancellationToken);
 }

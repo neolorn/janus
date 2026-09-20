@@ -7,6 +7,7 @@ Janus.Hosting.JanusAuthorizationModel
 Janus.Hosting.JanusEndpoints
 Janus.Hosting.JanusRegistration
 static Janus.Hosting.Bff.JanusPipeline.UseJanusBrowserProfile(this Microsoft.AspNetCore.Builder.IApplicationBuilder! application) -> Microsoft.AspNetCore.Builder.IApplicationBuilder!
+static Janus.Hosting.Bff.JanusPipeline.UseJanusMachineProfile(this Microsoft.AspNetCore.Builder.IApplicationBuilder! application) -> Microsoft.AspNetCore.Builder.IApplicationBuilder!
 static Janus.Hosting.JanusAuthorizationModel.MapJanusAuthorization(this Microsoft.EntityFrameworkCore.ModelBuilder! builder) -> Microsoft.EntityFrameworkCore.ModelBuilder!
 static Janus.Hosting.JanusEndpoints.MapJanus(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Routing.IEndpointRouteBuilder!
 static Janus.Hosting.JanusEndpoints.MapJanusWellKnown(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Routing.IEndpointRouteBuilder!

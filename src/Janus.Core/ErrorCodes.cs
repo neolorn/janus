@@ -123,6 +123,14 @@ public static class ErrorCodes
     public static ErrorCode StartupUndeclaredDerivationReference { get; } = ErrorCode.Parse("model.derivation.undeclaredreference");
 
     /// <summary>
+    /// Startup: the key-encryption key or the fingerprint key could not be obtained
+    /// from the secrets manager. Make the secrets manager reachable and the values
+    /// readable; the library holds no fallback and starts without neither.
+    /// </summary>
+    /// <remarks>Implements AUTH-KEY-002, OPS-SEC-001, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupKeyUnavailable { get; } = ErrorCode.Parse("model.startup.kekunavailable");
+
+    /// <summary>
     /// Startup: the relying party identifier is not a registrable suffix of a
     /// configured origin. Name an identifier every origin sits under, or leave it
     /// unset and let the common parent domain stand.
@@ -369,6 +377,90 @@ public static class ErrorCodes
     /// <remarks>Implements AUTH-FACT-001, chapter 10 section 1.2.</remarks>
     public static ErrorCode CredentialLabelInvalid { get; } =
         ErrorCode.Parse("auth.credential.labelinvalid");
+
+    /// <summary>
+    /// The credential is not a second-factor security key, so there is nothing for an
+    /// upgrade to replace. Name a security key the credential list carries.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-002b, chapter 10 section 1.2.</remarks>
+    public static ErrorCode CredentialNotUpgradable { get; } =
+        ErrorCode.Parse("auth.credential.notupgradable");
+
+    /// <summary>
+    /// The credential is reported lost and stands suspended. Cancel the report from
+    /// the link a notification carried, or from any session of the account.
+    /// </summary>
+    /// <remarks>Implements AUTH-RECOV-007, chapter 10 section 1.2.</remarks>
+    public static ErrorCode CredentialSuspended { get; } = ErrorCode.Parse("auth.credential.suspended");
+
+    /// <summary>
+    /// Removing this credential would lower what the account can reach, so it is
+    /// suspended now and invalidated after the notified window. Cancel from any
+    /// notification to keep it.
+    /// </summary>
+    /// <remarks>Implements AUTH-RECOV-007, chapter 10 section 1.2.</remarks>
+    public static ErrorCode CredentialLastSecondFactor { get; } =
+        ErrorCode.Parse("auth.credential.lastsecondfactor");
+
+    /// <summary>
+    /// The authenticator is already reported lost. Wait for the window in
+    /// <c>details.invalidatesAt</c>, or cancel the report and make it again.
+    /// </summary>
+    /// <remarks>Implements AUTH-RECOV-007, chapter 10 section 1.2.</remarks>
+    public static ErrorCode LossReportPending { get; } = ErrorCode.Parse("auth.lossreport.pending");
+
+    /// <summary>
+    /// Self-service loss reporting is not open to this account. Ask an approver for
+    /// admin-assisted re-enrolment instead.
+    /// </summary>
+    /// <remarks>Implements AUTH-RECOV-008, chapter 10 section 1.2.</remarks>
+    public static ErrorCode LossReportNotPermitted { get; } =
+        ErrorCode.Parse("auth.lossreport.notpermitted");
+
+    /// <summary>
+    /// The recovery link is unknown, already consumed, or not the token this endpoint
+    /// takes. Start recovery again to be sent a new one.
+    /// </summary>
+    /// <remarks>Implements AUTH-RECOV-002, chapter 10 section 1.2.</remarks>
+    public static ErrorCode RecoveryTokenInvalid { get; } = ErrorCode.Parse("auth.recovery.tokeninvalid");
+
+    /// <summary>
+    /// The recovery link is past its lifetime. Start recovery again to be sent a new
+    /// one.
+    /// </summary>
+    /// <remarks>Implements AUTH-RECOV-002, chapter 10 section 1.2.</remarks>
+    public static ErrorCode RecoveryTokenExpired { get; } = ErrorCode.Parse("auth.recovery.tokenexpired");
+
+    /// <summary>
+    /// Admin-assisted re-enrolment records why it was granted. Submit the written
+    /// reason with the request.
+    /// </summary>
+    /// <remarks>Implements AUTH-RECOV-002, chapter 10 section 1.2.</remarks>
+    public static ErrorCode RecoveryReasonRequired { get; } =
+        ErrorCode.Parse("auth.recovery.reasonrequired");
+
+    /// <summary>
+    /// The channel named is not one the account records. Name one of the account's
+    /// recorded channels; a channel supplied in the request is never used.
+    /// </summary>
+    /// <remarks>Implements AUTH-RECOV-003, chapter 10 section 1.2.</remarks>
+    public static ErrorCode RecoveryChannelNotOnAccount { get; } =
+        ErrorCode.Parse("auth.recovery.channelnotonaccount");
+
+    /// <summary>
+    /// An approver may not approve recovery for their own account. Have another
+    /// approver, or the emergency account, approve it.
+    /// </summary>
+    /// <remarks>Implements AUTH-RECOV-002a, chapter 10 section 1.2.</remarks>
+    public static ErrorCode RecoverySelfApproval { get; } = ErrorCode.Parse("auth.recovery.selfapproval");
+
+    /// <summary>
+    /// The enrolment link is unknown or already consumed. Ask an approver for a new
+    /// one.
+    /// </summary>
+    /// <remarks>Implements AUTH-RECOV-002, chapter 10 section 1.2.</remarks>
+    public static ErrorCode EnrolmentTokenInvalid { get; } =
+        ErrorCode.Parse("auth.enrolment.tokeninvalid");
 
     /// <summary>
     /// The password matched one of the sources the deployment rejects on. Choose

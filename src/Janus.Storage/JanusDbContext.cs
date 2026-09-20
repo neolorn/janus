@@ -1,11 +1,16 @@
 using System;
 using Janus.Storage.Authentication.Alerting;
+using Janus.Storage.Authentication.Credentials;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Identifiers;
+using Janus.Storage.Authentication.Oidc;
 using Janus.Storage.Authentication.Passwords;
+using Janus.Storage.Authentication.Policies;
+using Janus.Storage.Authentication.Recovery;
 using Janus.Storage.Authentication.Registration;
 using Janus.Storage.Authentication.Sending;
 using Janus.Storage.Authentication.Sessions;
+using Janus.Storage.Authentication.SignIn;
 using Janus.Storage.Authorization.Grants;
 using Janus.Storage.Authorization.Groups;
 using Janus.Storage.Authorization.Resources;
@@ -273,6 +278,61 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     public DbSet<PendingVerificationRecord> IdentifierVerifications =>
         Set<PendingVerificationRecord>();
 
+    /// <summary>
+    /// The sign-ins in progress.
+    /// </summary>
+    public DbSet<ChallengeRecord> SignInChallenges => Set<ChallengeRecord>();
+
+    /// <summary>
+    /// The credential creation ceremonies accounts have open.
+    /// </summary>
+    public DbSet<KeyCeremonyRecord> KeyCeremonies => Set<KeyCeremonyRecord>();
+
+    /// <summary>
+    /// The sign-in links and codes that have gone out.
+    /// </summary>
+    public DbSet<PendingSignInRecord> SignInLinks => Set<PendingSignInRecord>();
+
+    /// <summary>
+    /// The requirements the policies in force have raised.
+    /// </summary>
+    public DbSet<PolicyRaiseRecord> PolicyRaises => Set<PolicyRaiseRecord>();
+
+    /// <summary>
+    /// The recovery links that have gone out.
+    /// </summary>
+    public DbSet<RecoveryLinkRecord> RecoveryLinks => Set<RecoveryLinkRecord>();
+
+    /// <summary>
+    /// The approvals standing behind a re-enrolment.
+    /// </summary>
+    public DbSet<RecoveryApprovalRecord> RecoveryApprovals => Set<RecoveryApprovalRecord>();
+
+    /// <summary>
+    /// The loss reports that are running.
+    /// </summary>
+    public DbSet<LossReportRecord> LossReports => Set<LossReportRecord>();
+
+    /// <summary>
+    /// The clients the deployment registered with the provider.
+    /// </summary>
+    public DbSet<OidcClientRecord> OidcClients => Set<OidcClientRecord>();
+
+    /// <summary>
+    /// The authorization codes waiting to be exchanged.
+    /// </summary>
+    public DbSet<AuthorizationCodeRecord> AuthorizationCodes => Set<AuthorizationCodeRecord>();
+
+    /// <summary>
+    /// The refresh tokens, by family.
+    /// </summary>
+    public DbSet<RefreshTokenRecord> RefreshTokens => Set<RefreshTokenRecord>();
+
+    /// <summary>
+    /// The keys the provider signs tokens with.
+    /// </summary>
+    public DbSet<SigningKeyRecord> SigningKeys => Set<SigningKeyRecord>();
+
     /// <inheritdoc/>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -332,5 +392,16 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new RegistrationLinkConfiguration());
         modelBuilder.ApplyConfiguration(new PreAuthenticationConfiguration());
         modelBuilder.ApplyConfiguration(new PendingVerificationConfiguration());
+        modelBuilder.ApplyConfiguration(new ChallengeConfiguration());
+        modelBuilder.ApplyConfiguration(new KeyCeremonyConfiguration());
+        modelBuilder.ApplyConfiguration(new PendingSignInConfiguration());
+        modelBuilder.ApplyConfiguration(new PolicyRaiseConfiguration());
+        modelBuilder.ApplyConfiguration(new RecoveryLinkConfiguration());
+        modelBuilder.ApplyConfiguration(new RecoveryApprovalConfiguration());
+        modelBuilder.ApplyConfiguration(new LossReportConfiguration());
+        modelBuilder.ApplyConfiguration(new OidcClientConfiguration());
+        modelBuilder.ApplyConfiguration(new AuthorizationCodeConfiguration());
+        modelBuilder.ApplyConfiguration(new RefreshTokenConfiguration());
+        modelBuilder.ApplyConfiguration(new SigningKeyConfiguration());
     }
 }

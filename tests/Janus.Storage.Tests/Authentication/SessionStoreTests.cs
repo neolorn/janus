@@ -378,6 +378,42 @@ public sealed class SessionStoreTests(DatabaseFixture database)
             TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// AUTH-KEY-003 AC1: a session that has passed its absolute expiry is taken by the
+    /// sweep, which is one call and no person's task; one that has not is left.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_KEY_003_AC1_TheSweepTakesWhatHasPassedItsAbsoluteExpiryAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        Session expired = Record(subject, absolute: TimeSpan.FromDays(1));
+        Session live = Record(subject, absolute: TimeSpan.FromDays(30));
+
+        await using (JanusDbContext clearing = database.Context())
+        {
+            // The rows the other tests of this class left are taken first, so what the
+            // sweep below counts is this test's own expired session and nothing else.
+            _ = await Store(clearing).SweepAsync(
+                Noon + TimeSpan.FromDays(2),
+                TestContext.Current.CancellationToken);
+        }
+
+        await WrittenAsync(expired, live);
+
+        await using JanusDbContext sweeping = database.Context();
+
+        Assert.Equal(
+            1,
+            await Store(sweeping).SweepAsync(
+                Noon + TimeSpan.FromDays(2),
+                TestContext.Current.CancellationToken));
+
+        await using JanusDbContext reading = database.Context();
+
+        Assert.Null(await Store(reading).FindAsync(expired.Id, TestContext.Current.CancellationToken));
+        Assert.NotNull(await Store(reading).FindAsync(live.Id, TestContext.Current.CancellationToken));
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 

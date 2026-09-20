@@ -144,7 +144,9 @@ jobs:
       postgres:
         image: postgres:17-alpine
         env:
-          POSTGRES_PASSWORD: postgres
+          # AUTH-KEY-002: the throwaway container's credential is drawn per run rather
+          # than written down here, so no file in the repository carries one.
+          POSTGRES_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
         ports:
           - 5432:5432
         options: >-
@@ -153,7 +155,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      PGPASSWORD: postgres
+      PGPASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       # The second run starts from the previous release, so the tags have to be here.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

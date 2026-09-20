@@ -108,7 +108,7 @@ internal static class RegistrationEndpoints
         RegistrationSessionId session = (await registration
                 .BeginAsync(
                     client,
-                    Language(context.Request),
+                    RequestOrigin.Language(context.Request),
                     RequestOrigin.Source(context.Request),
                     cancellationToken)
                 .ConfigureAwait(false))
@@ -512,15 +512,6 @@ internal static class RegistrationEndpoints
             AccountJson.Default.AccountView,
             contentType: null,
             StatusCodes.Status200OK);
-
-    // The first tag of the header, which is the language the person is reading in.
-    private static string Language(HttpRequest request)
-    {
-        string accepted = request.Headers.AcceptLanguage.ToString();
-        int ends = accepted.IndexOfAny([',', ';']);
-
-        return (ends < 0 ? accepted : accepted[..ends]).Trim();
-    }
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)
     {
