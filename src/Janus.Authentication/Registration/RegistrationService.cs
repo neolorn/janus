@@ -610,6 +610,41 @@ internal sealed class RegistrationService(
         IReadOnlyDictionary<string, bool> consents,
         DeviceDescription device,
         SessionLocation? location,
+        CancellationToken cancellationToken) =>
+        (await CompleteAsync(
+                session,
+                termsVersion,
+                noticeVersion,
+                consents,
+                device,
+                location,
+                cancellationToken)
+            .ConfigureAwait(false))
+        .Match(
+            outcome => Result.Success(new RegistrationCompleted(outcome.Subject, outcome.Session.Id)),
+            Result.Failure<RegistrationCompleted>);
+
+    /// <summary>
+    /// The terms step, with what only the boundary can act on: the secrets the
+    /// browser is to carry away. The contract method is this one without them,
+    /// because a caller in process has no cookie to write them to.
+    /// </summary>
+    /// <param name="session">The registration session.</param>
+    /// <param name="termsVersion">The version of the terms accepted.</param>
+    /// <param name="noticeVersion">The version of the notice presented.</param>
+    /// <param name="consents">What each consent control was left at.</param>
+    /// <param name="device">What the browser said it is.</param>
+    /// <param name="location">Where the request came from, where that is known.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The account, the session it is signed in on, and the browser token.</returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    internal async ValueTask<Result<RegistrationOutcome>> CompleteAsync(
+        RegistrationSessionId session,
+        string termsVersion,
+        string noticeVersion,
+        IReadOnlyDictionary<string, bool> consents,
+        DeviceDescription device,
+        SessionLocation? location,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(termsVersion);
@@ -622,14 +657,14 @@ internal sealed class RegistrationService(
 
         if (live is null)
         {
-            return Result.Failure<RegistrationCompleted>(Error.From(ErrorCodes.SessionExpired));
+            return Result.Failure<RegistrationOutcome>(Error.From(ErrorCodes.SessionExpired));
         }
 
         // The affirmation is what the age screen derived, and the terms step refuses
         // without it (REG-SESS-007, `09` section 2).
         if (!live.AgeAnswered)
         {
-            return Result.Failure<RegistrationCompleted>(
+            return Result.Failure<RegistrationOutcome>(
                 Error.From(ErrorCodes.AffirmationRequired));
         }
 
@@ -641,13 +676,13 @@ internal sealed class RegistrationService(
 
         if (failure is not null)
         {
-            return Result.Failure<RegistrationCompleted>(failure);
+            return Result.Failure<RegistrationOutcome>(failure);
         }
 
         if (live.Step is not RegistrationStep.Terms
             || !SecurityStep.Complete(live, policy.LoginFactors))
         {
-            return Result.Failure<RegistrationCompleted>(
+            return Result.Failure<RegistrationOutcome>(
                 Error.From(ErrorCodes.RegistrationIncomplete));
         }
 
@@ -661,7 +696,7 @@ internal sealed class RegistrationService(
 
         if (failure is not null)
         {
-            return Result.Failure<RegistrationCompleted>(failure);
+            return Result.Failure<RegistrationOutcome>(failure);
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -686,18 +721,19 @@ internal sealed class RegistrationService(
 
         if (failure is not null)
         {
-            return Result.Failure<RegistrationCompleted>(failure);
+            return Result.Failure<RegistrationOutcome>(failure);
         }
 
         // The browser that completed the step is remembered, so the account's next
         // sign-in from it is not held for a new-device code (REG-SESS-007 AC4).
-        Result<OpaqueToken> remembered = await devices
-            .RememberAsync(live.Provisional, device, cancellationToken)
-            .ConfigureAwait(false);
+        OpaqueToken browser = (await devices
+                .RememberAsync(live.Provisional, device, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(token => token, error => Held<OpaqueToken>(error, ref failure));
 
-        if (remembered.Match(_ => (Error?)null, error => error) is Error unremembered)
+        if (failure is not null)
         {
-            return Result.Failure<RegistrationCompleted>(unremembered);
+            return Result.Failure<RegistrationOutcome>(failure);
         }
 
         // Nothing of the session survives it: an account exists now, and a staged
@@ -714,7 +750,7 @@ internal sealed class RegistrationService(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        return Result.Success(new RegistrationCompleted(live.Provisional, issued.Id));
+        return Result.Success(new RegistrationOutcome(live.Provisional, issued, browser));
     }
 
     /// <inheritdoc/>
