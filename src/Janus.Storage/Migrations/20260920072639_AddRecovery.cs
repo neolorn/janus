@@ -14,6 +14,13 @@ internal sealed partial class AddRecovery : Migration
     /// <inheritdoc />
     protected override void Up(MigrationBuilder migrationBuilder)
     {
+        migrationBuilder.AddColumn<Guid>(
+            name: "enrolment",
+            schema: "janus",
+            table: "preauthentication_sessions",
+            type: "uuid",
+            nullable: true);
+
         migrationBuilder.AddColumn<bool>(
             name: "change_required",
             schema: "janus",
@@ -125,6 +132,14 @@ internal sealed partial class AddRecovery : Migration
             });
 
         migrationBuilder.CreateIndex(
+            name: "ux_preauthentication_sessions_enrolment",
+            schema: "janus",
+            table: "preauthentication_sessions",
+            column: "enrolment",
+            unique: true,
+            filter: "enrolment IS NOT NULL");
+
+        migrationBuilder.CreateIndex(
             name: "ix_loss_reports_invalidates_at",
             schema: "janus",
             table: "loss_reports",
@@ -191,6 +206,16 @@ internal sealed partial class AddRecovery : Migration
         migrationBuilder.DropTable(
             name: "recovery_links",
             schema: "janus");
+
+        migrationBuilder.DropIndex(
+            name: "ux_preauthentication_sessions_enrolment",
+            schema: "janus",
+            table: "preauthentication_sessions");
+
+        migrationBuilder.DropColumn(
+            name: "enrolment",
+            schema: "janus",
+            table: "preauthentication_sessions");
 
         migrationBuilder.DropColumn(
             name: "change_required",

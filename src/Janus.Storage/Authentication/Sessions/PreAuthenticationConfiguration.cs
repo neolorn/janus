@@ -10,10 +10,11 @@ namespace Janus.Storage.Authentication.Sessions;
 /// How a browser's first contact is stored.
 /// </summary>
 /// <remarks>
-/// Implements BFF-CSRF-005a and BFF-CSRF-005b. A browser has at most one registration
-/// in flight and a registration belongs to one browser, which the database holds
-/// rather than a read before a write; abandoning the registration takes the binding
-/// with it and leaves the browser its token.
+/// Implements BFF-CSRF-005a, BFF-CSRF-005b and AUTH-RECOV-002. A browser has at most
+/// one registration and one enrolment in flight and each belongs to one browser,
+/// which the database holds rather than a read before a write; abandoning the
+/// registration or finishing the enrolment takes the binding with it and leaves the
+/// browser its token.
 /// </remarks>
 internal sealed class PreAuthenticationConfiguration
     : IEntityTypeConfiguration<PreAuthenticationRecord>
@@ -51,6 +52,10 @@ internal sealed class PreAuthenticationConfiguration
             .HasColumnName("registration")
             .HasConversion(id => id!.Value.Value, value => new RegistrationSessionId(value));
 
+        builder.Property(contact => contact.Enrolment)
+            .HasColumnName("enrolment")
+            .HasConversion(id => id!.Value.Value, value => new EnrolmentSessionId(value));
+
         builder.HasIndex(contact => contact.ExpiresAt)
             .HasDatabaseName("ix_preauthentication_sessions_expires_at");
 
@@ -58,6 +63,15 @@ internal sealed class PreAuthenticationConfiguration
             .HasDatabaseName("ux_preauthentication_sessions_registration")
             .IsUnique()
             .HasFilter("registration IS NOT NULL");
+
+        // AUTH-RECOV-002: one browser holds one enrolment and an enrolment belongs to
+        // one browser. There is no foreign key to the link the session lives on,
+        // because the column it would point at is unique only where it is not null,
+        // and a partial index cannot carry one.
+        builder.HasIndex(contact => contact.Enrolment)
+            .HasDatabaseName("ux_preauthentication_sessions_enrolment")
+            .IsUnique()
+            .HasFilter("enrolment IS NOT NULL");
 
         builder.HasOne<RegistrationSessionRecord>()
             .WithMany()

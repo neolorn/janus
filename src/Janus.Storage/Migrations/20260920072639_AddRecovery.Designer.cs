@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Janus.Storage.Migrations;
 
 [DbContext(typeof(JanusDbContext))]
-[Migration("20260920072220_AddRecovery")]
+[Migration("20260920072639_AddRecovery")]
 partial class AddRecovery
 {
     /// <inheritdoc />
@@ -849,6 +849,10 @@ partial class AddRecovery
                     .HasColumnType("bytea")
                     .HasColumnName("csrf_fingerprint");
 
+                b.Property<Guid?>("Enrolment")
+                    .HasColumnType("uuid")
+                    .HasColumnName("enrolment");
+
                 b.Property<DateTimeOffset>("ExpiresAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("expires_at");
@@ -859,6 +863,11 @@ partial class AddRecovery
 
                 b.HasKey("Fingerprint")
                     .HasName("pk_preauthentication_sessions");
+
+                b.HasIndex("Enrolment")
+                    .IsUnique()
+                    .HasDatabaseName("ux_preauthentication_sessions_enrolment")
+                    .HasFilter("enrolment IS NOT NULL");
 
                 b.HasIndex("ExpiresAt")
                     .HasDatabaseName("ix_preauthentication_sessions_expires_at");

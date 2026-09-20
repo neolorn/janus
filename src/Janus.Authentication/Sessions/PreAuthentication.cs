@@ -5,7 +5,7 @@ namespace Janus.Authentication.Sessions;
 
 /// <summary>
 /// What a browser carries before it holds a session: something for a synchronizer
-/// token to be bound to, and the registration it has in flight.
+/// token to be bound to, and the registration or enrolment it has in flight.
 /// </summary>
 /// <remarks>
 /// Implements BFF-CSRF-005a and BFF-CSRF-005b. It carries no identity and grants no
@@ -55,6 +55,11 @@ internal sealed class PreAuthentication
     public RegistrationSessionId? Registration { get; private set; }
 
     /// <summary>
+    /// The enrolment this browser has in flight, where it has one (AUTH-RECOV-002).
+    /// </summary>
+    public EnrolmentSessionId? Enrolment { get; private set; }
+
+    /// <summary>
     /// Issues one for a browser that carried nothing.
     /// </summary>
     /// <param name="secret">The token the cookie carries.</param>
@@ -78,6 +83,7 @@ internal sealed class PreAuthentication
     /// <param name="createdAt">When the browser arrived.</param>
     /// <param name="expiresAt">When it stops answering.</param>
     /// <param name="registration">The registration in flight, where there is one.</param>
+    /// <param name="enrolment">The enrolment in flight, where there is one.</param>
     /// <returns>The pre-authentication session.</returns>
     /// <exception cref="ArgumentNullException">Either fingerprint is absent.</exception>
     public static PreAuthentication Existing(
@@ -85,7 +91,8 @@ internal sealed class PreAuthentication
         byte[] csrfFingerprint,
         DateTimeOffset createdAt,
         DateTimeOffset expiresAt,
-        RegistrationSessionId? registration)
+        RegistrationSessionId? registration,
+        EnrolmentSessionId? enrolment = null)
     {
         ArgumentNullException.ThrowIfNull(fingerprint);
         ArgumentNullException.ThrowIfNull(csrfFingerprint);
@@ -93,6 +100,7 @@ internal sealed class PreAuthentication
         return new PreAuthentication(fingerprint, csrfFingerprint, createdAt, expiresAt)
         {
             Registration = registration,
+            Enrolment = enrolment,
         };
     }
 
@@ -116,7 +124,24 @@ internal sealed class PreAuthentication
     }
 
     /// <summary>
-    /// Forgets the registration, which is what abandoning one leaves behind.
+    /// Records the enrolment this browser has just opened, which binds the two as a
+    /// registration is bound (AUTH-RECOV-002, BFF-CSRF-005b).
     /// </summary>
-    public void Release() => Registration = null;
+    /// <param name="enrolment">Which enrolment.</param>
+    /// <param name="expiresAt">When both stop answering, which is one instant.</param>
+    public void Carry(EnrolmentSessionId enrolment, DateTimeOffset expiresAt)
+    {
+        Enrolment = enrolment;
+        ExpiresAt = expiresAt;
+    }
+
+    /// <summary>
+    /// Forgets what the browser had in flight, which is what abandoning a
+    /// registration or finishing an enrolment leaves behind.
+    /// </summary>
+    public void Release()
+    {
+        Registration = null;
+        Enrolment = null;
+    }
 }

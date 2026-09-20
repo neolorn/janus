@@ -310,6 +310,7 @@ public sealed class ModelTests
             // flight (BFF-CSRF-005a, BFF-CSRF-005b).
             "preauthentication_sessions.created_at",
             "preauthentication_sessions.csrf_fingerprint",
+            "preauthentication_sessions.enrolment",
             "preauthentication_sessions.expires_at",
             "preauthentication_sessions.fingerprint",
             "preauthentication_sessions.registration",

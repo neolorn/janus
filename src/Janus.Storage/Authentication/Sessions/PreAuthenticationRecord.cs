@@ -28,4 +28,7 @@ internal sealed class PreAuthenticationRecord
 
     /// <summary>The <c>registration</c> column, where the browser has one in flight.</summary>
     public RegistrationSessionId? Registration { get; set; }
+
+    /// <summary>The <c>enrolment</c> column, where the browser has one in flight.</summary>
+    public EnrolmentSessionId? Enrolment { get; set; }
 }
