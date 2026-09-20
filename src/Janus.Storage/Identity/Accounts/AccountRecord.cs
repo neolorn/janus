@@ -42,4 +42,29 @@ internal sealed class AccountRecord
     /// The <c>deleting_since</c> column.
     /// </summary>
     public DateTimeOffset? DeletingSince { get; set; }
+
+    /// <summary>
+    /// The <c>adult_affirmed</c> column.
+    /// </summary>
+    public bool? AdultAffirmed { get; set; }
+
+    /// <summary>
+    /// The <c>age_group</c> column.
+    /// </summary>
+    public AgeGroup? AgeGroup { get; set; }
+
+    /// <summary>
+    /// The <c>answered_age_at</c> column.
+    /// </summary>
+    public DateTimeOffset? AnsweredAgeAt { get; set; }
+
+    /// <summary>
+    /// The <c>terms_version</c> column.
+    /// </summary>
+    public string? TermsVersion { get; set; }
+
+    /// <summary>
+    /// The <c>notice_version</c> column.
+    /// </summary>
+    public string? NoticeVersion { get; set; }
 }

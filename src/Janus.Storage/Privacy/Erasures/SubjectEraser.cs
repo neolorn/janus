@@ -81,7 +81,8 @@ internal sealed class SubjectEraser(JanusDbContext context, ISessionStore sessio
             record.State,
             record.SuspendedBy,
             record.DeletingBy,
-            record.DeletingSince);
+            record.DeletingSince,
+            registration: null);
 
         account.MarkErased();
 
