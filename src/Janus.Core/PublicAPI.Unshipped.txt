@@ -831,6 +831,17 @@ Janus.Core.OrganizationId.OrganizationId() -> void
 Janus.Core.OrganizationId.OrganizationId(System.Guid Value) -> void
 Janus.Core.OrganizationId.Value.get -> System.Guid
 Janus.Core.OrganizationId.Value.init -> void
+Janus.Core.PasskeyAddresses
+Janus.Core.PasskeyAddresses.<Clone>$() -> Janus.Core.PasskeyAddresses!
+Janus.Core.PasskeyAddresses.ChangePassword.get -> string!
+Janus.Core.PasskeyAddresses.ChangePassword.init -> void
+Janus.Core.PasskeyAddresses.Deconstruct(out string! ChangePassword, out string! Enrol, out string! Manage) -> void
+Janus.Core.PasskeyAddresses.Enrol.get -> string!
+Janus.Core.PasskeyAddresses.Enrol.init -> void
+Janus.Core.PasskeyAddresses.Equals(Janus.Core.PasskeyAddresses? other) -> bool
+Janus.Core.PasskeyAddresses.Manage.get -> string!
+Janus.Core.PasskeyAddresses.Manage.init -> void
+Janus.Core.PasskeyAddresses.PasskeyAddresses(string! ChangePassword, string! Enrol, string! Manage) -> void
 Janus.Core.Permission
 Janus.Core.Permission.Action.get -> string!
 Janus.Core.Permission.Equals(Janus.Core.Permission other) -> bool
@@ -1528,6 +1539,9 @@ override Janus.Core.NotificationRequested.GetHashCode() -> int
 override Janus.Core.NotificationRequested.ToString() -> string!
 override Janus.Core.OrganizationId.GetHashCode() -> int
 override Janus.Core.OrganizationId.ToString() -> string!
+override Janus.Core.PasskeyAddresses.Equals(object? obj) -> bool
+override Janus.Core.PasskeyAddresses.GetHashCode() -> int
+override Janus.Core.PasskeyAddresses.ToString() -> string!
 override Janus.Core.Permission.GetHashCode() -> int
 override Janus.Core.Permission.ToString() -> string!
 override Janus.Core.PhoneNumber.GetHashCode() -> int
@@ -1988,6 +2002,9 @@ static Janus.Core.NotificationRequested.operator ==(Janus.Core.NotificationReque
 static Janus.Core.OrganizationId.New(System.TimeProvider! time) -> Janus.Core.OrganizationId
 static Janus.Core.OrganizationId.operator !=(Janus.Core.OrganizationId left, Janus.Core.OrganizationId right) -> bool
 static Janus.Core.OrganizationId.operator ==(Janus.Core.OrganizationId left, Janus.Core.OrganizationId right) -> bool
+static Janus.Core.PasskeyAddresses.None.get -> Janus.Core.PasskeyAddresses!
+static Janus.Core.PasskeyAddresses.operator !=(Janus.Core.PasskeyAddresses? left, Janus.Core.PasskeyAddresses? right) -> bool
+static Janus.Core.PasskeyAddresses.operator ==(Janus.Core.PasskeyAddresses? left, Janus.Core.PasskeyAddresses? right) -> bool
 static Janus.Core.Permission.Parse(string! value) -> Janus.Core.Permission
 static Janus.Core.Permission.TryParse(string? value, out Janus.Core.Permission permission) -> bool
 static Janus.Core.Permission.operator !=(Janus.Core.Permission left, Janus.Core.Permission right) -> bool
