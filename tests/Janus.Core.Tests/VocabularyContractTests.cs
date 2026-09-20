@@ -270,6 +270,7 @@ public sealed class VocabularyContractTests
                 "credential-enrolled",
                 "enrolment-link",
                 "identifier-added",
+                "identifier-change-confirm",
                 "identifier-detached",
                 "identifier-removed",
                 "identifier-settings-changed",

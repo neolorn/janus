@@ -267,7 +267,8 @@ public static class ErrorCodes
 
     /// <summary>
     /// The deployment does not take the field from the person: its key is off, or it
-    /// is the date of birth, which is corrected through support and nowhere else.
+    /// is the date of birth, which is corrected through support and nowhere else. Leave
+    /// the field out and send the rest.
     /// </summary>
     /// <remarks>Implements REG-PROF-001, REG-IDENT-009, chapter 10 section 1.1.</remarks>
     public static ErrorCode ProfileNotAccepted { get; } = ErrorCode.Parse("identity.profile.notaccepted");
