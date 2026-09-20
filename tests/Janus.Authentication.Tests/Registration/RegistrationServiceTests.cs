@@ -11,6 +11,7 @@ using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests.Factors;
+using Janus.Authentication.Tests.Oidc;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
 using Janus.Authentication.Tests.Sending;
@@ -30,6 +31,7 @@ namespace Janus.Authentication.Tests.Registration;
 public sealed class RegistrationServiceTests : IAsyncDisposable
 {
     private const string Client = "web";
+    private const string Registered = "https://app.example.test/welcome";
     private const string Language = "en";
     private const string Source = "198.51.100.7";
     private const string Address = "person@example.test";
@@ -66,6 +68,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
     private readonly ScreeningLogInMemory _screening = new();
     private readonly RecoveryCodeStoreInMemory _sets = new();
     private readonly AuthenticatorStoreInMemory _authenticators = new();
+    private readonly OidcClientStoreInMemory _clients = new();
     private readonly DeviceStoreInMemory _devices = new();
     private readonly SessionStoreInMemory _live = new();
     private readonly SessionAuditInMemory _audit = new();
@@ -135,6 +138,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
                 _randomness),
             _sets,
             _authenticators,
+            _clients,
             new PolicyResolution(_memberships, _configuration, _raises),
             new SessionService(
                 _live,
@@ -842,12 +846,16 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-SESS-008 AC2: the client captured at the first request is the one the
-    /// session carries to the end, and the end is a session the person holds.
+    /// REG-SESS-008 AC2 and API-REDIR-002 AC1, AC4: the client captured at the first
+    /// request is the one the session carries to the end, the end is a session the
+    /// person holds, and where they are returned is the address the registry holds
+    /// for that client.
     /// </summary>
     [Fact]
     public async Task REG_SESS_008_AC2_TheReturnIsDecidedByTheClientCapturedAtTheStartAsync()
     {
+        await RegisteredAsync();
+
         RegistrationSessionId session = await SecuredAsync();
 
         Assert.Equal(Client, Live(session).Client);
@@ -858,7 +866,48 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
 
         Assert.Equal(completed.Subject, signedIn.Subject);
         Assert.Equal(completed.Session, signedIn.Id);
+        Assert.Equal(Registered, completed.Landing);
     }
+
+    /// <summary>
+    /// API-REDIR-002 AC1: the identifier is resolved against the registry where it is
+    /// captured, so the session carries a client the deployment registered and not a
+    /// string the request chose.
+    /// </summary>
+    [Fact]
+    public async Task API_REDIR_002_AC1_TheIdentifierIsResolvedWhereItIsCapturedAsync()
+    {
+        await RegisteredAsync();
+
+        Assert.Equal(Client, Live(await StartedAsync()).Client);
+    }
+
+    /// <summary>
+    /// API-REDIR-002 AC2: an identifier the registry does not hold registers a person
+    /// exactly as a registered one does, and the return falls back to the deployment's
+    /// default rather than to anything the request named.
+    /// </summary>
+    [Fact]
+    public async Task API_REDIR_002_AC2_AnUnrecognisedIdentifierIsTheDefaultAndNoRefusalAsync()
+    {
+        RegistrationSessionId session = await SecuredAsync();
+
+        Assert.Empty(Live(session).Client);
+        Assert.Empty(Ok(await AcceptedAsync(session)).Landing);
+    }
+
+    /// <summary>
+    /// API-REDIR-002 AC3: no step after the first takes a destination, so there is
+    /// nothing at the end to validate and nothing a later request could replace.
+    /// </summary>
+    [Fact]
+    public void API_REDIR_002_AC3_NoLaterStepTakesADestination() =>
+        Assert.DoesNotContain(
+            typeof(IRegistration).GetMethods().SelectMany(method => method.GetParameters()),
+            parameter => parameter.Name is not null
+                && (parameter.Name.Contains("redirect", StringComparison.OrdinalIgnoreCase)
+                    || parameter.Name.Contains("destination", StringComparison.OrdinalIgnoreCase)
+                    || parameter.Name.Contains("return", StringComparison.OrdinalIgnoreCase)));
 
     /// <summary>
     /// REG-PROF-002 AC1: the age screen comes first, and an identifier offered
@@ -1036,6 +1085,13 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
 
     // The steps a test is not about, run the way a browser runs them, so that each
     // test says only what it is checking.
+    private Task RegisteredAsync() => _clients
+        .RecordAsync(
+            new OidcClient(Client, Client, OidcClientKind.BrowserApplication, Registered, ["openid"]),
+            [1, 2, 3],
+            TestContext.Current.CancellationToken)
+        .AsTask();
+
     private async Task<RegistrationSessionId> StartedAsync()
     {
         Result<RegistrationSessionId> begun = await Service

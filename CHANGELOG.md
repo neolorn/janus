@@ -18,6 +18,11 @@ against the public contract of LIB-API-001.
 - A second-factor security key offered for upgrade when it is not one now answers with
   its own code rather than the one a refused factor answers with, and a credential of
   another account answers as one that does not exist.
+- Registration now resolves the client identifier it is given against the registry as
+  it takes it, and what a completed registration reports as the return is the address
+  that client registered. An identifier the registry does not hold registers the person
+  exactly as a registered one does and leaves the return to the deployment's own
+  default; no step after the first takes a destination at all.
 
 - A deployment that cannot reach its secrets manager now stops as it starts, with the
   code that says which of the two values was not there, rather than failing at the

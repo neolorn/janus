@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Oidc;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Sending;
@@ -28,6 +29,7 @@ namespace Janus.Authentication.Registration;
 /// <param name="recoveryCodes">What draws a set of recovery codes.</param>
 /// <param name="recoveryCodeStore">Where the account's set is written.</param>
 /// <param name="authenticators">Where the account's credentials are written.</param>
+/// <param name="clients">The registry the originating client is resolved against.</param>
 /// <param name="policies">Where the policy in force is resolved.</param>
 /// <param name="issuing">What issues the session the person is signed in on.</param>
 /// <param name="devices">What remembers the registering browser.</param>
@@ -38,7 +40,7 @@ namespace Janus.Authentication.Registration;
 /// <param name="randomness">Where the codes and the tokens are drawn from.</param>
 /// <remarks>
 /// Implements REG-SESS-001 to REG-SESS-008, REG-PROF-002, REG-IDENT-010,
-/// AUTH-FACT-004 and AUTH-ABUSE-003. Every answer is the same whether or not the
+/// API-REDIR-002, AUTH-FACT-004 and AUTH-ABUSE-003. Every answer is the same whether or not the
 /// identifier presented belongs to an account already: the lookup decides only
 /// whether a code goes out and whether the holder is told.
 /// </remarks>
@@ -52,6 +54,7 @@ internal sealed class RegistrationService(
     RecoveryCodeService recoveryCodes,
     IRecoveryCodeStore recoveryCodeStore,
     IAuthenticatorStore authenticators,
+    IOidcClientStore clients,
     PolicyResolution policies,
     SessionService issuing,
     DeviceService devices,
@@ -85,10 +88,16 @@ internal sealed class RegistrationService(
             return Result.Failure<RegistrationSessionId>(failure);
         }
 
+        // API-REDIR-002 AC1 and AC2: the identifier is resolved where it is captured,
+        // and one the registry does not hold is stored as the default rather than
+        // refused, so by the last step there is nothing left to validate.
+        OidcClient? originating =
+            await clients.FindAsync(client, cancellationToken).ConfigureAwait(false);
+
         var session = RegistrationSession.Open(
             RegistrationSessionId.New(time),
             SubjectId.New(randomness),
-            client,
+            originating?.ClientId ?? string.Empty,
             language,
             source,
             time.GetUtcNow(),
@@ -611,19 +620,43 @@ internal sealed class RegistrationService(
         IReadOnlyDictionary<string, bool> consents,
         DeviceDescription device,
         SessionLocation? location,
-        CancellationToken cancellationToken) =>
-        (await CompleteAsync(
-                session,
-                termsVersion,
-                noticeVersion,
-                consents,
-                device,
-                location,
-                cancellationToken)
-            .ConfigureAwait(false))
-        .Match(
-            outcome => Result.Success(new RegistrationCompleted(outcome.Subject, outcome.Session.Id)),
-            Result.Failure<RegistrationCompleted>);
+        CancellationToken cancellationToken)
+    {
+        // API-REDIR-002 AC4: where the person is returned is read from what the
+        // session stored at step 1, so it is resolved before the step that ends the
+        // session and never from anything this request carries.
+        string landing = await LandingAsync(session, cancellationToken).ConfigureAwait(false);
+
+        return (await CompleteAsync(
+                    session,
+                    termsVersion,
+                    noticeVersion,
+                    consents,
+                    device,
+                    location,
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match(
+                outcome => Result.Success(
+                    new RegistrationCompleted(outcome.Subject, outcome.Session.Id, landing)),
+                Result.Failure<RegistrationCompleted>);
+    }
+
+    private async ValueTask<string> LandingAsync(
+        RegistrationSessionId session,
+        CancellationToken cancellationToken)
+    {
+        if (await LiveAsync(session, cancellationToken).ConfigureAwait(false) is not
+            { Client.Length: > 0 } live)
+        {
+            return string.Empty;
+        }
+
+        return await clients.FindAsync(live.Client, cancellationToken).ConfigureAwait(false)
+            is OidcClient originating
+            ? originating.Redirect
+            : string.Empty;
+    }
 
     /// <summary>
     /// The terms step, with what only the boundary can act on: the secrets the

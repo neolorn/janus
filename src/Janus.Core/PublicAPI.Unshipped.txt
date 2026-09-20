@@ -1327,9 +1327,11 @@ Janus.Core.RefreshRedemption.RefreshToken.get -> string!
 Janus.Core.RefreshRedemption.RefreshToken.init -> void
 Janus.Core.RegistrationCompleted
 Janus.Core.RegistrationCompleted.<Clone>$() -> Janus.Core.RegistrationCompleted!
-Janus.Core.RegistrationCompleted.Deconstruct(out Janus.Core.SubjectId Subject, out Janus.Core.SessionId Session) -> void
+Janus.Core.RegistrationCompleted.Deconstruct(out Janus.Core.SubjectId Subject, out Janus.Core.SessionId Session, out string! Landing) -> void
 Janus.Core.RegistrationCompleted.Equals(Janus.Core.RegistrationCompleted? other) -> bool
-Janus.Core.RegistrationCompleted.RegistrationCompleted(Janus.Core.SubjectId Subject, Janus.Core.SessionId Session) -> void
+Janus.Core.RegistrationCompleted.Landing.get -> string!
+Janus.Core.RegistrationCompleted.Landing.init -> void
+Janus.Core.RegistrationCompleted.RegistrationCompleted(Janus.Core.SubjectId Subject, Janus.Core.SessionId Session, string! Landing) -> void
 Janus.Core.RegistrationCompleted.Session.get -> Janus.Core.SessionId
 Janus.Core.RegistrationCompleted.Session.init -> void
 Janus.Core.RegistrationCompleted.Subject.get -> Janus.Core.SubjectId
