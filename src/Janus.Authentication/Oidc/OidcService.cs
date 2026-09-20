@@ -53,10 +53,13 @@ internal sealed class OidcService(
     private const string Separator = " ";
 
     /// <inheritdoc/>
-    public ValueTask<OidcClient?> FindClientAsync(
+    public async ValueTask<Result<OidcClient>> FindClientAsync(
         string clientId,
         CancellationToken cancellationToken) =>
-        clients.FindAsync(clientId, cancellationToken);
+        await clients.FindAsync(clientId, cancellationToken).ConfigureAwait(false)
+            is OidcClient registered
+            ? Result.Success(registered)
+            : Result.Failure<OidcClient>(Error.From(ErrorCodes.Denied));
 
     /// <inheritdoc/>
     public async ValueTask<Result<IssuedCode>> IssueCodeAsync(

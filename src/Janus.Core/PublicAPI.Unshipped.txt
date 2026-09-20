@@ -803,7 +803,7 @@ Janus.Core.IMessageTemplates
 Janus.Core.IMessageTemplates.Find(Janus.Core.MessageKind message, Janus.Core.SendKind kind, string! language) -> Janus.Core.Result<Janus.Core.MessageTemplate!>
 Janus.Core.IOidc
 Janus.Core.IOidc.ClaimsAsync(Janus.Core.SubjectId subject, string! scope, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.OidcClaims!>>
-Janus.Core.IOidc.FindClientAsync(string! clientId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.OidcClient?>
+Janus.Core.IOidc.FindClientAsync(string! clientId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.OidcClient!>>
 Janus.Core.IOidc.IssueCodeAsync(Janus.Core.AuthorizationIntent! intent, Janus.Core.SessionId? session, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.IssuedCode!>>
 Janus.Core.IOidc.KeysAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.PublishedSigningKey!>!>>
 Janus.Core.IOidc.RedeemCodeAsync(Janus.Core.CodeRedemption! redemption, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.IssuedToken!>>

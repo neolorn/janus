@@ -29,7 +29,8 @@ internal sealed class AuthorizationValidation(IOidc oidc, ILogger<AuthorizationV
         ArgumentNullException.ThrowIfNull(context);
 
         OidcClient? client = context.ClientId is string named
-            ? await oidc.FindClientAsync(named, context.CancellationToken).ConfigureAwait(false)
+            ? (await oidc.FindClientAsync(named, context.CancellationToken).ConfigureAwait(false))
+                .Match(registered => (OidcClient?)registered, _ => null)
             : null;
 
         if (client is null)

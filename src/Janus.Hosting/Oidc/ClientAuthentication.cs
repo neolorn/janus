@@ -26,7 +26,8 @@ internal sealed class ClientAuthentication(IOidc oidc, ILogger<ClientAuthenticat
         ArgumentNullException.ThrowIfNull(context);
 
         if (context.Request.ClientId is string named
-            && await oidc.FindClientAsync(named, context.CancellationToken).ConfigureAwait(false) is not null)
+            && (await oidc.FindClientAsync(named, context.CancellationToken).ConfigureAwait(false))
+                .Match(_ => true, _ => false))
         {
             return;
         }

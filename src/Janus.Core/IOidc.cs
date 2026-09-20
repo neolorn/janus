@@ -24,10 +24,10 @@ public interface IOidc
     /// <param name="clientId">What the request called it.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// The client, or nothing where the registry holds none: an unregistered client
-    /// obtains neither a code nor a token.
+    /// The client, or <c>authz.denied</c> where the registry holds none: an
+    /// unregistered client obtains neither a code nor a token.
     /// </returns>
-    ValueTask<OidcClient?> FindClientAsync(string clientId, CancellationToken cancellationToken);
+    ValueTask<Result<OidcClient>> FindClientAsync(string clientId, CancellationToken cancellationToken);
 
     /// <summary>
     /// Issues a one-time code against a live session.
