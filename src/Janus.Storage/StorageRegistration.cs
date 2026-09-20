@@ -4,6 +4,7 @@ using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authorization.Gate;
@@ -26,6 +27,7 @@ using Janus.Storage.Authentication.Alerting;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Passwords;
 using Janus.Storage.Authentication.Policies;
+using Janus.Storage.Authentication.Registration;
 using Janus.Storage.Authentication.Sending;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Authorization.Gate;
@@ -93,7 +95,10 @@ internal static class StorageRegistration
         services.AddScoped<IConfigurationStore, ConfigurationStore>();
 
         services.AddScoped<IAccountStore, AccountStore>();
-        services.AddScoped<ISubjectKeyStore, SubjectKeyStore>();
+        services.AddScoped<ISubjectKeyStore>(provider => new SubjectKeyStore(
+            provider.GetRequiredService<JanusDbContext>(),
+            keyEncryptionKeys,
+            provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IErasureStore, ErasureStore>();
         services.AddScoped<ISubjectEraser, SubjectEraser>();
         services.AddScoped<IOrganizationStore, OrganizationStore>();
@@ -128,6 +133,16 @@ internal static class StorageRegistration
             provider.GetRequiredService<JanusDbContext>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<IRegistrationSessionStore>(provider => new RegistrationSessionStore(
+            provider.GetRequiredService<JanusDbContext>(),
+            keyEncryptionKeys,
+            provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<IRegistrationDirectory>(provider => new RegistrationDirectory(
+            provider.GetRequiredService<JanusDbContext>(),
+            provider.GetRequiredService<IAccountStore>(),
+            provider.GetRequiredService<IIdentifierStore>(),
+            provider.GetRequiredService<IProfileStore>(),
+            provider.GetRequiredService<ISubjectKeyStore>()));
         services.AddScoped<IPasswordStore, PasswordStore>();
         services.AddScoped<IRecoveryCodeStore, RecoveryCodeStore>();
         services.AddScoped<IDeviceStore, DeviceStore>();

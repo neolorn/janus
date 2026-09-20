@@ -2,6 +2,7 @@ using System;
 using Janus.Storage.Authentication.Alerting;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Passwords;
+using Janus.Storage.Authentication.Registration;
 using Janus.Storage.Authentication.Sending;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Authorization.Grants;
@@ -237,6 +238,18 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     /// </summary>
     public DbSet<AlertRecord> Alerts => Set<AlertRecord>();
 
+    /// <summary>
+    /// The registrations in progress, each staging what its steps collected.
+    /// </summary>
+    public DbSet<RegistrationSessionRecord> RegistrationSessions =>
+        Set<RegistrationSessionRecord>();
+
+    /// <summary>
+    /// The verification links a registration in progress has outstanding.
+    /// </summary>
+    public DbSet<RegistrationLinkRecord> RegistrationLinks =>
+        Set<RegistrationLinkRecord>();
+
     /// <inheritdoc/>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -290,5 +303,7 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new CallbackConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationSourceConfiguration());
         modelBuilder.ApplyConfiguration(new AlertConfiguration());
+        modelBuilder.ApplyConfiguration(new RegistrationSessionConfiguration());
+        modelBuilder.ApplyConfiguration(new RegistrationLinkConfiguration());
     }
 }
