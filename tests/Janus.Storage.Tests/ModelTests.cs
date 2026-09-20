@@ -69,13 +69,20 @@ public sealed class ModelTests
             "account_preferences.subject",
             "account_preferences.time_zone",
 
-            // Standing: the state and the two windows `01` section 4 gives it.
+            // Standing: the state and the two windows `01` section 4 gives it, with
+            // what the terms step wrote down of the age answer, the affirmation
+            // derived from it and the versions accepted (REG-PROF-002, REG-SESS-007).
+            "accounts.adult_affirmed",
+            "accounts.age_group",
+            "accounts.answered_age_at",
             "accounts.created_at",
             "accounts.deleting_by",
             "accounts.deleting_since",
+            "accounts.notice_version",
             "accounts.state",
             "accounts.subject",
             "accounts.suspended_by",
+            "accounts.terms_version",
 
             // Not an account field: the alert ledger of OPS-ALERT-002, holding one row
             // per condition told and when it last went out.
@@ -116,6 +123,7 @@ public sealed class ModelTests
             "authenticators.factor",
             "authenticators.id",
             "authenticators.invalidates_at",
+            "authenticators.is_preferred",
             "authenticators.label",
             "authenticators.last_used_at",
             "authenticators.public_key",
@@ -201,6 +209,36 @@ public sealed class ModelTests
             "identifier_backup_settings.rule",
             "identifier_backup_settings.subject",
 
+            // Identifiers: what a removal keeps for the length of its undo window,
+            // the row as it stood with the fingerprint the undo link answers to
+            // (REG-IDENT-006).
+            "identifier_removals.added_at",
+            "identifier_removals.enc_canonical",
+            "identifier_removals.enc_entered",
+            "identifier_removals.expires_at",
+            "identifier_removals.fingerprint",
+            "identifier_removals.identifier_id",
+            "identifier_removals.is_locked",
+            "identifier_removals.kind",
+            "identifier_removals.removed_at",
+            "identifier_removals.subject",
+            "identifier_removals.undo_fingerprint",
+            "identifier_removals.verified_at",
+
+            // Identifiers: one staged identifier waiting to be proved, the browser
+            // that staged it, and what a replace has to put back (REG-IDENT-004,
+            // REG-IDENT-007, REG-SESS-003).
+            "identifier_verifications.browser",
+            "identifier_verifications.enc_staged",
+            "identifier_verifications.identifier_id",
+            "identifier_verifications.is_replacement",
+            "identifier_verifications.link",
+            "identifier_verifications.old_confirmed_at",
+            "identifier_verifications.old_link",
+            "identifier_verifications.old_must_confirm",
+            "identifier_verifications.staged_at",
+            "identifier_verifications.subject",
+
             // Identifiers: the two forms and the fingerprint of IDN-ACCT-004 and
             // PRIV-RIGHT-005c, with the roles REG-IDENT-002 gives a row.
             "identifiers.added_at",
@@ -245,6 +283,15 @@ public sealed class ModelTests
             "passwords.set_at",
             "passwords.subject",
 
+            // Not an account field: what a browser carries before it holds a session,
+            // keyed as the session table is and carrying the registration session in
+            // flight (BFF-CSRF-005a, BFF-CSRF-005b).
+            "preauthentication_sessions.created_at",
+            "preauthentication_sessions.csrf_fingerprint",
+            "preauthentication_sessions.expires_at",
+            "preauthentication_sessions.fingerprint",
+            "preauthentication_sessions.registration",
+
             // Profile: the photo, in a table of its own (IDN-ATTR-003).
             "profile_photos.enc_image",
             "profile_photos.subject",
@@ -270,6 +317,21 @@ public sealed class ModelTests
             "recovery_codes.ordinal",
             "recovery_codes.subject",
             "recovery_codes.used_at",
+
+            // Not an account field: the link a registration session sent, answered to
+            // by what it fingerprints to (REG-SESS-003).
+            "registration_links.fingerprint",
+            "registration_links.session",
+
+            // Not an account field: the registration session of REG-SESS-001, which
+            // reserves nothing: everything it stages is one blob under its own key,
+            // discarded whole when it ends.
+            "registration_sessions.enc_session",
+            "registration_sessions.expires_at",
+            "registration_sessions.id",
+            "registration_sessions.key_version",
+            "registration_sessions.provisional_subject",
+            "registration_sessions.wrapped_key",
 
             // Not an account field: the registration sessions of AUTH-ABUSE-008, counted
             // against the hash of the source they were started from.
@@ -357,6 +419,13 @@ public sealed class ModelTests
             "throttle_counters.failures",
             "throttle_counters.key",
             "throttle_counters.scope",
+
+            // Not an account field: the username an erasure left held for as long as
+            // `retention.consent` asks, so that nobody takes it in the meantime
+            // (REG-IDENT-009, PRIV-RET-002).
+            "username_holds.fingerprint",
+            "username_holds.held_from",
+            "username_holds.releases_at",
         ];
 
         Assert.Equal(expected, Columns().OrderBy(name => name, StringComparer.Ordinal));
