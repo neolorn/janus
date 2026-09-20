@@ -14,9 +14,11 @@ using Janus.Authorization.Gate;
 using Janus.Authorization.Model;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Hosting.Accounts;
 using Janus.Hosting.Alerting;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Passwords;
+using Janus.Hosting.Registration;
 using Janus.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -163,6 +165,19 @@ public static class JanusRegistration
 
         services.TryAddSingleton(PreferenceDeclarations.None);
         services.TryAddSingleton(ReservedUsernames.Default);
+
+        // REG-PM-001: a deployment that declares no frontend addresses serves neither
+        // well-known document rather than pointing at a page that is not there.
+        services.TryAddSingleton(PasskeyAddresses.None);
+
+        // CONV-DESIGN-006: every request and response of the library's endpoints is
+        // read and written by the generated contexts, never by reflection.
+        services.ConfigureHttpJsonOptions(options =>
+        {
+            options.SerializerOptions.TypeInfoResolverChain.Add(RegistrationJson.Default);
+            options.SerializerOptions.TypeInfoResolverChain.Add(AccountJson.Default);
+            options.SerializerOptions.TypeInfoResolverChain.Add(WellKnownJson.Default);
+        });
         services.AddScoped<RegistrationService>();
         services.AddScoped<IRegistration>(provider => provider.GetRequiredService<RegistrationService>());
         services.AddScoped<IdentifierService>();
