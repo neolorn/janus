@@ -1734,3 +1734,570 @@ the criterion cannot be exercised. `MessageKind.CredentialEnrolled` and its rout
 `AlertRouterTests` and the sending suite of phase 4, which carry `CredentialEnrolled`.
 
 *Chapter text that should change.* None.
+
+---
+
+## 58. The provider runs on OpenIddict in degraded mode
+
+**Phase 6 · 2026-09-20 · Tier 2 · AUTH-OIDC-001, CONV-DESIGN-008**
+
+*The question.* CONV-DESIGN-008 permits OpenIddict. OpenIddict ordinarily owns its own
+tables for applications, authorizations and tokens, while chapter 07 already gives the
+library tables for the client registry, the one-time codes, the refresh-token families
+and the signing keys, and chapter 02 has `IOidc` answer from them. Nothing says which of
+the two holds the rows.
+
+*The readings.*
+
+1. Register OpenIddict's Entity Framework stores and let it own the clients and tokens.
+2. Enable degraded mode and answer every question the server would have asked a store
+   with a handler of the library's own, over the library's tables.
+
+*Chosen: 2.* Chapter 07 names the tables and OPS-MIG-001 describes one migration history;
+a second store would be a second source of truth about the same client and a second
+history to migrate, and a registry that disagreed with itself could admit a client the
+library refuses. The protocol, the request shapes and the signatures stay the server's.
+
+*Tests that pin what is built.*
+`OidcServiceTests.AUTH_OIDC_001_AC2_AnUnregisteredClientObtainsNoCodeAsync`,
+`OidcFlowTests.AUTH_SESS_012_AC5_TheExchangeIsBackChannelAndNamesTheSessionAsync`.
+
+*Chapter text that should change.* `08` CONV-DESIGN-008 could say that OpenIddict is
+taken in degraded mode and that the library holds the rows, so no later run reaches for
+its stores.
+
+---
+
+## 59. The server's own keys are ephemeral and protect nothing
+
+**Phase 6 · 2026-09-20 · Tier 2 · AUTH-KEY-001, AUTH-OIDC-004**
+
+*The question.* In degraded mode the server still refuses to start without an encryption
+credential and a signing credential of its own, while every token the deployment issues
+is signed with the key AUTH-KEY-001 rotates and validated against the set the library
+publishes.
+
+*The readings.*
+
+1. Hand the server the deployment's signing key so there is one key and not two.
+2. Hand it ephemeral in-process keys, use neither, and sign every token with the key read
+   for the request.
+
+*Chosen: 2.* Reading 1 would put the private key in a second component's hands and tie
+rotation to a restart, which AUTH-KEY-001 AC1 forbids. The ephemeral pair is created per
+process, never written anywhere and never published, and protects nothing: the access
+token is signed by the library's handler, the code and the refresh token are the
+library's own opaque values, and access-token encryption is off so a relying party can
+validate offline (AUTH-OIDC-004 AC3).
+
+*Tests that pin what is built.*
+`SigningKeysTests.AUTH_KEY_001_AC1_RotationNeedsNoRestartAndNoPersonAsync`,
+`SigningKeysTests.AUTH_KEY_001_AC4_ThePublishedSetCarriesNoPrivateMaterialAsync`,
+`OidcFlowTests.AUTH_OIDC_004_AC3_AnOfflineValidatorRefusesTheTokenAtItsExpiryAsync`.
+
+*Chapter text that should change.* None.
+
+---
+
+## 60. What API-REDIR-001's configured list is at each endpoint
+
+**Phase 6 · 2026-09-20 · Tier 2 · API-REDIR-001**
+
+*The question.* API-REDIR-001 requires every redirect target to be matched against a
+configured list and replaced by the configured default where it does not match, without
+naming the list or the default for either place a redirect is decided.
+
+*The readings.*
+
+1. One list for the whole library, a new configuration key holding it.
+2. The list is whatever the endpoint's own chapter already registers: the origins of
+   `webauthn.origins` where the library lands a browser after a link, and the client's
+   one registered `redirect_uri` at the authorization endpoint.
+
+*Chosen: 2.* Chapter 10 section 4.4 already carries `webauthn.origins` as a protected
+setting with at least one entry, and chapter 02 makes the registered destination the only
+one a client obtains a code at. A new key would be a second list to keep in step with
+both, and REF-001 requires a chapter 10 row for a key that does not exist. The match is
+exact: a destination that merely contains a registered one is replaced, so no prefix and
+no pattern is read.
+
+*Tests that pin what is built.*
+`OidcFlowTests.API_REDIR_001_AC1_AnUnknownDestinationIsReplacedAndLoggedAsync`,
+`OidcServiceTests.API_REDIR_001_AC2_ADestinationContainingAKnownOneIsNotAcceptedAsync`.
+
+*Chapter text that should change.* `09` API-REDIR-001 should name the list and the
+default for each endpoint that redirects.
+
+---
+
+## 61. Where a browser holding no session is sent
+
+**Phase 6 · 2026-09-20 · Tier 2 · AUTH-SESS-012 AC3, LIB-HOST-003**
+
+*The question.* AUTH-SESS-012 AC3 requires an interactive authorization request from a
+browser holding no session to reach the sign-in screen. The library renders no page and
+chapter 10 carries no key for a route to one.
+
+*The readings.*
+
+1. Assume a path, such as `/sign-in`, and redirect to it.
+2. Let the host declare it, and refuse where it has declared none.
+
+*Chosen: 2.* A path the library assumed would be an assumption about a frontend, which
+section 4 of the instruction file forbids and LIB-HOST-003 settles the other way for
+every other address. `AuthenticationAddresses` is registered by the host and defaults to
+`None`; where it holds nothing the request is refused with `login_required` rather than
+forwarded to a route that may not be there, which is the closed answer.
+
+*Tests that pin what is built.*
+`OidcFlowTests.AUTH_SESS_012_AC3_AnInteractiveRequestReachesTheSignInScreenAsync`,
+`OidcFlowTests.AUTH_SESS_012_AC3_ASilentRequestWithoutASessionSaysSoAsync`.
+
+*Chapter text that should change.* `10` section 5 should carry `AuthenticationAddresses`
+beside the other host declarations, or `09` should name the address the authorization
+endpoint forwards to.
+
+---
+
+## 62. Which routes the machine profile governs
+
+**Phase 6 · 2026-09-20 · Tier 2 · BFF-MACH-001 AC1**
+
+*The question.* BFF-MACH-001 requires a machine profile that no browser endpoint can be
+moved onto. Chapter 09 does not say whether the host chooses which routes it covers.
+
+*The readings.*
+
+1. The host names the routes when it mounts the profile.
+2. The library holds a fixed list and the host mounts the profile over it.
+
+*Chosen: 2.* A host that can name the routes can put a browser endpoint on the machine
+profile, which is what AC1 forbids, so the smaller surface is also the closed one. The
+list is the library's, a gate test reads it against the mounted endpoints, and the host
+chooses nothing about what the profile covers.
+
+*Tests that pin what is built.*
+`BrowserProfileTests.BFF_MACH_001_AC1_NoBrowserEndpointCanBeMovedOntoTheMachineProfile`,
+`OidcFlowTests.BFF_MACH_001_AC2_ACookieOnAMachineRouteIsRefusedAsync`.
+
+*Chapter text that should change.* None.
+
+---
+
+## 63. A deployment that starts without key material refuses to start
+
+**Phase 6 · 2026-09-20 · Tier 2 · AUTH-KEY-002 AC2, OPS-SEC-001**
+
+*The question.* AUTH-KEY-002 AC2 requires startup to fail, named, where key material is
+absent. Chapter 10 section 1 carries no code for it, and nothing states how short a
+fingerprint key is too short.
+
+*The readings.*
+
+1. Throw with a sentence.
+2. Fail with a code of the catalogue's own, naming which key is missing in the structured
+   details, and put a floor under the fingerprint key.
+
+*Chosen: 2.* CONV-DESIGN-005 and LIB-API-003 make a code with structured details the way
+the library names anything, and a sentence would be wording decided in library code
+(CONV-CONTENT-001). `model.startup.kekunavailable` joins the other `model.startup`
+faults. The floor is 32 bytes because the fingerprint key computes an HMAC-SHA256 and a
+key shorter than the hash is not a key of that construction; a shorter one is refused
+rather than padded.
+
+*Tests that pin what is built.*
+`KeyMaterialTests.AUTH_KEY_002_AC2_StartupFailsNamedWithoutTheKeyEncryptionKey`,
+`KeyMaterialTests.AUTH_KEY_002_AC2_StartupFailsNamedWithoutTheFingerprintKey`,
+`KeyMaterialTests.AUTH_KEY_002_AC2_StartupFailsNamedOnAFingerprintKeyShorterThanTheHash`.
+
+*Chapter text that should change.* `10` section 1.2 should carry
+`model.startup.kekunavailable`, and `10` section 4 should state the fingerprint key's
+minimum length.
+
+---
+
+## 64. Sessions past their absolute expiry are swept
+
+**Phase 6 · 2026-09-20 · Tier 2 · AUTH-KEY-003 AC1**
+
+*The question.* AUTH-KEY-003 AC1 requires what has expired to be removed rather than kept
+unreadable. The codes, the refresh tokens and the retired signing keys each sweep; the
+session record a token stands on is not named.
+
+*The readings.*
+
+1. Sweep only what AUTH-KEY-003 names.
+2. Sweep the session record on its absolute expiry beside them.
+
+*Chosen: 2.* A session past its absolute expiry can be revived by nothing and is read
+again by nothing, and it carries the same account identifier the swept rows do, so
+keeping it would leave exactly what AC1 says is not left. The sweep reads the absolute
+expiry and never idleness, so nothing a request could still revive is taken.
+
+*Tests that pin what is built.*
+`SessionStoreTests.AUTH_KEY_003_AC1_TheSweepTakesWhatHasPassedItsAbsoluteExpiryAsync`,
+`OidcStoreTests.AUTH_KEY_003_AC1_TheSweepTakesTheCodesThatHaveExpiredAsync`,
+`OidcStoreTests.AUTH_KEY_003_AC1_TheSweepTakesTheRefreshTokensThatHaveExpiredAsync`.
+
+*Chapter text that should change.* `02` AUTH-KEY-003 should name the session record among
+what the sweep takes.
+
+---
+
+## 65. The integration container's credential is drawn per run
+
+**Phase 6 · 2026-09-20 · Tier 2 · CONV-GATE-002, OPS-SEC-001**
+
+*The question.* The containerised jobs need a database password. A literal in the workflow
+is a secret in the repository, which OPS-SEC-001 and the secret-scanning gate both stand
+against, and the container accepts connections from nothing but the job that starts it.
+
+*The readings.*
+
+1. A repository secret, added and held by the owner.
+2. A value drawn from the run itself, unique per run and per attempt.
+
+*Chosen: 2.* A repository secret would be one more thing the owner maintains for a
+database that lives for the length of one job. The run identifier and the attempt number
+are unique per run, are a credential to nothing else, and leave nothing to rotate.
+Reading 1 stays available if the owner would rather hold it.
+
+*Tests that pin what is built.* None; the workflow is the gate of record.
+
+*Chapter text that should change.* None.
+
+---
+
+## 66. The browser half of BFF-SESS-006 is the deployment's
+
+**Phase 6 · 2026-09-20 · Tier 3 · BFF-SESS-006**
+
+*The question.* BFF-SESS-006 describes a second browser application re-establishing its
+session silently against the provider. A backend-for-frontend that does so is an OpenID
+Connect client: it needs a client identifier, a secret, and somewhere to keep them.
+LIB-HOST-001 names no such declaration, chapter 10 section 4.9 carries no key for one,
+and `oidc_clients.secret` holds only what a secret hashes to, so the library could not
+read one back even if it held it.
+
+*The readings.*
+
+1. The library ships both halves, adding a client identifier and a secret to what a host
+   declares.
+2. The library ships the provider side, and the deployment's own backend-for-frontend is
+   the client.
+
+*Chosen: 2, the strictest reading.* Adding a secret to the host's declarations would put a
+live credential in configuration that chapter 10 does not carry and AUTH-KEY-002 AC1 says
+configuration does not hold, and would widen the public surface for a component the
+chapters place outside the library. What the library owes BFF-SESS-006 is the silent
+re-establishment itself, which it answers: a second application with a live session at the
+provider obtains a code without interaction.
+
+*Tests that pin what is built.*
+`OidcFlowTests.BFF_SESS_003_AC2_ASecondApplicationReEstablishesSilentlyAsync`,
+`OidcServiceTests.AUTH_SESS_012_AC2_ALiveSessionIssuesACodeWithoutInteractionAsync`.
+
+*Chapter text that should change.* `05` BFF-SESS-006 should say which side of the exchange
+the library ships.
+
+---
+
+## 67. The restricted channel is a catalogue property
+
+**Phase 6 · 2026-09-20 · Tier 2 · AUTH-FACT-002b AC5**
+
+*The question.* AUTH-FACT-002b AC5 requires the entries a text carries to be marked as
+restricted wherever they are offered. Chapter 09's shapes carry factors as bare catalogue
+identifiers in the enrolment list, the credential list and the challenge, so there is no
+field to put a marker in without adding one to three payloads.
+
+*The readings.*
+
+1. Add a marked field to each of the three shapes.
+2. Carry it as a property of the catalogue entry, which every rule already reads.
+
+*Chosen: 2.* Chapter 09 is authoritative for the shapes and gives none of the three a
+marker field; AUTH-FACT-001 says every rule reads a factor's properties and never its
+name, and `FactorProperties` is where the library states what an entry is. One property
+marks the entry once, wherever it is offered, and the frontend writes the sentence
+(CONV-CONTENT-001).
+
+*Tests that pin what is built.*
+`FactorCatalogueTests.AUTH_FACT_002b_AC5_TheRestrictedEntriesAreTheOnesCarriedByText`.
+
+*Chapter text that should change.* `09` should say how the marker reaches the frontend, or
+`02` should say that it is a property of the entry.
+
+---
+
+## 68. What is known about a number is considered and recorded, not refused on
+
+**Phase 6 · 2026-09-20 · Tier 2 · AUTH-FACT-002b AC6**
+
+*The question.* AUTH-FACT-002b AC6 requires what the deployment can learn about a number
+to be considered before a restricted entry is used. Neither chapter 02, nor chapter 13's
+R-A18, nor chapter 10 describes a refusal or names a code for one.
+
+*The readings.*
+
+1. Refuse the send where the host's callback answers `risk`.
+2. Ask, record what was answered, and let the send go.
+
+*Chosen: 2.* A refusal needs a code from chapter 10 section 1 and a status in chapter 09,
+and neither exists; inventing both would decide behaviour no chapter describes. The signal
+is asked for once the restrictions have let the send through and before a transport takes
+it, and the answer is written to the audit trail with the factor and the account, never
+the number. A deployment that declares no provider is itself recorded, so the trail says
+the question was asked and unanswered rather than saying nothing.
+
+*Tests that pin what is built.*
+`SendingServiceTests.AUTH_FACT_002b_AC6_TheSignalIsConsideredBeforeARestrictedFactorGoesAsync`,
+`SendingServiceTests.AUTH_FACT_002b_AC6_AnAbsentProviderIsItselfRecordedAsync`,
+`SendingServiceTests.AUTH_FACT_002b_AC6_NothingIsConsideredForAMessageThatIsNoFactorAsync`.
+
+*Chapter text that should change.* `02` AUTH-FACT-002b AC6 should say what a deployment
+does with the answer, and `10` should carry a code if a refusal is meant.
+
+---
+
+## 69. The upgrade refuses with a code of its own
+
+**Phase 6 · 2026-09-20 · Tier 2 · AUTH-FACT-002b AC3**
+
+*The question.* Chapter 09 gives the credential upgrade a 409 for a credential that is not
+a second-factor security key. Chapter 10 section 1.2 carries no code that maps to 409 on
+that endpoint, and `auth.factor.rejected` maps to 422.
+
+*The readings.*
+
+1. Answer `auth.factor.rejected` and accept a 422 where the chapter says 409.
+2. Add `auth.credential.notupgradable`, mapped to 409.
+
+*Chosen: 2.* Chapter 09 is authoritative for status codes and says 409, so the code that
+produces it has to exist; REF-001 requires the chapter 10 row, which the owner adds. A
+credential of another account still answers `auth.credential.notfound`, so the new code
+says only that a credential the account holds is not one an upgrade applies to, and tells
+nobody whose a credential is.
+
+*Tests that pin what is built.*
+`CredentialServiceTests.AUTH_FACT_002b_AC3_OnlyASecurityKeyIsUpgradedAsync`,
+`WebAuthnServiceTests.UpgradeAsync_ACredentialOfAnotherAccount_IsRefusedAsync`.
+
+*Chapter text that should change.* `10` section 1.2 should carry
+`auth.credential.notupgradable` with its 409.
+
+---
+
+## 70. Nothing carries "shown" or "exported" to the library
+
+**Phase 6 · 2026-09-20 · Tier 2 · AUTH-RECOV-006 AC2**
+
+*The question.* AUTH-RECOV-006 AC2 requires the account to record whether a set of recovery
+codes was shown and whether it was copied, downloaded or printed. No endpoint in chapter
+09 carries either fact to the library, so the operation exists and nothing in production
+can reach it.
+
+*The readings.*
+
+1. Add an endpoint.
+2. Build the operation, test it directly, and report that the route is missing.
+
+*Chosen: 2.* Adding a route would be deciding chapter 09's surface, which section 3 of the
+instruction file puts outside a run. The service records both facts, each way of taking
+the codes away sets the export, and the storage column and the audit entry exist, so the
+owner adds one route and nothing else changes.
+
+*Tests that pin what is built.*
+`RecoveryCodeServiceTests.AUTH_RECOV_006_AC2_EachWayOfTakingTheCodesAwaySetsTheExportAsync`.
+
+*Chapter text that should change.* `09` section 6 should carry a route that records that
+the set was shown and whether it was exported.
+
+---
+
+## 71. The other half of AUTH-OIDC-001 AC4 belongs to later phases
+
+**Phase 6 · 2026-09-20 · Tier 2 · AUTH-OIDC-001 AC4**
+
+*The question.* AUTH-OIDC-001 AC4 requires a protocol client's token to be the signed-in
+person's and never a shared identity. Two of the ways a deployment could come by a shared
+one are the bootstrap registration of OPS-BOOT, which phase 9 builds, and the application
+password of chapter 06, which phase 8 builds.
+
+*The readings.*
+
+1. Build enough of both here to prove the criterion end to end.
+2. Prove the criterion where the provider decides it, and leave the two later surfaces to
+   their phases.
+
+*Chosen: 2.* The criterion is decided at the token endpoint: the subject a token carries is
+the session's, the client authenticates as itself and obtains nothing on anyone's behalf,
+and no grant type the server admits mints a token without a session. Building part of a
+later phase's surface here would put it outside the phase, which section 3 forbids.
+
+*Tests that pin what is built.*
+`OidcFlowTests.AUTH_OIDC_001_AC4_TheProtocolClientsTokenIsTheSignedInPersonsAsync`,
+`OidcFlowTests.AUTH_OIDC_001_AC3_NoDynamicRegistrationEndpointExistsAsync`.
+
+*Chapter text that should change.* None.
+
+---
+
+## 72. BFF-MACH-001's break-glass and provider callbacks reach past this phase
+
+**Phase 6 · 2026-09-20 · Tier 2 · BFF-MACH-001 AC2, AC3**
+
+*The question.* BFF-MACH-001 AC2 excepts the break-glass path from the machine profile's
+refusal of cookies, and AC3 has the profile authenticate the caller by the deployment's
+own means. Break-glass is phase 9's, and the application-password callbacks are phase 8's.
+
+*The readings.*
+
+1. Build both now against surfaces that do not exist yet.
+2. Build the profile and what it governs, prove the refusal, and leave the exception and
+   the callbacks to the phases that build what they stand on.
+
+*Chosen: 2.* The profile refuses a cookie on every machine route it governs, which is what
+AC2 states for everything this phase mounts; the exception has nothing to except until
+break-glass exists. AC3 is proved at the token endpoint, where the client authenticates
+with its registered secret, and widens when phase 8 adds application passwords.
+
+*Tests that pin what is built.*
+`OidcFlowTests.BFF_MACH_001_AC2_ACookieOnAMachineRouteIsRefusedAsync`,
+`OidcFlowTests.BFF_MACH_001_AC3_TheTokenEndpointAuthenticatesTheClientAsync`.
+
+*Chapter text that should change.* None.
+
+---
+
+## 73. Two contracts reported absence with a null
+
+**Phase 6 · 2026-09-20 · Tier 2 · CONV-DESIGN-005 AC2, AUTH-RECOV-007**
+
+*The question.* `IOidc.FindClientAsync` returned the client or null, and
+`ICredentials.RemoveAsync` returned a loss report or null where the removal opened no
+window. CONV-DESIGN-005 says a service method never returns null for "not found" and AC2
+admits no null-returning lookup on a contract, while the contract test reads the return
+type of every contract method.
+
+*The readings.*
+
+1. Narrow the test to lookups, so a null that means something else is admitted.
+2. Keep the test as it stands and give both contracts an outcome that carries the answer.
+
+*Chosen: 2.* Narrowing a test to make code pass is the one thing section 4 of the
+instruction file rules out, and a lookup is not a distinction a test can draw. The registry
+answers `authz.denied` where it holds no client, which is what the issuing path already
+answered for the same condition. The removal answers nothing where the credential is gone
+and `auth.credential.lastsecondfactor` carrying `invalidatesAt` where the window was
+opened, which is what chapter 09 gives the endpoint: a 202 with that code and a body
+carrying `invalidatesAt`. The code was in chapter 10 and mapped to 202 in the answer
+table, and nothing produced it until now.
+
+*Tests that pin what is built.*
+`ResultContractTests.CONV_DESIGN_005_AC1_EveryContractMethodReturnsAnOutcome`,
+`ResultContractTests.CONV_DESIGN_005_AC2_NoContractReturnsNullForNotFound`,
+`CredentialServiceTests.AUTH_RECOV_007_AC5_RemovingTheLastSecondStepRunsTheWindowAsync`.
+
+*Chapter text that should change.* `10` section 1.2's note on
+`auth.credential.lastsecondfactor` reads as a status; it could say that the code travels
+on the failure branch and carries `invalidatesAt`.
+
+---
+
+## 74. API-REDIR-002 is built in the phase that first can
+
+**Phase 6 · 2026-09-20 · Tier 2 · API-REDIR-002, REG-SESS-008 AC2**
+
+*The question.* API-REDIR-002 governs registration, which phase 5 built, and requires the
+client identifier to be resolved against the registry at capture and the return to be
+resolved from that stored reference. The registry did not exist in phase 5, and chapter
+09 section 11 is in no phase's chapter list.
+
+*The readings.*
+
+1. Leave it to whichever later phase claims it.
+2. Build it here, the first phase in which the registry it needs exists.
+
+*Chosen: 2.* No later phase of Milestone 1 owns registration or the registry, and the
+exit gate asks for every criterion of chapters 01 to 10, 17 and 20. The session already
+captured the identifier at step 1; what this adds is the resolution against the registry
+there, and the address the registry holds for that client carried on what the completion
+returns. Chapter 09 gives the completion a bare 201, so nothing about the answer at the
+boundary changes.
+
+Where the registry holds no such client the session stores the empty reference and the
+completion carries no address: the library declares no default of its own, exactly as it
+declares no sign-in address (entry 61), and the deployment's default applies. The
+registration is not refused either way, which is what AC2 asks.
+
+*Tests that pin what is built.*
+`RegistrationServiceTests.API_REDIR_002_AC1_TheIdentifierIsResolvedWhereItIsCapturedAsync`,
+`RegistrationServiceTests.API_REDIR_002_AC2_AnUnrecognisedIdentifierIsTheDefaultAndNoRefusalAsync`,
+`RegistrationServiceTests.API_REDIR_002_AC3_NoLaterStepTakesADestination`,
+`RegistrationServiceTests.REG_SESS_008_AC2_TheReturnIsDecidedByTheClientCapturedAtTheStartAsync`.
+
+*Chapter text that should change.* `09` section 2 should say what the completion carries
+the return in, and `10` should name the default a deployment falls back to, or state that
+it is the host's.
+
+---
+
+## 75. A user handle is proved absent rather than made safe
+
+**Phase 6 · 2026-09-20 · Tier 2 · REG-PM-001 AC1**
+
+*The question.* REG-PM-001 AC1 requires that no user handle contain personal data. The
+library issues the ceremony a credential is created under and holds no user handle at
+all: a credential is found again by its identifier, and the ceremony carries the relying
+party, the algorithms, whether the credential is discoverable, and the challenge.
+
+*The readings.*
+
+1. Introduce a user handle the library derives, so there is something to prove safe.
+2. Prove that the library issues none, which is what makes the criterion hold.
+
+*Chosen: 2.* Adding a handle would add a public field, a stored column and a second way
+to find a credential, none of which any chapter asks for. The ceremony is not a function
+of the account at all: the operation that opens it takes no subject, so nothing of the
+person can reach it.
+
+*Tests that pin what is built.*
+`WebAuthnServiceTests.REG_PM_001_AC1_NoCeremonyCarriesAUserHandleAtAllAsync`.
+
+*Chapter text that should change.* `20` REG-PM-001 AC1 could say that a library issuing
+no user handle satisfies it, since a frontend that builds the browser's request decides
+what goes in that field.
+
+---
+
+## 76. A prefix moves the provider's endpoints with the rest
+
+**Phase 6 · 2026-09-20 · Tier 2 · API-CONV-001 AC2, LIB-HOST-003 AC2**
+
+*The question.* API-CONV-001 requires the discovery document to reflect the configured
+prefix. The provider's endpoints are answered by the server's own middleware against the
+request path, not by the routes the library maps, so a host that mounts the library's
+endpoints under a route group leaves the provider at the site root and the document with
+it.
+
+*The readings.*
+
+1. Map the provider's endpoints among the library's, so a route group moves them.
+2. The prefix a host mounts under is a path base, which moves every path the library
+   answers, the provider's with them.
+
+*Chosen: 2.* The library writes no absolute path anywhere: every address the document
+publishes is built from the request, so under a path base the document reflects the
+prefix with no code change, which is what both criteria ask. Reading 1 would mean holding
+the provider's routes twice, in the server's configuration and in the library's map, and
+the two could disagree. The two documents of REG-PM-001 stay at the site root, where the
+standard puts them.
+
+*Tests that pin what is built.*
+`OidcFlowTests.API_CONV_001_AC2_TheDocumentCarriesThePrefixTheHostMountedUnderAsync`,
+`ApiConventionTests.API_CONV_001_AC1_TheHostMountsTheLibraryWhereItLikesAsync`.
+
+*Chapter text that should change.* `07` LIB-HOST-003 should say that the prefix is the
+path base the host mounts under, so a host does not reach for a route group and leave
+the provider behind.
