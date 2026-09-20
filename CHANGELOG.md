@@ -461,6 +461,41 @@ against the public contract of LIB-API-001.
   name, a host declares which of its own actions are reading, and everything else
   modifies.
 
+- Registration is now served end to end. A browser that reaches the library is given a
+  pre-authentication session, and the registration it starts is bound to that session
+  and reachable from no other browser: the age screen, the email and phone steps, the
+  confirm screen, the security step and the terms step, each refusing to run before the
+  one before it has finished. An address or a number that already belongs to somebody
+  else is answered exactly as a fresh one is, and its holder is told once that somebody
+  tried. A registration that is abandoned leaves nothing behind.
+
+- An identifier is verified by the code in the message or by pressing the link. The
+  press verifies only in the browser that asked for the message; opened anywhere else
+  the same request changes nothing and hands back the code to type, and a control there
+  ends the attempt. Merely loading the link, which is what a mail scanner does, changes
+  nothing at all. A waiting screen follows the state on a stream of server-sent events
+  carrying exactly what the polling endpoint answers, so a frontend that loses the
+  stream misses nothing.
+
+- An account now reads and changes itself: its identifiers, its credentials and their
+  labels, its profile, its preferences and its sessions. An identifier can be added up
+  to the deployment's maximum, made primary, set as the backup destination, removed
+  with an undo the remaining addresses are sent, and, where only one of a kind is
+  allowed, replaced in one operation. A removed identifier stays out of reach of every
+  other account until its undo window closes. The session list marks the one asking and
+  says no more about where each was used than the city.
+
+- A profile field the deployment has switched off is neither accepted from a request
+  nor carried in an answer, and the date of birth is never the person's to change. A
+  preference key the host never declared is refused and never returned. A username, once
+  chosen, is held against every other account for the cooling-off period after it is
+  given up, and after erasure for the same period.
+
+- The library now serves `/.well-known/change-password`, `/.well-known/passkey-endpoints`
+  and `/.well-known/webauthn` at the site root. The first two answer only where the host
+  has declared the frontend pages behind them; the third is the deployment's own
+  related-origin allowlist.
+
 ### Changed
 
 - The case-insensitive collation is created in the default schema, because a column
