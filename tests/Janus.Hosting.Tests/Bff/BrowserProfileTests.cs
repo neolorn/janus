@@ -478,6 +478,26 @@ public sealed class BrowserProfileTests : IDisposable
     }
 
     /// <summary>
+    /// BFF-MACH-001 AC1: which routes the machine profile governs is settled in one
+    /// place in the library, and nothing a deployment writes reaches it, so a browser
+    /// endpoint cannot be moved onto it by configuration or by an attribute.
+    /// </summary>
+    [Fact]
+    public void BFF_MACH_001_AC1_NoBrowserEndpointCanBeMovedOntoTheMachineProfile()
+    {
+        Assert.Empty(Reading("MachineRoutes.Governs").Except(["JanusPipeline.cs"]));
+        Assert.Equal(["MachineRoutes.cs"], Reading("PathString[] Governed"));
+
+        MethodInfo governs = typeof(MachineRoutes).GetMethod(
+            "Governs",
+            BindingFlags.Public | BindingFlags.Static)!;
+
+        ParameterInfo only = Assert.Single(governs.GetParameters());
+
+        Assert.Equal(typeof(PathString), only.ParameterType);
+    }
+
+    /// <summary>
     /// BFF-CSRF-001 AC3 and BFF-OWN-001 AC2: whatever the host mounts after the
     /// pipeline inherits every layer without doing anything, and a refusal is
     /// answered before it runs.

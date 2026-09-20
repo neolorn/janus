@@ -25,6 +25,7 @@ public sealed class OidcFlowTests
 {
     private const string Application = "browser-app";
     private const string Protocol = "mail-server";
+    private const string Second = "another-browser-app";
     private const string Destination = "https://app.example.test/signin/callback";
     private const string Secret = "a-secret-the-deployment-set";
     private const string Verifier = "a-verifier-of-at-least-forty-three-characters-long";
@@ -264,6 +265,77 @@ public sealed class OidcFlowTests
         Assert.Equal(Flow.Address, read.Text("email"));
         Assert.True(read.Json().GetProperty("email_verified").GetBoolean());
         Assert.False(read.Json().TryGetProperty("phone_number", out _));
+    }
+
+    /// <summary>
+    /// BFF-SESS-003 AC2: a second application reaches the same session record without
+    /// asking the person anything, so moving between applications re-establishes
+    /// silently and authenticates nobody again.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_SESS_003_AC2_ASecondApplicationReEstablishesSilentlyAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Browser browser = await PreparedAsync(deployment);
+
+        await deployment.Clients.RecordAsync(
+            new OidcClient(
+                Second,
+                Second,
+                OidcClientKind.BrowserApplication,
+                Destination,
+                ["openid", "email"]),
+            OpaqueToken.Of(Secret).Fingerprint(),
+            TestContext.Current.CancellationToken);
+
+        var machine = new Machine(deployment);
+        string first = await CodeAsync(browser, Application);
+        string second = await CodeAsync(browser, Second);
+
+        Assert.NotEqual(first, second);
+
+        string held = Single(deployment.Sessions.All).Id.Value.ToString();
+
+        Assert.Equal(
+            held,
+            Claim((await machine.PostAsync("/oidc/token", Code(first, Application))).Text("id_token"), "sid"));
+        Assert.Equal(
+            held,
+            Claim((await machine.PostAsync("/oidc/token", Code(second, Second))).Text("id_token"), "sid"));
+    }
+
+    /// <summary>
+    /// BFF-MACH-001 AC3: the token endpoint authenticates a client that carries its
+    /// secret and nothing a browser carries, and refuses one whose secret is not the
+    /// registered one.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_MACH_001_AC3_TheTokenEndpointAuthenticatesTheClientAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Browser browser = await PreparedAsync(deployment);
+        var machine = new Machine(deployment);
+        string code = await CodeAsync(browser, Protocol);
+
+        Answer refused = await machine.PostAsync(
+            "/oidc/token",
+            ("grant_type", "authorization_code"),
+            ("code", code),
+            ("client_id", Protocol),
+            ("client_secret", "not-the-registered-secret"),
+            ("redirect_uri", Destination),
+            ("code_verifier", Verifier));
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, refused.Status);
+
+        Answer taken = await machine.PostAsync("/oidc/token", Code(code, Protocol));
+
+        Assert.Equal(StatusCodes.Status200OK, taken.Status);
+        Assert.NotEmpty(taken.Text("access_token"));
     }
 
     /// <summary>
