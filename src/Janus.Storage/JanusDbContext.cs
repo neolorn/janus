@@ -1,5 +1,6 @@
 using System;
 using Janus.Storage.Authentication.Alerting;
+using Janus.Storage.Authentication.Credentials;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Identifiers;
 using Janus.Storage.Authentication.Passwords;
@@ -282,6 +283,11 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     public DbSet<ChallengeRecord> SignInChallenges => Set<ChallengeRecord>();
 
     /// <summary>
+    /// The credential creation ceremonies accounts have open.
+    /// </summary>
+    public DbSet<KeyCeremonyRecord> KeyCeremonies => Set<KeyCeremonyRecord>();
+
+    /// <summary>
     /// The sign-in links and codes that have gone out.
     /// </summary>
     public DbSet<PendingSignInRecord> SignInLinks => Set<PendingSignInRecord>();
@@ -366,6 +372,7 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new PreAuthenticationConfiguration());
         modelBuilder.ApplyConfiguration(new PendingVerificationConfiguration());
         modelBuilder.ApplyConfiguration(new ChallengeConfiguration());
+        modelBuilder.ApplyConfiguration(new KeyCeremonyConfiguration());
         modelBuilder.ApplyConfiguration(new PendingSignInConfiguration());
         modelBuilder.ApplyConfiguration(new PolicyRaiseConfiguration());
         modelBuilder.ApplyConfiguration(new RecoveryLinkConfiguration());

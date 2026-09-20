@@ -2,6 +2,7 @@ using System;
 using System.Security.Cryptography;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
+using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Passwords;
@@ -29,6 +30,7 @@ using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Accounts;
 using Janus.Storage.Authentication.Alerting;
+using Janus.Storage.Authentication.Credentials;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Identifiers;
 using Janus.Storage.Authentication.Passwords;
@@ -164,6 +166,7 @@ internal static class StorageRegistration
         services.AddScoped<IMembershipLookup, MembershipLookup>();
         services.AddScoped<IPreAuthenticationStore, PreAuthenticationStore>();
         services.AddScoped<IChallengeStore, ChallengeStore>();
+        services.AddScoped<IKeyCeremonyStore, KeyCeremonyStore>();
         services.AddScoped<IPendingSignInStore>(provider => new PendingSignInStore(
             provider.GetRequiredService<JanusDbContext>(),
             keyEncryptionKeys,

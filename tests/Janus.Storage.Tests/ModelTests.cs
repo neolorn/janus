@@ -253,6 +253,15 @@ public sealed class ModelTests
             "identifiers.subject",
             "identifiers.verified_at",
 
+            // Not an account field: the creation ceremony one account has open, and
+            // the value AUTH-FACT-014 has the authenticator sign over.
+            "key_ceremonies.challenge",
+            "key_ceremonies.expires_at",
+            "key_ceremonies.issued_at",
+            "key_ceremonies.kind",
+            "key_ceremonies.subject",
+            "key_ceremonies.upgrading",
+
             // Not an account field: a credential its holder reported lost, the window
             // AUTH-RECOV-007 invalidates it at the end of, and what the notices across
             // that window have reached.

@@ -583,6 +583,11 @@ against the public contract of LIB-API-001.
   reach. The enrolment session an approved link opens reaches the same operations
   without a session, and ends when the enrolment completes.
 
+- The library's schema gains the table a key ceremony in flight is kept in, one row
+  per account, so a deployment applies one new migration. The row holds the challenge
+  the server issued, what it is upgrading where it upgrades anything, and when it
+  stops answering.
+
 ### Changed
 
 - A sign-in whose password an invalidation left below the single-factor floor now
