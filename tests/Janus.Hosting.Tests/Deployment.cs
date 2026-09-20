@@ -363,6 +363,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IPendingSignInStore, PendingSignInStoreInMemory>();
         _ = services.AddSingleton<IAccessGate>(Gate);
         _ = services.AddSingleton<IAccountAudit, AccountAuditInMemory>();
+        _ = services.AddSingleton<ILifecycleLinkStore, LifecycleLinkStoreInMemory>();
         _ = services.AddSingleton<IRecoveryLinkStore>(Links);
         _ = services.AddSingleton<IRecoveryApprovalStore, RecoveryApprovalStoreInMemory>();
         _ = services.AddSingleton<ILossReportStore, LossReportStoreInMemory>();
@@ -409,6 +410,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IdentifierService>();
         _ = services.AddScoped<IIdentifiers>(provider =>
             provider.GetRequiredService<IdentifierService>());
+        _ = services.AddScoped<AccountLifecycle>();
         _ = services.AddScoped<AccountService>();
         _ = services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
         _ = services.AddScoped<TotpService>();

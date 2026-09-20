@@ -222,6 +222,7 @@ public static class JanusRegistration
         services.AddScoped<IRegistration>(provider => provider.GetRequiredService<RegistrationService>());
         services.AddScoped<IdentifierService>();
         services.AddScoped<IIdentifiers>(provider => provider.GetRequiredService<IdentifierService>());
+        services.AddScoped<AccountLifecycle>();
         services.AddScoped<AccountService>();
         services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
         services.AddScoped<SignInLinks>();

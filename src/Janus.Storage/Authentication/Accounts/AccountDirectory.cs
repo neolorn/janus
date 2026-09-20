@@ -61,6 +61,62 @@ internal sealed class AccountDirectory(
     }
 
     /// <inheritdoc/>
+    public async ValueTask<HeldDeletion?> DeletingAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken) =>
+        await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
+            is { DeletingBy: DeletionOrigin by, DeletingSince: DateTimeOffset since }
+            ? new HeldDeletion(by, since)
+            : null;
+
+    /// <inheritdoc/>
+    public async ValueTask DeactivateAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        if (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
+            is not Account account)
+        {
+            return;
+        }
+
+        account.Deactivate();
+
+        await accounts.RecordTransitionAsync(account, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask BeginDeletionAsync(
+        SubjectId subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        if (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
+            is not Account account)
+        {
+            return;
+        }
+
+        account.RequestDeletion(DeletionOrigin.Self, at);
+
+        await accounts.RecordTransitionAsync(account, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask CancelDeletionAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        if (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
+            is not Account account)
+        {
+            return;
+        }
+
+        account.CancelDeletion();
+
+        await accounts.RecordTransitionAsync(account, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<DateTimeOffset?> CreatedAtAsync(
         SubjectId subject,
         CancellationToken cancellationToken) =>

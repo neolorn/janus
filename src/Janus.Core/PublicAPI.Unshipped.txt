@@ -20,6 +20,18 @@ Janus.Core.AccessExplanation.Principal.init -> void
 Janus.Core.AccessOutcome
 Janus.Core.AccessOutcome.Allowed = 1 -> Janus.Core.AccessOutcome
 Janus.Core.AccessOutcome.Denied = 0 -> Janus.Core.AccessOutcome
+Janus.Core.AccountDeletionCancelled
+Janus.Core.AccountDeletionCancelled.AccountDeletionCancelled(System.DateTimeOffset RaisedAt, string! IdempotencyKey) -> void
+Janus.Core.AccountDeletionCancelled.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey) -> void
+Janus.Core.AccountDeletionCancelled.Equals(Janus.Core.AccountDeletionCancelled? other) -> bool
+Janus.Core.AccountDeletionRequested
+Janus.Core.AccountDeletionRequested.AccountDeletionRequested(System.DateTimeOffset RaisedAt, string! IdempotencyKey, Janus.Core.DeletionOrigin By, System.DateTimeOffset ErasesAt) -> void
+Janus.Core.AccountDeletionRequested.By.get -> Janus.Core.DeletionOrigin
+Janus.Core.AccountDeletionRequested.By.init -> void
+Janus.Core.AccountDeletionRequested.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.DeletionOrigin By, out System.DateTimeOffset ErasesAt) -> void
+Janus.Core.AccountDeletionRequested.Equals(Janus.Core.AccountDeletionRequested? other) -> bool
+Janus.Core.AccountDeletionRequested.ErasesAt.get -> System.DateTimeOffset
+Janus.Core.AccountDeletionRequested.ErasesAt.init -> void
 Janus.Core.AccountDetail
 Janus.Core.AccountDetail.<Clone>$() -> Janus.Core.AccountDetail!
 Janus.Core.AccountDetail.AccountDetail(Janus.Core.AccountState State, Janus.Core.AccountIdentifiers! Identifiers, System.Collections.Generic.IReadOnlyList<Janus.Core.CredentialSummary!>! Credentials, Janus.Core.RecoveryCodeStatus? RecoveryCodes, Janus.Core.ProfileDetail! Profile, Janus.Core.PreferenceValues! Preferences) -> void
@@ -50,6 +62,10 @@ Janus.Core.AccountIdentifiers.Phones.get -> System.Collections.Generic.IReadOnly
 Janus.Core.AccountIdentifiers.Phones.init -> void
 Janus.Core.AccountIdentifiers.Username.get -> string?
 Janus.Core.AccountIdentifiers.Username.init -> void
+Janus.Core.AccountReactivated
+Janus.Core.AccountReactivated.AccountReactivated(System.DateTimeOffset RaisedAt, string! IdempotencyKey) -> void
+Janus.Core.AccountReactivated.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey) -> void
+Janus.Core.AccountReactivated.Equals(Janus.Core.AccountReactivated? other) -> bool
 Janus.Core.AccountRegistered
 Janus.Core.AccountRegistered.AccountRegistered(System.DateTimeOffset RaisedAt, string! IdempotencyKey) -> void
 Janus.Core.AccountRegistered.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey) -> void
@@ -60,6 +76,12 @@ Janus.Core.AccountState.Deleted = 4 -> Janus.Core.AccountState
 Janus.Core.AccountState.Deleting = 3 -> Janus.Core.AccountState
 Janus.Core.AccountState.Restricted = 2 -> Janus.Core.AccountState
 Janus.Core.AccountState.Suspended = 1 -> Janus.Core.AccountState
+Janus.Core.AccountSuspended
+Janus.Core.AccountSuspended.AccountSuspended(System.DateTimeOffset RaisedAt, string! IdempotencyKey, Janus.Core.SuspensionOrigin By) -> void
+Janus.Core.AccountSuspended.By.get -> Janus.Core.SuspensionOrigin
+Janus.Core.AccountSuspended.By.init -> void
+Janus.Core.AccountSuspended.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.SuspensionOrigin By) -> void
+Janus.Core.AccountSuspended.Equals(Janus.Core.AccountSuspended? other) -> bool
 Janus.Core.AgeGroup
 Janus.Core.AgeGroup.Adult = 1 -> Janus.Core.AgeGroup
 Janus.Core.AgeGroup.Minor = 0 -> Janus.Core.AgeGroup
@@ -863,10 +885,14 @@ Janus.Core.IAccessGate.RequireAsync(Janus.Core.AccessContext! context, Janus.Cor
 Janus.Core.IAccessGate.RequireAsync<TResource>(Janus.Core.AccessContext! context, Janus.Core.Permission permission, Janus.Core.ResourceReference resource, Janus.Core.FilterSources<TResource>! sources, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAccessGate.ResolveAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, Janus.Core.AuditRecordId correlation, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AccessExplanation!>>
 Janus.Core.IAccount
+Janus.Core.IAccount.CancelDeletionAsync(string! linkToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IAccount.DeactivateAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IAccount.DeleteAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.DateTimeOffset>>
 Janus.Core.IAccount.EditProfileAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.ProfileEdit! edit, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAccount.LabelCredentialAsync(Janus.Core.AccessContext! context, Janus.Core.AuthenticatorId credential, string! label, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAccount.ListCredentialsAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.CredentialSummary!>!>>
 Janus.Core.IAccount.PreferSecondStepAsync(Janus.Core.AccessContext! context, Janus.Core.AuthenticatorId credential, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IAccount.ReactivateAsync(string! linkToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAccount.ReadAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AccountDetail!>>
 Janus.Core.IAccount.ReadPreferencesAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.PreferenceValues!>>
 Janus.Core.IAccount.SetPreferencesAsync(Janus.Core.AccessContext! context, string? language, string? timeZone, System.Collections.Generic.IReadOnlyDictionary<string!, string!>! declared, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -1162,6 +1188,8 @@ Janus.Core.MessageKind
 Janus.Core.MessageKind.AccountExists = 7 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.Alert = 5 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.CredentialEnrolled = 12 -> Janus.Core.MessageKind
+Janus.Core.MessageKind.DeactivationNotice = 17 -> Janus.Core.MessageKind
+Janus.Core.MessageKind.DeletionNotice = 18 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.EnrolmentLink = 4 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.IdentifierAdded = 8 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.IdentifierChangeConfirm = 13 -> Janus.Core.MessageKind
@@ -2024,16 +2052,32 @@ const Janus.Core.Username.MinimumLength = 3 -> int
 override Janus.Core.AccessExplanation.Equals(object? obj) -> bool
 override Janus.Core.AccessExplanation.GetHashCode() -> int
 override Janus.Core.AccessExplanation.ToString() -> string!
+override Janus.Core.AccountDeletionCancelled.<Clone>$() -> Janus.Core.AccountDeletionCancelled!
+override Janus.Core.AccountDeletionCancelled.Equals(object? obj) -> bool
+override Janus.Core.AccountDeletionCancelled.GetHashCode() -> int
+override Janus.Core.AccountDeletionCancelled.ToString() -> string!
+override Janus.Core.AccountDeletionRequested.<Clone>$() -> Janus.Core.AccountDeletionRequested!
+override Janus.Core.AccountDeletionRequested.Equals(object? obj) -> bool
+override Janus.Core.AccountDeletionRequested.GetHashCode() -> int
+override Janus.Core.AccountDeletionRequested.ToString() -> string!
 override Janus.Core.AccountDetail.Equals(object? obj) -> bool
 override Janus.Core.AccountDetail.GetHashCode() -> int
 override Janus.Core.AccountDetail.ToString() -> string!
 override Janus.Core.AccountIdentifiers.Equals(object? obj) -> bool
 override Janus.Core.AccountIdentifiers.GetHashCode() -> int
 override Janus.Core.AccountIdentifiers.ToString() -> string!
+override Janus.Core.AccountReactivated.<Clone>$() -> Janus.Core.AccountReactivated!
+override Janus.Core.AccountReactivated.Equals(object? obj) -> bool
+override Janus.Core.AccountReactivated.GetHashCode() -> int
+override Janus.Core.AccountReactivated.ToString() -> string!
 override Janus.Core.AccountRegistered.<Clone>$() -> Janus.Core.AccountRegistered!
 override Janus.Core.AccountRegistered.Equals(object? obj) -> bool
 override Janus.Core.AccountRegistered.GetHashCode() -> int
 override Janus.Core.AccountRegistered.ToString() -> string!
+override Janus.Core.AccountSuspended.<Clone>$() -> Janus.Core.AccountSuspended!
+override Janus.Core.AccountSuspended.Equals(object? obj) -> bool
+override Janus.Core.AccountSuspended.GetHashCode() -> int
+override Janus.Core.AccountSuspended.ToString() -> string!
 override Janus.Core.AlertRaised.<Clone>$() -> Janus.Core.AlertRaised!
 override Janus.Core.AlertRaised.Equals(object? obj) -> bool
 override Janus.Core.AlertRaised.GetHashCode() -> int
@@ -2415,7 +2459,11 @@ override Janus.Core.WebAuthnChallenge.Equals(object? obj) -> bool
 override Janus.Core.WebAuthnChallenge.GetHashCode() -> int
 override Janus.Core.WebAuthnChallenge.ToString() -> string!
 override abstract Janus.Core.SubjectEvent.<Clone>$() -> Janus.Core.SubjectEvent!
+override sealed Janus.Core.AccountDeletionCancelled.Equals(Janus.Core.JanusEvent? other) -> bool
+override sealed Janus.Core.AccountDeletionRequested.Equals(Janus.Core.JanusEvent? other) -> bool
+override sealed Janus.Core.AccountReactivated.Equals(Janus.Core.JanusEvent? other) -> bool
 override sealed Janus.Core.AccountRegistered.Equals(Janus.Core.JanusEvent? other) -> bool
+override sealed Janus.Core.AccountSuspended.Equals(Janus.Core.JanusEvent? other) -> bool
 override sealed Janus.Core.AlertRaised.Equals(Janus.Core.JanusEvent? other) -> bool
 override sealed Janus.Core.ConsentChanged.Equals(Janus.Core.JanusEvent? other) -> bool
 override sealed Janus.Core.DeviceVerified.Equals(Janus.Core.JanusEvent? other) -> bool
@@ -2435,12 +2483,20 @@ static Janus.Core.AccessContext.Of(Janus.Core.SubjectId subject) -> Janus.Core.A
 static Janus.Core.AccessContext.Of(Janus.Core.SystemPrincipal! principal) -> Janus.Core.AccessContext!
 static Janus.Core.AccessExplanation.operator !=(Janus.Core.AccessExplanation? left, Janus.Core.AccessExplanation? right) -> bool
 static Janus.Core.AccessExplanation.operator ==(Janus.Core.AccessExplanation? left, Janus.Core.AccessExplanation? right) -> bool
+static Janus.Core.AccountDeletionCancelled.operator !=(Janus.Core.AccountDeletionCancelled? left, Janus.Core.AccountDeletionCancelled? right) -> bool
+static Janus.Core.AccountDeletionCancelled.operator ==(Janus.Core.AccountDeletionCancelled? left, Janus.Core.AccountDeletionCancelled? right) -> bool
+static Janus.Core.AccountDeletionRequested.operator !=(Janus.Core.AccountDeletionRequested? left, Janus.Core.AccountDeletionRequested? right) -> bool
+static Janus.Core.AccountDeletionRequested.operator ==(Janus.Core.AccountDeletionRequested? left, Janus.Core.AccountDeletionRequested? right) -> bool
 static Janus.Core.AccountDetail.operator !=(Janus.Core.AccountDetail? left, Janus.Core.AccountDetail? right) -> bool
 static Janus.Core.AccountDetail.operator ==(Janus.Core.AccountDetail? left, Janus.Core.AccountDetail? right) -> bool
 static Janus.Core.AccountIdentifiers.operator !=(Janus.Core.AccountIdentifiers? left, Janus.Core.AccountIdentifiers? right) -> bool
 static Janus.Core.AccountIdentifiers.operator ==(Janus.Core.AccountIdentifiers? left, Janus.Core.AccountIdentifiers? right) -> bool
+static Janus.Core.AccountReactivated.operator !=(Janus.Core.AccountReactivated? left, Janus.Core.AccountReactivated? right) -> bool
+static Janus.Core.AccountReactivated.operator ==(Janus.Core.AccountReactivated? left, Janus.Core.AccountReactivated? right) -> bool
 static Janus.Core.AccountRegistered.operator !=(Janus.Core.AccountRegistered? left, Janus.Core.AccountRegistered? right) -> bool
 static Janus.Core.AccountRegistered.operator ==(Janus.Core.AccountRegistered? left, Janus.Core.AccountRegistered? right) -> bool
+static Janus.Core.AccountSuspended.operator !=(Janus.Core.AccountSuspended? left, Janus.Core.AccountSuspended? right) -> bool
+static Janus.Core.AccountSuspended.operator ==(Janus.Core.AccountSuspended? left, Janus.Core.AccountSuspended? right) -> bool
 static Janus.Core.AlertRaised.operator !=(Janus.Core.AlertRaised? left, Janus.Core.AlertRaised? right) -> bool
 static Janus.Core.AlertRaised.operator ==(Janus.Core.AlertRaised? left, Janus.Core.AlertRaised? right) -> bool
 static Janus.Core.AncestryEntry.operator !=(Janus.Core.AncestryEntry? left, Janus.Core.AncestryEntry? right) -> bool
@@ -2690,6 +2746,7 @@ static Janus.Core.Error.operator ==(Janus.Core.Error? left, Janus.Core.Error? ri
 static Janus.Core.ErrorCode.Parse(string! value) -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCode.operator !=(Janus.Core.ErrorCode left, Janus.Core.ErrorCode right) -> bool
 static Janus.Core.ErrorCode.operator ==(Janus.Core.ErrorCode left, Janus.Core.ErrorCode right) -> bool
+static Janus.Core.ErrorCodes.AccountAdministrativelySuspended.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.AffirmationRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.CallbackRejected.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ChallengeRequired.get -> Janus.Core.ErrorCode
@@ -2713,6 +2770,7 @@ static Janus.Core.ErrorCodes.CredentialLastSecondFactor.get -> Janus.Core.ErrorC
 static Janus.Core.ErrorCodes.CredentialNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.CredentialNotUpgradable.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.CredentialSuspended.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.DeletionWindowElapsed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.Denied.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.DerivationSourcesMissing.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.DeviceVerificationRequired.get -> Janus.Core.ErrorCode
@@ -2749,6 +2807,7 @@ static Janus.Core.ErrorCodes.ProfileInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ProfileNotAccepted.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ProfileUnderage.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PurposeNotObjectable.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.ReactivationTokenInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RecoveryChannelNotOnAccount.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RecoveryReasonRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RecoverySelfApproval.get -> Janus.Core.ErrorCode
@@ -2780,6 +2839,7 @@ static Janus.Core.ErrorCodes.StartupUnindexedDerivation.get -> Janus.Core.ErrorC
 static Janus.Core.ErrorCodes.StepUpRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StepUpUnavailable.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.SystemFault.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.TakedownActive.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.Throttled.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.UsernameCoolingOff.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.UsernameInvalid.get -> Janus.Core.ErrorCode

@@ -302,6 +302,14 @@ public sealed class ModelTests
             "legal_document_versions.published_at",
             "legal_document_versions.version",
 
+            // Not an account field: the one link an account's own deactivation or
+            // deletion notice carried, held by its fingerprint (IDN-LIFE-013,
+            // IDN-LIFE-014).
+            "lifecycle_links.issued_at",
+            "lifecycle_links.kind",
+            "lifecycle_links.subject",
+            "lifecycle_links.token",
+
             // Not an account field: a credential its holder reported lost, the window
             // AUTH-RECOV-007 invalidates it at the end of, and what the notices across
             // that window have reached.

@@ -118,4 +118,18 @@ public enum MessageKind
     /// </summary>
     [JsonStringEnumMemberName("privacy-request-lapsed")]
     PrivacyRequestLapsed = 16,
+
+    /// <summary>
+    /// The word to an account that has just deactivated itself, carrying the link
+    /// that stands it back up (IDN-LIFE-013).
+    /// </summary>
+    [JsonStringEnumMemberName("deactivation-notice")]
+    DeactivationNotice = 17,
+
+    /// <summary>
+    /// The word to an account whose deletion grace window has begun, carrying the
+    /// link that cancels it where the deletion is the account's own (IDN-LIFE-014).
+    /// </summary>
+    [JsonStringEnumMemberName("deletion-notice")]
+    DeletionNotice = 18,
 }

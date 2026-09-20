@@ -49,6 +49,44 @@ internal interface IAccountDirectory
     ValueTask ReinstateAsync(SubjectId subject, CancellationToken cancellationToken);
 
     /// <summary>
+    /// The deletion an account is in the grace window of, where it is in one.
+    /// </summary>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The deletion, or nothing where the account is not deleting.</returns>
+    ValueTask<HeldDeletion?> DeletingAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Takes an account down at its own request, which is the <c>self</c> entry into
+    /// the suspended state.
+    /// </summary>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of taking it down.</returns>
+    ValueTask DeactivateAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Begins the deletion grace window at the account's own request.
+    /// </summary>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="at">When the window began.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of beginning it.</returns>
+    ValueTask BeginDeletionAsync(
+        SubjectId subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Ends a grace window without erasing, restoring the account exactly as it
+    /// stood.
+    /// </summary>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of restoring it.</returns>
+    ValueTask CancelDeletionAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
     /// When an account came into being, which decides whether a raised requirement
     /// gives it a run-up or holds it at once (AUTH-FACT-017).
     /// </summary>

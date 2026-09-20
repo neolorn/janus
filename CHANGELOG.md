@@ -10,6 +10,17 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- An account now takes itself down and puts itself back up. `POST /account/deactivate`
+  suspends it with `suspendedBy = self`, ends every session it holds, and sends the
+  deactivation notice with the link `POST /account/reactivate` consumes; an account an
+  administrator suspended answers `identity.account.adminsuspended` instead, and only
+  an administrator stands it up. `POST /account/delete` starts the grace window
+  (`account.deletion.grace`), answers with when the erasure runs, ends every session,
+  and sends the deletion notice with the link `POST /account/delete/cancel` consumes
+  anywhere inside the window; afterwards it answers
+  `identity.deletion.windowelapsed`, and a deletion the deployment began as a takedown
+  answers `identity.takedown.active`. Both requests require step-up.
+
 - The outbox worker now publishes erasure, restriction and export to every handler a
   host registers, keeps each confirmation on the delivery's own row, and closes the
   delivery only when every required handler has confirmed. A handler that refuses, or

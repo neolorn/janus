@@ -2955,3 +2955,38 @@ passes on its own terms.
 *Chapter text that should change.* IDN-LIFE-003a should say, beside the requirement
 that subscribers be idempotent, that a handler which faults is one that did not
 confirm.
+
+---
+
+## 98. The link-borne bodies carry `linkToken`, including reactivation
+
+**Phase 7 · 2026-09-20 · Tier 2 · chapter 09 sections 6 and 6a, IDN-LIFE-013**
+
+*The question.* Chapter 09's entry for `POST /account/reactivate` spells its body
+`{ "token": "..." }` and says in the same paragraph that it is "the same shape as
+deletion cancellation". The entry for `POST /account/identifiers/{id}/undo` also says
+it is "the same shape as deletion cancellation" and spells `{ "linkToken": "..." }`.
+Deletion cancellation's own entry spells no body. The two sentences cannot both hold.
+
+*The readings.*
+
+1. The reactivation body is `token`, as its own JSON block spells, and deletion
+   cancellation is `linkToken`, as the undo entry's cross-reference spells.
+2. Every link-borne body is `linkToken`, and the block at the reactivation entry is
+   the slip.
+
+*Chosen: 2.* The reactivation entry is inconsistent with itself, so it cannot settle
+its own shape; what remains is the rest of the chapter, where every body carrying a
+token out of a notice (`POST /register/verify/{id}`, `POST /register/abandon`,
+`POST /auth/link/abandon`, the identifier undo and the identifier abandon) is spelled
+`linkToken`, and `token` is spelled only where the token is an enrolment or recovery
+token the person was handed rather than a link.
+Reading 2 also keeps one request shape for the four link-borne account paths instead
+of two.
+
+*Tests that pin what is built.*
+`AccountLifecycleFlowTests.IDN_LIFE_013_AC1_TheNoticesLinkStandsTheAccountBackUpAsync`,
+`AccountLifecycleFlowTests.IDN_ACCT_007_AC4_TheLinkEndsTheWindowAsync`.
+
+*Chapter text that should change.* The `POST /account/reactivate` entry's JSON block
+should read `{ "linkToken": "..." }`.

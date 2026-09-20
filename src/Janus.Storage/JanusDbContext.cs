@@ -1,4 +1,5 @@
 using System;
+using Janus.Storage.Authentication.Accounts;
 using Janus.Storage.Authentication.Alerting;
 using Janus.Storage.Authentication.Credentials;
 using Janus.Storage.Authentication.Factors;
@@ -335,6 +336,11 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     public DbSet<PendingSignInRecord> SignInLinks => Set<PendingSignInRecord>();
 
     /// <summary>
+    /// The links the deactivation and deletion notices carried.
+    /// </summary>
+    public DbSet<LifecycleLinkRecord> LifecycleLinks => Set<LifecycleLinkRecord>();
+
+    /// <summary>
     /// The requirements the policies in force have raised.
     /// </summary>
     public DbSet<PolicyRaiseRecord> PolicyRaises => Set<PolicyRaiseRecord>();
@@ -440,6 +446,7 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new RecoveryLinkConfiguration());
         modelBuilder.ApplyConfiguration(new RecoveryApprovalConfiguration());
         modelBuilder.ApplyConfiguration(new LossReportConfiguration());
+        modelBuilder.ApplyConfiguration(new LifecycleLinkConfiguration());
         modelBuilder.ApplyConfiguration(new OidcClientConfiguration());
         modelBuilder.ApplyConfiguration(new AuthorizationCodeConfiguration());
         modelBuilder.ApplyConfiguration(new RefreshTokenConfiguration());

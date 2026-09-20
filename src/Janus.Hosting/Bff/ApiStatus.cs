@@ -77,6 +77,8 @@ internal static class ApiStatus
         [ErrorCodes.CredentialNotUpgradable] = StatusCodes.Status409Conflict,
         [ErrorCodes.RequestDuplicate] = StatusCodes.Status409Conflict,
         [ErrorCodes.ErasureNotFailed] = StatusCodes.Status409Conflict,
+        [ErrorCodes.TakedownActive] = StatusCodes.Status409Conflict,
+        [ErrorCodes.AccountAdministrativelySuspended] = StatusCodes.Status409Conflict,
 
         // Well formed, and refused on what it says.
         [ErrorCodes.AffirmationRequired] = StatusCodes.Status422UnprocessableEntity,
@@ -128,6 +130,8 @@ internal static class ApiStatus
         [ErrorCodes.RequestReceivedFuture] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ConsentSuperseded] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ConsentWrittenRequired] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.DeletionWindowElapsed] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.ReactivationTokenInvalid] = StatusCodes.Status422UnprocessableEntity,
 
         // What 10 section 1.2 calls a status and not a refusal: the removal is
         // accepted and the window it takes is what the answer carries, and the

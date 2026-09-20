@@ -209,6 +209,35 @@ public static class ErrorCodes
     public static ErrorCode ChangeWindowElapsed { get; } = ErrorCode.Parse("identity.change.windowelapsed");
 
     /// <summary>
+    /// The deletion grace window has closed, so there is nothing left to cancel. The
+    /// erasure has run.
+    /// </summary>
+    /// <remarks>Implements IDN-ACCT-007, chapter 10 section 1.1.</remarks>
+    public static ErrorCode DeletionWindowElapsed { get; } = ErrorCode.Parse("identity.deletion.windowelapsed");
+
+    /// <summary>
+    /// The deletion was a takedown, which the subject does not cancel. Only
+    /// <c>POST /admin/accounts/{subject}/takedown/reverse</c> undoes it.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-003, chapter 10 section 1.1.</remarks>
+    public static ErrorCode TakedownActive { get; } = ErrorCode.Parse("identity.takedown.active");
+
+    /// <summary>
+    /// The reactivation link is unknown, has lapsed with the state it belonged to, or
+    /// has already been used. Where the notice carrying it is lost, ordinary recovery
+    /// restores the account instead.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-013, chapter 10 section 1.1.</remarks>
+    public static ErrorCode ReactivationTokenInvalid { get; } = ErrorCode.Parse("identity.reactivation.tokeninvalid");
+
+    /// <summary>
+    /// The account was suspended by an administrator, so no link of the account's own
+    /// stands it back up. An administrator reverses it.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-013, chapter 10 section 1.1.</remarks>
+    public static ErrorCode AccountAdministrativelySuspended { get; } = ErrorCode.Parse("identity.account.adminsuspended");
+
+    /// <summary>
     /// The identifier is the primary of its kind, which is not removable. Set another
     /// primary first, then remove it.
     /// </summary>

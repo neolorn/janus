@@ -173,6 +173,7 @@ internal static class StorageRegistration
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IIdentifierDirectory, IdentifierDirectory>();
         services.AddScoped<IAccountDirectory, AccountDirectory>();
+        services.AddScoped<ILifecycleLinkStore, LifecycleLinkStore>();
         services.AddScoped<IAccountAudit, AccountAudit>();
         services.AddScoped<IPasswordStore, PasswordStore>();
         services.AddScoped<IRecoveryCodeStore, RecoveryCodeStore>();

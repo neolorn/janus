@@ -64,6 +64,11 @@ internal static class AccountEndpoints
         _ = group.MapGet("/sessions", ListSessionsAsync);
         _ = group.MapDelete("/sessions/{id:guid}", EndSessionAsync);
 
+        _ = group.MapPost("/deactivate", DeactivateAsync);
+        _ = group.MapPost("/reactivate", ReactivateAsync);
+        _ = group.MapPost("/delete", DeleteAsync);
+        _ = group.MapPost("/delete/cancel", CancelDeletionAsync);
+
         return endpoints;
     }
 
@@ -290,6 +295,86 @@ internal static class AccountEndpoints
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
+    }
+
+    private static async Task<IResult> DeactivateAsync(
+        IAccount account,
+        RequestSession browser,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+        ArgumentNullException.ThrowIfNull(context);
+
+        return Asking(browser) is not AccessContext holder || browser.Live is null
+            ? Nobody()
+            : Answers.Of(
+                await account
+                    .DeactivateAsync(
+                        holder,
+                        browser.Live.Id,
+                        RequestOrigin.Source(context.Request),
+                        cancellationToken)
+                    .ConfigureAwait(false),
+                Accepted);
+    }
+
+    // IDN-LIFE-013: link-borne, because a suspended account cannot sign in and so has
+    // no session that could reach this on its own.
+    private static async Task<IResult> ReactivateAsync(
+        LinkTokenRequest request,
+        IAccount account,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(account);
+
+        return request.LinkToken is not { Length: > 0 } token
+            ? Malformed
+            : Answers.Of(
+                await account.ReactivateAsync(token, cancellationToken).ConfigureAwait(false),
+                Nothing);
+    }
+
+    private static async Task<IResult> DeleteAsync(
+        IAccount account,
+        RequestSession browser,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+        ArgumentNullException.ThrowIfNull(context);
+
+        return Asking(browser) is not AccessContext holder || browser.Live is null
+            ? Nobody()
+            : Answers.Of(
+                await account
+                    .DeleteAsync(
+                        holder,
+                        browser.Live.Id,
+                        RequestOrigin.Source(context.Request),
+                        cancellationToken)
+                    .ConfigureAwait(false),
+                erasesAt => TypedResults.Accepted(
+                    (string?)null,
+                    new DeletionView(erasesAt)));
+    }
+
+    // IDN-LIFE-014: the deletion notice carries the link, because a deleting account
+    // cannot sign in either.
+    private static async Task<IResult> CancelDeletionAsync(
+        LinkTokenRequest request,
+        IAccount account,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(account);
+
+        return request.LinkToken is not { Length: > 0 } token
+            ? Malformed
+            : Answers.Of(
+                await account.CancelDeletionAsync(token, cancellationToken).ConfigureAwait(false),
+                Nothing);
     }
 
     private static async Task<IResult> RemoveIdentifierAsync(

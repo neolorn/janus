@@ -20,6 +20,7 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
     private readonly Dictionary<SubjectId, HeldPreferences> _preferences = [];
     private readonly Dictionary<SubjectId, DateTimeOffset> _created = [];
     private readonly Dictionary<SubjectId, SuspensionOrigin> _suspensions = [];
+    private readonly Dictionary<SubjectId, HeldDeletion> _deletions = [];
 
     /// <summary>
     /// Puts an account in a state, which is what makes it exist here at all.
@@ -73,6 +74,56 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
     {
         _states[subject] = AccountState.Active;
         _ = _suspensions.Remove(subject);
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// Puts an account in a grace window somebody else began, as a takedown or the
+    /// privacy queue does.
+    /// </summary>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="by">Why the window was entered.</param>
+    /// <param name="since">When it began.</param>
+    public void Deleting(SubjectId subject, DeletionOrigin by, DateTimeOffset since)
+    {
+        _states[subject] = AccountState.Deleting;
+        _deletions[subject] = new HeldDeletion(by, since);
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<HeldDeletion?> DeletingAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_deletions.TryGetValue(subject, out HeldDeletion? deleting)
+            ? deleting
+            : null);
+
+    /// <inheritdoc/>
+    public ValueTask DeactivateAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        _states[subject] = AccountState.Suspended;
+        _suspensions[subject] = SuspensionOrigin.Self;
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask BeginDeletionAsync(
+        SubjectId subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        Deleting(subject, DeletionOrigin.Self, at);
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask CancelDeletionAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        _states[subject] = AccountState.Active;
+        _ = _deletions.Remove(subject);
 
         return ValueTask.CompletedTask;
     }
