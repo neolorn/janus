@@ -100,7 +100,6 @@ internal static class ApiStatus
         [ErrorCodes.WebAuthnCounterMismatch] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.WebAuthnRelyingPartyChanged] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.WebAuthnUserVerificationRequired] = StatusCodes.Status422UnprocessableEntity,
-        [ErrorCodes.RestrictionExceeded] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.RestrictionReasonRequired] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.GrantReasonRequired] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ConfigurationValueBelowFloor] = StatusCodes.Status422UnprocessableEntity,
@@ -112,8 +111,11 @@ internal static class ApiStatus
         [ErrorCodes.EndpointInsecure] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.SmsBalanceFloor] = StatusCodes.Status422UnprocessableEntity,
 
-        // Throttled, which carries the interval and not the reason.
+        // Throttled, which carries the interval and not the reason. A send a
+        // restriction refused is the same answer: 09 gives it 429 wherever it names
+        // it, and 10 section 6 reserves 429 for what carries Retry-After.
         [ErrorCodes.Throttled] = StatusCodes.Status429TooManyRequests,
+        [ErrorCodes.RestrictionExceeded] = StatusCodes.Status429TooManyRequests,
     }.ToFrozenDictionary();
 
     /// <summary>

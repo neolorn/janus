@@ -479,6 +479,8 @@ against the public contract of LIB-API-001.
 
 ### Fixed
 
+- A send a restriction refused is answered 429 with the interval, as the API contract
+  gives it, rather than 422.
 - The interval a throttled answer carries is measured on the deployment's clock.
 - A per-organization configuration key is accepted whatever the organization
   identifier begins with. A key such as `policy.<organization>` was refused whenever
