@@ -106,6 +106,7 @@ internal sealed class AuthenticatorStore(
             BackupEligible = authenticator.WebAuthn?.BackupEligible,
             BackupState = authenticator.WebAuthn?.BackupState,
             TotpConsumedStep = authenticator.Totp?.ConsumedStep,
+            IsPreferred = authenticator.IsPreferred,
         };
 
         if (authenticator.Totp is not null)
@@ -148,6 +149,7 @@ internal sealed class AuthenticatorStore(
         record.TotpConsumedStep = authenticator.Totp?.ConsumedStep;
         record.Counter = authenticator.WebAuthn?.Counter;
         record.BackupState = authenticator.WebAuthn?.BackupState;
+        record.IsPreferred = authenticator.IsPreferred;
     }
 
     /// <inheritdoc/>
@@ -191,7 +193,8 @@ internal sealed class AuthenticatorStore(
                     record.RelyingParty!,
                     record.Counter is long counter ? (uint)counter : null,
                     record.BackupEligible!.Value,
-                    record.BackupState!.Value));
+                    record.BackupState!.Value),
+            record.IsPreferred);
 
     // A label this library wrote is a label this library accepts, so a stored value
     // that no longer parses is a corrupted row and not a label to drop quietly.

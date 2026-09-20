@@ -92,6 +92,7 @@ internal sealed class AuthenticatorConfiguration : IEntityTypeConfiguration<Auth
         builder.Property(credential => credential.Counter).HasColumnName("counter");
         builder.Property(credential => credential.BackupEligible).HasColumnName("backup_eligible");
         builder.Property(credential => credential.BackupState).HasColumnName("backup_state");
+        builder.Property(credential => credential.IsPreferred).HasColumnName("is_preferred");
 
         // AUTH-FACT-013: the browser names the credential and not the account, so the
         // credential identifier is what a presentation is resolved by.
@@ -109,6 +110,12 @@ internal sealed class AuthenticatorConfiguration : IEntityTypeConfiguration<Auth
         })
             .HasDatabaseName("ux_authenticators_label")
             .IsUnique();
+
+        // IDN-ATTR-008: an account marks at most one credential to be offered first.
+        builder.HasIndex(credential => credential.Subject)
+            .HasDatabaseName("ux_authenticators_preferred")
+            .IsUnique()
+            .HasFilter("is_preferred");
 
         builder.HasOne<AccountRecord>()
             .WithMany()

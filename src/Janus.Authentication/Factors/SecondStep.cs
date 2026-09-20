@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -53,4 +54,27 @@ internal static class SecondStep
     /// <returns>What the account may enrol.</returns>
     public static IReadOnlyList<Factor> Offerable(bool password, IReadOnlySet<Factor> permitted) =>
         password ? [.. permitted.Where(Is).Order()] : [];
+
+    /// <summary>
+    /// Which of an account's second steps is offered first: the one the person
+    /// marked, and where none is marked the one enrolled most recently
+    /// (IDN-ATTR-008).
+    /// </summary>
+    /// <param name="enrolled">Every credential the account holds.</param>
+    /// <returns>The one to offer first, and nothing where it holds no second step.</returns>
+    /// <remarks>
+    /// The answer is derived rather than held, so removing the marked one moves the
+    /// preference on its own and an enrolment on an unmarked account becomes the
+    /// preference without a second write.
+    /// </remarks>
+    public static Authenticator? Preferred(IEnumerable<Authenticator> enrolled)
+    {
+        Authenticator[] usable = [.. enrolled.Where(Usable)];
+
+        return Array.Find(usable, credential => credential.IsPreferred)
+            ?? usable.OrderByDescending(credential => credential.AddedAt).FirstOrDefault();
+    }
+
+    private static bool Usable(Authenticator credential) =>
+        credential.State is AuthenticatorState.Active && Is(credential.Factor);
 }
