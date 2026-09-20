@@ -262,6 +262,12 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         Set<RegistrationLinkRecord>();
 
     /// <summary>
+    /// What browsers carry before they hold a session.
+    /// </summary>
+    public DbSet<PreAuthenticationRecord> PreAuthenticationSessions =>
+        Set<PreAuthenticationRecord>();
+
+    /// <summary>
     /// The identifiers of live accounts waiting to be proved.
     /// </summary>
     public DbSet<PendingVerificationRecord> IdentifierVerifications =>
@@ -324,6 +330,7 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new AlertConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationSessionConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationLinkConfiguration());
+        modelBuilder.ApplyConfiguration(new PreAuthenticationConfiguration());
         modelBuilder.ApplyConfiguration(new PendingVerificationConfiguration());
     }
 }

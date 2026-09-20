@@ -30,6 +30,10 @@ public static class JanusPipeline
         _ = application.UseMiddleware<ResourceIsolation>();
         _ = application.UseMiddleware<CustomRequestHeader>();
         _ = application.UseMiddleware<OriginValidation>();
+
+        // BFF-CSRF-005a: the token's binding target has to exist before the token is
+        // checked, so a browser arriving for the first time is given one here.
+        _ = application.UseMiddleware<FirstContact>();
         _ = application.UseMiddleware<SynchronizerToken>();
 
         return application;

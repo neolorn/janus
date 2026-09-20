@@ -8,8 +8,10 @@ using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Sessions;
+using Janus.Authentication.Tests;
 using Janus.Authentication.Tests.Sessions;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -33,6 +35,9 @@ public sealed class BrowserProfileTests : IDisposable
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
 
     private readonly SessionStoreInMemory _sessions = new();
+
+    private readonly PreAuthenticationStoreInMemory _contacts = new();
+
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
 
     private bool _reached;
@@ -168,7 +173,7 @@ public sealed class BrowserProfileTests : IDisposable
             Carrying(context, secret);
         }
 
-        await new SynchronizerToken(new SynchronizerTokens(_sessions), log)
+        await new SynchronizerToken(Tokens(), log)
             .InvokeAsync(context, Endpoint);
 
         await AssertRefusedAsync(context);
@@ -187,7 +192,7 @@ public sealed class BrowserProfileTests : IDisposable
 
         Carrying(context, secret);
 
-        await new SynchronizerToken(new SynchronizerTokens(_sessions), new LogInMemory<SynchronizerToken>())
+        await new SynchronizerToken(Tokens(), new LogInMemory<SynchronizerToken>())
             .InvokeAsync(context, Endpoint);
 
         Assert.True(_reached);
@@ -202,7 +207,7 @@ public sealed class BrowserProfileTests : IDisposable
     {
         HttpContext context = Arriving("GET");
 
-        await new SynchronizerToken(new SynchronizerTokens(_sessions), new LogInMemory<SynchronizerToken>())
+        await new SynchronizerToken(Tokens(), new LogInMemory<SynchronizerToken>())
             .InvokeAsync(context, Endpoint);
 
         Assert.True(_reached);
@@ -229,7 +234,7 @@ public sealed class BrowserProfileTests : IDisposable
             reissued.Fingerprint(),
             TestContext.Current.CancellationToken);
 
-        var tokens = new SynchronizerTokens(_sessions);
+        SynchronizerTokens tokens = Tokens();
 
         Assert.False(await tokens.MatchesAsync(rotated, token, TestContext.Current.CancellationToken));
         Assert.True(await tokens.MatchesAsync(rotated, reissued, TestContext.Current.CancellationToken));
@@ -343,7 +348,7 @@ public sealed class BrowserProfileTests : IDisposable
 
         Carrying(context, secret);
 
-        await new SynchronizerToken(new SynchronizerTokens(_sessions), log)
+        await new SynchronizerToken(Tokens(), log)
             .InvokeAsync(context, Endpoint);
 
         await AssertRefusedAsync(context);
@@ -360,7 +365,7 @@ public sealed class BrowserProfileTests : IDisposable
     {
         var log = new LogInMemory<SynchronizerToken>();
 
-        await new SynchronizerToken(new SynchronizerTokens(_sessions), log)
+        await new SynchronizerToken(Tokens(), log)
             .InvokeAsync(Arriving("POST"), Endpoint);
 
         Assert.Equal(LogLevel.Warning, Assert.Single(log.Entries).Level);
@@ -572,9 +577,11 @@ public sealed class BrowserProfileTests : IDisposable
         return Task.CompletedTask;
     }
 
+    private SynchronizerTokens Tokens() => new(_sessions, _contacts, TimeProvider.System);
+
     // The layer that needs the session, as the layer before it hands a request on.
     private RequestDelegate Token() => carried =>
-        new SynchronizerToken(new SynchronizerTokens(_sessions), new LogInMemory<SynchronizerToken>())
+        new SynchronizerToken(Tokens(), new LogInMemory<SynchronizerToken>())
             .InvokeAsync(carried, Endpoint);
 
     private RequestDelegate Mounted() => Mounted(
@@ -596,11 +603,20 @@ public sealed class BrowserProfileTests : IDisposable
         services.AddSingleton(header);
         services.AddSingleton(origin);
         services.AddSingleton(token);
+        services.AddSingleton<ILogger<FirstContact>>(new LogInMemory<FirstContact>());
         services.AddSingleton<ISessionStore>(_sessions);
+        services.AddSingleton<IPreAuthenticationStore>(_contacts);
+        services.AddSingleton<IConfigurationStore>(new ConfigurationInMemory());
+        services.AddSingleton<IUnitOfWork, UnitOfWorkInMemory>();
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton(_randomness);
+        services.AddSingleton(new BrowserSessionCookies(JanusApplication.Public));
+        services.AddScoped<PreAuthenticationService>();
         services.AddScoped<SynchronizerTokens>();
         services.AddScoped<ResourceIsolation>();
         services.AddScoped<CustomRequestHeader>();
         services.AddScoped<OriginValidation>();
+        services.AddScoped<FirstContact>();
         services.AddScoped<SynchronizerToken>();
 
         ServiceProvider provider = services.BuildServiceProvider();

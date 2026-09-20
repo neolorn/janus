@@ -93,6 +93,7 @@ public static class JanusRegistration
         services.AddScoped<CustomRequestHeader>();
         services.AddScoped<OriginValidation>();
         services.AddScoped<SynchronizerToken>();
+        services.AddScoped<FirstContact>();
 
         // LIB-HOST-001: what the host declares about its own messaging is the host's.
         // A deployment that declares none of it starts, and the checks that would have
@@ -149,6 +150,7 @@ public static class JanusRegistration
 
         services.AddScoped<PasswordScreening>();
         services.AddScoped<PasswordService>();
+        services.AddScoped<PreAuthenticationService>();
         services.AddScoped<SessionService>();
         services.AddScoped<ISessions>(provider => provider.GetRequiredService<SessionService>());
         services.AddScoped<TotpService>();

@@ -43,6 +43,44 @@ internal sealed class BrowserSessionCookies(JanusApplication application)
     }
 
     /// <summary>
+    /// Writes the pair a browser carries before it holds a session (BFF-CSRF-005a).
+    /// </summary>
+    /// <param name="response">The response the browser receives.</param>
+    /// <param name="issued">The first contact just issued.</param>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    public void Write(HttpResponse response, IssuedPreAuthentication issued)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+        ArgumentNullException.ThrowIfNull(issued);
+
+        response.Cookies.Append(
+            BrowserCookies.PreAuthentication,
+            issued.Secret.Value,
+            BrowserCookies.Options(application, readableByScript: false));
+
+        response.Cookies.Append(
+            BrowserCookies.Csrf,
+            issued.CsrfToken.Value,
+            BrowserCookies.Options(application, readableByScript: true));
+    }
+
+    /// <summary>
+    /// Clears what a browser carried before it held a session, which is what
+    /// authentication does rather than leaving it beside the session it became
+    /// (BFF-CSRF-005a AC3).
+    /// </summary>
+    /// <param name="response">The response the browser receives.</param>
+    /// <exception cref="ArgumentNullException">The response is absent.</exception>
+    public void ClearFirstContact(HttpResponse response)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+
+        response.Cookies.Delete(
+            BrowserCookies.PreAuthentication,
+            BrowserCookies.Options(application, readableByScript: false));
+    }
+
+    /// <summary>
     /// Clears the pair, which is what a sign-out leaves behind.
     /// </summary>
     /// <param name="response">The response the browser receives.</param>

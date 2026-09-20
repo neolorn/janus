@@ -158,6 +158,7 @@ internal static class StorageRegistration
         services.AddScoped<IRecoveryCodeStore, RecoveryCodeStore>();
         services.AddScoped<IDeviceStore, DeviceStore>();
         services.AddScoped<IMembershipLookup, MembershipLookup>();
+        services.AddScoped<IPreAuthenticationStore, PreAuthenticationStore>();
         services.AddScoped<ISessionAudit, SessionAudit>();
         services.AddScoped<ICredentialAudit, CredentialAudit>();
 

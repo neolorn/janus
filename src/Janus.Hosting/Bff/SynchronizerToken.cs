@@ -58,13 +58,32 @@ internal sealed class SynchronizerToken(
 
     private async ValueTask<bool> BoundAsync(HttpContext context, CancellationToken cancellationToken)
     {
-        string secret = context.Request.Cookies[BrowserCookies.Session] ?? string.Empty;
         string presented = context.Request.Headers[Header].ToString();
 
-        return secret.Length is not 0
-            && presented.Length is not 0
-            && await tokens
+        if (presented.Length is 0)
+        {
+            return false;
+        }
+
+        // BFF-CSRF-005a AC2: a browser that holds no session presents the token bound
+        // to its first contact instead, and it is validated the same way.
+        string secret = context.Request.Cookies[BrowserCookies.Session] ?? string.Empty;
+
+        if (secret.Length is not 0)
+        {
+            return await tokens
                 .MatchesAsync(OpaqueToken.Of(secret), OpaqueToken.Of(presented), cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        string first = context.Request.Cookies[BrowserCookies.PreAuthentication] ?? string.Empty;
+
+        return first.Length is not 0
+            && await tokens
+                .MatchesFirstContactAsync(
+                    OpaqueToken.Of(first),
+                    OpaqueToken.Of(presented),
+                    cancellationToken)
                 .ConfigureAwait(false);
     }
 }

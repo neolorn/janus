@@ -18,6 +18,12 @@ internal static class BrowserCookies
     public const string Session = "__Host-janus-session";
 
     /// <summary>
+    /// The cookie a browser carries before it holds a session, which is what a
+    /// synchronizer token binds to until one exists (D-153, BFF-CSRF-005a).
+    /// </summary>
+    public const string PreAuthentication = "__Host-janus-preauth";
+
+    /// <summary>
     /// The synchronizer token cookie, which the first-party frontend reads on load so
     /// that obtaining the token costs no round trip (D-153).
     /// </summary>
