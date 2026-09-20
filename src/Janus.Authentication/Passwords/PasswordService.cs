@@ -32,9 +32,10 @@ internal sealed class PasswordService(
     TimeProvider time)
 {
     /// <summary>
-    /// Sets the account's password, replacing whatever it held.
+    /// Puts a password through the floor, the screening and the hashing, and stops
+    /// short of storing it. Registration prepares one because no account exists to
+    /// store it against until the terms step.
     /// </summary>
-    /// <param name="subject">Whose password.</param>
     /// <param name="password">The password, in UTF-8. The caller clears it.</param>
     /// <param name="ownWords">
     /// The person's own identifiers and profile fields, and the service name.
@@ -45,12 +46,11 @@ internal sealed class PasswordService(
     /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// The advice to show beside the password that was accepted, or the failure that
+    /// What the password hashes to and what to show beside it, or the failure that
     /// refused it.
     /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
-    public async ValueTask<Result<PasswordFeedback>> SetAsync(
-        SubjectId subject,
+    public async ValueTask<Result<PreparedPassword>> PrepareAsync(
         byte[] password,
         IReadOnlyCollection<string> ownWords,
         AssuranceLevel reachable,
@@ -83,7 +83,7 @@ internal sealed class PasswordService(
 
         if (failure is not null)
         {
-            return Result.Failure<PasswordFeedback>(failure);
+            return Result.Failure<PreparedPassword>(failure);
         }
 
         int characters = PasswordFloor.Characters(password);
@@ -93,7 +93,7 @@ internal sealed class PasswordService(
 
         if (failure is not null)
         {
-            return Result.Failure<PasswordFeedback>(failure);
+            return Result.Failure<PreparedPassword>(failure);
         }
 
         (await screening.ScreenAsync(password, ownWords, cancellationToken).ConfigureAwait(false))
@@ -101,11 +101,51 @@ internal sealed class PasswordService(
 
         if (failure is not null)
         {
+            return Result.Failure<PreparedPassword>(failure);
+        }
+
+        return Result.Success(new PreparedPassword(
+            hasher.Hash(password, parameters, parallelism),
+            PasswordFloor.MeetsSingleFactorFloor(characters, singleFactor),
+            PasswordAdvice.On(password, ownWords)));
+    }
+
+    /// <summary>
+    /// Sets the account's password, replacing whatever it held.
+    /// </summary>
+    /// <param name="subject">Whose password.</param>
+    /// <param name="password">The password, in UTF-8. The caller clears it.</param>
+    /// <param name="ownWords">
+    /// The person's own identifiers and profile fields, and the service name.
+    /// </param>
+    /// <param name="reachable">
+    /// What the account reaches with the credentials it holds, which is what decides
+    /// whether the shorter floor applies (AUTH-PASS-001a).
+    /// </param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The advice to show beside the password that was accepted, or the failure that
+    /// refused it.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    public async ValueTask<Result<PasswordFeedback>> SetAsync(
+        SubjectId subject,
+        byte[] password,
+        IReadOnlyCollection<string> ownWords,
+        AssuranceLevel reachable,
+        CancellationToken cancellationToken)
+    {
+        Error? failure = null;
+
+        PreparedPassword prepared =
+            (await PrepareAsync(password, ownWords, reachable, cancellationToken).ConfigureAwait(false))
+                .Match(value => value, error => Held<PreparedPassword>(error, ref failure));
+
+        if (failure is not null)
+        {
             return Result.Failure<PasswordFeedback>(failure);
         }
 
-        PasswordHash hash = hasher.Hash(password, parameters, parallelism);
-        bool stands = PasswordFloor.MeetsSingleFactorFloor(characters, singleFactor);
         DateTimeOffset now = time.GetUtcNow();
         Password? held = await passwords.FindAsync(subject, cancellationToken).ConfigureAwait(false);
 
@@ -113,18 +153,19 @@ internal sealed class PasswordService(
 
         if (held is null)
         {
-            await passwords.SetAsync(Password.Set(subject, hash, stands, now), cancellationToken)
+            await passwords
+                .SetAsync(Password.Set(subject, prepared.Hash, prepared.StandsAlone, now), cancellationToken)
                 .ConfigureAwait(false);
         }
         else
         {
-            held.Change(hash, stands, now);
+            held.Change(prepared.Hash, prepared.StandsAlone, now);
             await passwords.SetAsync(held, cancellationToken).ConfigureAwait(false);
         }
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-        return Result.Success(PasswordAdvice.On(password, ownWords));
+        return Result.Success(prepared.Feedback);
     }
 
     /// <summary>

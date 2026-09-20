@@ -69,6 +69,7 @@ public sealed class FactorCatalogueTests
             SignInOnly: false,
             IsWebAuthn: false,
             IsDiscoverable: false,
+            Channel: null,
             SingleUse: false);
 
         Assert.Null(Assurance.Reached([code]));

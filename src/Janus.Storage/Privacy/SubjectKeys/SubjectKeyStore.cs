@@ -1,4 +1,5 @@
 using System;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -10,8 +11,13 @@ namespace Janus.Storage.Privacy.SubjectKeys;
 /// Subject keys, over the <c>subject_keys</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
+/// <param name="keyEncryptionKeys">The versions a subject key may be wrapped under.</param>
+/// <param name="randomness">The randomness a data key is drawn from.</param>
 /// <remarks>Implements PRIV-RIGHT-005a, OPS-SEC-003 and CONV-DESIGN-003.</remarks>
-internal sealed class SubjectKeyStore(JanusDbContext context) : ISubjectKeyStore
+internal sealed class SubjectKeyStore(
+    JanusDbContext context,
+    KeyEncryptionKeys keyEncryptionKeys,
+    RandomNumberGenerator randomness) : ISubjectKeyStore
 {
     /// <inheritdoc/>
     public async ValueTask<SubjectKey?> FindBySubjectAsync(
@@ -43,6 +49,27 @@ internal sealed class SubjectKeyStore(JanusDbContext context) : ISubjectKeyStore
                 },
                 cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask CreateAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        byte[] dataKey = PersonalFieldCipher.NewDataKey(randomness);
+
+        try
+        {
+            await AddAsync(
+                    SubjectKey.Wrapped(
+                        subject,
+                        keyEncryptionKeys.CurrentVersion,
+                        PersonalFieldCipher.Wrap(dataKey, keyEncryptionKeys.Current.Span)),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(dataKey);
+        }
     }
 
     /// <inheritdoc/>

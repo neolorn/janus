@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using Janus.Core;
 
@@ -30,7 +31,30 @@ internal static class MessageChannels
         MessageKind.EnrolmentLink,
         MessageKind.Alert,
         MessageKind.NoAccount,
+        MessageKind.AccountExists,
+        MessageKind.IdentifierAdded,
+        MessageKind.IdentifierRemoved,
+        MessageKind.IdentifierDetached,
+        MessageKind.IdentifierSettingsChanged,
+        MessageKind.CredentialEnrolled,
     ];
+
+    /// <summary>
+    /// The messages that tell an account holder something happened to their account.
+    /// A send of one of these to an address the account already holds is outside the
+    /// destination restrictions, so an attacker who drains a bucket cannot silence
+    /// the notice that says so.
+    /// </summary>
+    public static FrozenSet<MessageKind> Notices { get; } = FrozenSet.ToFrozenSet(
+    [
+        MessageKind.SecurityNotice,
+        MessageKind.AccountExists,
+        MessageKind.IdentifierAdded,
+        MessageKind.IdentifierRemoved,
+        MessageKind.IdentifierDetached,
+        MessageKind.IdentifierSettingsChanged,
+        MessageKind.CredentialEnrolled,
+    ]);
 
     /// <summary>
     /// The channels one message goes out on.

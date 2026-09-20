@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Sessions;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Janus.Identity.Accounts;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
@@ -20,6 +21,7 @@ namespace Janus.Storage.Privacy.Erasures;
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
 /// <param name="sessions">Where the subject's sessions are held.</param>
+/// <param name="configuration">Where the username hold's length is read.</param>
 /// <remarks>
 /// Implements PRIV-RIGHT-005, PRIV-RIGHT-005a, PRIV-RIGHT-005c, IDN-LIFE-003b,
 /// IDN-LIFE-014, IDN-ACCT-002 and IDN-PRIN-003. Every write here is made on one
@@ -30,7 +32,10 @@ namespace Janus.Storage.Privacy.Erasures;
 /// The sessions go first (AUTH-SESS-010): a request arriving on one of them after the
 /// key is gone would read fields it can no longer decrypt.
 /// </remarks>
-internal sealed class SubjectEraser(JanusDbContext context, ISessionStore sessions) : ISubjectEraser
+internal sealed class SubjectEraser(
+    JanusDbContext context,
+    ISessionStore sessions,
+    IConfigurationStore configuration) : ISubjectEraser
 {
     /// <inheritdoc/>
     public async ValueTask<Erasure> EraseAsync(
@@ -48,6 +53,7 @@ internal sealed class SubjectEraser(JanusDbContext context, ISessionStore sessio
         await sessions.EndAccountAsync(subject, at, cancellationToken).ConfigureAwait(false);
         await MarkErasedAsync(subject, cancellationToken).ConfigureAwait(false);
         await DestroyKeyAsync(subject, cancellationToken).ConfigureAwait(false);
+        await HoldUsernameAsync(subject, at, cancellationToken).ConfigureAwait(false);
         await NeutraliseFingerprintsAsync(subject, cancellationToken).ConfigureAwait(false);
 
         var erasure = Erasure.Begun(subject, at, reason);
@@ -81,7 +87,8 @@ internal sealed class SubjectEraser(JanusDbContext context, ISessionStore sessio
             record.State,
             record.SuspendedBy,
             record.DeletingBy,
-            record.DeletingSince);
+            record.DeletingSince,
+            registration: null);
 
         account.MarkErased();
 
@@ -106,6 +113,58 @@ internal sealed class SubjectEraser(JanusDbContext context, ISessionStore sessio
         record.FormatMarker = key.FormatMarker;
         record.KeyVersion = key.KeyVersion;
         record.WrappedKey = key.WrappedKey.ToArray();
+    }
+
+    // REG-IDENT-009: the name stays out of reach for the evidential period, and the
+    // fingerprint is the only thing left that knows it, so the hold is taken before
+    // the fingerprints are neutralised.
+    private async ValueTask HoldUsernameAsync(
+        SubjectId subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        IdentifierRecord? username = await context.Identifiers
+            .Where(identifier =>
+                identifier.Subject == subject && identifier.Kind == IdentifierKind.Username)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (username is null)
+        {
+            return;
+        }
+
+        TimeSpan held = (await configuration
+                .ReadAsync(Janus.Core.Configuration.Settings.RetentionConsent, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(
+                read => read,
+                _ => throw new InvalidOperationException("The username hold has no length to run for."));
+
+        UsernameHoldRecord? standing = await context.UsernameHolds
+            .FindAsync([username.Fingerprint], cancellationToken)
+            .ConfigureAwait(false);
+
+        // A name an earlier account gave up and this one took is held once, for
+        // whichever period ends later.
+        if (standing is not null)
+        {
+            standing.HeldFrom = at;
+            standing.ReleasesAt = standing.ReleasesAt > at + held ? standing.ReleasesAt : at + held;
+
+            return;
+        }
+
+        await context.UsernameHolds
+            .AddAsync(
+                new UsernameHoldRecord
+                {
+                    Fingerprint = username.Fingerprint,
+                    HeldFrom = at,
+                    ReleasesAt = at + held,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private async ValueTask NeutraliseFingerprintsAsync(

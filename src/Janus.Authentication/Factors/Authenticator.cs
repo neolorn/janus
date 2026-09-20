@@ -74,6 +74,13 @@ internal sealed class Authenticator
     public WebAuthnMaterial? WebAuthn { get; private set; }
 
     /// <summary>
+    /// Whether the person chose this one to be offered first at a second step. Where
+    /// the account has chosen none, the most recently enrolled second factor is
+    /// offered first and no credential carries the mark (IDN-ATTR-008).
+    /// </summary>
+    public bool IsPreferred { get; private set; }
+
+    /// <summary>
     /// Whether it may be presented at this instant, which a credential awaiting its
     /// confirming code and a suspended one may not.
     /// </summary>
@@ -152,6 +159,7 @@ internal sealed class Authenticator
     /// <param name="confirmed">Whether the enrolment was confirmed.</param>
     /// <param name="totp">The shared secret, where it is a code generator.</param>
     /// <param name="webAuthn">The key material, where it holds a key.</param>
+    /// <param name="isPreferred">Whether the person chose it to be offered first.</param>
     /// <returns>The credential.</returns>
     public static Authenticator Existing(
         AuthenticatorId id,
@@ -164,12 +172,14 @@ internal sealed class Authenticator
         DateTimeOffset? invalidatesAt,
         bool confirmed,
         TotpMaterial? totp,
-        WebAuthnMaterial? webAuthn) =>
+        WebAuthnMaterial? webAuthn,
+        bool isPreferred = false) =>
         new(id, subject, factor, label, addedAt, confirmed, totp, webAuthn)
         {
             State = state,
             LastUsedAt = lastUsedAt,
             InvalidatesAt = invalidatesAt,
+            IsPreferred = isPreferred,
         };
 
     /// <summary>
@@ -214,6 +224,13 @@ internal sealed class Authenticator
     /// </summary>
     /// <param name="label">What they call it now.</param>
     public void Rename(CredentialLabel label) => Label = label;
+
+    /// <summary>
+    /// The person chose this one to be offered first at a second step, or chose
+    /// another and this one gave the mark up (IDN-ATTR-008).
+    /// </summary>
+    /// <param name="preferred">Whether it is the one chosen.</param>
+    public void Prefer(bool preferred) => IsPreferred = preferred;
 
     /// <summary>
     /// The credential was reported lost: it is refused from now and gone when the

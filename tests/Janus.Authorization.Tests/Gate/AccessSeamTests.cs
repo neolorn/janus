@@ -214,7 +214,7 @@ public sealed class AccessSeamTests
             [
                 Path.Combine("Janus.Authorization", "Gate", "AccessGate.cs"),
             ],
-            Naming("ErrorCodes.Restricted"));
+            Naming("Error.From(ErrorCodes.Restricted)"));
 
         Assert.Equal(
             [

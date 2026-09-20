@@ -16,6 +16,8 @@ namespace Janus.Storage.Identity.Accounts;
 /// </remarks>
 internal sealed class AccountConfiguration : IEntityTypeConfiguration<AccountRecord>
 {
+    private const int DocumentVersionLength = 64;
+
     /// <inheritdoc/>
     public void Configure(EntityTypeBuilder<AccountRecord> builder)
     {
@@ -40,6 +42,25 @@ internal sealed class AccountConfiguration : IEntityTypeConfiguration<AccountRec
             table.HasCheckConstraint(
                 "ck_accounts_deleting",
                 "(deleting_by IS NULL) = (deleting_since IS NULL)");
+            table.HasCheckConstraint(
+                "ck_accounts_age_group",
+                "age_group IS NULL OR " + Vocabulary.Admits<AgeGroup>("age_group"));
+
+            // REG-PROF-002 AC3 and AC4: the age screen records an affirmation or a
+            // band, never both, and its instant comes with whichever it recorded.
+            table.HasCheckConstraint(
+                "ck_accounts_age_answer",
+                "adult_affirmed IS NULL OR age_group IS NULL");
+            table.HasCheckConstraint(
+                "ck_accounts_answered_age_at",
+                "(answered_age_at IS NULL) = "
+                    + "(adult_affirmed IS NULL AND age_group IS NULL)");
+
+            // REG-SESS-007 AC2: an account a registration created carries both
+            // documents, and one no registration created carries neither.
+            table.HasCheckConstraint(
+                "ck_accounts_documents",
+                "(terms_version IS NULL) = (notice_version IS NULL)");
         });
 
         builder.HasKey(account => account.Subject).HasName("pk_accounts");
@@ -63,6 +84,22 @@ internal sealed class AccountConfiguration : IEntityTypeConfiguration<AccountRec
             .HasConversion(new VocabularyConverter<DeletionOrigin>());
 
         builder.Property(account => account.DeletingSince).HasColumnName("deleting_since");
+
+        builder.Property(account => account.AdultAffirmed).HasColumnName("adult_affirmed");
+
+        builder.Property(account => account.AgeGroup)
+            .HasColumnName("age_group")
+            .HasConversion(new VocabularyConverter<AgeGroup>());
+
+        builder.Property(account => account.AnsweredAgeAt).HasColumnName("answered_age_at");
+
+        builder.Property(account => account.TermsVersion)
+            .HasColumnName("terms_version")
+            .HasMaxLength(DocumentVersionLength);
+
+        builder.Property(account => account.NoticeVersion)
+            .HasColumnName("notice_version")
+            .HasMaxLength(DocumentVersionLength);
 
         // The sweep of OPS-OBS-003 reads the windows that have elapsed and nothing else.
         builder.HasIndex(account => account.DeletingSince)

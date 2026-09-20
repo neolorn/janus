@@ -60,4 +60,18 @@ internal static partial class BrowserProfileLog
         Level = LogLevel.Warning,
         Message = "A {Method} without a session-bound synchronizer token was refused ({CorrelationId}).")]
     public static partial void TokenRejected(ILogger log, string correlationId, string method);
+
+    /// <summary>
+    /// A browser arrived holding nothing and could not be given a pre-authentication
+    /// session, so the request goes on without one and every state change it tries is
+    /// refused.
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    /// <param name="code">The code the refusal carried.</param>
+    [LoggerMessage(
+        EventId = 5,
+        Level = LogLevel.Warning,
+        Message = "A browser was given no pre-authentication session: {Code} ({CorrelationId}).")]
+    public static partial void FirstContactRefused(ILogger log, string correlationId, string code);
 }

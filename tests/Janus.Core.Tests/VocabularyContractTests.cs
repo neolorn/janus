@@ -265,8 +265,15 @@ public sealed class VocabularyContractTests
     {
         Assert.Equal(
             [
+                "account-exists",
                 "alert",
+                "credential-enrolled",
                 "enrolment-link",
+                "identifier-added",
+                "identifier-change-confirm",
+                "identifier-detached",
+                "identifier-removed",
+                "identifier-settings-changed",
                 "no-account",
                 "secondstep-code",
                 "security-notice",
@@ -313,6 +320,7 @@ public sealed class VocabularyContractTests
             typeof(AlertSeverity),
             typeof(MessageKind),
             typeof(SendKind),
+            typeof(RegistrationStep),
         ];
 
         foreach (Type vocabulary in vocabularies)

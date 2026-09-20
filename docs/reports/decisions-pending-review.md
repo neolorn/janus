@@ -1116,3 +1116,621 @@ already tells every previous destination.
 *Chapter text that should change.* The plan should name the phase that builds
 OPS-CFG-002, OPS-CFG-005 and the remaining OPS-CFG-008 criteria, and that phase should
 add the reason and the audit entry to the alert-destination change.
+
+---
+
+## 35. A given-up identifier stays reserved for the whole undo window
+
+**Phase 5 · 2026-09-20 · Tier 2 · REG-IDENT-006**
+
+*The question.* REG-IDENT-006 gives a removed identifier an undo window and puts the
+value out of the account's reach while it runs. It does not say whether another account
+may take that value in the meantime.
+
+*The readings.*
+
+1. Release the value at once, so the undo may find it taken.
+2. Hold it against every other account until the undo window closes.
+
+*Chosen: 2.* Fail closed: an undo the specification promises cannot be beaten to the
+address. The reservation is a unique fingerprint on `identifier_removals`, and
+`FindOwnerAsync` still treats the value as unknown everywhere a recovery path reads it
+(REG-IDENT-006 AC3).
+
+*Tests that pin it.*
+`IdentifierServiceTests.REG_IDENT_006_AC2_TheUndoRestoresInsideTheWindowAndNotAfterAsync`,
+`IdentifierServiceTests.REG_IDENT_006_AC3_TheRemovedAddressIsToldWithNoLinkAsync`.
+
+*Chapter text that should change.* REG-IDENT-006 should say that the value is
+unavailable to other accounts until the undo window ends.
+
+---
+
+## 36. The username hold after erasure is its own table
+
+**Phase 5 · 2026-09-20 · Tier 2 · REG-IDENT-009, PRIV-RIGHT-005a**
+
+*The question.* REG-IDENT-009 holds a released username against every other account for
+the cooling-off period, and holds an erased account's username for the same period. It
+does not say where that hold lives once the subject key is destroyed.
+
+*The readings.*
+
+1. Keep the hold on the removal record, beside the other released values.
+2. A table of fingerprints alone, each with the instant it is released.
+
+*Chosen: 2.* Erasure destroys the subject key, so a removal record's held columns are
+unreadable afterwards and cannot carry the hold. A username is public by nature, so a
+fingerprint with a release instant keeps nothing that erasure should have taken.
+
+*Tests that pin it.*
+`IdentifierServiceTests.REG_IDENT_009_AC3_AnErasedUsernameIsHeldUntilTheRetentionElapsesAsync`,
+`IdentifierServiceTests.REG_IDENT_009_AC2_ASecondChangeInsideTheWindowIsRefusedAsync`.
+
+*Chapter text that should change.* REG-IDENT-009 should say where the hold lives after
+erasure.
+
+---
+
+## 37. A pending identifier verification reuses the staged identity of registration
+
+**Phase 5 · 2026-09-20 · Tier 2 · REG-IDENT-004, REG-IDENT-007, REG-SESS-003**
+
+*The question.* An identifier added to a live account waits to be proved exactly as one
+staged during registration does. No chapter says whether the live account's waiting
+identifier is a second mechanism or the registration one.
+
+*The readings.*
+
+1. A second verification mechanism, written for an account that already exists.
+2. Compose the registration one, which already draws the code and the link token and
+   counts the attempts.
+
+*Chosen: 2.* One way of doing a thing (CONV-DESIGN). The waiting record adds only what
+registration has no use for: which browser asked, whether it is a replacement, and
+whether the address being left has confirmed.
+
+*Tests that pin it.*
+`IdentifierServiceTests.REG_IDENT_004_AC2_AnAddedIdentifierWaitsUnverifiedAsync`,
+`IdentifierServiceTests.REG_IDENT_010_AC2_ChangingAnIdentifierResetsItsVerificationAsync`,
+`IdentifierServiceTests.REG_IDENT_007_AC2_WithNoOtherChannelTheOldAddressConfirmsAsync`.
+
+*Chapter text that should change.* None; the chapters do not say which mechanism carries
+it.
+
+---
+
+## 38. The preferred second step is stored as a mark and the order derived
+
+**Phase 5 · 2026-09-20 · Tier 2 · IDN-ATTR-008**
+
+*The question.* IDN-ATTR-008 gives an account a preferred second step, makes the most
+recently enrolled one preferred until the person chooses, and moves the preference when
+the preferred credential is removed. It does not say where the preference is held.
+
+*The readings.*
+
+1. Hold the preferred credential's identifier on the account and maintain it at every
+   enrolment and every removal.
+2. Hold a mark on the credential and derive the order from it.
+
+*Chosen: 2.* AC1 and AC3 then need no maintenance: an enrolment on an unmarked account
+is the most recent second factor and therefore preferred, and removing the marked one
+moves the preference by itself. At most one mark per account is a unique filtered index
+rather than a rule in code.
+
+*Tests that pin it.*
+`AccountServiceTests.IDN_ATTR_008_AC1_TheLatestSecondStepIsPreferredWhileNothingIsMarkedAsync`,
+`AccountServiceTests.IDN_ATTR_008_AC2_AMethodTheAccountDoesNotHoldIsRefusedAsync`,
+`AccountServiceTests.IDN_ATTR_008_AC3_RemovingThePreferredOneMovesThePreferenceAsync`.
+
+*Chapter text that should change.* None.
+
+---
+
+## 39. Every error code is mapped to one status in one table
+
+**Phase 5 · 2026-09-20 · Tier 2 · API-CONV-003, BFF-ERR-001, BFF-ERR-002**
+
+*The question.* `09` gives a status beside each code at each endpoint. BFF-ERR-001
+requires every failure to answer with the status its code carries, and does not say
+whether the mapping belongs to the endpoint or to the code.
+
+*The readings.*
+
+1. Each endpoint names the status for each code it can answer with, as `09` writes them
+   per endpoint.
+2. One table from code to status, used by every endpoint.
+
+*Chosen: 2.* `09` assigns the same status to the same code everywhere it appears, so the
+first reading is the same table written many times with many chances to disagree. A code
+the table does not name answers as a fault, which discloses nothing the table did not
+decide, and a test asserts the table names every code the library raises.
+
+*Tests that pin it.* `ApiStatusTests.Of_ACodeTheLibraryRaises_HasAStatusOfItsOwn`,
+`ApiStatusTests.Of_EveryCodeButSessionDeath_AnswersWithSomethingOtherThan401`.
+
+*Chapter text that should change.* `10` section 6 should say that the status is a
+property of the code and not of the endpoint, and `10` section 1 should carry the status
+for every row.
+
+---
+
+## 40. Six codes the chapters describe but do not name
+
+**Phase 5 · 2026-09-20 · Tier 3 · BFF-ERR-001 AC3, `10` section 1**
+
+*The question.* The library raises `identity.profile.invalid`,
+`identity.profile.notaccepted`, `auth.credential.notfound`,
+`auth.credential.labelinvalid`, `identity.identifier.invalid` and
+`identity.identifier.locked`. Each is a refusal a chapter describes in prose (`09`
+`PUT /account/profile` 422 for a display name over 64 bytes and for a field immutable to
+the person; `09` `PATCH /account/credentials/{id}` 422 for a label of 0 or over 64
+characters; a credential or an identifier the account does not hold), and none has a row
+in `10` section 1. BFF-ERR-001 AC3 requires every code to be one `10` names, so the
+criterion cannot pass as written.
+
+*The readings.*
+
+1. Answer those refusals with a code `10` does name, which would say something other
+   than what happened.
+2. Raise the code the chapter describes, and record that `10` has to gain the rows.
+
+*Chosen: 2, the strictest reading: it keeps most.* Nothing is loosened; the refusals are
+the ones the chapters describe, and the library's own catalogue documents each with its
+meaning and its remediation (CONV-NAME-003).
+
+*Tests that pin it.* `ApiStatusTests.Of_ACodeTheLibraryRaises_HasAStatusOfItsOwn`,
+`ErrorCodesTests.CONV_NAME_003_AC2_ChangingACodeFailsTheContractTest`.
+
+*Chapter text that should change.* `10` sections 1.1 and 1.2 should carry a row for each
+of the six.
+
+---
+
+## 41. Session resolution refuses a dead session in the pipeline
+
+**Phase 5 · 2026-09-20 · Tier 2 · BFF-ORDER-001 stage 5, API-CONV-003, BFF-ERR-003 AC3**
+
+*The question.* Stage 5 resolves the session cookie. The chapters do not say what the
+stage does when the cookie no longer resolves to a live session.
+
+*The readings.*
+
+1. Resolution leaves the request without a session and each endpoint decides.
+2. A cookie that no longer resolves is answered 401 at the stage, once.
+
+*Chosen: 2.* BFF-ERR-003 AC3 puts uniformity in the pipeline rather than in endpoint
+discipline, and API-CONV-003 reserves 401 for exactly this. A browser that carries
+nothing is not refused: what an endpoint requires of a caller stays the endpoint's. The
+dead pair is cleared in the same answer so the browser stops presenting it.
+
+*Tests that pin it.*
+`BrowserProfileTests.BFF_STEP_001_AC3_AnExpiredSessionIsRefusedWithWhatMustBeRedoneAsync`,
+`ApiConventionTests.API_CONV_002_AC1_NoRefusalCarriesASentenceAsync`.
+
+*Chapter text that should change.* `17` should say that stage 5 answers session death
+itself.
+
+---
+
+## 42. A session records no location until a local database can resolve one
+
+**Phase 5 · 2026-09-20 · Tier 2 · INT-GEN-006, AUTH-SESS-013**
+
+*The question.* A session entry carries the city it was used from. INT-GEN-006 gives the
+city to a local database the plan assigns to no phase.
+
+*The readings.*
+
+1. Hold the session list until the city database exists.
+2. Record the address and the device and leave the location absent.
+
+*Chosen: 2.* INT-GEN-006 allows the degradation and AUTH-SESS-013 makes the field
+optional, so a deployment without the database shows a session list without a city
+rather than no session list at all.
+
+*Tests that pin it.*
+`AccountApplicationTests.FE_ACCT_001_AC2_OneSessionIsCurrentAndAnotherIsEndedAsync`,
+`SessionServiceTests.AUTH_SESS_013_AC2_EachEntryCarriesTimesDeviceAndCityAsync`.
+
+*Chapter text that should change.* None; the plan should name the phase INT-GEN-006
+belongs to.
+
+---
+
+## 43. The browser and the operating system are read from the user agent
+
+**Phase 5 · 2026-09-20 · Tier 2 · AUTH-SESS-013, IDN-ATTR-006**
+
+*The question.* A session entry names the device it was used from. No chapter says how
+the browser and the operating system are established.
+
+*The readings.*
+
+1. A package that parses user agents.
+2. A short ordered list of tokens read from the header.
+
+*Chosen: 2.* CONV-DESIGN-008 admits no such package, and the item asks for the two coarse
+facts a person recognises their own session by, not for a device profile. Anything finer
+would be a fingerprint, which IDN-ATTR-006 is written against.
+
+*Tests that pin it.*
+`SessionServiceTests.AUTH_SESS_013_AC2_EachEntryCarriesTimesDeviceAndCityAsync`,
+`ModelTests.IDN_ATTR_006_AC1_NoSchemaFieldHoldsCoordinates`.
+
+*Chapter text that should change.* None.
+
+---
+
+## 44. The phone step is skipped through a path of its own
+
+**Phase 5 · 2026-09-20 · Tier 2 · REG-SESS-002, `09` section 2**
+
+*The question.* REG-SESS-002 requires step 3 to be skippable where `registration.phone`
+is `optional`. `09` section 2 names no path for the skip, and the contract method
+(`IRegistration.SkipPhoneAsync`) exists.
+
+*The readings.*
+
+1. Treat an empty `PUT /register/phone` as the skip.
+2. A path that says what it does, `POST /register/phone/skip`.
+
+*Chosen: 2.* An empty value would have to be told apart from a malformed one, which is
+the oracle API-CONV-005 is written against, and a skip that leaves no staged identifier
+is not a stage.
+
+*Tests that pin it.*
+`RegistrationServiceTests.REG_SESS_002_AC3_ThePhoneStepIsSkippableOnlyWhereItIsOptionalAsync`,
+`RegistrationWizardTests.FE_REG_005_AC1_NoStepIsReachableBeforeItsPredecessorAsync`.
+
+*Chapter text that should change.* The endpoint table of `09` section 2 should carry
+`POST /register/phone/skip`, step 3, **204**.
+
+---
+
+## 45. The second-step choice names the next ceremony and is recorded nowhere
+
+**Phase 5 · 2026-09-20 · Tier 2 · REG-SESS-006, `09` section 2**
+
+*The question.* The security step takes a `secondStep` field beside the password. No
+chapter says what the server does with the choice.
+
+*The readings.*
+
+1. Record the choice on the registration session and refuse an enrolment that does not
+   match it.
+2. Set the password and leave the choice to the frontend, which enrols through the
+   WebAuthn and TOTP endpoints that accept the registration session.
+
+*Chosen: 2.* REG-SESS-006 makes the step complete when what the policy requires is
+enrolled, not when a choice is stored, and a stored choice would be a second gate on an
+enrolment the policy already gates. Nothing in `10` holds the field.
+
+*Tests that pin it.*
+`RegistrationServiceTests.REG_SESS_006_AC4_ASecondStepBesideAPasswordDrawsRecoveryCodesAsync`,
+`RegistrationServiceTests.FE_REG_003_AC4_ASecondStepAfterAPasswordLeavesItStandingAsync`.
+
+*Chapter text that should change.* `09` section 2 should say that `secondStep` selects
+the frontend's next screen and that the server records nothing for it.
+
+---
+
+## 46. A signed-in browser that asks to register is answered with the account
+
+**Phase 5 · 2026-09-20 · Tier 2 · REG-SESS-002, API-LAND-001**
+
+*The question.* `09` section 2 says a request to begin a registration from a browser that
+already holds a session "is answered with the account landing" and creates no
+registration session. It gives neither a status nor a body.
+
+*The readings.*
+
+1. Refuse with a code.
+2. Answer **200** with the document of `GET /account`.
+
+*Chosen: 2.* The account landing is the document the account application already has, and
+a refusal would make the frontend ask a second time for what it was about to show.
+
+*Tests that pin it.*
+`RegistrationFlowTests.BeginAsync_ABrowserAlreadySignedIn_IsAnsweredWithTheAccountAsync`.
+
+*Chapter text that should change.* `09` section 2 should give the status and the body of
+that answer.
+
+---
+
+## 47. Every event of the stream carries the state document
+
+**Phase 5 · 2026-09-20 · Tier 3 · REG-SESS-003, FE-VER-001, `09` section 2**
+
+*The question.* `09` section 2 names the stream's events with a payload in parentheses
+(`{ id, kind }`, `{ step }`, `{}`), and the sentence that follows them says the data of
+every event is the state document, "so polling and streaming are one shape". The two
+readings are in the same paragraph.
+
+*The readings.*
+
+1. The payloads the parentheses give.
+2. The `GET /register` state as the data of all three.
+
+*Chosen: 2.* It is the reading the item is for: a frontend that falls back to polling then
+needs no second reader. `session-ended` carries `{}` because there is no state left to
+read.
+
+*Tests that pin it.*
+`RegistrationFlowTests.BFF_CSRF_005b_AC3_TheStreamAndThePollCarryTheSameStateAsync`,
+`RegistrationWizardTests.FE_REG_005_AC4_TheStateIsReadBackFromTheServerAsync`.
+
+*Chapter text that should change.* `09` section 2 should drop the parenthetical payloads
+or say they are the change and not the data.
+
+---
+
+## 48. The stream is produced by reading the state back on an interval
+
+**Phase 5 · 2026-09-20 · Tier 2 · REG-SESS-003, FE-VER-001, CONV-DESIGN-008**
+
+*The question.* The waiting screen follows a stream of server-sent events. No chapter says
+what produces them.
+
+*The readings.*
+
+1. Signal the stream in process when a step completes.
+2. Read the state back every second and emit what changed.
+
+*Chosen: 2.* The browser that presses a verification link is not promised to reach the
+instance the stream is open on, so an in-process signal would strand the waiting screen
+behind a load balancer. A database channel would be a dependency CONV-DESIGN-008 does not
+admit. One second is short enough that a press feels immediate and long enough that a
+waiting screen is not a load generator.
+
+*Tests that pin it.*
+`RegistrationFlowTests.BFF_CSRF_005b_AC3_TheStreamAndThePollCarryTheSameStateAsync`,
+`RegistrationWizardTests.FE_VER_001_AC2_ThePressAdvancesWhatTheWaitingScreenReadsAsync`.
+
+*Chapter text that should change.* None.
+
+---
+
+## 49. A request the reader cannot parse is answered 400 with no body
+
+**Phase 5 · 2026-09-20 · Tier 3 · API-CONV-002, API-CONV-003**
+
+*The question.* API-CONV-002 AC2 requires every refusal to carry a code and a correlation
+identifier. A body the reader cannot parse never reaches an endpoint, and `10` names no
+code for a malformed request.
+
+*The readings.*
+
+1. Invent a code for a malformed request and answer the usual body.
+2. Answer the status alone.
+
+*Chosen: 2, the strictest reading: it grants least.* A code is wire vocabulary that the
+reference chapter owns, and the library does not add to it. API-CONV-002 AC2 therefore
+cannot be met at 400 until `10` carries a row for it; nothing is disclosed by the empty
+body in the meantime.
+
+*Tests that pin it.*
+`ApiConventionTests.MapRegistration_ABodyThatDoesNotParse_AnswersTheStatusAloneAsync`.
+
+*Chapter text that should change.* `10` should carry a code for a malformed request, or
+API-CONV-002 should say that 400 carries no body.
+
+---
+
+## 50. The addresses of the frontend's passkey pages are declared by the host
+
+**Phase 5 · 2026-09-20 · Tier 2 · REG-PM-001, LIB-HOST-003**
+
+*The question.* `/.well-known/change-password` and `/.well-known/passkey-endpoints` point
+at pages of the frontend. No chapter says how the library learns their addresses.
+
+*The readings.*
+
+1. Derive the addresses from the configured application origin.
+2. A declaration the host registers, `PasskeyAddresses`, empty by default.
+
+*Chosen: 2.* The library knows no route of the frontend (CONV-CONTENT-001, LIB-HOST-003),
+and a derived address would be a guess at a page that may not exist. A deployment that
+declares none serves neither document, which is what REG-PM-001 asks for where the pages
+are absent.
+
+*Tests that pin it.*
+`WellKnownTests.MapWellKnown_NoDeclaredAddresses_ServesNeitherDocumentAsync`,
+`WellKnownTests.REG_PM_001_AC2_TheWellKnownDocumentsAnswerAndTheProbeDoesNotAsync`.
+
+*Chapter text that should change.* REG-PM-001 should name the declaration the host
+registers.
+
+---
+
+## 51. The last-of-kind refusal is unreachable where the primary cannot be removed
+
+**Phase 5 · 2026-09-20 · Tier 3 · REG-IDENT-006 AC1, REG-IDENT-002**
+
+*The question.* REG-IDENT-006 AC1 refuses the removal of the last identifier of a kind
+the deployment requires. REG-IDENT-002 says the primary is never removed. Where a kind
+holds one identifier, that identifier is the primary, and the two items name different
+refusals for the same request.
+
+*The readings.*
+
+1. Let the primary of a kind be removed once another verified identifier of that kind
+   exists, so that `identity.identifier.lastofkind` is what refuses the last one.
+2. Keep REG-IDENT-002's rule without exception, which leaves
+   `identity.identifier.primary` as the answer in every case the second clause describes.
+
+*Chosen: 2, the strictest reading: it refuses more.* `identity.identifier.lastofkind` is
+raised where a kind's minimum can be unmet without a primary in the way, which is the
+registration discard (REG-SESS-004 AC1). The criterion's second clause is therefore proved
+there and not at `DELETE /account/identifiers/{id}`.
+
+*Tests that pin it.*
+`IdentifierServiceTests.REG_IDENT_006_AC1_RemovalNeedsStepUpAndSparesThePrimaryAsync`,
+`RegistrationServiceTests.REG_SESS_004_AC1_AnUnverifiedExtraHoldsTheStepUntilItIsDroppedAsync`.
+
+*Chapter text that should change.* REG-IDENT-006 should say that the primary refusal comes
+first and that the last-of-kind refusal answers the registration discard.
+
+---
+
+## 52. The WebAuthn registration ceremony is carried to phase 6 with the rest of `09` section 3
+
+**Phase 5 · 2026-09-20 · Tier 2 · REG-PM-001 AC1, `09` section 4, AUTH-FACT-012**
+
+*The question.* `09` section 4 holds the WebAuthn registration ceremony
+(`/auth/webauthn/register/*`). The plan's chapter lists give section 4 to no phase, and
+phase 5 owns registration and the well-known documents.
+
+*The readings.*
+
+1. Section 4 belongs to phase 5, because phase 5 owns registration.
+2. It belongs to phase 6 with `09` section 3, because the ceremony is a sign-in surface
+   built on the factor endpoints that phase builds.
+
+*Chosen: 2.* It keeps most: the creation options are written once, beside the assertion
+options they mirror, rather than half now and half later. `/.well-known/webauthn` needs
+nothing from the ceremony and is mounted now, so a deployment's allowlist is public from
+phase 5 (AUTH-FACT-012). REG-PM-001 AC1 ("No user handle contains personal data") is
+proved where the user handle is written, and is therefore carried to phase 6 with it.
+
+*Tests that pin what is built.*
+`WellKnownTests.REG_PM_001_AC2_TheWellKnownDocumentsAnswerAndTheProbeDoesNotAsync`.
+
+*Chapter text that should change.* The plan should name the phase that owns `09`
+section 4.
+
+---
+
+## 53. API-REDIR-001 has no endpoint in phase 5 to govern
+
+**Phase 5 · 2026-09-20 · Tier 2 · API-REDIR-001, API-REDIR-002**
+
+*The question.* The plan gives API-REDIR-001 to phase 5. API-REDIR-002 exempts
+registration from the return address, and no other endpoint of this phase takes one.
+
+*The readings.*
+
+1. Prove the return-address rules against the registration endpoints.
+2. Carry all four criteria to phase 6.
+
+*Chosen: 2.* There is nothing in this phase for the rules to refuse. The four criteria are
+proved at the sign-in and OIDC surfaces that do take a return address.
+
+*Tests that pin what is built.*
+`RegistrationServiceTests.REG_SESS_008_AC2_TheReturnIsDecidedByTheClientCapturedAtTheStartAsync`.
+
+*Chapter text that should change.* None.
+
+---
+
+## 54. The phase's surface is the plan's Builds column, not the whole of `09` section 6
+
+**Phase 5 · 2026-09-20 · Tier 2 · `09` section 6, the plan's phase 5 row**
+
+*The question.* The phase's Chapters column names `09` sections 2 and 6. Section 6 holds
+endpoints whose operations other phases build.
+
+*The readings.*
+
+1. The Chapters column makes every endpoint of section 6 this phase's.
+2. The Builds column names what the phase builds, and an endpoint of section 6 whose
+   operation another phase builds belongs to that phase.
+
+*Chosen: 2.* The Builds column is written endpoint by endpoint ("identifier add, primary,
+backup, remove with undo, replace; profile; preferences store; sessions list; credential
+list and labels; well-known endpoints"), and the first reading would put half-built
+surfaces in this phase: `DELETE /account/credentials/{id}` needs the suspension window of
+AUTH-RECOV-007, `/upgrade` needs the ceremony of `09` section 4,
+`POST /account/link/{provider}` needs a social consumer no phase builds, and
+`/account/photo` needs an imaging capability no permitted package provides. Serving any of
+them in part would be a "for now", which the working guide's section 4 forbids.
+
+*Tests that pin what is built.*
+`ApiConventionTests.IDN_ACCT_003_AC1_NoSurfaceTakesTwoAccountsAsync`, which reads the
+endpoint table the phase mounts.
+
+*Chapter text that should change.* The plan should say that a phase builds the endpoints
+of a chapter its Builds column names and no others.
+
+---
+
+## 55. The photo endpoints cannot be built inside the permitted packages
+
+**Phase 5 · 2026-09-20 · Tier 3 · IDN-ATTR-004, IDN-ATTR-002, PRIV-RIGHT-005 AC4, `09` section 6**
+
+*The question.* IDN-ATTR-004 requires an upload to be recognised by content among JPEG,
+PNG and WebP, limited by dimension, and re-encoded to JPEG at quality 85 with every
+metadata segment removed. The base class library decodes and encodes no image on the
+platforms this library targets (`System.Drawing.Common` is Windows-only and unsupported
+elsewhere), CONV-DESIGN-008 permits no imaging package, and D-161 forbids adding one.
+
+*The readings.*
+
+1. Accept uploads and store the bytes unvalidated.
+2. Serve no photo endpoint until the capability exists.
+
+*Chosen: 2, the strictest reading: it refuses.* An upload the library cannot re-encode is
+the exposure IDN-ATTR-004 exists to prevent, and storing the bytes would ship that
+exposure under the name of the item that forbids it. `janus.profile_photos` and the
+erasure that reaches it stand (IDN-ATTR-003, PRIV-RIGHT-005 AC4, phase 1); nothing writes
+to them.
+
+*Tests that pin what is built.*
+`SubjectEraserTests.IDN_ATTR_003_AC1_ThePhotoIsUnreadableInTheSameTransactionAsync`,
+`SubjectEraserTests.PRIV_RIGHT_005_AC4_ThePhotoIsRenderedUnreadableByTheSameOperationAsync`.
+
+*Chapter text that should change.* CONV-DESIGN-008 needs a row for an imaging package, or
+IDN-ATTR-002 to IDN-ATTR-004 need to leave the photo to the host.
+
+---
+
+## 56. The preferred second step is presented by the challenge that phase 6 builds
+
+**Phase 5 · 2026-09-20 · Tier 2 · IDN-ATTR-008 AC4**
+
+*The question.* IDN-ATTR-008 AC4 requires the preferred method to be offered first where a
+second step is asked for. Phase 5 builds no endpoint that presents a challenge.
+
+*The readings.*
+
+1. Order the combinations `StepUpChallenge` carries by the preference.
+2. Decide AC1 to AC3 here and prove AC4 where a challenge is presented.
+
+*Chosen: 2.* `StepUpChallenge` answers a gate with the combinations of factors that reach
+it, not with a list of methods to offer, and the endpoint that presents a challenge is
+`09` section 3, which phase 6 builds. Reordering combinations would put a presentation
+concern inside a gate decision.
+
+*Tests that pin what is built.*
+`AccountServiceTests.IDN_ATTR_008_AC1_TheLatestSecondStepIsPreferredWhileNothingIsMarkedAsync`,
+`AccountServiceTests.IDN_ATTR_008_AC3_RemovingThePreferredOneMovesThePreferenceAsync`.
+
+*Chapter text that should change.* None.
+
+---
+
+## 57. Two criteria wait on an enrolment that only a live account can have
+
+**Phase 5 · 2026-09-20 · Tier 2 · AUTH-STEP-007 AC1, AUTH-FACT-002a AC5**
+
+*The question.* AUTH-STEP-007 AC1 requires an enrolment to be notified "on every recorded
+channel that is not the enrolling session". The only enrolment phase 5 reaches is the
+registration security step, where the account does not yet exist. AUTH-FACT-002a AC5 names
+`POST /account/link/{provider}`.
+
+*The readings.*
+
+1. Prove them against the registration security step.
+2. Carry them to the phase that builds enrolment on a live account.
+
+*Chosen: 2.* At the security step there is no recorded channel and no other session, so
+the criterion cannot be exercised. `MessageKind.CredentialEnrolled` and its routing stand
+(phase 4); nothing raises it yet. No social consumer exists in the library at all.
+
+*Tests that pin what is built.*
+`RegistrationServiceTests.REG_SESS_006_AC4_ASecondStepBesideAPasswordDrawsRecoveryCodesAsync`,
+`AlertRouterTests` and the sending suite of phase 4, which carry `CredentialEnrolled`.
+
+*Chapter text that should change.* None.

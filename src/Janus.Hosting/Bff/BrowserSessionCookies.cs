@@ -1,4 +1,5 @@
 using System;
+using Janus.Authentication;
 using Janus.Authentication.Sessions;
 using Microsoft.AspNetCore.Http;
 
@@ -40,6 +41,62 @@ internal sealed class BrowserSessionCookies(JanusApplication application)
             BrowserCookies.Csrf,
             issued.CsrfToken.Value,
             BrowserCookies.Options(application, readableByScript: true));
+    }
+
+    /// <summary>
+    /// Writes the pair a browser carries before it holds a session (BFF-CSRF-005a).
+    /// </summary>
+    /// <param name="response">The response the browser receives.</param>
+    /// <param name="issued">The first contact just issued.</param>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    public void Write(HttpResponse response, IssuedPreAuthentication issued)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+        ArgumentNullException.ThrowIfNull(issued);
+
+        response.Cookies.Append(
+            BrowserCookies.PreAuthentication,
+            issued.Secret.Value,
+            BrowserCookies.Options(application, readableByScript: false));
+
+        response.Cookies.Append(
+            BrowserCookies.Csrf,
+            issued.CsrfToken.Value,
+            BrowserCookies.Options(application, readableByScript: true));
+    }
+
+    /// <summary>
+    /// Clears what a browser carried before it held a session, which is what
+    /// authentication does rather than leaving it beside the session it became
+    /// (BFF-CSRF-005a AC3).
+    /// </summary>
+    /// <param name="response">The response the browser receives.</param>
+    /// <exception cref="ArgumentNullException">The response is absent.</exception>
+    public void ClearFirstContact(HttpResponse response)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+
+        response.Cookies.Delete(
+            BrowserCookies.PreAuthentication,
+            BrowserCookies.Options(application, readableByScript: false));
+    }
+
+    /// <summary>
+    /// Writes what a browser the account has been seen from carries, so the next
+    /// sign-in from it is not held for a code (AUTH-FACT-016, REG-SESS-007).
+    /// </summary>
+    /// <param name="response">The response the browser receives.</param>
+    /// <param name="token">The token the record answers to.</param>
+    /// <param name="until">When the browser is to forget it.</param>
+    /// <exception cref="ArgumentNullException">The response is absent.</exception>
+    public void Remembered(HttpResponse response, OpaqueToken token, DateTimeOffset until)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+
+        response.Cookies.Append(
+            BrowserCookies.Browser,
+            token.Value,
+            BrowserCookies.Lasting(application, until));
     }
 
     /// <summary>

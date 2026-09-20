@@ -7,9 +7,13 @@ using System.Text;
 using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Policies;
 using Janus.Authentication.Sessions;
+using Janus.Authentication.Tests;
+using Janus.Authentication.Tests.Policies;
 using Janus.Authentication.Tests.Sessions;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -32,10 +36,25 @@ public sealed class BrowserProfileTests : IDisposable
 
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
 
+    private readonly FixedClock _clock = new(Noon);
+
     private readonly SessionStoreInMemory _sessions = new();
+
+    private readonly SessionAuditInMemory _audit = new();
+
+    private readonly MembershipLookupInMemory _memberships = new();
+
+    private readonly AccessGateInMemory _gate = new();
+
+    private readonly ConfigurationInMemory _configuration = new();
+
+    private readonly PreAuthenticationStoreInMemory _contacts = new();
+
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
 
     private bool _reached;
+
+    private RequestSession? _resolved;
 
     /// <summary>
     /// BFF-CSRF-002 AC1: a cross-site request that would change state is refused
@@ -168,7 +187,7 @@ public sealed class BrowserProfileTests : IDisposable
             Carrying(context, secret);
         }
 
-        await new SynchronizerToken(new SynchronizerTokens(_sessions), log)
+        await new SynchronizerToken(Tokens(), log)
             .InvokeAsync(context, Endpoint);
 
         await AssertRefusedAsync(context);
@@ -187,7 +206,7 @@ public sealed class BrowserProfileTests : IDisposable
 
         Carrying(context, secret);
 
-        await new SynchronizerToken(new SynchronizerTokens(_sessions), new LogInMemory<SynchronizerToken>())
+        await new SynchronizerToken(Tokens(), new LogInMemory<SynchronizerToken>())
             .InvokeAsync(context, Endpoint);
 
         Assert.True(_reached);
@@ -202,7 +221,7 @@ public sealed class BrowserProfileTests : IDisposable
     {
         HttpContext context = Arriving("GET");
 
-        await new SynchronizerToken(new SynchronizerTokens(_sessions), new LogInMemory<SynchronizerToken>())
+        await new SynchronizerToken(Tokens(), new LogInMemory<SynchronizerToken>())
             .InvokeAsync(context, Endpoint);
 
         Assert.True(_reached);
@@ -229,7 +248,7 @@ public sealed class BrowserProfileTests : IDisposable
             reissued.Fingerprint(),
             TestContext.Current.CancellationToken);
 
-        var tokens = new SynchronizerTokens(_sessions);
+        SynchronizerTokens tokens = Tokens();
 
         Assert.False(await tokens.MatchesAsync(rotated, token, TestContext.Current.CancellationToken));
         Assert.True(await tokens.MatchesAsync(rotated, reissued, TestContext.Current.CancellationToken));
@@ -343,7 +362,7 @@ public sealed class BrowserProfileTests : IDisposable
 
         Carrying(context, secret);
 
-        await new SynchronizerToken(new SynchronizerTokens(_sessions), log)
+        await new SynchronizerToken(Tokens(), log)
             .InvokeAsync(context, Endpoint);
 
         await AssertRefusedAsync(context);
@@ -360,7 +379,7 @@ public sealed class BrowserProfileTests : IDisposable
     {
         var log = new LogInMemory<SynchronizerToken>();
 
-        await new SynchronizerToken(new SynchronizerTokens(_sessions), log)
+        await new SynchronizerToken(Tokens(), log)
             .InvokeAsync(Arriving("POST"), Endpoint);
 
         Assert.Equal(LogLevel.Warning, Assert.Single(log.Entries).Level);
@@ -527,6 +546,113 @@ public sealed class BrowserProfileTests : IDisposable
         Assert.DoesNotContain("SequenceEqual", comparing, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// BFF-CSRF-005a AC1: a browser that arrives holding nothing is given a
+    /// pre-authentication session, so the endpoints reached before one exists have
+    /// something for a token to bind to.
+    /// </summary>
+    [Fact]
+    public async Task BFF_CSRF_005a_AC1_ABrowserHoldingNothingIsGivenAFirstContactAsync()
+    {
+        HttpContext context = Arriving("GET", ("Sec-Fetch-Site", "same-origin"));
+
+        await Mounted()(context);
+
+        Assert.True(_reached);
+        Assert.Single(_contacts.All);
+        Assert.Contains(
+            BrowserCookies.PreAuthentication + "=",
+            context.Response.Headers.SetCookie.ToString(),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// BFF-CSRF-005a AC2: the token bound to a first contact is validated the way a
+    /// session's is, so a state change before sign-in is protected and not exempted.
+    /// </summary>
+    [Fact]
+    public async Task BFF_CSRF_005a_AC2_TheFirstContactsTokenIsValidatedLikeASessionsAsync()
+    {
+        (OpaqueToken secret, OpaqueToken token) = await ContactAsync();
+
+        HttpContext refused = Arriving(
+            "POST",
+            (BrowserCookies.RequestHeader, "1"),
+            ("Origin", Target),
+            ("Sec-Fetch-Site", "same-origin"),
+            (SynchronizerToken.Header, OpaqueToken.Draw(_randomness).Value));
+
+        CarryingFirstContact(refused, secret);
+
+        await Mounted()(refused);
+
+        await AssertRefusedAsync(refused);
+        Assert.False(_reached);
+
+        HttpContext carried = Arriving(
+            "POST",
+            (BrowserCookies.RequestHeader, "1"),
+            ("Origin", Target),
+            ("Sec-Fetch-Site", "same-origin"),
+            (SynchronizerToken.Header, token.Value));
+
+        CarryingFirstContact(carried, secret);
+
+        await Mounted()(carried);
+
+        Assert.True(_reached);
+    }
+
+    /// <summary>
+    /// BFF-CSRF-005a AC4: what a first contact establishes is that a browser is the
+    /// same browser, never who is using it.
+    /// </summary>
+    [Fact]
+    public async Task BFF_CSRF_005a_AC4_AFirstContactCarriesNoIdentityAsync()
+    {
+        (OpaqueToken secret, OpaqueToken _) = await ContactAsync();
+        HttpContext context = Arriving("GET", ("Sec-Fetch-Site", "same-origin"));
+
+        CarryingFirstContact(context, secret);
+
+        await Mounted()(context);
+
+        Assert.NotNull(_resolved);
+        Assert.NotNull(_resolved.FirstContact);
+        Assert.Null(_resolved.Live);
+        Assert.Null(_resolved.Context);
+    }
+
+    /// <summary>
+    /// BFF-STEP-001 AC3: an expired session is refused with what has to be done
+    /// again, and the pair it answered to is cleared rather than presented for ever.
+    /// </summary>
+    [Fact]
+    public async Task BFF_STEP_001_AC3_AnExpiredSessionIsRefusedWithWhatMustBeRedoneAsync()
+    {
+        (OpaqueToken secret, OpaqueToken _) = await LiveAsync();
+
+        _clock.Advance(TimeSpan.FromDays(2));
+
+        HttpContext context = Arriving("GET", ("Sec-Fetch-Site", "same-origin"));
+
+        Carrying(context, secret);
+
+        await Mounted()(context);
+
+        Assert.False(_reached);
+        Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
+
+        string answered = await AnsweredAsync(context);
+
+        Assert.Contains("\"code\":\"auth.session.expired\"", answered, StringComparison.Ordinal);
+        Assert.Contains("\"reauthenticate\":", answered, StringComparison.Ordinal);
+        Assert.Contains(
+            BrowserCookies.Session + "=;",
+            context.Response.Headers.SetCookie.ToString(),
+            StringComparison.Ordinal);
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _randomness.Dispose();
 
@@ -534,10 +660,7 @@ public sealed class BrowserProfileTests : IDisposable
     {
         Assert.Equal(StatusCodes.Status403Forbidden, context.Response.StatusCode);
 
-        context.Response.Body.Position = 0;
-
-        using var reading = new StreamReader(context.Response.Body, Encoding.UTF8);
-        string answered = await reading.ReadToEndAsync(TestContext.Current.CancellationToken);
+        string answered = await AnsweredAsync(context);
 
         Assert.Contains("\"code\":\"" + Refused + "\"", answered, StringComparison.Ordinal);
         Assert.Contains("\"correlationId\":", answered, StringComparison.Ordinal);
@@ -545,6 +668,18 @@ public sealed class BrowserProfileTests : IDisposable
 
     private static void Carrying(HttpContext context, OpaqueToken secret) =>
         context.Request.Headers.Cookie = BrowserCookies.Session + "=" + secret.Value;
+
+    private static void CarryingFirstContact(HttpContext context, OpaqueToken secret) =>
+        context.Request.Headers.Cookie = BrowserCookies.PreAuthentication + "=" + secret.Value;
+
+    private static async Task<string> AnsweredAsync(HttpContext context)
+    {
+        context.Response.Body.Position = 0;
+
+        using var reading = new StreamReader(context.Response.Body, Encoding.UTF8);
+
+        return await reading.ReadToEndAsync(TestContext.Current.CancellationToken);
+    }
 
     private static DefaultHttpContext Arriving(string method, params (string Name, string Value)[] headers)
     {
@@ -568,13 +703,16 @@ public sealed class BrowserProfileTests : IDisposable
     private Task Endpoint(HttpContext context)
     {
         _reached = true;
+        _resolved = context.RequestServices?.GetService<RequestSession>();
 
         return Task.CompletedTask;
     }
 
+    private SynchronizerTokens Tokens() => new(_sessions, _contacts, _clock);
+
     // The layer that needs the session, as the layer before it hands a request on.
     private RequestDelegate Token() => carried =>
-        new SynchronizerToken(new SynchronizerTokens(_sessions), new LogInMemory<SynchronizerToken>())
+        new SynchronizerToken(Tokens(), new LogInMemory<SynchronizerToken>())
             .InvokeAsync(carried, Endpoint);
 
     private RequestDelegate Mounted() => Mounted(
@@ -596,11 +734,27 @@ public sealed class BrowserProfileTests : IDisposable
         services.AddSingleton(header);
         services.AddSingleton(origin);
         services.AddSingleton(token);
+        services.AddSingleton<ILogger<FirstContact>>(new LogInMemory<FirstContact>());
         services.AddSingleton<ISessionStore>(_sessions);
+        services.AddSingleton<ISessionAudit>(_audit);
+        services.AddSingleton<IMembershipLookup>(_memberships);
+        services.AddSingleton<IAccessGate>(_gate);
+        services.AddSingleton<IPreAuthenticationStore>(_contacts);
+        services.AddSingleton<IConfigurationStore>(_configuration);
+        services.AddSingleton<IUnitOfWork, UnitOfWorkInMemory>();
+        services.AddSingleton<TimeProvider>(_clock);
+        services.AddSingleton(_randomness);
+        services.AddSingleton(new BrowserSessionCookies(JanusApplication.Public));
+        services.AddScoped<PolicyResolution>();
+        services.AddScoped<SessionService>();
+        services.AddScoped<PreAuthenticationService>();
         services.AddScoped<SynchronizerTokens>();
         services.AddScoped<ResourceIsolation>();
         services.AddScoped<CustomRequestHeader>();
         services.AddScoped<OriginValidation>();
+        services.AddScoped<RequestSession>();
+        services.AddScoped<SessionResolution>();
+        services.AddScoped<FirstContact>();
         services.AddScoped<SynchronizerToken>();
 
         ServiceProvider provider = services.BuildServiceProvider();
@@ -611,12 +765,28 @@ public sealed class BrowserProfileTests : IDisposable
 
         RequestDelegate built = building.Build();
 
-        return context =>
+        return async context =>
         {
-            context.RequestServices = provider;
+            // One scope per request, as a host gives each request its own, so that
+            // what one request resolved is not what the next one reads.
+            await using AsyncServiceScope scope = provider.CreateAsyncScope();
 
-            return built(context);
+            context.RequestServices = scope.ServiceProvider;
+
+            await built(context);
         };
+    }
+
+    private async Task<(OpaqueToken Secret, OpaqueToken Token)> ContactAsync()
+    {
+        var secret = OpaqueToken.Draw(_randomness);
+        var token = OpaqueToken.Draw(_randomness);
+
+        await _contacts.AddAsync(
+            PreAuthentication.Issue(secret, token, Noon, TimeSpan.FromHours(1)),
+            TestContext.Current.CancellationToken);
+
+        return (secret, token);
     }
 
     private async Task<(OpaqueToken Secret, OpaqueToken Token)> LiveAsync()

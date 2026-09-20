@@ -30,7 +30,8 @@ internal sealed class AccountStore(JanusDbContext context) : IAccountStore
             record.State,
             record.SuspendedBy,
             record.DeletingBy,
-            record.DeletingSince);
+            record.DeletingSince,
+            Registered(record));
     }
 
     /// <inheritdoc/>
@@ -48,6 +49,11 @@ internal sealed class AccountStore(JanusDbContext context) : IAccountStore
                     SuspendedBy = account.SuspendedBy,
                     DeletingBy = account.DeletingBy,
                     DeletingSince = account.DeletingSince,
+                    AdultAffirmed = account.Registration?.AdultAffirmed,
+                    AgeGroup = account.Registration?.Group,
+                    AnsweredAgeAt = account.Registration?.AnsweredAgeAt,
+                    TermsVersion = account.Registration?.TermsVersion,
+                    NoticeVersion = account.Registration?.NoticeVersion,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -66,6 +72,16 @@ internal sealed class AccountStore(JanusDbContext context) : IAccountStore
         record.DeletingBy = account.DeletingBy;
         record.DeletingSince = account.DeletingSince;
     }
+
+    private static AccountRegistration? Registered(AccountRecord record) =>
+        record.AnsweredAgeAt is DateTimeOffset answered
+            ? new AccountRegistration(
+                record.AdultAffirmed,
+                record.AgeGroup,
+                answered,
+                record.TermsVersion ?? string.Empty,
+                record.NoticeVersion ?? string.Empty)
+            : null;
 
     private async ValueTask<AccountRecord?> FindAsync(
         SubjectId subject,

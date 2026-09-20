@@ -46,7 +46,7 @@ internal sealed record SendRequest(
     /// bucket cannot silence the notice that says so (AUTH-ABUSE-004).
     /// </summary>
     public bool IsNoticeToHolder =>
-        Message is MessageKind.SecurityNotice && Subject is not null;
+        MessageChannels.Notices.Contains(Message) && Subject is not null;
 
     /// <summary>
     /// Whether this is an alert to an operator destination, which continues below the

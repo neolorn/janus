@@ -72,14 +72,26 @@ internal sealed class Account
     public DateTimeOffset? DeletingSince { get; private set; }
 
     /// <summary>
+    /// What the registration that created it recorded, and nothing for an account no
+    /// registration created.
+    /// </summary>
+    public AccountRegistration? Registration { get; private init; }
+
+    /// <summary>
     /// Creates an account. It is created active, in one transaction, at the end of the
     /// registration session; there is no pending state.
     /// </summary>
     /// <param name="subject">The identifier issued for it.</param>
     /// <param name="createdAt">The instant it was created.</param>
+    /// <param name="registration">
+    /// What the registration recorded, and nothing where no registration created it.
+    /// </param>
     /// <returns>The account.</returns>
-    public static Account Create(SubjectId subject, DateTimeOffset createdAt) =>
-        new(subject, createdAt);
+    public static Account Create(
+        SubjectId subject,
+        DateTimeOffset createdAt,
+        AccountRegistration? registration = null) =>
+        new(subject, createdAt) { Registration = registration };
 
     /// <summary>
     /// The account as it already stands. This is the store's translation of a stored
@@ -92,6 +104,7 @@ internal sealed class Account
     /// <param name="suspendedBy">Who suspended it, where it is suspended.</param>
     /// <param name="deletingBy">Why its grace window began, where one is running.</param>
     /// <param name="deletingSince">When that window began.</param>
+    /// <param name="registration">What the registration recorded.</param>
     /// <returns>The account.</returns>
     public static Account Existing(
         SubjectId subject,
@@ -99,8 +112,12 @@ internal sealed class Account
         AccountState state,
         SuspensionOrigin? suspendedBy,
         DeletionOrigin? deletingBy,
-        DateTimeOffset? deletingSince) =>
-        new(subject, createdAt, state, suspendedBy, deletingBy, deletingSince);
+        DateTimeOffset? deletingSince,
+        AccountRegistration? registration) =>
+        new(subject, createdAt, state, suspendedBy, deletingBy, deletingSince)
+        {
+            Registration = registration,
+        };
 
     /// <summary>
     /// The account's owner deactivates it. Grants are suspended, not removed, and the

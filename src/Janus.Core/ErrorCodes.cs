@@ -180,6 +180,120 @@ public static class ErrorCodes
     public static ErrorCode PreferenceAdministratorOnly { get; } = ErrorCode.Parse("identity.preference.administratoronly");
 
     /// <summary>
+    /// The affirmation derived at the age step is absent, so the terms step has nothing
+    /// to record. Answer the age step and repeat the terms step.
+    /// </summary>
+    /// <remarks>Implements REG-PROF-002, REG-SESS-007, chapter 10 section 1.1.</remarks>
+    public static ErrorCode AffirmationRequired { get; } = ErrorCode.Parse("identity.affirmation.required");
+
+    /// <summary>
+    /// A change of this kind is in progress already: a replace is staged for the
+    /// identifier. Complete or abandon that one first.
+    /// </summary>
+    /// <remarks>Implements REG-IDENT-007, chapter 10 section 1.1.</remarks>
+    public static ErrorCode ChangePending { get; } = ErrorCode.Parse("identity.change.pending");
+
+    /// <summary>
+    /// The undo of an identifier removal or replace arrived after
+    /// <c>identifier.change.coolingoff</c>. Add the identifier again as a new one.
+    /// </summary>
+    /// <remarks>Implements REG-IDENT-006, REG-IDENT-007, chapter 10 section 1.1.</remarks>
+    public static ErrorCode ChangeWindowElapsed { get; } = ErrorCode.Parse("identity.change.windowelapsed");
+
+    /// <summary>
+    /// The identifier is the primary of its kind, which is not removable. Set another
+    /// primary first, then remove it.
+    /// </summary>
+    /// <remarks>Implements REG-IDENT-006, chapter 10 section 1.1.</remarks>
+    public static ErrorCode IdentifierPrimary { get; } = ErrorCode.Parse("identity.identifier.primary");
+
+    /// <summary>
+    /// The value is not a well-formed identifier of its kind. Enter an address or a
+    /// number the deployment stores.
+    /// </summary>
+    /// <remarks>Implements REG-IDENT-001, chapter 10 section 1.1.</remarks>
+    public static ErrorCode IdentifierInvalid { get; } = ErrorCode.Parse("identity.identifier.invalid");
+
+    /// <summary>
+    /// The identifier is locked: an invitation bound it, or a provider operates the
+    /// mailbox. Nothing about it is the person's to change.
+    /// </summary>
+    /// <remarks>Implements REG-IDENT-010, chapter 10 section 1.1.</remarks>
+    public static ErrorCode IdentifierLocked { get; } = ErrorCode.Parse("identity.identifier.locked");
+
+    /// <summary>
+    /// The account or the registration holds as many of the kind as it may. Remove one
+    /// of them first, or, where the maximum is one, replace it in one operation.
+    /// </summary>
+    /// <remarks>Implements REG-IDENT-002, REG-IDENT-007, chapter 10 section 1.1.</remarks>
+    public static ErrorCode IdentifierMaximum { get; } = ErrorCode.Parse("identity.identifier.maximum");
+
+    /// <summary>
+    /// Removal would leave fewer than the required minimum of the kind. Add another of
+    /// the kind and verify it first.
+    /// </summary>
+    /// <remarks>Implements REG-IDENT-001, REG-IDENT-006, chapter 10 section 1.1.</remarks>
+    public static ErrorCode IdentifierLastOfKind { get; } = ErrorCode.Parse("identity.identifier.lastofkind");
+
+    /// <summary>
+    /// Scripts are mixed within a single word of the value. Write each word in one
+    /// script.
+    /// </summary>
+    /// <remarks>Implements IDN-ACCT-005, chapter 10 section 1.1.</remarks>
+    public static ErrorCode IdentifierMixedScript { get; } = ErrorCode.Parse("identity.identifier.mixedscript");
+
+    /// <summary>
+    /// The step the request is for is not the step the registration has reached: its
+    /// predecessor is incomplete, or it is complete already. Read the session's state
+    /// and answer the step it names.
+    /// </summary>
+    /// <remarks>Implements REG-SESS-002, REG-SESS-004, chapter 10 section 1.1.</remarks>
+    public static ErrorCode RegistrationIncomplete { get; } = ErrorCode.Parse("identity.registration.incomplete");
+
+    /// <summary>
+    /// The date of birth is under eighteen where the deployment takes an adult
+    /// affirmation. The registration session has ended; nothing further is accepted in
+    /// it.
+    /// </summary>
+    /// <remarks>Implements REG-PROF-002, chapter 10 section 1.1.</remarks>
+    public static ErrorCode ProfileUnderage { get; } = ErrorCode.Parse("identity.profile.underage");
+
+    /// <summary>
+    /// A profile field is not one the library admits: a display name over its byte
+    /// bound, or a legal name over its length. Shorten it.
+    /// </summary>
+    /// <remarks>Implements REG-PROF-001, chapter 10 section 1.1.</remarks>
+    public static ErrorCode ProfileInvalid { get; } = ErrorCode.Parse("identity.profile.invalid");
+
+    /// <summary>
+    /// The deployment does not take the field from the person: its key is off, or it
+    /// is the date of birth, which is corrected through support and nowhere else. Leave
+    /// the field out and send the rest.
+    /// </summary>
+    /// <remarks>Implements REG-PROF-001, REG-IDENT-009, chapter 10 section 1.1.</remarks>
+    public static ErrorCode ProfileNotAccepted { get; } = ErrorCode.Parse("identity.profile.notaccepted");
+
+    /// <summary>
+    /// A second username change fell inside <c>identifiers.username.changecooloff</c>.
+    /// Repeat it after the end the details carry.
+    /// </summary>
+    /// <remarks>Implements REG-IDENT-009, chapter 10 section 1.1.</remarks>
+    public static ErrorCode UsernameCoolingOff { get; } = ErrorCode.Parse("identity.username.coolingoff");
+
+    /// <summary>
+    /// The username is on the reserved list. Choose another.
+    /// </summary>
+    /// <remarks>Implements REG-IDENT-009, chapter 10 section 1.1.</remarks>
+    public static ErrorCode UsernameReserved { get; } = ErrorCode.Parse("identity.username.reserved");
+
+    /// <summary>
+    /// The username belongs to another account, or is held after an erasure. Choose
+    /// another.
+    /// </summary>
+    /// <remarks>Implements REG-IDENT-009, chapter 10 section 1.1.</remarks>
+    public static ErrorCode UsernameTaken { get; } = ErrorCode.Parse("identity.username.taken");
+
+    /// <summary>
     /// A bot-defence signal fired and the host declared a challenge verifier. Present a
     /// passing challenge token and repeat the step.
     /// </summary>
@@ -241,6 +355,20 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements AUTH-FACT-001, chapter 10 section 1.2.</remarks>
     public static ErrorCode FactorRequired { get; } = ErrorCode.Parse("auth.factor.required");
+
+    /// <summary>
+    /// The account holds no such credential. Name one the credential list carries.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-001, chapter 10 section 1.2.</remarks>
+    public static ErrorCode CredentialNotFound { get; } = ErrorCode.Parse("auth.credential.notfound");
+
+    /// <summary>
+    /// The label is empty, longer than the bound, or already held by another
+    /// credential of the same kind on the account. Choose another.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-001, chapter 10 section 1.2.</remarks>
+    public static ErrorCode CredentialLabelInvalid { get; } =
+        ErrorCode.Parse("auth.credential.labelinvalid");
 
     /// <summary>
     /// The password matched one of the sources the deployment rejects on. Choose

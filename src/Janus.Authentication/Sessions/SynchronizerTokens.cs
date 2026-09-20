@@ -1,6 +1,8 @@
+using System;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Core;
 
 namespace Janus.Authentication.Sessions;
 
@@ -9,6 +11,8 @@ namespace Janus.Authentication.Sessions;
 /// the request arrived on.
 /// </summary>
 /// <param name="sessions">Where sessions are held.</param>
+/// <param name="contacts">Where a browser's first contact is held.</param>
+/// <param name="time">The clock a lifetime is judged against.</param>
 /// <remarks>
 /// Implements BFF-CSRF-001 and BFF-CSRF-006. The token is validated against the
 /// record, not against a second copy of itself, because this is a stateful backend
@@ -16,7 +20,10 @@ namespace Janus.Authentication.Sessions;
 /// each fingerprints to, and the comparison is constant time, so neither how much of
 /// a token matched nor whether a session exists can be read from how long it took.
 /// </remarks>
-internal sealed class SynchronizerTokens(ISessionStore sessions)
+internal sealed class SynchronizerTokens(
+    ISessionStore sessions,
+    IPreAuthenticationStore contacts,
+    TimeProvider time)
 {
     /// <summary>
     /// Whether the pair a request carried belong together.
@@ -48,5 +55,30 @@ internal sealed class SynchronizerTokens(ISessionStore sessions)
 
         return bound is not null
             && CryptographicOperations.FixedTimeEquals(bound, presented.Fingerprint());
+    }
+
+    /// <summary>
+    /// Whether the pair a request carried belong to the same first contact, which is
+    /// what a browser that holds no session presents instead (BFF-CSRF-005a AC2).
+    /// </summary>
+    /// <param name="secret">What the pre-authentication cookie carried.</param>
+    /// <param name="presented">What the request presented as the token.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Whether they do. A secret that answers to nothing, one whose lifetime has run
+    /// out, and a token belonging to another browser all answer no.
+    /// </returns>
+    public async ValueTask<bool> MatchesFirstContactAsync(
+        OpaqueToken secret,
+        OpaqueToken presented,
+        CancellationToken cancellationToken)
+    {
+        PreAuthentication? held = await contacts
+            .FindAsync(secret.Fingerprint(), cancellationToken)
+            .ConfigureAwait(false);
+
+        return held is not null
+            && !held.HasExpired(time.GetUtcNow())
+            && CryptographicOperations.FixedTimeEquals(held.CsrfFingerprint, presented.Fingerprint());
     }
 }

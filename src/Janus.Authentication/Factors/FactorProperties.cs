@@ -29,6 +29,11 @@ namespace Janus.Authentication.Factors;
 /// Whether the ceremony that creates it keeps it on the authenticator, which is what
 /// lets it be offered without the account being named first (AUTH-FACT-002b).
 /// </param>
+/// <param name="Channel">
+/// The identifier an entry rides, where it rides one: proving control of that
+/// identifier is what makes the entry available, and nothing else does. Nothing
+/// where the entry rides no identifier.
+/// </param>
 /// <param name="SingleUse">
 /// Whether presenting it spends it. What an account can reach counts none of these:
 /// a dwindling set of one-use secrets would be spent at every gate that read it as
@@ -49,4 +54,5 @@ internal sealed record FactorProperties(
     bool SignInOnly,
     bool IsWebAuthn,
     bool IsDiscoverable,
+    IdentifierKind? Channel,
     bool SingleUse);

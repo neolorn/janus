@@ -1,19 +1,25 @@
 using System;
 using System.IO;
 using System.Net.Http;
+using System.Text.Json.Serialization;
+using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Identifiers;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authorization.Gate;
 using Janus.Authorization.Model;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Hosting.Accounts;
 using Janus.Hosting.Alerting;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Passwords;
+using Janus.Hosting.Registration;
 using Janus.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -89,6 +95,9 @@ public static class JanusRegistration
         services.AddScoped<ResourceIsolation>();
         services.AddScoped<CustomRequestHeader>();
         services.AddScoped<OriginValidation>();
+        services.AddScoped<RequestSession>();
+        services.AddScoped<SessionResolution>();
+        services.AddScoped<FirstContact>();
         services.AddScoped<SynchronizerToken>();
 
         // LIB-HOST-001: what the host declares about its own messaging is the host's.
@@ -146,12 +155,40 @@ public static class JanusRegistration
 
         services.AddScoped<PasswordScreening>();
         services.AddScoped<PasswordService>();
+        services.AddScoped<PreAuthenticationService>();
         services.AddScoped<SessionService>();
         services.AddScoped<ISessions>(provider => provider.GetRequiredService<SessionService>());
         services.AddScoped<TotpService>();
         services.AddScoped<WebAuthnService>();
         services.AddScoped<RecoveryCodeService>();
         services.AddScoped<DeviceService>();
+        services.AddScoped<StepUpGuard>();
+
+        services.TryAddSingleton(PreferenceDeclarations.None);
+        services.TryAddSingleton(ReservedUsernames.Default);
+
+        // REG-PM-001: a deployment that declares no frontend addresses serves neither
+        // well-known document rather than pointing at a page that is not there.
+        services.TryAddSingleton(PasskeyAddresses.None);
+
+        // CONV-DESIGN-006: every request and response of the library's endpoints is
+        // read and written by the generated contexts, never by reflection.
+        services.ConfigureHttpJsonOptions(options =>
+        {
+            // The contexts spell an enum as the contract spells it, and a request is
+            // read through these options rather than through a context, so the same
+            // converter stands here (API-CONV-002).
+            options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<IdentifierKind>());
+            options.SerializerOptions.TypeInfoResolverChain.Add(RegistrationJson.Default);
+            options.SerializerOptions.TypeInfoResolverChain.Add(AccountJson.Default);
+            options.SerializerOptions.TypeInfoResolverChain.Add(WellKnownJson.Default);
+        });
+        services.AddScoped<RegistrationService>();
+        services.AddScoped<IRegistration>(provider => provider.GetRequiredService<RegistrationService>());
+        services.AddScoped<IdentifierService>();
+        services.AddScoped<IIdentifiers>(provider => provider.GetRequiredService<IdentifierService>());
+        services.AddScoped<AccountService>();
+        services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
 
         services.AddScoped<Derivations>();
         services.AddScoped<IAccessGate, AccessGate>();

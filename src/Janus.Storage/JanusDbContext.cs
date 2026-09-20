@@ -1,7 +1,9 @@
 using System;
 using Janus.Storage.Authentication.Alerting;
 using Janus.Storage.Authentication.Factors;
+using Janus.Storage.Authentication.Identifiers;
 using Janus.Storage.Authentication.Passwords;
+using Janus.Storage.Authentication.Registration;
 using Janus.Storage.Authentication.Sending;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Authorization.Grants;
@@ -78,6 +80,16 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     /// The backup setting each account has put in force for a kind.
     /// </summary>
     public DbSet<BackupSettingRecord> BackupSettings => Set<BackupSettingRecord>();
+
+    /// <summary>
+    /// The identifiers the accounts have given up, held while their undo lasts.
+    /// </summary>
+    public DbSet<IdentifierRemovalRecord> IdentifierRemovals => Set<IdentifierRemovalRecord>();
+
+    /// <summary>
+    /// The usernames held after the erasure of the accounts that bore them.
+    /// </summary>
+    public DbSet<UsernameHoldRecord> UsernameHolds => Set<UsernameHoldRecord>();
 
     /// <summary>
     /// The accounts' profiles.
@@ -237,6 +249,30 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     /// </summary>
     public DbSet<AlertRecord> Alerts => Set<AlertRecord>();
 
+    /// <summary>
+    /// The registrations in progress, each staging what its steps collected.
+    /// </summary>
+    public DbSet<RegistrationSessionRecord> RegistrationSessions =>
+        Set<RegistrationSessionRecord>();
+
+    /// <summary>
+    /// The verification links a registration in progress has outstanding.
+    /// </summary>
+    public DbSet<RegistrationLinkRecord> RegistrationLinks =>
+        Set<RegistrationLinkRecord>();
+
+    /// <summary>
+    /// What browsers carry before they hold a session.
+    /// </summary>
+    public DbSet<PreAuthenticationRecord> PreAuthenticationSessions =>
+        Set<PreAuthenticationRecord>();
+
+    /// <summary>
+    /// The identifiers of live accounts waiting to be proved.
+    /// </summary>
+    public DbSet<PendingVerificationRecord> IdentifierVerifications =>
+        Set<PendingVerificationRecord>();
+
     /// <inheritdoc/>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -259,6 +295,8 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new MembershipConfiguration());
         modelBuilder.ApplyConfiguration(new IdentifierConfiguration());
         modelBuilder.ApplyConfiguration(new BackupSettingConfiguration());
+        modelBuilder.ApplyConfiguration(new IdentifierRemovalConfiguration());
+        modelBuilder.ApplyConfiguration(new UsernameHoldConfiguration());
         modelBuilder.ApplyConfiguration(new ProfileConfiguration());
         modelBuilder.ApplyConfiguration(new ProfilePhotoConfiguration());
         modelBuilder.ApplyConfiguration(new PreferenceConfiguration());
@@ -290,5 +328,9 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new CallbackConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationSourceConfiguration());
         modelBuilder.ApplyConfiguration(new AlertConfiguration());
+        modelBuilder.ApplyConfiguration(new RegistrationSessionConfiguration());
+        modelBuilder.ApplyConfiguration(new RegistrationLinkConfiguration());
+        modelBuilder.ApplyConfiguration(new PreAuthenticationConfiguration());
+        modelBuilder.ApplyConfiguration(new PendingVerificationConfiguration());
     }
 }

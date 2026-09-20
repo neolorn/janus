@@ -29,9 +29,9 @@ internal static class FactorCatalogue
                 phishingResistant: true,
                 webAuthn: true,
                 discoverable: true),
-            [Factor.EmailLink] = AtSignIn(AssuranceLevel.Aal1),
-            [Factor.EmailCode] = AtSignIn(AssuranceLevel.Aal1),
-            [Factor.PhoneLink] = AtSignIn(AssuranceLevel.Aal1),
+            [Factor.EmailLink] = AtSignIn(AssuranceLevel.Aal1, IdentifierKind.Email),
+            [Factor.EmailCode] = AtSignIn(AssuranceLevel.Aal1, IdentifierKind.Email),
+            [Factor.PhoneLink] = AtSignIn(AssuranceLevel.Aal1, IdentifierKind.Phone),
             [Factor.Google] = Primary(AssuranceLevel.Delegated, phishingResistant: false),
             [Factor.Apple] = Primary(AssuranceLevel.Delegated, phishingResistant: false),
             [Factor.Totp] = Second(phishingResistant: false),
@@ -47,6 +47,13 @@ internal static class FactorCatalogue
     /// </summary>
     public static Factor Discoverable { get; } =
         Entries.First(entry => entry.Value.IsWebAuthn && entry.Value.IsDiscoverable).Key;
+
+    /// <summary>
+    /// The entry a password is. No property tells it from another primary and no
+    /// ceremony produces it, so the one place the library says which entry a stored
+    /// password amounts to is here; a rule reads this and never the name.
+    /// </summary>
+    public static Factor Password { get; } = Factor.Password;
 
     /// <summary>
     /// What an entry may do.
@@ -71,12 +78,13 @@ internal static class FactorCatalogue
             SignInOnly: false,
             webAuthn,
             discoverable,
+            Channel: null,
             SingleUse: false);
 
     // An entry whose contribution is to a sign-in and to nothing afterwards: the
     // mailbox or the number behind it is also the recovery channel, so counting it
     // later would make one compromise both steps (AUTH-FACT-003).
-    private static FactorProperties AtSignIn(AssuranceLevel level) =>
+    private static FactorProperties AtSignIn(AssuranceLevel level, IdentifierKind channel) =>
         new(
             CanBePrimary: true,
             CanBeSecondFactor: false,
@@ -86,6 +94,7 @@ internal static class FactorCatalogue
             SignInOnly: true,
             IsWebAuthn: false,
             IsDiscoverable: false,
+            channel,
             SingleUse: false);
 
     // An entry that is never a first step and lifts a sign-in beside one.
@@ -102,5 +111,6 @@ internal static class FactorCatalogue
             SignInOnly: false,
             webAuthn,
             IsDiscoverable: false,
+            Channel: null,
             singleUse);
 }

@@ -51,4 +51,50 @@ public enum MessageKind
     /// </summary>
     [JsonStringEnumMemberName("no-account")]
     NoAccount = 6,
+
+    /// <summary>
+    /// The answer to a registration or a change made with an address an account
+    /// already holds, sent to the holder and never to the person who tried.
+    /// </summary>
+    [JsonStringEnumMemberName("account-exists")]
+    AccountExists = 7,
+
+    /// <summary>
+    /// An identifier was added to the account.
+    /// </summary>
+    [JsonStringEnumMemberName("identifier-added")]
+    IdentifierAdded = 8,
+
+    /// <summary>
+    /// An identifier was removed, sent to the members of the security-notice set that
+    /// remain and carrying the link that undoes it.
+    /// </summary>
+    [JsonStringEnumMemberName("identifier-removed")]
+    IdentifierRemoved = 9,
+
+    /// <summary>
+    /// The identifier that was removed no longer reaches the account. It carries no
+    /// link and no powers.
+    /// </summary>
+    [JsonStringEnumMemberName("identifier-detached")]
+    IdentifierDetached = 10,
+
+    /// <summary>
+    /// The primary identifier of a kind, or the kind's backup setting, changed.
+    /// </summary>
+    [JsonStringEnumMemberName("identifier-settings-changed")]
+    IdentifierSettingsChanged = 11,
+
+    /// <summary>
+    /// A credential was enrolled on the account.
+    /// </summary>
+    [JsonStringEnumMemberName("credential-enrolled")]
+    CredentialEnrolled = 12,
+
+    /// <summary>
+    /// The address being displaced by a change is asked to confirm it, which is asked
+    /// only where the account has no other channel at all.
+    /// </summary>
+    [JsonStringEnumMemberName("identifier-change-confirm")]
+    IdentifierChangeConfirm = 13,
 }
