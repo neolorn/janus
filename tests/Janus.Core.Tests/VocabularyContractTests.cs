@@ -238,6 +238,46 @@ public sealed class VocabularyContractTests
         Assert.Equal(["datacenterRange", "repeatedAttempts"], WireNames<BotDefenceSignal>());
 
     /// <summary>
+    /// LIB-API-001 AC2: the restriction keys of chapter 10 section 5.14, the purposes
+    /// of section 5.15 and the bucket windows of section 5.16, which every declared
+    /// restriction carries, with the severities of OPS-ALERT-001 beside them.
+    /// </summary>
+    [Fact]
+    public void LIB_API_001_AC2_TheRestrictionVocabulariesAreTheContract()
+    {
+        Assert.Equal(
+            ["account", "destination", "global", "host", "source"],
+            WireNames<RestrictionKeyKind>());
+        Assert.Equal(
+            ["any", "notification", "secondfactor", "signin", "verification"],
+            WireNames<RestrictionPurpose>());
+        Assert.Equal(["fixed", "sliding"], WireNames<BucketWindow>());
+        Assert.Equal(["high", "normal"], WireNames<AlertSeverity>());
+    }
+
+    /// <summary>
+    /// The catalogue a deployment declares is asked by message and by channel, so
+    /// what the library asks it for is a written name and never the compiler's
+    /// (CONV-CONTENT-001, LIB-HOST-001).
+    /// </summary>
+    [Fact]
+    public void WireNames_TheKeysTheCatalogueIsAskedBy_AreWritten()
+    {
+        Assert.Equal(
+            [
+                "alert",
+                "enrolment-link",
+                "no-account",
+                "secondstep-code",
+                "security-notice",
+                "signin-link",
+                "verification-code",
+            ],
+            WireNames<MessageKind>());
+        Assert.Equal(["email", "sms"], WireNames<SendKind>());
+    }
+
+    /// <summary>
     /// Every member of every vocabulary carries a wire name, so none of them reaches a
     /// host as the name the compiler happens to give it.
     /// </summary>
@@ -267,6 +307,12 @@ public sealed class VocabularyContractTests
             typeof(ReauthenticationKind),
             typeof(DeviceKind),
             typeof(PolicyField),
+            typeof(RestrictionKeyKind),
+            typeof(RestrictionPurpose),
+            typeof(BucketWindow),
+            typeof(AlertSeverity),
+            typeof(MessageKind),
+            typeof(SendKind),
         ];
 
         foreach (Type vocabulary in vocabularies)

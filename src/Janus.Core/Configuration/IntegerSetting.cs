@@ -23,4 +23,10 @@ public sealed class IntegerSetting : BoundedSetting<int>
 
     private protected override string Render(int value) =>
         value.ToString(CultureInfo.InvariantCulture);
+
+    /// <inheritdoc />
+    private protected override Result<int> Parse(string stored) =>
+        int.TryParse(stored, NumberStyles.Integer, CultureInfo.InvariantCulture, out int number)
+            ? Result.Success(number)
+            : NotOfTheType("a whole number");
 }

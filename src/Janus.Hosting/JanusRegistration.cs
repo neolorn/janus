@@ -1,9 +1,19 @@
 using System;
+using System.IO;
+using System.Net.Http;
+using Janus.Authentication.Alerting;
+using Janus.Authentication.Factors;
+using Janus.Authentication.Passwords;
+using Janus.Authentication.Policies;
+using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authorization.Gate;
 using Janus.Authorization.Model;
 using Janus.Core;
+using Janus.Core.Configuration;
+using Janus.Hosting.Alerting;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Passwords;
 using Janus.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -81,6 +91,68 @@ public static class JanusRegistration
         services.AddScoped<OriginValidation>();
         services.AddScoped<SynchronizerToken>();
 
+        // LIB-HOST-001: what the host declares about its own messaging is the host's.
+        // A deployment that declares none of it starts, and the checks that would have
+        // read a declaration find nothing to read.
+        services.TryAddSingleton(RestrictionKeySuppliers.None);
+        services.TryAddSingleton(IntegrationEndpoints.None);
+        services.TryAddSingleton(Recipients.Shipped);
+
+        // AUTH-ABUSE-004, OPS-ALERT-001: the one path every message takes, and what
+        // decides whether it goes.
+        services.AddScoped<SmsBalance>();
+        services.AddScoped<SendingService>();
+        services.AddScoped(provider => new SendingValidation(
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetService<IMessageTemplates>(),
+            provider.GetRequiredService<RestrictionKeySuppliers>(),
+            provider.GetRequiredService<IntegrationEndpoints>()));
+        services.AddScoped<RestrictionAdministration>();
+        services.AddScoped<ThrottleService>();
+        services.AddScoped<NonExistenceNotice>();
+        services.AddScoped<DeliveryReports>();
+        services.AddScoped(services => new BotDefence(
+            services.GetRequiredService<IConfigurationStore>(),
+            services.GetRequiredService<IDatacenterRanges>(),
+            services.GetRequiredService<IRegistrationSources>(),
+            services.GetRequiredService<IBotDefenceAudit>(),
+            services.GetRequiredService<IUnitOfWork>(),
+            services.GetService<ChallengeVerifier>(),
+            services.GetRequiredService<TimeProvider>()));
+        services.AddScoped<AlertRouter>();
+        services.AddScoped<AlertDestinationChange>();
+        services.AddScoped<IAlertLog, AlertLog>();
+
+        // AUTH-SESS-001, AUTH-PASS-004, AUTH-FACT-005: the authentication services,
+        // each of which reads the settings table for what it enforces.
+        services.AddScoped<PolicyResolution>();
+        services.AddSingleton<Argon2idHasher>();
+        services.AddScoped<IScreeningLog, ScreeningLog>();
+        services.AddSingleton<IWordList>(_ => new WordList(Corpus));
+
+        // INT-PWD-001: the range API is reached over the framework's client, which
+        // rotates its connections; the corpus files beside the application answer
+        // when it cannot (INT-PWD-002).
+        services.AddHttpClient<ILeakedPasswordCorpus, LeakedPasswordCorpus>((requests, provider) =>
+        {
+            requests.BaseAddress = LeakedPasswordCorpus.Provider;
+
+            return new LeakedPasswordCorpus(
+                requests,
+                provider.GetRequiredService<IConfigurationStore>(),
+                provider.GetRequiredService<TimeProvider>(),
+                Corpus);
+        });
+
+        services.AddScoped<PasswordScreening>();
+        services.AddScoped<PasswordService>();
+        services.AddScoped<SessionService>();
+        services.AddScoped<ISessions>(provider => provider.GetRequiredService<SessionService>());
+        services.AddScoped<TotpService>();
+        services.AddScoped<WebAuthnService>();
+        services.AddScoped<RecoveryCodeService>();
+        services.AddScoped<DeviceService>();
+
         services.AddScoped<Derivations>();
         services.AddScoped<IAccessGate, AccessGate>();
         services.AddScoped<IDerivationMaterialiser, DerivationMaterialiser>();
@@ -90,7 +162,13 @@ public static class JanusRegistration
         // registered after it, and the web server is one, so the checks that read the
         // database go at the head of the collection.
         services.Insert(0, ServiceDescriptor.Singleton<IHostedService, ModelValidationService>());
+        services.Insert(1, ServiceDescriptor.Singleton<IHostedService, SendingValidationService>());
 
         return services;
     }
+
+    // The corpus and the word list are files a deployment holds beside the
+    // application (AUTH-PASS-004, INT-PWD-003).
+    private static string Corpus =>
+        Path.Combine(AppContext.BaseDirectory, LeakedPasswordCorpus.Directory);
 }

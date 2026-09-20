@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -12,6 +13,8 @@ namespace Janus.Authentication.Tests;
 /// </summary>
 internal sealed class ConfigurationInMemory : IConfigurationStore
 {
+    private static readonly Dictionary<string, JsonElement> Nothing = [];
+
     private readonly Dictionary<ConfigurationKey, object> _values = [];
 
     /// <summary>
@@ -42,6 +45,30 @@ internal sealed class ConfigurationInMemory : IConfigurationStore
             _values.TryGetValue(ConfigurationKey.Parse(family.Prefix + "." + parameter), out object? written)
                 ? (TValue)written
                 : family.Default));
+
+    /// <inheritdoc/>
+    public ValueTask<Result<TValue>> WriteAsync<TValue>(
+        Setting<TValue> setting,
+        TValue value,
+        CancellationToken cancellationToken)
+    {
+        if (setting.Scope is SettingScope.Protected)
+        {
+            return ValueTask.FromResult(
+                Result.Failure<TValue>(new Error(ErrorCodes.ConfigurationKeyProtected, Nothing)));
+        }
+
+        var before = Result.Success(
+            _values.TryGetValue(setting.Key, out object? written) ? (TValue)written : setting.Default);
+
+        return ValueTask.FromResult(setting.Accept(value).Match(
+            admitted =>
+            {
+                _values[setting.Key] = admitted!;
+                return before;
+            },
+            Result.Failure<TValue>));
+    }
 
     /// <summary>
     /// Names a value for one member of a family.

@@ -22,4 +22,13 @@ public sealed class DateListSetting : Setting<IReadOnlyList<DateOnly>>
             ? Result.Failure<IReadOnlyList<DateOnly>>(
                 Refused(ErrorCodes.ConfigurationValueNotAllowed, "allowed", "a list of dates"))
             : Result.Success(value);
+
+    /// <inheritdoc />
+    private protected override Result<IReadOnlyList<DateOnly>> Parse(string stored) =>
+        SettingText.List<DateOnly>(
+            stored,
+            Refused(ErrorCodes.ConfigurationValueNotAllowed, "allowed", "a list of dates"));
+
+    /// <inheritdoc />
+    private protected override string Render(IReadOnlyList<DateOnly> value) => SettingText.OfList(value);
 }

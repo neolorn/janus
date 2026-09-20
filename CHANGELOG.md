@@ -10,6 +10,59 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Every message the library sends now goes down one path, and the named restrictions
+  decide whether it goes: a fourth text message to one number inside a day is refused
+  with the time the restriction lifts, a message a transport would not take is not
+  counted against anything, and a security notice to the holder of an existing address
+  is not held back by a destination whose allowance is gone. Support can add credit to
+  one exhausted key, and a restriction can be created, changed or deleted while the
+  deployment runs; both need step-up, a loosening needs a written reason, and both are
+  audited without the key ever being written down.
+- Every authentication, registration and recovery attempt now waits out a progressive
+  delay that grows with the failures counted against the source, the account and the
+  identifier, and the delay is the same whether or not an account holds the identifier
+  that was typed. An address no account holds is told so once per window, in a message
+  that names no one, and a registration from a datacenter range or from a source that
+  has just made many attempts is put behind the deployment's own challenge where one is
+  registered.
+- The operator is now alerted when the conditions of the operations chapter fire, once
+  per sustained attack rather than once per attempt, by email and, for the severe ones
+  or where email reached nobody, by text message. Changing where those alerts go tells
+  the previous destinations first.
+- A text message is refused before it is sent when the gateway balance is at the floor,
+  alerts excepted, and a balance that is draining faster than it has been raises its own
+  alert.
+- The library's schema gains the tables the sending restrictions, the progressive
+  delay, the alerting and the delivery reports are kept in, so a deployment applies
+  one new migration. No plain address, account or source is in any of them: each is
+  held under the deployment's fingerprint key.
+- A deployment whose catalogue is missing a message in a configured language, whose
+  text message is longer than one message in it, whose restriction names a key
+  supplier nothing supplies, or that declares an endpoint reached over plain HTTP now
+  fails to start, rather than at the moment someone is waiting for a code.
+
+- The message catalogue, the mail and text transports, the addresses the deployment
+  calls out to, the recipients its data reaches and the keys a sending restriction
+  counts under are now the host's to declare. A deployment that has declared no
+  catalogue cannot answer in any language and does not start; the rest are optional,
+  and a deployment that declares none of them starts.
+
+- Registering the library now registers the sessions, passwords, factors, trusted
+  browsers and policies of the authentication chapter as well, so a host resolves
+  them from its own container. Passing the new-device check is announced as
+  `DeviceVerified`, carrying the browser and nothing about the person.
+
+- The audit entry for a restriction change now carries what the restriction was and
+  what it became, so an operator reading the trail sees the change and not only that
+  one was made.
+
+- Every runtime-changeable configuration key is now read from the library's own
+  `settings` table, so a value changed anywhere in the deployment is in force for the
+  next read of it without a restart. A key the deployment never wrote reads as its
+  default, a stored value a tightened floor or ceiling no longer admits comes back as
+  a failure naming the constraint, and a key the application may not change is
+  refused whatever the caller asks.
+
 - The organizations a principal belongs to now are read from the database, so a
   policy resolves against live memberships and not against ended ones.
 - Erasing a subject ends every session they hold before the key their fields are

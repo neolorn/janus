@@ -828,7 +828,7 @@ public static class Settings
     /// created with no override when the organization is.
     /// </summary>
     public static SettingFamily<PolicyOverride> OrganizationPolicy { get; } =
-        new("policy", SettingScope.Runtime, PolicyOverride.None);
+        new("policy", SettingScope.Runtime, SettingForms.Override, PolicyOverride.None);
 
     /// <summary>
     /// How long a host-declared category of data is kept: one key per declared
@@ -836,14 +836,14 @@ public static class Settings
     /// without one.
     /// </summary>
     public static SettingFamily<TimeSpan> HostCategoryRetention { get; } =
-        new("retention", SettingScope.Runtime);
+        new("retention", SettingScope.Runtime, SettingForms.Duration);
 
     /// <summary>
     /// Whether step-up is enforced for an organization: one key per organization, and
     /// the protected kill switch rather than a field of the policy object.
     /// </summary>
     public static SettingFamily<bool> OrganizationStepUpEnforcement { get; } =
-        new("stepup.enforcement", SettingScope.Protected, true);
+        new("stepup.enforcement", SettingScope.Protected, SettingForms.Flag, true);
 
     /// <summary>
     /// The (memory, iterations) pairs the Argon2id floor admits. A deployment is at or

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace Janus.Core.Configuration;
@@ -33,4 +34,21 @@ public sealed class ChoiceSetting<TValue> : Setting<TValue>
         ? Result.Success(value)
         : Result.Failure<TValue>(
             Refused(ErrorCodes.ConfigurationValueNotAllowed, "allowed", string.Join(", ", Allowed)));
+
+    /// <inheritdoc />
+    private protected override Result<TValue> Parse(string stored)
+    {
+        foreach (TValue candidate in Allowed)
+        {
+            if (string.Equals(SettingText.Of(candidate), stored, StringComparison.Ordinal))
+            {
+                return Result.Success(candidate);
+            }
+        }
+
+        return NotOfTheType(string.Join(", ", Allowed));
+    }
+
+    /// <inheritdoc />
+    private protected override string Render(TValue value) => SettingText.Of(value);
 }

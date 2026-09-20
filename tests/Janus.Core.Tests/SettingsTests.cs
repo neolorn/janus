@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
+using System.Linq;
 using Janus.Core.Configuration;
 using Xunit;
 
@@ -278,6 +279,63 @@ public sealed class SettingsTests
             "policy.019bdf22-0000-7000-8000-000000000001",
             Settings.OrganizationPolicy.For(organization.ToString()).ToString());
     }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC1: the four restrictions the library ships are the ones
+    /// chapter 10 section 4.5 names, with the buckets it gives them, because every
+    /// send is decided against these until a deployment edits them.
+    /// </summary>
+    [Fact]
+    public void AUTH_ABUSE_004_AC1_TheShippedRestrictionsAreTheNamedFour()
+    {
+        IReadOnlyList<Restriction> shipped = Settings.Restrictions.Default;
+
+        Assert.Equal(
+            ["sms.destination", "sms.source", "email.destination", "notification.destination"],
+            shipped.Select(restriction => restriction.Name));
+
+        Assert.All(shipped, restriction => Assert.Null(restriction.HostKeyName));
+
+        Assert.Equal(
+            [
+                RestrictionKeyKind.Destination,
+                RestrictionKeyKind.Source,
+                RestrictionKeyKind.Destination,
+                RestrictionKeyKind.Destination,
+            ],
+            shipped.Select(restriction => restriction.Key));
+
+        Assert.Equal(
+            [
+                RestrictionPurpose.Any,
+                RestrictionPurpose.Any,
+                RestrictionPurpose.Any,
+                RestrictionPurpose.Notification,
+            ],
+            shipped.Select(restriction => restriction.Purpose));
+
+        Assert.Equal(
+            [new Bucket(3, TimeSpan.FromHours(24), BucketWindow.Sliding)],
+            Named(shipped, "sms.destination").Buckets);
+
+        Assert.Equal(
+            [new Bucket(10, TimeSpan.FromHours(1), BucketWindow.Sliding)],
+            Named(shipped, "sms.source").Buckets);
+
+        Assert.Equal(
+            [
+                new Bucket(5, TimeSpan.FromHours(1), BucketWindow.Sliding),
+                new Bucket(1, TimeSpan.FromSeconds(60), BucketWindow.Fixed),
+            ],
+            Named(shipped, "email.destination").Buckets);
+
+        Assert.Equal(
+            [new Bucket(5, TimeSpan.FromHours(24), BucketWindow.Sliding)],
+            Named(shipped, "notification.destination").Buckets);
+    }
+
+    private static Restriction Named(IEnumerable<Restriction> shipped, string name) =>
+        shipped.Single(restriction => string.Equals(restriction.Name, name, StringComparison.Ordinal));
 
     private static ErrorCode? Code<TValue>(Result<TValue> outcome) =>
         outcome.Match(_ => (ErrorCode?)null, failure => failure.Code);

@@ -52,11 +52,4 @@ public abstract class BoundedSetting<TValue> : Setting<TValue>
 
         return Result.Success(value);
     }
-
-    /// <summary>
-    /// The value as the management application and the audit record write it.
-    /// </summary>
-    /// <param name="value">The value.</param>
-    /// <returns>The written form.</returns>
-    private protected abstract string Render(TValue value);
 }

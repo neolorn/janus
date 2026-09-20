@@ -24,6 +24,23 @@ partial class JanusDbContextModelSnapshot : ModelSnapshot
 
         NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+        modelBuilder.Entity("Janus.Storage.Authentication.Alerting.AlertRecord", b =>
+            {
+                b.Property<string>("Key")
+                    .HasMaxLength(256)
+                    .HasColumnType("character varying(256)")
+                    .HasColumnName("key");
+
+                b.Property<DateTimeOffset>("At")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("at");
+
+                b.HasKey("Key")
+                    .HasName("pk_alerts");
+
+                b.ToTable("alerts", "janus");
+            });
+
         modelBuilder.Entity("Janus.Storage.Authentication.Factors.AuthenticatorRecord", b =>
             {
                 b.Property<Guid>("Id")
@@ -265,6 +282,207 @@ partial class JanusDbContextModelSnapshot : ModelSnapshot
                     .HasName("pk_passwords");
 
                 b.ToTable("passwords", "janus");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Sending.BalanceReadingRecord", b =>
+            {
+                b.Property<DateTimeOffset>("ReadAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("read_at");
+
+                b.Property<decimal>("Balance")
+                    .HasPrecision(18, 4)
+                    .HasColumnType("numeric(18,4)")
+                    .HasColumnName("balance");
+
+                b.HasKey("ReadAt")
+                    .HasName("pk_sms_balance_readings");
+
+                b.ToTable("sms_balance_readings", "janus");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Sending.CallbackRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<DateTimeOffset>("At")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("at");
+
+                b.Property<bool>("Rejected")
+                    .HasColumnType("boolean")
+                    .HasColumnName("rejected");
+
+                b.Property<byte[]>("Source")
+                    .IsRequired()
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("source");
+
+                b.HasKey("Id")
+                    .HasName("pk_callbacks");
+
+                b.HasIndex("Source", "At")
+                    .HasDatabaseName("ix_callbacks_source_at");
+
+                b.ToTable("callbacks", "janus");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Sending.NoticeRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<DateTimeOffset>("At")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("at");
+
+                b.Property<byte[]>("Destination")
+                    .IsRequired()
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("destination");
+
+                b.HasKey("Id")
+                    .HasName("pk_nonexistence_notices");
+
+                b.HasIndex("Destination", "At")
+                    .HasDatabaseName("ix_nonexistence_notices_destination_at");
+
+                b.ToTable("nonexistence_notices", "janus");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Sending.RegistrationSourceRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<DateTimeOffset>("At")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("at");
+
+                b.Property<byte[]>("Source")
+                    .IsRequired()
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("source");
+
+                b.HasKey("Id")
+                    .HasName("pk_registration_sources");
+
+                b.HasIndex("Source", "At")
+                    .HasDatabaseName("ix_registration_sources_source_at");
+
+                b.ToTable("registration_sources", "janus");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Sending.SendCounterRecord", b =>
+            {
+                b.Property<byte[]>("Key")
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("key");
+
+                b.PrimitiveCollection<DateTimeOffset[]>("SentAt")
+                    .IsRequired()
+                    .HasColumnType("timestamp with time zone[]")
+                    .HasColumnName("sent_at");
+
+                b.Property<DateTimeOffset>("SettlesAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("settles_at");
+
+                b.HasKey("Key")
+                    .HasName("pk_send_counters");
+
+                b.HasIndex("SettlesAt")
+                    .HasDatabaseName("ix_send_counters_settles_at");
+
+                b.ToTable("send_counters", "janus");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Sending.SendGrantRecord", b =>
+            {
+                b.Property<byte[]>("Key")
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("key");
+
+                b.Property<int>("Credit")
+                    .HasColumnType("integer")
+                    .HasColumnName("credit");
+
+                b.HasKey("Key")
+                    .HasName("pk_send_grants");
+
+                b.ToTable("send_grants", "janus", t =>
+                    {
+                        t.HasCheckConstraint("ck_send_grants_credit", "credit > 0");
+                    });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Sending.SendRecord", b =>
+            {
+                b.Property<byte[]>("Reference")
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("reference");
+
+                b.PrimitiveCollection<byte[][]>("Counted")
+                    .IsRequired()
+                    .HasColumnType("bytea[]")
+                    .HasColumnName("counted");
+
+                b.Property<DateTimeOffset>("SentAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("sent_at");
+
+                b.Property<DateTimeOffset>("SettlesAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("settles_at");
+
+                b.HasKey("Reference")
+                    .HasName("pk_sends");
+
+                b.HasIndex("SettlesAt")
+                    .HasDatabaseName("ix_sends_settles_at");
+
+                b.ToTable("sends", "janus");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Sending.ThrottleRecord", b =>
+            {
+                b.Property<string>("Scope")
+                    .HasColumnType("text")
+                    .HasColumnName("scope");
+
+                b.Property<byte[]>("Key")
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("key");
+
+                b.Property<DateTimeOffset>("At")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("at");
+
+                b.Property<int>("Failures")
+                    .HasColumnType("integer")
+                    .HasColumnName("failures");
+
+                b.HasKey("Scope", "Key")
+                    .HasName("pk_throttle_counters");
+
+                b.ToTable("throttle_counters", "janus", t =>
+                    {
+                        t.HasCheckConstraint("ck_throttle_counters_scope", "scope IN ('account', 'identifier', 'source')");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Sessions.SessionRecord", b =>

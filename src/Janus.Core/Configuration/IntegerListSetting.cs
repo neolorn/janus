@@ -33,4 +33,13 @@ public sealed class IntegerListSetting : Setting<IReadOnlyList<int>>
                     ErrorCodes.ConfigurationValueNotAllowed,
                     "unremovable",
                     string.Join(", ", Unremovable.Select(member => member.ToString(CultureInfo.InvariantCulture)))));
+
+    /// <inheritdoc />
+    private protected override Result<IReadOnlyList<int>> Parse(string stored) =>
+        SettingText.List<int>(
+            stored,
+            Refused(ErrorCodes.ConfigurationValueNotAllowed, "allowed", "a list of whole numbers"));
+
+    /// <inheritdoc />
+    private protected override string Render(IReadOnlyList<int> value) => SettingText.OfList(value);
 }

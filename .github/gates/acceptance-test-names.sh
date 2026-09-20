@@ -19,7 +19,10 @@ for name in $names; do
   item=$(echo "${name%_AC*}" | tr '_' '-')
   criterion=${name##*_AC}
 
-  chapter=$(grep -rlF "**${item}**" docs/spec || true)
+  # The declaring chapter is the one that opens a line with the item. A chapter that
+  # quotes an item elsewhere, as `00` does to show the requirement format, states none
+  # of its criteria.
+  chapter=$(grep -rlE "^\*\*${item}\*\* " docs/spec || true)
 
   if [ -z "$chapter" ]; then
     echo "${name}: no item ${item} in docs/spec."
@@ -27,8 +30,8 @@ for name in $names; do
     continue
   fi
 
-  criteria=$(awk -v item="**${item}**" '
-    index($0, item) { inside = 1 }
+  criteria=$(awk -v item="**${item}** " '
+    index($0, item) == 1 { inside = 1 }
     inside && /^---$/ { inside = 0 }
     inside && /^[0-9]+\. / { count = $1 + 0 }
     END { print count + 0 }

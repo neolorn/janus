@@ -21,4 +21,10 @@ public sealed class TextSetting : Setting<string>
     public override Result<string> Accept(string value) => string.IsNullOrWhiteSpace(value)
         ? Result.Failure<string>(Refused(ErrorCodes.ConfigurationValueNotAllowed, "allowed", "a value"))
         : Result.Success(value);
+
+    /// <inheritdoc />
+    private protected override Result<string> Parse(string stored) => Result.Success(stored);
+
+    /// <inheritdoc />
+    private protected override string Render(string value) => value;
 }

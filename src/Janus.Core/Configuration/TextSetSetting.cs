@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -22,4 +23,19 @@ public sealed class TextSetSetting : Setting<IReadOnlySet<string>>
             ? Result.Failure<IReadOnlySet<string>>(
                 Refused(ErrorCodes.ConfigurationValueNotAllowed, "allowed", "a set of values"))
             : Result.Success(value);
+
+    /// <inheritdoc />
+    private protected override Result<IReadOnlySet<string>> Parse(string stored) =>
+        SettingText
+            .List<string>(stored, Malformed())
+            .Match(
+                written => Result.Success<IReadOnlySet<string>>(
+                    new HashSet<string>(written, StringComparer.Ordinal)),
+                Result.Failure<IReadOnlySet<string>>);
+
+    /// <inheritdoc />
+    private protected override string Render(IReadOnlySet<string> value) => SettingText.OfList(value);
+
+    private Error Malformed() =>
+        Refused(ErrorCodes.ConfigurationValueNotAllowed, "allowed", "a set of values");
 }

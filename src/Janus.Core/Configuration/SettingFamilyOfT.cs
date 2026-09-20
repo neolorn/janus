@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Text.Json;
 
 namespace Janus.Core.Configuration;
 
@@ -11,18 +13,21 @@ namespace Janus.Core.Configuration;
 public sealed class SettingFamily<TValue> : SettingFamily
 {
     private readonly TValue _fallback;
+    private readonly SettingForm<TValue> _form;
 
-    internal SettingFamily(string prefix, SettingScope scope, TValue fallback)
+    internal SettingFamily(string prefix, SettingScope scope, SettingForm<TValue> form, TValue fallback)
         : base(prefix, scope, DirectionFrom(fallback))
     {
         _fallback = fallback;
+        _form = form;
         HasDefault = true;
     }
 
-    internal SettingFamily(string prefix, SettingScope scope)
+    internal SettingFamily(string prefix, SettingScope scope, SettingForm<TValue> form)
         : base(prefix, scope, SettingDirection.AnyChange)
     {
         _fallback = default!;
+        _form = form;
         HasDefault = false;
     }
 
@@ -40,6 +45,32 @@ public sealed class SettingFamily<TValue> : SettingFamily
     public TValue Default => HasDefault
         ? _fallback
         : throw new InvalidOperationException("The host declares each " + Prefix + " value; the library has no default.");
+
+    /// <summary>
+    /// Reads a member's value from the text the settings table holds for it.
+    /// </summary>
+    /// <param name="parameter">The organization identifier or the declared category.</param>
+    /// <param name="stored">The stored text.</param>
+    /// <returns>The value, or the failure naming what the text misses.</returns>
+    /// <remarks>Implements OPS-CFG-008.</remarks>
+    public Result<TValue> Read(string parameter, string stored) =>
+        _form.Parse(stored, Malformed(parameter));
+
+    /// <summary>
+    /// Writes a member's value as the settings table holds it.
+    /// </summary>
+    /// <param name="value">The value.</param>
+    /// <returns>The text to store.</returns>
+    /// <remarks>Implements OPS-CFG-008.</remarks>
+    public string Write(TValue value) => _form.Render(value);
+
+    private Error Malformed(string parameter) => new(
+        ErrorCodes.ConfigurationValueNotAllowed,
+        new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
+        {
+            ["key"] = JsonSerializer.SerializeToElement(For(parameter).ToString()),
+            ["allowed"] = JsonSerializer.SerializeToElement(_form.Expected),
+        });
 
     // The chapter 10 section 4 direction rule as it reaches a family: a boolean
     // loosens away from its default, and a family of any other type states no

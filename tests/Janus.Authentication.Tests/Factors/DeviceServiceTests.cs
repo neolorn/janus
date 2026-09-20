@@ -30,11 +30,12 @@ public sealed class DeviceServiceTests : IAsyncDisposable
     private readonly DeviceStoreInMemory _devices = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly UnitOfWorkInMemory _work = new();
+    private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
 
     private DeviceService Service =>
-        new(_devices, _configuration, _work, _clock, _randomness);
+        new(_devices, _configuration, _work, _events, _clock, _randomness);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
@@ -461,6 +462,51 @@ public sealed class DeviceServiceTests : IAsyncDisposable
             OneFactor,
             browser.Value,
             TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-016 AC5: passing the check announces it once, carrying the browser
+    /// the person passed it from and nothing about the person.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_016_AC5_ThePassedCheckIsAnnouncedOnceAsync()
+    {
+        SubjectId subject = Subject();
+
+        OpaqueToken browser = Value(await Service.VerifiedAsync(
+            subject,
+            Browser(),
+            TestContext.Current.CancellationToken));
+
+        DeviceSummary remembered = Assert.Single(Value(await Service.ListAsync(
+            AccessContext.Of(subject),
+            TestContext.Current.CancellationToken)));
+
+        DeviceVerified announced = Assert.Single(_events.Of<DeviceVerified>());
+
+        Assert.Equal(remembered.Id, announced.Browser);
+        Assert.Equal(Noon, announced.RaisedAt);
+        Assert.Equal("device-verified:" + remembered.Id, announced.IdempotencyKey);
+        Assert.Null(announced.Subject);
+        Assert.Null(announced.Actor);
+        Assert.True(await Service.RemembersAsync(
+            subject,
+            browser.Value,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-016 AC5: the browser a registration records is not a check anyone
+    /// passed, so it announces nothing (REG-SESS-007).
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task RememberAsync_TheBrowserARegistrationRecords_AnnouncesNothingAsync()
+    {
+        await Service.RememberAsync(Subject(), Browser(), TestContext.Current.CancellationToken);
+
+        Assert.Empty(_events.Published);
     }
 
     private static DeviceDescription Browser() => new("Firefox", "Linux");

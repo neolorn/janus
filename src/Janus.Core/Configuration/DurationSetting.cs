@@ -28,4 +28,10 @@ public sealed class DurationSetting : BoundedSetting<TimeSpan>
     }
 
     private protected override string Render(TimeSpan value) => XmlConvert.ToString(value);
+
+    /// <inheritdoc />
+    private protected override Result<TimeSpan> Parse(string stored) =>
+        Duration.TryParse(stored, out TimeSpan duration)
+            ? Result.Success(duration)
+            : NotOfTheType("an ISO 8601 duration");
 }
