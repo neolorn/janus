@@ -501,6 +501,30 @@ against the public contract of LIB-API-001.
   displaced is asked to confirm the change, so a deployment declares a template for
   `identifier-change-confirm` in every language it configures or it does not start.
 
+- A person can sign in. A sign-in is begun against an identifier and answered with the
+  entries the deployment enables, never with what the account holds, so an identifier
+  nobody holds answers as one somebody holds does. A password, a passkey, a security
+  key, a generated code, a recovery code and a link or a code the library sends are
+  each judged by the service that owns them, and the answer carries the assurance the
+  attempt has reached, whether it is phishing-resistant, and what it still needs. A
+  second step is asked for whenever the account holds one, whatever the policy floor
+  is, and a device the account has trusted is remembered for as long as the policy
+  allows.
+
+- A sign-in that would complete at a single factor from a browser the account has not
+  been seen on is held, a code goes to the account's primary address, and the sign-in
+  completes when that code is typed. A passkey sign-in and a sign-in that already took
+  two steps are never held this way.
+
+- A sign-in link completes the sign-in in the browser that asked for it. Opened in any
+  other browser it changes nothing and shows the code to type back where the sign-in
+  was begun, and a link the account abandons is spent at once.
+
+- An account that does not yet meet a requirement its organization raised is told the
+  requirement and the deadline and signs in as it did before until the run-up ends;
+  after it, the sign-in stops at enrolment. An account created after the raise is held
+  at enrolment at its first sign-in, and lowering a requirement starts no run-up.
+
 ### Changed
 
 - The case-insensitive collation is created in the default schema, because a column

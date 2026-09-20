@@ -58,7 +58,7 @@ internal sealed class SessionService(
         IReadOnlyCollection<Factor> presented,
         SessionOrigin origin,
         CancellationToken cancellationToken) =>
-        BeginAsync(subject, presented, origin, satisfiesEveryGate: false, cancellationToken);
+        BeginAsync(subject, presented, origin, Admission.Held, cancellationToken);
 
     /// <summary>
     /// Begins a session that passes every gate and the stated floor for its lifetime,
@@ -78,7 +78,29 @@ internal sealed class SessionService(
         IReadOnlyCollection<Factor> presented,
         SessionOrigin origin,
         CancellationToken cancellationToken) =>
-        BeginAsync(subject, presented, origin, satisfiesEveryGate: true, cancellationToken);
+        BeginAsync(subject, presented, origin, Admission.Exempt, cancellationToken);
+
+    /// <summary>
+    /// Begins a session for an account inside the run-up a raised requirement carries,
+    /// which the raised floor does not refuse. What the session then reaches is what
+    /// was presented, so every gate above it holds as it did before (AUTH-FACT-017,
+    /// AUTH-SESS-009).
+    /// </summary>
+    /// <param name="subject">Who signed in.</param>
+    /// <param name="presented">What they presented.</param>
+    /// <param name="origin">Where from.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The session and its secret, or the failure where a factor the policy does not
+    /// admit was presented.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    public ValueTask<Result<IssuedSession>> BeginDuringGraceAsync(
+        SubjectId subject,
+        IReadOnlyCollection<Factor> presented,
+        SessionOrigin origin,
+        CancellationToken cancellationToken) =>
+        BeginAsync(subject, presented, origin, Admission.WithinTheRunUp, cancellationToken);
 
     /// <summary>
     /// The session a presented secret belongs to, refreshed by the use that resolved
@@ -379,6 +401,32 @@ internal sealed class SessionService(
     }
 
     /// <inheritdoc/>
+    public async ValueTask<Result<SessionDetail>> ReadAsync(
+        AccessContext context,
+        SessionId session,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        Session? live = await sessions.FindAsync(session, cancellationToken).ConfigureAwait(false);
+
+        if (context.Effective is not SubjectId subject
+            || live is null
+            || live.Subject != subject
+            || live.EndedAt is not null)
+        {
+            return Result.Failure<SessionDetail>(Error.From(ErrorCodes.SessionExpired));
+        }
+
+        return Result.Success(new SessionDetail(
+            live.Subject,
+            live.Attained,
+            live.PhishingResistant,
+            live.AttainedAt,
+            live.IdleExpiry < live.AbsoluteExpiry ? live.IdleExpiry : live.AbsoluteExpiry));
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<Result<IReadOnlyList<SessionSummary>>> ListAsync(
         AccessContext context,
         SessionId current,
@@ -531,6 +579,17 @@ internal sealed class SessionService(
         || (reached.Level is AssuranceLevel.Delegated
             && policy.RequiredAssurance is AssuranceLevel.Aal1);
 
+    // How far the floor holds a session's start. Every ordinary sign-in is held by it;
+    // a sign-in inside the run-up a raised requirement carries is not, and reaches what
+    // it presented (AUTH-FACT-017); the emergency path passes every gate for the
+    // session's lifetime (AUTH-SESS-005b).
+    private enum Admission
+    {
+        Held,
+        WithinTheRunUp,
+        Exempt,
+    }
+
     private static Error Expiry(ReauthenticationKind asked) =>
         Error.From(
             ErrorCodes.SessionExpired,
@@ -579,13 +638,14 @@ internal sealed class SessionService(
         SubjectId subject,
         IReadOnlyCollection<Factor> presented,
         SessionOrigin origin,
-        bool satisfiesEveryGate,
+        Admission admission,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(presented);
         ArgumentNullException.ThrowIfNull(origin);
 
         Error? failure = null;
+        bool satisfiesEveryGate = admission is Admission.Exempt;
 
         Policy policy = (await policies.ForAsync(subject, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Held<Policy>(error, ref failure));
@@ -607,7 +667,7 @@ internal sealed class SessionService(
             return Result.Failure<IssuedSession>(Error.From(ErrorCodes.FactorRequired));
         }
 
-        if (!satisfiesEveryGate && !Admits(policy, reached.Value))
+        if (admission is Admission.Held && !Admits(policy, reached.Value))
         {
             return Result.Failure<IssuedSession>(Error.From(ErrorCodes.FactorRequired));
         }

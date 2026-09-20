@@ -49,6 +49,33 @@ internal static class FactorCatalogue
         Entries.First(entry => entry.Value.IsWebAuthn && entry.Value.IsDiscoverable).Key;
 
     /// <summary>
+    /// The entry a message the library sends amounts to, by the channel it goes to and
+    /// whether it carries a link (AUTH-FACT-016). No property tells a code from a link
+    /// on the same channel, so the one place that mapping is written is here.
+    /// </summary>
+    public static FrozenDictionary<(IdentifierKind Channel, bool CarriesLink), Factor> Sent { get; } =
+        new Dictionary<(IdentifierKind Channel, bool CarriesLink), Factor>
+        {
+            [(IdentifierKind.Email, true)] = Factor.EmailLink,
+            [(IdentifierKind.Email, false)] = Factor.EmailCode,
+            [(IdentifierKind.Phone, true)] = Factor.PhoneLink,
+            [(IdentifierKind.Phone, false)] = Factor.PhoneCode,
+        }.ToFrozenDictionary();
+
+    /// <summary>
+    /// The entries presented by repeating what the library sent, which is what tells
+    /// them from a secret the account holds and decides which service judges them.
+    /// </summary>
+    public static FrozenSet<Factor> Delivered { get; } = Sent.Values.ToFrozenSet();
+
+    /// <summary>
+    /// The entry a code generated from a shared secret is. No property tells it from
+    /// another second step, so the one place the library says which entry a stored
+    /// secret amounts to is here; a rule reads this and never the name.
+    /// </summary>
+    public static Factor Generated { get; } = Factor.Totp;
+
+    /// <summary>
     /// The entry a password is. No property tells it from another primary and no
     /// ceremony produces it, so the one place the library says which entry a stored
     /// password amounts to is here; a rule reads this and never the name.
