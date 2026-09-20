@@ -140,6 +140,62 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// INT-GEN-003 AC1: a reference of the right shape that nobody drew is rejected,
+    /// so knowing what a reference looks like buys nothing.
+    /// </summary>
+    [Fact]
+    public async Task INT_GEN_003_AC1_ACallbackWithAGuessedReferenceIsRejectedAsync()
+    {
+        await SentAsync();
+
+        Assert.Equal(
+            ErrorCodes.CallbackRejected,
+            Refusal(await Reports.ReportAsync(
+                Gateway,
+                SendReference.Draw(_randomness).Value,
+                delivered: false,
+                TestContext.Current.CancellationToken)));
+
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
+    }
+
+    /// <summary>
+    /// INT-GEN-003 AC2: the release of a failed send is the one state a report may
+    /// cause. A report that the message arrived advances nothing and announces
+    /// nothing, so nothing downstream waits on a callback being true.
+    /// </summary>
+    [Fact]
+    public async Task INT_GEN_003_AC2_ACallbackAdvancesNoStateOfItsOwnAsync()
+    {
+        SendReference reference = await SentAsync();
+        int announced = _events.Published.Count;
+
+        await ReportedAsync(reference.Value, delivered: true);
+
+        Assert.Equal(announced, _events.Published.Count);
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.source", "198.51.100.7")));
+    }
+
+    /// <summary>
+    /// INT-SMS-005 AC1: a forged report verifies no phone. A report of delivery for
+    /// a reference nobody drew is taken and does nothing: no count moves, nothing is
+    /// announced, and there is no state a phone could be marked verified in.
+    /// </summary>
+    [Fact]
+    public async Task INT_SMS_005_AC1_AForgedReportVerifiesNoPhoneAsync()
+    {
+        await SentAsync();
+        int announced = _events.Published.Count;
+
+        await ReportedAsync(SendReference.Draw(_randomness).Value, delivered: true);
+
+        Assert.Equal(announced, _events.Published.Count);
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.source", "198.51.100.7")));
+    }
+
+    /// <summary>
     /// INT-GEN-003: a flood from one source is answered before any lookup, so the
     /// endpoint costs the deployment nothing beyond the count it already keeps.
     /// </summary>

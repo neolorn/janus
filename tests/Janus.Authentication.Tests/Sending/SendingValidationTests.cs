@@ -74,6 +74,47 @@ public sealed class SendingValidationTests
     }
 
     /// <summary>
+    /// INT-SMS-003 AC1: the Latin budget is enforced as the Arabic one is, so a
+    /// message one character over 160 stops the deployment rather than costing two
+    /// messages for every send.
+    /// </summary>
+    [Fact]
+    public async Task INT_SMS_003_AC1_ALatinMessageOverItsBudgetStopsStartupAsync()
+    {
+        _templates.Set(
+            MessageKind.VerificationCode,
+            SendKind.Sms,
+            "en",
+            new MessageTemplate(null, new string('a', 161)));
+
+        Error refusal = await RefusedAsync();
+
+        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, refusal.Code);
+        Assert.Equal("verification-code.sms.en", refusal.Details["key"].GetString());
+        Assert.Equal(160, refusal.Details["allowed"].GetInt32());
+    }
+
+    /// <summary>
+    /// INT-SMS-003 AC2: every message that goes out by text is measured in every
+    /// configured language, so no language is budgeted by the one it was written in.
+    /// </summary>
+    [Fact]
+    public async Task INT_SMS_003_AC2_EveryTextMessageIsMeasuredInEveryLanguageAsync()
+    {
+        await PassedAsync();
+
+        IEnumerable<(MessageKind Message, SendKind Kind, string Language)> texted =
+            from message in MessageChannels.Messages
+            where MessageChannels.Of(message).Contains(SendKind.Sms)
+            from language in Languages
+            select (message, SendKind.Sms, language);
+
+        Assert.Equal(
+            [.. texted.Order()],
+            [.. _templates.Asked.Where(asked => asked.Kind is SendKind.Sms).Order()]);
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-005 AC3: a language the catalogue cannot answer in stops the
     /// deployment, rather than the send a person is waiting for.
     /// </summary>

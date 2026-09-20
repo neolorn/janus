@@ -109,6 +109,27 @@ public sealed class SmsBalanceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// INT-SMS-004 AC1: the watch is the poll itself. One scheduled read both keeps
+    /// the balance and raises the alert, so an abnormal drain is caught with nobody
+    /// looking at a dashboard.
+    /// </summary>
+    [Fact]
+    public async Task INT_SMS_004_AC1_TheScheduledPollIsWhatRaisesTheAlertAsync()
+    {
+        _configuration.Set(Settings.AbuseSmsDrainFactor, 3.0m);
+
+        Steady(from: 168, to: 1, start: 100_000m, spendAnHour: 10m);
+
+        _sms.Balance = 98_320m - 400m;
+
+        await PolledAsync();
+
+        Assert.Single(_events.Of<AlertRaised>());
+        Assert.Equal(_sms.Balance, _readings.Readings[^1].Balance);
+        Assert.Equal(Noon, _readings.Readings[^1].At);
+    }
+
+    /// <summary>
     /// A reading inside the poll interval answers the hard stop without asking the
     /// gateway again, so the question costs one call an interval.
     /// </summary>
