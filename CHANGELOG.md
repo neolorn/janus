@@ -496,6 +496,11 @@ against the public contract of LIB-API-001.
   has declared the frontend pages behind them; the third is the deployment's own
   related-origin allowlist.
 
+- The message catalogue is asked for one more kind. Where an account replaces its
+  only address of a kind and holds no other channel at all, the address being
+  displaced is asked to confirm the change, so a deployment declares a template for
+  `identifier-change-confirm` in every language it configures or it does not start.
+
 ### Changed
 
 - The case-insensitive collation is created in the default schema, because a column
