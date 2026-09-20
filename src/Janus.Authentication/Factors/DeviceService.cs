@@ -16,6 +16,7 @@ namespace Janus.Authentication.Factors;
 /// <param name="devices">Where the browsers are read and written.</param>
 /// <param name="configuration">Where the lifetimes and the failure limit come from.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
+/// <param name="events">Where the emitted events go.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where a token is drawn from.</param>
 /// <remarks>
@@ -28,9 +29,12 @@ internal sealed class DeviceService(
     IDeviceStore devices,
     IConfigurationStore configuration,
     IUnitOfWork work,
+    IEvents events,
     TimeProvider time,
     RandomNumberGenerator randomness)
 {
+    private const string Verified = "device-verified";
+
     /// <summary>
     /// Whether the account may be offered the trust of this browser, which a policy
     /// that requires two factors and a password that would complete a sign-in alone
@@ -68,16 +72,18 @@ internal sealed class DeviceService(
     /// <param name="device">What the browser said it is.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The token the browser carries, returned once.</returns>
-    public ValueTask<Result<OpaqueToken>> TrustAsync(
+    public async ValueTask<Result<OpaqueToken>> TrustAsync(
         SubjectId subject,
         DeviceDescription device,
         CancellationToken cancellationToken) =>
-        KnownAsync(
-            subject,
-            DeviceKind.Trusted,
-            device,
-            Settings.FactorTrustedDeviceLifetime,
-            cancellationToken);
+        (await KnownAsync(
+                subject,
+                DeviceKind.Trusted,
+                device,
+                Settings.FactorTrustedDeviceLifetime,
+                cancellationToken)
+            .ConfigureAwait(false))
+        .Match(known => Result.Success(known.Token), Result.Failure<OpaqueToken>);
 
     /// <summary>
     /// Records that this browser passed the new-device check, or completed the step
@@ -88,16 +94,47 @@ internal sealed class DeviceService(
     /// <param name="device">What the browser said it is.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The token the browser carries, returned once.</returns>
-    public ValueTask<Result<OpaqueToken>> RememberAsync(
+    public async ValueTask<Result<OpaqueToken>> RememberAsync(
         SubjectId subject,
         DeviceDescription device,
         CancellationToken cancellationToken) =>
-        KnownAsync(
-            subject,
-            DeviceKind.Remembered,
-            device,
-            Settings.DeviceVerificationLifetime,
-            cancellationToken);
+        (await RecordedAsync(subject, device, cancellationToken).ConfigureAwait(false))
+        .Match(known => Result.Success(known.Token), Result.Failure<OpaqueToken>);
+
+    /// <summary>
+    /// The new-device check passed: the browser is remembered for the period the
+    /// deployment configured, and the completion is announced once.
+    /// </summary>
+    /// <param name="subject">Whose browser.</param>
+    /// <param name="device">What the browser said it is.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The token the browser carries, returned once.</returns>
+    public async ValueTask<Result<OpaqueToken>> VerifiedAsync(
+        SubjectId subject,
+        DeviceDescription device,
+        CancellationToken cancellationToken)
+    {
+        Error? failure = null;
+
+        (DeviceId browser, OpaqueToken token) = (await RecordedAsync(subject, device, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(known => known, error => Held<(DeviceId Browser, OpaqueToken Token)>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<OpaqueToken>(failure);
+        }
+
+        // One browser is remembered per check, so its identifier is what a consumer
+        // recognises the repeat of one check by (AUTH-FACT-016).
+        await events
+            .PublishAsync(
+                new DeviceVerified(time.GetUtcNow(), Verified + ":" + browser, browser),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return Result.Success(token);
+    }
 
     /// <summary>
     /// Whether the trust of the browser carrying this token stands for this account,
@@ -312,7 +349,18 @@ internal sealed class DeviceService(
         return default!;
     }
 
-    private async ValueTask<Result<OpaqueToken>> KnownAsync(
+    private ValueTask<Result<(DeviceId Browser, OpaqueToken Token)>> RecordedAsync(
+        SubjectId subject,
+        DeviceDescription device,
+        CancellationToken cancellationToken) =>
+        KnownAsync(
+            subject,
+            DeviceKind.Remembered,
+            device,
+            Settings.DeviceVerificationLifetime,
+            cancellationToken);
+
+    private async ValueTask<Result<(DeviceId Browser, OpaqueToken Token)>> KnownAsync(
         SubjectId subject,
         DeviceKind kind,
         DeviceDescription device,
@@ -327,7 +375,7 @@ internal sealed class DeviceService(
 
         if (failure is not null)
         {
-            return Result.Failure<OpaqueToken>(failure);
+            return Result.Failure<(DeviceId, OpaqueToken)>(failure);
         }
 
         var token = OpaqueToken.Draw(randomness);
@@ -343,7 +391,7 @@ internal sealed class DeviceService(
         await devices.AddAsync(known, token.Fingerprint(), cancellationToken).ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-        return Result.Success(token);
+        return Result.Success((known.Id, token));
     }
 
     private async ValueTask<bool> StandsAsync(

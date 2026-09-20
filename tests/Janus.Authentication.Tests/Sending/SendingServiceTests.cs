@@ -108,6 +108,23 @@ public sealed class SendingServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-016 AC4: the code the new-device check sends is an ordinary mail to
+    /// a destination, counted against the email destination restriction and refused
+    /// with the restriction's own code once that destination is exhausted.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_016_AC4_TheCheckCodeCountsAgainstTheEmailDestinationAsync()
+    {
+        await SentAsync(Mailed());
+
+        Assert.Single(_ledger.Sends(new RestrictionKey("email.destination", Mailbox.Value)));
+
+        Assert.Equal(
+            ErrorCodes.RestrictionExceeded,
+            Refusal(await Service.SendAsync(Mailed(), TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-004 AC2: a transport that would not take the message leaves
     /// nothing counted, so the next attempt is not held by the one that failed.
     /// </summary>
