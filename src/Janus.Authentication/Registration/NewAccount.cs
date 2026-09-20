@@ -19,6 +19,8 @@ namespace Janus.Authentication.Registration;
 /// <param name="AnsweredAgeAt">When the age screen was answered.</param>
 /// <param name="TermsVersion">The version of the terms accepted.</param>
 /// <param name="NoticeVersion">The version of the privacy notice presented.</param>
+/// <param name="EmailMaximum">How many emails an account of this deployment holds.</param>
+/// <param name="PhoneMaximum">How many phones an account of this deployment holds.</param>
 /// <remarks>Implements REG-SESS-001, REG-SESS-007, REG-PROF-002 and REG-ACCT-001.</remarks>
 internal sealed record NewAccount(
     SubjectId Subject,
@@ -29,4 +31,6 @@ internal sealed record NewAccount(
     AgeGroup? Group,
     DateTimeOffset AnsweredAgeAt,
     string TermsVersion,
-    string NoticeVersion);
+    string NoticeVersion,
+    int EmailMaximum,
+    int PhoneMaximum);

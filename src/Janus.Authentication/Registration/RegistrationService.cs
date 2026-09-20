@@ -651,13 +651,28 @@ internal sealed class RegistrationService(
                 Error.From(ErrorCodes.RegistrationIncomplete));
         }
 
+        int emails = (await configuration
+                .ReadAsync(Settings.IdentifiersEmailMax, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<int>(error, ref failure));
+
+        int phones = (await configuration
+                .ReadAsync(Settings.IdentifiersPhoneMax, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<int>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<RegistrationCompleted>(failure);
+        }
+
         DateTimeOffset now = time.GetUtcNow();
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
         live.AcceptTerms(termsVersion, noticeVersion);
 
-        await directory.CreateAsync(Created(live, now), cancellationToken).ConfigureAwait(false);
+        await directory
+            .CreateAsync(Created(live, now, emails, phones), cancellationToken)
+            .ConfigureAwait(false);
         await WriteCredentialsAsync(live, now, cancellationToken).ConfigureAwait(false);
 
         IssuedSession issued = (await issuing
@@ -865,7 +880,11 @@ internal sealed class RegistrationService(
         return presented;
     }
 
-    private static NewAccount Created(RegistrationSession session, DateTimeOffset now)
+    private static NewAccount Created(
+        RegistrationSession session,
+        DateTimeOffset now,
+        int emails,
+        int phones)
     {
         var identifiers = new List<NewIdentifier>(session.Identifiers.Count);
 
@@ -889,7 +908,9 @@ internal sealed class RegistrationService(
             session.Group,
             session.AnsweredAgeAt ?? now,
             session.TermsVersion ?? string.Empty,
-            session.NoticeVersion ?? string.Empty);
+            session.NoticeVersion ?? string.Empty,
+            emails,
+            phones);
     }
 
     private static RegistrationState State(
