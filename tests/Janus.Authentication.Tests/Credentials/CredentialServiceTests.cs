@@ -517,7 +517,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             Codes,
             Passwords,
             Losses,
-            Recovery,
+            Enrolments,
             Guard,
             Policies,
             _ceremonies,
@@ -564,6 +564,8 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             _work,
             _clock,
             _randomness);
+
+    private EnrolmentSessions Enrolments => new(_links, _work, _clock);
 
     private RecoveryService Recovery =>
         new(

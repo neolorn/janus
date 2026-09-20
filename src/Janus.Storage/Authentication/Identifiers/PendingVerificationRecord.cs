@@ -23,9 +23,10 @@ internal sealed class PendingVerificationRecord
 
     /// <summary>
     /// The <c>browser</c> column: the session the change was made from, which is the
-    /// only one a press on the landing page proves anything in.
+    /// only one a press on the landing page proves anything in, and nothing where an
+    /// enrolment session made it.
     /// </summary>
-    public SessionId Browser { get; set; }
+    public SessionId? Browser { get; set; }
 
     /// <summary>The <c>is_replacement</c> column.</summary>
     public bool IsReplacement { get; set; }

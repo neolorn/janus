@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Identifiers;
 using Janus.Authentication.Recovery;
 using Janus.Authentication.Sending;
 using Janus.Core;
@@ -24,6 +25,7 @@ public sealed class CredentialFlowTests : IAsyncDisposable
     private const string Label = "This phone";
     private const string Replacement = "quincejellyonasaucer";
     private const string Link = "the-approver-sent-this-one";
+    private const string Replaced = "elsewhere@example.test";
 
     private readonly Deployment _deployment = new();
 
@@ -213,6 +215,52 @@ public sealed class CredentialFlowTests : IAsyncDisposable
             (await browser.SendAsync("POST", "/account/password", ("password", Replacement))).Status);
     }
 
+    /// <summary>
+    /// REG-IDENT-007 AC3 and AUTH-RECOV-002: the enrolment session an approver opened
+    /// for a lost mailbox replaces the address over the endpoint, the new address
+    /// alone confirms it, and the displaced one is never asked.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_007_AC3_TheEnrolmentSessionReplacesTheLostAddressAsync()
+    {
+        _deployment.Configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        _ = await SignedInAsync();
+
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+
+        await LinkedAsync(subject, mailboxLost: true);
+
+        Browser browser = await ArrivedAsync();
+
+        _ = await browser.SendAsync("POST", "/enrol/begin", ("token", Link));
+
+        IdentifierId held = await EmailAsync(subject);
+
+        Assert.Equal(
+            StatusCodes.Status202Accepted,
+            (await browser.SendAsync(
+                "PUT",
+                "/account/identifiers/" + held.Value + "/replace",
+                ("value", Replaced))).Status);
+
+        Assert.Equal(
+            StatusCodes.Status204NoContent,
+            (await browser.SendAsync(
+                "POST",
+                "/account/identifiers/" + held.Value + "/verify",
+                ("code", Flow.Code(_deployment, IdentifierKind.Email)))).Status);
+
+        HeldIdentifiers standing = await _deployment.Identifiers
+            .HeldAsync(subject, TestContext.Current.CancellationToken);
+
+        Assert.Contains(
+            standing.All,
+            identifier => string.Equals(identifier.Canonical, Replaced, StringComparison.Ordinal));
+        Assert.DoesNotContain(_deployment.Mail.Taken, sent => sent.Subject is "confirm");
+    }
+
     // The account the tests act on, with the clock past the minute the registration's
     // own messages hold the address for (AUTH-ABUSE-004).
     private async Task<Browser> SignedInAsync()
@@ -237,15 +285,34 @@ public sealed class CredentialFlowTests : IAsyncDisposable
 
     // The admin-assisted link an approver would have sent, which is the only token
     // /enrol/begin consumes (D-147).
-    private async Task LinkedAsync(SubjectId subject) =>
+    private async Task LinkedAsync(SubjectId subject, bool mailboxLost = false) =>
         await _deployment.Links.ReplaceAsync(
             RecoveryLink.Issue(
                 OpaqueToken.Of(Link),
                 subject,
                 RecoveryPurpose.Enrolment,
                 _deployment.Clock.GetUtcNow(),
-                TimeSpan.FromHours(1)),
+                TimeSpan.FromHours(1),
+                approver: _deployment.Directory.Created[0].Subject,
+                mailboxLost),
             TestContext.Current.CancellationToken);
+
+    // The one address the account holds, which is what a replace names.
+    private async Task<IdentifierId> EmailAsync(SubjectId subject)
+    {
+        HeldIdentifiers held = await _deployment.Identifiers
+            .HeldAsync(subject, TestContext.Current.CancellationToken);
+
+        foreach (HeldIdentifier identifier in held.All)
+        {
+            if (identifier.Kind is IdentifierKind.Email)
+            {
+                return identifier.Id;
+            }
+        }
+
+        throw new InvalidOperationException("The account holds no address.");
+    }
 
     private string Code(string secret) =>
         new Totp(

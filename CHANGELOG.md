@@ -595,6 +595,14 @@ against the public contract of LIB-API-001.
   else; which of the two it is, is what the request's own session resolution
   established and never what the request says.
 
+- A customer whose mailbox is gone can move their account to a new address from the
+  enrolment session an approver opened for them: the new address confirms alone, the
+  displaced one is not asked, and the approver's confirmation on a channel the account
+  already holds is what stands in its place. Everywhere else the rule is unchanged, so
+  an address is still displaced only by a session that has stepped up, and still asks
+  the old address where the account has no other channel at all. A deployment applies
+  one further migration, which lets a staged verification record no browser.
+
 ### Changed
 
 - A sign-in whose password an invalidation left below the single-factor floor now

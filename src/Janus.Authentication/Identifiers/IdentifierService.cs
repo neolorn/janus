@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Recovery;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
@@ -22,6 +23,7 @@ namespace Janus.Authentication.Identifiers;
 /// <param name="notices">What keeps a holder from being told twice in a window.</param>
 /// <param name="sessions">Where the account's sessions are read and ended.</param>
 /// <param name="stepUp">What asks whether the session has proved enough.</param>
+/// <param name="enrolments">What the enrolment session a browser carries is read from.</param>
 /// <param name="configuration">Where the maxima and the windows are read.</param>
 /// <param name="work">The transaction each operation writes inside.</param>
 /// <param name="events">Where what happened is published.</param>
@@ -42,6 +44,7 @@ internal sealed class IdentifierService(
     INoticeLedger notices,
     ISessionStore sessions,
     StepUpGuard stepUp,
+    EnrolmentSessions enrolments,
     IConfigurationStore configuration,
     IUnitOfWork work,
     IEvents events,
@@ -141,11 +144,39 @@ internal sealed class IdentifierService(
         ArgumentNullException.ThrowIfNull(code);
         ArgumentNullException.ThrowIfNull(source);
 
-        if (context.Effective is not SubjectId subject)
-        {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
-        }
+        return context.Effective is not SubjectId subject
+            ? Result.Failure(Error.From(ErrorCodes.Denied))
+            : await ProvedAsync(subject, identifier, code, source, cancellationToken)
+                .ConfigureAwait(false);
+    }
 
+    /// <inheritdoc/>
+    public async ValueTask<Result> VerifyAsync(
+        EnrolmentSessionId enrolment,
+        IdentifierId identifier,
+        string code,
+        string source,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(code);
+        ArgumentNullException.ThrowIfNull(source);
+
+        return await enrolments.FindAsync(enrolment, cancellationToken).ConfigureAwait(false)
+            is not EnrolmentSession opened
+            ? Result.Failure(Error.From(ErrorCodes.EnrolmentTokenInvalid))
+            : await ProvedAsync(opened.Subject, identifier, code, source, cancellationToken)
+                .ConfigureAwait(false);
+    }
+
+    // The code is judged the same way whoever presented it: what differs is only how
+    // the account it belongs to was established.
+    private async ValueTask<Result> ProvedAsync(
+        SubjectId subject,
+        IdentifierId identifier,
+        string code,
+        string source,
+        CancellationToken cancellationToken)
+    {
         PendingVerification? waiting = await pending
             .FindAsync(identifier, cancellationToken)
             .ConfigureAwait(false);
@@ -243,7 +274,11 @@ internal sealed class IdentifierService(
         }
 
         StagedIdentity staged = waiting.Staged;
-        bool sameBrowser = session == waiting.Browser;
+
+        // REG-SESS-003: a press proves the browser only against the session that
+        // staged it, so a replace an enrolment session staged is proved by the code
+        // alone and never by a press from a browser holding no session.
+        bool sameBrowser = waiting.Browser is SessionId staging && session == staging;
 
         // The press proves it only from the browser that staged the change; anywhere
         // else the page shows the code and changes nothing, which is what defeats a
@@ -574,6 +609,53 @@ internal sealed class IdentifierService(
             return Result.Failure(closed);
         }
 
+        return await StagedAsync(subject, session, identifier, value, source, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result> ReplaceAsync(
+        EnrolmentSessionId enrolment,
+        IdentifierId identifier,
+        string value,
+        string source,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        ArgumentNullException.ThrowIfNull(source);
+
+        if (await enrolments.FindAsync(enrolment, cancellationToken).ConfigureAwait(false)
+            is not EnrolmentSession opened)
+        {
+            return Result.Failure(Error.From(ErrorCodes.EnrolmentTokenInvalid));
+        }
+
+        // REG-IDENT-007: the one exception to the displaced address confirming is the
+        // mailbox the approver recorded as lost, and an enrolment session opened for
+        // anything else reaches this no more than a session does.
+        return opened.MailboxLost
+            ? await StagedAsync(
+                    opened.Subject,
+                    session: null,
+                    identifier,
+                    value,
+                    source,
+                    cancellationToken)
+                .ConfigureAwait(false)
+            : Result.Failure(Error.From(ErrorCodes.Denied));
+    }
+
+    // AUTH-RECOV-002, REG-IDENT-007: an enrolment session stages from no browser and
+    // asks nothing of the address it displaces, because the approver already
+    // confirmed on a channel the account holds.
+    private async ValueTask<Result> StagedAsync(
+        SubjectId subject,
+        SessionId? session,
+        IdentifierId identifier,
+        string value,
+        string source,
+        CancellationToken cancellationToken)
+    {
         HeldIdentifiers held = await directory.HeldAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
@@ -638,7 +720,7 @@ internal sealed class IdentifierService(
             subject,
             session,
             StagedIdentity.Of(identifier, changing.Kind, entered, canonical),
-            held.NoticeSetWithout(identifier).Count is 0,
+            session is not null && held.NoticeSetWithout(identifier).Count is 0,
             time.GetUtcNow());
 
         await pending.AddAsync(waiting, cancellationToken).ConfigureAwait(false);

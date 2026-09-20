@@ -204,6 +204,7 @@ public static class JanusRegistration
         services.AddScoped<IAuthentication>(provider =>
             provider.GetRequiredService<AuthenticationService>());
         services.AddScoped<LossReports>();
+        services.AddScoped<EnrolmentSessions>();
         services.AddScoped<RecoveryService>();
         services.AddScoped<IRecovery>(provider => provider.GetRequiredService<RecoveryService>());
         services.AddScoped<ICredentials, CredentialService>();

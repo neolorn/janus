@@ -19,7 +19,7 @@ internal sealed class PendingVerification
 {
     private PendingVerification(
         SubjectId subject,
-        SessionId browser,
+        SessionId? browser,
         StagedIdentity staged,
         bool isReplacement,
         bool oldMustConfirm,
@@ -40,9 +40,10 @@ internal sealed class PendingVerification
 
     /// <summary>
     /// The session the add or the replace was made from, which is the only browser a
-    /// press on the landing page proves anything in.
+    /// press on the landing page proves anything in, and nothing where an enrolment
+    /// session staged it and no browser holds a session at all (AUTH-RECOV-002).
     /// </summary>
-    public SessionId Browser { get; }
+    public SessionId? Browser { get; }
 
     /// <summary>
     /// The value being proved, with what was sent to prove it.
@@ -99,7 +100,7 @@ internal sealed class PendingVerification
     /// <exception cref="ArgumentNullException">The value is absent.</exception>
     public static PendingVerification ToAdd(
         SubjectId subject,
-        SessionId browser,
+        SessionId? browser,
         StagedIdentity staged,
         DateTimeOffset stagedAt)
     {
@@ -119,7 +120,10 @@ internal sealed class PendingVerification
     /// already holds.
     /// </summary>
     /// <param name="subject">Whose it is.</param>
-    /// <param name="browser">The session the replace was made from.</param>
+    /// <param name="browser">
+    /// The session the replace was made from, or nothing where an enrolment session
+    /// made it.
+    /// </param>
     /// <param name="staged">The new value, under the identifier it will replace.</param>
     /// <param name="oldMustConfirm">
     /// Whether the address being displaced has to confirm, which is so only where the
@@ -130,7 +134,7 @@ internal sealed class PendingVerification
     /// <exception cref="ArgumentNullException">The value is absent.</exception>
     public static PendingVerification ToReplace(
         SubjectId subject,
-        SessionId browser,
+        SessionId? browser,
         StagedIdentity staged,
         bool oldMustConfirm,
         DateTimeOffset stagedAt)
@@ -162,7 +166,7 @@ internal sealed class PendingVerification
     /// <exception cref="ArgumentNullException">The value is absent.</exception>
     public static PendingVerification Existing(
         SubjectId subject,
-        SessionId browser,
+        SessionId? browser,
         StagedIdentity staged,
         bool isReplacement,
         bool oldMustConfirm,

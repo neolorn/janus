@@ -57,7 +57,7 @@ internal sealed class PendingVerificationConfiguration
 
         builder.Property(pending => pending.Browser)
             .HasColumnName("browser")
-            .HasConversion(session => session.Value, value => new SessionId(value));
+            .HasConversion(session => session!.Value.Value, value => new SessionId(value));
 
         builder.Property(pending => pending.IsReplacement).HasColumnName("is_replacement");
         builder.Property(pending => pending.OldMustConfirm).HasColumnName("old_must_confirm");

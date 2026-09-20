@@ -26,7 +26,7 @@ namespace Janus.Authentication.Credentials;
 /// <param name="codes">What issues a set of single-use codes.</param>
 /// <param name="passwords">What sets a password.</param>
 /// <param name="losses">What suspends a credential for a notified window.</param>
-/// <param name="recovery">Where an enrolment session is read and ended.</param>
+/// <param name="enrolments">Where an enrolment session is read and ended.</param>
 /// <param name="stepUp">What an operation asks of the session it arrived on.</param>
 /// <param name="policies">What policy governs the account.</param>
 /// <param name="ceremonies">Where the creation ceremony an account has open is held.</param>
@@ -53,7 +53,7 @@ internal sealed class CredentialService(
     RecoveryCodeService codes,
     PasswordService passwords,
     LossReports losses,
-    RecoveryService recovery,
+    EnrolmentSessions enrolments,
     StepUpGuard stepUp,
     PolicyResolution policies,
     IKeyCeremonyStore ceremonies,
@@ -531,7 +531,7 @@ internal sealed class CredentialService(
 
         if (authority.Enrolment is EnrolmentSessionId opened)
         {
-            return await recovery.FindAsync(opened, cancellationToken).ConfigureAwait(false)
+            return await enrolments.FindAsync(opened, cancellationToken).ConfigureAwait(false)
                 is EnrolmentSession enrolment
                 ? Result.Success(new Acting(enrolment.Subject, Session: null, opened))
                 : Result.Failure<Acting>(Error.From(ErrorCodes.EnrolmentTokenInvalid));
@@ -709,7 +709,7 @@ internal sealed class CredentialService(
     {
         if (acting.Enrolment is EnrolmentSessionId opened)
         {
-            await recovery.EndAsync(opened, cancellationToken).ConfigureAwait(false);
+            await enrolments.EndAsync(opened, cancellationToken).ConfigureAwait(false);
         }
     }
 

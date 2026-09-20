@@ -172,4 +172,39 @@ public interface IIdentifiers
         string value,
         string source,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Stages the same replacement from an enrolment session opened for an account
+    /// whose mailbox the approver recorded as lost. The approver's confirmation on a
+    /// recorded channel stands in for the displaced address, so the new value proves
+    /// alone and the displaced one is not asked.
+    /// </summary>
+    /// <param name="enrolment">The enrolment session the browser opened.</param>
+    /// <param name="identifier">Which identifier is being changed.</param>
+    /// <param name="value">The new value as the person entered it.</param>
+    /// <param name="source">The address the request came from.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or the refusal and its code.</returns>
+    ValueTask<Result> ReplaceAsync(
+        EnrolmentSessionId enrolment,
+        IdentifierId identifier,
+        string value,
+        string source,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Proves a value staged from an enrolment session by the code sent to it.
+    /// </summary>
+    /// <param name="enrolment">The enrolment session the browser opened.</param>
+    /// <param name="identifier">Which identifier the code was sent for.</param>
+    /// <param name="code">The code as the person typed it.</param>
+    /// <param name="source">The address the request came from.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or the refusal and its code.</returns>
+    ValueTask<Result> VerifyAsync(
+        EnrolmentSessionId enrolment,
+        IdentifierId identifier,
+        string code,
+        string source,
+        CancellationToken cancellationToken);
 }

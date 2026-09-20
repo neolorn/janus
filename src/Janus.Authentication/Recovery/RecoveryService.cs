@@ -334,44 +334,6 @@ internal sealed class RecoveryService(
         CancellationToken cancellationToken) =>
         losses.CancelAsync(context, credential, cancelToken, cancellationToken);
 
-    /// <summary>
-    /// The enrolment session a browser carries, where it is still open.
-    /// </summary>
-    /// <param name="session">Which session.</param>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The session, or nothing where none answers to it.</returns>
-    public async ValueTask<EnrolmentSession?> FindAsync(
-        EnrolmentSessionId session,
-        CancellationToken cancellationToken)
-    {
-        RecoveryLink? link = await links.FindAsync(session, cancellationToken).ConfigureAwait(false);
-
-        return link is null || link.HasExpired(time.GetUtcNow())
-            ? null
-            : new EnrolmentSession(session, link.Subject, link.ExpiresAt, link.MailboxLost);
-    }
-
-    /// <summary>
-    /// Ends an enrolment session, which completing the enrolment does: what the person
-    /// set is used by signing in with it (D-148).
-    /// </summary>
-    /// <param name="session">Which session.</param>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The work of ending it.</returns>
-    public async ValueTask EndAsync(EnrolmentSessionId session, CancellationToken cancellationToken)
-    {
-        RecoveryLink? link = await links.FindAsync(session, cancellationToken).ConfigureAwait(false);
-
-        if (link is null)
-        {
-            return;
-        }
-
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-        await links.RemoveAsync(link.Fingerprint, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-    }
-
     private sealed record Channel(IdentifierKind Kind, string Canonical, SendDestination Destination);
 
     // A username reaches nobody and an identifier of no kind at all is read as

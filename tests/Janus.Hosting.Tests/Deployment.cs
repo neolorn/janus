@@ -293,6 +293,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IAuthentication>(provider =>
             provider.GetRequiredService<AuthenticationService>());
         _ = services.AddScoped<LossReports>();
+        _ = services.AddScoped<EnrolmentSessions>();
         _ = services.AddScoped<RecoveryService>();
         _ = services.AddScoped<IRecovery>(provider => provider.GetRequiredService<RecoveryService>());
         _ = services.AddScoped<ICredentials, CredentialService>();

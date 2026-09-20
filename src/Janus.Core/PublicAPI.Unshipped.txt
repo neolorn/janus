@@ -751,9 +751,11 @@ Janus.Core.IIdentifiers.LandAsync(Janus.Core.SessionId? session, string! linkTok
 Janus.Core.IIdentifiers.MakePrimaryAsync(Janus.Core.AccessContext! context, Janus.Core.IdentifierId identifier, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IIdentifiers.RemoveAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.IdentifierId identifier, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IIdentifiers.ReplaceAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.IdentifierId identifier, string! value, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IIdentifiers.ReplaceAsync(Janus.Core.EnrolmentSessionId enrolment, Janus.Core.IdentifierId identifier, string! value, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IIdentifiers.SetBackupAsync(Janus.Core.AccessContext! context, Janus.Core.IdentifierKind kind, Janus.Core.BackupChoice choice, Janus.Core.IdentifierId? named, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IIdentifiers.UndoAsync(string! linkToken, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IIdentifiers.VerifyAsync(Janus.Core.AccessContext! context, Janus.Core.IdentifierId identifier, string! code, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IIdentifiers.VerifyAsync(Janus.Core.EnrolmentSessionId enrolment, Janus.Core.IdentifierId identifier, string! code, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IMailTransport
 Janus.Core.IMailTransport.SendAsync(Janus.Core.MailMessage! mail, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IMessageTemplates
