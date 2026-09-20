@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Accounts;
@@ -257,6 +258,10 @@ internal sealed class Deployment : IAsyncDisposable
 
         _ = services.ConfigureHttpJsonOptions(options =>
         {
+            // The contexts spell an enum as the contract spells it, and a request is
+            // read through these options rather than through a context, so the same
+            // converter stands here (API-CONV-002).
+            options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<IdentifierKind>());
             options.SerializerOptions.TypeInfoResolverChain.Add(RegistrationJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(AccountJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(WellKnownJson.Default);

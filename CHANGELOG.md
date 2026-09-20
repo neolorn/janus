@@ -479,6 +479,9 @@ against the public contract of LIB-API-001.
 
 ### Fixed
 
+- A request that names an identifier kind (`email`, `phone`) is read. Adding an
+  identifier to a registration or to an account, and setting a backup identifier, were
+  answered as malformed requests whatever was sent.
 - A send a restriction refused is answered 429 with the interval, as the API contract
   gives it, rather than 422.
 - The interval a throttled answer carries is measured on the deployment's clock.

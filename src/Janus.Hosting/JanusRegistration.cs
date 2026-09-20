@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Net.Http;
+using System.Text.Json.Serialization;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
@@ -174,6 +175,10 @@ public static class JanusRegistration
         // read and written by the generated contexts, never by reflection.
         services.ConfigureHttpJsonOptions(options =>
         {
+            // The contexts spell an enum as the contract spells it, and a request is
+            // read through these options rather than through a context, so the same
+            // converter stands here (API-CONV-002).
+            options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<IdentifierKind>());
             options.SerializerOptions.TypeInfoResolverChain.Add(RegistrationJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(AccountJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(WellKnownJson.Default);
