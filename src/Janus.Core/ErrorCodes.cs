@@ -259,6 +259,20 @@ public static class ErrorCodes
     public static ErrorCode ProfileUnderage { get; } = ErrorCode.Parse("identity.profile.underage");
 
     /// <summary>
+    /// A profile field is not one the library admits: a display name over its byte
+    /// bound, or a legal name over its length. Shorten it.
+    /// </summary>
+    /// <remarks>Implements REG-PROF-001, chapter 10 section 1.1.</remarks>
+    public static ErrorCode ProfileInvalid { get; } = ErrorCode.Parse("identity.profile.invalid");
+
+    /// <summary>
+    /// The deployment does not take the field from the person: its key is off, or it
+    /// is the date of birth, which is corrected through support and nowhere else.
+    /// </summary>
+    /// <remarks>Implements REG-PROF-001, REG-IDENT-009, chapter 10 section 1.1.</remarks>
+    public static ErrorCode ProfileNotAccepted { get; } = ErrorCode.Parse("identity.profile.notaccepted");
+
+    /// <summary>
     /// A second username change fell inside <c>identifiers.username.changecooloff</c>.
     /// Repeat it after the end the details carry.
     /// </summary>
@@ -340,6 +354,20 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements AUTH-FACT-001, chapter 10 section 1.2.</remarks>
     public static ErrorCode FactorRequired { get; } = ErrorCode.Parse("auth.factor.required");
+
+    /// <summary>
+    /// The account holds no such credential. Name one the credential list carries.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-001, chapter 10 section 1.2.</remarks>
+    public static ErrorCode CredentialNotFound { get; } = ErrorCode.Parse("auth.credential.notfound");
+
+    /// <summary>
+    /// The label is empty, longer than the bound, or already held by another
+    /// credential of the same kind on the account. Choose another.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-001, chapter 10 section 1.2.</remarks>
+    public static ErrorCode CredentialLabelInvalid { get; } =
+        ErrorCode.Parse("auth.credential.labelinvalid");
 
     /// <summary>
     /// The password matched one of the sources the deployment rejects on. Choose

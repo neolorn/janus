@@ -1,3 +1,4 @@
+using System;
 using Janus.Core;
 
 namespace Janus.Authentication.Identifiers;
@@ -13,6 +14,10 @@ namespace Janus.Authentication.Identifiers;
 /// <param name="IsVerified">Whether it counts.</param>
 /// <param name="IsPrimary">Whether it is the primary of its kind.</param>
 /// <param name="IsLocked">Whether it is fixed against change.</param>
+/// <param name="VerifiedAt">
+/// When it was proved, or for a username when it was chosen, which is what a cooling
+/// off is measured from (REG-IDENT-009).
+/// </param>
 /// <remarks>Implements REG-IDENT-002 and CONV-LAYOUT-001.</remarks>
 internal sealed record HeldIdentifier(
     IdentifierId Id,
@@ -21,4 +26,5 @@ internal sealed record HeldIdentifier(
     string Canonical,
     bool IsVerified,
     bool IsPrimary,
-    bool IsLocked);
+    bool IsLocked,
+    DateTimeOffset? VerifiedAt);
