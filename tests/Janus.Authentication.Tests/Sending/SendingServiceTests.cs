@@ -186,6 +186,35 @@ public sealed class SendingServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// INT-SMS-001 AC4: a security notice to a phone an account holds answers to the
+    /// notification restriction and to no other, so draining the destination bucket
+    /// does not silence the notice that says the account was touched.
+    /// </summary>
+    [Fact]
+    public async Task INT_SMS_001_AC4_ANoticeToAHeldPhoneAnswersToNotificationOnlyAsync()
+    {
+        var subject = SubjectId.New(_randomness);
+
+        _ledger.Given(new RestrictionKey("sms.destination", Phone.Value), Noon, Noon, Noon);
+
+        await SentAsync(TextedNotice(subject));
+
+        Assert.Single(_sms.Taken);
+
+        _ledger.Given(
+            new RestrictionKey("notification.destination", Phone.Value),
+            Noon,
+            Noon,
+            Noon,
+            Noon,
+            Noon);
+
+        Assert.Equal(
+            ErrorCodes.RestrictionExceeded,
+            Refusal(await Service.SendAsync(TextedNotice(subject), TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-004 AC7: a restriction whose key the host supplies is evaluated
     /// exactly as a built-in key is.
     /// </summary>
@@ -416,6 +445,17 @@ public sealed class SendingServiceTests : IAsyncDisposable
     private static SendRequest Notice(SubjectId subject) =>
         new(
             SendDestination.Of(Mailbox),
+            MessageKind.SecurityNotice,
+            RestrictionPurpose.Notification,
+            "198.51.100.7",
+            "en")
+        {
+            Subject = subject,
+        };
+
+    private static SendRequest TextedNotice(SubjectId subject) =>
+        new(
+            SendDestination.Of(Phone),
             MessageKind.SecurityNotice,
             RestrictionPurpose.Notification,
             "198.51.100.7",
