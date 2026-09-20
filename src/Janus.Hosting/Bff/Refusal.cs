@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Net.Http.Headers;
 
 namespace Janus.Hosting.Bff;
@@ -90,7 +91,8 @@ internal static class Refusal
             return;
         }
 
-        TimeSpan remaining = lifts - DateTimeOffset.UtcNow;
+        TimeProvider time = context.RequestServices.GetRequiredService<TimeProvider>();
+        TimeSpan remaining = lifts - time.GetUtcNow();
         long seconds = remaining > TimeSpan.Zero ? (long)Math.Ceiling(remaining.TotalSeconds) : 0;
 
         context.Response.Headers[HeaderNames.RetryAfter] =

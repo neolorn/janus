@@ -479,6 +479,7 @@ against the public contract of LIB-API-001.
 
 ### Fixed
 
+- The interval a throttled answer carries is measured on the deployment's clock.
 - A per-organization configuration key is accepted whatever the organization
   identifier begins with. A key such as `policy.<organization>` was refused whenever
   the identifier began with a digit, which is about half of them.
