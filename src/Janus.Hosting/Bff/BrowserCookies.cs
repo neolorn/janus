@@ -1,3 +1,4 @@
+using System;
 using Microsoft.AspNetCore.Http;
 
 namespace Janus.Hosting.Bff;
@@ -28,6 +29,12 @@ internal static class BrowserCookies
     /// that obtaining the token costs no round trip (D-153).
     /// </summary>
     public const string Csrf = "__Host-janus-csrf";
+
+    /// <summary>
+    /// What a browser the account has been seen from carries, so that its next
+    /// sign-in is not held for a code (D-153, AUTH-FACT-016).
+    /// </summary>
+    public const string Browser = "__Host-janus-browser";
 
     /// <summary>
     /// The header a state-changing request carries, whose presence is checked and
@@ -61,4 +68,20 @@ internal static class BrowserCookies
         // withholds what consent has not covered does not withhold these.
         IsEssential = true,
     };
+
+    /// <summary>
+    /// The same attributes, on a cookie that outlives the browser being closed
+    /// because what it stands for outlives it.
+    /// </summary>
+    /// <param name="application">Which application the pipeline is mounted in.</param>
+    /// <param name="until">When the browser is to forget it.</param>
+    /// <returns>The attributes.</returns>
+    public static CookieOptions Lasting(JanusApplication application, DateTimeOffset until)
+    {
+        CookieOptions options = Options(application, readableByScript: false);
+
+        options.Expires = until;
+
+        return options;
+    }
 }

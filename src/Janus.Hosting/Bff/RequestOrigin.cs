@@ -34,9 +34,23 @@ internal static class RequestOrigin
         string agent = request.Headers.UserAgent.ToString();
 
         return new SessionOrigin(
-            request.HttpContext.Connection.RemoteIpAddress?.ToString() ?? Unknown,
+            Source(request),
             new DeviceDescription(Browser(agent), System(agent)),
             Location: null);
+    }
+
+    /// <summary>
+    /// Where one request came from, for the counters that are kept per source
+    /// (AUTH-ABUSE-001, AUTH-ABUSE-008).
+    /// </summary>
+    /// <param name="request">The request.</param>
+    /// <returns>The address.</returns>
+    /// <exception cref="ArgumentNullException">The request is absent.</exception>
+    public static string Source(HttpRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return request.HttpContext.Connection.RemoteIpAddress?.ToString() ?? Unknown;
     }
 
     // Order matters: the engines that name themselves after the ones they replaced

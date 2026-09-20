@@ -1,4 +1,5 @@
 using System;
+using Janus.Authentication;
 using Janus.Authentication.Sessions;
 using Microsoft.AspNetCore.Http;
 
@@ -78,6 +79,24 @@ internal sealed class BrowserSessionCookies(JanusApplication application)
         response.Cookies.Delete(
             BrowserCookies.PreAuthentication,
             BrowserCookies.Options(application, readableByScript: false));
+    }
+
+    /// <summary>
+    /// Writes what a browser the account has been seen from carries, so the next
+    /// sign-in from it is not held for a code (AUTH-FACT-016, REG-SESS-007).
+    /// </summary>
+    /// <param name="response">The response the browser receives.</param>
+    /// <param name="token">The token the record answers to.</param>
+    /// <param name="until">When the browser is to forget it.</param>
+    /// <exception cref="ArgumentNullException">The response is absent.</exception>
+    public void Remembered(HttpResponse response, OpaqueToken token, DateTimeOffset until)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+
+        response.Cookies.Append(
+            BrowserCookies.Browser,
+            token.Value,
+            BrowserCookies.Lasting(application, until));
     }
 
     /// <summary>
