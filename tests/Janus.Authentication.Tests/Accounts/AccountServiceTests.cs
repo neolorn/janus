@@ -335,4 +335,115 @@ public sealed class AccountServiceTests : IAsyncDisposable
 
         return fingerprint;
     }
+
+    /// <summary>
+    /// IDN-ATTR-008 AC1: nothing is marked, so the second step enrolled last is the
+    /// one offered first, and the one enrolled after it takes its place.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ATTR_008_AC1_TheLatestSecondStepIsPreferredWhileNothingIsMarkedAsync()
+    {
+        Authenticator first = SecondStepKey("The old one", Noon);
+
+        _authenticators.Hold(first);
+
+        Assert.Equal(first.Id, await PreferredAsync());
+
+        Authenticator second = SecondStepKey("The new one", Noon.AddDays(1));
+
+        _authenticators.Hold(second);
+
+        Assert.Equal(second.Id, await PreferredAsync());
+    }
+
+    /// <summary>
+    /// IDN-ATTR-008 AC2: the preference names a second step the account holds, so a
+    /// credential of another account, and one that is no second step, are refused
+    /// alike.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ATTR_008_AC2_AMethodTheAccountDoesNotHoldIsRefusedAsync()
+    {
+        Authenticator passkey = Passkey();
+
+        _authenticators.Hold(passkey);
+
+        Assert.Equal(
+            ErrorCodes.CredentialNotFound,
+            Refused(await Service.PreferSecondStepAsync(
+                Acting,
+                AuthenticatorId.New(_clock),
+                TestContext.Current.CancellationToken)));
+
+        Assert.Equal(
+            ErrorCodes.CredentialNotFound,
+            Refused(await Service.PreferSecondStepAsync(
+                Acting,
+                passkey.Id,
+                TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// IDN-ATTR-008 AC3: the mark goes with the credential it was on, so the
+    /// preference falls to the latest of what remains and to nothing where nothing
+    /// remains.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ATTR_008_AC3_RemovingThePreferredOneMovesThePreferenceAsync()
+    {
+        Authenticator older = SecondStepKey("The old one", Noon);
+        Authenticator marked = SecondStepKey("The marked one", Noon.AddDays(1));
+
+        _authenticators.Hold(older);
+        _authenticators.Hold(marked);
+
+        Accepted(await Service.PreferSecondStepAsync(
+            Acting,
+            marked.Id,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(marked.Id, await PreferredAsync());
+
+        await _authenticators.RemoveAsync(marked.Id, TestContext.Current.CancellationToken);
+
+        Assert.Equal(older.Id, await PreferredAsync());
+
+        await _authenticators.RemoveAsync(older.Id, TestContext.Current.CancellationToken);
+
+        Assert.Null(await PreferredAsync());
+    }
+
+    // Which credential the account read says is offered first.
+    private async Task<AuthenticatorId?> PreferredAsync()
+    {
+        AccountDetail detail = Read(await Service.ReadAsync(
+            Acting,
+            TestContext.Current.CancellationToken));
+
+        foreach (CredentialSummary credential in detail.Credentials)
+        {
+            if (credential.Preferred)
+            {
+                return credential.Id;
+            }
+        }
+
+        return null;
+    }
+
+    private Authenticator SecondStepKey(string label, DateTimeOffset at) =>
+        Authenticator.WebAuthnCredential(
+            AuthenticatorId.New(_clock),
+            _person,
+            Factor.SecurityKey,
+            Labelled(label),
+            new WebAuthnMaterial(
+                new byte[] { 1, 2, 3 },
+                new byte[] { 4, 5, 6 },
+                Algorithm: -7,
+                "example.test",
+                Counter: 0,
+                BackupEligible: false,
+                BackupState: false),
+            at);
 }
