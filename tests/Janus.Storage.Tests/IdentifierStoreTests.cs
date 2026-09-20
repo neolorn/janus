@@ -371,7 +371,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
 
             BackupSetting setting = set.Backup(IdentifierKind.Email);
 
-            Assert.Equal(BackupRule.Named, setting.Rule);
+            Assert.Equal(BackupChoice.Named, setting.Rule);
             Assert.Equal(second, setting.Named);
         }
 
@@ -383,7 +383,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
                 subject,
                 TestContext.Current.CancellationToken);
 
-            Assert.Equal(BackupRule.PrimaryOnly, set.Backup(IdentifierKind.Email).Rule);
+            Assert.Equal(BackupChoice.PrimaryOnly, set.Backup(IdentifierKind.Email).Rule);
         }
 
         await RecordAsync(subject, set => set.Backup(IdentifierKind.Email).UseEveryVerified());
@@ -397,7 +397,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
                 subject,
                 TestContext.Current.CancellationToken);
 
-            Assert.Equal(BackupRule.AllVerified, set.Backup(IdentifierKind.Email).Rule);
+            Assert.Equal(BackupChoice.AllVerified, set.Backup(IdentifierKind.Email).Rule);
         }
     }
 

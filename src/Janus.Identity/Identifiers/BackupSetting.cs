@@ -9,12 +9,12 @@ namespace Janus.Identity.Identifiers;
 /// </summary>
 /// <remarks>
 /// Implements REG-IDENT-002. The setting exists once per account and kind; where the
-/// account has never changed it, it is <see cref="BackupRule.AllVerified"/> and no row
+/// account has never changed it, it is <see cref="BackupChoice.AllVerified"/> and no row
 /// is written.
 /// </remarks>
 internal sealed class BackupSetting
 {
-    private BackupSetting(SubjectId subject, IdentifierKind kind, BackupRule rule, IdentifierId? named)
+    private BackupSetting(SubjectId subject, IdentifierKind kind, BackupChoice rule, IdentifierId? named)
     {
         Subject = subject;
         Kind = kind;
@@ -35,7 +35,7 @@ internal sealed class BackupSetting
     /// <summary>
     /// What it adds to the primary.
     /// </summary>
-    public BackupRule Rule { get; private set; }
+    public BackupChoice Rule { get; private set; }
 
     /// <summary>
     /// The one identifier it names, where it names one.
@@ -49,7 +49,7 @@ internal sealed class BackupSetting
     /// <param name="kind">The kind it governs.</param>
     /// <returns>The setting, at its default.</returns>
     public static BackupSetting Default(SubjectId subject, IdentifierKind kind) =>
-        new(subject, kind, BackupRule.AllVerified, named: null);
+        new(subject, kind, BackupChoice.AllVerified, named: null);
 
     /// <summary>
     /// The setting as it already stands. This is the store translating a stored row and
@@ -63,7 +63,7 @@ internal sealed class BackupSetting
     public static BackupSetting Existing(
         SubjectId subject,
         IdentifierKind kind,
-        BackupRule rule,
+        BackupChoice rule,
         IdentifierId? named) =>
         new(subject, kind, rule, named);
 
@@ -72,7 +72,7 @@ internal sealed class BackupSetting
     /// </summary>
     public void UseEveryVerified()
     {
-        Rule = BackupRule.AllVerified;
+        Rule = BackupChoice.AllVerified;
         Named = null;
     }
 
@@ -81,7 +81,7 @@ internal sealed class BackupSetting
     /// </summary>
     public void UsePrimaryOnly()
     {
-        Rule = BackupRule.PrimaryOnly;
+        Rule = BackupChoice.PrimaryOnly;
         Named = null;
     }
 
@@ -91,7 +91,7 @@ internal sealed class BackupSetting
     /// <param name="named">The identifier to name.</param>
     public void UseNamed(IdentifierId named)
     {
-        Rule = BackupRule.Named;
+        Rule = BackupChoice.Named;
         Named = named;
     }
 
@@ -112,8 +112,8 @@ internal sealed class BackupSetting
 
         return Rule switch
         {
-            BackupRule.AllVerified => true,
-            BackupRule.Named => identifier.IsPrimary || identifier.Id == Named,
+            BackupChoice.AllVerified => true,
+            BackupChoice.Named => identifier.IsPrimary || identifier.Id == Named,
             _ => identifier.IsPrimary,
         };
     }

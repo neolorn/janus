@@ -129,23 +129,23 @@ internal sealed class IdentifierStore(
     private static BackupSetting Settled(BackupSettingRecord row) =>
         BackupSetting.Existing(row.Subject, row.Kind, Ruled(row), row.Named);
 
-    private static BackupRule Ruled(BackupSettingRecord row) => row.Rule switch
+    private static BackupChoice Ruled(BackupSettingRecord row) => row.Rule switch
     {
-        BackupSettingRecord.AllVerified => BackupRule.AllVerified,
-        BackupSettingRecord.PrimaryOnly => BackupRule.PrimaryOnly,
-        _ => BackupRule.Named,
+        BackupSettingRecord.AllVerified => BackupChoice.AllVerified,
+        BackupSettingRecord.PrimaryOnly => BackupChoice.PrimaryOnly,
+        _ => BackupChoice.Named,
     };
 
     private static void Settle(BackupSetting setting, BackupSettingRecord row)
     {
         row.Rule = setting.Rule switch
         {
-            BackupRule.PrimaryOnly => BackupSettingRecord.PrimaryOnly,
-            BackupRule.Named => null,
+            BackupChoice.PrimaryOnly => BackupSettingRecord.PrimaryOnly,
+            BackupChoice.Named => null,
             _ => BackupSettingRecord.AllVerified,
         };
 
-        row.Named = setting.Rule is BackupRule.Named ? setting.Named : null;
+        row.Named = setting.Rule is BackupChoice.Named ? setting.Named : null;
     }
 
     private static string Read(
@@ -270,7 +270,7 @@ internal sealed class IdentifierStore(
 
             // REG-IDENT-002: the default needs no row, so a kind returned to it gives
             // the row up rather than recording the default twice.
-            if (setting.Rule is BackupRule.AllVerified)
+            if (setting.Rule is BackupChoice.AllVerified)
             {
                 if (row is not null)
                 {

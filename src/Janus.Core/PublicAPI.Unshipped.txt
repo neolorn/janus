@@ -153,6 +153,10 @@ Janus.Core.AuthorizationDeclarationBuilder.Relationship<TRelationship>(string! n
 Janus.Core.AuthorizationDeclarationBuilder.Resource<TResource>(string! name, System.Action<Janus.Core.ResourceTypeDeclarationBuilder<TResource>!>! declare) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.SensitiveCategory(string! category) -> Janus.Core.AuthorizationDeclarationBuilder!
 Janus.Core.AuthorizationDeclarationBuilder.StepUpGate(string! permission, string! gate) -> Janus.Core.AuthorizationDeclarationBuilder!
+Janus.Core.BackupChoice
+Janus.Core.BackupChoice.AllVerified = 0 -> Janus.Core.BackupChoice
+Janus.Core.BackupChoice.Named = 2 -> Janus.Core.BackupChoice
+Janus.Core.BackupChoice.PrimaryOnly = 1 -> Janus.Core.BackupChoice
 Janus.Core.Bucket
 Janus.Core.Bucket.<Clone>$() -> Janus.Core.Bucket!
 Janus.Core.Bucket.Bucket(int Maximum, System.TimeSpan Interval, Janus.Core.BucketWindow Window) -> void
