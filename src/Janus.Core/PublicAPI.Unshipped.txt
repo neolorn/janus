@@ -541,7 +541,7 @@ Janus.Core.IRegistration.ChangeAsync(Janus.Core.RegistrationSessionId session, J
 Janus.Core.IRegistration.CompleteSecurityAsync(Janus.Core.RegistrationSessionId session, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationState!>>
 Janus.Core.IRegistration.ConfirmAsync(Janus.Core.RegistrationSessionId session, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationState!>>
 Janus.Core.IRegistration.DiscardAsync(Janus.Core.RegistrationSessionId session, Janus.Core.IdentifierId identifier, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationState!>>
-Janus.Core.IRegistration.LandAsync(Janus.Core.RegistrationSessionId? session, string! linkToken, bool press, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.LinkLanding?>>
+Janus.Core.IRegistration.LandAsync(Janus.Core.RegistrationSessionId? session, string! linkToken, bool press, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.LinkLanding!>>
 Janus.Core.IRegistration.RecordAgeAsync(Janus.Core.RegistrationSessionId session, System.DateOnly dateOfBirth, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationState!>>
 Janus.Core.IRegistration.SetPasswordAsync(Janus.Core.RegistrationSessionId session, string! password, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationState!>>
 Janus.Core.IRegistration.SkipPhoneAsync(Janus.Core.RegistrationSessionId session, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationState!>>
@@ -661,11 +661,13 @@ Janus.Core.LinkLanding
 Janus.Core.LinkLanding.<Clone>$() -> Janus.Core.LinkLanding!
 Janus.Core.LinkLanding.Code.get -> string?
 Janus.Core.LinkLanding.Code.init -> void
-Janus.Core.LinkLanding.Deconstruct(out bool SameBrowser, out string? Code) -> void
+Janus.Core.LinkLanding.Deconstruct(out bool Verified, out bool SameBrowser, out string? Code) -> void
 Janus.Core.LinkLanding.Equals(Janus.Core.LinkLanding? other) -> bool
-Janus.Core.LinkLanding.LinkLanding(bool SameBrowser, string? Code) -> void
+Janus.Core.LinkLanding.LinkLanding(bool Verified, bool SameBrowser, string? Code) -> void
 Janus.Core.LinkLanding.SameBrowser.get -> bool
 Janus.Core.LinkLanding.SameBrowser.init -> void
+Janus.Core.LinkLanding.Verified.get -> bool
+Janus.Core.LinkLanding.Verified.init -> void
 Janus.Core.MailMessage
 Janus.Core.MailMessage.<Clone>$() -> Janus.Core.MailMessage!
 Janus.Core.MailMessage.Body.get -> string!
@@ -687,8 +689,14 @@ Janus.Core.MembershipId.MembershipId(System.Guid Value) -> void
 Janus.Core.MembershipId.Value.get -> System.Guid
 Janus.Core.MembershipId.Value.init -> void
 Janus.Core.MessageKind
+Janus.Core.MessageKind.AccountExists = 7 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.Alert = 5 -> Janus.Core.MessageKind
+Janus.Core.MessageKind.CredentialEnrolled = 12 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.EnrolmentLink = 4 -> Janus.Core.MessageKind
+Janus.Core.MessageKind.IdentifierAdded = 8 -> Janus.Core.MessageKind
+Janus.Core.MessageKind.IdentifierDetached = 10 -> Janus.Core.MessageKind
+Janus.Core.MessageKind.IdentifierRemoved = 9 -> Janus.Core.MessageKind
+Janus.Core.MessageKind.IdentifierSettingsChanged = 11 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.NoAccount = 6 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.SecondStepCode = 2 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.SecurityNotice = 3 -> Janus.Core.MessageKind

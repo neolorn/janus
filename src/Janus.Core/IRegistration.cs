@@ -160,9 +160,9 @@ public interface IRegistration
     /// <param name="press">Whether the person pressed the control.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// Nothing where the verification completed, and otherwise what the landing shows.
+    /// Whether the press verified, and where it did not, what the landing shows.
     /// </returns>
-    ValueTask<Result<LinkLanding?>> LandAsync(
+    ValueTask<Result<LinkLanding>> LandAsync(
         RegistrationSessionId? session,
         string linkToken,
         bool press,

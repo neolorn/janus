@@ -265,8 +265,14 @@ public sealed class VocabularyContractTests
     {
         Assert.Equal(
             [
+                "account-exists",
                 "alert",
+                "credential-enrolled",
                 "enrolment-link",
+                "identifier-added",
+                "identifier-detached",
+                "identifier-removed",
+                "identifier-settings-changed",
                 "no-account",
                 "secondstep-code",
                 "security-notice",
