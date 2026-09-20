@@ -313,6 +313,7 @@ public sealed class VocabularyContractTests
             typeof(AlertSeverity),
             typeof(MessageKind),
             typeof(SendKind),
+            typeof(RegistrationStep),
         ];
 
         foreach (Type vocabulary in vocabularies)
