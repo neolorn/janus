@@ -253,6 +253,18 @@ public sealed class ModelTests
             "identifiers.subject",
             "identifiers.verified_at",
 
+            // Not an account field: a credential its holder reported lost, the window
+            // AUTH-RECOV-007 invalidates it at the end of, and what the notices across
+            // that window have reached.
+            "loss_reports.any_delivered",
+            "loss_reports.credential",
+            "loss_reports.enc_cancel",
+            "loss_reports.held_at",
+            "loss_reports.invalidates_at",
+            "loss_reports.notified_at",
+            "loss_reports.reported_at",
+            "loss_reports.subject",
+
             // Standing: the membership record of IDN-MEM-001, with its own beginning
             // and end.
             "memberships.created_at",
@@ -278,6 +290,7 @@ public sealed class ModelTests
 
             // Credentials: the password hash of AUTH-PASS-007 and the floor flag
             // AUTH-PASS-001a says cannot be recomputed from it.
+            "passwords.change_required",
             "passwords.hash",
             "passwords.meets_single_factor_floor",
             "passwords.set_at",
@@ -312,6 +325,15 @@ public sealed class ModelTests
             "profiles.enc_legal_name",
             "profiles.subject",
 
+            // Not an account field: one approver standing behind one re-enrolment, on
+            // the channel they confirmed the person on, which is held under the
+            // account's key (AUTH-RECOV-002, AUTH-RECOV-003).
+            "recovery_approvals.approved_at",
+            "recovery_approvals.approver",
+            "recovery_approvals.enc_channel",
+            "recovery_approvals.spent_at",
+            "recovery_approvals.subject",
+
             // Credentials: the recovery-code set of AUTH-FACT-008, with the instants the
             // account shows and the reminder reads.
             "recovery_code_sets.exported_at",
@@ -326,6 +348,18 @@ public sealed class ModelTests
             "recovery_codes.ordinal",
             "recovery_codes.subject",
             "recovery_codes.used_at",
+
+            // Not an account field: a recovery link, answered to by what it fingerprints
+            // to, and, once spent, the enrolment session it opened (AUTH-RECOV-002).
+            "recovery_links.approver",
+            "recovery_links.expires_at",
+            "recovery_links.issued_at",
+            "recovery_links.mailbox_lost",
+            "recovery_links.purpose",
+            "recovery_links.session",
+            "recovery_links.spent_at",
+            "recovery_links.subject",
+            "recovery_links.token",
 
             // Not an account field: the link a registration session sent, answered to
             // by what it fingerprints to (REG-SESS-003).

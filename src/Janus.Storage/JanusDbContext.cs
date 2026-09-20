@@ -4,6 +4,7 @@ using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Identifiers;
 using Janus.Storage.Authentication.Passwords;
 using Janus.Storage.Authentication.Policies;
+using Janus.Storage.Authentication.Recovery;
 using Janus.Storage.Authentication.Registration;
 using Janus.Storage.Authentication.Sending;
 using Janus.Storage.Authentication.Sessions;
@@ -290,6 +291,21 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     /// </summary>
     public DbSet<PolicyRaiseRecord> PolicyRaises => Set<PolicyRaiseRecord>();
 
+    /// <summary>
+    /// The recovery links that have gone out.
+    /// </summary>
+    public DbSet<RecoveryLinkRecord> RecoveryLinks => Set<RecoveryLinkRecord>();
+
+    /// <summary>
+    /// The approvals standing behind a re-enrolment.
+    /// </summary>
+    public DbSet<RecoveryApprovalRecord> RecoveryApprovals => Set<RecoveryApprovalRecord>();
+
+    /// <summary>
+    /// The loss reports that are running.
+    /// </summary>
+    public DbSet<LossReportRecord> LossReports => Set<LossReportRecord>();
+
     /// <inheritdoc/>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -352,5 +368,8 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new ChallengeConfiguration());
         modelBuilder.ApplyConfiguration(new PendingSignInConfiguration());
         modelBuilder.ApplyConfiguration(new PolicyRaiseConfiguration());
+        modelBuilder.ApplyConfiguration(new RecoveryLinkConfiguration());
+        modelBuilder.ApplyConfiguration(new RecoveryApprovalConfiguration());
+        modelBuilder.ApplyConfiguration(new LossReportConfiguration());
     }
 }

@@ -557,6 +557,13 @@ against the public contract of LIB-API-001.
   be changed at the next sign-in where it does not meet the single-factor floor, and
   one that takes the last second step takes the recovery codes with it.
 
+- The library's schema gains the tables a recovery link, an approval standing behind a
+  re-enrolment and a running loss report are kept in, and the passwords table gains the
+  mark that the next sign-in has to set a new one, so a deployment applies one new
+  migration. The link is held as its fingerprint; the channel an approver confirmed on
+  and the token the loss notices carry are each held under the account's own key, where
+  an erasure leaves them unreadable.
+
 ### Changed
 
 - The case-insensitive collation is created in the default schema, because a column

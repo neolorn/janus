@@ -22,7 +22,8 @@ internal sealed class PasswordStore(JanusDbContext context) : IPasswordStore
             record.Subject,
             PasswordHash.Parse(record.Hash),
             record.MeetsSingleFactorFloor,
-            record.SetAt);
+            record.SetAt,
+            record.ChangeRequired);
     }
 
     /// <inheritdoc/>
@@ -41,6 +42,7 @@ internal sealed class PasswordStore(JanusDbContext context) : IPasswordStore
         record.Hash = password.Hash.Encoded;
         record.MeetsSingleFactorFloor = password.MeetsSingleFactorFloor;
         record.SetAt = password.SetAt;
+        record.ChangeRequired = password.ChangeRequired;
     }
 
     /// <inheritdoc/>

@@ -8,6 +8,7 @@ using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Recovery;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
@@ -197,6 +198,9 @@ public static class JanusRegistration
         services.AddScoped<AuthenticationService>();
         services.AddScoped<IAuthentication>(provider =>
             provider.GetRequiredService<AuthenticationService>());
+        services.AddScoped<LossReports>();
+        services.AddScoped<RecoveryService>();
+        services.AddScoped<IRecovery>(provider => provider.GetRequiredService<RecoveryService>());
 
         services.AddScoped<Derivations>();
         services.AddScoped<IAccessGate, AccessGate>();
