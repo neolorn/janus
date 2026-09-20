@@ -4,7 +4,6 @@ using System.Threading.Tasks;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Hosting.Bff;
-using Janus.Hosting.Recovery;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -244,7 +243,8 @@ internal static class CredentialEndpoints
     }
 
     // AUTH-RECOV-007, D-141: a removal that would lower what the account reaches
-    // suspends the credential for the notified window instead, and says when it ends.
+    // suspends the credential for the notified window instead, which the contract
+    // says with the code that carries when the window ends.
     private static async Task<IResult> RemoveAsync(
         Guid id,
         ICredentials credentials,
@@ -265,13 +265,7 @@ internal static class CredentialEndpoints
                         RequestOrigin.Source(context.Request),
                         cancellationToken)
                     .ConfigureAwait(false),
-                reported => reported is null
-                    ? Nothing
-                    : TypedResults.Json(
-                        LossReportedView.Of(reported),
-                        RecoveryJson.Default.LossReportedView,
-                        contentType: null,
-                        StatusCodes.Status202Accepted));
+                Nothing);
     }
 
     private static IResult Ceremony(CredentialCeremony ceremony) =>

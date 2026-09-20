@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
@@ -416,7 +417,7 @@ internal sealed class CredentialService(
     }
 
     /// <inheritdoc/>
-    public async ValueTask<Result<LossReported?>> RemoveAsync(
+    public async ValueTask<Result> RemoveAsync(
         CredentialAuthority authority,
         AuthenticatorId credential,
         string source,
@@ -431,14 +432,14 @@ internal sealed class CredentialService(
 
         if (failure is not null)
         {
-            return Result.Failure<LossReported?>(failure);
+            return Result.Failure(failure);
         }
 
         if (await GateAsync(acting, StepUpAction.FactorRemove, null, cancellationToken)
                 .ConfigureAwait(false)
             is Error gate)
         {
-            return Result.Failure<LossReported?>(gate);
+            return Result.Failure(gate);
         }
 
         Authenticator? going = await authenticators.FindAsync(credential, cancellationToken)
@@ -446,7 +447,7 @@ internal sealed class CredentialService(
 
         if (going is null || going.Subject != acting.Subject)
         {
-            return Result.Failure<LossReported?>(Error.From(ErrorCodes.CredentialNotFound));
+            return Result.Failure(Error.From(ErrorCodes.CredentialNotFound));
         }
 
         IReadOnlyList<Authenticator> enrolled = await authenticators
@@ -463,8 +464,11 @@ internal sealed class CredentialService(
         {
             return (await losses.SuspendAsync(going, source, cancellationToken).ConfigureAwait(false))
                 .Match(
-                    reported => Result.Success<LossReported?>(reported),
-                    Result.Failure<LossReported?>);
+                    reported => Result.Failure(Error.From(
+                        ErrorCodes.CredentialLastSecondFactor,
+                        "invalidatesAt",
+                        JsonSerializer.SerializeToElement(reported.InvalidatesAt))),
+                    Result.Failure);
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -480,7 +484,7 @@ internal sealed class CredentialService(
         _ = await TellAsync(acting.Subject, MessageKind.SecurityNotice, source, cancellationToken)
             .ConfigureAwait(false);
 
-        return Result.Success<LossReported?>(null);
+        return Result.Success();
     }
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)

@@ -146,11 +146,12 @@ public interface ICredentials
     /// <param name="source">The address the request came from.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// When the window ends where one was opened and nothing where the credential is
-    /// gone already, or <c>auth.stepup.required</c> or
+    /// Nothing where the credential is gone already, or
+    /// <c>auth.credential.lastsecondfactor</c> carrying <c>invalidatesAt</c> where the
+    /// window was opened instead, or <c>auth.stepup.required</c> or
     /// <c>auth.credential.notfound</c>.
     /// </returns>
-    ValueTask<Result<LossReported?>> RemoveAsync(
+    ValueTask<Result> RemoveAsync(
         CredentialAuthority authority,
         AuthenticatorId credential,
         string source,

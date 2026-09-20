@@ -386,14 +386,16 @@ public sealed class CredentialServiceTests : IAsyncDisposable
 
         await PresentedAsync(subject, session);
 
-        LossReported? reported = Reported(await Service.RemoveAsync(
+        Error window = Failure(await Service.RemoveAsync(
             Authority(subject, session),
             confirmed.Credential,
             Source,
             TestContext.Current.CancellationToken));
 
-        Assert.NotNull(reported);
-        Assert.Equal(_clock.GetUtcNow() + TimeSpan.FromDays(7), reported.InvalidatesAt);
+        Assert.Equal(ErrorCodes.CredentialLastSecondFactor, window.Code);
+        Assert.Equal(
+            _clock.GetUtcNow() + TimeSpan.FromDays(7),
+            window.Details["invalidatesAt"].GetDateTimeOffset());
         Assert.Equal(
             AuthenticatorState.Suspended,
             (await _authenticators.FindAsync(
@@ -461,11 +463,11 @@ public sealed class CredentialServiceTests : IAsyncDisposable
 
         await PresentedAsync(subject, session);
 
-        Assert.Null(Reported(await Service.RemoveAsync(
+        Accepted(await Service.RemoveAsync(
             Authority(subject, session),
             confirmed.Credential,
             Source,
-            TestContext.Current.CancellationToken)));
+            TestContext.Current.CancellationToken));
 
         Assert.Null(await _authenticators.FindAsync(
             confirmed.Credential,
@@ -737,8 +739,21 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     private static TValue Value<TValue>(Result<TValue> result) =>
         result.Match(value => value, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
 
-    private static LossReported? Reported(Result<LossReported?> result) =>
-        result.Match(reported => reported, _ => null);
+    private static Error Failure(Result result)
+    {
+        Error? refused = null;
+
+        result.Switch(
+            () => throw new InvalidOperationException("The removal was accepted."),
+            error => refused = error);
+
+        return refused!;
+    }
+
+    private static void Accepted(Result result) =>
+        result.Switch(
+            () => { },
+            error => throw new InvalidOperationException("It was refused: " + error.Code));
 
     // What a browser sends back from a creation ceremony: the challenge the server
     // issued, an origin the relying party admits, and a key the runtime can read.
