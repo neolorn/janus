@@ -150,6 +150,13 @@ Janus.Core.AuditRecordId.Deconstruct(out System.Guid Value) -> void
 Janus.Core.AuditRecordId.Equals(Janus.Core.AuditRecordId other) -> bool
 Janus.Core.AuditRecordId.Value.get -> System.Guid
 Janus.Core.AuditRecordId.Value.init -> void
+Janus.Core.AuthenticationAddresses
+Janus.Core.AuthenticationAddresses.<Clone>$() -> Janus.Core.AuthenticationAddresses!
+Janus.Core.AuthenticationAddresses.AuthenticationAddresses(string! SignIn) -> void
+Janus.Core.AuthenticationAddresses.Deconstruct(out string! SignIn) -> void
+Janus.Core.AuthenticationAddresses.Equals(Janus.Core.AuthenticationAddresses? other) -> bool
+Janus.Core.AuthenticationAddresses.SignIn.get -> string!
+Janus.Core.AuthenticationAddresses.SignIn.init -> void
 Janus.Core.AuthenticatorAssertion
 Janus.Core.AuthenticatorAssertion.<Clone>$() -> Janus.Core.AuthenticatorAssertion!
 Janus.Core.AuthenticatorAssertion.AuthenticatorAssertion(string! CredentialId, string! ClientDataJson, string! AuthenticatorData, string! Signature) -> void
@@ -1772,6 +1779,9 @@ override Janus.Core.AuditAction.GetHashCode() -> int
 override Janus.Core.AuditAction.ToString() -> string!
 override Janus.Core.AuditRecordId.GetHashCode() -> int
 override Janus.Core.AuditRecordId.ToString() -> string!
+override Janus.Core.AuthenticationAddresses.Equals(object? obj) -> bool
+override Janus.Core.AuthenticationAddresses.GetHashCode() -> int
+override Janus.Core.AuthenticationAddresses.ToString() -> string!
 override Janus.Core.AuthenticatorAssertion.Equals(object? obj) -> bool
 override Janus.Core.AuthenticatorAssertion.GetHashCode() -> int
 override Janus.Core.AuthenticatorAssertion.ToString() -> string!
@@ -2110,6 +2120,9 @@ static Janus.Core.AuditAction.operator ==(Janus.Core.AuditAction left, Janus.Cor
 static Janus.Core.AuditRecordId.New(System.TimeProvider! time) -> Janus.Core.AuditRecordId
 static Janus.Core.AuditRecordId.operator !=(Janus.Core.AuditRecordId left, Janus.Core.AuditRecordId right) -> bool
 static Janus.Core.AuditRecordId.operator ==(Janus.Core.AuditRecordId left, Janus.Core.AuditRecordId right) -> bool
+static Janus.Core.AuthenticationAddresses.None.get -> Janus.Core.AuthenticationAddresses!
+static Janus.Core.AuthenticationAddresses.operator !=(Janus.Core.AuthenticationAddresses? left, Janus.Core.AuthenticationAddresses? right) -> bool
+static Janus.Core.AuthenticationAddresses.operator ==(Janus.Core.AuthenticationAddresses? left, Janus.Core.AuthenticationAddresses? right) -> bool
 static Janus.Core.AuthenticatorAssertion.operator !=(Janus.Core.AuthenticatorAssertion? left, Janus.Core.AuthenticatorAssertion? right) -> bool
 static Janus.Core.AuthenticatorAssertion.operator ==(Janus.Core.AuthenticatorAssertion? left, Janus.Core.AuthenticatorAssertion? right) -> bool
 static Janus.Core.AuthenticatorAttestation.operator !=(Janus.Core.AuthenticatorAttestation? left, Janus.Core.AuthenticatorAttestation? right) -> bool
