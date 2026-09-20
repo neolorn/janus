@@ -208,6 +208,20 @@ public static class ErrorCodes
     public static ErrorCode IdentifierPrimary { get; } = ErrorCode.Parse("identity.identifier.primary");
 
     /// <summary>
+    /// The value is not a well-formed identifier of its kind. Enter an address or a
+    /// number the deployment stores.
+    /// </summary>
+    /// <remarks>Implements REG-IDENT-001, chapter 10 section 1.1.</remarks>
+    public static ErrorCode IdentifierInvalid { get; } = ErrorCode.Parse("identity.identifier.invalid");
+
+    /// <summary>
+    /// The identifier is locked: an invitation bound it, or a provider operates the
+    /// mailbox. Nothing about it is the person's to change.
+    /// </summary>
+    /// <remarks>Implements REG-IDENT-010, chapter 10 section 1.1.</remarks>
+    public static ErrorCode IdentifierLocked { get; } = ErrorCode.Parse("identity.identifier.locked");
+
+    /// <summary>
     /// The account or the registration holds as many of the kind as it may. Remove one
     /// of them first, or, where the maximum is one, replace it in one operation.
     /// </summary>

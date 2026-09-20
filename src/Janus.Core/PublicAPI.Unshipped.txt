@@ -1688,7 +1688,9 @@ static Janus.Core.ErrorCodes.GrantExpired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GrantNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GrantReasonRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GroupCycle.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.IdentifierInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierLastOfKind.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.IdentifierLocked.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierMaximum.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierMixedScript.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierPrimary.get -> Janus.Core.ErrorCode
