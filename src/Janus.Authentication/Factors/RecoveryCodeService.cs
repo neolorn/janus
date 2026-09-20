@@ -44,6 +44,35 @@ internal sealed class RecoveryCodeService(
     {
         Error? failure = null;
 
+        PreparedRecoveryCodes drawn = (await PrepareAsync(cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<PreparedRecoveryCodes>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<IReadOnlyList<string>>(failure);
+        }
+
+        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        await sets.ReplaceAsync(
+                RecoveryCodeSet.Of(subject, drawn.Hashes, time.GetUtcNow()),
+                cancellationToken)
+            .ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        return Result.Success(drawn.Codes);
+    }
+
+    /// <summary>
+    /// Draws a set without writing it, which the security step of a registration
+    /// needs because no account holds it yet.
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The codes and their hashes, or the failure a setting produced.</returns>
+    public async ValueTask<Result<PreparedRecoveryCodes>> PrepareAsync(
+        CancellationToken cancellationToken)
+    {
+        Error? failure = null;
+
         int count = (await configuration.ReadAsync(Settings.FactorRecoveryCodesCount, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Held<int>(error, ref failure));
@@ -58,7 +87,7 @@ internal sealed class RecoveryCodeService(
 
         if (failure is not null)
         {
-            return Result.Failure<IReadOnlyList<string>>(failure);
+            return Result.Failure<PreparedRecoveryCodes>(failure);
         }
 
         List<string> drawn = [];
@@ -81,14 +110,7 @@ internal sealed class RecoveryCodeService(
             drawn.Add(issued);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-        await sets.ReplaceAsync(
-                RecoveryCodeSet.Of(subject, hashes, time.GetUtcNow()),
-                cancellationToken)
-            .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
-        return Result.Success<IReadOnlyList<string>>(drawn);
+        return Result.Success(new PreparedRecoveryCodes(drawn, hashes));
     }
 
     /// <summary>
