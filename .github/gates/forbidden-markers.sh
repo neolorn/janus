@@ -13,10 +13,15 @@ if markers=$(grep -rnE '\b(TODO|FIXME|HACK)\b' --include='*.cs' --include='*.csp
   status=1
 fi
 
-# A comment that ends in a statement terminator or a brace is code someone commented
-# out; prose does not end that way. Documentation comments are not comments of this
+# Commented-out code ends in a statement terminator or a brace and carries something
+# only code carries: a call, an assignment, an index, a brace, a member access, or a
+# statement keyword at its head. Prose ends a clause in a semicolon too, so the
+# terminator alone does not decide it. Documentation comments are not comments of this
 # kind and are left alone.
-if commented=$(grep -rnE '^[[:space:]]*//[^/].*[;{}][[:space:]]*$' --include='*.cs' src tests tools); then
+terminated='^[[:space:]]*//[^/].*[;{}][[:space:]]*$'
+written='//[[:space:]]*((return|var|if|else|for|foreach|while|do|switch|case|throw|await|using|new|break|continue|yield|lock|try|catch|finally)\b|.*[][(){}=]|.*[A-Za-z0-9_)]\.[A-Za-z_])'
+
+if commented=$(grep -rnE "$terminated" --include='*.cs' src tests tools | grep -E "$written"); then
   echo "Commented-out code:"
   echo "$commented"
   status=1
