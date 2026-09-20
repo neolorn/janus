@@ -1215,7 +1215,7 @@ internal sealed class AuthenticationService(
                 grace,
                 raise.Field is PolicyField.RequiredAssurance
                     ? StepUp.Reachable(factors.Standing).Level >= policy.RequiredAssurance
-                    : Redundant(enrolled),
+                    : Redundancy.Satisfied(enrolled),
                 registered,
                 now))
             .OfType<PolicyHold>()
@@ -1248,11 +1248,4 @@ internal sealed class AuthenticationService(
 
         return failure ?? revoked;
     }
-
-    // A synced passkey satisfies redundancy on its own, because it survives the
-    // device; a device-bound credential is gone with the device, so a second one
-    // stands behind it (AUTH-RECOV-001).
-    private static bool Redundant(IReadOnlyList<Authenticator> enrolled) =>
-        enrolled.Count(credential => credential.IsUsable) > 1
-        || enrolled.Any(credential => credential.IsUsable && credential.WebAuthn?.BackupState is true);
 }

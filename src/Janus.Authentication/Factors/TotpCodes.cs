@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Security.Cryptography;
 using OtpNet;
 
@@ -45,6 +46,32 @@ internal static class TotpCodes
 
         return drawn;
     }
+
+    /// <summary>
+    /// A shared secret as the person types it into an authenticator app.
+    /// </summary>
+    /// <param name="secret">The secret.</param>
+    /// <returns>The secret in Base32, which is what the app expects.</returns>
+    /// <exception cref="ArgumentNullException">The secret is absent.</exception>
+    public static string Text(byte[] secret)
+    {
+        ArgumentNullException.ThrowIfNull(secret);
+
+        return Base32Encoding.ToString(secret);
+    }
+
+    /// <summary>
+    /// The address an authenticator app is pointed at, which the frontend shows as a
+    /// QR code (FE-PM-006).
+    /// </summary>
+    /// <param name="issuer">What the deployment calls itself.</param>
+    /// <param name="account">Which account of it the secret belongs to.</param>
+    /// <param name="secret">The secret in Base32.</param>
+    /// <returns>The <c>otpauth</c> address, carrying the parameters of AUTH-FACT-005.</returns>
+    public static string Address(string issuer, string account, string secret) =>
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"otpauth://totp/{Uri.EscapeDataString(issuer)}:{Uri.EscapeDataString(account)}?secret={secret}&issuer={Uri.EscapeDataString(issuer)}&algorithm=SHA1&digits={Digits}&period={StepSeconds}");
 
     /// <summary>
     /// The step a code is valid for, where it is valid and has not been used.

@@ -570,6 +570,19 @@ against the public contract of LIB-API-001.
   browser that opened the link exactly as a registration is, so nothing else reaches
   what it may do.
 
+- A person can now manage their own credentials: setting or changing a password,
+  enrolling a passkey or a security key against a challenge the server issued,
+  upgrading a security key to one the authenticator keeps, enrolling a generator and
+  confirming it with a code, taking a fresh set of recovery codes, and removing a
+  credential. A second step is refused on an account that holds no password, a second
+  step beside a password brings a set of recovery codes with it, an enrolment that
+  leaves the account on one credential says whether a second is asked for or required,
+  and a removal that would lower what the account reaches runs the notified window
+  instead of taking effect at once. Each of these reaches every recorded channel, and
+  each is gated at the lower of what the action asks for and what the account can
+  reach. The enrolment session an approved link opens reaches the same operations
+  without a session, and ends when the enrolment completes.
+
 ### Changed
 
 - A sign-in whose password an invalidation left below the single-factor floor now
