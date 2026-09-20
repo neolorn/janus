@@ -929,6 +929,9 @@ Janus.Core.RelationshipDeclaration.ResourceColumn.init -> void
 Janus.Core.RelationshipRows
 Janus.Core.RelationshipRows.Any(System.Linq.Expressions.LambdaExpression! predicate) -> System.Linq.Expressions.Expression!
 Janus.Core.RelationshipRows.HeldBy(System.Linq.Expressions.LambdaExpression! predicate, System.Linq.Expressions.LambdaExpression! holder) -> System.Collections.Generic.IAsyncEnumerable<Janus.Core.SubjectId>!
+Janus.Core.ReservedUsernames
+Janus.Core.ReservedUsernames.All.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
+Janus.Core.ReservedUsernames.Holds(Janus.Core.Username username) -> bool
 Janus.Core.ResourceId
 Janus.Core.ResourceId.Equals(Janus.Core.ResourceId other) -> bool
 Janus.Core.ResourceId.ResourceId() -> void
@@ -1856,6 +1859,8 @@ static Janus.Core.RegistrationState.operator !=(Janus.Core.RegistrationState? le
 static Janus.Core.RegistrationState.operator ==(Janus.Core.RegistrationState? left, Janus.Core.RegistrationState? right) -> bool
 static Janus.Core.RelationshipDeclaration.operator !=(Janus.Core.RelationshipDeclaration? left, Janus.Core.RelationshipDeclaration? right) -> bool
 static Janus.Core.RelationshipDeclaration.operator ==(Janus.Core.RelationshipDeclaration? left, Janus.Core.RelationshipDeclaration? right) -> bool
+static Janus.Core.ReservedUsernames.Default.get -> Janus.Core.ReservedUsernames!
+static Janus.Core.ReservedUsernames.Of(System.Collections.Generic.IEnumerable<string!>! added) -> Janus.Core.ReservedUsernames!
 static Janus.Core.ResourceId.Parse(string! value) -> Janus.Core.ResourceId
 static Janus.Core.ResourceId.operator !=(Janus.Core.ResourceId left, Janus.Core.ResourceId right) -> bool
 static Janus.Core.ResourceId.operator ==(Janus.Core.ResourceId left, Janus.Core.ResourceId right) -> bool
