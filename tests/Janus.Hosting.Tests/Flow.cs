@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
 using Xunit;
 
@@ -42,7 +43,8 @@ internal static class Flow
     {
         ArgumentNullException.ThrowIfNull(deployment);
 
-        deployment.Configuration.Set(Janus.Core.Configuration.Settings.AbuseSmsBalanceFloor, 0m);
+        deployment.Configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
+        deployment.Configuration.Set(Settings.NotificationLanguages, [Language]);
 
         foreach (MessageKind message in new[] { MessageKind.VerificationCode, MessageKind.AccountExists })
         {

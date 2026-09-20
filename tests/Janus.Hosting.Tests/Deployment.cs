@@ -53,14 +53,19 @@ internal sealed class Deployment : IAsyncDisposable
     /// <param name="application">Which application this process serves.</param>
     /// <param name="addresses">The frontend addresses the host declared.</param>
     /// <param name="prefix">The path the host mounts the library under.</param>
+    /// <param name="preferences">The preference keys the host declared.</param>
     public Deployment(
         JanusApplication application = JanusApplication.Public,
         PasskeyAddresses? addresses = null,
-        string prefix = "")
+        string prefix = "",
+        PreferenceDeclarations? preferences = null)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
         builder.Logging.ClearProviders();
+
+        Declared = preferences ?? PreferenceDeclarations.None;
+        Accounts = new AccountDirectoryInMemory(Declared);
 
         Register(builder.Services, application, addresses ?? PasskeyAddresses.None);
 
@@ -130,7 +135,12 @@ internal sealed class Deployment : IAsyncDisposable
     /// <summary>
     /// The standing, profile and preferences of the accounts.
     /// </summary>
-    public AccountDirectoryInMemory Accounts { get; } = new(PreferenceDeclarations.None);
+    public AccountDirectoryInMemory Accounts { get; }
+
+    /// <summary>
+    /// The preference keys the host declared.
+    /// </summary>
+    public PreferenceDeclarations Declared { get; }
 
     /// <summary>
     /// The templates every message is written from.
@@ -221,7 +231,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IAccountAudit, AccountAuditInMemory>();
 
         _ = services.AddSingleton(RestrictionKeySuppliers.None);
-        _ = services.AddSingleton(PreferenceDeclarations.None);
+        _ = services.AddSingleton(Declared);
         _ = services.AddSingleton(ReservedUsernames.Default);
         _ = services.AddSingleton(addresses);
 
