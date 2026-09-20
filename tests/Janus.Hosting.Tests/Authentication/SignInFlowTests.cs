@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Janus.Authentication.Sending;
 using Janus.Core;
@@ -222,6 +223,66 @@ public sealed class SignInFlowTests : IAsyncDisposable
 
     // The account a sign-in is against, and the interval its registration messages
     // opened left behind (AUTH-ABUSE-004).
+    /// <summary>
+    /// REG-IDENT-003 AC1: the phone the account verified at registration opens a
+    /// sign-in exactly as the primary email does, and the same entries are offered.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_003_AC1_ANonPrimaryVerifiedIdentifierOpensTheSameSignInAsync()
+    {
+        await RegisteredAsync();
+
+        var browser = new Browser(_deployment);
+
+        _ = await browser.SendAsync("GET", "/auth/session");
+
+        Answer byEmail = await browser.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
+        Answer byPhone = await browser.SendAsync("POST", "/auth/begin", ("identifier", Flow.Number));
+
+        Assert.Equal(StatusCodes.Status200OK, byPhone.Status);
+        Assert.Equal(Offered(byEmail), Offered(byPhone));
+        Assert.NotEmpty(byPhone.Text("challengeId"));
+    }
+
+    /// <summary>
+    /// REG-IDENT-003 AC2: an identifier no account holds opens a sign-in that answers
+    /// with the same status, the same fields and the same length as one that is held,
+    /// so nothing about which it was crosses the boundary.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_003_AC2_AnUnknownIdentifierAnswersAsAHeldOneDoesAsync()
+    {
+        await RegisteredAsync();
+
+        var browser = new Browser(_deployment);
+
+        _ = await browser.SendAsync("GET", "/auth/session");
+
+        Answer held = await browser.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
+        Answer unheld = await browser.SendAsync(
+            "POST",
+            "/auth/begin",
+            ("identifier", "nobody@example.test"));
+
+        Assert.Equal(held.Status, unheld.Status);
+        Assert.Equal(Fields(held), Fields(unheld));
+        Assert.Equal(Offered(held), Offered(unheld));
+        Assert.Equal(held.Body.Length, unheld.Body.Length);
+    }
+
+    // The entries the answer offered, which are the policy's and never the account's.
+    private static IReadOnlyList<string> Offered(Answer answered) =>
+    [
+        .. answered.Json().GetProperty("available").EnumerateArray()
+            .Select(entry => entry.GetString() ?? string.Empty),
+    ];
+
+    // The names the answer carries, in the order it carries them.
+    private static IReadOnlyList<string> Fields(Answer answered) =>
+        [.. answered.Json().EnumerateObject().Select(field => field.Name)];
+
     private async Task RegisteredAsync()
     {
         _ = await Flow.SignedInAsync(_deployment);
