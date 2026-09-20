@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Janus.Authentication;
@@ -26,6 +27,7 @@ using Janus.Hosting.Bff;
 using Janus.Hosting.Registration;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -141,6 +143,12 @@ internal sealed class Deployment : IAsyncDisposable
     /// The passwords the accounts hold.
     /// </summary>
     public PasswordStoreInMemory Passwords { get; } = new();
+
+    /// <summary>
+    /// Every endpoint the library mounted.
+    /// </summary>
+    public IReadOnlyList<Endpoint> Endpoints =>
+        _application.Services.GetRequiredService<EndpointDataSource>().Endpoints;
 
     /// <summary>
     /// The transaction every operation runs in.

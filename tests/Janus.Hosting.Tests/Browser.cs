@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Http;
@@ -58,6 +59,7 @@ internal sealed class Browser(Deployment deployment)
         context.Request.Path = Path(path, out QueryString query);
         context.Request.QueryString = query;
         context.Request.Headers["Sec-Fetch-Site"] = "same-origin";
+        context.Request.Headers.AcceptLanguage = "en";
 
         if (header)
         {
@@ -89,13 +91,49 @@ internal sealed class Browser(Deployment deployment)
             context.Features.Set<IHttpRequestBodyDetectionFeature>(new RequestBodyPresent());
         }
 
-        var written = new MemoryStream();
+        var written = new ResponseBody();
 
         context.Response.Body = written;
 
         await deployment.SendAsync(context);
 
         return Taken(context, written);
+    }
+
+    /// <summary>
+    /// Opens a stream and hands back what is being written to it, so a test can
+    /// watch it while it runs.
+    /// </summary>
+    /// <param name="path">The path.</param>
+    /// <param name="abort">What the browser goes away on.</param>
+    /// <returns>The running request and the body it is writing.</returns>
+    public (Task Running, ResponseBody Written) Open(string path, CancellationToken abort)
+    {
+        var context = new DefaultHttpContext();
+
+        context.Request.Method = "GET";
+        context.Request.Scheme = "https";
+        context.Request.Host = new HostString("janus.example.test");
+        context.Request.Path = Path(path, out QueryString query);
+        context.Request.QueryString = query;
+        context.Request.Headers["Sec-Fetch-Site"] = "same-origin";
+        context.Request.Headers.AcceptLanguage = "en";
+        context.Request.Headers[BrowserCookies.RequestHeader] = "1";
+        context.Request.Headers.Origin = Origin;
+        context.RequestAborted = abort;
+
+        if (_cookies.Count is not 0)
+        {
+            context.Request.Headers.Cookie = string.Join(
+                "; ",
+                _cookies.Select(held => held.Key + "=" + held.Value));
+        }
+
+        var written = new ResponseBody();
+
+        context.Response.Body = written;
+
+        return (deployment.SendAsync(context), written);
     }
 
     /// <summary>
@@ -139,7 +177,7 @@ internal sealed class Browser(Deployment deployment)
         return new PathString(path[..at]);
     }
 
-    private Answer Taken(DefaultHttpContext context, MemoryStream written)
+    private Answer Taken(DefaultHttpContext context, ResponseBody written)
     {
         string[] cookies = [.. context.Response.Headers.SetCookie.Select(header => header!)];
 
@@ -162,7 +200,7 @@ internal sealed class Browser(Deployment deployment)
 
         return new Answer(
             context.Response.StatusCode,
-            Encoding.UTF8.GetString(written.ToArray()),
+            written.Taken(),
             context.Response.Headers.Location.ToString() is { Length: > 0 } where ? where : null,
             cookies);
     }
