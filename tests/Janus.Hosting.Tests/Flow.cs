@@ -25,9 +25,13 @@ internal static class Flow
     /// </summary>
     public const string Number = "+441632960011";
 
+    /// <summary>
+    /// The password the flow sets, which stands alone at the floor.
+    /// </summary>
+    public const string Password = "orangemarmalade";
+
     private const string Client = "web";
     private const string Language = "en";
-    private const string Password = "orangemarmalade";
 
     /// <summary>
     /// Makes a deployment able to send: the templates carry the code and the link
