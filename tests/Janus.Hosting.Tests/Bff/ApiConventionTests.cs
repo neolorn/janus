@@ -164,6 +164,27 @@ public sealed class ApiConventionTests
     }
 
     /// <summary>
+    /// A body the reader cannot parse is answered with the status alone: chapter 10
+    /// names no code for it, and a code is the reference chapter's to give
+    /// (API-CONV-002, API-CONV-003).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task MapRegistration_ABodyThatDoesNotParse_AnswersTheStatusAloneAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Flow.Prepare(deployment);
+
+        Browser browser = await Flow.BegunAsync(deployment);
+
+        Answer refused = await browser.SendAsync("PUT", "/register/age", "{\"dateOfBirth\":");
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
+        Assert.Equal(string.Empty, refused.Body);
+    }
+
+    /// <summary>
     /// API-CONV-005 AC1, AUTH-ABUSE-003 AC1: the answer to an address another
     /// account holds is the answer to one nobody holds, byte for byte but for the
     /// correlation identifier every answer differs by.

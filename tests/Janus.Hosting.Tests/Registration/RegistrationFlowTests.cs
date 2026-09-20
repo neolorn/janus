@@ -172,6 +172,26 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// A browser that already holds a session is answered with its account, and no
+    /// registration is staged for it (REG-SESS-002).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BeginAsync_ABrowserAlreadySignedIn_IsAnsweredWithTheAccountAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        int staged = _deployment.Registrations.All.Count;
+
+        Answer landing = await browser.SendAsync("POST", "/register", ("clientId", "web"));
+        Answer account = await browser.SendAsync("GET", "/account");
+
+        Assert.Equal(StatusCodes.Status200OK, landing.Status);
+        Assert.Equal(account.Body, landing.Body);
+        Assert.Equal(staged, _deployment.Registrations.All.Count);
+    }
+
+    /// <summary>
     /// BFF-CSRF-005b AC2: no route of the flow names a token, and the stream answers
     /// to the cookie alone: one put in the query opens nothing, and the browser that
     /// carries the cookie is read without presenting anything else.
