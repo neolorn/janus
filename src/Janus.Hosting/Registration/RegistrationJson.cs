@@ -7,7 +7,9 @@ namespace Janus.Hosting.Registration;
 /// (CONV-CODE-004, CONV-DESIGN-006).
 /// </summary>
 /// <remarks>Implements API-CONV-002 and CONV-DESIGN-006.</remarks>
-[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+[JsonSourceGenerationOptions(
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    UseStringEnumConverter = true)]
 [JsonSerializable(typeof(BeginRegistrationRequest))]
 [JsonSerializable(typeof(AgeRequest))]
 [JsonSerializable(typeof(IdentifierValueRequest))]
