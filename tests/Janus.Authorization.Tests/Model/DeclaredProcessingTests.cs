@@ -144,6 +144,45 @@ public sealed class DeclaredProcessingTests
     }
 
     /// <summary>
+    /// PRIV-BASIS-003 AC1: a purpose over sensitive data that states the ordinary
+    /// path, on a basis requiring the written one there, stops the deployment rather
+    /// than capturing a consent that would not stand.
+    /// </summary>
+    [Fact]
+    public void PRIV_BASIS_003_AC1_TheOrdinaryPathOverSensitiveDataFailsValidation() =>
+        Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(Consenting(sensitive: true, ConsentKind.Ordinary)));
+
+    /// <summary>
+    /// AUTHZ-MODEL-003 AC2: the capture path follows from the sensitivity of the type
+    /// and the properties of the basis, so declaring a type sensitive is the whole of
+    /// the change.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_MODEL_003_AC2_DeclaringATypeSensitiveChangesWhatItsConsentAsksFor()
+    {
+        Assert.Equal(
+            ConsentKind.Ordinary,
+            AuthorizationModel.Of(Consenting(sensitive: false, null))
+                .Processing.Find("recommendations")!.Consent);
+        Assert.Equal(
+            ConsentKind.Written,
+            AuthorizationModel.Of(Consenting(sensitive: true, null))
+                .Processing.Find("recommendations")!.Consent);
+    }
+
+    /// <summary>
+    /// A purpose on a basis that is not consent runs through no capture path at all,
+    /// which is what makes the path a property of the basis rather than of the
+    /// dashboard.
+    /// </summary>
+    [Fact]
+    public void Of_APurposeOnANonConsentBasis_RunsThroughNoCapturePath() =>
+        Assert.Null(
+            AuthorizationModel.Of(HostDomain.Declared().Build())
+                .Processing.Find("collaboration")!.Consent);
+
+    /// <summary>
     /// PRIV-SENS-001 AC1: a type is declared sensitive by naming a category of the
     /// declared list and nothing further, and a category outside that list stops the
     /// deployment.
@@ -174,17 +213,39 @@ public sealed class DeclaredProcessingTests
             .GetCustomAttribute<JsonStringEnumMemberNameAttribute>()!
             .Name;
 
-    // Every library source carrying one of the keys as a value. A basis is read by
-    // its properties, so its key reaches the library only as data it was handed.
+    // Every library source carrying one of the keys as a value, comments aside. A
+    // basis is read by its properties, so its key reaches the library only as data it
+    // was handed, and prose naming one decides nothing.
     private static IReadOnlyList<string> Naming(IReadOnlyList<string> keys) =>
     [
         .. Directory
             .EnumerateFiles(Source(), "*.cs", SearchOption.AllDirectories)
-            .Where(file => keys.Any(key =>
-                File.ReadAllText(file).Contains("\"" + key + "\"", StringComparison.Ordinal)))
+            .Where(file => File.ReadLines(file).Any(line =>
+                !line.TrimStart().StartsWith('/')
+                && keys.Any(key => line.Contains('"' + key + '"', StringComparison.Ordinal))))
             .Select(file => Path.GetFileName(file)!)
             .Order(StringComparer.Ordinal),
     ];
+
+    // A deployment whose one purpose rests on consent over a basis that requires the
+    // written path for sensitive data, the type being sensitive or not as the test
+    // asks.
+    private static AuthorizationDeclaration Consenting(bool sensitive, ConsentKind? consent) =>
+        new AuthorizationDeclarationBuilder()
+            .LawfulBasis(new LawfulBasisDeclaration("agreement", true, true, false, false))
+            .SensitiveCategory("financial")
+            .Resource<HostDomain.Workspace>("workspace", workspace =>
+            {
+                _ = workspace
+                    .BelongsToOrganization()
+                    .Purpose("recommendations", "agreement", data: ["history"], consent: consent);
+
+                if (sensitive)
+                {
+                    _ = workspace.Sensitive("financial");
+                }
+            })
+            .Build();
 
     // One type of the host's, declared as the test needs it, with everything else the
     // model requires already in place.

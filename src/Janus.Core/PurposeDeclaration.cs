@@ -18,13 +18,19 @@ namespace Janus.Core;
 /// held.
 /// </param>
 /// <param name="SubjectCategories">The categories of person the purpose is about.</param>
+/// <param name="Consent">
+/// The capture path a consent for it runs through, where the deployment states one.
+/// Absent, the path follows from the basis and the sensitivity of the type, and a
+/// declaration may ask for the written path and never for less.
+/// </param>
 /// <remarks>
 /// Implements AUTHZ-MODEL-003, PRIV-PRIN-001, PRIV-BASIS-001, PRIV-BASIS-002,
-/// PRIV-ROPA-001.
+/// PRIV-BASIS-003, PRIV-ROPA-001.
 /// </remarks>
 public sealed record PurposeDeclaration(
     string Name,
     string Basis,
     string? Assessment,
     IReadOnlyList<string> DataCategories,
-    IReadOnlyList<string> SubjectCategories);
+    IReadOnlyList<string> SubjectCategories,
+    ConsentKind? Consent);

@@ -27,6 +27,7 @@ internal sealed class AuthorizationModel
     private readonly HashSet<Permission> _permissions;
     private readonly HashSet<string> _readingActions;
     private readonly Dictionary<string, RelationshipDeclaration> _relationships;
+    private readonly DeclaredProcessing _processing;
     private readonly IReadOnlyList<string> _sensitiveCategories;
     private readonly IReadOnlyDictionary<Permission, string> _stepUpGates;
     private readonly Dictionary<ResourceType, ResourceTypeDeclaration> _types;
@@ -39,7 +40,8 @@ internal sealed class AuthorizationModel
         HashSet<string> readingActions,
         IReadOnlyDictionary<Permission, string> stepUpGates,
         Dictionary<string, LawfulBasisDeclaration> bases,
-        IReadOnlyList<string> sensitiveCategories)
+        IReadOnlyList<string> sensitiveCategories,
+        DeclaredProcessing processing)
     {
         _types = types;
         _entities = entities;
@@ -49,7 +51,13 @@ internal sealed class AuthorizationModel
         _stepUpGates = stepUpGates;
         _bases = bases;
         _sensitiveCategories = sensitiveCategories;
+        _processing = processing;
     }
+
+    /// <summary>
+    /// What the deployment processes, one entry per purpose.
+    /// </summary>
+    public DeclaredProcessing Processing => _processing;
 
     /// <summary>
     /// Every resource type the host declared.
@@ -114,7 +122,8 @@ internal sealed class AuthorizationModel
             new HashSet<string>([.. Reading, .. declaration.ReadingActions], StringComparer.Ordinal),
             declaration.StepUpGates,
             bases,
-            declaration.SensitiveCategories);
+            declaration.SensitiveCategories,
+            DeclaredProcessing.Of(declaration));
     }
 
     /// <summary>

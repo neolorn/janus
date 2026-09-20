@@ -88,6 +88,10 @@ public sealed class ResourceTypeDeclarationBuilder<TResource>
     /// </param>
     /// <param name="data">The categories of data the purpose requires.</param>
     /// <param name="subjects">The categories of person it is about.</param>
+    /// <param name="consent">
+    /// The capture path a consent for it runs through, where the deployment states
+    /// one rather than leaving it to follow from the basis and the sensitivity.
+    /// </param>
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentException">The purpose or the basis is absent or blank.</exception>
     public ResourceTypeDeclarationBuilder<TResource> Purpose(
@@ -95,11 +99,12 @@ public sealed class ResourceTypeDeclarationBuilder<TResource>
         string basis,
         string? assessment = null,
         IReadOnlyList<string>? data = null,
-        IReadOnlyList<string>? subjects = null)
+        IReadOnlyList<string>? subjects = null,
+        ConsentKind? consent = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(basis);
-        _purposes.Add(new PurposeDeclaration(name, basis, assessment, data ?? [], subjects ?? []));
+        _purposes.Add(new PurposeDeclaration(name, basis, assessment, data ?? [], subjects ?? [], consent));
 
         return this;
     }

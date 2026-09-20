@@ -400,6 +400,9 @@ Janus.Core.Configuration.TextListSetting
 Janus.Core.Configuration.TextListSetting.Minimum.get -> int
 Janus.Core.Configuration.TextSetSetting
 Janus.Core.Configuration.TextSetting
+Janus.Core.ConsentKind
+Janus.Core.ConsentKind.Ordinary = 0 -> Janus.Core.ConsentKind
+Janus.Core.ConsentKind.Written = 1 -> Janus.Core.ConsentKind
 Janus.Core.ConsentMechanism
 Janus.Core.ConsentMechanism.Administrator = 3 -> Janus.Core.ConsentMechanism
 Janus.Core.ConsentMechanism.Dashboard = 1 -> Janus.Core.ConsentMechanism
@@ -456,6 +459,30 @@ Janus.Core.CredentialSummary.Preferred.get -> bool
 Janus.Core.CredentialSummary.Preferred.init -> void
 Janus.Core.CredentialSummary.State.get -> Janus.Core.AuthenticatorState
 Janus.Core.CredentialSummary.State.init -> void
+Janus.Core.DeclaredProcessing
+Janus.Core.DeclaredProcessing.Find(string! purpose) -> Janus.Core.DeclaredPurpose?
+Janus.Core.DeclaredProcessing.Purposes.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.DeclaredPurpose!>!
+Janus.Core.DeclaredPurpose
+Janus.Core.DeclaredPurpose.<Clone>$() -> Janus.Core.DeclaredPurpose!
+Janus.Core.DeclaredPurpose.Assessment.get -> string?
+Janus.Core.DeclaredPurpose.Assessment.init -> void
+Janus.Core.DeclaredPurpose.Basis.get -> Janus.Core.LawfulBasisDeclaration!
+Janus.Core.DeclaredPurpose.Basis.init -> void
+Janus.Core.DeclaredPurpose.Consent.get -> Janus.Core.ConsentKind?
+Janus.Core.DeclaredPurpose.Consent.init -> void
+Janus.Core.DeclaredPurpose.DataCategories.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Janus.Core.DeclaredPurpose.DataCategories.init -> void
+Janus.Core.DeclaredPurpose.DeclaredPurpose(string! Name, Janus.Core.LawfulBasisDeclaration! Basis, Janus.Core.ConsentKind? Consent, string? Assessment, System.Collections.Generic.IReadOnlyList<string!>! DataCategories, System.Collections.Generic.IReadOnlyList<string!>! SubjectCategories, System.Collections.Generic.IReadOnlyList<string!>! SensitiveCategories, System.Collections.Generic.IReadOnlyList<Janus.Core.ResourceType>! Types) -> void
+Janus.Core.DeclaredPurpose.Deconstruct(out string! Name, out Janus.Core.LawfulBasisDeclaration! Basis, out Janus.Core.ConsentKind? Consent, out string? Assessment, out System.Collections.Generic.IReadOnlyList<string!>! DataCategories, out System.Collections.Generic.IReadOnlyList<string!>! SubjectCategories, out System.Collections.Generic.IReadOnlyList<string!>! SensitiveCategories, out System.Collections.Generic.IReadOnlyList<Janus.Core.ResourceType>! Types) -> void
+Janus.Core.DeclaredPurpose.Equals(Janus.Core.DeclaredPurpose? other) -> bool
+Janus.Core.DeclaredPurpose.Name.get -> string!
+Janus.Core.DeclaredPurpose.Name.init -> void
+Janus.Core.DeclaredPurpose.SensitiveCategories.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Janus.Core.DeclaredPurpose.SensitiveCategories.init -> void
+Janus.Core.DeclaredPurpose.SubjectCategories.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Janus.Core.DeclaredPurpose.SubjectCategories.init -> void
+Janus.Core.DeclaredPurpose.Types.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.ResourceType>!
+Janus.Core.DeclaredPurpose.Types.init -> void
 Janus.Core.DeletionOrigin
 Janus.Core.DeletionOrigin.OutOfBandRequest = 2 -> Janus.Core.DeletionOrigin
 Janus.Core.DeletionOrigin.Self = 0 -> Janus.Core.DeletionOrigin
@@ -1260,13 +1287,15 @@ Janus.Core.PurposeDeclaration.Assessment.get -> string?
 Janus.Core.PurposeDeclaration.Assessment.init -> void
 Janus.Core.PurposeDeclaration.Basis.get -> string!
 Janus.Core.PurposeDeclaration.Basis.init -> void
+Janus.Core.PurposeDeclaration.Consent.get -> Janus.Core.ConsentKind?
+Janus.Core.PurposeDeclaration.Consent.init -> void
 Janus.Core.PurposeDeclaration.DataCategories.get -> System.Collections.Generic.IReadOnlyList<string!>!
 Janus.Core.PurposeDeclaration.DataCategories.init -> void
-Janus.Core.PurposeDeclaration.Deconstruct(out string! Name, out string! Basis, out string? Assessment, out System.Collections.Generic.IReadOnlyList<string!>! DataCategories, out System.Collections.Generic.IReadOnlyList<string!>! SubjectCategories) -> void
+Janus.Core.PurposeDeclaration.Deconstruct(out string! Name, out string! Basis, out string? Assessment, out System.Collections.Generic.IReadOnlyList<string!>! DataCategories, out System.Collections.Generic.IReadOnlyList<string!>! SubjectCategories, out Janus.Core.ConsentKind? Consent) -> void
 Janus.Core.PurposeDeclaration.Equals(Janus.Core.PurposeDeclaration? other) -> bool
 Janus.Core.PurposeDeclaration.Name.get -> string!
 Janus.Core.PurposeDeclaration.Name.init -> void
-Janus.Core.PurposeDeclaration.PurposeDeclaration(string! Name, string! Basis, string? Assessment, System.Collections.Generic.IReadOnlyList<string!>! DataCategories, System.Collections.Generic.IReadOnlyList<string!>! SubjectCategories) -> void
+Janus.Core.PurposeDeclaration.PurposeDeclaration(string! Name, string! Basis, string? Assessment, System.Collections.Generic.IReadOnlyList<string!>! DataCategories, System.Collections.Generic.IReadOnlyList<string!>! SubjectCategories, Janus.Core.ConsentKind? Consent) -> void
 Janus.Core.PurposeDeclaration.SubjectCategories.get -> System.Collections.Generic.IReadOnlyList<string!>!
 Janus.Core.PurposeDeclaration.SubjectCategories.init -> void
 Janus.Core.ReauthenticationKind
@@ -1452,7 +1481,7 @@ Janus.Core.ResourceTypeDeclarationBuilder<TResource>.ContainedIn(string! contain
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Derivation(string! relationship, string! role, bool materialised = false) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Discloses() -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Encrypted(System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! field, System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! subject) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
-Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Purpose(string! name, string! basis, string? assessment = null, System.Collections.Generic.IReadOnlyList<string!>? data = null, System.Collections.Generic.IReadOnlyList<string!>? subjects = null) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
+Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Purpose(string! name, string! basis, string? assessment = null, System.Collections.Generic.IReadOnlyList<string!>? data = null, System.Collections.Generic.IReadOnlyList<string!>? subjects = null, Janus.Core.ConsentKind? consent = null) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Sensitive(string! category) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.Restriction
 Janus.Core.Restriction.<Clone>$() -> Janus.Core.Restriction!
@@ -1855,6 +1884,9 @@ override Janus.Core.CredentialLabel.ToString() -> string!
 override Janus.Core.CredentialSummary.Equals(object? obj) -> bool
 override Janus.Core.CredentialSummary.GetHashCode() -> int
 override Janus.Core.CredentialSummary.ToString() -> string!
+override Janus.Core.DeclaredPurpose.Equals(object? obj) -> bool
+override Janus.Core.DeclaredPurpose.GetHashCode() -> int
+override Janus.Core.DeclaredPurpose.ToString() -> string!
 override Janus.Core.DerivationDeclaration.Equals(object? obj) -> bool
 override Janus.Core.DerivationDeclaration.GetHashCode() -> int
 override Janus.Core.DerivationDeclaration.ToString() -> string!
@@ -2325,6 +2357,9 @@ static Janus.Core.CredentialLabel.operator !=(Janus.Core.CredentialLabel left, J
 static Janus.Core.CredentialLabel.operator ==(Janus.Core.CredentialLabel left, Janus.Core.CredentialLabel right) -> bool
 static Janus.Core.CredentialSummary.operator !=(Janus.Core.CredentialSummary? left, Janus.Core.CredentialSummary? right) -> bool
 static Janus.Core.CredentialSummary.operator ==(Janus.Core.CredentialSummary? left, Janus.Core.CredentialSummary? right) -> bool
+static Janus.Core.DeclaredProcessing.Of(Janus.Core.AuthorizationDeclaration! declaration) -> Janus.Core.DeclaredProcessing!
+static Janus.Core.DeclaredPurpose.operator !=(Janus.Core.DeclaredPurpose? left, Janus.Core.DeclaredPurpose? right) -> bool
+static Janus.Core.DeclaredPurpose.operator ==(Janus.Core.DeclaredPurpose? left, Janus.Core.DeclaredPurpose? right) -> bool
 static Janus.Core.DerivationDeclaration.operator !=(Janus.Core.DerivationDeclaration? left, Janus.Core.DerivationDeclaration? right) -> bool
 static Janus.Core.DerivationDeclaration.operator ==(Janus.Core.DerivationDeclaration? left, Janus.Core.DerivationDeclaration? right) -> bool
 static Janus.Core.DerivationRefresh.operator !=(Janus.Core.DerivationRefresh? left, Janus.Core.DerivationRefresh? right) -> bool

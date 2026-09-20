@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Which capture path a consent runs through now follows from the lawful basis and the
+  sensitivity of the type: a consent-based purpose over sensitive data, on a basis that
+  requires it, takes the written path with nothing further to configure. A deployment
+  may state the written path itself and never the ordinary one where the written one is
+  required, which startup refuses.
 - A declared purpose now carries the categories of data it requires and the categories
   of person it is about, and startup refuses a purpose that names no data category, so
   the declaration states what is collected rather than what happens to be held. A
