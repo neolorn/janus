@@ -109,6 +109,33 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-PM-001 AC1: a user handle is what would carry personal data into an
+    /// authenticator, and the library issues none: the ceremony is not a function of
+    /// the account, and what the browser is handed is the relying party, the
+    /// algorithms and the challenge.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_PM_001_AC1_NoCeremonyCarriesAUserHandleAtAllAsync()
+    {
+        WebAuthnCeremony ceremony = Value(await Service.BeginAsync(
+            Factor.Passkey,
+            TestContext.Current.CancellationToken));
+
+        foreach (Type shape in new[] { typeof(WebAuthnCeremony), typeof(CredentialCeremony) })
+        {
+            Assert.Equal(
+                ["Algorithms", "Challenge", "DiscoverableCredential", "RelyingPartyId"],
+                shape.GetProperties().Select(property => property.Name).Order(StringComparer.Ordinal));
+        }
+
+        Assert.DoesNotContain(
+            Service.GetType().GetMethod(nameof(WebAuthnService.BeginAsync))!.GetParameters(),
+            parameter => parameter.ParameterType == typeof(SubjectId));
+        Assert.Equal("example.com", ceremony.RelyingPartyId);
+    }
+
+    /// <summary>
     /// AUTH-FACT-010 AC3: a deployment whose relying party identifier sits over none
     /// of its origins enrols nothing; the refusal comes before the credential.
     /// </summary>

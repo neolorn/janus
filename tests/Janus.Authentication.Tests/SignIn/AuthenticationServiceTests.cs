@@ -251,6 +251,24 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-ATTR-008 AC4: the order the challenge presents is the account's preference
+    /// and not a fixed one, and every other enrolled method is still offered from it.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ATTR_008_AC4_TheChallengeFollowsThePreferenceAndOffersTheRestAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.SecurityKey);
+        Holds(subject, Factor.Totp, isPreferred: true);
+
+        SignInProgress reached = await SignedInAsync(subject, Factor.Password, Secret);
+
+        Assert.Equal(SignInStatus.FactorRequired, reached.Status);
+        Assert.Equal([Factor.Totp, Factor.SecurityKey], reached.Required);
+    }
+
+    /// <summary>
     /// AUTH-RECOV-007a AC2: a password an invalidation left below the single-factor
     /// floor signs in and is told to change it, rather than being locked out.
     /// </summary>

@@ -97,10 +97,21 @@ internal sealed class Deployment : IAsyncDisposable
 
         // The web server composes these two around the middleware when it starts;
         // here the pipeline is built by hand, so they are named by hand.
+        if (prefix.Length > 0)
+        {
+            // A host that mounts the library under a prefix mounts all of it there,
+            // the provider's endpoints with the rest, so every path the library
+            // answers and every address its document publishes carries the prefix
+            // (API-CONV-001, LIB-HOST-003). The two documents of REG-PM-001 are the
+            // exception: they belong to the site and stay at its root.
+            _ = ((IApplicationBuilder)_application).Map(prefix, Mounted);
+        }
+        else
+        {
+            Mounted(_application);
+        }
+
         _ = ((IApplicationBuilder)_application).UseRouting();
-        _ = _application.UseJanusMachineProfile();
-        _ = _application.UseJanusBrowserProfile();
-        _ = _application.MapGroup(prefix).MapJanus();
         _ = _application.MapJanusWellKnown();
         _ = ((IApplicationBuilder)_application).UseEndpoints(_ => { });
 
@@ -249,6 +260,16 @@ internal sealed class Deployment : IAsyncDisposable
         context.RequestServices = scope.ServiceProvider;
 
         await _pipeline(context);
+    }
+
+    // What a host mounts: the two profiles around the library's endpoints, with
+    // routing named by hand because no web server composes it here.
+    private static void Mounted(IApplicationBuilder mount)
+    {
+        _ = mount.UseRouting();
+        _ = mount.UseJanusMachineProfile();
+        _ = mount.UseJanusBrowserProfile();
+        _ = mount.UseEndpoints(endpoints => endpoints.MapJanus());
     }
 
     // Everything AddJanus registers, over the area's own fakes instead of the

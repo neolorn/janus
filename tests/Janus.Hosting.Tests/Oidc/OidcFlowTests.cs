@@ -10,6 +10,7 @@ using Janus.Authentication.Oidc;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Oidc;
@@ -29,6 +30,7 @@ public sealed class OidcFlowTests
     private const string Destination = "https://app.example.test/signin/callback";
     private const string Secret = "a-secret-the-deployment-set";
     private const string Verifier = "a-verifier-of-at-least-forty-three-characters-long";
+    private const string Prefix = "/identity/v1";
 
     /// <summary>
     /// AUTH-OIDC-001 AC1: the discovery document names the endpoints the deployment
@@ -435,6 +437,81 @@ public sealed class OidcFlowTests
 
         Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
         Assert.Equal(ErrorCodes.Denied.ToString(), refused.Text("code"));
+    }
+
+    /// <summary>
+    /// API-CONV-001 AC2 and LIB-HOST-003 AC2: a deployment that mounts the library
+    /// under a prefix publishes a document whose addresses carry it, because nothing
+    /// in the document is a path the library wrote down.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_CONV_001_AC2_TheDocumentCarriesThePrefixTheHostMountedUnderAsync()
+    {
+        await using var deployment = new Deployment(prefix: Prefix);
+
+        JsonElement document = (await new Machine(deployment)
+                .GetAsync(Prefix + "/.well-known/openid-configuration", bearer: string.Empty))
+            .Json();
+
+        foreach (string named in new[]
+        {
+            "authorization_endpoint",
+            "token_endpoint",
+            "userinfo_endpoint",
+            "jwks_uri",
+        })
+        {
+            Assert.Contains(
+                Prefix + "/oidc/",
+                document.GetProperty(named).GetString(),
+                StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// AUTH-SESS-012 AC6: the exchange hands a browser application's own layer an
+    /// access token and nothing it could hold the session with afterwards.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_SESS_012_AC6_TheExchangeHandsABrowserApplicationNoRefreshTokenAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Browser browser = await PreparedAsync(deployment);
+        var machine = new Machine(deployment);
+        string code = await CodeAsync(browser, Application);
+
+        Answer exchanged = await machine.PostAsync("/oidc/token", Code(code, Application));
+
+        Assert.Equal(StatusCodes.Status200OK, exchanged.Status);
+        Assert.NotEmpty(exchanged.Text("access_token"));
+        Assert.False(exchanged.Json().TryGetProperty("refresh_token", out _));
+    }
+
+    /// <summary>
+    /// API-REDIR-001 AC4: the destination that was replaced is recorded, and the
+    /// request that named the registered one records nothing, so what the log holds
+    /// is the attempts and not the traffic.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_REDIR_001_AC4_OnlyTheReplacedDestinationIsRecordedAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Browser browser = await PreparedAsync(deployment);
+
+        _ = await browser.SendAsync("GET", Authorize(Application, silent: true));
+
+        Assert.Empty(deployment.OidcLog.Entries);
+
+        _ = await browser.SendAsync(
+            "GET",
+            Authorize(Application, silent: true, redirect: "https://attacker.test/collect"));
+
+        Assert.Equal(LogLevel.Warning, Assert.Single(deployment.OidcLog.Entries).Level);
     }
 
     private static string Challenge =>

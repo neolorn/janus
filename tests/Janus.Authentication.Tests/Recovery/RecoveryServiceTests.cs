@@ -181,6 +181,34 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-STEP-007 AC3: setting a password through recovery changes the password and
+    /// nothing else, so every other credential stands exactly as it did.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_STEP_007_AC3_TheRecoveredPasswordLeavesEveryOtherCredentialAsItWasAsync()
+    {
+        SubjectId subject = await AccountAsync(password: false);
+        AuthenticatorId passkey = Enrolled(subject, Factor.Passkey);
+        AuthenticatorId generator = Enrolled(subject, Factor.Totp);
+
+        _ = await Service.BeginAsync(Address, Language, Source, TestContext.Current.CancellationToken);
+
+        Assert.True(Succeeded(await Service.CompleteAsync(
+            Sent(),
+            Secret,
+            Source,
+            TestContext.Current.CancellationToken)));
+
+        foreach (AuthenticatorId held in new[] { passkey, generator })
+        {
+            Assert.Equal(
+                AuthenticatorState.Active,
+                (await _authenticators.FindAsync(held, TestContext.Current.CancellationToken))!.State);
+        }
+    }
+
+    /// <summary>
     /// AUTH-RECOV-005 AC1: what recovery sets is a password, so an account whose policy
     /// asks for two factors still has to present the second one to sign in.
     /// </summary>
