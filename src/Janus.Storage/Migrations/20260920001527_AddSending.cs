@@ -66,7 +66,8 @@ internal sealed partial class AddSending : Migration
             columns: table => new
             {
                 key = table.Column<byte[]>(type: "bytea", maxLength: 32, nullable: false),
-                sent_at = table.Column<DateTimeOffset[]>(type: "timestamp with time zone[]", nullable: false)
+                sent_at = table.Column<DateTimeOffset[]>(type: "timestamp with time zone[]", nullable: false),
+                settles_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
             },
             constraints: table => table.PrimaryKey("pk_send_counters", x => x.key));
 
@@ -139,6 +140,12 @@ internal sealed partial class AddSending : Migration
             schema: "janus",
             table: "registration_sources",
             columns: SourceAndAt);
+
+        migrationBuilder.CreateIndex(
+            name: "ix_send_counters_settles_at",
+            schema: "janus",
+            table: "send_counters",
+            column: "settles_at");
 
         migrationBuilder.CreateIndex(
             name: "ix_sends_settles_at",

@@ -69,6 +69,14 @@ internal sealed class SendLedger(JanusDbContext context, ReadOnlyMemory<byte> fi
         ArgumentNullException.ThrowIfNull(counted);
         ArgumentNullException.ThrowIfNull(spent);
 
+        // A counter every time in which has aged out holds nothing, so it goes
+        // rather than standing until the key is sent to again (AUTH-ABUSE-004). The
+        // sweep runs before the rows below are read, so none of them is tracked.
+        await context.SendCounters
+            .Where(counter => counter.SettlesAt < at)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
+
         TimeSpan settles = TimeSpan.Zero;
 
         foreach (SendCount count in counted)
@@ -87,11 +95,17 @@ internal sealed class SendLedger(JanusDbContext context, ReadOnlyMemory<byte> fi
 
             if (counter is null)
             {
-                context.SendCounters.Add(new SendCounterRecord { Key = hashed, SentAt = kept });
+                context.SendCounters.Add(new SendCounterRecord
+                {
+                    Key = hashed,
+                    SentAt = kept,
+                    SettlesAt = at + count.Retain,
+                });
             }
             else
             {
                 counter.SentAt = kept;
+                counter.SettlesAt = at + count.Retain;
             }
 
             if (count.Retain > settles)

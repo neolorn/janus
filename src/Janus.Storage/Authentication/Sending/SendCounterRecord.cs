@@ -18,4 +18,10 @@ internal sealed class SendCounterRecord
 
     /// <summary>The <c>sent_at</c> column.</summary>
     public DateTimeOffset[] SentAt { get; set; } = [];
+
+    /// <summary>
+    /// The <c>settles_at</c> column: when the last time counted here ages out of the
+    /// longest bucket it was counted against, after which the row holds nothing.
+    /// </summary>
+    public DateTimeOffset SettlesAt { get; set; }
 }

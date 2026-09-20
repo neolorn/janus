@@ -395,8 +395,15 @@ partial class JanusDbContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone[]")
                     .HasColumnName("sent_at");
 
+                b.Property<DateTimeOffset>("SettlesAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("settles_at");
+
                 b.HasKey("Key")
                     .HasName("pk_send_counters");
+
+                b.HasIndex("SettlesAt")
+                    .HasDatabaseName("ix_send_counters_settles_at");
 
                 b.ToTable("send_counters", "janus");
             });
