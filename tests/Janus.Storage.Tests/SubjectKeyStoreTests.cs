@@ -26,6 +26,8 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
     private static readonly byte[] Secret =
         Encoding.UTF8.GetBytes("a value held under one subject key");
 
+    private static readonly RandomNumberGenerator Randomness = RandomNumberGenerator.Create();
+
     /// <summary>
     /// A key written through the store reads back as the key that was written, and the
     /// data key it wrapped still decrypts what was encrypted under it.
@@ -61,7 +63,7 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
     {
         await using JanusDbContext context = database.Context();
 
-        Assert.Null(await new SubjectKeyStore(context)
+        Assert.Null(await Store(context)
             .FindBySubjectAsync(Subjects.New(), TestContext.Current.CancellationToken));
     }
 
@@ -90,7 +92,7 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
             SubjectKey key = await ReadAsync(erasing, subject);
             key.Erase();
 
-            await new SubjectKeyStore(erasing)
+            await Store(erasing)
                 .RecordWrappingAsync(key, TestContext.Current.CancellationToken);
             await erasing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
@@ -138,7 +140,7 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
                 CryptographicOperations.ZeroMemory(unwrapped);
             }
 
-            await new SubjectKeyStore(rotating)
+            await Store(rotating)
                 .RecordWrappingAsync(key, TestContext.Current.CancellationToken);
             await rotating.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
@@ -166,7 +168,7 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
             new byte[PersonalDataFormat.WrappedKeyLength]);
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await new SubjectKeyStore(context)
+            await Store(context)
                 .RecordWrappingAsync(key, TestContext.Current.CancellationToken));
     }
 
@@ -206,14 +208,14 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     private static async Task<SubjectKey> ReadAsync(JanusDbContext context, SubjectId subject) =>
-        Assert.IsType<SubjectKey>(await new SubjectKeyStore(context)
+        Assert.IsType<SubjectKey>(await Store(context)
             .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
 
     private async Task WriteAsync(SubjectId subject, byte[] dataKey, KeyEncryptionKeys keys)
     {
         await using JanusDbContext context = database.Context();
 
-        await new SubjectKeyStore(context).AddAsync(
+        await Store(context).AddAsync(
             SubjectKey.Wrapped(
                 subject,
                 keys.CurrentVersion,
@@ -222,4 +224,10 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
 
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
+
+    // The store draws and wraps a key of its own; the tests here write the wrapping
+    // they mean to test, so the versions and the randomness it would draw with are
+    // whatever a store needs to be constructed.
+    private static SubjectKeyStore Store(JanusDbContext context) =>
+        new(context, OneVersion(1), Randomness);
 }

@@ -28,6 +28,16 @@ internal interface ISubjectKeyStore
     ValueTask AddAsync(SubjectKey key, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Draws a subject their key and records it. What the key is made of and what it
+    /// is wrapped with is the implementation's business, so no caller above the port
+    /// holds key material.
+    /// </summary>
+    /// <param name="subject">Whose key to draw.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of drawing and recording it.</returns>
+    ValueTask CreateAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Carries the wrapping the key now holds onto the row. Re-wrapping under a newer
     /// key-encryption key version and erasure both reach the row this way; which of the
     /// two happened is the key's business, not the store's.
