@@ -90,4 +90,11 @@ public enum MessageKind
     /// </summary>
     [JsonStringEnumMemberName("credential-enrolled")]
     CredentialEnrolled = 12,
+
+    /// <summary>
+    /// The address being displaced by a change is asked to confirm it, which is asked
+    /// only where the account has no other channel at all.
+    /// </summary>
+    [JsonStringEnumMemberName("identifier-change-confirm")]
+    IdentifierChangeConfirm = 13,
 }

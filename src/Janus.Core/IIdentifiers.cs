@@ -46,12 +46,14 @@ public interface IIdentifiers
     /// <param name="context">Who is asking.</param>
     /// <param name="identifier">Which identifier.</param>
     /// <param name="code">The code typed in.</param>
+    /// <param name="source">The address the request came from.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Success, or the refusal and its code.</returns>
     ValueTask<Result> VerifyAsync(
         AccessContext context,
         IdentifierId identifier,
         string code,
+        string source,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -64,6 +66,7 @@ public interface IIdentifiers
     /// </param>
     /// <param name="linkToken">The token the message carried.</param>
     /// <param name="press">Whether the person pressed the control.</param>
+    /// <param name="source">The address the request came from.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Whether the press proved it, and where it did not, what the landing shows.
@@ -72,6 +75,7 @@ public interface IIdentifiers
         SessionId? session,
         string linkToken,
         bool press,
+        string source,
         CancellationToken cancellationToken);
 
     /// <summary>

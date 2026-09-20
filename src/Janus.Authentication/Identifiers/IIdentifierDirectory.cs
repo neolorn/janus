@@ -158,6 +158,24 @@ internal interface IIdentifierDirectory
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Takes an unverified identifier off the account, which leaves nothing behind:
+    /// a value nobody proved holds nothing out of reach and has no undo.
+    /// </summary>
+    /// <param name="subject">Whose it is.</param>
+    /// <param name="id">Which identifier.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of discarding it.</returns>
+    ValueTask DiscardAsync(SubjectId subject, IdentifierId id, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The language the account settled on, where it settled one.
+    /// </summary>
+    /// <param name="subject">Whose language.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The BCP 47 tag, or nothing where the account has none.</returns>
+    ValueTask<string?> LanguageAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Takes an identifier off the account and holds its value for as long as the undo
     /// is good for.
     /// </summary>
