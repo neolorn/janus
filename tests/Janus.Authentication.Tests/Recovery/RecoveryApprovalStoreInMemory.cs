@@ -16,6 +16,11 @@ internal sealed class RecoveryApprovalStoreInMemory : IRecoveryApprovalStore
 {
     private readonly List<RecoveryApproval> _given = [];
 
+    /// <summary>
+    /// Every approval given, in order.
+    /// </summary>
+    public IReadOnlyList<RecoveryApproval> All => _given;
+
     /// <inheritdoc/>
     public ValueTask AddAsync(RecoveryApproval approval, CancellationToken cancellationToken)
     {

@@ -145,6 +145,42 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-RECOV-005 AC3: the password recovery set is enough on its own to report the
+    /// passkey that was lost, which is the whole point of having set it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_005_AC3_TheRecoveredPasswordReportsTheLostPasskeyAsync()
+    {
+        SubjectId subject = await AccountAsync(password: false);
+        AuthenticatorId passkey = Enrolled(subject, Factor.Passkey);
+
+        _ = await Service.BeginAsync(Address, Language, Source, TestContext.Current.CancellationToken);
+
+        Assert.True(Succeeded(await Service.CompleteAsync(
+            Sent(),
+            Secret,
+            Source,
+            TestContext.Current.CancellationToken)));
+
+        IssuedSession recovered = Value(await Sessions.BeginAsync(
+            subject,
+            [Factor.Password],
+            Somewhere,
+            TestContext.Current.CancellationToken))!;
+
+        Assert.NotNull(recovered);
+        Assert.NotNull(Value(await Losses.ReportAsync(
+            AccessContext.Of(subject),
+            passkey,
+            Source,
+            TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            AuthenticatorState.Suspended,
+            (await _authenticators.FindAsync(passkey, TestContext.Current.CancellationToken))!.State);
+    }
+
+    /// <summary>
     /// AUTH-RECOV-005 AC1: what recovery sets is a password, so an account whose policy
     /// asks for two factors still has to present the second one to sign in.
     /// </summary>
@@ -470,6 +506,51 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
         Assert.NotNull(opened);
         Assert.True(opened.MailboxLost);
         Assert.Contains(_mail.Taken, sent => string.Equals(sent.Destination.Value, Address, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-002 AC6: the link goes to what the account records and never to what
+    /// the request carried, so a channel the account does not hold reaches nobody and
+    /// one it does is written to in the form the account holds it in.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_002_AC6_TheLinkGoesToWhatTheAccountRecordsAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        (SubjectId approver, SessionId session) = await ApproverAsync();
+
+        Assert.Equal(
+            ErrorCodes.RecoveryChannelNotOnAccount,
+            Refused(await Approving(approver, session, subject, Reason, Elsewhere)));
+        Assert.DoesNotContain(
+            _mail.Taken,
+            sent => string.Equals(sent.Destination.Value, Elsewhere, StringComparison.Ordinal));
+
+        _ = await Approving(approver, session, subject, Reason, "  PERSON@Example.TEST ");
+
+        Assert.Contains(
+            _mail.Taken,
+            sent => string.Equals(sent.Destination.Value, Address, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-002a AC2: an approval an interface could find nothing wrong with,
+    /// carrying a live session that passed the gate, a recorded channel and a written
+    /// reason, is still refused because the approver is the subject.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_002a_AC2_TheRefusalIsTheDomainsAndNotTheInterfacesAsync()
+    {
+        (SubjectId approver, SessionId session) = await ApproverAsync();
+
+        _ = _identifiers.Verified(approver, IdentifierKind.Email, Address);
+
+        Assert.Equal(
+            ErrorCodes.RecoverySelfApproval,
+            Refused(await Approving(approver, session, approver, Reason)));
+        Assert.Empty(_approvals.All);
     }
 
     /// <summary>

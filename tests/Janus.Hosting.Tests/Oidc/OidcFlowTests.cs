@@ -267,6 +267,53 @@ public sealed class OidcFlowTests
     }
 
     /// <summary>
+    /// AUTH-OIDC-001 AC3: the registry is managed by hand, so the document offers no
+    /// registration endpoint and the route a client would post one to is not there.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_001_AC3_NoDynamicRegistrationEndpointExistsAsync()
+    {
+        await using var deployment = new Deployment();
+
+        var machine = new Machine(deployment);
+        JsonElement document = (await machine
+                .GetAsync("/.well-known/openid-configuration", bearer: string.Empty))
+            .Json();
+
+        Assert.False(document.TryGetProperty("registration_endpoint", out _));
+
+        // A path the library maps for another method answers 405, so 404 is the route
+        // not being there at all rather than this request being the wrong shape.
+        Answer reached = await machine.GetAsync("/oidc/register", bearer: string.Empty);
+
+        Assert.Equal(StatusCodes.Status404NotFound, reached.Status);
+        Assert.Empty(await deployment.Clients.AllAsync(TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-001 AC4: the token a protocol client obtains is the signed-in person's
+    /// and nobody else's, which is what the mail server manages app passwords under;
+    /// the library holds none of those passwords.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_001_AC4_TheProtocolClientsTokenIsTheSignedInPersonsAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Browser browser = await PreparedAsync(deployment);
+        string code = await CodeAsync(browser, Protocol);
+        Answer exchanged = await new Machine(deployment).PostAsync("/oidc/token", Code(code, Protocol));
+
+        Session live = Single(deployment.Sessions.All);
+
+        Assert.Equal(StatusCodes.Status200OK, exchanged.Status);
+        Assert.Equal(live.Subject.Value.ToString(), Claim(exchanged.Text("id_token"), "sub"));
+        Assert.Equal(live.Id.Value.ToString(), Claim(exchanged.Text("id_token"), "sid"));
+    }
+
+    /// <summary>
     /// AUTH-OIDC-004 AC3: a party that validates the token against the published keys
     /// rather than the record refuses it at its expiry and no later, so the latency it
     /// accepts is the configured lifetime.

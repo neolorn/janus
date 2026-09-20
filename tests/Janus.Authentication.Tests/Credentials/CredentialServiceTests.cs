@@ -373,12 +373,12 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-RECOV-007 and D-092: removing the credential the account's assurance rests
-    /// on runs the notified window rather than taking it away at once.
+    /// AUTH-RECOV-007 AC5 and D-092: removing the credential the account's assurance
+    /// rests on runs the notified window rather than taking it away at once.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_RECOV_007_RemovingTheLastSecondStepRunsTheWindowAsync()
+    public async Task AUTH_RECOV_007_AC5_RemovingTheLastSecondStepRunsTheWindowAsync()
     {
         (SubjectId subject, SessionId session) = await SignedInAsync();
 
@@ -402,12 +402,54 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-RECOV-007 and D-092: removing one of several credentials leaves what the
-    /// account reaches where it was, so it goes at once.
+    /// AUTH-RECOV-007 AC7: an account whose one passkey is gone and whose password came
+    /// from recovery reports the passkey on that password alone, and once the window has
+    /// run it enrols another on the same password.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_RECOV_007_RemovingOneOfSeveralCredentialsCompletesAtOnceAsync()
+    public async Task AUTH_RECOV_007_AC7_ARecoveredPasswordReportsThePasskeyAndEnrolsAnotherAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync(password: false);
+
+        byte[] recovered = Encoding.UTF8.GetBytes(Another);
+
+        _ = await Passwords.SetAsync(
+            subject,
+            recovered,
+            [],
+            AssuranceLevel.Aal1,
+            TestContext.Current.CancellationToken);
+
+        AuthenticatorId lost = _authenticators.All.Single().Id;
+
+        Assert.NotNull(Value(await Losses.ReportAsync(
+            AccessContext.Of(subject),
+            lost,
+            Source,
+            TestContext.Current.CancellationToken)));
+        Assert.Equal(AuthenticatorState.Suspended, Held(lost).State);
+
+        _clock.Advance(TimeSpan.FromDays(8));
+
+        _ = await Losses.AdvanceAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(AuthenticatorState.Invalidated, Held(lost).State);
+
+        await PresentedAsync(subject, session);
+
+        EnrolledCredential enrolled = await KeyAsync(subject, session, synced: true);
+
+        Assert.Equal(AuthenticatorState.Active, Held(enrolled.Credential).State);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007 AC5 and D-092: removing one of several credentials leaves what
+    /// the account reaches where it was, so it goes at once after the gate.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_007_AC5_RemovingOneOfSeveralCredentialsCompletesAtOnceAsync()
     {
         (SubjectId subject, SessionId session) = await SignedInAsync();
 

@@ -45,6 +45,23 @@ public sealed class FactorCatalogueTests
             BranchingOnAFactor());
 
     /// <summary>
+    /// AUTH-FACT-003 AC1: an entry whose contribution is to a sign-in and to nothing
+    /// afterwards is never offered as a second step, whatever the policy enables; the
+    /// three the chapter names are those entries.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_003_AC1_NoSignInOnlyEntryIsOfferedAsASecondStep()
+    {
+        Factor[] named = [Factor.EmailCode, Factor.EmailLink, Factor.PhoneLink];
+
+        Assert.All(named, factor => Assert.True(FactorCatalogue.Of(factor).SignInOnly));
+
+        Assert.DoesNotContain(
+            SecondStep.Offerable(password: true, Enum.GetValues<Factor>().ToHashSet()),
+            factor => FactorCatalogue.Of(factor).SignInOnly);
+    }
+
+    /// <summary>
     /// AUTH-FACT-002b AC5: the entries the standard treats as restricted are the two
     /// a text message carries and no others, which is the fact every list naming one
     /// of them is flagged from (`18` FE-SEC-001).
