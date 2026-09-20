@@ -91,8 +91,8 @@ public static class JanusRegistration
         services.AddScoped<OriginValidation>();
         services.AddScoped<SynchronizerToken>();
 
-        // LIB-HOST-001: what the host declares about its own messaging is the host's;
-        // a deployment that declares none of it starts, and the checks that would have
+        // LIB-HOST-001: what the host declares about its own messaging is the host's.
+        // A deployment that declares none of it starts, and the checks that would have
         // read a declaration find nothing to read.
         services.TryAddSingleton(RestrictionKeySuppliers.None);
         services.TryAddSingleton(IntegrationEndpoints.None);
