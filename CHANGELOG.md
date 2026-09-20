@@ -564,6 +564,12 @@ against the public contract of LIB-API-001.
   and the token the loss notices carry are each held under the account's own key, where
   an erasure leaves them unreadable.
 
+- The recovery endpoints answer: asking for a link, completing one, reporting a
+  credential lost and cancelling that report, approving a re-enrolment, and opening
+  the enrolment session an approved link stands for. That session is bound to the
+  browser that opened the link exactly as a registration is, so nothing else reaches
+  what it may do.
+
 ### Changed
 
 - The case-insensitive collation is created in the default schema, because a column

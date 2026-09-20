@@ -703,7 +703,7 @@ Janus.Core.IRecovery
 Janus.Core.IRecovery.ApproveAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, string! reason, string! channelUsed, string! language, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.ApprovedRecovery!>>
 Janus.Core.IRecovery.BeginAsync(string! identifier, string! language, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IRecovery.BeginEnrolmentAsync(string! token, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.EnrolmentSession!>>
-Janus.Core.IRecovery.CancelLossAsync(Janus.Core.AccessContext! context, Janus.Core.AuthenticatorId credential, string? cancelToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IRecovery.CancelLossAsync(Janus.Core.AccessContext? context, Janus.Core.AuthenticatorId credential, string? cancelToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IRecovery.CompleteAsync(string! token, string! password, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IRecovery.ReportLossAsync(Janus.Core.AccessContext! context, Janus.Core.AuthenticatorId credential, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.LossReported!>>
 Janus.Core.IRegistration

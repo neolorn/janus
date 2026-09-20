@@ -22,6 +22,7 @@ using Janus.Hosting.Alerting;
 using Janus.Hosting.Authentication;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Passwords;
+using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
 using Janus.Storage;
 using Microsoft.Extensions.DependencyInjection;
@@ -186,6 +187,7 @@ public static class JanusRegistration
             options.SerializerOptions.TypeInfoResolverChain.Add(RegistrationJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(AuthenticationJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(AccountJson.Default);
+            options.SerializerOptions.TypeInfoResolverChain.Add(RecoveryJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(WellKnownJson.Default);
         });
         services.AddScoped<RegistrationService>();

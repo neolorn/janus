@@ -9,6 +9,7 @@ using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Recovery;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
@@ -19,6 +20,7 @@ using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Identifiers;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
+using Janus.Authentication.Tests.Recovery;
 using Janus.Authentication.Tests.Registration;
 using Janus.Authentication.Tests.Sending;
 using Janus.Authentication.Tests.Sessions;
@@ -28,6 +30,7 @@ using Janus.Core.Configuration;
 using Janus.Hosting.Accounts;
 using Janus.Hosting.Authentication;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -166,6 +169,11 @@ internal sealed class Deployment : IAsyncDisposable
     public PasswordStoreInMemory Passwords { get; } = new();
 
     /// <summary>
+    /// The recovery links that have gone out.
+    /// </summary>
+    public RecoveryLinkStoreInMemory Links { get; } = new();
+
+    /// <summary>
     /// Every endpoint the library mounted.
     /// </summary>
     public IReadOnlyList<Endpoint> Endpoints =>
@@ -240,6 +248,10 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IPendingSignInStore, PendingSignInStoreInMemory>();
         _ = services.AddSingleton<IAccessGate, AccessGateInMemory>();
         _ = services.AddSingleton<IAccountAudit, AccountAuditInMemory>();
+        _ = services.AddSingleton<IRecoveryLinkStore>(Links);
+        _ = services.AddSingleton<IRecoveryApprovalStore, RecoveryApprovalStoreInMemory>();
+        _ = services.AddSingleton<ILossReportStore, LossReportStoreInMemory>();
+        _ = services.AddSingleton<IRecoveryAudit, RecoveryAuditInMemory>();
 
         _ = services.AddSingleton(RestrictionKeySuppliers.None);
         _ = services.AddSingleton(Declared);
@@ -276,6 +288,9 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<AuthenticationService>();
         _ = services.AddScoped<IAuthentication>(provider =>
             provider.GetRequiredService<AuthenticationService>());
+        _ = services.AddScoped<LossReports>();
+        _ = services.AddScoped<RecoveryService>();
+        _ = services.AddScoped<IRecovery>(provider => provider.GetRequiredService<RecoveryService>());
 
         _ = services.AddSingleton(new BrowserSessionCookies(application));
         _ = services.AddScoped<SynchronizerTokens>();
@@ -297,6 +312,7 @@ internal sealed class Deployment : IAsyncDisposable
             options.SerializerOptions.TypeInfoResolverChain.Add(RegistrationJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(AuthenticationJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(AccountJson.Default);
+            options.SerializerOptions.TypeInfoResolverChain.Add(RecoveryJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(WellKnownJson.Default);
         });
     }

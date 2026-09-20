@@ -328,7 +328,7 @@ internal sealed class RecoveryService(
 
     /// <inheritdoc/>
     public ValueTask<Result> CancelLossAsync(
-        AccessContext context,
+        AccessContext? context,
         AuthenticatorId credential,
         string? cancelToken,
         CancellationToken cancellationToken) =>

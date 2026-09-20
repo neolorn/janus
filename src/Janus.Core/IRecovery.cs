@@ -122,7 +122,7 @@ public interface IRecovery
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Success, or <c>auth.credential.notfound</c> where no report answers.</returns>
     ValueTask<Result> CancelLossAsync(
-        AccessContext context,
+        AccessContext? context,
         AuthenticatorId credential,
         string? cancelToken,
         CancellationToken cancellationToken);

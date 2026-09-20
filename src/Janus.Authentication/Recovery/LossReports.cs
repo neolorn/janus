@@ -191,20 +191,18 @@ internal sealed class LossReports(
     /// <returns>Success, or the refusal that tells an outsider nothing.</returns>
     /// <exception cref="ArgumentNullException">The context is absent.</exception>
     public async ValueTask<Result> CancelAsync(
-        AccessContext context,
+        AccessContext? context,
         AuthenticatorId credential,
         string? cancelToken,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(context);
-
         LossReport? report = await reports.FindAsync(credential, cancellationToken)
             .ConfigureAwait(false);
 
         // One refusal answers an unknown credential, a report that is not running and
         // a token that is not the one: none of them tells the caller which it was.
         if (report is null
-            || !(context.Effective == report.Subject || report.Matches(cancelToken)))
+            || !(context?.Effective == report.Subject || report.Matches(cancelToken)))
         {
             return Result.Failure(Error.From(ErrorCodes.CredentialNotFound));
         }
