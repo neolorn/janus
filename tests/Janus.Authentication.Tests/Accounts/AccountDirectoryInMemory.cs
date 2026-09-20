@@ -19,6 +19,7 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
     private readonly Dictionary<SubjectId, HeldProfile> _profiles = [];
     private readonly Dictionary<SubjectId, HeldPreferences> _preferences = [];
     private readonly Dictionary<SubjectId, DateTimeOffset> _created = [];
+    private readonly Dictionary<SubjectId, SuspensionOrigin> _suspensions = [];
 
     /// <summary>
     /// Puts an account in a state, which is what makes it exist here at all.
@@ -26,6 +27,18 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
     /// <param name="subject">Whose account.</param>
     /// <param name="state">Where it stands.</param>
     public void Stands(SubjectId subject, AccountState state) => _states[subject] = state;
+
+    /// <summary>
+    /// Suspends an account, recording who did it, which is what decides how it is
+    /// reversed (IDN-LIFE-013).
+    /// </summary>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="origin">Who suspended it.</param>
+    public void Suspended(SubjectId subject, SuspensionOrigin origin)
+    {
+        _states[subject] = AccountState.Suspended;
+        _suspensions[subject] = origin;
+    }
 
     /// <summary>
     /// Says when an account came into being.
@@ -46,6 +59,23 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
         ValueTask.FromResult(_states.TryGetValue(subject, out AccountState state)
             ? state
             : (AccountState?)null);
+
+    /// <inheritdoc/>
+    public ValueTask<SuspensionOrigin?> SuspendedByAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_suspensions.TryGetValue(subject, out SuspensionOrigin origin)
+            ? origin
+            : (SuspensionOrigin?)null);
+
+    /// <inheritdoc/>
+    public ValueTask ReinstateAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        _states[subject] = AccountState.Active;
+        _ = _suspensions.Remove(subject);
+
+        return ValueTask.CompletedTask;
+    }
 
     /// <inheritdoc/>
     public ValueTask<DateTimeOffset?> CreatedAtAsync(

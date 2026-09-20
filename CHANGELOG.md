@@ -535,6 +535,28 @@ against the public contract of LIB-API-001.
   it was issued: each is kept as its fingerprint, and the code beside it is held under
   the account's own key, where an erasure leaves it unreadable.
 
+- An account whose policy allows it can recover a forgotten password from a link sent
+  to the address or number it holds, and an address no account holds is answered the
+  same way as one that does. Completing the recovery sets the password, stands a
+  self-suspended account back up and ends every session the account held, and it
+  clears no second step: the account still passes one at the next sign-in.
+
+- An account that can no longer be recovered by itself is re-enrolled by approvers,
+  who must each write a reason, pass step-up, and confirm the person on a channel the
+  account already holds; the number required is configurable, nobody can approve their
+  own recovery, and an approver recovering many accounts, or many approvals of one
+  account, is surfaced to the operator. The link the last approval sends is the only
+  one that opens an enrolment session, and where the mailbox is the thing that was
+  lost, that session may replace the address it is held on.
+
+- The holder of a lost credential can report it, which refuses it from that instant
+  without ending anything else the account can do, and invalidates it only after a
+  window in which every notice sent carries a link that cancels the report. A window
+  whose notices reached nobody holds the invalidation rather than completing it, an
+  invalidation that leaves the account on a password alone requires that password to
+  be changed at the next sign-in where it does not meet the single-factor floor, and
+  one that takes the last second step takes the recovery codes with it.
+
 ### Changed
 
 - The case-insensitive collation is created in the default schema, because a column

@@ -97,4 +97,11 @@ public enum MessageKind
     /// </summary>
     [JsonStringEnumMemberName("identifier-change-confirm")]
     IdentifierChangeConfirm = 13,
+
+    /// <summary>
+    /// The link a person asked for to set a new password, which restores nothing else
+    /// and removes no factor.
+    /// </summary>
+    [JsonStringEnumMemberName("recovery-link")]
+    RecoveryLink = 14,
 }

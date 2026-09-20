@@ -37,6 +37,8 @@ internal static class MessageChannels
         MessageKind.IdentifierDetached,
         MessageKind.IdentifierSettingsChanged,
         MessageKind.CredentialEnrolled,
+        MessageKind.IdentifierChangeConfirm,
+        MessageKind.RecoveryLink,
     ];
 
     /// <summary>

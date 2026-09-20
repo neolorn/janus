@@ -247,6 +247,19 @@ internal sealed class Authenticator
     }
 
     /// <summary>
+    /// The report against it was cancelled, so it is usable again from this instant
+    /// (AUTH-RECOV-007).
+    /// </summary>
+    public void Restore()
+    {
+        if (State is AuthenticatorState.Suspended)
+        {
+            State = AuthenticatorState.Active;
+            InvalidatesAt = null;
+        }
+    }
+
+    /// <summary>
     /// The window ended, or the account was recovered.
     /// </summary>
     public void Invalidate()

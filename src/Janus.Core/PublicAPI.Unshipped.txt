@@ -125,6 +125,13 @@ Janus.Core.AncestryEntry.ResourceId.get -> string!
 Janus.Core.AncestryEntry.ResourceId.init -> void
 Janus.Core.AncestryEntry.ResourceType.get -> string!
 Janus.Core.AncestryEntry.ResourceType.init -> void
+Janus.Core.ApprovedRecovery
+Janus.Core.ApprovedRecovery.<Clone>$() -> Janus.Core.ApprovedRecovery!
+Janus.Core.ApprovedRecovery.ApprovedRecovery(System.DateTimeOffset? EnrolmentLinkExpiresAt) -> void
+Janus.Core.ApprovedRecovery.Deconstruct(out System.DateTimeOffset? EnrolmentLinkExpiresAt) -> void
+Janus.Core.ApprovedRecovery.EnrolmentLinkExpiresAt.get -> System.DateTimeOffset?
+Janus.Core.ApprovedRecovery.EnrolmentLinkExpiresAt.init -> void
+Janus.Core.ApprovedRecovery.Equals(Janus.Core.ApprovedRecovery? other) -> bool
 Janus.Core.AssuranceLevel
 Janus.Core.AssuranceLevel.Aal1 = 1 -> Janus.Core.AssuranceLevel
 Janus.Core.AssuranceLevel.Aal2 = 2 -> Janus.Core.AssuranceLevel
@@ -500,6 +507,26 @@ Janus.Core.EncryptedFieldDeclaration.Field.get -> string!
 Janus.Core.EncryptedFieldDeclaration.Field.init -> void
 Janus.Core.EncryptedFieldDeclaration.SubjectColumn.get -> string!
 Janus.Core.EncryptedFieldDeclaration.SubjectColumn.init -> void
+Janus.Core.EnrolmentSession
+Janus.Core.EnrolmentSession.<Clone>$() -> Janus.Core.EnrolmentSession!
+Janus.Core.EnrolmentSession.Deconstruct(out Janus.Core.EnrolmentSessionId Id, out Janus.Core.SubjectId Subject, out System.DateTimeOffset ExpiresAt, out bool MailboxLost) -> void
+Janus.Core.EnrolmentSession.EnrolmentSession(Janus.Core.EnrolmentSessionId Id, Janus.Core.SubjectId Subject, System.DateTimeOffset ExpiresAt, bool MailboxLost) -> void
+Janus.Core.EnrolmentSession.Equals(Janus.Core.EnrolmentSession? other) -> bool
+Janus.Core.EnrolmentSession.ExpiresAt.get -> System.DateTimeOffset
+Janus.Core.EnrolmentSession.ExpiresAt.init -> void
+Janus.Core.EnrolmentSession.Id.get -> Janus.Core.EnrolmentSessionId
+Janus.Core.EnrolmentSession.Id.init -> void
+Janus.Core.EnrolmentSession.MailboxLost.get -> bool
+Janus.Core.EnrolmentSession.MailboxLost.init -> void
+Janus.Core.EnrolmentSession.Subject.get -> Janus.Core.SubjectId
+Janus.Core.EnrolmentSession.Subject.init -> void
+Janus.Core.EnrolmentSessionId
+Janus.Core.EnrolmentSessionId.Deconstruct(out System.Guid Value) -> void
+Janus.Core.EnrolmentSessionId.EnrolmentSessionId() -> void
+Janus.Core.EnrolmentSessionId.EnrolmentSessionId(System.Guid Value) -> void
+Janus.Core.EnrolmentSessionId.Equals(Janus.Core.EnrolmentSessionId other) -> bool
+Janus.Core.EnrolmentSessionId.Value.get -> System.Guid
+Janus.Core.EnrolmentSessionId.Value.init -> void
 Janus.Core.ErasureReason
 Janus.Core.ErasureReason.ErasureRequest = 0 -> Janus.Core.ErasureReason
 Janus.Core.ErasureReason.MinorTakedown = 1 -> Janus.Core.ErasureReason
@@ -672,6 +699,13 @@ Janus.Core.IMailTransport
 Janus.Core.IMailTransport.SendAsync(Janus.Core.MailMessage! mail, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IMessageTemplates
 Janus.Core.IMessageTemplates.Find(Janus.Core.MessageKind message, Janus.Core.SendKind kind, string! language) -> Janus.Core.Result<Janus.Core.MessageTemplate!>
+Janus.Core.IRecovery
+Janus.Core.IRecovery.ApproveAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, string! reason, string! channelUsed, string! language, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.ApprovedRecovery!>>
+Janus.Core.IRecovery.BeginAsync(string! identifier, string! language, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IRecovery.BeginEnrolmentAsync(string! token, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.EnrolmentSession!>>
+Janus.Core.IRecovery.CancelLossAsync(Janus.Core.AccessContext! context, Janus.Core.AuthenticatorId credential, string? cancelToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IRecovery.CompleteAsync(string! token, string! password, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IRecovery.ReportLossAsync(Janus.Core.AccessContext! context, Janus.Core.AuthenticatorId credential, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.LossReported!>>
 Janus.Core.IRegistration
 Janus.Core.IRegistration.AbandonAsync(Janus.Core.RegistrationSessionId? session, string? linkToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IRegistration.AcceptTermsAsync(Janus.Core.RegistrationSessionId session, string! termsVersion, string! noticeVersion, System.Collections.Generic.IReadOnlyDictionary<string!, bool>! consents, Janus.Core.DeviceDescription! device, Janus.Core.SessionLocation? location, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationCompleted!>>
@@ -823,6 +857,15 @@ Janus.Core.LinkLanding.SameBrowser.get -> bool
 Janus.Core.LinkLanding.SameBrowser.init -> void
 Janus.Core.LinkLanding.Verified.get -> bool
 Janus.Core.LinkLanding.Verified.init -> void
+Janus.Core.LossReported
+Janus.Core.LossReported.<Clone>$() -> Janus.Core.LossReported!
+Janus.Core.LossReported.Credential.get -> Janus.Core.AuthenticatorId
+Janus.Core.LossReported.Credential.init -> void
+Janus.Core.LossReported.Deconstruct(out Janus.Core.AuthenticatorId Credential, out System.DateTimeOffset InvalidatesAt) -> void
+Janus.Core.LossReported.Equals(Janus.Core.LossReported? other) -> bool
+Janus.Core.LossReported.InvalidatesAt.get -> System.DateTimeOffset
+Janus.Core.LossReported.InvalidatesAt.init -> void
+Janus.Core.LossReported.LossReported(Janus.Core.AuthenticatorId Credential, System.DateTimeOffset InvalidatesAt) -> void
 Janus.Core.MailMessage
 Janus.Core.MailMessage.<Clone>$() -> Janus.Core.MailMessage!
 Janus.Core.MailMessage.Body.get -> string!
@@ -854,6 +897,7 @@ Janus.Core.MessageKind.IdentifierDetached = 10 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.IdentifierRemoved = 9 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.IdentifierSettingsChanged = 11 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.NoAccount = 6 -> Janus.Core.MessageKind
+Janus.Core.MessageKind.RecoveryLink = 14 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.SecondStepCode = 2 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.SecurityNotice = 3 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.SignInLink = 1 -> Janus.Core.MessageKind
@@ -1527,6 +1571,9 @@ override Janus.Core.AlertRaised.ToString() -> string!
 override Janus.Core.AncestryEntry.Equals(object? obj) -> bool
 override Janus.Core.AncestryEntry.GetHashCode() -> int
 override Janus.Core.AncestryEntry.ToString() -> string!
+override Janus.Core.ApprovedRecovery.Equals(object? obj) -> bool
+override Janus.Core.ApprovedRecovery.GetHashCode() -> int
+override Janus.Core.ApprovedRecovery.ToString() -> string!
 override Janus.Core.AuditAction.GetHashCode() -> int
 override Janus.Core.AuditAction.ToString() -> string!
 override Janus.Core.AuditRecordId.GetHashCode() -> int
@@ -1603,6 +1650,11 @@ override Janus.Core.EmailAddress.ToString() -> string!
 override Janus.Core.EncryptedFieldDeclaration.Equals(object? obj) -> bool
 override Janus.Core.EncryptedFieldDeclaration.GetHashCode() -> int
 override Janus.Core.EncryptedFieldDeclaration.ToString() -> string!
+override Janus.Core.EnrolmentSession.Equals(object? obj) -> bool
+override Janus.Core.EnrolmentSession.GetHashCode() -> int
+override Janus.Core.EnrolmentSession.ToString() -> string!
+override Janus.Core.EnrolmentSessionId.GetHashCode() -> int
+override Janus.Core.EnrolmentSessionId.ToString() -> string!
 override Janus.Core.Error.Equals(object? obj) -> bool
 override Janus.Core.Error.GetHashCode() -> int
 override Janus.Core.Error.ToString() -> string!
@@ -1658,6 +1710,9 @@ override Janus.Core.LegalName.ToString() -> string!
 override Janus.Core.LinkLanding.Equals(object? obj) -> bool
 override Janus.Core.LinkLanding.GetHashCode() -> int
 override Janus.Core.LinkLanding.ToString() -> string!
+override Janus.Core.LossReported.Equals(object? obj) -> bool
+override Janus.Core.LossReported.GetHashCode() -> int
+override Janus.Core.LossReported.ToString() -> string!
 override Janus.Core.MailMessage.Equals(object? obj) -> bool
 override Janus.Core.MailMessage.GetHashCode() -> int
 override Janus.Core.MailMessage.ToString() -> string!
@@ -1812,6 +1867,8 @@ static Janus.Core.AlertRaised.operator !=(Janus.Core.AlertRaised? left, Janus.Co
 static Janus.Core.AlertRaised.operator ==(Janus.Core.AlertRaised? left, Janus.Core.AlertRaised? right) -> bool
 static Janus.Core.AncestryEntry.operator !=(Janus.Core.AncestryEntry? left, Janus.Core.AncestryEntry? right) -> bool
 static Janus.Core.AncestryEntry.operator ==(Janus.Core.AncestryEntry? left, Janus.Core.AncestryEntry? right) -> bool
+static Janus.Core.ApprovedRecovery.operator !=(Janus.Core.ApprovedRecovery? left, Janus.Core.ApprovedRecovery? right) -> bool
+static Janus.Core.ApprovedRecovery.operator ==(Janus.Core.ApprovedRecovery? left, Janus.Core.ApprovedRecovery? right) -> bool
 static Janus.Core.AuditAction.Parse(string! value) -> Janus.Core.AuditAction
 static Janus.Core.AuditAction.operator !=(Janus.Core.AuditAction left, Janus.Core.AuditAction right) -> bool
 static Janus.Core.AuditAction.operator ==(Janus.Core.AuditAction left, Janus.Core.AuditAction right) -> bool
@@ -2013,6 +2070,11 @@ static Janus.Core.EmailAddress.operator !=(Janus.Core.EmailAddress left, Janus.C
 static Janus.Core.EmailAddress.operator ==(Janus.Core.EmailAddress left, Janus.Core.EmailAddress right) -> bool
 static Janus.Core.EncryptedFieldDeclaration.operator !=(Janus.Core.EncryptedFieldDeclaration? left, Janus.Core.EncryptedFieldDeclaration? right) -> bool
 static Janus.Core.EncryptedFieldDeclaration.operator ==(Janus.Core.EncryptedFieldDeclaration? left, Janus.Core.EncryptedFieldDeclaration? right) -> bool
+static Janus.Core.EnrolmentSession.operator !=(Janus.Core.EnrolmentSession? left, Janus.Core.EnrolmentSession? right) -> bool
+static Janus.Core.EnrolmentSession.operator ==(Janus.Core.EnrolmentSession? left, Janus.Core.EnrolmentSession? right) -> bool
+static Janus.Core.EnrolmentSessionId.New(System.TimeProvider! time) -> Janus.Core.EnrolmentSessionId
+static Janus.Core.EnrolmentSessionId.operator !=(Janus.Core.EnrolmentSessionId left, Janus.Core.EnrolmentSessionId right) -> bool
+static Janus.Core.EnrolmentSessionId.operator ==(Janus.Core.EnrolmentSessionId left, Janus.Core.EnrolmentSessionId right) -> bool
 static Janus.Core.Error.From(Janus.Core.ErrorCode code) -> Janus.Core.Error!
 static Janus.Core.Error.From(Janus.Core.ErrorCode code, string! name, System.Text.Json.JsonElement value) -> Janus.Core.Error!
 static Janus.Core.Error.operator !=(Janus.Core.Error? left, Janus.Core.Error? right) -> bool
@@ -2154,6 +2216,8 @@ static Janus.Core.LegalName.operator !=(Janus.Core.LegalName left, Janus.Core.Le
 static Janus.Core.LegalName.operator ==(Janus.Core.LegalName left, Janus.Core.LegalName right) -> bool
 static Janus.Core.LinkLanding.operator !=(Janus.Core.LinkLanding? left, Janus.Core.LinkLanding? right) -> bool
 static Janus.Core.LinkLanding.operator ==(Janus.Core.LinkLanding? left, Janus.Core.LinkLanding? right) -> bool
+static Janus.Core.LossReported.operator !=(Janus.Core.LossReported? left, Janus.Core.LossReported? right) -> bool
+static Janus.Core.LossReported.operator ==(Janus.Core.LossReported? left, Janus.Core.LossReported? right) -> bool
 static Janus.Core.MailMessage.operator !=(Janus.Core.MailMessage? left, Janus.Core.MailMessage? right) -> bool
 static Janus.Core.MailMessage.operator ==(Janus.Core.MailMessage? left, Janus.Core.MailMessage? right) -> bool
 static Janus.Core.MembershipId.New(System.TimeProvider! time) -> Janus.Core.MembershipId
@@ -2319,6 +2383,7 @@ virtual Janus.Core.JanusEvent.PrintMembers(System.Text.StringBuilder! builder) -
 ~override Janus.Core.DeviceId.Equals(object obj) -> bool
 ~override Janus.Core.DisplayName.Equals(object obj) -> bool
 ~override Janus.Core.EmailAddress.Equals(object obj) -> bool
+~override Janus.Core.EnrolmentSessionId.Equals(object obj) -> bool
 ~override Janus.Core.ErrorCode.Equals(object obj) -> bool
 ~override Janus.Core.ExplainedPrincipal.Equals(object obj) -> bool
 ~override Janus.Core.ExplainedPrincipal.ToString() -> string
