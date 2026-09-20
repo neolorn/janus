@@ -958,6 +958,80 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
         Assert.Equal(AgeGroup.Adult, created.Group);
     }
 
+
+    /// <summary>
+    /// REG-IDENT-009 AC1: the username is chosen later, so a registration that never
+    /// names one completes and the account holds none.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_009_AC1_RegistrationCompletesWithNoUsernameAsync()
+    {
+        _configuration.Set(Settings.IdentifiersUsernameEnabled, value: true);
+
+        RegistrationSessionId session = await SecuredAsync();
+
+        _ = Ok(await AcceptedAsync(session));
+
+        Assert.DoesNotContain(
+            Assert.Single(_directory.Created).Identifiers,
+            identifier => identifier.Kind is IdentifierKind.Username);
+    }
+
+    /// <summary>
+    /// REG-IDENT-010 AC1: a locked identifier is marked as such on the confirm step
+    /// and refuses the change the screen therefore does not offer.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_010_AC1_TheConfirmStepOffersNoChangeOnALockedIdentifierAsync()
+    {
+        RegistrationSessionId session = await AgedAsync();
+
+        Locked(session, Address);
+
+        StagedIdentity staged = Identity(session, IdentifierKind.Email);
+
+        RegistrationState state = Ok(await Service.StateAsync(
+            session,
+            TestContext.Current.CancellationToken));
+
+        Assert.True(Assert.Single(state.Identifiers).Locked);
+
+        Assert.Equal(
+            ErrorCodes.IdentifierLocked,
+            Refused(await Service.ChangeAsync(
+                session,
+                staged.Id,
+                "other@example.test",
+                TestContext.Current.CancellationToken)));
+
+        Assert.Equal(Address, Identity(session, IdentifierKind.Email).Canonical);
+    }
+
+    /// <summary>
+    /// REG-IDENT-010 AC2: an unlocked identifier changes, and what the old value
+    /// proved does not carry over to the new one.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_010_AC2_ChangingAnIdentifierResetsItsVerificationAsync()
+    {
+        RegistrationSessionId session = await StagedAsync(phone: false);
+
+        StagedIdentity staged = Identity(session, IdentifierKind.Email);
+
+        Assert.True(staged.IsVerified);
+
+        _ = Ok(await Service.ChangeAsync(
+            session,
+            staged.Id,
+            "other@example.test",
+            TestContext.Current.CancellationToken));
+
+        StagedIdentity changed = Identity(session, IdentifierKind.Email);
+
+        Assert.Equal("other@example.test", changed.Canonical);
+        Assert.False(changed.IsVerified);
+    }
+
     // The steps a test is not about, run the way a browser runs them, so that each
     // test says only what it is checking.
     private async Task<RegistrationSessionId> StartedAsync()
@@ -1053,6 +1127,18 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
             Browser,
             location: null,
             TestContext.Current.CancellationToken);
+
+    // What a bound invitation leaves on the session: an address the person did not
+    // type and therefore does not change (REG-IDENT-010).
+    private void Locked(RegistrationSessionId session, string address)
+    {
+        Live(session).Stage(StagedIdentity.Of(
+            IdentifierId.New(_clock),
+            IdentifierKind.Email,
+            address,
+            address,
+            isLocked: true));
+    }
 
     private RegistrationSession Live(RegistrationSessionId session) =>
         _sessions.All.Single(held => held.Id == session);
