@@ -1,6 +1,6 @@
 # Phase 4: Sending and restrictions
 
-Status: complete, no open question, full gate pending the pipeline run. One path for every message the
+Status: complete, full gate green, no open question. One path for every message the
 library sends, the catalogue and the transports behind ports a host registers, the
 named restrictions with their keys, purposes, buckets, grants and runtime edits, the
 progressive delay, the non-existence notice, the bot defence, the prepaid balance and
@@ -115,9 +115,14 @@ runs `dotnet test` unchanged. The local counts at the end of the phase:
 96, `Janus.Core.Tests` 413, `Janus.Hosting.Tests` 147, `Janus.Identity.Tests` 62,
 `Janus.Privacy.Tests` 13 and `Janus.Storage.Tests` 198, none failing.
 
-Full gate: the branch `phase-04-sending-2` is not yet pushed, so the pipeline has not
-run. The jobs of CONV-GATE-001 that run without a database were run locally and are
-green: commit message format, changelog line present, forbidden markers and
-commented-out code, acceptance-criterion test names, the destructive-operation report,
-and format. This section is completed with the run identifiers once the branch is
-pushed.
+Full gate: GitHub Actions runs `35480429222` (push) and `35480435205` (pull request)
+on branch `phase-04-sending-2`, pull request #12, green on every job. `Integration
+tests`, `Double migration run`, `Destructive-operation detection report`, `Truth-table
+suite` and `Dependency vulnerability alerting` run on the pull-request event and
+`Secret scanning` on the push event, as CONV-GATE-002 states, so the two runs together
+are one pass of the table of CONV-GATE-001.
+
+Branch `phase-04-sending` carried the same work with three commit bodies over the
+72-character bound of CONV-VCS-003. It was never pushed; the branch above is the same
+work replayed onto `main` with those bodies corrected. The commit after the two runs
+above changes this section alone.
