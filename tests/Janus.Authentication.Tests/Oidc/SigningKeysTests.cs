@@ -103,12 +103,12 @@ public sealed class SigningKeysTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-KEY-002 AC1: what the store is handed is the private material, and what the
+    /// AUTH-KEY-001 AC4: what the store is handed is the private material, and what the
     /// set publishes is the public half alone.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_KEY_002_AC1_ThePublishedSetCarriesNoPrivateMaterialAsync()
+    public async Task AUTH_KEY_001_AC4_ThePublishedSetCarriesNoPrivateMaterialAsync()
     {
         string keyId = await SigningAsync();
 

@@ -123,6 +123,14 @@ public static class ErrorCodes
     public static ErrorCode StartupUndeclaredDerivationReference { get; } = ErrorCode.Parse("model.derivation.undeclaredreference");
 
     /// <summary>
+    /// Startup: the key-encryption key or the fingerprint key could not be obtained
+    /// from the secrets manager. Make the secrets manager reachable and the values
+    /// readable; the library holds no fallback and starts without neither.
+    /// </summary>
+    /// <remarks>Implements AUTH-KEY-002, OPS-SEC-001, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupKeyUnavailable { get; } = ErrorCode.Parse("model.startup.kekunavailable");
+
+    /// <summary>
     /// Startup: the relying party identifier is not a registrable suffix of a
     /// configured origin. Name an identifier every origin sits under, or leave it
     /// unset and let the common parent domain stand.

@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A deployment that cannot reach its secrets manager now stops as it starts, with the
+  code that says which of the two values was not there, rather than failing at the
+  first request that would have read a person's field. A fingerprint key shorter than
+  the hash it computes is refused as an absent one is.
+- What has expired is now removable without anyone's attention: a session past its
+  absolute expiry, an authorization code past its lifetime, a refresh token past the
+  expiry its session gave it and a signing key past its overlap each go in one call.
 - The deployment is now an OpenID Connect provider for the clients it registers
   itself: it advertises what it answers, publishes the keys a relying party validates
   against, hands a browser that already holds a session a code without asking anyone

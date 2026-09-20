@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Net.Http;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
@@ -69,7 +70,10 @@ public static class JanusRegistration
     /// </param>
     /// <returns>The collection, for chaining.</returns>
     /// <exception cref="ArgumentNullException">The collection is absent.</exception>
-    /// <exception cref="StartupException">The declaration does not hold together.</exception>
+    /// <exception cref="StartupException">
+    /// The key material is not there to be had, or the declaration does not hold
+    /// together.
+    /// </exception>
     public static IServiceCollection AddJanus(
         this IServiceCollection services,
         string connectionString,
@@ -79,6 +83,12 @@ public static class JanusRegistration
         JanusApplication application)
     {
         ArgumentNullException.ThrowIfNull(services);
+
+        // AUTH-KEY-002 and OPS-SEC-001: both values come from the secrets manager and
+        // the library holds no fallback for either, so a deployment that reached
+        // neither stops here with the code that names why, not at the first request
+        // that would have read a person's field.
+        Present(keyEncryptionKeys, fingerprintKey);
 
         // CONV-DESIGN-007: time is injected, and a host that has its own clock keeps it.
         services.TryAddSingleton(TimeProvider.System);
@@ -234,4 +244,24 @@ public static class JanusRegistration
     // application (AUTH-PASS-004, INT-PWD-003).
     private static string Corpus =>
         Path.Combine(AppContext.BaseDirectory, LeakedPasswordCorpus.Directory);
+
+    // The fingerprint key computes an HMAC-SHA256, so anything shorter than that hash
+    // is a key that weakens the code it is used by and is not a key the library runs on.
+    private static void Present(KeyEncryptionKeys keyEncryptionKeys, ReadOnlyMemory<byte> fingerprintKey)
+    {
+        if (keyEncryptionKeys is null)
+        {
+            throw new StartupException(
+                "The key-encryption key was not supplied; the library reads it from the secrets manager and holds no fallback.",
+                Error.From(ErrorCodes.StartupKeyUnavailable, "key", JsonSerializer.SerializeToElement("keyEncryptionKeys")));
+        }
+
+        if (fingerprintKey.Length < 32)
+        {
+            throw new StartupException(
+                "The fingerprint key was not supplied, or is shorter than the hash it computes.",
+                Error.From(ErrorCodes.StartupKeyUnavailable, "key", JsonSerializer.SerializeToElement("fingerprintKey")));
+        }
+    }
+
 }

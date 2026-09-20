@@ -66,12 +66,12 @@ public sealed class OidcFlowTests
     }
 
     /// <summary>
-    /// AUTH-KEY-002 AC1 and AC2: what the key set serves is the public half of the
-    /// deployment's own keys, named so that a token's header resolves to one of them.
+    /// AUTH-KEY-001 AC4: what the key set serves carries the configured algorithm and
+    /// the public half only, named so that a token's header resolves to one of them.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_KEY_002_AC1_TheKeySetCarriesNoPrivateMaterialAsync()
+    public async Task AUTH_KEY_001_AC4_TheKeySetCarriesTheConfiguredAlgorithmAsync()
     {
         await using var deployment = new Deployment();
 
@@ -245,13 +245,12 @@ public sealed class OidcFlowTests
     }
 
     /// <summary>
-    /// AUTH-OIDC-004 AC3: the access token validates against the published key set,
-    /// which is what userinfo reading it amounts to, and what it answers is what the
-    /// scope named.
+    /// AUTH-OIDC-001, chapter 09 section 9: what userinfo answers is what the scope
+    /// named and nothing else, read against the published key set.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_OIDC_004_AC3_TheAccessTokenValidatesAgainstThePublishedKeysAsync()
+    public async Task AUTH_OIDC_001_UserInfoAnswersWhatTheScopeNamesAsync()
     {
         await using var deployment = new Deployment();
 
@@ -264,6 +263,36 @@ public sealed class OidcFlowTests
         Assert.Equal(StatusCodes.Status200OK, read.Status);
         Assert.Equal(Flow.Address, read.Text("email"));
         Assert.True(read.Json().GetProperty("email_verified").GetBoolean());
+        Assert.False(read.Json().TryGetProperty("phone_number", out _));
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-004 AC3: a party that validates the token against the published keys
+    /// rather than the record refuses it at its expiry and no later, so the latency it
+    /// accepts is the configured lifetime.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_004_AC3_AnOfflineValidatorRefusesTheTokenAtItsExpiryAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Browser browser = await PreparedAsync(deployment);
+        var machine = new Machine(deployment);
+        string code = await CodeAsync(browser, Application);
+        Answer exchanged = await machine.PostAsync("/oidc/token", Code(code, Application));
+
+        string token = exchanged.Text("access_token");
+
+        Assert.Equal(
+            StatusCodes.Status200OK,
+            (await machine.GetAsync("/oidc/userinfo", token)).Status);
+
+        deployment.Clock.Advance(TimeSpan.FromMinutes(10) + TimeSpan.FromSeconds(1));
+
+        Assert.Equal(
+            StatusCodes.Status401Unauthorized,
+            (await machine.GetAsync("/oidc/userinfo", token)).Status);
     }
 
     /// <summary>

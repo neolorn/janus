@@ -2410,6 +2410,7 @@ static Janus.Core.ErrorCodes.SmsBalanceFloor.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupContainmentCycle.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupDeclarationMissing.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupGoverningLanguage.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.StartupKeyUnavailable.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupLabelLimit.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupMissingAssessment.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupNoOrganizationPath.get -> Janus.Core.ErrorCode

@@ -33,6 +33,7 @@ internal static class ApiStatus
         [ErrorCodes.StartupUndeclaredTypeReference] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupUndeclaredPermission] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupUndeclaredDerivationReference] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupKeyUnavailable] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupRelyingPartyId] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupLabelLimit] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.PolicyUnregistered] = StatusCodes.Status500InternalServerError,
