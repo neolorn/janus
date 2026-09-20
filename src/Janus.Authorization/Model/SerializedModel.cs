@@ -46,12 +46,19 @@ internal sealed record SerializedModel(
         IReadOnlyList<Field> EncryptedFields);
 
     /// <summary>
-    /// One purpose and the basis it rests on.
+    /// One purpose, the basis it rests on and what it requires.
     /// </summary>
     /// <param name="Name">The purpose.</param>
     /// <param name="Basis">The basis it rests on.</param>
     /// <param name="Assessment">The assessment, where the basis requires one.</param>
-    internal sealed record Purpose(string Name, string Basis, string? Assessment);
+    /// <param name="DataCategories">The categories of data it requires.</param>
+    /// <param name="SubjectCategories">The categories of person it is about.</param>
+    internal sealed record Purpose(
+        string Name,
+        string Basis,
+        string? Assessment,
+        IReadOnlyList<string> DataCategories,
+        IReadOnlyList<string> SubjectCategories);
 
     /// <summary>
     /// One derivation.

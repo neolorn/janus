@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A declared purpose now carries the categories of data it requires and the categories
+  of person it is about, and startup refuses a purpose that names no data category, so
+  the declaration states what is collected rather than what happens to be held. A
+  resource type declared sensitive in a category the deployment did not declare is
+  refused at startup for the same reason.
 - A deployment can now register a callback that says what its gateway knows about a
   phone number. Before a sign-in link or a second-step code goes to a number, the
   callback is asked and the answer is written to the audit trail against the factor it

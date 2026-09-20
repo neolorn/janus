@@ -74,7 +74,7 @@ public sealed class DerivationTests
         var model = AuthorizationModel.Of(HostDomain.Declared()
             .Resource<HostDomain.Draft>("draft", draft => draft
                 .ContainedIn("folder")
-                .Purpose("collaboration", "contract")
+                .Purpose("collaboration", "contract", data: ["identity"])
                 .Derivation("reviewer", "reader", materialised: true))
             .Build());
 

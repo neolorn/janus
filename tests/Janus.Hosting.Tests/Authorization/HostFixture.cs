@@ -143,13 +143,13 @@ public sealed class HostFixture : IAsyncLifetime
             .Resource<HostWorkspace>("workspace", type => type
                 .BelongsToOrganization()
                 .Derivation("reviewer", "reviewer", materialised)
-                .Purpose("running the host", "contract"))
+                .Purpose("running the host", "contract", data: ["identity"], subjects: ["members"]))
             .Resource<HostDocument>("document", type => type
                 .ContainedIn("workspace")
-                .Purpose("running the host", "contract"))
+                .Purpose("running the host", "contract", data: ["identity"], subjects: ["members"]))
             .Resource<HostNote>("note", type => type
                 .ContainedIn("workspace")
                 .Discloses()
-                .Purpose("running the host", "contract"))
+                .Purpose("running the host", "contract", data: ["identity"], subjects: ["members"]))
             .Build();
 }

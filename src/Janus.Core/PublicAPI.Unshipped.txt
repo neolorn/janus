@@ -1260,11 +1260,15 @@ Janus.Core.PurposeDeclaration.Assessment.get -> string?
 Janus.Core.PurposeDeclaration.Assessment.init -> void
 Janus.Core.PurposeDeclaration.Basis.get -> string!
 Janus.Core.PurposeDeclaration.Basis.init -> void
-Janus.Core.PurposeDeclaration.Deconstruct(out string! Name, out string! Basis, out string? Assessment) -> void
+Janus.Core.PurposeDeclaration.DataCategories.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Janus.Core.PurposeDeclaration.DataCategories.init -> void
+Janus.Core.PurposeDeclaration.Deconstruct(out string! Name, out string! Basis, out string? Assessment, out System.Collections.Generic.IReadOnlyList<string!>! DataCategories, out System.Collections.Generic.IReadOnlyList<string!>! SubjectCategories) -> void
 Janus.Core.PurposeDeclaration.Equals(Janus.Core.PurposeDeclaration? other) -> bool
 Janus.Core.PurposeDeclaration.Name.get -> string!
 Janus.Core.PurposeDeclaration.Name.init -> void
-Janus.Core.PurposeDeclaration.PurposeDeclaration(string! Name, string! Basis, string? Assessment = null) -> void
+Janus.Core.PurposeDeclaration.PurposeDeclaration(string! Name, string! Basis, string? Assessment, System.Collections.Generic.IReadOnlyList<string!>! DataCategories, System.Collections.Generic.IReadOnlyList<string!>! SubjectCategories) -> void
+Janus.Core.PurposeDeclaration.SubjectCategories.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Janus.Core.PurposeDeclaration.SubjectCategories.init -> void
 Janus.Core.ReauthenticationKind
 Janus.Core.ReauthenticationKind.Full = 0 -> Janus.Core.ReauthenticationKind
 Janus.Core.ReauthenticationKind.SingleFactor = 1 -> Janus.Core.ReauthenticationKind
@@ -1448,7 +1452,7 @@ Janus.Core.ResourceTypeDeclarationBuilder<TResource>.ContainedIn(string! contain
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Derivation(string! relationship, string! role, bool materialised = false) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Discloses() -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Encrypted(System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! field, System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! subject) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
-Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Purpose(string! name, string! basis, string? assessment = null) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
+Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Purpose(string! name, string! basis, string? assessment = null, System.Collections.Generic.IReadOnlyList<string!>? data = null, System.Collections.Generic.IReadOnlyList<string!>? subjects = null) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Sensitive(string! category) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.Restriction
 Janus.Core.Restriction.<Clone>$() -> Janus.Core.Restriction!

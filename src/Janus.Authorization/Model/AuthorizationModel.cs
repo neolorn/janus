@@ -75,6 +75,7 @@ internal sealed class AuthorizationModel
 
         Dictionary<string, LawfulBasisDeclaration> bases = Bases(declaration);
         Dictionary<ResourceType, ResourceTypeDeclaration> types = Types(declaration);
+        var categories = new HashSet<string>(declaration.SensitiveCategories, StringComparer.Ordinal);
         var entities = new Dictionary<Type, ResourceTypeDeclaration>();
         var relationships = new Dictionary<string, RelationshipDeclaration>(StringComparer.Ordinal);
 
@@ -97,7 +98,7 @@ internal sealed class AuthorizationModel
 
         foreach (ResourceTypeDeclaration type in types.Values)
         {
-            Check(type, types, relationships, bases);
+            Check(type, types, relationships, bases, categories);
 
             if (!entities.TryAdd(type.Entity, type))
             {
@@ -272,7 +273,12 @@ internal sealed class AuthorizationModel
             [.. type.SensitiveCategories.Order(StringComparer.Ordinal)],
             [.. type.Purposes
                 .OrderBy(purpose => purpose.Name, StringComparer.Ordinal)
-                .Select(purpose => new SerializedModel.Purpose(purpose.Name, purpose.Basis, purpose.Assessment))],
+                .Select(purpose => new SerializedModel.Purpose(
+                    purpose.Name,
+                    purpose.Basis,
+                    purpose.Assessment,
+                    [.. purpose.DataCategories.Order(StringComparer.Ordinal)],
+                    [.. purpose.SubjectCategories.Order(StringComparer.Ordinal)]))],
             [.. type.Derivations
                 .OrderBy(derivation => derivation.Relationship, StringComparer.Ordinal)
                 .Select(derivation => new SerializedModel.Derivation(
@@ -351,12 +357,29 @@ internal sealed class AuthorizationModel
         ResourceTypeDeclaration type,
         Dictionary<ResourceType, ResourceTypeDeclaration> types,
         Dictionary<string, RelationshipDeclaration> relationships,
-        Dictionary<string, LawfulBasisDeclaration> bases)
+        Dictionary<string, LawfulBasisDeclaration> bases,
+        IReadOnlyCollection<string> categories)
     {
         CheckContainment(type, types);
         CheckOrganizationPath(type, types);
+        CheckSensitivity(type, categories);
         CheckPurposes(type, bases);
         CheckDerivations(type, relationships);
+    }
+
+    private static void CheckSensitivity(
+        ResourceTypeDeclaration type,
+        IReadOnlyCollection<string> categories)
+    {
+        foreach (string category in type.SensitiveCategories)
+        {
+            if (!categories.Contains(category))
+            {
+                throw Malformed(
+                    "the type " + type.Name + " is declared sensitive in " + category
+                    + ", which the model does not declare as a sensitivity category");
+            }
+        }
     }
 
     private static void CheckContainment(
@@ -439,6 +462,15 @@ internal sealed class AuthorizationModel
                     "purpose",
                     purpose.Name,
                     "its basis requires an assessment and it names none");
+            }
+
+            if (purpose.DataCategories.Count == 0)
+            {
+                throw Refused(
+                    ErrorCodes.StartupDeclarationMissing,
+                    "key",
+                    purpose.Name,
+                    "a purpose is declared with the categories of data it requires");
             }
         }
     }

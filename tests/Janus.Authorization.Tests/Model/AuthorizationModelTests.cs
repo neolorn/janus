@@ -99,7 +99,7 @@ public sealed class AuthorizationModelTests
             HostDomain.Declared()
                 .Resource<HostDomain.Draft>("draft", draft => draft
                     .ContainedIn("folder")
-                    .Purpose("collaboration", "contract"))
+                    .Purpose("collaboration", "contract", data: ["identity"]))
                 .Build());
 
         Assert.NotNull(model.Find(ResourceType.Parse("draft")));
@@ -236,7 +236,7 @@ public sealed class AuthorizationModelTests
             .Resource<HostDomain.Draft>("draft", draft => draft
                 .ContainedIn("folder")
                 .Discloses()
-                .Purpose("collaboration", "contract"))
+                .Purpose("collaboration", "contract", data: ["identity"]))
             .Build());
 
         Assert.Equal(
@@ -331,21 +331,21 @@ public sealed class AuthorizationModelTests
             .Resource<HostDomain.Folder>("folder", folder => folder
                 .ContainedIn("document")
                 .BelongsToOrganization()
-                .Purpose("collaboration", "contract"))
+                .Purpose("collaboration", "contract", data: ["identity"]))
             .Resource<HostDomain.Document>("document", document => document
                 .ContainedIn("folder")
-                .Purpose("collaboration", "contract"))
+                .Purpose("collaboration", "contract", data: ["identity"]))
             .Build(),
         1 => new AuthorizationDeclarationBuilder()
             .LawfulBasis(Contract())
             .Resource<HostDomain.Document>("document", document => document
                 .ContainedIn("folder")
-                .Purpose("collaboration", "contract"))
+                .Purpose("collaboration", "contract", data: ["identity"]))
             .Build(),
         2 => new AuthorizationDeclarationBuilder()
             .LawfulBasis(Contract())
             .Resource<HostDomain.Document>("document", document => document
-                .Purpose("collaboration", "contract"))
+                .Purpose("collaboration", "contract", data: ["identity"]))
             .Build(),
         3 => new AuthorizationDeclarationBuilder()
             .LawfulBasis(new LawfulBasisDeclaration("interest", false, false, true, true))
@@ -357,7 +357,7 @@ public sealed class AuthorizationModelTests
             .LawfulBasis(Contract())
             .Resource<HostDomain.Document>("document", document => document
                 .BelongsToOrganization()
-                .Purpose("collaboration", "contract")
+                .Purpose("collaboration", "contract", data: ["identity"])
                 .Derivation("reviewer", "reader"))
             .Build(),
     };

@@ -77,13 +77,13 @@ public sealed class SerializedModelTests
             .SensitiveCategory("financial")
             .Resource<HostDomain.Document>("document", document => document
                 .ContainedIn("folder")
-                .Purpose("collaboration", "contract")
+                .Purpose("collaboration", "contract", data: ["content", "identity"], subjects: ["members"])
                 .Encrypted(item => item.Body, item => item.Author))
             .Resource<HostDomain.Folder>("folder", folder => folder
                 .ContainedIn("workspace")
                 .Derivation("reviewer", "reader")
-                .Purpose("collaboration", "contract"))
+                .Purpose("collaboration", "contract", data: ["content", "identity"], subjects: ["members"]))
             .Resource<HostDomain.Workspace>("workspace", workspace => workspace
                 .BelongsToOrganization()
-                .Purpose("collaboration", "contract"));
+                .Purpose("collaboration", "contract", data: ["content", "identity"], subjects: ["members"]));
 }

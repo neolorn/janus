@@ -127,14 +127,14 @@ internal static class HostDomain
                 "id")
             .Resource<Workspace>("workspace", workspace => workspace
                 .BelongsToOrganization()
-                .Purpose("collaboration", "contract"))
+                .Purpose("collaboration", "contract", data: ["identity", "content"], subjects: ["members"]))
             .Resource<Folder>("folder", folder => folder
                 .ContainedIn("workspace")
-                .Purpose("collaboration", "contract")
+                .Purpose("collaboration", "contract", data: ["identity", "content"], subjects: ["members"])
                 .Derivation("reviewer", "reader"))
             .Resource<Document>("document", document => document
                 .ContainedIn("folder")
-                .Purpose("collaboration", "contract")
+                .Purpose("collaboration", "contract", data: ["identity", "content"], subjects: ["members"])
                 .Encrypted(item => item.Body, item => item.Author));
 
     // A record is named by the host's own text, whatever the host makes that of.
