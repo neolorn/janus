@@ -238,6 +238,32 @@ internal sealed class Identifier
     }
 
     /// <summary>
+    /// Puts a new value in the place of the old one on the same identifier, proved at
+    /// the instant given. This is the swap of single-address mode and the change of a
+    /// username: the identifier keeps its identity and the role it holds, so nothing
+    /// that names it has to be told a new one.
+    /// </summary>
+    /// <param name="entered">The new value as the person entered it.</param>
+    /// <param name="canonical">The new value in its canonical form.</param>
+    /// <param name="at">When the new value was proved.</param>
+    /// <exception cref="ArgumentNullException">Either form is absent.</exception>
+    /// <exception cref="InvalidOperationException">The identifier is locked.</exception>
+    public void Replace(string entered, string canonical, DateTimeOffset at)
+    {
+        ArgumentNullException.ThrowIfNull(entered);
+        ArgumentNullException.ThrowIfNull(canonical);
+
+        if (IsLocked)
+        {
+            throw new InvalidOperationException("A locked identifier is not changed.");
+        }
+
+        Entered = entered;
+        Canonical = canonical;
+        VerifiedAt = at;
+    }
+
+    /// <summary>
     /// Makes it the primary of its kind. Only the set it belongs to calls this, because
     /// only the set can see the one it displaces.
     /// </summary>

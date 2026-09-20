@@ -123,7 +123,160 @@ internal sealed class IdentifierStore(
             CryptographicOperations.ZeroMemory(dataKey);
         }
 
+        foreach (IdentifierId id in set.Removed)
+        {
+            IdentifierRecord? row = rows.Find(held => held.Id == id);
+
+            if (row is not null)
+            {
+                context.Identifiers.Remove(row);
+            }
+        }
+
         await RecordBackupsAsync(set, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> IsReservedAsync(
+        IdentifierKind kind,
+        string canonical,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(canonical);
+
+        byte[] fingerprint = Fingerprinted(canonical);
+
+        return await context.IdentifierRemovals
+            .Where(removal =>
+                removal.Kind == kind
+                && removal.Fingerprint == fingerprint
+                && removal.ExpiresAt > now)
+            .AnyAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<IdentifierRemoval?> FindRemovalAsync(
+        byte[] fingerprint,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(fingerprint);
+
+        IdentifierRemovalRecord? row = await context.IdentifierRemovals
+            .Where(removal => removal.Undo == fingerprint)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (row is null)
+        {
+            return null;
+        }
+
+        byte[] dataKey = await DataKeyAsync(row.Subject, cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            return IdentifierRemoval.Existing(
+                row.Id,
+                row.Subject,
+                row.Kind,
+                Given(dataKey, row, IdentifierRemovalConfiguration.EnteredColumn, row.Entered),
+                Given(dataKey, row, IdentifierRemovalConfiguration.CanonicalColumn, row.Canonical),
+                row.IsLocked,
+                row.AddedAt,
+                row.VerifiedAt,
+                row.RemovedAt,
+                row.ExpiresAt,
+                row.Undo);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(dataKey);
+        }
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask RecordRemovalAsync(
+        IdentifierRemoval removal,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(removal);
+
+        byte[] dataKey = await DataKeyAsync(removal.Subject, cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            await context.IdentifierRemovals
+                .AddAsync(
+                    new IdentifierRemovalRecord
+                    {
+                        Id = removal.Id,
+                        Subject = removal.Subject,
+                        Kind = removal.Kind,
+                        Fingerprint = Fingerprinted(removal.Canonical),
+                        Entered = Given(
+                            removal.Subject,
+                            IdentifierRemovalConfiguration.EnteredColumn,
+                            removal.Entered,
+                            dataKey),
+                        Canonical = Given(
+                            removal.Subject,
+                            IdentifierRemovalConfiguration.CanonicalColumn,
+                            removal.Canonical,
+                            dataKey),
+                        IsLocked = removal.IsLocked,
+                        AddedAt = removal.AddedAt,
+                        VerifiedAt = removal.VerifiedAt,
+                        RemovedAt = removal.RemovedAt,
+                        ExpiresAt = removal.ExpiresAt,
+                        Undo = removal.Undo,
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(dataKey);
+        }
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask DiscardRemovalAsync(IdentifierId id, CancellationToken cancellationToken)
+    {
+        IdentifierRemovalRecord? row = await context.IdentifierRemovals
+            .FindAsync([id], cancellationToken)
+            .ConfigureAwait(false);
+
+        if (row is not null)
+        {
+            context.IdentifierRemovals.Remove(row);
+        }
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<int> SweepRemovalsAsync(
+        DateTimeOffset now,
+        CancellationToken cancellationToken) =>
+        await context.IdentifierRemovals
+            .Where(removal => removal.ExpiresAt <= now)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> IsHeldAsync(
+        string canonical,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(canonical);
+
+        byte[] fingerprint = Fingerprinted(canonical);
+
+        return await context.UsernameHolds
+            .Where(hold => hold.Fingerprint == fingerprint && hold.ReleasesAt > now)
+            .AnyAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static BackupSetting Settled(BackupSettingRecord row) =>
@@ -158,6 +311,16 @@ internal sealed class IdentifierStore(
             new PersonalFieldLocation(row.Subject, IdentifierConfiguration.Table, column),
             stored));
 
+    private static string Given(
+        ReadOnlySpan<byte> dataKey,
+        IdentifierRemovalRecord row,
+        string column,
+        ReadOnlySpan<byte> stored) =>
+        Encoding.UTF8.GetString(PersonalFieldCipher.Decrypt(
+            dataKey,
+            new PersonalFieldLocation(row.Subject, IdentifierRemovalConfiguration.Table, column),
+            stored));
+
     private byte[] Fingerprinted(string canonical) =>
         Fingerprint.Compute(Encoding.UTF8.GetBytes(canonical), fingerprintKey.Span);
 
@@ -165,6 +328,13 @@ internal sealed class IdentifierStore(
         PersonalFieldCipher.Encrypt(
             dataKey,
             new PersonalFieldLocation(subject, IdentifierConfiguration.Table, column),
+            Encoding.UTF8.GetBytes(value),
+            randomness);
+
+    private byte[] Given(SubjectId subject, string column, string value, ReadOnlySpan<byte> dataKey) =>
+        PersonalFieldCipher.Encrypt(
+            dataKey,
+            new PersonalFieldLocation(subject, IdentifierRemovalConfiguration.Table, column),
             Encoding.UTF8.GetBytes(value),
             randomness);
 

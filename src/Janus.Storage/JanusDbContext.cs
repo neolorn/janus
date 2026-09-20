@@ -81,6 +81,16 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     public DbSet<BackupSettingRecord> BackupSettings => Set<BackupSettingRecord>();
 
     /// <summary>
+    /// The identifiers the accounts have given up, held while their undo lasts.
+    /// </summary>
+    public DbSet<IdentifierRemovalRecord> IdentifierRemovals => Set<IdentifierRemovalRecord>();
+
+    /// <summary>
+    /// The usernames held after the erasure of the accounts that bore them.
+    /// </summary>
+    public DbSet<UsernameHoldRecord> UsernameHolds => Set<UsernameHoldRecord>();
+
+    /// <summary>
     /// The accounts' profiles.
     /// </summary>
     public DbSet<ProfileRecord> Profiles => Set<ProfileRecord>();
@@ -272,6 +282,8 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new MembershipConfiguration());
         modelBuilder.ApplyConfiguration(new IdentifierConfiguration());
         modelBuilder.ApplyConfiguration(new BackupSettingConfiguration());
+        modelBuilder.ApplyConfiguration(new IdentifierRemovalConfiguration());
+        modelBuilder.ApplyConfiguration(new UsernameHoldConfiguration());
         modelBuilder.ApplyConfiguration(new ProfileConfiguration());
         modelBuilder.ApplyConfiguration(new ProfilePhotoConfiguration());
         modelBuilder.ApplyConfiguration(new PreferenceConfiguration());
