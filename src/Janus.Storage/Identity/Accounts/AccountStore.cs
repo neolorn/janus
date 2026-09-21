@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Identity.Accounts;
+using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Identity.Accounts;
 
@@ -71,6 +74,31 @@ internal sealed class AccountStore(JanusDbContext context) : IAccountStore
         record.SuspendedBy = account.SuspendedBy;
         record.DeletingBy = account.DeletingBy;
         record.DeletingSince = account.DeletingSince;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<Account>> DeletingSinceAsync(
+        DateTimeOffset before,
+        CancellationToken cancellationToken)
+    {
+        List<AccountRecord> records = await context.Accounts
+            .Where(record =>
+                record.State == AccountState.Deleting && record.DeletingSince <= before)
+            .OrderBy(record => record.DeletingSince)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return
+        [
+            .. records.Select(record => Account.Existing(
+                record.Subject,
+                record.CreatedAt,
+                record.State,
+                record.SuspendedBy,
+                record.DeletingBy,
+                record.DeletingSince,
+                Registered(record))),
+        ];
     }
 
     private static AccountRegistration? Registered(AccountRecord record) =>

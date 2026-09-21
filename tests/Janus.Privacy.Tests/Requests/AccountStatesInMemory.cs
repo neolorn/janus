@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
+using Janus.Privacy.Erasures;
 using Janus.Privacy.Requests;
 
 namespace Janus.Privacy.Tests.Requests;
@@ -13,6 +15,7 @@ namespace Janus.Privacy.Tests.Requests;
 internal sealed class AccountStatesInMemory : IAccountStates
 {
     private readonly Dictionary<SubjectId, AccountState> _states = [];
+    private readonly Dictionary<SubjectId, PendingDeletion> _deletions = [];
 
     /// <summary>
     /// Puts an account in a state, as a deployment has one.
@@ -46,9 +49,45 @@ internal sealed class AccountStatesInMemory : IAccountStates
         if (moved)
         {
             Deleting = origin;
+            _deletions[subject] = new PendingDeletion(subject, origin, at);
         }
 
         return ValueTask.FromResult(moved);
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<PendingDeletion>> DeletingSinceAsync(
+        DateTimeOffset before,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<PendingDeletion>>(
+        [
+            .. _deletions.Values
+                .Where(deletion => deletion.Since <= before
+                    && Of(deletion.Subject) is AccountState.Deleting)
+                .OrderBy(deletion => deletion.Since),
+        ]);
+
+    /// <summary>
+    /// Puts an account in a grace window somebody else began, as a takedown or the
+    /// privacy queue does.
+    /// </summary>
+    /// <param name="subject">Whose.</param>
+    /// <param name="origin">What began it.</param>
+    /// <param name="since">When the window began.</param>
+    public void Deletes(SubjectId subject, DeletionOrigin origin, DateTimeOffset since)
+    {
+        _states[subject] = AccountState.Deleting;
+        _deletions[subject] = new PendingDeletion(subject, origin, since);
+    }
+
+    /// <summary>
+    /// Takes an account out of the deletion window, as the subject's cancellation does.
+    /// </summary>
+    /// <param name="subject">Whose.</param>
+    public void Cancels(SubjectId subject)
+    {
+        _states[subject] = AccountState.Active;
+        _ = _deletions.Remove(subject);
     }
 
     /// <summary>

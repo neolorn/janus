@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A deletion grace window that runs out is now carried through: the sweep erases every
+  account whose window elapsed without a cancellation, in one transaction per account,
+  and puts the erasure on the outbox in the same transaction. The subject identifier
+  stays, the personal fields go with the subject's key, the audit trail and the
+  deployment's own records are untouched, and the username is held for
+  `retention.consent` before anyone can claim it.
+
 - An account now takes itself down and puts itself back up. `POST /account/deactivate`
   suspends it with `suspendedBy = self`, ends every session it holds, and sends the
   deactivation notice with the link `POST /account/reactivate` consumes; an account an

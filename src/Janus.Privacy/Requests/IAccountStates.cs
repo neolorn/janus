@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
+using Janus.Privacy.Erasures;
 
 namespace Janus.Privacy.Requests;
 
@@ -40,5 +42,16 @@ internal interface IAccountStates
         SubjectId subject,
         DeletionOrigin origin,
         DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The accounts whose deletion grace window began on or before an instant and
+    /// which nothing has cancelled.
+    /// </summary>
+    /// <param name="before">The instant the window must have begun by.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Them, oldest window first.</returns>
+    ValueTask<IReadOnlyList<PendingDeletion>> DeletingSinceAsync(
+        DateTimeOffset before,
         CancellationToken cancellationToken);
 }

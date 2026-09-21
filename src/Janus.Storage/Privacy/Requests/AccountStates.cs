@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Identity.Accounts;
+using Janus.Privacy.Erasures;
 using Janus.Privacy.Requests;
 
 namespace Janus.Storage.Privacy.Requests;
@@ -55,5 +58,25 @@ internal sealed class AccountStates(IAccountStore accounts) : IAccountStates
         await accounts.RecordTransitionAsync(account, cancellationToken).ConfigureAwait(false);
 
         return true;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<PendingDeletion>> DeletingSinceAsync(
+        DateTimeOffset before,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<Account> deleting = await accounts
+            .DeletingSinceAsync(before, cancellationToken)
+            .ConfigureAwait(false);
+
+        return
+        [
+            .. deleting
+                .Where(account => account.DeletingBy is not null && account.DeletingSince is not null)
+                .Select(account => new PendingDeletion(
+                    account.Subject,
+                    account.DeletingBy!.Value,
+                    account.DeletingSince!.Value)),
+        ];
     }
 }

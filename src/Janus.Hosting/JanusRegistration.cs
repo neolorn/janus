@@ -33,6 +33,7 @@ using Janus.Hosting.Registration;
 using Janus.Privacy;
 using Janus.Privacy.Consents;
 using Janus.Privacy.Documents;
+using Janus.Privacy.Erasures;
 using Janus.Privacy.Outbox;
 using Janus.Privacy.Policies;
 using Janus.Privacy.Requests;
@@ -255,6 +256,7 @@ public static class JanusRegistration
         services.AddScoped<RestrictionGrant>();
         services.AddScoped<DeadlineSweep>();
         services.AddScoped<IPrivacyRequests, PrivacyRequestService>();
+        services.AddScoped<DeletionSweep>();
         services.AddScoped<OutboxPublisher>();
 
         // AUTHZ-MODEL-001: what may be processed for what is part of the one
