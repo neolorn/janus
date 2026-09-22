@@ -2113,6 +2113,8 @@ the question was asked and unanswered rather than saying nothing.
 *Chapter text that should change.* `02` AUTH-FACT-002b AC6 should say what a deployment
 does with the answer, and `10` should carry a code if a refusal is meant.
 
+**Superseded by D-162.** Applied in entry 146.
+
 ---
 
 ## 69. The upgrade refuses with a code of its own
@@ -5033,6 +5035,72 @@ destination with the requesting client's own, the default standing for the flows
 carry no code. API-REDIR-002 AC2 should say that the default is the configured client
 and that a deployment naming none stores nothing. `10` section 4 should carry
 `redirect.defaultclient` and section 1.5 `model.startup.redirectclient`, both below.
+
+---
+
+## 146. A reported change of SIM withholds the entry that rides the number
+
+**Corrections 1 · 2026-09-23 · D-162 section C, item 68 · Tier 3 · AUTH-FACT-002b AC6,
+AUTH-FACT-003, AUTH-ABUSE-003 AC1, AUTH-FACT-001 AC1**
+
+*What D-162 decided.* On a `risk` answer the SMS factor is withheld for that sign-in and
+the challenge offers the account's other factors; `phoneLink` alone is refused with
+`auth.factor.rejected`. Entry 68 chose the other reading, that the answer is recorded and
+nothing else, on the ground that no chapter named a refusal or a code for one. D-162
+names both.
+
+*What was built.* `PhoneSignals` gains one answering method: it asks the provider the
+deployment declared and answers whether the entry may still be used, false only on
+`risk`. The second-step challenge asks it for every entry a text carries that it was
+about to offer, drops the ones it refuses, and offers what is left. A sign-in link by
+text asks it before anything goes out. The consideration is recorded where it refuses,
+because nothing is sent after that and the send is where a consideration is otherwise
+written down, so one use of a restricted entry still writes one row.
+
+*Three points D-162 does not settle, taken at the strictest reading (Tier 3: a signal
+that decides what is refused is security semantics).*
+
+1. **The refusal of a sign-in link is decided on the number, not on the account.**
+   AUTH-ABUSE-003 AC1 states that responses for existing and non-existent addresses are
+   byte-identical. A refusal read off the account would tell an enumerator that a risky
+   number belongs to one. The signal is therefore asked for every phone channel the ask
+   resolves to a channel at all, whether or not an account holds it, and the same
+   refusal is answered either way. Both texts hold, and nothing reaches the number.
+2. **Withholding the only second step refuses the sign-in; it never completes it.**
+   Where the account's own second step is the one the signal refused, there is nothing
+   left to present, and a challenge with nothing to present must not fall through to a
+   session at the level the second step was there to raise. It is refused with
+   `auth.factor.rejected`, the code D-162 names for the parallel case. A sign-in that
+   needed no second step is untouched: the refusal fires only where one was offered.
+3. **Which entries a text carries is the catalogue's, not a name in a rule.**
+   AUTH-FACT-001 AC1 admits one conditional in the library that tests for an entry by
+   name, in the policy object. The withholding therefore reads
+   `FactorCatalogue.Of(entry).Restricted`, which AUTH-FACT-002b AC5 makes exactly the
+   entries a text carries, so the rule names no factor and an entry added to the
+   catalogue is covered without a code change.
+
+*What is not changed.* The consideration at the send stays where it is and still covers
+every restricted send the sign-in path does not govern, which is what AUTH-FACT-002b AC6
+asks for. Recovery and enrolment are not touched: D-162 speaks of a sign-in, and
+refusing an enrolment on the same signal would decide behaviour no chapter describes.
+
+*Tests that pin it.*
+`AuthenticationServiceTests.AUTH_FACT_002b_AC6_AReportedChangeWithholdsTheTextCodeAndOffersTheRestAsync`,
+`AuthenticationServiceTests.AUTH_FACT_002b_AC6_AnAnswerThatReportsNoChangeLeavesTheTextCodeOnOfferAsync`,
+`AuthenticationServiceTests.AUTH_FACT_002b_AC6_AReportedChangeRefusesASignInWhoseOnlySecondStepIsTheTextCodeAsync`,
+`AuthenticationServiceTests.AUTH_FACT_002b_AC6_AWithholdingIsRecordedWithTheEntryAndNotTheNumberAsync`,
+`AuthenticationServiceTests.AUTH_FACT_002b_AC6_AReportedChangeRefusesASignInLinkByTextAsync`,
+`AuthenticationServiceTests.AUTH_ABUSE_003_AC1_ANumberNoAccountHoldsIsRefusedInTheSameBytesAsync`,
+`FactorCatalogueTests.AUTH_FACT_001_AC1_NoConditionalTestsForAFactorByName`,
+`SendingServiceTests.AUTH_FACT_002b_AC6_TheSignalIsConsideredBeforeARestrictedFactorGoesAsync`,
+`SendingServiceTests.AUTH_FACT_002b_AC6_AnAbsentProviderIsItselfRecordedAsync`.
+
+*Chapter text that should change.* AUTH-FACT-002b AC6 should say what a `risk` answer
+does: the entry is withheld from that sign-in, the challenge offers what is left, and a
+sign-in with nothing left is refused with `auth.factor.rejected`. It should say that the
+question is asked of the number and that the answer to an ask is the same whether or not
+an account holds it, so AUTH-ABUSE-003 AC1 still holds. `09` section 3 should add
+`auth.factor.rejected` to what `POST /auth/link` can answer.
 
 
 # Rows for chapter 10

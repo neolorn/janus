@@ -40,6 +40,7 @@ namespace Janus.Authentication.SignIn;
 /// <param name="policies">What policy governs the account, and what it has raised.</param>
 /// <param name="throttle">The progressive delay.</param>
 /// <param name="sending">Where a message goes out.</param>
+/// <param name="signals">What is known about a number before a text leans on it.</param>
 /// <param name="codes">The verification codes, which live and die on their own rules.</param>
 /// <param name="configuration">Where the lifetimes and the limits come from.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
@@ -69,6 +70,7 @@ internal sealed class AuthenticationService(
     PolicyResolution policies,
     ThrottleService throttle,
     INotificationHandler sending,
+    PhoneSignals signals,
     VerificationCodes codes,
     IConfigurationStore configuration,
     IUnitOfWork work,
@@ -889,6 +891,29 @@ internal sealed class AuthenticationService(
 
         List<Factor> wanted = Wanted(policy, enrolled, reached, trusts);
 
+        // AUTH-FACT-002b: where the carrier reports a recent change of SIM or of
+        // network, the entries a text carries are withheld from this sign-in and the
+        // account's other second steps are offered in their place.
+        int offered = wanted.Count;
+
+        List<Factor> textable = [.. wanted.Where(entry => FactorCatalogue.Of(entry).Restricted)];
+
+        foreach (Factor carried in textable)
+        {
+            if (!await TextableAsync(subject, carried, cancellationToken).ConfigureAwait(false))
+            {
+                _ = wanted.Remove(carried);
+            }
+        }
+
+        // Withholding the only second step cannot let the sign-in through below the
+        // level the account's own asked for, so a challenge left with nothing to
+        // present is refused rather than completed.
+        if (offered > 0 && wanted.Count is 0)
+        {
+            return Result.Failure<SignInOutcome>(Error.From(ErrorCodes.FactorRejected));
+        }
+
         if (wanted.Count > 0)
         {
             return Result.Success(new SignInOutcome(
@@ -933,6 +958,25 @@ internal sealed class AuthenticationService(
                     remembered is null ? null : OpaqueToken.Of(remembered),
                     trusted,
                     cancellationToken)
+                .ConfigureAwait(false);
+    }
+
+    // AUTH-FACT-002b: the entry rides the number the account would be texted at, so
+    // it is that number the signal is asked about.
+    private async ValueTask<bool> TextableAsync(
+        SubjectId subject,
+        Factor carried,
+        CancellationToken cancellationToken)
+    {
+        HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+        IReadOnlyList<HeldIdentifier> numbers = held.OfKind(IdentifierKind.Phone);
+        HeldIdentifier? texted = numbers.FirstOrDefault(number => number.IsPrimary)
+            ?? (numbers.Count is 0 ? null : numbers[0]);
+
+        return texted is null
+            || await signals
+                .AllowsAsync(carried, texted.Canonical, subject, cancellationToken)
                 .ConfigureAwait(false);
     }
 

@@ -68,8 +68,11 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     private readonly NotificationHandlerInMemory _notifications = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
+    private readonly PhoneSignalAuditInMemory _considered = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
+
+    private PhoneSignalProvider? _provider;
 
     /// <summary>
     /// A deployment that has named the one key with no default and holds a template
@@ -113,11 +116,14 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             Policies,
             Throttle,
             _notifications,
+            Signals,
             Codes,
             _configuration,
             _work,
             _clock,
             _randomness);
+
+    private PhoneSignals Signals => new(_provider, _considered, _work, _clock);
 
     private VerificationCodes Codes =>
         new(_codes, _configuration, _work, _clock, _randomness);
@@ -130,6 +136,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             Policies,
             _notifications,
             new NonExistenceNotice(_configuration, _notifications, _notices, _work, _events, _clock),
+            Signals,
             Throttle,
             _configuration,
             _work,
@@ -658,6 +665,150 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Assert.Equal(SignInStatus.Complete, reached.Status);
         Assert.Null(reached.Requirement);
     }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC6: a carrier reporting a recent change of SIM or of network
+    /// withholds the text code from that sign-in, and the account's other second
+    /// steps are offered in its place.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC6_AReportedChangeWithholdsTheTextCodeAndOffersTheRestAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.PhoneCode);
+        Holds(subject, Factor.Totp);
+        Answers(PhoneSignal.Risk);
+
+        SignInProgress reached = await SignedInAsync(subject, Factor.Password, Secret);
+
+        Assert.Equal(SignInStatus.FactorRequired, reached.Status);
+        Assert.Equal([Factor.Totp], reached.Required);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC6: an answer that reports nothing leaves the text code on
+    /// offer, so what the signal changes is the one case it speaks to.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC6_AnAnswerThatReportsNoChangeLeavesTheTextCodeOnOfferAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.PhoneCode);
+        Holds(subject, Factor.Totp);
+        Answers(PhoneSignal.Clear);
+
+        SignInProgress reached = await SignedInAsync(subject, Factor.Password, Secret);
+
+        Assert.Equal([Factor.PhoneCode, Factor.Totp], reached.Required);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC6: withholding the only second step leaves nothing to offer,
+    /// and a sign-in with nothing left to present is refused rather than completing
+    /// below the level the account's own second step asked for.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC6_AReportedChangeRefusesASignInWhoseOnlySecondStepIsTheTextCodeAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.PhoneCode);
+        Answers(PhoneSignal.Risk);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            Refused(await PresentAsync(began.Challenge, Factor.Password, Secret)));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC6: what the signal refused is recorded with the entry it was
+    /// asked about and without the number, which is the trail an operator reads.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC6_AWithholdingIsRecordedWithTheEntryAndNotTheNumberAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.PhoneCode);
+        Holds(subject, Factor.Totp);
+        Answers(PhoneSignal.Risk);
+
+        _ = await SignedInAsync(subject, Factor.Password, Secret);
+
+        (Factor Factor, PhoneSignal? Signal, SubjectId? Subject) recorded =
+            Assert.Single(_considered.Records);
+
+        Assert.Equal(Factor.PhoneCode, recorded.Factor);
+        Assert.Equal(PhoneSignal.Risk, recorded.Signal);
+        Assert.Equal(subject, recorded.Subject);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC6, AUTH-FACT-003: a sign-in link by text is the whole of the
+    /// sign-in, so there is nothing to offer beside it and the ask is refused; no
+    /// link goes to the number.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC6_AReportedChangeRefusesASignInLinkByTextAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneLink);
+        Answers(PhoneSignal.Risk);
+
+        Result asked = await Service.SendLinkAsync(
+            Number,
+            Language,
+            Source,
+            browser: null,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.FactorRejected, asked.Match(() => (ErrorCode?)null, error => error.Code));
+        Assert.Empty(_notifications.Texts);
+        Assert.NotEqual(default, subject);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-003 AC1: the question is asked of the number and never of the
+    /// account, so a number no account holds is refused in the same bytes and nothing
+    /// about existence is told either way.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_003_AC1_ANumberNoAccountHoldsIsRefusedInTheSameBytesAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneLink);
+        Answers(PhoneSignal.Risk);
+
+        Result held = await Service.SendLinkAsync(
+            Number,
+            Language,
+            Source,
+            browser: null,
+            TestContext.Current.CancellationToken);
+
+        Result nobodys = await Service.SendLinkAsync(
+            "+441632960099",
+            Language,
+            Source,
+            browser: null,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            held.Match(() => (ErrorCode?)null, error => error.Code),
+            nobodys.Match(() => (ErrorCode?)null, error => error.Code));
+        Assert.Empty(_notifications.Texts);
+        Assert.NotEqual(default, subject);
+    }
+
+    // AUTH-FACT-002b: the deployment's own provider, standing for the carrier.
+    private void Answers(PhoneSignal signal) =>
+        _provider = new PhoneSignalProvider((_, _) => ValueTask.FromResult(signal));
 
     private async ValueTask<SubjectId> AccountAsync()
     {

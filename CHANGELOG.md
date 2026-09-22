@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- A carrier reporting a recent change of SIM or of network now withholds the entry a
+  text would carry, instead of only being written down. The second-step challenge
+  offers the account's other methods in its place, and a sign-in that had no other
+  second step is refused with `auth.factor.rejected` rather than completing below what
+  the account asked for. A sign-in link by text is the whole of a sign-in, so it is
+  refused outright; the question is asked of the number and never of the account, so a
+  number no account holds is refused in the same bytes.
+
 - The waiting screen's event stream is woken by the database: the transaction that
   verifies or completes a registration step announces the session on a PostgreSQL
   channel, and every instance holding a stream open for it hears the announcement.

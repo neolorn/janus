@@ -16,7 +16,9 @@ namespace Janus.Authentication.Sending;
 /// <remarks>
 /// Implements AUTH-FACT-002b. A text reaches a number and not a person, so what the
 /// carrier reports about the number is considered before the entry that rides it is
-/// used; where nothing can be asked, the absence is the record.
+/// used; where nothing can be asked, the absence is the record. A reported change of
+/// SIM or of network withholds the entry from that sign-in, because the message would
+/// reach whoever holds the number now.
 /// </remarks>
 internal sealed class PhoneSignals(
     PhoneSignalProvider? provider,
@@ -24,6 +26,49 @@ internal sealed class PhoneSignals(
     IUnitOfWork work,
     TimeProvider time)
 {
+    /// <summary>
+    /// Considers the number a sign-in is about to lean on, and answers whether the
+    /// factor may still be used with it.
+    /// </summary>
+    /// <param name="factor">The entry the number would carry.</param>
+    /// <param name="number">The number, canonically.</param>
+    /// <param name="subject">Whose account it is.</param>
+    /// <param name="cancellationToken">Abandons the consideration.</param>
+    /// <returns>Whether the factor may be used.</returns>
+    /// <remarks>
+    /// A refusal is recorded here, because nothing is sent after it and the send is
+    /// where a consideration is otherwise written down (AUTH-FACT-002b AC6). Any
+    /// other answer leaves the record to the send that follows, so one use of a
+    /// restricted entry writes one row.
+    /// </remarks>
+    public async ValueTask<bool> AllowsAsync(
+        Factor factor,
+        string number,
+        SubjectId? subject,
+        CancellationToken cancellationToken)
+    {
+        if (provider is null)
+        {
+            return true;
+        }
+
+        PhoneSignal answered = await provider.Signal(number, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (answered is not PhoneSignal.Risk)
+        {
+            return true;
+        }
+
+        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        await audit
+            .ConsideredAsync(factor, answered, subject, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        return false;
+    }
+
     /// <summary>
     /// Considers the number one message is about to go to, where the message is a
     /// restricted factor, and records what was known.
