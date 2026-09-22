@@ -296,8 +296,24 @@ internal sealed class AuthorizationModel
                         binding.Key.ToString(), binding.Value))
                     .OrderBy(binding => binding.Permission, StringComparer.Ordinal)],
                 [.. _bases.Values.OrderBy(basis => basis.Key, StringComparer.Ordinal).Select(Serialized)],
-                [.. _sensitiveCategories.Order(StringComparer.Ordinal)]),
+                [.. _sensitiveCategories.Order(StringComparer.Ordinal)],
+                MaintenanceGrants),
             ModelJson.Default.SerializedModel);
+
+    // OPS-MIG-003a AC2, AC4: what the maintenance credential may reach, written out
+    // here so it is read in the serialized model and not only in the migration that
+    // grants it. DatabaseRoleTests holds the two against each other.
+    private static readonly SerializedModel.MaintenanceGrant[] MaintenanceGrants =
+    [
+        new(
+            "FUNCTION janus.audit_drop_expired_partitions("
+            + "security_retention interval, routine_retention interval)",
+            "EXECUTE"),
+        new("FUNCTION janus.audit_ensure_partitions()", "EXECUTE"),
+        new("SCHEMA janus", "USAGE"),
+        new("TABLE janus.subject_keys", "SELECT"),
+        new("TABLE janus.subject_keys", "UPDATE"),
+    ];
 
     private static SerializedModel.Type Serialized(ResourceTypeDeclaration type) =>
         new(

@@ -26,6 +26,32 @@ public sealed class SerializedModelTests
     }
 
     /// <summary>
+    /// OPS-MIG-003a AC2, AC4: the maintenance credential's functions and the rights it
+    /// holds on the wrapped keys are read in the serialized model, not only in the
+    /// migration that grants them.
+    /// </summary>
+    [Fact]
+    public void OPS_MIG_003a_AC4_TheMaintenanceGrantsAreListedInTheSerializedModel()
+    {
+        string written = AuthorizationModel.Of(HostDomain.Declared().Build()).Serialize();
+
+        foreach (string listed in
+            new[]
+            {
+                "FUNCTION janus.audit_drop_expired_partitions("
+                    + "security_retention interval, routine_retention interval)",
+                "FUNCTION janus.audit_ensure_partitions()",
+                "SCHEMA janus",
+                "TABLE janus.subject_keys",
+            })
+        {
+            Assert.Contains(listed, written, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("\"maintenanceGrants\"", written, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// AUTHZ-MODEL-005 AC2: a change to what the host declared is a difference in the
     /// file, on the line the change was made.
     /// </summary>

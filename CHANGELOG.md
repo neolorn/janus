@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- The serialized model now lists what the maintenance credential may reach: the two
+  audit partition functions it may execute and the rights it holds on the wrapped keys.
+  A reviewer reads them in `artifacts/model.json` beside the rest of the model rather
+  than only in the migration that grants them.
+
 - The case-insensitive collation moves out of the default schema and into the schema
   the library owns, so nothing of the library's can collide with an object a host holds
   in `public`. A database already carrying it is moved by a migration.

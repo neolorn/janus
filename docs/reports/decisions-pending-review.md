@@ -4523,6 +4523,41 @@ silently taking another collation, so the constraint is loud where it is broken.
 *Chapter text that should change.* OPS-DB-001's values should say the collation is
 created in the library's schema and that a column names it by that schema.
 
+---
+
+## 135. The maintenance grants are listed in the serialized model
+
+**Corrections 1 · 2026-09-22 · D-162 section B, Tier 1 reversal, correcting the phase 1 Tier 1 resolution recorded in `docs/reports/phase-01.md` · OPS-MIG-003a AC2, AC4, AUTHZ-MODEL-005**
+
+*What D-162 decided.* The grants of OPS-MIG-003a are listed in the serialized model
+output, `artifacts/model.json`, not only in the migration. Phase 1 had read the migration
+file as the listing, because the serialized model carried tables, columns, keys and
+indexes and neither a function nor a grant.
+
+*What was built.* The serialized model carries a `maintenanceGrants` list: what the
+credential may reach, its kind first, and the right it holds on it. It names the two
+audit partition functions and the two rights on the wrapped keys, plus the schema usage
+both runtime roles need.
+
+*Two points D-162 does not settle, taken at the strictest reading.* The listing is held
+beside the serializer in `Janus.Authorization`, not in `Janus.Storage`, because the
+serialized model is written there and an area project may not reference the storage
+project (CONV-DESIGN-003). Held alone that listing could drift from the migration, so
+`DatabaseRoleTests` reads the listing out of the serialized model and compares it with
+what the database actually grants `janus_maintenance`: every right on every table,
+function and schema of the library's. A grant added, removed or widened by a later
+migration and not listed fails that test.
+
+*Tests that pin it.*
+`SerializedModelTests.OPS_MIG_003a_AC4_TheMaintenanceGrantsAreListedInTheSerializedModel`,
+`DatabaseRoleTests.OPS_MIG_003a_AC4_TheListedGrantsAreTheOnesTheDatabaseHoldsAsync`,
+`DatabaseRoleTests.OPS_MIG_003a_AC4_TheMaintenanceRoleReachesTheKeysAndNoOtherTableAsync`,
+`SerializedModelTests.AUTHZ_MODEL_005_AC1_OneConfigurationSerializesToTheSameBytes`.
+
+*Chapter text that should change.* AUTHZ-MODEL-005 should say the serialized model also
+carries the maintenance credential's grants, which is the only part of it the host does
+not declare.
+
 
 # Rows for chapter 10
 
