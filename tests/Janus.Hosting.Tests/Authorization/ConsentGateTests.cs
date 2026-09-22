@@ -148,6 +148,60 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
         Assert.Empty(await RequiredAsync(granted));
     }
 
+    /// <summary>
+    /// PRIV-SENS-003 AC1: the type the host declares sensitive derives the written
+    /// requirement from the declaration alone, so an ordinary consent over it is the
+    /// wrong kind and a written one admits the action.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_SENS_003_AC1_TheSensitiveDeclarationDerivesTheWrittenRequirementAsync()
+    {
+        Granted granted = await GrantedAsync();
+
+        await RecordAsync(granted.Account, Held(ConsentKind.Ordinary));
+
+        Assert.Equal(ErrorCodes.ConsentWrittenRequired, await RefusalAsync(granted));
+
+        await RecordAsync(granted.Account, Held(ConsentKind.Written));
+
+        Assert.Null(await RefusalAsync(granted));
+    }
+
+    /// <summary>
+    /// PRIV-SENS-003 AC2: the written record is asked for by the consent-based
+    /// purpose and by nothing else, so reading the same sensitive record for a
+    /// purpose resting on the contract is admitted with no consent anywhere.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_SENS_003_AC2_TheWrittenRecordIsAskedForByTheConsentBasedPurposeOnlyAsync()
+    {
+        Granted granted = await GrantedAsync();
+
+        Assert.Equal(ErrorCodes.ConsentRequired, await RefusalAsync(granted));
+        Assert.Null(await RefusalAsync(granted, HostPermissions.Read));
+    }
+
+    /// <summary>
+    /// PRIV-SENS-003 AC3: a customer who has granted no consent-based purpose still
+    /// has their record read and kept, and the capability offers the reading without
+    /// a residual rather than withholding it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_SENS_003_AC3_TheRecordIsReadForACustomerWhoConsentedToNothingAsync()
+    {
+        Granted granted = await GrantedAsync();
+
+        IReadOnlyDictionary<Permission, IReadOnlySet<CapabilityResidual>> residual =
+            await RequiredAsync(granted);
+
+        Assert.Null(await RefusalAsync(granted, HostPermissions.Read));
+        Assert.DoesNotContain(HostPermissions.Read, residual);
+        Assert.Equal([CapabilityResidual.Consent], residual[HostPermissions.Recommend]);
+    }
+
     private static ConsentRecord Held(ConsentKind kind) =>
         new(
             Recommendations,

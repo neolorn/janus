@@ -84,6 +84,95 @@ public sealed class PrivacyContractTests
             property => CardData.Contains(property.Name, StringComparer.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// PRIV-CONS-009 AC1: the method of withdrawal is on the same contract as the
+    /// grant and takes the same one purpose, so the screen that obtains a consent can
+    /// state how it is taken back without anything further being built.
+    /// </summary>
+    [Fact]
+    public void PRIV_CONS_009_AC1_TheWithdrawalIsOnTheSameContractAsTheGrant()
+    {
+        MethodInfo granting = typeof(IConsents).GetMethod("GrantAsync")!;
+        MethodInfo withdrawing = typeof(IConsents).GetMethod("WithdrawAsync")!;
+
+        Assert.Equal(
+            ["context", "purpose", "cancellationToken"],
+            withdrawing.GetParameters().Select(parameter => parameter.Name));
+
+        Assert.Equal(
+            granting.GetParameters().Length - 1,
+            withdrawing.GetParameters().Length);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-006 AC1: nothing the library answers with is a sentence. A refusal
+    /// is a code and structured details, so the words a subject reads are written in
+    /// their language from the requirement and never translated from a string that
+    /// crossed the boundary (LIB-API-003, CONV-CONTENT-001).
+    /// </summary>
+    [Fact]
+    public void PRIV_RIGHT_006_AC1_NoAnswerTheLibraryGivesCarriesASentence()
+    {
+        Assert.Equal(typeof(ErrorCode), typeof(Error).GetProperty("Code")!.PropertyType);
+
+        Assert.DoesNotContain(
+            typeof(Error).GetProperties(),
+            property => property.PropertyType == typeof(string));
+    }
+
+    /// <summary>
+    /// PRIV-CONS-006a AC3: the library sets five cookies, every one of them strictly
+    /// necessary to the service, and offers no way to register another. A cookie that
+    /// is not necessary cannot be registered without a consent-based purpose because
+    /// it cannot be registered at all.
+    /// </summary>
+    [Fact]
+    public void PRIV_CONS_006a_AC3_TheLibrarySetsOnlyTheFiveNecessaryCookies()
+    {
+        Assert.Equal(
+            [
+                "__Host-janus-browser",
+                "__Host-janus-csrf",
+                "__Host-janus-device",
+                "__Host-janus-preauth",
+                "__Host-janus-session",
+            ],
+            Cookies());
+
+        Assert.DoesNotContain(
+            typeof(Result).Assembly.GetTypes().Where(type => type.IsPublic),
+            type => type.Name.Contains("Cookie", StringComparison.Ordinal));
+    }
+
+    // Every cookie name the library's source sets, which is the whole of what a
+    // browser carries from it.
+    private static IReadOnlyList<string> Cookies() =>
+    [
+        .. Directory
+            .EnumerateFiles(Path.Combine(Repository.Root, "src"), "*.cs", SearchOption.AllDirectories)
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .SelectMany(File.ReadLines)
+            .SelectMany(Named)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal),
+    ];
+
+    private static IEnumerable<string> Named(string line)
+    {
+        const string opening = "\"__Host-";
+
+        for (int at = line.IndexOf(opening, StringComparison.Ordinal); at >= 0;
+            at = line.IndexOf(opening, at + 1, StringComparison.Ordinal))
+        {
+            int closing = line.IndexOf('"', at + 1);
+
+            if (closing > at)
+            {
+                yield return line[(at + 1)..closing];
+            }
+        }
+    }
+
     // Every source file of the library naming one of the words, in any casing and
     // outside a comment. A word that appears only in prose about what is not held
     // would otherwise fail a search the criterion means literally.

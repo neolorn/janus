@@ -1129,6 +1129,79 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
 
 
     /// <summary>
+    /// PRIV-MINOR-001 AC1, AC3: on an adults-only deployment nothing is taken before
+    /// the affirmation is derived, and an under-age answer ends the session, so no
+    /// account exists whose subject has not affirmed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_MINOR_001_AC1_NoAccountExistsWithoutTheDerivedAffirmationAsync()
+    {
+        _configuration.Set(Settings.RegistrationAdultAffirmation, AttributeRequirement.Required);
+
+        RegistrationSessionId unanswered = await StartedAsync();
+
+        Assert.Equal(
+            ErrorCodes.AffirmationRequired,
+            Refused(await Service.StageAsync(
+                unanswered,
+                IdentifierKind.Email,
+                Address,
+                TestContext.Current.CancellationToken)));
+
+        RegistrationSessionId underage = await StartedAsync();
+
+        Assert.Equal(
+            ErrorCodes.ProfileUnderage,
+            Refused(await Service.RecordAgeAsync(
+                underage,
+                Minor,
+                TestContext.Current.CancellationToken)));
+
+        Assert.Empty(_directory.Created);
+
+        RegistrationSessionId affirmed = await SecuredAsync();
+
+        _ = Ok(await AcceptedAsync(affirmed));
+
+        Assert.True(Assert.Single(_directory.Created).AdultAffirmed);
+    }
+
+    /// <summary>
+    /// PRIV-MINOR-001 AC2: with the date off, the affirmation is derived from the age
+    /// screen and the date itself reaches no record.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_MINOR_001_AC2_TheDateIsNotKeptWhereTheDeploymentDoesNotKeepItAsync()
+    {
+        _ = Ok(await AcceptedAsync(await SecuredAsync()));
+
+        NewAccount withheld = Assert.Single(_directory.Created);
+
+        Assert.True(withheld.AdultAffirmed);
+        Assert.Null(withheld.DateOfBirth);
+    }
+
+    /// <summary>
+    /// PRIV-MINOR-001 AC2: with the date on, it is on the account beside the
+    /// affirmation, as the personal field PRIV-RIGHT-005a holds under the subject key.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_MINOR_001_AC2_TheDateIsKeptWhereTheDeploymentKeepsItAsync()
+    {
+        _configuration.Set(Settings.ProfileDateOfBirth, AttributeRequirement.Optional);
+
+        _ = Ok(await AcceptedAsync(await SecuredAsync()));
+
+        NewAccount kept = Assert.Single(_directory.Created);
+
+        Assert.True(kept.AdultAffirmed);
+        Assert.Equal(Adult, kept.DateOfBirth);
+    }
+
+    /// <summary>
     /// REG-IDENT-009 AC1: the username is chosen later, so a registration that never
     /// names one completes and the account holds none.
     /// </summary>
