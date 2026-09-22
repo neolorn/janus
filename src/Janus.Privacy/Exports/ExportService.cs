@@ -47,7 +47,7 @@ internal sealed class ExportService(
     /// </summary>
     internal static readonly TimeSpan Window = TimeSpan.FromDays(1);
 
-    private static readonly AuditAction Assembled = AuditAction.Parse("privacy.export.assembled");
+    private static readonly AuditAction Assembled = AuditActions.ExportAssembled;
 
     /// <inheritdoc/>
     public async ValueTask<Result<SubjectExport>> AssembleAsync(

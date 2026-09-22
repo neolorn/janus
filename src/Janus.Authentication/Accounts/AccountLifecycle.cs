@@ -49,16 +49,16 @@ internal sealed class AccountLifecycle(
     RandomNumberGenerator randomness)
 {
     private static readonly AuditAction Deactivated =
-        AuditAction.Parse("identity.account.deactivated");
+        AuditActions.AccountDeactivated;
 
     private static readonly AuditAction Reactivated =
-        AuditAction.Parse("identity.account.reactivated");
+        AuditActions.AccountReactivated;
 
     private static readonly AuditAction DeletionRequested =
-        AuditAction.Parse("identity.deletion.requested");
+        AuditActions.DeletionRequested;
 
     private static readonly AuditAction DeletionCancelled =
-        AuditAction.Parse("identity.deletion.cancelled");
+        AuditActions.DeletionCancelled;
 
     /// <summary>
     /// Takes the account down at its own request.

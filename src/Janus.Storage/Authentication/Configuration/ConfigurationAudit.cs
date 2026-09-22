@@ -30,12 +30,7 @@ internal sealed class ConfigurationAudit(
     IAuditStore records,
     TimeProvider time) : IConfigurationAudit
 {
-    /// <summary>
-    /// What the trail calls a configuration change.
-    /// </summary>
-    public const string Action = "ops.configuration.changed";
-
-    private static readonly AuditAction Changed = AuditAction.Parse(Action);
+    private static readonly AuditAction Changed = AuditActions.ConfigurationChanged;
 
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException">The change is absent.</exception>

@@ -23,7 +23,7 @@ namespace Janus.Storage.Authentication.Sending;
 /// </remarks>
 internal sealed class BotDefenceAudit(IAuditStore records, TimeProvider time) : IBotDefenceAudit
 {
-    private static readonly AuditAction Signalled = AuditAction.Parse("auth.botdefence.signalled");
+    private static readonly AuditAction Signalled = AuditActions.BotDefenceSignalled;
 
     /// <inheritdoc/>
     public async ValueTask SignalledAsync(

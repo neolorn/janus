@@ -4600,6 +4600,43 @@ lifecycle events and that an authorization refusal made under no account names n
 identity, the absence being the recorded fact. AUTHZ-CONCEAL-004 should say the
 identifier is carried whoever asked.
 
+---
+
+## 137. The audit actions are a catalogue, and the closed vocabularies are listed
+
+**Corrections 1 · 2026-09-22 · D-162 section B, Tier 1 reversals · IDN-AUD-001, CONV-NAME-003, `10` section 5**
+
+*What D-162 decided.* `AuditAction` is a closed vocabulary: every member is listed for a
+`10` section 5 row and no member is added without being listed. `MessageKind` is
+likewise a closed set and its members are listed.
+
+*What was built.* The audit actions were thirty-eight literals spelled in eighteen files
+and listed nowhere. They are now one catalogue, `Janus.Core.AuditActions`, built exactly
+as `ErrorCodes` is: one documented member per action, every call site naming the member
+rather than the code. A contract test holds the catalogue against a written list, so an
+action added, removed or respelled fails it. `MessageKind` was already closed and
+already pinned member by member; nothing in it changed. Both are listed under **Rows for
+chapter 10**, member by member.
+
+*One point D-162 does not settle, taken at the strictest reading.* `AuditAction.Parse`
+keeps its shape check and does not refuse a code outside the catalogue, because that is
+exactly how `ErrorCode.Parse` and `ErrorCodes` already work: the catalogue plus the
+contract test is the mechanism CONV-NAME-003 AC2 uses for the library's other closed
+wire vocabulary, and a second mechanism for the same problem would be a second way of
+doing something that already has one.
+
+*Tests that pin it.*
+`AuditActionsTests.IDN_AUD_001_TheSetOfActionsIsClosed`,
+`AuditActionsTests.CONV_NAME_003_AC2_ChangingAnActionFailsTheContractTest`,
+`AuditActionsTests.CONV_NAME_003_AC1_EveryActionSaysWhatItRecords`,
+`VocabularyContractTests.WireNames_TheKeysTheCatalogueIsAskedBy_AreWritten`,
+`VocabularyContractTests.WireNames_EveryVocabularyMember_CarriesOne`.
+
+*Chapter text that should change.* `10` section 5 should carry a subsection listing the
+audit actions and one listing the message kinds, from the rows below. CONV-NAME-003
+should say the audit actions are catalogued and stable as the error codes are.
+
+---
 
 # Rows for chapter 10
 
@@ -4695,9 +4732,75 @@ D-162 item 26). A place the library does not fill is left as it stands.
 ## Audit actions
 
 Chapter 10 holds no list of audit actions yet. D-162 makes `AuditAction` a closed
-vocabulary, so every action the library writes is listed here member by member. This
-entry carries the members added since, until the whole vocabulary is gathered.
+vocabulary, so every action the library writes is listed here, member by member, as
+the catalogue `Janus.Core.AuditActions` holds it. The category is the partition the
+row is routed to, which is what its retention follows (PRIV-RET-002).
 
-| Action | Category | Written when |
+| Action | Category | Catalogue member | Written when |
+| --- | --- | --- | --- |
+| `auth.botdefence.signalled` | security | `AuditActions.BotDefenceSignalled` | The bot defence answered a send with a signal, which is recorded without the signal's own detail. (AUTH-ABUSE-009) |
+| `auth.credential.countermismatch` | security | `AuditActions.CredentialCounterMismatch` | An authenticator presented a signature counter that did not advance, which is what a cloned credential looks like. (AUTH-FACT-002) |
+| `auth.credential.enrolled` | security | `AuditActions.CredentialEnrolled` | A credential was enrolled on an account. (AUTH-FACT-001) |
+| `auth.credential.invalidated` | security | `AuditActions.CredentialInvalidated` | A credential was invalidated by a loss report that took effect. (AUTH-REC-004) |
+| `auth.credential.invalidationheld` | security | `AuditActions.CredentialInvalidationHeld` | An invalidation was held rather than carried out, because carrying it out would leave the account with no way in. (AUTH-REC-004) |
+| `auth.credential.removed` | security | `AuditActions.CredentialRemoved` | A credential was removed from an account. (AUTH-FACT-001) |
+| `auth.credential.reportcancelled` | security | `AuditActions.CredentialReportCancelled` | A loss report was cancelled before it took effect. (AUTH-REC-004) |
+| `auth.credential.reportedlost` | security | `AuditActions.CredentialReportedLost` | A credential was reported lost, which starts the window before it is invalidated. (AUTH-REC-004) |
+| `auth.oidc.refreshreused` | security | `AuditActions.RefreshTokenReused` | A refresh token was presented a second time, which revokes the family it belongs to. (AUTH-TOK-004) |
+| `auth.phonesignal.considered` | security | `AuditActions.PhoneSignalConsidered` | A phone signal was consulted before a send, recorded without the number it was consulted for. (AUTH-ABUSE-006) |
+| `auth.recovery.approved` | security | `AuditActions.RecoveryApproved` | An assisted recovery was approved, naming the approver and the reason given. (AUTH-REC-006) |
+| `auth.restriction.edited` | security | `AuditActions.RestrictionEdited` | A sending restriction was edited. (AUTH-ABUSE-005) |
+| `auth.restriction.granted` | security | `AuditActions.RestrictionGranted` | A sending restriction was granted against an address or a number. (AUTH-ABUSE-005) |
+| `auth.session.presented` | security | `AuditActions.SessionPresented` | A session was presented, which is what a sign-in history is read from. (AUTH-SESS-010) |
+| `authz.access.denied` | security | `AuditActions.AccessDenied` | A permission was refused, which is the row the refusal's correlation identifier resolves to. (AUTHZ-CONCEAL-004) |
+| `identity.account.deactivated` | routine | `AuditActions.AccountDeactivated` | An account was deactivated by its own owner. (IDN-LIFE-013) |
+| `identity.account.reactivated` | routine | `AuditActions.AccountReactivated` | A deactivated account was stood back up. (IDN-LIFE-013) |
+| `identity.credential.labelled` | routine | `AuditActions.CredentialLabelled` | A credential was given or renamed a label by its holder. (REG-PM-002) |
+| `identity.deletion.cancelled` | routine | `AuditActions.DeletionCancelled` | A deletion was cancelled inside its grace window. (IDN-LIFE-014) |
+| `identity.deletion.requested` | routine | `AuditActions.DeletionRequested` | A deletion was requested, which opens the grace window it can be brought back from. (IDN-LIFE-014) |
+| `identity.preferences.changed` | routine | `AuditActions.PreferencesChanged` | The account's preference values were changed, recorded by key and never by value. (REG-PREF-001) |
+| `identity.profile.changed` | routine | `AuditActions.ProfileChanged` | A profile attribute of the account was changed. (IDN-ATTR-001) |
+| `identity.secondstep.preferred` | routine | `AuditActions.SecondStepPreferred` | The account's preferred second step was changed. (AUTH-FACT-007) |
+| `identity.username.changed` | routine | `AuditActions.UsernameChanged` | The account's username was changed, which holds the old one for as long as the retention says. (REG-IDENT-009) |
+| `ops.configuration.changed` | security | `AuditActions.ConfigurationChanged` | A runtime setting is put in force through the one configuration operation. Details carry `key`, `before`, `after`, `loosening` and, where the change is a loosening, `reason`. (OPS-CFG-002, OPS-CFG-005) |
+| `privacy.consent.granted` | security | `AuditActions.ConsentGranted` | A consent was granted for a purpose, naming the document version it was given against. (PRIV-CONS-004) |
+| `privacy.consent.withdrawn` | security | `AuditActions.ConsentWithdrawn` | A consent was withdrawn for a purpose. (PRIV-CONS-008) |
+| `privacy.document.published` | security | `AuditActions.DocumentPublished` | A version of a legal document was published in the governing language. (PRIV-CONS-005) |
+| `privacy.document.translated` | security | `AuditActions.DocumentTranslated` | A translation was filed against a published version of a legal document. (PRIV-CONS-005) |
+| `privacy.erasure.executed` | security | `AuditActions.ErasureExecuted` | An erasure was carried out, which destroys the subject key and leaves the trail resolving. (PRIV-RIGHT-005) |
+| `privacy.export.assembled` | security | `AuditActions.ExportAssembled` | A subject export was assembled and made available to the subject. (PRIV-RIGHT-003) |
+| `privacy.objection.recorded` | security | `AuditActions.ObjectionRecorded` | An objection to a purpose was recorded. (PRIV-BASIS-003) |
+| `privacy.objection.withdrawn` | security | `AuditActions.ObjectionWithdrawn` | An objection to a purpose was withdrawn and the purpose resumed. (PRIV-BASIS-003) |
+| `privacy.request.entered` | security | `AuditActions.RequestEntered` | A data subject request entered the queue staff work. (PRIV-RIGHT-002) |
+| `privacy.request.fulfilled` | security | `AuditActions.RequestFulfilled` | A data subject request was fulfilled. (PRIV-RIGHT-002) |
+| `privacy.request.lapsed` | security | `AuditActions.RequestLapsed` | A data subject request reached its deadline undecided. (PRIV-RIGHT-002) |
+| `privacy.request.refused` | security | `AuditActions.RequestRefused` | A data subject request was refused, with the reason recorded against it. (PRIV-RIGHT-002) |
+| `privacy.request.submitted` | security | `AuditActions.RequestSubmitted` | A data subject request was submitted by the subject. (PRIV-RIGHT-002) |
+
+## Message kinds
+
+`MessageKind` is a closed set and chapter 10 carries no list of it. Every member is
+listed here: the name the deployment's catalogue is asked by, and what the library
+asks for it. The library never holds the words (CONV-CONTENT-001).
+
+| Key | Member | Asked for when |
 | --- | --- | --- |
-| `ops.configuration.changed` | security | A runtime setting is put in force through the one configuration operation (OPS-CFG-002, OPS-CFG-005). Details carry `key`, `before`, `after`, `loosening` and, where the change is a loosening, `reason`. The acting and effective subject are both the person who made it. |
+| `account-exists` | `MessageKind.AccountExists` | The answer to a registration or a change made with an address an account already holds, sent to the holder and never to the person who tried. |
+| `alert` | `MessageKind.Alert` | A condition the operator has to see. |
+| `credential-enrolled` | `MessageKind.CredentialEnrolled` | A credential was enrolled on the account. |
+| `deactivation-notice` | `MessageKind.DeactivationNotice` | The word to an account that has just deactivated itself, carrying the link that stands it back up (IDN-LIFE-013). |
+| `deletion-notice` | `MessageKind.DeletionNotice` | The word to an account whose deletion grace window has begun, carrying the link that cancels it where the deletion is the account's own (IDN-LIFE-014). |
+| `enrolment-link` | `MessageKind.EnrolmentLink` | A link that carries an admin-assisted enrolment. |
+| `identifier-added` | `MessageKind.IdentifierAdded` | An identifier was added to the account. |
+| `identifier-change-confirm` | `MessageKind.IdentifierChangeConfirm` | The address being displaced by a change is asked to confirm it, which is asked only where the account has no other channel at all. |
+| `identifier-detached` | `MessageKind.IdentifierDetached` | The identifier that was removed no longer reaches the account. It carries no link and no powers. |
+| `identifier-removed` | `MessageKind.IdentifierRemoved` | An identifier was removed, sent to the members of the security-notice set that remain and carrying the link that undoes it. |
+| `identifier-settings-changed` | `MessageKind.IdentifierSettingsChanged` | The primary identifier of a kind, or the kind's backup setting, changed. |
+| `no-account` | `MessageKind.NoAccount` | The answer to a request made for an address no account holds. |
+| `privacy-request-lapsed` | `MessageKind.PrivacyRequestLapsed` | The honest word to a subject whose out-of-band erasure request reached its deadline undecided (PRIV-RIGHT-002). |
+| `privacy-request-received` | `MessageKind.PrivacyRequestReceived` | The automatic receipt a data subject request gets the moment it enters the queue, which is not a decision and starts nothing (PRIV-RIGHT-002). |
+| `recovery-link` | `MessageKind.RecoveryLink` | The link a person asked for to set a new password, which restores nothing else and removes no factor. |
+| `secondstep-code` | `MessageKind.SecondStepCode` | A code presented as a second step. |
+| `security-notice` | `MessageKind.SecurityNotice` | A notice that something happened to the account. |
+| `signin-link` | `MessageKind.SignInLink` | A link that signs the person in. |
+| `verification-code` | `MessageKind.VerificationCode` | A code that proves control of an address or a number. |

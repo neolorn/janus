@@ -25,7 +25,7 @@ internal sealed class PhoneSignalAudit(IAuditStore records, TimeProvider time) :
     private const string Absent = "unavailable";
 
     private static readonly AuditAction Considered =
-        AuditAction.Parse("auth.phonesignal.considered");
+        AuditActions.PhoneSignalConsidered;
 
     /// <inheritdoc/>
     public async ValueTask ConsideredAsync(

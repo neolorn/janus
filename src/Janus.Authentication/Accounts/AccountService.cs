@@ -44,18 +44,18 @@ internal sealed class AccountService(
     IUnitOfWork work,
     TimeProvider time) : IAccount
 {
-    private static readonly AuditAction ProfileChanged = AuditAction.Parse("identity.profile.changed");
+    private static readonly AuditAction ProfileChanged = AuditActions.ProfileChanged;
 
-    private static readonly AuditAction UsernameChanged = AuditAction.Parse("identity.username.changed");
+    private static readonly AuditAction UsernameChanged = AuditActions.UsernameChanged;
 
     private static readonly AuditAction PreferencesChanged =
-        AuditAction.Parse("identity.preferences.changed");
+        AuditActions.PreferencesChanged;
 
     private static readonly AuditAction CredentialLabelled =
-        AuditAction.Parse("identity.credential.labelled");
+        AuditActions.CredentialLabelled;
 
     private static readonly AuditAction SecondStepPreferred =
-        AuditAction.Parse("identity.secondstep.preferred");
+        AuditActions.SecondStepPreferred;
 
     /// <inheritdoc/>
     public async ValueTask<Result<AccountDetail>> ReadAsync(

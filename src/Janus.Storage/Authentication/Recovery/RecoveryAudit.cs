@@ -23,7 +23,7 @@ namespace Janus.Storage.Authentication.Recovery;
 /// </remarks>
 internal sealed class RecoveryAudit(IAuditStore records, TimeProvider time) : IRecoveryAudit
 {
-    private static readonly AuditAction Approved = AuditAction.Parse("auth.recovery.approved");
+    private static readonly AuditAction Approved = AuditActions.RecoveryApproved;
 
     private const string Channel = "channel";
 

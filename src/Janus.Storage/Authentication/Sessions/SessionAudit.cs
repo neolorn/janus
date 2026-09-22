@@ -22,7 +22,7 @@ namespace Janus.Storage.Authentication.Sessions;
 /// </remarks>
 internal sealed class SessionAudit(IAuditStore records, TimeProvider time) : ISessionAudit
 {
-    private static readonly AuditAction Presented = AuditAction.Parse("auth.session.presented");
+    private static readonly AuditAction Presented = AuditActions.SessionPresented;
 
     private const string Session = "session";
     private const string Factors = "factors";

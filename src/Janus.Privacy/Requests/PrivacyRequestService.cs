@@ -46,13 +46,13 @@ internal sealed class PrivacyRequestService(
     /// </summary>
     internal const string Source = "privacy.request";
 
-    private static readonly AuditAction Submitted = AuditAction.Parse("privacy.request.submitted");
+    private static readonly AuditAction Submitted = AuditActions.RequestSubmitted;
 
-    private static readonly AuditAction Entered = AuditAction.Parse("privacy.request.entered");
+    private static readonly AuditAction Entered = AuditActions.RequestEntered;
 
-    private static readonly AuditAction Fulfilled = AuditAction.Parse("privacy.request.fulfilled");
+    private static readonly AuditAction Fulfilled = AuditActions.RequestFulfilled;
 
-    private static readonly AuditAction Refused = AuditAction.Parse("privacy.request.refused");
+    private static readonly AuditAction Refused = AuditActions.RequestRefused;
 
     /// <inheritdoc/>
     public async ValueTask<Result<PrivacyRequestReceipt>> SubmitAsync(

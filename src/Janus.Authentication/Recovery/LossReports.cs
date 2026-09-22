@@ -51,13 +51,13 @@ internal sealed class LossReports(
     TimeProvider time,
     RandomNumberGenerator randomness)
 {
-    private static readonly AuditAction Reported = AuditAction.Parse("auth.credential.reportedlost");
+    private static readonly AuditAction Reported = AuditActions.CredentialReportedLost;
 
-    private static readonly AuditAction Cancelled = AuditAction.Parse("auth.credential.reportcancelled");
+    private static readonly AuditAction Cancelled = AuditActions.CredentialReportCancelled;
 
-    private static readonly AuditAction Invalidated = AuditAction.Parse("auth.credential.invalidated");
+    private static readonly AuditAction Invalidated = AuditActions.CredentialInvalidated;
 
-    private static readonly AuditAction Held = AuditAction.Parse("auth.credential.invalidationheld");
+    private static readonly AuditAction Held = AuditActions.CredentialInvalidationHeld;
 
     // The notices the window carries are asked for by no request, so they count
     // against the deployment itself and not against a person's address.

@@ -36,7 +36,7 @@ internal sealed class DeletionSweep(
     IUnitOfWork work,
     TimeProvider time)
 {
-    private static readonly AuditAction Erased = AuditAction.Parse("privacy.erasure.executed");
+    private static readonly AuditAction Erased = AuditActions.ErasureExecuted;
 
     /// <summary>
     /// Runs one pass.

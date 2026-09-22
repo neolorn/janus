@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- The audit actions the library records are now one catalogue, `AuditActions`, instead
+  of a code spelled where it happened to be written. The set is closed and a contract
+  test fails on an action added or respelled without the catalogue saying so, as the
+  error codes already do.
+
 - A refusal from the access gate now carries a correlation identifier whatever the
   request was made under, background work included. The trail records the refusal with
   neither identity named, which is the recorded fact rather than an omission, and the

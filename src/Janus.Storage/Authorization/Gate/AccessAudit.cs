@@ -27,7 +27,7 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
     private const string Permission = "permission";
     private const string ResourceType = "resourceType";
 
-    private static readonly AuditAction Denied = AuditAction.Parse("authz.access.denied");
+    private static readonly AuditAction Denied = AuditActions.AccessDenied;
 
     private const string Append =
         """

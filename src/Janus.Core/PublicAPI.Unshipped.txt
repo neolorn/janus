@@ -162,6 +162,7 @@ Janus.Core.AssuranceLevel.Delegated = 0 -> Janus.Core.AssuranceLevel
 Janus.Core.AuditAction
 Janus.Core.AuditAction.AuditAction() -> void
 Janus.Core.AuditAction.Equals(Janus.Core.AuditAction other) -> bool
+Janus.Core.AuditActions
 Janus.Core.AuditCategory
 Janus.Core.AuditCategory.Routine = 1 -> Janus.Core.AuditCategory
 Janus.Core.AuditCategory.Security = 0 -> Janus.Core.AuditCategory
@@ -2757,6 +2758,44 @@ static Janus.Core.ApprovedRecovery.operator ==(Janus.Core.ApprovedRecovery? left
 static Janus.Core.AuditAction.Parse(string! value) -> Janus.Core.AuditAction
 static Janus.Core.AuditAction.operator !=(Janus.Core.AuditAction left, Janus.Core.AuditAction right) -> bool
 static Janus.Core.AuditAction.operator ==(Janus.Core.AuditAction left, Janus.Core.AuditAction right) -> bool
+static Janus.Core.AuditActions.AccessDenied.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.AccountDeactivated.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.AccountReactivated.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.BotDefenceSignalled.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.ConfigurationChanged.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.ConsentGranted.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.ConsentWithdrawn.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.CredentialCounterMismatch.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.CredentialEnrolled.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.CredentialInvalidated.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.CredentialInvalidationHeld.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.CredentialLabelled.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.CredentialRemoved.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.CredentialReportCancelled.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.CredentialReportedLost.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.DeletionCancelled.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.DeletionRequested.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.DocumentPublished.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.DocumentTranslated.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.ErasureExecuted.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.ExportAssembled.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.ObjectionRecorded.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.ObjectionWithdrawn.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.PhoneSignalConsidered.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.PreferencesChanged.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.ProfileChanged.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.RecoveryApproved.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.RefreshTokenReused.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.RequestEntered.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.RequestFulfilled.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.RequestLapsed.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.RequestRefused.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.RequestSubmitted.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.RestrictionEdited.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.RestrictionGranted.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.SecondStepPreferred.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.SessionPresented.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.UsernameChanged.get -> Janus.Core.AuditAction
 static Janus.Core.AuditRecordId.New(System.TimeProvider! time) -> Janus.Core.AuditRecordId
 static Janus.Core.AuditRecordId.operator !=(Janus.Core.AuditRecordId left, Janus.Core.AuditRecordId right) -> bool
 static Janus.Core.AuditRecordId.operator ==(Janus.Core.AuditRecordId left, Janus.Core.AuditRecordId right) -> bool

@@ -71,9 +71,9 @@ internal sealed class CredentialService(
     IUnitOfWork work,
     TimeProvider time) : ICredentials
 {
-    private static readonly AuditAction Enrolled = AuditAction.Parse("auth.credential.enrolled");
+    private static readonly AuditAction Enrolled = AuditActions.CredentialEnrolled;
 
-    private static readonly AuditAction Removed = AuditAction.Parse("auth.credential.removed");
+    private static readonly AuditAction Removed = AuditActions.CredentialRemoved;
 
     private static readonly IReadOnlyDictionary<string, string> Nothing =
         new Dictionary<string, string>(StringComparer.Ordinal);

@@ -39,9 +39,9 @@ internal sealed class LegalDocumentService(
     IUnitOfWork work,
     TimeProvider time) : ILegalDocuments
 {
-    private static readonly AuditAction Published = AuditAction.Parse("privacy.document.published");
+    private static readonly AuditAction Published = AuditActions.DocumentPublished;
 
-    private static readonly AuditAction Translated = AuditAction.Parse("privacy.document.translated");
+    private static readonly AuditAction Translated = AuditActions.DocumentTranslated;
 
     /// <inheritdoc/>
     public async ValueTask<Result<DocumentVersion>> ReadAsync(

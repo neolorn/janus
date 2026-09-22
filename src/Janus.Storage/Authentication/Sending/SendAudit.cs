@@ -31,9 +31,9 @@ internal sealed class SendAudit(IAuditStore records, TimeProvider time) : ISendA
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
     };
 
-    private static readonly AuditAction Edited = AuditAction.Parse("auth.restriction.edited");
+    private static readonly AuditAction Edited = AuditActions.RestrictionEdited;
 
-    private static readonly AuditAction Granted = AuditAction.Parse("auth.restriction.granted");
+    private static readonly AuditAction Granted = AuditActions.RestrictionGranted;
 
     /// <inheritdoc/>
     public async ValueTask EditedAsync(

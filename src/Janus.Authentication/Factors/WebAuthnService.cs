@@ -38,7 +38,7 @@ internal sealed class WebAuthnService(
     RandomNumberGenerator randomness)
 {
     private static readonly AuditAction CounterMoved =
-        AuditAction.Parse("auth.credential.countermismatch");
+        AuditActions.CredentialCounterMismatch;
 
     /// <summary>
     /// Begins a creation ceremony of the kind asked for.

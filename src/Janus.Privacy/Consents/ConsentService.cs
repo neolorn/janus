@@ -39,13 +39,13 @@ internal sealed class ConsentService(
     /// </summary>
     internal const string Notice = "privacy-notice";
 
-    private static readonly AuditAction Granted = AuditAction.Parse("privacy.consent.granted");
+    private static readonly AuditAction Granted = AuditActions.ConsentGranted;
 
-    private static readonly AuditAction Withdrawn = AuditAction.Parse("privacy.consent.withdrawn");
+    private static readonly AuditAction Withdrawn = AuditActions.ConsentWithdrawn;
 
-    private static readonly AuditAction Objected = AuditAction.Parse("privacy.objection.recorded");
+    private static readonly AuditAction Objected = AuditActions.ObjectionRecorded;
 
-    private static readonly AuditAction Resumed = AuditAction.Parse("privacy.objection.withdrawn");
+    private static readonly AuditAction Resumed = AuditActions.ObjectionWithdrawn;
 
     /// <inheritdoc/>
     public async ValueTask<Result<IReadOnlyList<ConsentRecord>>> ReadAsync(
