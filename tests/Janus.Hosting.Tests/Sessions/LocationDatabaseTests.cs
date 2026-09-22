@@ -1,16 +1,10 @@
 using System;
 using System.Linq;
 using System.Reflection;
-using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
-using Janus.Authentication.Sending;
-using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests;
-using Janus.Authentication.Tests.Alerting;
-using Janus.Authentication.Tests.Sending;
 using Janus.Core;
-using Janus.Core.Configuration;
 using Janus.Hosting.Sessions;
 using Xunit;
 
@@ -22,69 +16,14 @@ namespace Janus.Hosting.Tests.Sessions;
 /// (INT-GEN-006).
 /// </summary>
 [Trait("kind", "unit")]
-public sealed class LocationDatabaseTests : IAsyncDisposable
+public sealed class LocationDatabaseTests
 {
     private static readonly DateTimeOffset Noon = new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
-    private static readonly string[] OneLanguage = ["en"];
-
-    private static readonly string[] OneAddress = ["ops@example.test"];
-
-    private static readonly string[] OneNumber = ["+201001234567"];
-
-    private readonly ConfigurationInMemory _configuration = new();
-    private readonly SendLedgerInMemory _ledger = new();
-    private readonly AlertLedgerInMemory _alerts = new();
-    private readonly AlertLogInMemory _log = new();
-    private readonly MessageTemplatesInMemory _templates = new();
-    private readonly MailTransportInMemory _mail = new();
-    private readonly SmsTransportInMemory _sms = new();
-    private readonly SmsBalanceLedgerInMemory _balances = new();
-    private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
-    private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
 
-    /// <summary>
-    /// A deployment with one address to alert and nothing else to say.
-    /// </summary>
-    public LocationDatabaseTests()
-    {
-        _configuration.Set(Settings.NotificationLanguages, OneLanguage);
-        _configuration.Set(Settings.AlertingEmailDestinations, OneAddress);
-        _configuration.Set(Settings.AlertingSmsDestinations, OneNumber);
-        _configuration.Set(Settings.AbuseSmsBalanceFloor, 100m);
-        _sms.Balance = 1000m;
-    }
-
-    private LocationDatabase Database =>
-        new(
-            new AlertRouter(
-                _configuration,
-                new SendingService(
-                    _configuration,
-                    _ledger,
-                    _templates,
-                    _mail,
-                    _sms,
-                    RestrictionKeySuppliers.None,
-                    Considered.Nothing(_work, _clock),
-                    new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
-                    _work,
-                    _events,
-                    _clock,
-                    _randomness),
-                _alerts,
-                _work,
-                _log),
-            _clock);
-
-    /// <inheritdoc/>
-    public async ValueTask DisposeAsync()
-    {
-        await _work.DisposeAsync();
-        _randomness.Dispose();
-    }
+    private LocationDatabase Database => new(_events, _clock);
 
     /// <summary>
     /// INT-GEN-006 AC1: the resolver holds nothing it could reach a third party with,
@@ -99,7 +38,7 @@ public sealed class LocationDatabaseTests : IAsyncDisposable
             .GetParameters();
 
         Assert.Equal(
-            [typeof(AlertRouter), typeof(TimeProvider)],
+            [typeof(IEvents), typeof(TimeProvider)],
             held.Select(parameter => parameter.ParameterType));
     }
 
@@ -117,11 +56,12 @@ public sealed class LocationDatabaseTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// INT-GEN-006 AC2, OPS-ALERT-002 AC1: the missing file is a degradation the
-    /// operator sees, once a window and not once a sign-in.
+    /// INT-GEN-006 AC2: the missing file surfaces as the degradation condition, under
+    /// a scope of its own so that the router carries it once a window and not once a
+    /// sign-in, and not under another degradation's key.
     /// </summary>
     [Fact]
-    public async Task INT_GEN_006_AC2_TheMissingFileSurfacesAsOneDegradationAsync()
+    public async Task INT_GEN_006_AC2_TheMissingFileSurfacesAsADegradationAsync()
     {
         for (int session = 0; session < 3; session++)
         {
@@ -130,24 +70,15 @@ public sealed class LocationDatabaseTests : IAsyncDisposable
                 TestContext.Current.CancellationToken);
         }
 
-        MailMessage alert = Assert.Single(_mail.Taken);
-        Assert.Equal("ops@example.test", alert.Destination.Value);
-        Assert.Empty(_sms.Taken);
-    }
-
-    /// <summary>
-    /// INT-GEN-006 AC3: an alert that cannot be carried is not a reason to refuse the
-    /// session, which is recorded without a location either way.
-    /// </summary>
-    [Fact]
-    public async Task INT_GEN_006_AC3_AnUndeliveredAlertStillAnswersNoLocationAsync()
-    {
-        _mail.Accepts = false;
-
-        SessionLocation? where = await Database.ResolveAsync(
-            "198.51.100.7",
-            TestContext.Current.CancellationToken);
-
-        Assert.Null(where);
+        Assert.Equal(3, _events.Of<AlertRaised>().Count);
+        Assert.All(
+            _events.Of<AlertRaised>(),
+            raised =>
+            {
+                Assert.Equal(AlertCondition.Degradation, raised.Condition);
+                Assert.Equal(
+                    Alerts.Key(AlertCondition.Degradation, "location.database.absent"),
+                    Alerts.Deduplication(raised.IdempotencyKey));
+            });
     }
 }

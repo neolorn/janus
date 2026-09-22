@@ -3634,11 +3634,12 @@ on a listing is the library's own reading of the address and never a caller's cl
 `SessionOrigin` no longer takes a place as a constructor part, and `SessionLocation`
 left `PresentAsync`, `VerifyDeviceAsync`, `LandAsync` and `AcceptTermsAsync`; a contract
 test now refuses its return to any public parameter. The implementation registered in
-`AddJanus` is `Janus.Hosting.Sessions.LocationDatabase`, which holds the alert router
+`AddJanus` is `Janus.Hosting.Sessions.LocationDatabase`, which holds the event stream
 and the clock and nothing it could reach a third party with: with no file to read it
-raises the `degradation` condition, once a deduplication window rather than once a
-sign-in, and answers no location. An alert that cannot be carried does not refuse the
-session. The file itself and the job that refreshes it are INT-GEN-006's own work in
+raises the `degradation` condition under the absent file, the way every other condition
+in the library is raised, and answers no location. The router carries one alert a
+deduplication window rather than one a sign-in, and an alert that cannot be carried
+does not refuse the session. The file itself and the job that refreshes it are INT-GEN-006's own work in
 phase 9 (INF-BG-001), and what that phase adds is the reading of the file behind this
 port, not another signature.
 
@@ -3648,9 +3649,8 @@ port, not another signature.
 `SessionServiceTests.AUTH_SESS_013_AC2_EachEntryCarriesTimesDeviceAndCityAsync`,
 `PublicSurfaceTests.INT_GEN_006_AC3_NoContractMemberIsToldWhereASessionWas`,
 `LocationDatabaseTests.INT_GEN_006_AC1_TheResolverHoldsNothingItCouldCallOutWith`,
-`LocationDatabaseTests.INT_GEN_006_AC2_TheMissingFileSurfacesAsOneDegradationAsync`,
-`LocationDatabaseTests.INT_GEN_006_AC3_WithNoFileAvailableNoLocationIsAnsweredAsync`,
-`LocationDatabaseTests.INT_GEN_006_AC3_AnUndeliveredAlertStillAnswersNoLocationAsync`.
+`LocationDatabaseTests.INT_GEN_006_AC2_TheMissingFileSurfacesAsADegradationAsync`,
+`LocationDatabaseTests.INT_GEN_006_AC3_WithNoFileAvailableNoLocationIsAnsweredAsync`.
 
 *Chapter text that should change.* None in `05` or `09`, which name a location only
 where a session is listed. The implementation plan should name the phase that builds
