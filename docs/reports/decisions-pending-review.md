@@ -2704,6 +2704,8 @@ guess. A host that raises the prompt calls the contract and names `reconsent`.
 record the `dashboard` mechanism and that `reconsent` is written by a host calling the
 contract.
 
+**Superseded by D-162.** Applied in entry 148.
+
 ---
 
 ## 88. An action is bound to the purpose it is done for
@@ -5169,6 +5171,49 @@ purposes the document covers". PRIV-CONS-001 AC2 should say that the version res
 to the exact text of the governing document. LIB-HOST-001's purpose declaration should
 carry the governing document. `09` section 7 should say that `noticeVersion` carries the
 version of the document that governs the purpose.
+
+---
+
+## 148. The dashboard records whether it was asked again
+
+**Corrections 1 · 2026-09-23 · D-162 section C, item 87 · PRIV-CONS-001 AC1,
+PRIV-CONS-007, `09` section 7, `10` section 5.21**
+
+*What D-162 decided.* A grant for a purpose on which the subject holds a superseded,
+unwithdrawn consent records `reconsent`; any other grant records `dashboard`. Entry 87
+chose the other reading, that the endpoint always records `dashboard` and `reconsent` is
+left to a host calling the contract, on the ground that which surface asked is the
+frontend's fact. D-162 makes it the library's, and it is derivable without asking the
+frontend anything.
+
+*What was built.* `POST /privacy/consents/{purpose}/grant` reads the subject's records
+first and names `reconsent` where the one for that purpose was ended by a revision and
+never taken back, and `dashboard` otherwise. Nothing else changes: the endpoint that
+serves the first grant is the endpoint that serves the prompt, which is why the record
+has to tell them apart.
+
+*Two points D-162 does not settle, taken at the strictest reading.*
+
+1. **The derivation is at the endpoint, not in the consent service.** `09` section 7
+   gives the grant endpoint no body, so the mechanism there is the library's to choose;
+   everywhere else it is the caller's. Putting the rule in the service would have it
+   overwrite what a caller named, so a host recording an administrator's grant over a
+   superseded consent would lose the administrator. The service goes on recording what
+   it is told, and `registration` and `administrator` are untouched.
+2. **Withdrawn beats superseded.** A consent the subject took back before a revision
+   ended it raises no prompt to answer, so granting it again is an ordinary dashboard
+   grant. D-162's "superseded, unwithdrawn" says exactly this, and the withdrawal is
+   the subject's own act while the supersession is not.
+
+*Tests that pin it.*
+`ConsentEndpointTests.PRIV_CONS_001_AC1_AGrantOverASupersededConsentIsRecordedAsReconsentAsync`,
+`ConsentEndpointTests.PRIV_CONS_001_AC1_AGrantOverAWithdrawnConsentIsRecordedAsTheDashboardAsync`,
+`ConsentEndpointTests.PRIV_CONS_011_AC1_EveryConsentHeldIsVisibleToItsSubjectAsync`.
+
+*Chapter text that should change.* `09` section 7 should say that the grant endpoint
+records `reconsent` where the subject holds a superseded, unwithdrawn consent for the
+purpose and `dashboard` otherwise, and that a host calling the contract names its own
+mechanism. `10` section 5.21's `reconsent` row should say the library writes it.
 
 
 # Rows for chapter 10

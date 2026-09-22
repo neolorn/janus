@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- The privacy dashboard's grant records which of the two things it was: a grant made on
+  the subject's own pages records `dashboard`, and one answering the prompt a material
+  revision raised, over a consent the revision ended and the subject never took back,
+  records `reconsent`. A host granting through the contract still names its own
+  mechanism.
+
 - A purpose declaration now names the legal document that governs its consent, and the
   privacy notice governs the purposes that name none. A consent is recorded against the
   version of that document, and a material revision of it ends the live consents of the
