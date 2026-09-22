@@ -131,8 +131,9 @@ public sealed class OidcFlowTests
     }
 
     /// <summary>
-    /// AUTH-SESS-012 AC3: where the host declared where its sign-in screen is, a
-    /// request that is not silent is forwarded to it rather than answered.
+    /// AUTH-SESS-012 AC3: a request that is not silent is forwarded to the sign-in
+    /// screen the deployment declared, and is never told `login_required`, which is
+    /// what `prompt=none` asked to be told and it did not.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -151,6 +152,8 @@ public sealed class OidcFlowTests
             "https://janus.example.test/signin",
             Where(answered),
             StringComparison.Ordinal);
+
+        Assert.DoesNotContain("login_required", Where(answered), StringComparison.Ordinal);
     }
 
     /// <summary>

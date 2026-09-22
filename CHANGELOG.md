@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- Where a browser holding no session is sent to sign in is now a declaration with no
+  default. A deployment that registers none does not start, instead of meeting an
+  interactive authorization request with nowhere to forward it. `login_required` is now
+  the answer to `prompt=none` alone, which is what a silent request asks to be told.
+
 - The addresses of the frontend's password and passkey pages are now a declaration with
   no default. A deployment that registers none does not start, naming the declaration it
   left out, instead of serving neither well-known document to a password manager. Both

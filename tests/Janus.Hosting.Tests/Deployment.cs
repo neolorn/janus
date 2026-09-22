@@ -73,6 +73,11 @@ internal sealed class Deployment : IAsyncDisposable
     private readonly WebApplication _application;
     private readonly RequestDelegate _pipeline;
 
+    // LIB-HOST-001: where a browser holding no session is sent is a declaration no
+    // deployment starts without, so every deployment here carries one (AUTH-SESS-012).
+    private static readonly AuthenticationAddresses Screen =
+        new("https://janus.example.test/signin");
+
     // LIB-HOST-001: the frontend's pages are a declaration no deployment starts
     // without, so every deployment here carries one (REG-PM-001).
     private static readonly PasskeyAddresses Pages = new(
@@ -111,7 +116,7 @@ internal sealed class Deployment : IAsyncDisposable
             builder.Services,
             application,
             addresses ?? Pages,
-            signIn ?? AuthenticationAddresses.None);
+            signIn ?? Screen);
 
         _application = builder.Build();
 

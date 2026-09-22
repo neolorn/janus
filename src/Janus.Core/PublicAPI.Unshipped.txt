@@ -2741,7 +2741,6 @@ static Janus.Core.AuditAction.operator ==(Janus.Core.AuditAction left, Janus.Cor
 static Janus.Core.AuditRecordId.New(System.TimeProvider! time) -> Janus.Core.AuditRecordId
 static Janus.Core.AuditRecordId.operator !=(Janus.Core.AuditRecordId left, Janus.Core.AuditRecordId right) -> bool
 static Janus.Core.AuditRecordId.operator ==(Janus.Core.AuditRecordId left, Janus.Core.AuditRecordId right) -> bool
-static Janus.Core.AuthenticationAddresses.None.get -> Janus.Core.AuthenticationAddresses!
 static Janus.Core.AuthenticationAddresses.operator !=(Janus.Core.AuthenticationAddresses? left, Janus.Core.AuthenticationAddresses? right) -> bool
 static Janus.Core.AuthenticationAddresses.operator ==(Janus.Core.AuthenticationAddresses? left, Janus.Core.AuthenticationAddresses? right) -> bool
 static Janus.Core.AuthenticatorAssertion.operator !=(Janus.Core.AuthenticatorAssertion? left, Janus.Core.AuthenticatorAssertion? right) -> bool

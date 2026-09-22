@@ -136,6 +136,27 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// LIB-HOST-001, AUTH-SESS-012 AC3: where a browser holding no session is sent is
+    /// likewise a declaration with no default, so a deployment that registered none is
+    /// stopped as it starts rather than meeting an interactive authorization request
+    /// with nowhere to forward it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_SESS_012_AC3_ADeploymentThatDeclaredNoSignInScreenIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using IHost deployment = Deployed(signIn: false);
+
+        StartupException refused = await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(cancellationToken));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        Assert.Equal("authenticationAddresses.signIn", refused.Failure?.Details["key"].GetString());
+    }
+
+    /// <summary>
     /// AUTHZ-MODEL-004 AC2: the web server is a hosted service of the host's, and
     /// hosted services start in the order they were registered, so the checks that read
     /// the database stand at the head of the collection and no request is served
@@ -157,9 +178,13 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         Assert.Equal(typeof(ModelValidationService), first.ImplementationType);
     }
 
-    private IHost Deployed(bool catalogue = true, bool handlers = true, bool addresses = true) =>
+    private IHost Deployed(
+        bool catalogue = true,
+        bool handlers = true,
+        bool addresses = true,
+        bool signIn = true) =>
         new HostBuilder()
-            .ConfigureServices(services => Declared(services, catalogue, handlers, addresses))
+            .ConfigureServices(services => Declared(services, catalogue, handlers, addresses, signIn))
             .Build();
 
     // The library registered over this deployment, as the host's own code registers
@@ -168,7 +193,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         IServiceCollection services,
         bool catalogue = true,
         bool handlers = true,
-        bool addresses = true)
+        bool addresses = true,
+        bool signIn = true)
     {
         if (catalogue)
         {
@@ -186,6 +212,11 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
                 "https://accounts.example.test/password",
                 "https://accounts.example.test/passkeys/new",
                 "https://accounts.example.test/passkeys"));
+        }
+
+        if (signIn)
+        {
+            services.AddSingleton(new AuthenticationAddresses("https://accounts.example.test/signin"));
         }
 
         return services.AddJanus(

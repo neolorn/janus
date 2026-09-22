@@ -228,7 +228,9 @@ public static class JanusRegistration
         // REG-PM-001, LIB-HOST-001: the frontend's pages are the host's to declare and
         // the library has no address to fall back on, so a deployment that registered
         // none is stopped at startup and none is registered here.
-        services.AddScoped(provider => new DeclarationCoverage(provider.GetService<PasskeyAddresses>()));
+        services.AddScoped(provider => new DeclarationCoverage(
+            provider.GetService<PasskeyAddresses>(),
+            provider.GetService<AuthenticationAddresses>()));
 
         // CONV-DESIGN-006: every request and response of the library's endpoints is
         // read and written by the generated contexts, never by reflection.

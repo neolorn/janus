@@ -108,11 +108,10 @@ internal sealed class AuthorizationIssue(
         Error refusal,
         bool silent)
     {
-        // AUTH-SESS-012 AC3: a silent request is told that nobody is signed in, and a
-        // request that is not silent is sent where a person can sign in.
+        // AUTH-SESS-012 AC3: a request that is not silent is sent where a person can
+        // sign in, which the deployment declared or it did not start.
         if (!silent
             && refusal.Code == ErrorCodes.SessionExpired
-            && addresses.SignIn.Length > 0
             && context.Transaction.GetHttpRequest() is HttpRequest request)
         {
             request.HttpContext.Response.Redirect(addresses.SignIn);
@@ -121,8 +120,11 @@ internal sealed class AuthorizationIssue(
             return;
         }
 
+        // `login_required` answers a silent request and nothing else: it is what
+        // `prompt=none` asks to be told, and a request that did not ask to be told it
+        // was forwarded instead.
         context.Reject(
-            refusal.Code == ErrorCodes.SessionExpired
+            silent && refusal.Code == ErrorCodes.SessionExpired
                 ? OpenIddictConstants.Errors.LoginRequired
                 : OpenIddictConstants.Errors.AccessDenied,
             description: null,

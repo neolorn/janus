@@ -11,14 +11,24 @@ namespace Janus.Hosting;
 /// The frontend pages the two well-known documents point at, or nothing where the
 /// deployment registered none.
 /// </param>
+/// <param name="authentication">
+/// Where a browser holding no session is sent, or nothing where the deployment
+/// registered none.
+/// </param>
 /// <remarks>
-/// Implements LIB-HOST-001 and REG-PM-001. The library knows no route of the frontend,
-/// so it has none to fall back on: a deployment that declares none of these is stopped
-/// here rather than answering a password manager as a site that offers neither page.
+/// Implements LIB-HOST-001, REG-PM-001 and AUTH-SESS-012. The library knows no route of
+/// the frontend, so it has none to fall back on: a deployment that declares none of
+/// these is stopped here rather than answering a password manager as a site that offers
+/// neither page, or meeting an interactive authorization request with nowhere to send
+/// it.
 /// </remarks>
-internal sealed class DeclarationCoverage(PasskeyAddresses? addresses)
+internal sealed class DeclarationCoverage(
+    PasskeyAddresses? addresses,
+    AuthenticationAddresses? authentication)
 {
-    private const string Declaration = "passkeyAddresses";
+    private const string Passkeys = "passkeyAddresses";
+
+    private const string Authentication = "authenticationAddresses";
 
     /// <summary>
     /// Reads what LIB-HOST-001 requires against what is registered.
@@ -28,21 +38,26 @@ internal sealed class DeclarationCoverage(PasskeyAddresses? addresses)
     {
         if (addresses is null)
         {
-            return Missing(Declaration);
+            return Missing(Passkeys);
         }
 
         if (addresses.ChangePassword.Length is 0)
         {
-            return Missing(Declaration + ".changePassword");
+            return Missing(Passkeys + ".changePassword");
         }
 
         if (addresses.Enrol.Length is 0)
         {
-            return Missing(Declaration + ".enrol");
+            return Missing(Passkeys + ".enrol");
         }
 
-        return addresses.Manage.Length is 0
-            ? Missing(Declaration + ".manage")
+        if (addresses.Manage.Length is 0)
+        {
+            return Missing(Passkeys + ".manage");
+        }
+
+        return authentication is null || authentication.SignIn.Length is 0
+            ? Missing(Authentication + ".signIn")
             : Result.Success();
     }
 

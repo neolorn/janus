@@ -1900,6 +1900,8 @@ forwarded to a route that may not be there, which is the closed answer.
 beside the other host declarations, or `09` should name the address the authorization
 endpoint forwards to.
 
+**Superseded by D-162.** Applied in entry 128.
+
 ---
 
 ## 62. Which routes the machine profile governs
@@ -4251,6 +4253,42 @@ incomplete.
 registers and say that its absence stops the deployment. LIB-HOST-001's table needs the
 row, listed under **Rows for chapter 10**.
 
+---
+
+## 128. The sign-in screen is a declaration the deployment cannot start without
+
+**Corrections 1 · 2026-09-22 · D-162 section B, correcting entry 61 · AUTH-SESS-012 AC3, LIB-HOST-001, LIB-HOST-003**
+
+*What D-162 decided.* The authentication application's sign-in address is a required
+declaration with no default; its absence fails startup with
+`model.startup.declarationmissing`; `login_required` is the answer to `prompt=none`
+alone.
+
+*What was built.* `AuthenticationAddresses.None` is gone, nothing registers a default,
+and `DeclarationCoverage` now reads the sign-in address beside the passkey pages, naming
+`authenticationAddresses.signIn` where it is absent or empty. The OIDC registration no
+longer registers an address of its own, so the only address in the process is the one the
+host declared.
+
+`AuthorizationIssue` forwards every interactive request whose refusal is a missing
+session, because there is now always somewhere to forward it, and answers
+`login_required` only where the request carried `prompt=none`. A request that did not ask
+to be told is told nothing it did not ask for; anything else is `access_denied`.
+
+*Decided in the owner's absence.* One point, Tier 2: *what the refusal names.* As in
+entry 127, a host declaration is nearest a settings key, so the refusal names `key` and
+spells the declaration as the host writes it, with the absent field appended:
+`authenticationAddresses.signIn`.
+
+*Tests that pin it.*
+`StartupValidationTests.AUTH_SESS_012_AC3_ADeploymentThatDeclaredNoSignInScreenIsRefusedAsync`,
+`OidcFlowTests.AUTH_SESS_012_AC3_AnInteractiveRequestReachesTheSignInScreenAsync`,
+`OidcFlowTests.AUTH_SESS_012_AC3_ASilentRequestWithoutASessionSaysSoAsync`.
+
+*Chapter text that should change.* AUTH-SESS-012 AC3 should say that the address is
+declared and that its absence stops the deployment, and that `login_required` answers a
+silent request alone. LIB-HOST-001's table needs the row, listed under **Rows for chapter
+10**.
 
 # Rows for chapter 10
 
@@ -4259,11 +4297,22 @@ carries and chapter 10 does not yet hold rows for. Each is listed with what the 
 does, so the row can be written from it. Nothing here is a decision; the shapes are
 D-162's.
 
-## Section 1.2, error codes
+## Section 1, error codes
 
-| Code | Status | Raised when |
+The subsection each row belongs in is named with it.
+
+| Code | Section | Status | Raised when |
+| --- | --- | --- | --- |
+| `api.request.malformed` | 1.5 | 400 | The request could not be read: its body is not the shape the endpoint takes, or a member it requires is absent or empty. `details.member` names the member the reader stopped at, or the one the endpoint required, and carries nothing of its value; where the body failed before any member, the refusal carries the code alone (API-CONV-002). |
+| `identity.registration.signedin` | 1.1 | 409 | `POST /register` arrives from a browser holding a live session. Nothing is staged and no account document is answered; the frontend navigates to the account application (REG-SESS-002). |
+| `auth.password.toolong` | 1.2 | 422 | A password longer than `password.maximum` is set, at registration, at a password change or at a reset. Nothing is truncated. |
+
+## LIB-HOST-001, host declarations
+
+| Declaration | Required | Absent |
 | --- | --- | --- |
-| `auth.password.toolong` | 422 | A password longer than `password.maximum` is set, at registration, at a password change or at a reset. Nothing is truncated. |
+| `PasskeyAddresses` (`changePassword`, `enrol`, `manage`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `passkeyAddresses` or the field of it that is empty. The addresses are the frontend pages `/.well-known/change-password` and `/.well-known/passkey-endpoints` point at (REG-PM-001). |
+| `AuthenticationAddresses` (`signIn`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `authenticationAddresses.signIn`. The address is where an authorization request that is not silent and holds no session is forwarded (AUTH-SESS-012 AC3). |
 
 ## Section 4, configuration keys
 
@@ -4299,3 +4348,13 @@ D-162 item 26). A place the library does not fill is left as it stands.
 | `type` | the widest written request type | What was asked for. |
 | `status` | the widest written request status | Where it had got to. |
 | `decisionDue` | the width of an instant | When the decision was due. |
+
+## Audit actions
+
+Chapter 10 holds no list of audit actions yet. D-162 makes `AuditAction` a closed
+vocabulary, so every action the library writes is listed here member by member. This
+entry carries the members added since, until the whole vocabulary is gathered.
+
+| Action | Category | Written when |
+| --- | --- | --- |
+| `ops.configuration.changed` | security | A runtime setting is put in force through the one configuration operation (OPS-CFG-002, OPS-CFG-005). Details carry `key`, `before`, `after`, `loosening` and, where the change is a loosening, `reason`. The acting and effective subject are both the person who made it. |

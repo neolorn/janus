@@ -97,21 +97,6 @@ internal static class OidcRegistration
             _ = options.UseAspNetCore();
         });
 
-        services.TryAddOidcAddresses();
-
         return services;
-    }
-
-    private static void TryAddOidcAddresses(this IServiceCollection services)
-    {
-        foreach (ServiceDescriptor descriptor in services)
-        {
-            if (descriptor.ServiceType == typeof(AuthenticationAddresses))
-            {
-                return;
-            }
-        }
-
-        services.AddSingleton(AuthenticationAddresses.None);
     }
 }
