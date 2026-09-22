@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Factors;
@@ -169,6 +170,56 @@ public sealed class ExportSourceTests(DatabaseFixture database)
         IReadOnlyList<ExportSection> sections = await AssembledAsync(subject);
 
         Assert.Empty(Assert.Single(sections, section => section.Name == "sessions").Records);
+    }
+
+    /// <summary>
+    /// REG-PREF-001 AC4: the export carries the preferences in force, and after an
+    /// erasure the declared values are no longer readable while the language and the
+    /// time zone, which are not under the subject key, still are.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_PREF_001_AC4_TheExportCarriesThePreferencesAndErasureTakesTheValuesAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        await SettledAsync(subject);
+
+        IReadOnlyDictionary<string, string> exported = Assert.Single(
+            Assert.Single(
+                await AssembledAsync(subject),
+                section => section.Name == "preferences").Records).Values;
+
+        Assert.Equal("light", exported["theme"]);
+        Assert.Equal("16", exported["text-size"]);
+
+        await _deployment.EraseAsync(subject);
+
+        await using JanusDbContext reading = database.Context();
+
+        await Assert.ThrowsAsync<CryptographicException>(async () =>
+            await Preferences(reading).FindBySubjectAsync(
+                subject,
+                TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// IDN-ATTR-001 AC1: the language the person set is in the subject access export
+    /// beside the rest of what is held about them.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ATTR_001_AC1_TheLanguagePreferenceIsInTheExportAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        await SettledAsync(subject);
+
+        IReadOnlyDictionary<string, string> exported = Assert.Single(
+            Assert.Single(
+                await AssembledAsync(subject),
+                section => section.Name == "preferences").Records).Values;
+
+        Assert.Equal("ar-EG", exported["language"]);
+        Assert.Equal("Africa/Cairo", exported["timeZone"]);
     }
 
     private static string Fresh(string person) =>
