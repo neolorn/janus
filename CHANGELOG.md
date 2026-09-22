@@ -784,6 +784,10 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- A check, a capability page or an explanation on a type a derivation reaches is now
+  refused without the host's rows whatever that derivation confers, rather than only
+  where the role it confers allows what is being asked. A call site that passes today
+  can no longer start faulting because an administrator edited a role.
 - An explanation can now be asked with the host's own rows, and on a type a derivation
   reaches it names the grant the fact produced: no identifier, the derived kind, the
   role the derivation confers, and the container it was inherited from. Asked without

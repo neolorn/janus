@@ -254,15 +254,19 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
         await work.CommitAsync(TestContext.Current.CancellationToken);
     }
 
+    // The type a document sits in declares a derivation, so the check is asked with the
+    // rows that derivation is evaluated over (AUTHZ-DERIVE-001, D-162).
     private async Task<ErrorCode?> RefusalAsync(Granted granted, Permission? permission = null)
     {
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
 
         Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
             .RequireAsync(
                 AccessContext.Of(granted.Account),
                 permission ?? HostPermissions.Recommend,
                 granted.Record,
+                Sources(reading),
                 TestContext.Current.CancellationToken);
 
         return outcome.Match(() => (ErrorCode?)null, error => error.Code);
@@ -272,6 +276,7 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
         RequiredAsync(Granted granted)
     {
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
 
         Result<IReadOnlyList<Capability>> answered = await scope.ServiceProvider
             .GetRequiredService<IAccessGate>()
@@ -280,12 +285,17 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
                 Document,
                 [granted.Record.Id],
                 [HostPermissions.Read, HostPermissions.Recommend],
+                Sources(reading),
                 TestContext.Current.CancellationToken);
 
         return answered.Match(
             capabilities => capabilities[0].Requires,
             error => throw new InvalidOperationException(error.Code.ToString()));
     }
+
+    private static FilterSources<HostDocument> Sources(HostContext reading) =>
+        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, document => document.Id)
+            .Relationship("reviewer", reading.Reviewers);
 
     // One case's rows: the account holding the grant and the record it holds it on.
     private sealed record Granted(SubjectId Account, ResourceReference Record);

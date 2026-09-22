@@ -419,12 +419,14 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
         Permission permission)
     {
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
 
         Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
             .RequireAsync(
                 AccessContext.Of(deployed.Account),
                 permission,
                 resource,
+                Sources(reading),
                 TestContext.Current.CancellationToken);
 
         return outcome.Match(

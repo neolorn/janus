@@ -94,6 +94,8 @@ type a non-materialised derivation reaches, where the role it confers allows the
 permission being asked for, a call without sources is refused with
 `authz.derivation.sourcesmissing`".
 
+**Superseded by D-162.** Applied in entry 112.
+
 ---
 
 ## 3. The explanation is refused on a derived type rather than answered from grants alone
@@ -3446,3 +3448,30 @@ decided.
 `ExplanationTests.AUTHZ_GATE_004_AC2_AnApprovalNamesTheGrantAndWhatItWasInheritedFromAsync`,
 `ExplanationTests.AUTHZ_GATE_004_AC3_OnlyATypeThatDisclosesExplainsToTheCallerAsync`,
 `MaterialisationTests.AUTHZ_DERIVE_005_AC2_AnExplanationNamesTheGrantAsMaterialisedAsync`.
+
+---
+
+## 112. A type a derivation reaches is asked with the host's rows, whatever it confers
+
+**Corrections 1 · 2026-09-22 · D-162 section B, correcting entry 2 · AUTHZ-DERIVE-001, AUTHZ-PRIN-001 AC2**
+
+*What D-162 decided.* The refusal `authz.derivation.sourcesmissing` applies on any type
+that a non-materialised derivation is declared on or reaches through containment,
+whatever the derivation confers; the narrowing to "a derivation that confers what is
+asked" makes a host call site pass until an administrator edits a role, then fault.
+Materialised derivations stay excluded.
+
+*What was built.* The three paths that take no sources (the check, the page and the
+explanation) ask one predicate: whether a non-materialised derivation is declared on the
+type or on a type containing it. Neither the role nor what it allows is read there, so
+nothing about a call site's fate depends on a row an administrator may edit. The rule
+composed for an evaluation still carries only the derivations whose role confers what is
+being asked, because a relationship conferring nothing asked for must grant nothing.
+
+*Tests that pin it.*
+`GateBehaviourTests.AUTHZ_PRIN_001_AC2_ACheckWithoutTheHostsRowsIsAFaultAsync`, which
+asks for a permission the reviewer's role does not confer and expects the fault,
+`GateBehaviourTests.AUTHZ_PRIN_001_AC2_ACheckNoDerivationReachesNeedsNoRowsAsync`, which
+checks a record of a type no derivation reaches and is answered,
+`MaterialisationTests.AUTHZ_DERIVE_005_AC2_AnExplanationNamesTheGrantAsMaterialisedAsync`,
+which explains a materialised deployment's record without rows.

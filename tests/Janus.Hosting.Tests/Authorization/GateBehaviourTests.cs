@@ -21,6 +21,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
 {
     private static readonly ResourceType Document = ResourceType.Parse("document");
     private static readonly ResourceType Workspace = ResourceType.Parse("workspace");
+    private static readonly ResourceType Report = ResourceType.Parse("report");
 
     // The role the host's declaration says a reviewer holds on what they review.
     private static readonly RoleName Reviewer = RoleName.Parse("reviewer");
@@ -615,9 +616,11 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
-    /// AUTHZ-PRIN-001 AC2, AUTHZ-DERIVE-001 (D-161): a check on a type a derivation
+    /// AUTHZ-PRIN-001 AC2, AUTHZ-DERIVE-001 (D-162): a check on a type a derivation
     /// reaches, asked without the rows the derivation is evaluated over, is a fault
-    /// rather than an answer read from the stored grants alone.
+    /// rather than an answer read from the stored grants alone. It is a fault whatever
+    /// the derivation confers: the role is edited where it stands, so a call the
+    /// conferred role happens to allow nothing of would fault on the next edit of it.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -640,6 +643,12 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             nested.Record,
             cancellationToken);
 
+        Result conferringNothing = await gate.RequireAsync(
+            AccessContext.Of(nested.Account),
+            HostPermissions.Publish,
+            nested.Record,
+            cancellationToken);
+
         Result<IReadOnlyList<Capability>> page = await gate.CapabilitiesAsync(
             AccessContext.Of(nested.Account),
             Document,
@@ -658,6 +667,9 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             checking.Match(() => throw new InvalidOperationException("It was not a fault."), error => error.Code));
         Assert.Equal(
             ErrorCodes.DerivationSourcesMissing,
+            conferringNothing.Match(() => throw new InvalidOperationException("It was not a fault."), error => error.Code));
+        Assert.Equal(
+            ErrorCodes.DerivationSourcesMissing,
             page.Match(_ => throw new InvalidOperationException("It was not a fault."), error => error.Code));
         Assert.Equal(
             ErrorCodes.DerivationSourcesMissing,
@@ -665,10 +677,9 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
-    /// AUTHZ-PRIN-001 AC2, AUTHZ-DERIVE-001 (D-161): where no derivation confers what
-    /// is being asked for, the stored grants are the whole of the answer and the path
-    /// without the host's rows answers it. The role the declaration's derivation confers
-    /// allows reading and not editing, so editing follows from no fact of the host's.
+    /// AUTHZ-PRIN-001 AC2, AUTHZ-DERIVE-001 (D-162): on a type no derivation reaches,
+    /// on itself or through a container, the stored grants are the whole of the answer
+    /// and the path without the host's rows answers it.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -677,12 +688,14 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         Nested nested = await NestAsync(allowing: [HostPermissions.Edit]);
 
-        await nested.Deployment.NamedRoleAsync(Reviewer, [HostPermissions.Read], cancellationToken);
+        ResourceReference report = Reference(Report);
+
+        await nested.Deployment.RegisterAsync(report, containedIn: null, cancellationToken);
 
         await nested.Deployment.GrantAsync(
             GrantSubject.Of(nested.Account),
             nested.Role,
-            nested.Record,
+            report,
             false,
             null,
             null,
@@ -694,7 +707,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             .RequireAsync(
                 AccessContext.Of(nested.Account),
                 HostPermissions.Edit,
-                nested.Record,
+                report,
                 cancellationToken);
 
         Assert.True(outcome.Match(() => true, _ => false));

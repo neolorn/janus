@@ -56,8 +56,9 @@ public interface IAccessGate
     /// evaluated beside the stored grants.
     /// </returns>
     /// <remarks>
-    /// AUTHZ-DERIVE-001, AUTHZ-PRIN-001 AC2, D-161: a type that declares a derivation
-    /// is asked through this overload, and the one without sources is refused with
+    /// AUTHZ-DERIVE-001, AUTHZ-PRIN-001 AC2, D-161: a type a derivation reaches, on
+    /// itself or through a container, is asked through this overload, whatever the role
+    /// the derivation confers allows; the one without sources is refused with
     /// <c>authz.derivation.sourcesmissing</c>, so no path answers from stored grants
     /// alone.
     /// </remarks>
@@ -242,7 +243,7 @@ public interface IAccessGate
     /// AUTHZ-DERIVE-001, AUTHZ-GATE-005 AC1, D-162: the derivations cost one further
     /// query for the whole page, carrying one clause each, whatever the page's size and
     /// however many permissions are asked for; the overload without sources is refused
-    /// on a type that declares one.
+    /// on a type a derivation reaches, whatever it confers.
     /// </remarks>
     ValueTask<Result<IReadOnlyList<Capability>>> CapabilitiesAsync<TResource>(
         AccessContext context,

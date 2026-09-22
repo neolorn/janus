@@ -186,5 +186,9 @@ public sealed class HostFixture : IAsyncLifetime
                 .ContainedIn("workspace")
                 .Discloses()
                 .Purpose("running the host", "contract", data: ["identity"], subjects: ["members"]))
+            .Resource<HostReport>("report", type => type
+                .BelongsToOrganization()
+                .Discloses()
+                .Purpose("running the host", "contract", data: ["identity"], subjects: ["members"]))
             .Build();
 }

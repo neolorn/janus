@@ -63,8 +63,7 @@ internal sealed class AccessGate(
         ResourceReference resource,
         CancellationToken cancellationToken)
     {
-        if (await FollowsFromTheHostsDataAsync(resource.Type, [permission], cancellationToken)
-            .ConfigureAwait(false))
+        if (FollowsFromTheHostsData(resource.Type))
         {
             return Result.Failure(Error.From(ErrorCodes.DerivationSourcesMissing));
         }
@@ -188,8 +187,7 @@ internal sealed class AccessGate(
         // AUTHZ-GATE-004, D-161: an explanation read from the stored grants alone would
         // say that no grant matched for a record the filter admits, so a type whose
         // access follows in part from the host's own data is not explained here.
-        if (await FollowsFromTheHostsDataAsync(resource.Type, [permission], cancellationToken)
-            .ConfigureAwait(false))
+        if (FollowsFromTheHostsData(resource.Type))
         {
             return Result.Failure<AccessExplanation>(
                 Error.From(ErrorCodes.DerivationSourcesMissing));
@@ -326,8 +324,7 @@ internal sealed class AccessGate(
         ArgumentNullException.ThrowIfNull(resources);
         ArgumentNullException.ThrowIfNull(permissions);
 
-        if (await FollowsFromTheHostsDataAsync(type, permissions, cancellationToken)
-            .ConfigureAwait(false))
+        if (FollowsFromTheHostsData(type))
         {
             return Result.Failure<IReadOnlyList<Capability>>(
                 Error.From(ErrorCodes.DerivationSourcesMissing));
@@ -558,15 +555,14 @@ internal sealed class AccessGate(
 
     // AUTHZ-DERIVE-001, D-161: what a path answers without the host's rows is what the
     // stored grants alone say, which on a type a derivation reaches is not the answer.
-    private async ValueTask<bool> FollowsFromTheHostsDataAsync(
-        ResourceType type,
-        IReadOnlyList<Permission> permissions,
-        CancellationToken cancellationToken)
+    // What the conferred role allows is not read here: a role is edited where it
+    // stands, so a call admitted today because the role allowed nothing asked for
+    // would fault on the next edit of the role instead of at the call site.
+    private bool FollowsFromTheHostsData(ResourceType type)
     {
         Declared(type);
 
-        return (await derived.ReachingAsync(type, permissions, cancellationToken)
-            .ConfigureAwait(false)).Count > 0;
+        return derived.Reaches(type);
     }
 
     private static ValueTask<IReadOnlyDictionary<Permission, IReadOnlySet<string>>> NoneAdmitted(
