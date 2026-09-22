@@ -570,6 +570,53 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// PRIV-RIGHT-005b AC5: the photo is in the database beside everything else held
+    /// under the subject key, so one erasure reaches all of it at once and no store
+    /// is left readable after another has been cleared.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_005b_AC5_OneErasureReachesThePhotoAndEveryOtherStoreAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        byte[] image = new byte[256];
+        _deployment.Randomness.GetBytes(image);
+
+        await using (JanusDbContext writing = database.Context())
+        {
+            Assert.True(LegalName.TryParse("Ahmed Hassan", out LegalName legal));
+
+            var profile = Profile.Empty(subject);
+            profile.SetLegalName(legal);
+
+            await new ProfileStore(writing, _deployment.Keys, _deployment.Randomness)
+                .RecordAsync(profile, TestContext.Current.CancellationToken);
+
+            await new ProfilePhotoStore(writing, _deployment.Keys, _deployment.Randomness)
+                .RecordAsync(ProfilePhoto.Of(subject, image, Noon), TestContext.Current.CancellationToken);
+
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using JanusDbContext reading = database.Context();
+
+        await Assert.ThrowsAsync<CryptographicException>(async () =>
+            await new ProfilePhotoStore(reading, _deployment.Keys, _deployment.Randomness)
+                .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+
+        await Assert.ThrowsAsync<CryptographicException>(async () =>
+            await new ProfileStore(reading, _deployment.Keys, _deployment.Randomness)
+                .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+
+        IdentifierSet identifiers = await Identifiers(reading).FindBySubjectAsync(
+            subject,
+            TestContext.Current.CancellationToken);
+
+        Assert.Empty(identifiers.All);
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 

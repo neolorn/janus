@@ -146,6 +146,80 @@ public sealed class ErasureTests(DatabaseFixture database) : IClassFixture<Datab
             Assert.IsType<PostgresException>(refusal.InnerException).ConstraintName);
     }
 
+    /// <summary>
+    /// PRIV-SENS-002 AC2: every column of the schema that could hold text is read as
+    /// text, and neither identifier appears in any of them, so a dump taken without
+    /// the key-encryption key yields no personal field for any subject.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_SENS_002_AC2_ADumpOfTheSchemaHoldsNoPersonalFieldAsync()
+    {
+        const string email = "dumped@example.com";
+        const string phone = "+201009998877";
+
+        await WriteAsync(Subjects.New(), OneVersion(), email, phone);
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        List<(string Table, string Column, string Type)> columns =
+            [.. await connection.QueryAsync<(string, string, string)>(
+                "SELECT c.table_name, c.column_name, c.data_type "
+                    + "FROM information_schema.columns c "
+                    + "JOIN information_schema.tables t "
+                    + "ON t.table_schema = c.table_schema AND t.table_name = c.table_name "
+                    + "WHERE c.table_schema = 'janus' AND t.table_type = 'BASE TABLE' "
+                    + "AND c.data_type IN ('text', 'character varying', 'bytea', 'jsonb')")];
+
+        var holding = new List<string>();
+
+        foreach ((string table, string column, string type) in columns)
+        {
+            string read = type is "bytea"
+                ? "encode(\"" + column + "\", 'escape')"
+                : "\"" + column + "\"::text";
+
+            long found = await connection.ExecuteScalarAsync<long>(
+                "SELECT count(*) FROM janus.\"" + table + "\" WHERE " + read + " LIKE ANY(@sought)",
+                new { sought = new[] { "%" + email + "%", "%" + phone + "%" } });
+
+            if (found > 0)
+            {
+                holding.Add(table + "." + column);
+            }
+        }
+
+        Assert.NotEmpty(columns);
+        Assert.Empty(holding);
+    }
+
+    /// <summary>
+    /// PRIV-SENS-002 AC3: the fields declared for filtering are not encrypted, so the
+    /// database still answers a lookup over them and the work stays where the index
+    /// is rather than moving into the application.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_SENS_002_AC3_AFieldDeclaredForFilteringIsStillQueriedInSqlAsync()
+    {
+        const string email = "filtered@example.com";
+
+        SubjectId subject = Subjects.New();
+        await WriteAsync(subject, OneVersion(), email, "+201009998866");
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        Guid found = await connection.ExecuteScalarAsync<Guid>(
+            "SELECT subject FROM janus.identifiers "
+                + "WHERE fingerprint = @fingerprint AND kind = 'email' AND is_primary",
+            new
+            {
+                fingerprint = Fingerprint.Compute(
+                    Encoding.UTF8.GetBytes(CanonicalForm.Of(email)),
+                    FingerprintKey),
+            });
+
+        Assert.Equal(subject.Value, found);
+    }
+
     private static KeyEncryptionKeys OneVersion()
     {
         using var randomness = RandomNumberGenerator.Create();

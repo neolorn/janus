@@ -55,6 +55,25 @@ public sealed class ProcedureDocumentTests
     }
 
     /// <summary>
+    /// PRIV-BREACH-001 AC2: the clock the operator runs starts at detection, and the
+    /// procedure has them record the timeline, so what was known when is tracked
+    /// rather than reconstructed afterwards.
+    /// </summary>
+    [Fact]
+    public void PRIV_BREACH_001_AC2_TheClockStartsAtDetectionAndTheTimelineIsRecorded()
+    {
+        string runbook = Repository.ReadText(Runbook);
+
+        Assert.Contains("Clock starts at detection", runbook, StringComparison.Ordinal);
+        Assert.Contains("Record the timeline", runbook, StringComparison.Ordinal);
+
+        Assert.Contains(
+            "detection is the moment of the credible indication",
+            runbook,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// PRIV-BREACH-003 AC1: the procedure the operator follows says the notice to
     /// subjects answers to no preference.
     /// </summary>

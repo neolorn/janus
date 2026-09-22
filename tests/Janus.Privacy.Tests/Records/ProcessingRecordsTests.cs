@@ -84,13 +84,14 @@ public sealed class ProcessingRecordsTests
     }
 
     /// <summary>
-    /// PRIV-ROPA-001: the technical security measures column is the controls a
-    /// sensitive declaration derives and the keys no deployment can turn off through
-    /// the application, so it cannot report a control the deployment does not have.
+    /// PRIV-SENS-002 AC4, PRIV-ROPA-001: the technical security measures column
+    /// names one measure a threat, the controls a sensitive declaration derives and
+    /// the keys no deployment can turn off through the application, rather than one
+    /// phrase standing for all of them.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task PRIV_ROPA_001_TheTechnicalMeasuresAreTheControlsAndTheProtectedKeysAsync()
+    public async Task PRIV_SENS_002_AC4_TheMeasuresAreNamedOneAThreatAsync()
     {
         ProcessingRegister register = Generated(await Records(Declaration.Declared().Build())
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
@@ -156,7 +157,7 @@ public sealed class ProcessingRecordsTests
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task PRIV_ROPA_001_SensitivityIsAColumnOfItsOwnAsync()
+    public async Task PRIV_SENS_001_AC2_SensitivityIsAColumnOfItsOwnAsync()
     {
         ProcessingRegister register = Generated(await Records(Declaration.Declared().Build())
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
@@ -183,7 +184,7 @@ public sealed class ProcessingRecordsTests
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task PRIV_ROPA_001_ADeploymentAdmittingMinorsIsInTheChildrensColumnAsync()
+    public async Task PRIV_ROPA_001_AC1_ADeploymentAdmittingMinorsIsInTheChildrensColumnAsync()
     {
         _configuration.Set(Settings.RegistrationAdultAffirmation, AttributeRequirement.Off);
 
@@ -386,7 +387,7 @@ public sealed class ProcessingRecordsTests
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task PRIV_ROPA_001_TheRolesWithAccessAreTheOnesHoldingAServingPermissionAsync()
+    public async Task PRIV_ROPA_001_AC1_TheRolesWithAccessAreTheOnesHoldingAServingPermissionAsync()
     {
         _roles.Allows("support", "order:read");
         _roles.Allows("auditor", "audit:read");
@@ -403,12 +404,13 @@ public sealed class ProcessingRecordsTests
     }
 
     /// <summary>
-    /// PRIV-ROPA-001: the register answers the permission and nobody else, because it
-    /// is the whole of what the deployment processes about everyone.
+    /// The register is the whole of what the deployment processes about everyone, so
+    /// it answers the permission and nobody else, and neither does a statement of the
+    /// three supplied fields.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task PRIV_ROPA_001_TheRegisterAnswersThePermissionAndNobodyElseAsync()
+    public async Task GenerateAsync_WithoutThePermission_RefusesAndWritesNothingAsync()
     {
         var elsewhere = new SubjectId(Guid.Parse("66666666-6666-4666-8666-666666666666"));
 
@@ -428,6 +430,90 @@ public sealed class ProcessingRecordsTests
                 .Match(() => default!, error => error.Code));
 
         Assert.Null(_compliance.Held.DataOwner);
+    }
+
+    /// <summary>
+    /// PRIV-BASIS-001 AC2: the lawful basis column is the label the deployment
+    /// declared, so a deployment whose list reads differently emits its own words and
+    /// the library contributes none.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_BASIS_001_AC2_TheBasisColumnCarriesTheDeclaredLabelAsync()
+    {
+        ProcessingRegister register = Generated(await Records(Declaration.Declared().Build())
+            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
+
+        Assert.Equal("contract", Row(register, "fulfilment").LawfulBasis);
+        Assert.Equal("agreement", Row(register, "marketing").LawfulBasis);
+
+        AuthorizationDeclaration elsewhere = new AuthorizationDeclarationBuilder()
+            .LawfulBasis(new LawfulBasisDeclaration("art-6-1-b", false, false, false, false))
+            .Resource<Declaration.Mailing>("mailing", mailing => mailing
+                .BelongsToOrganization()
+                .Purpose("marketing", "art-6-1-b", data: ["identity"], subjects: ["customers"]))
+            .Build();
+
+        ProcessingRegister other = Generated(await Records(elsewhere)
+            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
+
+        Assert.Equal("art-6-1-b", Row(other, "marketing").LawfulBasis);
+    }
+
+    /// <summary>
+    /// PRIV-BASIS-002 AC2: the assessment a purpose names is on its row, and a
+    /// purpose whose basis requires none carries none rather than an empty reference
+    /// nobody wrote.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_BASIS_002_AC2_TheAssessmentReferenceIsOnTheRowAsync()
+    {
+        ProcessingRegister register = Generated(await Records(Declaration.Declared().Build())
+            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            "The abuse controls are assessed annually.",
+            Row(register, "security").Assessment);
+
+        Assert.Null(Row(register, "fulfilment").Assessment);
+    }
+
+    /// <summary>
+    /// PRIV-RET-005 AC3: the session location and the sending-restriction record are
+    /// in the register under the purposes the host declares for them, with the
+    /// retention it named, because the library keeps no inventory of its own.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RET_005_AC3_TheTwoRecordsAppearUnderTheDeclaredPurposesAsync()
+    {
+        _configuration.Set(Settings.HostCategoryRetention, "session-location", TimeSpan.FromDays(30));
+        _configuration.Set(Settings.HostCategoryRetention, "sending-restriction", TimeSpan.FromDays(1));
+
+        AuthorizationDeclaration declared = Declaration.Declared()
+            .Resource<Declaration.Mailing>("signing-in", signing => signing
+                .BelongsToOrganization()
+                .Purpose(
+                    "session-management",
+                    "contract",
+                    data: ["session-location"],
+                    subjects: ["customers"])
+                .Purpose(
+                    "abuse-prevention",
+                    "interest",
+                    assessment: "The abuse controls are assessed annually.",
+                    data: ["sending-restriction"],
+                    subjects: ["customers"]))
+            .Build();
+
+        ProcessingRegister register = Generated(await Records(declared)
+            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
+
+        Assert.Equal(["session-location"], Row(register, "session-management").DataCategories);
+        Assert.Equal(["session-location P30D"], Row(register, "session-management").Retention);
+        Assert.Equal(["sending-restriction"], Row(register, "abuse-prevention").DataCategories);
+        Assert.Equal(["sending-restriction P1D"], Row(register, "abuse-prevention").Retention);
     }
 
     private static ProcessingRegister Generated(Result<ProcessingRegister> outcome) =>

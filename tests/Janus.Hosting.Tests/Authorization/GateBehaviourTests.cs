@@ -933,6 +933,81 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
+    /// PRIV-RIGHT-004 AC2: the restriction suspends action and nothing else, so
+    /// lifting it gives back exactly what was there before: the same actions are
+    /// admitted and the capability array reads as it read.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_004_AC2_LiftingTheRestrictionRestoresWhatWasThereBeforeAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Edit]);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        Capability before = await CapabilityAsync(nested);
+
+        await nested.Deployment.RestrictAsync(nested.Account, cancellationToken);
+
+        Assert.Equal(
+            ErrorCodes.Restricted,
+            await RefusalAsync(nested.Account, nested.Record, HostPermissions.Edit));
+
+        await nested.Deployment.LiftAsync(nested.Account, cancellationToken);
+
+        Capability after = await CapabilityAsync(nested);
+
+        Assert.True(await ChecksAsync(nested.Account, nested.Record, HostPermissions.Edit));
+        Assert.Equal(before.Can, after.Can);
+        Assert.Equal(before.Requires, after.Requires);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-004 AC3: the restriction is the gate's, so every way of asking the
+    /// gate carries it: the check refuses the modifying action, the capability array
+    /// reports it as restricted rather than offering it, and the reading action is
+    /// untouched on both.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_004_AC3_EveryWayOfAskingTheGateCarriesTheRestrictionAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Edit]);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        await nested.Deployment.RestrictAsync(nested.Account, cancellationToken);
+
+        Capability capability = await CapabilityAsync(nested);
+
+        Assert.Equal(
+            ErrorCodes.Restricted,
+            await RefusalAsync(nested.Account, nested.Record, HostPermissions.Edit));
+        Assert.True(await ChecksAsync(nested.Account, nested.Record));
+
+        Assert.Equal(
+            [CapabilityResidual.Restricted],
+            Assert.Contains(HostPermissions.Edit, capability.Requires));
+        Assert.DoesNotContain(HostPermissions.Read, capability.Requires);
+    }
+
+    /// <summary>
     /// AUTHZ-CACHE-001 AC8: restricting an account decides the next request, with no
     /// wait and nothing to invalidate.
     /// </summary>
@@ -958,6 +1033,22 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             TestContext.Current.CancellationToken);
 
         Assert.False(await ChecksAsync(nested.Account, nested.Record, HostPermissions.Edit));
+    }
+
+    private async Task<Capability> CapabilityAsync(Nested nested)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        return Assert.Single(Rendered(
+            await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .CapabilitiesAsync(
+                    AccessContext.Of(nested.Account),
+                    Document,
+                    [nested.Record.Id],
+                    [HostPermissions.Read, HostPermissions.Edit],
+                    Sources(reading),
+                    TestContext.Current.CancellationToken)));
     }
 
     private async Task<ErrorCode?> RefusalAsync(

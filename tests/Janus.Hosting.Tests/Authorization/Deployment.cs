@@ -241,6 +241,22 @@ internal sealed class Deployment(HostFixture fixture)
     }
 
     /// <summary>
+    /// Lifts the restriction, as the decision that ends it does.
+    /// </summary>
+    /// <param name="subject">The account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of writing it.</returns>
+    public async Task LiftAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await fixture.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE janus.accounts SET state = 'active' WHERE subject = @subject;",
+            new { subject = subject.Value },
+            cancellationToken: cancellationToken));
+    }
+
+    /// <summary>
     /// Writes a group.
     /// </summary>
     /// <param name="cancellationToken">Abandons the operation.</param>

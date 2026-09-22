@@ -837,6 +837,30 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-CONS-008a AC2: what is recorded of the privacy notice is that a version
+    /// was presented at a time. The account carries the version and the instant, and
+    /// no field of what the step writes records an acceptance of it; the terms, which
+    /// are a contract, are the only thing accepted.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_CONS_008a_AC2_ThePresentationRecordCarriesTheVersionAndTheInstantAsync()
+    {
+        RegistrationSessionId session = await SecuredAsync();
+
+        _ = Ok(await AcceptedAsync(session));
+
+        NewAccount created = Assert.Single(_directory.Created);
+
+        Assert.Equal(Notice, created.NoticeVersion);
+        Assert.Equal(Noon, created.CreatedAt);
+
+        Assert.DoesNotContain(
+            typeof(NewAccount).GetProperties(),
+            property => property.Name.Contains("NoticeAccepted", StringComparison.Ordinal)
+                || property.Name.Contains("AcceptedNotice", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// REG-SESS-007 AC3: the session carries what the enrolled methods support and
     /// not a level above them.
     /// </summary>
