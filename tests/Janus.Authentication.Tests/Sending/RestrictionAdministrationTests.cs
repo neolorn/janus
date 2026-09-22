@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
+using Janus.Authentication.Configuration;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Sending;
+using Janus.Authentication.Tests.Configuration;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Xunit;
@@ -32,6 +34,7 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
     private readonly ConfigurationInMemory _configuration = new();
     private readonly SendLedgerInMemory _ledger = new();
     private readonly SendAuditInMemory _audit = new();
+    private readonly ConfigurationAuditInMemory _changes = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
@@ -46,6 +49,7 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
     private RestrictionAdministration Administration =>
         new(
             _configuration,
+            new ConfigurationAdministration(_configuration, _changes, _work, _clock),
             _ledger,
             _audit,
             RestrictionKeySuppliers.None,

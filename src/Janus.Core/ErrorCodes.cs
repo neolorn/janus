@@ -591,10 +591,16 @@ public static class ErrorCodes
     public static ErrorCode RestrictionExceeded { get; } = ErrorCode.Parse("auth.restriction.exceeded");
 
     /// <summary>
-    /// A restriction grant, or an edit that loosens a restriction, arrived without a
-    /// written reason. State the reason and submit it again.
+    /// A runtime configuration change, a restriction grant, or an edit that loosens a
+    /// restriction, arrived without a written reason. State the reason and submit it
+    /// again.
     /// </summary>
-    /// <remarks>Implements AUTH-ABUSE-004, OPS-CFG-002, chapter 10 section 1.2.</remarks>
+    /// <remarks>
+    /// Implements AUTH-ABUSE-004, OPS-CFG-002, OPS-CFG-005, chapter 9
+    /// <c>PUT /admin/config/{key}</c> and chapter 10 section 1.2. The code is the one
+    /// chapter 9 names for a configuration change with no reason, which is why a code
+    /// of the restriction area answers for every setting.
+    /// </remarks>
     public static ErrorCode RestrictionReasonRequired { get; } = ErrorCode.Parse("auth.restriction.reasonrequired");
 
     /// <summary>

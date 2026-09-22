@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
+using Janus.Authentication.Configuration;
 using Janus.Authentication.Factors;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -16,7 +17,8 @@ namespace Janus.Authentication.Sending;
 /// configuration, stepped up, audited, and alerted on where a change lets more
 /// through than before.
 /// </summary>
-/// <param name="configuration">Where the restriction set is read and written.</param>
+/// <param name="configuration">Where the restriction set is read.</param>
+/// <param name="administration">The one operation a runtime setting is written through.</param>
 /// <param name="ledger">Where credit is added.</param>
 /// <param name="audit">Where the change is written down.</param>
 /// <param name="suppliers">The host-registered key suppliers.</param>
@@ -30,6 +32,7 @@ namespace Janus.Authentication.Sending;
 /// </remarks>
 internal sealed class RestrictionAdministration(
     IConfigurationStore configuration,
+    ConfigurationAdministration administration,
     ISendLedger ledger,
     ISendAudit audit,
     RestrictionKeySuppliers suppliers,
@@ -117,14 +120,23 @@ internal sealed class RestrictionAdministration(
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
-        _ = (await configuration
-                .WriteAsync(Settings.Restrictions, written, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(value => value, error => Held<IReadOnlyList<Restriction>>(error, ref failure));
+        // OPS-CFG-002, OPS-CFG-005: every runtime write goes through the one operation
+        // that classifies it, gates it and writes it down. The restriction set carries
+        // its own direction, so a tightening passes here as it does at this method's
+        // own gate.
+        Result changed = await administration
+            .ChangeAsync(
+                Settings.Restrictions,
+                written,
+                reason,
+                challenge,
+                AccessContext.Of(actor),
+                cancellationToken)
+            .ConfigureAwait(false);
 
-        if (failure is not null)
+        if (changed.Match(() => (Error?)null, error => error) is Error unchanged)
         {
-            return Result.Failure(failure);
+            return Result.Failure(unchanged);
         }
 
         DateTimeOffset now = time.GetUtcNow();

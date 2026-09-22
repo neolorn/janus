@@ -6,9 +6,11 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Janus.Authentication.Configuration;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Tests;
+using Janus.Authentication.Tests.Configuration;
 using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -78,6 +80,7 @@ public sealed class SendingServiceTests : IAsyncDisposable
     private RestrictionAdministration Administration =>
         new(
             _configuration,
+            new ConfigurationAdministration(_configuration, new ConfigurationAuditInMemory(), _work, _clock),
             _ledger,
             _audit,
             RestrictionKeySuppliers.None,

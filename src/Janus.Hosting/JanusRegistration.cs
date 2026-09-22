@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
+using Janus.Authentication.Configuration;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
@@ -162,6 +163,7 @@ public static class JanusRegistration
             provider.GetRequiredService<IMessageTemplates>(),
             provider.GetRequiredService<RestrictionKeySuppliers>(),
             provider.GetRequiredService<IntegrationEndpoints>()));
+        services.AddScoped<ConfigurationAdministration>();
         services.AddScoped<RestrictionAdministration>();
         services.AddScoped<ThrottleService>();
         services.AddScoped<NonExistenceNotice>();

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Janus.Core;
+using Janus.Core.Configuration;
 
 namespace Janus.Authentication.Sending;
 
@@ -142,32 +143,8 @@ internal static class Restrictions
     /// <param name="before">What stood, or nothing where the restriction is new.</param>
     /// <param name="after">What replaces it, or nothing where it is deleted.</param>
     /// <returns>Whether the change is a loosening.</returns>
-    public static bool IsLoosening(Restriction? before, Restriction? after)
-    {
-        if (before is null)
-        {
-            return false;
-        }
-
-        if (after is null)
-        {
-            return true;
-        }
-
-        if (after.Key != before.Key
-            || after.HostKeyName != before.HostKeyName
-            || (after.Purpose is not RestrictionPurpose.Any && after.Purpose != before.Purpose))
-        {
-            return true;
-        }
-
-        return before.Buckets.Any(bucket => !after.Buckets.Any(kept => AtLeastAsStrict(kept, bucket)));
-    }
-
-    private static bool AtLeastAsStrict(Bucket kept, Bucket bucket) =>
-        kept.Maximum <= bucket.Maximum
-        && kept.Interval >= bucket.Interval
-        && (kept.Window == bucket.Window || kept.Window is BucketWindow.Sliding);
+    public static bool IsLoosening(Restriction? before, Restriction? after) =>
+        RestrictionSetSetting.Loosens(before, after);
 
     private static DateTimeOffset Opened(Bucket bucket, DateTimeOffset now) =>
         bucket.Window is BucketWindow.Sliding

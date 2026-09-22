@@ -44,6 +44,26 @@ public sealed class MultipleChoiceSetting<TValue> : Setting<IReadOnlySet<TValue>
     public int Minimum { get; }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// A set loosens by what it gained or lost, never by a comparison of the two: a key
+    /// that loosens upward loosens where a member was added, and one that loosens
+    /// downward where a member was dropped (OPS-CFG-002, chapter 10 section 4).
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Either set is absent.</exception>
+    public override bool Loosens(IReadOnlySet<TValue> before, IReadOnlySet<TValue> after)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+        ArgumentNullException.ThrowIfNull(after);
+
+        return Loosening switch
+        {
+            SettingDirection.Increase => after.Any(one => !before.Contains(one)),
+            SettingDirection.Decrease => before.Any(one => !after.Contains(one)),
+            _ => !after.SetEquals(before),
+        };
+    }
+
+    /// <inheritdoc />
     public override Result<IReadOnlySet<TValue>> Accept(IReadOnlySet<TValue> value)
     {
         if (value is null || !value.All(Allowed.Contains) || value.Count < Minimum)

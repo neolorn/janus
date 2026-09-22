@@ -272,6 +272,25 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
+    /// OPS-CFG-002, OPS-CFG-005: one operation writes a runtime setting, so a change
+    /// that went round it would be a change nobody was told of and nobody had to answer
+    /// for. Nothing else in the library calls the store's write.
+    /// </summary>
+    [Fact]
+    public void OPS_CFG_002_OnlyTheConfigurationAdministrationWritesARuntimeSetting()
+    {
+        IEnumerable<string> writing = Sources()
+            .Where(file => !Path.GetFileNameWithoutExtension(file).Equals(
+                "ConfigurationAdministration",
+                StringComparison.Ordinal))
+            .Select(file => (File: file, Text: File.ReadAllText(file)))
+            .Where(one => Written(one.Text))
+            .Select(one => one.File);
+
+        Assert.Empty(writing);
+    }
+
+    /// <summary>
     /// IDN-ATTR-003 AC2: the photo is in a table of its own and only its own port
     /// reaches it, so no ordinary read of an account carries image bytes.
     /// </summary>
@@ -409,6 +428,13 @@ public sealed class LibraryStructureTests
             .Select(project => Path.Combine(Repository.Root, "src", project) + Path.DirectorySeparatorChar)
             .SelectMany(folder => Sources().Where(file =>
                 file.StartsWith(folder, StringComparison.Ordinal)));
+
+    // Whichever name a class gives the store it holds, a write through it is that name
+    // followed by the store's write.
+    private static bool Written(string text) =>
+        Regex.Matches(text, @"IConfigurationStore\s+(\w+)", RegexOptions.None, TimeSpan.FromSeconds(5))
+            .Select(match => match.Groups[1].Value)
+            .Any(held => text.Contains(held + ".WriteAsync(", StringComparison.Ordinal));
 
     private static IEnumerable<string> Sources() =>
         Roots

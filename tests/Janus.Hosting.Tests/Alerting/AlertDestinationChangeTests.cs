@@ -4,10 +4,12 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
+using Janus.Authentication.Configuration;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Tests;
 using Janus.Authentication.Tests.Alerting;
+using Janus.Authentication.Tests.Configuration;
 using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -53,6 +55,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
     private readonly MailTransportInMemory _mail = new();
     private readonly SmsTransportInMemory _sms = new();
     private readonly SmsBalanceLedgerInMemory _balances = new();
+    private readonly ConfigurationAuditInMemory _changes = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
@@ -75,6 +78,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
     private AlertDestinationChange Change =>
         new(
             _configuration,
+            new ConfigurationAdministration(_configuration, _changes, _work, _clock),
             new AlertRouter(
                 _configuration,
                 new SendingService(
@@ -237,6 +241,42 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
         Assert.Empty(_events.Published);
     }
 
+    /// <summary>
+    /// OPS-CFG-002, OPS-CFG-005: the destination list is a runtime setting, so the
+    /// change goes through the one operation and is written down with what it replaced.
+    /// </summary>
+    [Fact]
+    public async Task ChangeAsync_ADestinationChange_IsWrittenDownAsARuntimeChangeAsync()
+    {
+        await ChangedAsync(SendKind.Email, Elsewhere);
+
+        ConfigurationChange written = Assert.Single(_changes.Written);
+
+        Assert.Equal(Settings.AlertingEmailDestinations.Key, written.Key);
+        Assert.Equal(Settings.AlertingEmailDestinations.Write(ThreeAddresses), written.Before);
+        Assert.Equal(Settings.AlertingEmailDestinations.Write(Elsewhere), written.After);
+        Assert.True(written.Loosening);
+        Assert.Equal("an incident", written.Reason);
+    }
+
+    /// <summary>
+    /// OPS-CFG-002 AC3: the key has no direction, so the change carries a written
+    /// reason. Without one it is refused before the destinations being replaced are
+    /// told, because a notice of a change that did not happen is a false one.
+    /// </summary>
+    [Fact]
+    public async Task ChangeAsync_ADestinationChangeWithNoReason_TellsNobodyAsync()
+    {
+        Error refusal = await RefusedAsync(SendKind.Email, Elsewhere, reason: null);
+
+        Assert.Equal(ErrorCodes.RestrictionReasonRequired, refusal.Code);
+        Assert.Equal("alerting.email.destinations", refusal.Details["key"].GetString());
+        Assert.Equal(ThreeAddresses, await DestinationsAsync(Settings.AlertingEmailDestinations));
+        Assert.Empty(_changes.Written);
+        Assert.Empty(_mail.Taken);
+        Assert.Empty(_events.Published);
+    }
+
     private async Task<IReadOnlyList<string>> DestinationsAsync(TextListSetting setting) =>
         (await _configuration.ReadAsync(setting, TestContext.Current.CancellationToken)).Match(
             destinations => destinations,
@@ -246,6 +286,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
         (await Change.ChangeAsync(
             channel,
             replacement,
+            "an incident",
             Satisfied,
             SubjectId.New(_randomness),
             TestContext.Current.CancellationToken)).Switch(
@@ -255,10 +296,12 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
     private async Task<Error> RefusedAsync(
         SendKind channel,
         IReadOnlyList<string> replacement,
-        StepUpChallenge? challenge = null) =>
+        StepUpChallenge? challenge = null,
+        string? reason = "an incident") =>
         (await Change.ChangeAsync(
             channel,
             replacement,
+            reason,
             challenge ?? Satisfied,
             SubjectId.New(_randomness),
             TestContext.Current.CancellationToken)).Match(

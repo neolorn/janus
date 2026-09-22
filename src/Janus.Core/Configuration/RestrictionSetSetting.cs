@@ -22,6 +22,58 @@ public sealed class RestrictionSetSetting : Setting<IReadOnlyList<Restriction>>
     {
     }
 
+    /// <summary>
+    /// Whether replacing one restriction with another lets more through than before.
+    /// </summary>
+    /// <param name="before">What stood, or nothing where the restriction is new.</param>
+    /// <param name="after">What replaces it, or nothing where it is deleted.</param>
+    /// <returns>Whether the change is a loosening.</returns>
+    /// <remarks>
+    /// Implements AUTH-ABUSE-004 and OPS-CFG-002. A deleted restriction, a widened key
+    /// or purpose, a higher maximum, a shorter interval and a dropped bucket all let
+    /// more through; a restriction that is new lets through nothing that was not
+    /// already getting through.
+    /// </remarks>
+    public static bool Loosens(Restriction? before, Restriction? after)
+    {
+        if (before is null)
+        {
+            return false;
+        }
+
+        if (after is null)
+        {
+            return true;
+        }
+
+        if (after.Key != before.Key
+            || after.HostKeyName != before.HostKeyName
+            || (after.Purpose is not RestrictionPurpose.Any && after.Purpose != before.Purpose))
+        {
+            return true;
+        }
+
+        return before.Buckets.Any(bucket => !after.Buckets.Any(kept => AtLeastAsStrict(kept, bucket)));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The restriction set is the one key whose own chapter states its direction, which
+    /// chapter 10 section 4 lets govern: a set loosens where any restriction in it was
+    /// deleted or replaced by one that lets more through, and a set that only gains
+    /// restrictions or tightens them does not (AUTH-ABUSE-004, OPS-CFG-002).
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Either set is absent.</exception>
+    public override bool Loosens(IReadOnlyList<Restriction> before, IReadOnlyList<Restriction> after)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+        ArgumentNullException.ThrowIfNull(after);
+
+        return before.Any(one => Loosens(
+            one,
+            after.FirstOrDefault(kept => string.Equals(kept.Name, one.Name, StringComparison.Ordinal))));
+    }
+
     /// <inheritdoc />
     public override Result<IReadOnlyList<Restriction>> Accept(IReadOnlyList<Restriction> value) =>
         value is null || value.Any(restriction => restriction is null || restriction.Buckets.Count == 0)
@@ -38,6 +90,11 @@ public sealed class RestrictionSetSetting : Setting<IReadOnlyList<Restriction>>
     /// <inheritdoc />
     private protected override string Render(IReadOnlyList<Restriction> value) =>
         SettingText.OfShape(value.Select(Write).ToArray());
+
+    private static bool AtLeastAsStrict(Bucket kept, Bucket bucket) =>
+        kept.Maximum <= bucket.Maximum
+        && kept.Interval >= bucket.Interval
+        && (kept.Window == bucket.Window || kept.Window is BucketWindow.Sliding);
 
     private static Written Write(Restriction restriction) =>
         new(

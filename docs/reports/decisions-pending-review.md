@@ -1152,6 +1152,8 @@ already tells every previous destination.
 OPS-CFG-002, OPS-CFG-005 and the remaining OPS-CFG-008 criteria, and that phase should
 add the reason and the audit entry to the alert-destination change.
 
+**Superseded by D-162.** Applied in entry 124.
+
 ---
 
 ## 35. A given-up identifier stays reserved for the whole undo window
@@ -4030,6 +4032,109 @@ what is refused is a message with no text in a declared language or over budget,
 that a deployment which registers no catalogue is answered out of the shipped one.
 LIB-HOST-001 should not list a message catalogue among the declarations a deployment
 must make.
+
+---
+
+## 124. Every runtime setting is written through one operation, which classifies it, gates it, requires a reason and writes it down
+
+**Corrections 1 · 2026-09-22 · D-162 section B, correcting entry 34 · OPS-CFG-002, OPS-CFG-005, OPS-CFG-008, OPS-ALERT-004a**
+
+*What D-162 decided.* The general configuration audit is built now. Every runtime write
+goes through one operation taking the access context and a reason, classifying direction
+per `10` section 4, requiring step-up and a non-empty reason for a loosening or a
+no-direction change, writing actor, key, before, after, timestamp and reason, queryable
+by setting and by actor. `IConfigurationStore.WriteAsync` is called only from it, and
+the alert-destination change goes through it.
+
+*What was built.* `ConfigurationAdministration` in `Janus.Authentication/Configuration/`
+is that operation. It refuses a system principal outright, because a change answers for
+itself through the person who made it and background work is nobody to answer. It begins
+the unit of work, reads the value in force, asks the setting which way the change runs,
+and where the change loosens it refuses a challenge the `config:loosen` gate is not
+satisfied by and then a reason that is absent or blank, before writing anything. The
+write, the audit record and the commit are one transaction.
+
+Direction is decided by the setting itself. `Setting<TValue>.Loosens` reads the
+`SettingDirection` of chapter 10 section 4: a key bounded above loosens upward, one
+bounded below loosens downward, and a key with no direction is loosened by any change at
+all. `MultipleChoiceSetting` overrides it for a set, which loosens by the member it lost
+or gained as its own direction says.
+
+`RestrictionSetSetting` overrides it too, because chapter 10 section 4 lets a key whose
+own chapter states its direction govern, and AUTH-ABUSE-004 states the restriction set's:
+a set loosens where a restriction in it was deleted, widened, raised, shortened or lost a
+bucket, and a set that only gains restrictions or tightens them does not. The rule that
+had lived in `Restrictions.IsLoosening` is the override; `Restrictions.IsLoosening` calls
+it, so there is one implementation and a restriction tightening stays free of a reason as
+`/admin/restrictions` requires.
+
+`IConfigurationAudit` is the port and `ConfigurationAudit` the adapter. The record goes to
+the one audit trail under the security retention, exactly as a permission grant does,
+with the action `ops.configuration.changed` and the key, before, after, direction and
+reason in its details. It reads back by setting through a jsonb containment query and by
+actor through the acting subject, over two indexes the migration adds: a partial GIN
+index on the details for that action, and a composite index on the acting subject and
+the instant.
+
+`RestrictionAdministration` and `AlertDestinationChange` write through the operation, and
+a gate test over the source tree holds that nothing else calls
+`IConfigurationStore.WriteAsync`.
+
+*Decided in the owner's absence.* Four points.
+
+1. *Which error code a missing reason carries (Tier 2).* Chapter 09 gives
+   `PUT /admin/config/{key}` the codes `auth.restriction.reasonrequired` (422) and
+   `auth.stepup.required` (403), so no code is added. The existing code's documentation
+   is widened to cover a runtime configuration change, which is the chapter's own
+   reading; `09` is authoritative for status codes and names.
+
+2. *When a reason is required (Tier 3, strictest reading).* Chapter 09's prose says a
+   reason is required on every change to that endpoint; its status list requires one only
+   where the change loosens. D-162 item 34 says step-up and a non-empty reason for a
+   loosening or a no-direction change, and D-162 wins. The operation therefore requires a
+   reason exactly where it computes a loosening, which is also what keeps a restriction
+   tightening free of one.
+
+3. *Where the operation lives (Tier 2).* `Janus.Core` internals are not visible to
+   `Janus.Authentication`, and `RestrictionAdministration` is in `Janus.Authentication`
+   and has to call it, so the operation cannot be a Core-internal helper.
+   `Janus.Authentication/Configuration/` is the one place both callers can reach.
+
+4. *When a destination change is refused for want of a reason (Tier 3, strictest
+   reading).* OPS-ALERT-004a tells the destinations being replaced before the change
+   takes effect. A change refused after that notice would tell them of something that did
+   not happen, and the event is not published on a refusal, so the trail and the notice
+   would disagree. What the change costs is therefore decided before the notice goes out,
+   through `ConfigurationAdministration.AllowedAsync`, which applies the same rule the
+   change applies and writes nothing.
+
+*Tests that pin it.*
+`ConfigurationAdministrationTests.OPS_CFG_002_AC1_ShorteningASessionTimeoutRequiresNoStepUpAsync`,
+`ConfigurationAdministrationTests.OPS_CFG_002_AC2_LengtheningOneRequiresStepUpAsync`,
+`ConfigurationAdministrationTests.OPS_CFG_002_AC2_LengtheningOneRequiresAReasonAsync`,
+`ConfigurationAdministrationTests.OPS_CFG_002_AC3_AChangeWithNoDirectionRequiresStepUpAndAReasonAsync`,
+`ConfigurationAdministrationTests.OPS_CFG_002_AC4_ATighteningAndALooseningAreBothAuditedAsync`,
+`ConfigurationAdministrationTests.OPS_CFG_005_AC1_TheRecordCarriesBeforeAndAfterAsync`,
+`ConfigurationAdministrationTests.OPS_CFG_005_AC2_TheRecordsAreQueryableBySettingAndByActorAsync`,
+`ConfigurationAdministrationTests.OPS_CFG_005_ASystemPrincipalChangesNoSettingAsync`,
+`SettingDirectionTests.OPS_CFG_002_AKeyBoundedOnlyAboveLoosensUpward`,
+`SettingDirectionTests.OPS_CFG_002_AKeyBoundedOnlyBelowLoosensDownward`,
+`SettingDirectionTests.OPS_CFG_002_ABooleanLoosensAwayFromItsDefault`,
+`SettingDirectionTests.OPS_CFG_002_ASetLoosensByTheMemberItLost`,
+`SettingDirectionTests.OPS_CFG_002_TheRestrictionSetLoosensByItsOwnRule`,
+`ConfigurationAuditTests.OPS_CFG_005_AC1_TheRecordCarriesBeforeAndAfterAsync`,
+`ConfigurationAuditTests.OPS_CFG_005_AC2_TheRecordsAreQueryableBySettingAsync`,
+`ConfigurationAuditTests.OPS_CFG_005_AC2_TheRecordsAreQueryableByActorAsync`,
+`AlertDestinationChangeTests.ChangeAsync_ADestinationChange_IsWrittenDownAsARuntimeChangeAsync`,
+`AlertDestinationChangeTests.ChangeAsync_ADestinationChangeWithNoReason_TellsNobodyAsync`,
+`LibraryStructureTests.OPS_CFG_002_OnlyTheConfigurationAdministrationWritesARuntimeSetting`.
+
+*Chapter text that should change.* Chapter 09's prose for `PUT /admin/config/{key}`
+should say a reason is required where the change loosens, which is what its own status
+list says and what D-162 item 34 decides. Chapter 10 section 4 should say that a key
+whose chapter states its direction governs, naming the restriction set as the one that
+does. Chapter 10 needs a row for the audit action `ops.configuration.changed`, listed
+under **Rows for chapter 10**.
 
 
 # Rows for chapter 10

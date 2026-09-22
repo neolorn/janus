@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Every runtime configuration change now goes through one operation that classifies it,
+  gates it and writes it down. A change that loosens the deployment, and any change to a
+  key that has no direction, needs the step-up gate met and a written reason; a
+  tightening needs neither. Both are recorded with who made it, the key, the value
+  before and after, the direction, the reason and the time, and the record reads back by
+  setting and by actor. Changing the alert destinations goes through the same operation,
+  and a change with no reason is refused before the destinations being replaced are told.
+
 - The library now ships the words of every message it sends, in English and in Arabic.
   A deployment that registers a catalogue of its own keeps it; one that registers none
   sends out of the shipped texts instead of failing to start. The startup check still
