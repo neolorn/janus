@@ -2,6 +2,7 @@ using System;
 using Janus.Core;
 using Janus.Hosting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Janus.Hosting.Tests.Authorization;
 
@@ -47,6 +48,12 @@ internal sealed class HostContext(DbContextOptions<HostContext> options) : DbCon
             document.HasKey(row => row.Id);
             document.Property(row => row.Id).HasColumnName("id");
             document.Property(row => row.Title).HasColumnName("title");
+            document.Property(row => row.Owner)
+                .HasColumnName("owner")
+                .HasConversion(new ValueConverter<SubjectId, Guid>(
+                    subject => subject.Value,
+                    value => new SubjectId(value)));
+            document.Property(row => row.Notes).HasColumnName("notes");
         });
 
         modelBuilder.Entity<HostReviewer>(reviewer =>

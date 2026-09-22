@@ -10,6 +10,15 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- A consent is now read against the data subject of the record being acted on rather
+  than against the caller. A host says who that subject is when it registers a record,
+  reading the column its resource type declares for its encrypted fields, and the gate
+  reads that subject's consent for the purpose the action is done for. Staff, system
+  and background callers are gated exactly as the subject's own request is, and a check
+  that names no record, or a record naming no subject, is refused where the purpose
+  rests on consent. A deployment binding a consent-based purpose to a type whose
+  encrypted fields name no one subject column does not start.
+
 - The children's column of the records of processing now follows the `children`
   sensitivity category a resource type declares, like every other category, instead of
   being true for every row wherever the deployment admits minors. A deployment that

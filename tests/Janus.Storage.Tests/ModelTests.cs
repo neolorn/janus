@@ -529,13 +529,16 @@ public sealed class ModelTests
             "registration_sources.id",
             "registration_sources.source",
 
-            // Authorization: the host's records as AUTHZ-INHERIT-001 registers them, and
-            // the one containing each.
+            // Authorization: the host's records as AUTHZ-INHERIT-001 registers them, the
+            // one containing each, and the data subject each is about, which the host
+            // reads from the column its type declares for its encrypted fields and the
+            // consent gate of PRIV-SENS-002 reads the consent of.
             "resources.contained_in_id",
             "resources.contained_in_type",
             "resources.organization",
             "resources.resource_id",
             "resources.resource_type",
+            "resources.subject",
 
             // Authorization: what a role allows (AUTHZ-GRANT-004), read live so that
             // editing it takes effect at once.

@@ -114,12 +114,25 @@ internal sealed class ResourceStore(JanusDbContext context, DataConnections conn
             return null;
         }
 
-        return RegisteredResource.Existing(
-            new ResourceReference(record.Type, record.Id),
-            record.Organization,
-            record.ContainedInType is null
-                ? null
-                : new ResourceReference(record.ContainedInType.Value, record.ContainedInId!.Value));
+        return Registered(record);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<RegisteredResource>> FindManyAsync(
+        ResourceType type,
+        IReadOnlyList<ResourceId> resources,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(resources);
+
+        List<ResourceId> asked = [.. resources];
+
+        List<ResourceRecord> records = await context.Resources
+            .Where(row => row.Type == type && asked.Contains(row.Id))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. records.Select(Registered)];
     }
 
     /// <inheritdoc/>
@@ -225,11 +238,21 @@ internal sealed class ResourceStore(JanusDbContext context, DataConnections conn
         return [.. records.Select(entry => new ResourceReference(entry.AncestorType, entry.AncestorId))];
     }
 
+    private static RegisteredResource Registered(ResourceRecord record) =>
+        RegisteredResource.Existing(
+            new ResourceReference(record.Type, record.Id),
+            record.Organization,
+            record.Subject,
+            record.ContainedInType is null
+                ? null
+                : new ResourceReference(record.ContainedInType.Value, record.ContainedInId!.Value));
+
     private static ResourceRecord Row(RegisteredResource resource) => new()
     {
         Type = resource.Reference.Type,
         Id = resource.Reference.Id,
         Organization = resource.Organization,
+        Subject = resource.Subject,
         ContainedInType = resource.ContainedIn?.Type,
         ContainedInId = resource.ContainedIn?.Id,
     };

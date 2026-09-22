@@ -84,7 +84,11 @@ public sealed class HostFixture : IAsyncLifetime
                     ('retention.history', 'P2Y');
 
                 CREATE SCHEMA host;
-                CREATE TABLE host.documents (id text PRIMARY KEY, title text NOT NULL);
+                CREATE TABLE host.documents (
+                    id text PRIMARY KEY,
+                    title text NOT NULL,
+                    owner uuid,
+                    notes text NOT NULL DEFAULT '');
                 CREATE TABLE host.reviewers (
                     workspace_id text NOT NULL,
                     reviewer uuid NOT NULL,
@@ -176,6 +180,7 @@ public sealed class HostFixture : IAsyncLifetime
             .Resource<HostDocument>("document", type => type
                 .ContainedIn("workspace")
                 .Sensitive("financial")
+                .Encrypted(held => held.Notes, held => held.Owner)
                 .Purpose("running the host", "contract", data: ["identity"], subjects: ["members"])
                 .Purpose(
                     "recommendations",

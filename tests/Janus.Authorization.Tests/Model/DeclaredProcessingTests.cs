@@ -236,8 +236,11 @@ public sealed class DeclaredProcessingTests
             .SensitiveCategory("financial")
             .Resource<HostDomain.Workspace>("workspace", workspace =>
             {
+                // PRIV-SENS-002 AC1: a consent-based purpose needs a type whose
+                // encrypted fields name the column the data subject is read from.
                 _ = workspace
                     .BelongsToOrganization()
+                    .Encrypted(held => held.Title, held => held.Owner)
                     .Purpose("recommendations", "agreement", data: ["history"], consent: consent);
 
                 if (sensitive)

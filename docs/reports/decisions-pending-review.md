@@ -2758,6 +2758,8 @@ needs is refused on its own terms (AUTHZ-PRIN-003).
 *Chapter text that should change.* PRIV-SENS-002 AC1 should say whose consent is read,
 and `03` should say what a host does where the caller is not the subject.
 
+**Superseded by D-162.** Applied in entry 133.
+
 ---
 
 ## 90. A consent control for a purpose taking no consent refuses the terms step
@@ -4442,6 +4444,51 @@ finding.
 flagged. PRIV-SENS-001 says nothing in the library branches on a category; that sentence
 now has one exception, which it should name.
 
+---
+
+## 133. The consent the gate reads is the record's data subject's
+
+**Corrections 1 · 2026-09-22 · D-162 section B, correcting entry 89 · PRIV-SENS-002 AC1, AUTHZ-GATE-005, PRIV-RIGHT-005a**
+
+*What D-162 decided.* The `consent` residual and `privacy.consent.required` are evaluated
+against the consent of the record's data subject, for the purpose bound to the action,
+whoever the caller is. The data subject is the one the type's encrypted fields name as
+their subject. A consent-based purpose bound to a type that names none fails startup
+validation. Entry 89 read PRIV-SENS-002 AC1 as a fact about the caller and is superseded.
+
+*What was built.* LIB-HOST-002 AC1 forbids the library a query against a host-owned
+table, so the library cannot read the subject column itself. The host reads it and says
+who the subject is when it registers the record; the library holds the value on its own
+`resources` row, beside the organization it already holds for the same reason. The gate
+resolves the record, takes the subject from that row and reads that subject's consent.
+A capability page reads one consent per distinct subject on the page rather than one for
+the page. Startup validation refuses a deployment that binds a consent-based purpose to
+a type whose encrypted fields name no one subject column.
+
+*Two points D-162 does not settle, taken at the strictest reading.* A type whose
+encrypted fields name two different subject columns has no one data subject, so it is
+treated as naming none and refuses at startup. A check that names no record, an
+organization-wide `RequireAsync` or a record the library holds no row for, has no data
+subject; a consent-based purpose is refused there rather than admitted on nobody's
+consent, which is the admission PRIV-SENS-002 AC1 forbids.
+
+*Tests that pin it.*
+`ConsentGateTests.PRIV_SENS_002_AC1_StaffAreGatedByTheRecordsSubjectsConsentAsync`,
+`ConsentGateTests.PRIV_SENS_002_AC1_ARecordNamingNoSubjectAdmitsNoConsentedActionAsync`,
+`ConsentGateTests.PRIV_SENS_002_AC1_AWrittenConsentAdmitsTheActionAsync`,
+`ConsentGateTests.PRIV_SENS_002a_AC2_WithdrawingStopsThePurposeOnTheNextRequestAsync`,
+`DeclaredProcessingTests.AUTHZ_MODEL_003_AC2_DeclaringATypeSensitiveChangesWhatItsConsentAsksFor`,
+`RegisteredResourceTests.Existing_ARow_CarriesWhatWasWritten`,
+`ModelTests.REG_ACCT_001_AC2_NoFieldExistsOutsideTheGroupsTheTableNames`.
+
+*Chapter text that should change.* PRIV-SENS-002 AC1 should say the consent read is the
+record's data subject's and that the caller's own consent is never what admits an action.
+`03` should say the host supplies the data subject when it registers a record, reading
+the column its type declares for its encrypted fields, and that the library holds it on
+the `resources` row because LIB-HOST-002 forbids it the host's table. AUTHZ-MODEL-003
+should list the new startup refusal, and `10` should carry the `subject` column of
+`resources`.
+
 # Rows for chapter 10
 
 D-162 section E names codes, keys, declarations and vocabularies the library now
@@ -4470,6 +4517,18 @@ The subsection each row belongs in is named with it.
 | --- | --- | --- |
 | `PasskeyAddresses` (`changePassword`, `enrol`, `manage`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `passkeyAddresses` or the field of it that is empty. The addresses are the frontend pages `/.well-known/change-password` and `/.well-known/passkey-endpoints` point at (REG-PM-001). |
 | `AuthenticationAddresses` (`signIn`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `authenticationAddresses.signIn`. The address is where an authorization request that is not silent and holds no session is forwarded (AUTH-SESS-012 AC3). |
+
+## Section 3, the `resources` table
+
+| Column | Type | Holds |
+| --- | --- | --- |
+| `subject` | `uuid`, nullable | The data subject of the record, which the host supplies when it registers it, reading the column its resource type declares for its encrypted fields. Absent where the record is about nobody. The consent gate of PRIV-SENS-002 reads this subject's consent for the purpose bound to the action. |
+
+## AUTHZ-MODEL-003, startup refusals
+
+| Refusal | Code | `details.key` |
+| --- | --- | --- |
+| A consent-based purpose is bound to a resource type whose encrypted fields name no one subject column, or name two different ones, so the record has no data subject whose consent could admit the action. | `model.startup.declarationmissing` | `<type>.<purpose>`, the type and the purpose that cannot be gated. |
 
 ## Register findings
 

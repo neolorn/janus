@@ -25,6 +25,12 @@ internal static class HostDomain
 
         /// <summary>The organization owning it.</summary>
         public Guid OrganizationId { get; init; }
+
+        /// <summary>Whose workspace it is, which its encrypted field is held under.</summary>
+        public SubjectId Owner { get; init; }
+
+        /// <summary>What the person called it, held under the owner's key.</summary>
+        public byte[] Title { get; init; } = [];
     }
 
     /// <summary>

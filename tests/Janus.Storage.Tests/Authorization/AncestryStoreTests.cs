@@ -64,7 +64,7 @@ public sealed class AncestryStoreTests(DatabaseFixture database)
             await transaction.BeginAsync(TestContext.Current.CancellationToken);
 
             await Store(writing).RegisterAsync(
-                RegisteredResource.Create(workspace, organization, containedIn: null),
+                RegisteredResource.Create(workspace, organization, subject: null, containedIn: null),
                 TestContext.Current.CancellationToken);
         }
 
@@ -157,18 +157,18 @@ public sealed class AncestryStoreTests(DatabaseFixture database)
         OrganizationId organization = await _deployment.OrganizationAsync(Noon);
         ResourceReference workspace = Reference("workspace");
         List<RegisteredResource> batch =
-            [RegisteredResource.Create(workspace, organization, containedIn: null)];
+            [RegisteredResource.Create(workspace, organization, subject: null, containedIn: null)];
         List<ResourceReference> folders = [];
 
         for (int index = 0; index < 99; index++)
         {
             ResourceReference folder = Reference("folder");
             folders.Add(folder);
-            batch.Add(RegisteredResource.Create(folder, organization, workspace));
+            batch.Add(RegisteredResource.Create(folder, organization, subject: null, workspace));
 
             for (int beneath = 0; beneath < 100; beneath++)
             {
-                batch.Add(RegisteredResource.Create(Reference("document"), organization, folder));
+                batch.Add(RegisteredResource.Create(Reference("document"), organization, subject: null, folder));
             }
         }
 
@@ -243,7 +243,7 @@ public sealed class AncestryStoreTests(DatabaseFixture database)
         await transaction.BeginAsync(TestContext.Current.CancellationToken);
 
         await Store(writing).RegisterAsync(
-            RegisteredResource.Create(reference, organization, containedIn),
+            RegisteredResource.Create(reference, organization, subject: null, containedIn),
             TestContext.Current.CancellationToken);
 
         await transaction.CommitAsync(TestContext.Current.CancellationToken);

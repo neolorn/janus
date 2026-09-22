@@ -1,3 +1,4 @@
+using System;
 using Janus.Authorization.Resources;
 using Janus.Core;
 using Xunit;
@@ -22,7 +23,7 @@ public sealed class RegisteredResourceTests
         ResourceReference document = Identifiers.Resource("document");
         OrganizationId organization = Identifiers.Organization();
 
-        var resource = RegisteredResource.Create(document, organization, folder);
+        var resource = RegisteredResource.Create(document, organization, subject: null, folder);
 
         Assert.Equal(document, resource.Reference);
         Assert.Equal(organization, resource.Organization);
@@ -38,6 +39,7 @@ public sealed class RegisteredResourceTests
         var resource = RegisteredResource.Create(
             Identifiers.Resource("workspace"),
             Identifiers.Organization(),
+            subject: null,
             containedIn: null);
 
         Assert.Null(resource.ContainedIn);
@@ -53,6 +55,7 @@ public sealed class RegisteredResourceTests
         var resource = RegisteredResource.Create(
             Identifiers.Resource("document"),
             Identifiers.Organization(),
+            subject: null,
             Identifiers.Resource("folder"));
 
         resource.MoveTo(elsewhere);
@@ -69,6 +72,7 @@ public sealed class RegisteredResourceTests
         var resource = RegisteredResource.Create(
             Identifiers.Resource("document"),
             Identifiers.Organization(),
+            subject: null,
             Identifiers.Resource("folder"));
 
         resource.MoveTo(containedIn: null);
@@ -85,11 +89,13 @@ public sealed class RegisteredResourceTests
         ResourceReference document = Identifiers.Resource("document");
         ResourceReference folder = Identifiers.Resource("folder");
         OrganizationId organization = Identifiers.Organization();
+        var whose = new SubjectId(Guid.Parse("22222222-2222-4222-8222-222222222222"));
 
-        var resource = RegisteredResource.Existing(document, organization, folder);
+        var resource = RegisteredResource.Existing(document, organization, whose, folder);
 
         Assert.Equal(document, resource.Reference);
         Assert.Equal(organization, resource.Organization);
+        Assert.Equal(whose, resource.Subject);
         Assert.Equal(folder, resource.ContainedIn);
     }
 }
