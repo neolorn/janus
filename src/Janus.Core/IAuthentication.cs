@@ -43,18 +43,17 @@ public interface IAuthentication
     /// <param name="challenge">The handle <see cref="BeginAsync"/> returned.</param>
     /// <param name="presented">The factor and what proves it.</param>
     /// <param name="device">What the browser says it is.</param>
-    /// <param name="location">
-    /// Where the request came from, no finer than a city, and absent where the local
-    /// database could not say.
-    /// </param>
     /// <param name="source">The address the attempt came from.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>What the sign-in reached, or the refusal.</returns>
+    /// <remarks>
+    /// INT-GEN-006: the city a session shows is resolved inside the library from this
+    /// address, so no caller says where a session was used from.
+    /// </remarks>
     ValueTask<Result<SignInProgress>> PresentAsync(
         string challenge,
         FactorPresentation presented,
         DeviceDescription device,
-        SessionLocation? location,
         string source,
         CancellationToken cancellationToken);
 
@@ -65,7 +64,6 @@ public interface IAuthentication
     /// <param name="challenge">The handle the held sign-in carries.</param>
     /// <param name="code">The code typed where the sign-in began.</param>
     /// <param name="device">What the browser says it is.</param>
-    /// <param name="location">Where the request came from.</param>
     /// <param name="source">The address the attempt came from.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>What the sign-in reached, or the failure the code produced.</returns>
@@ -73,7 +71,6 @@ public interface IAuthentication
         string challenge,
         string code,
         DeviceDescription device,
-        SessionLocation? location,
         string source,
         CancellationToken cancellationToken);
 
@@ -152,7 +149,6 @@ public interface IAuthentication
     /// <param name="linkToken">The token the message carried.</param>
     /// <param name="press">Whether the person pressed the control.</param>
     /// <param name="device">What the browser says it is.</param>
-    /// <param name="location">Where the request came from.</param>
     /// <param name="source">The address the attempt came from.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The sign-in, or what the landing shows instead.</returns>
@@ -162,7 +158,6 @@ public interface IAuthentication
         string linkToken,
         bool press,
         DeviceDescription device,
-        SessionLocation? location,
         string source,
         CancellationToken cancellationToken);
 

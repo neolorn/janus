@@ -347,7 +347,6 @@ internal static class RegistrationEndpoints
                     notice,
                     request.Consents ?? NoConsents,
                     origin.Device,
-                    origin.Location,
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match(outcome => outcome, error => Withheld<RegistrationOutcome>(error, ref failure));

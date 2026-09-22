@@ -22,6 +22,7 @@ namespace Janus.Authentication.Sessions;
 /// <param name="policies">Where the principal's policy is resolved.</param>
 /// <param name="configuration">Where the lifetimes are read from.</param>
 /// <param name="gate">Where a permission is evaluated.</param>
+/// <param name="locations">What the address a session was used from resolves to.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where a session secret is drawn from.</param>
@@ -36,6 +37,7 @@ internal sealed class SessionService(
     PolicyResolution policies,
     IConfigurationStore configuration,
     IAccessGate gate,
+    ILocationResolver locations,
     IUnitOfWork work,
     TimeProvider time,
     RandomNumberGenerator randomness) : ISessions
@@ -162,9 +164,11 @@ internal sealed class SessionService(
         (TimeSpan inactivity, TimeSpan _) =
             await LifetimesAsync(policy, cancellationToken).ConfigureAwait(false);
 
+        SessionOrigin used = await LocatedAsync(origin, cancellationToken).ConfigureAwait(false);
+
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
-        session.Touch(origin, now, inactivity);
+        session.Touch(used, now, inactivity);
         await sessions.RecordAsync(session, cancellationToken).ConfigureAwait(false);
 
         // Use of a session standing on the record is use of the record: one session
@@ -172,7 +176,7 @@ internal sealed class SessionService(
         // (AUTH-SESS-004, AUTH-SESS-005).
         if (!ReferenceEquals(spine, session))
         {
-            spine.Touch(origin, now, inactivity);
+            spine.Touch(used, now, inactivity);
             await sessions.RecordAsync(spine, cancellationToken).ConfigureAwait(false);
         }
 
@@ -297,7 +301,10 @@ internal sealed class SessionService(
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
         session.Present(proved, now);
-        session.Touch(origin, now, inactivity);
+        session.Touch(
+            await LocatedAsync(origin, cancellationToken).ConfigureAwait(false),
+            now,
+            inactivity);
         await sessions.RecordAsync(session, cancellationToken).ConfigureAwait(false);
         await sessions
             .ReplaceSecretAsync(
@@ -387,7 +394,12 @@ internal sealed class SessionService(
         (TimeSpan inactivity, TimeSpan _) =
             await LifetimesAsync(policy, cancellationToken).ConfigureAwait(false);
 
-        Session derived = record.Derive(SessionId.New(time), type, origin, now, inactivity);
+        Session derived = record.Derive(
+            SessionId.New(time),
+            type,
+            await LocatedAsync(origin, cancellationToken).ConfigureAwait(false),
+            now,
+            inactivity);
         var secret = OpaqueToken.Draw(randomness);
         var token = OpaqueToken.Draw(randomness);
 
@@ -634,6 +646,18 @@ internal sealed class SessionService(
         (await configuration.ReadAsync(setting, cancellationToken).ConfigureAwait(false))
             .Match(value => value, _ => setting.Default);
 
+    // INT-GEN-006: the address is the session's own and the city is what the local
+    // database makes of it, so nothing outside the library writes a place into one.
+    private async ValueTask<SessionOrigin> LocatedAsync(
+        SessionOrigin origin,
+        CancellationToken cancellationToken) =>
+        origin with
+        {
+            Location = await locations
+                .ResolveAsync(origin.Address, cancellationToken)
+                .ConfigureAwait(false),
+        };
+
     private async ValueTask<Result<IssuedSession>> BeginAsync(
         SubjectId subject,
         IReadOnlyCollection<Factor> presented,
@@ -680,7 +704,7 @@ internal sealed class SessionService(
             SessionId.New(time),
             subject,
             reached.Value,
-            origin,
+            await LocatedAsync(origin, cancellationToken).ConfigureAwait(false),
             now,
             inactivity,
             absolute,

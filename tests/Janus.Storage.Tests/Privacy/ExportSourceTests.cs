@@ -299,10 +299,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
             SessionId.New(TimeProvider.System),
             subject,
             new Assurance(AssuranceLevel.Aal1, PhishingResistant: false),
-            new SessionOrigin(
-                "198.51.100.7",
-                new DeviceDescription("Firefox", "Linux"),
-                new SessionLocation("Cairo", "EG")),
+            new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")) { Location = new SessionLocation("Cairo", "EG") },
             Noon,
             TimeSpan.FromDays(1),
             TimeSpan.FromDays(30),

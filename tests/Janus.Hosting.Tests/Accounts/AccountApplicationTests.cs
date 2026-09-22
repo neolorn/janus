@@ -303,7 +303,7 @@ public sealed class AccountApplicationTests : IAsyncDisposable
                 id,
                 subject,
                 new Assurance(AssuranceLevel.Aal1, PhishingResistant: false),
-                new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux"), Somewhere),
+                new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")) { Location = Somewhere },
                 Noon,
                 TimeSpan.FromDays(1),
                 TimeSpan.FromDays(30),

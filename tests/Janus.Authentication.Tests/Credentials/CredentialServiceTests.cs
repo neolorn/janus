@@ -49,10 +49,10 @@ public sealed class CredentialServiceTests : IAsyncDisposable
 
     private static readonly OrganizationId Staff = new(Guid.NewGuid());
 
-    private static readonly SessionOrigin Somewhere = new(
-        Source,
-        new DeviceDescription("Firefox", "Fedora"),
-        new SessionLocation("Alexandria", "EG"));
+    private static readonly SessionOrigin Somewhere = new(Source, new DeviceDescription("Firefox", "Fedora"))
+    {
+        Location = new SessionLocation("Alexandria", "EG"),
+    };
 
     private readonly KeyCeremonyStoreInMemory _ceremonies = new();
     private readonly RecoveryLinkStoreInMemory _links = new();
@@ -73,6 +73,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly AccessGateInMemory _gate = new();
+    private readonly LocationResolverInMemory _locations = new();
     private readonly ThrottleLedgerInMemory _throttle = new();
     private readonly SendLedgerInMemory _ledger = new();
     private readonly NoticeLedgerInMemory _notices = new();
@@ -655,7 +656,16 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     private PolicyResolution Policies => new(_memberships, _configuration, _raises);
 
     private SessionService Sessions =>
-        new(_live, _audit, Policies, _configuration, _gate, _work, _clock, _randomness);
+        new(
+            _live,
+            _audit,
+            Policies,
+            _configuration,
+            _gate,
+            _locations,
+            _work,
+            _clock,
+            _randomness);
 
     private ThrottleService Throttle =>
         new(_configuration, _throttle, _work, _events, _clock);

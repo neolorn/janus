@@ -358,10 +358,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
                 await Store(changing).FindAsync(record.Id, TestContext.Current.CancellationToken));
 
             held.Touch(
-                new SessionOrigin(
-                    "203.0.113.9",
-                    new DeviceDescription("Safari", "iOS"),
-                    new SessionLocation("Alexandria", "EG")),
+                new SessionOrigin("203.0.113.9", new DeviceDescription("Safari", "iOS")) { Location = new SessionLocation("Alexandria", "EG") },
                 Noon + TimeSpan.FromHours(1),
                 TimeSpan.FromDays(1));
             held.Present(
@@ -475,10 +472,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
             new Assurance(
                 phishingResistant ? AssuranceLevel.Aal2 : AssuranceLevel.Aal1,
                 phishingResistant),
-            new SessionOrigin(
-                "198.51.100.7",
-                new DeviceDescription("Firefox", "Linux"),
-                new SessionLocation("Cairo", "EG")),
+            new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")) { Location = new SessionLocation("Cairo", "EG") },
             Noon,
             inactivity ?? TimeSpan.FromDays(1),
             absolute ?? TimeSpan.FromDays(30),
@@ -487,7 +481,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
     private static Session Derived(Session record, SessionType type) => record.Derive(
         SessionId.New(TimeProvider.System),
         type,
-        new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux"), null),
+        new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")),
         Noon,
         TimeSpan.FromHours(8));
 

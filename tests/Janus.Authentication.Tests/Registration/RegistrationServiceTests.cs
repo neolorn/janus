@@ -76,6 +76,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly AccessGateInMemory _gate = new();
+    private readonly LocationResolverInMemory _locations = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
@@ -147,6 +148,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
                 new PolicyResolution(_memberships, _configuration, _raises),
                 _configuration,
                 _gate,
+                _locations,
                 _work,
                 _clock,
                 _randomness),
@@ -718,7 +720,6 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
             Notice,
             untouched,
             Browser,
-            location: null,
             TestContext.Current.CancellationToken));
 
         Assert.Equal(Assert.Single(_directory.Created).Subject, completed.Subject);
@@ -749,7 +750,6 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
             Notice,
             untouched,
             Browser,
-            location: null,
             TestContext.Current.CancellationToken));
 
         Assert.Empty(_consents.Of(completed.Subject));
@@ -779,7 +779,6 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
             Notice,
             ticked,
             Browser,
-            location: null,
             TestContext.Current.CancellationToken));
 
         Assert.Equal(
@@ -811,7 +810,6 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
             Notice,
             ticked,
             Browser,
-            location: null,
             TestContext.Current.CancellationToken);
 
         Assert.Equal(ErrorCodes.Denied, Refused(refused));
@@ -914,7 +912,6 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
             Notice,
             Unticked,
             Browser,
-            location: null,
             TestContext.Current.CancellationToken));
 
         var devices = new DeviceService(
@@ -1398,7 +1395,6 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
             Notice,
             Unticked,
             Browser,
-            location: null,
             TestContext.Current.CancellationToken);
 
     // What a bound invitation leaves on the session: an address the person did not
@@ -1623,7 +1619,6 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
             Notice,
             Unticked,
             Browser,
-            location: null,
             TestContext.Current.CancellationToken));
 
         var single = new Assurance(AssuranceLevel.Aal1, PhishingResistant: false);

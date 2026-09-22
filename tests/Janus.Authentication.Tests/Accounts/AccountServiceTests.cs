@@ -37,10 +37,7 @@ public sealed class AccountServiceTests : IAsyncDisposable
     private static readonly DateTimeOffset Noon =
         new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
-    private static readonly SessionOrigin Somewhere = new(
-        Source,
-        new DeviceDescription("Firefox", "Fedora"),
-        Location: null);
+    private static readonly SessionOrigin Somewhere = new(Source, new DeviceDescription("Firefox", "Fedora"));
 
     private static readonly PreferenceDeclarations Declared = PreferenceDeclarations.Of(
     [

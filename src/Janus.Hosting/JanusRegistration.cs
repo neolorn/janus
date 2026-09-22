@@ -30,6 +30,7 @@ using Janus.Hosting.Passwords;
 using Janus.Hosting.Privacy;
 using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
+using Janus.Hosting.Sessions;
 using Janus.Privacy;
 using Janus.Privacy.Consents;
 using Janus.Privacy.Documents;
@@ -190,6 +191,7 @@ public static class JanusRegistration
         services.AddScoped<PasswordScreening>();
         services.AddScoped<PasswordService>();
         services.AddScoped<PreAuthenticationService>();
+        services.AddScoped<ILocationResolver, LocationDatabase>();
         services.AddScoped<SessionService>();
         services.AddScoped<ISessions>(provider => provider.GetRequiredService<SessionService>());
         services.AddScoped<TotpService>();

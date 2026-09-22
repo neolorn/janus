@@ -14,8 +14,8 @@ namespace Janus.Hosting.Bff;
 /// tells the framework which proxies it trusts, and nothing here second-guesses that.
 /// The description is the two coarse facts a person recognises their own device by
 /// and no more; anything finer would be a fingerprint, which is not what the list is
-/// for. The location stays absent until a local database can resolve one, which
-/// INT-GEN-006 allows and which is why the field is optional.
+/// for. Where the request was is not read here at all: the library resolves that from
+/// the address when it records the session (INT-GEN-006).
 /// </remarks>
 internal static class RequestOrigin
 {
@@ -35,8 +35,7 @@ internal static class RequestOrigin
 
         return new SessionOrigin(
             Source(request),
-            new DeviceDescription(Browser(agent), System(agent)),
-            Location: null);
+            new DeviceDescription(Browser(agent), System(agent)));
     }
 
     /// <summary>

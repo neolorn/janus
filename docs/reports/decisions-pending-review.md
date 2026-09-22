@@ -696,6 +696,8 @@ criterion of AUTH-SESS-013 waits on the resolver.
 *Chapter text that should change.* None. The implementation plan should name the phase
 that builds INT-GEN-006.
 
+**Superseded by D-162.** Applied in entry 117.
+
 ---
 
 ## 21. Two source scans decide the fact their criteria state rather than the words
@@ -3612,6 +3614,47 @@ malformed row read as the key's default.
 `ConfigurationStoreTests.ReadAsync_AStoredValueThatDoesNotParse_IsAFaultAsync`,
 beside `ConfigurationStoreTests.OPS_CFG_008_AC1_AChangedSettingIsInForceForTheNextReadAsync`
 and the registration the hosting tests exercise end to end.
+
+---
+
+## 117. The library resolves a session's city from the address it already holds
+
+**Corrections 1 · 2026-09-22 · D-162 section B, correcting entry 20 · INT-GEN-006, AUTH-SESS-013**
+
+*What D-162 decided.* The session takes the client address it already records; an
+internal resolver port maps address to `{ city, country }`; until INT-GEN-006 is built
+the implementation answers no location and raises the degradation. No caller-supplied
+place on any signature.
+
+*What was built.* `ILocationResolver` is a port of the sessions area taking the address
+a session was used from and answering a `SessionLocation` or nothing.
+`SessionService` asks it at the four points a session records where it was used from
+(begun, derived, resolved, restored) and writes the answer onto the origin, so the city
+on a listing is the library's own reading of the address and never a caller's claim.
+`SessionOrigin` no longer takes a place as a constructor part, and `SessionLocation`
+left `PresentAsync`, `VerifyDeviceAsync`, `LandAsync` and `AcceptTermsAsync`; a contract
+test now refuses its return to any public parameter. The implementation registered in
+`AddJanus` is `Janus.Hosting.Sessions.LocationDatabase`, which holds the alert router
+and the clock and nothing it could reach a third party with: with no file to read it
+raises the `degradation` condition, once a deduplication window rather than once a
+sign-in, and answers no location. An alert that cannot be carried does not refuse the
+session. The file itself and the job that refreshes it are INT-GEN-006's own work in
+phase 9 (INF-BG-001), and what that phase adds is the reading of the file behind this
+port, not another signature.
+
+*Tests that pin it.*
+`SessionServiceTests.INT_GEN_006_AC3_TheCityIsWhatTheDatabaseMadeOfTheAddressAsync`,
+`SessionServiceTests.INT_GEN_006_AC3_WithNoDatabaseTheSessionIsListedWithoutALocationAsync`,
+`SessionServiceTests.AUTH_SESS_013_AC2_EachEntryCarriesTimesDeviceAndCityAsync`,
+`PublicSurfaceTests.INT_GEN_006_AC3_NoContractMemberIsToldWhereASessionWas`,
+`LocationDatabaseTests.INT_GEN_006_AC1_TheResolverHoldsNothingItCouldCallOutWith`,
+`LocationDatabaseTests.INT_GEN_006_AC2_TheMissingFileSurfacesAsOneDegradationAsync`,
+`LocationDatabaseTests.INT_GEN_006_AC3_WithNoFileAvailableNoLocationIsAnsweredAsync`,
+`LocationDatabaseTests.INT_GEN_006_AC3_AnUndeliveredAlertStillAnswersNoLocationAsync`.
+
+*Chapter text that should change.* None in `05` or `09`, which name a location only
+where a session is listed. The implementation plan should name the phase that builds
+the file and its refresh behind this port.
 
 
 # Rows for chapter 10

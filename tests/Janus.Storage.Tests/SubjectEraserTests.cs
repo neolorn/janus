@@ -775,10 +775,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
                     SessionId.New(TimeProvider.System),
                     subject,
                     new Assurance(AssuranceLevel.Aal1, PhishingResistant: false),
-                    new SessionOrigin(
-                        "198.51.100.7",
-                        new DeviceDescription("Firefox", "Linux"),
-                        null),
+                    new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")),
                     Noon,
                     TimeSpan.FromDays(1),
                     TimeSpan.FromDays(30),

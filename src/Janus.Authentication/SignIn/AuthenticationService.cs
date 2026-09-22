@@ -136,13 +136,12 @@ internal sealed class AuthenticationService(
         string challenge,
         FactorPresentation presented,
         DeviceDescription device,
-        SessionLocation? location,
         string source,
         CancellationToken cancellationToken) =>
         (await PresentAsync(
                 challenge,
                 presented,
-                new SessionOrigin(source, device, location),
+                new SessionOrigin(source, device),
                 remembered: null,
                 trusted: null,
                 cancellationToken)
@@ -154,13 +153,12 @@ internal sealed class AuthenticationService(
         string challenge,
         string code,
         DeviceDescription device,
-        SessionLocation? location,
         string source,
         CancellationToken cancellationToken) =>
         (await VerifyDeviceAsync(
                 challenge,
                 code,
-                new SessionOrigin(source, device, location),
+                new SessionOrigin(source, device),
                 cancellationToken)
             .ConfigureAwait(false))
         .Match(outcome => Result.Success(outcome.Progress), Result.Failure<SignInProgress>);
@@ -200,7 +198,6 @@ internal sealed class AuthenticationService(
         string linkToken,
         bool press,
         DeviceDescription device,
-        SessionLocation? location,
         string source,
         CancellationToken cancellationToken) =>
         (await LandAsync(
@@ -208,7 +205,7 @@ internal sealed class AuthenticationService(
                 browser,
                 linkToken,
                 press,
-                new SessionOrigin(source, device, location),
+                new SessionOrigin(source, device),
                 remembered: null,
                 cancellationToken)
             .ConfigureAwait(false))

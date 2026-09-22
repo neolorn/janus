@@ -784,6 +784,10 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- The city shown on a session is now resolved by the library from the address the
+  session was used from, and no longer given by the caller: it is not a field on any
+  request. While no location database is present the listing shows no city and the
+  `degradation` condition is raised once a window.
 - A verification code is now an aggregate with a table of its own. It lives
   `code.verification.lifetime` whatever issued it, dies on the try that reaches
   `code.verification.attempts`, and is spent by the first right one. The new-device

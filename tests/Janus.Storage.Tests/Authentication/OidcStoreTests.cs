@@ -277,10 +277,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
             SessionId.New(TimeProvider.System),
             subject,
             new Assurance(AssuranceLevel.Aal2, PhishingResistant: true),
-            new SessionOrigin(
-                "198.51.100.7",
-                new DeviceDescription("Firefox", "Linux"),
-                new SessionLocation("Cairo", "EG")),
+            new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")) { Location = new SessionLocation("Cairo", "EG") },
             Noon,
             TimeSpan.FromDays(1),
             TimeSpan.FromDays(30),

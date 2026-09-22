@@ -306,12 +306,12 @@ internal sealed class SessionStore(
             SessionPlaceJson.Default.SessionPlace)
             ?? throw new InvalidOperationException("The stored place holds no address.");
 
-        return new SessionOrigin(
-            place.Address,
-            new DeviceDescription(browser, os),
-            place.City is null && place.Country is null
+        return new SessionOrigin(place.Address, new DeviceDescription(browser, os))
+        {
+            Location = place.City is null && place.Country is null
                 ? null
-                : new SessionLocation(place.City, place.Country));
+                : new SessionLocation(place.City, place.Country),
+        };
     }
 
     private async ValueTask<Session> ReadAsync(

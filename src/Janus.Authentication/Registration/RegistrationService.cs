@@ -622,7 +622,6 @@ internal sealed class RegistrationService(
         string noticeVersion,
         IReadOnlyDictionary<string, bool> consents,
         DeviceDescription device,
-        SessionLocation? location,
         CancellationToken cancellationToken)
     {
         // API-REDIR-002 AC4: where the person is returned is read from what the
@@ -636,7 +635,6 @@ internal sealed class RegistrationService(
                     noticeVersion,
                     consents,
                     device,
-                    location,
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match(
@@ -671,7 +669,6 @@ internal sealed class RegistrationService(
     /// <param name="noticeVersion">The version of the notice presented.</param>
     /// <param name="consents">What each consent control was left at.</param>
     /// <param name="device">What the browser said it is.</param>
-    /// <param name="location">Where the request came from, where that is known.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The account, the session it is signed in on, and the browser token.</returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
@@ -681,7 +678,6 @@ internal sealed class RegistrationService(
         string noticeVersion,
         IReadOnlyDictionary<string, bool> consents,
         DeviceDescription device,
-        SessionLocation? location,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(termsVersion);
@@ -751,7 +747,7 @@ internal sealed class RegistrationService(
                 .BeginAsync(
                     live.Provisional,
                     SecurityStep.Presented(live, policy.LoginFactors),
-                    new SessionOrigin(live.Source, device, location),
+                    new SessionOrigin(live.Source, device),
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Held<IssuedSession>(error, ref failure));

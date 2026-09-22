@@ -9,7 +9,8 @@ using Xunit;
 namespace Janus.Core.Tests;
 
 /// <summary>
-/// What the shipped code may expose and may hold (CONV-CODE-003, CONV-CODE-004).
+/// What the shipped code may expose, may hold and may be told (CONV-CODE-003,
+/// CONV-CODE-004, INT-GEN-006).
 /// </summary>
 [Trait("kind", "contract")]
 public sealed class PublicSurfaceTests
@@ -74,6 +75,24 @@ public sealed class PublicSurfaceTests
             .Where(file => File.ReadAllText(file).Contains("System.Reflection", StringComparison.Ordinal));
 
         Assert.Empty(reaching);
+    }
+
+    /// <summary>
+    /// INT-GEN-006 AC3: where a session was is resolved inside the library from the
+    /// address it was used from, so no contract member is told a place by its caller.
+    /// The equality a record is given compares two places and is told nothing.
+    /// </summary>
+    [Fact]
+    public void INT_GEN_006_AC3_NoContractMemberIsToldWhereASessionWas()
+    {
+        IEnumerable<string> told = typeof(Result).Assembly
+            .GetExportedTypes()
+            .SelectMany(type => type.GetMethods(Declared))
+            .Where(method => method.GetCustomAttribute<CompilerGeneratedAttribute>() is null)
+            .Where(method => method.GetParameters().Any(parameter => parameter.ParameterType == typeof(SessionLocation)))
+            .Select(method => method.DeclaringType!.Name + "." + method.Name);
+
+        Assert.Empty(told);
     }
 
     private static IEnumerable<Type> Members() =>

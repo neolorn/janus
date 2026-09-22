@@ -305,10 +305,7 @@ public sealed class BrowserProfileTests : IDisposable
                 record.Derive(
                     SessionId.New(TimeProvider.System),
                     SessionType.PerApp,
-                    new SessionOrigin(
-                        "198.51.100." + which.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                        new DeviceDescription("Firefox", "Linux"),
-                        null),
+                    new SessionOrigin("198.51.100." + which.ToString(System.Globalization.CultureInfo.InvariantCulture), new DeviceDescription("Firefox", "Linux")),
                     Noon,
                     TimeSpan.FromHours(8)),
                 OpaqueToken.Draw(_randomness).Fingerprint(),
@@ -787,6 +784,7 @@ public sealed class BrowserProfileTests : IDisposable
         services.AddSingleton<TimeProvider>(_clock);
         services.AddSingleton(_randomness);
         services.AddSingleton(new BrowserSessionCookies(JanusApplication.Public));
+        services.AddSingleton<ILocationResolver, LocationResolverInMemory>();
         services.AddScoped<PolicyResolution>();
         services.AddScoped<SessionService>();
         services.AddScoped<PreAuthenticationService>();
@@ -841,7 +839,7 @@ public sealed class BrowserProfileTests : IDisposable
                 SessionId.New(TimeProvider.System),
                 SubjectId.New(_randomness),
                 new Assurance(AssuranceLevel.Aal1, PhishingResistant: false),
-                new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux"), null),
+                new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")),
                 Noon,
                 TimeSpan.FromDays(1),
                 TimeSpan.FromDays(30),

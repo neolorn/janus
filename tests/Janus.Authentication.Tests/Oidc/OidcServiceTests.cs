@@ -36,10 +36,10 @@ public sealed class OidcServiceTests : IAsyncDisposable
 
     private static readonly DateTimeOffset Noon = new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
-    private static readonly SessionOrigin Somewhere = new(
-        "198.51.100.7",
-        new DeviceDescription("Firefox", "Fedora"),
-        new SessionLocation("Alexandria", "EG"));
+    private static readonly SessionOrigin Somewhere = new("198.51.100.7", new DeviceDescription("Firefox", "Fedora"))
+    {
+        Location = new SessionLocation("Alexandria", "EG"),
+    };
 
     private readonly OidcClientStoreInMemory _clients = new();
     private readonly AuthorizationCodeStoreInMemory _codes = new();
