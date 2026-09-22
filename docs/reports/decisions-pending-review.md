@@ -450,6 +450,8 @@ which is what INT-PWD-003 AC1 states.
 *Chapter text that should change.* `10` section 4.2 should say where each corpus is
 read from, or state that the address is not configuration.
 
+**Superseded by D-162.** Applied in entry 114.
+
 ---
 
 ## 13. A corpus whose age cannot be read is treated as no corpus
@@ -3499,6 +3501,47 @@ configuration code's detail, not this one's.
 `PasswordFloorTests.AUTH_PASS_001_AC3_TheMaximumIsAcceptedAndOneBeyondItIsRefused`,
 `ApiStatusTests.Of_ACodeTheLibraryRaises_HasAStatusOfItsOwn`.
 
+---
+
+## 114. The offline list travels in the package and the self-hosted corpus has an address
+
+**Corrections 1 · 2026-09-22 · D-162 section B, correcting entry 12 · AUTH-PASS-004, INT-PWD-002, INT-PWD-003**
+
+*What D-162 decided.* The offline leaked list is a resource embedded in the package,
+dated, working with no deployment file (AUTH-PASS-004 Values). The self-hosted corpus
+address is a new key `password.blocklist.selfhosted.address` (string, required only when
+`password.blocklist.source` is `selfHosted`, the `service.name` pattern).
+
+*What was built.* `leaked-passwords.txt` is an embedded resource of `Janus.Hosting`,
+read through `OfflineCorpus`, which replaces the file reader. A deployment that holds no
+file of its own falls back to it, and the date on its first line is still what
+`password.blocklist.corpusmaxage` judges, so a release that does not refresh it goes
+stale rather than silently trusted. The self-hosted corpus is no longer a second file:
+it answers the same range protocol the primary source does, at the address the new key
+names, which is what INT-PWD-003 ("brought in-house") describes and what makes switching
+configuration only. `Settings.ThrowIfIncomplete` takes the corpus choice and requires the
+address where it is `selfHosted`, beside the two conditional declarations already there.
+A self-hosted corpus with no address reachable falls back to the package's list and
+records the degradation, as any unreachable primary source does.
+
+*What the release still owes.* The file's content is composed from the weak passwords
+that can be enumerated without the provider's downloadable corpus (54,676 hashes). The
+Values paragraph of AUTH-PASS-004 names the 100,000 most prevalent hashes of that corpus,
+whose licence is verified from the provider's published terms before the file is added
+and attributed in `NOTICE`. Neither the corpus nor the terms can be read from here, so
+the mechanism is built and dated and the content is what the release refreshes. Nothing
+in the code names the provider as the source of the shipped file.
+
+*Tests that pin it.*
+`ScreeningTests.INT_PWD_002_AC1_WithTheServiceUnreachableTheOfflineListAnswersAsync`,
+which holds no file at all,
+`ScreeningTests.INT_PWD_003_AC1_SwitchingToTheSelfHostedCorpusIsConfigurationOnlyAsync`,
+`ScreeningTests.ScreenAsync_TheSelfHostedCorpusWithNoAddress_FallsBackAsync`,
+`ScreeningTests.ScreenAsync_ACorpusOlderThanTheMaximumAge_RefusesAsync`,
+`ScreeningTests.ScreenAsync_ACorpusWithNoDate_RefusesAsync`,
+`StartupConfigurationTests.ThrowIfIncomplete_TheCorpusIsSelfHosted_RequiresItsAddress`,
+`StartupConfigurationTests.ThrowIfIncomplete_TheCorpusIsNotSelfHosted_NeedsNoAddress`.
+
 # Rows for chapter 10
 
 D-162 section E names codes, keys, declarations and vocabularies the library now
@@ -3511,3 +3554,9 @@ D-162's.
 | Code | Status | Raised when |
 | --- | --- | --- |
 | `auth.password.toolong` | 422 | A password longer than `password.maximum` is set, at registration, at a password change or at a reset. Nothing is truncated. |
+
+## Section 4, configuration keys
+
+| Key | Type | Scope | Default | Named when |
+| --- | --- | --- | --- | --- |
+| `password.blocklist.selfhosted.address` | string | R | none | Required where `password.blocklist.source` is `selfHosted`. Where the deployment's own corpus serves the ranges the primary source serves. |

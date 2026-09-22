@@ -34,6 +34,7 @@ public sealed class ErrorCodesTests
         "auth.lossreport.notpermitted",
         "auth.lossreport.pending",
         "auth.password.blocklisted",
+        "auth.password.toolong",
         "auth.password.tooshort",
         "auth.policy.graceexpired",
         "auth.recovery.channelnotonaccount",

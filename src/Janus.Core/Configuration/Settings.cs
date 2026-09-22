@@ -127,6 +127,15 @@ public static class Settings
             minimum: 1,
             loosening: SettingDirection.Decrease);
 
+    /// <summary>
+    /// Where the corpus a deployment hosts itself answers. It serves the same ranges
+    /// the primary source does, which is the whole of bringing the integration
+    /// in-house. The deployment names it where <c>password.blocklist.source</c> is
+    /// <c>selfHosted</c>.
+    /// </summary>
+    public static TextSetting PasswordBlocklistSelfHostedAddress { get; } =
+        new("password.blocklist.selfhosted.address", SettingScope.Runtime);
+
     /// <summary>How stale the leaked-password corpus may be.</summary>
     public static DurationSetting PasswordBlocklistCorpusMaxAge { get; } =
         new("password.blocklist.corpusmaxage", SettingScope.Runtime, "P30D");
@@ -875,6 +884,7 @@ public static class Settings
         PasswordMaximum,
         PasswordBlocklistSource,
         PasswordBlocklistSources,
+        PasswordBlocklistSelfHostedAddress,
         PasswordBlocklistCorpusMaxAge,
         PasswordArgon2Memory,
         PasswordArgon2Iterations,
@@ -1059,6 +1069,7 @@ public static class Settings
     /// Where the deployment holds its data, or <see langword="null"/> where it named
     /// no value for <c>hosting.location</c>.
     /// </param>
+    /// <param name="blocklistSource">The value named for <c>password.blocklist.source</c>.</param>
     /// <param name="blocklistSources">The value named for <c>password.blocklist.sources</c>.</param>
     /// <param name="recordsOfProcessing">
     /// Whether the deployment generates the records of processing.
@@ -1077,6 +1088,7 @@ public static class Settings
     public static void ThrowIfIncomplete(
         IReadOnlySet<ConfigurationKey> named,
         HostingLocation? location,
+        BlocklistSource blocklistSource,
         IReadOnlySet<BlocklistRejectionSource> blocklistSources,
         bool recordsOfProcessing)
     {
@@ -1090,7 +1102,7 @@ public static class Settings
 
         foreach (Setting setting in Required)
         {
-            if (!Applies(setting, location, blocklistSources, recordsOfProcessing))
+            if (!Applies(setting, location, blocklistSource, blocklistSources, recordsOfProcessing))
             {
                 continue;
             }
@@ -1102,17 +1114,23 @@ public static class Settings
         }
     }
 
-    // The three conditional declarations of the section 4 preamble. Every other
-    // required key is named whatever the deployment does.
+    // The conditional declarations of the section 4 preamble. Every other required
+    // key is named whatever the deployment does.
     private static bool Applies(
         Setting setting,
         HostingLocation? location,
+        BlocklistSource blocklistSource,
         IReadOnlySet<BlocklistRejectionSource> blocklistSources,
         bool recordsOfProcessing)
     {
         if (setting.Key == HostingCrossBorderBasis.Key)
         {
             return location == Configuration.HostingLocation.Outside;
+        }
+
+        if (setting.Key == PasswordBlocklistSelfHostedAddress.Key)
+        {
+            return blocklistSource is BlocklistSource.SelfHosted;
         }
 
         if (setting.Key == ServiceName.Key)

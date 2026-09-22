@@ -174,8 +174,8 @@ public static class JanusRegistration
         services.AddSingleton<IWordList>(_ => new WordList(Corpus));
 
         // INT-PWD-001: the range API is reached over the framework's client, which
-        // rotates its connections; the corpus files beside the application answer
-        // when it cannot (INT-PWD-002).
+        // rotates its connections; the list the package carries answers when it
+        // cannot (INT-PWD-002).
         services.AddHttpClient<ILeakedPasswordCorpus, LeakedPasswordCorpus>((requests, provider) =>
         {
             requests.BaseAddress = LeakedPasswordCorpus.Provider;
@@ -184,7 +184,7 @@ public static class JanusRegistration
                 requests,
                 provider.GetRequiredService<IConfigurationStore>(),
                 provider.GetRequiredService<TimeProvider>(),
-                Corpus);
+                new OfflineCorpus());
         });
 
         services.AddScoped<PasswordScreening>();
@@ -287,10 +287,10 @@ public static class JanusRegistration
         return services;
     }
 
-    // The corpus and the word list are files a deployment holds beside the
-    // application (AUTH-PASS-004, INT-PWD-003).
+    // The word list is a file a deployment holds beside the application, where it
+    // rejects on one (AUTH-PASS-004).
     private static string Corpus =>
-        Path.Combine(AppContext.BaseDirectory, LeakedPasswordCorpus.Directory);
+        Path.Combine(AppContext.BaseDirectory, WordList.Directory);
 
     // The fingerprint key computes an HMAC-SHA256, so anything shorter than that hash
     // is a key that weakens the code it is used by and is not a key the library runs on.

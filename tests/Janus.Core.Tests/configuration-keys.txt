@@ -81,6 +81,7 @@ password.argon2.iterations
 password.argon2.memory
 password.argon2.parallelism
 password.blocklist.corpusmaxage
+password.blocklist.selfhosted.address
 password.blocklist.source
 password.blocklist.sources
 password.floor.singlefactor

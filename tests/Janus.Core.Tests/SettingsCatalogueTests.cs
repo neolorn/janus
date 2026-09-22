@@ -41,6 +41,7 @@ public sealed class SettingsCatalogueTests
         "legal.governinglanguage",
         "notification.email.sendingdomain",
         "notification.languages",
+        "password.blocklist.selfhosted.address",
         "privacy.calendar.timezone",
         "service.name",
         "webauthn.origins",

@@ -784,6 +784,13 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- The offline leaked-password list now travels in the package. A deployment that holds
+  no corpus file of its own still falls back to a dated list when the range API cannot
+  answer, and the list is refreshed with each release rather than by the operator.
+- The self-hosted compromised-password corpus is now reached at the address
+  `password.blocklist.selfhosted.address` names, over the same range protocol the
+  primary source uses, rather than read from a second file beside the application. A
+  deployment that names `selfHosted` and no address does not start.
 - A password longer than `password.maximum` is now refused with
   `auth.password.toolong` rather than with the configuration code for a value above a
   ceiling. A password field no longer answers with a sentence about configuration.

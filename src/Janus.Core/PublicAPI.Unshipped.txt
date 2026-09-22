@@ -2822,6 +2822,7 @@ static Janus.Core.Configuration.Settings.PasswordArgon2Iterations.get -> Janus.C
 static Janus.Core.Configuration.Settings.PasswordArgon2Memory.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.PasswordArgon2Parallelism.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.PasswordBlocklistCorpusMaxAge.get -> Janus.Core.Configuration.DurationSetting!
+static Janus.Core.Configuration.Settings.PasswordBlocklistSelfHostedAddress.get -> Janus.Core.Configuration.TextSetting!
 static Janus.Core.Configuration.Settings.PasswordBlocklistSource.get -> Janus.Core.Configuration.ChoiceSetting<Janus.Core.Configuration.BlocklistSource>!
 static Janus.Core.Configuration.Settings.PasswordBlocklistSources.get -> Janus.Core.Configuration.MultipleChoiceSetting<Janus.Core.Configuration.BlocklistRejectionSource>!
 static Janus.Core.Configuration.Settings.PasswordFloorSingleFactor.get -> Janus.Core.Configuration.IntegerSetting!
@@ -2863,7 +2864,7 @@ static Janus.Core.Configuration.Settings.SessionDefaultInactivity.get -> Janus.C
 static Janus.Core.Configuration.Settings.SessionStepUpRecency.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.SweepInterval.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.TakedownGrace.get -> Janus.Core.Configuration.DurationSetting!
-static Janus.Core.Configuration.Settings.ThrowIfIncomplete(System.Collections.Generic.IReadOnlySet<Janus.Core.Configuration.ConfigurationKey>! named, Janus.Core.Configuration.HostingLocation? location, System.Collections.Generic.IReadOnlySet<Janus.Core.Configuration.BlocklistRejectionSource>! blocklistSources, bool recordsOfProcessing) -> void
+static Janus.Core.Configuration.Settings.ThrowIfIncomplete(System.Collections.Generic.IReadOnlySet<Janus.Core.Configuration.ConfigurationKey>! named, Janus.Core.Configuration.HostingLocation? location, Janus.Core.Configuration.BlocklistSource blocklistSource, System.Collections.Generic.IReadOnlySet<Janus.Core.Configuration.BlocklistRejectionSource>! blocklistSources, bool recordsOfProcessing) -> void
 static Janus.Core.Configuration.Settings.TokenSignatureVerification.get -> Janus.Core.Configuration.FlagSetting!
 static Janus.Core.Configuration.Settings.TokenSigningAlgorithm.get -> Janus.Core.Configuration.ChoiceSetting<string!>!
 static Janus.Core.Configuration.Settings.TokenSigningRotation.get -> Janus.Core.Configuration.DurationSetting!
