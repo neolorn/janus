@@ -257,6 +257,42 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
+    /// AUTHZ-GATE-005 AC1 (D-162): a page asked for three permissions costs one
+    /// statement over the host's rows, not one for each of them. What the derivation's
+    /// role confers is model data, mapped where the model is, so the answer names the
+    /// one permission the reviewer's role allows and the cost does not follow the
+    /// permissions asked for.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_005_AC1_APageCostsOneStatementOverTheHostsRowsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+
+        await nested.Deployment.NamedRoleAsync(Reviewer, [HostPermissions.Read], cancellationToken);
+        await nested.Deployment.ReviewAsync(nested.Bottom, nested.Account, cancellationToken);
+
+        var counted = new CountedCommands();
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context(counted);
+
+        IReadOnlyList<Capability> page = Rendered(
+            await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .CapabilitiesAsync(
+                    AccessContext.Of(nested.Account),
+                    Document,
+                    [nested.Record.Id],
+                    [HostPermissions.Read, HostPermissions.Edit, HostPermissions.Publish],
+                    Sources(reading),
+                    cancellationToken));
+
+        Assert.Equal([HostPermissions.Read], Assert.Single(page).Can);
+        Assert.Equal(1, counted.Statements);
+    }
+
+    /// <summary>
     /// AUTHZ-PRIN-003 AC1: a record of a kind the host never declared raises, rather
     /// than being permitted by a rule that governs nothing.
     /// </summary>

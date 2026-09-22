@@ -53,6 +53,17 @@ public sealed class HostFixture : IAsyncLifetime
     internal HostContext Context() =>
         new(new DbContextOptionsBuilder<HostContext>().UseNpgsql(ConnectionString).Options);
 
+    /// <summary>
+    /// The same context with the statements it sends counted.
+    /// </summary>
+    /// <param name="counted">Where the count is kept.</param>
+    /// <returns>The context.</returns>
+    internal HostContext Context(CountedCommands counted) =>
+        new(new DbContextOptionsBuilder<HostContext>()
+            .UseNpgsql(ConnectionString)
+            .AddInterceptors(counted)
+            .Options);
+
     /// <inheritdoc/>
     public async ValueTask InitializeAsync()
     {

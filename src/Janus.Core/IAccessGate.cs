@@ -207,9 +207,10 @@ public interface IAccessGate
     /// declared derivation evaluated beside the stored grants.
     /// </returns>
     /// <remarks>
-    /// AUTHZ-DERIVE-001, AUTHZ-GATE-005 AC1, D-161: each derivation costs one further
-    /// query for the whole page, whatever the page's size, and the overload without
-    /// sources is refused on a type that declares one.
+    /// AUTHZ-DERIVE-001, AUTHZ-GATE-005 AC1, D-162: the derivations cost one further
+    /// query for the whole page, carrying one clause each, whatever the page's size and
+    /// however many permissions are asked for; the overload without sources is refused
+    /// on a type that declares one.
     /// </remarks>
     ValueTask<Result<IReadOnlyList<Capability>>> CapabilitiesAsync<TResource>(
         AccessContext context,

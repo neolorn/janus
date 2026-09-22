@@ -332,8 +332,8 @@ internal sealed class AccessGate(
     }
 
     // AUTHZ-GATE-005 AC1: one query answers the whole page for the stored grants, and
-    // one further query per permission a derivation confers answers the rest, so the
-    // cost stands whatever the page's size.
+    // one further query over the host's rows answers what the derivations confer, so
+    // the cost stands whatever the page's size and however many permissions are asked.
     private async ValueTask<Result<IReadOnlyList<Capability>>> PageAsync(
         AccessContext context,
         ResourceType type,
@@ -401,8 +401,9 @@ internal sealed class AccessGate(
         return outstanding;
     }
 
-    // A derivation confers a role, and what that role allows is not what another
-    // allows, so each permission is asked for on its own.
+    // AUTHZ-GATE-005 AC1, D-162: the page is one query over the host's rows, carrying
+    // one clause per derivation reaching the type. What each derivation's role allows
+    // is model data and is mapped here, so no permission costs a query of its own.
     private async ValueTask<IReadOnlyDictionary<Permission, IReadOnlySet<string>>> DerivedAsync<TResource>(
         AccessContext context,
         ResourceType type,
@@ -412,26 +413,77 @@ internal sealed class AccessGate(
         FilterSources<TResource> sources,
         CancellationToken cancellationToken)
     {
-        var admitted = new Dictionary<Permission, IReadOnlySet<string>>();
+        IReadOnlyList<ConferredDerivation> conferring = await derived
+            .ConferringAsync(type, cancellationToken)
+            .ConfigureAwait(false);
 
-        foreach (Permission permission in permissions)
+        if (conferring.Count == 0)
         {
-            IReadOnlySet<string> records = await AdmittedAsync(
-                context,
-                [permission],
-                type,
-                organization,
-                sources,
-                resources,
-                cancellationToken).ConfigureAwait(false);
+            return new Dictionary<Permission, IReadOnlySet<string>>();
+        }
 
-            if (records.Count > 0)
+        var rule = new PermissionRule(
+            permissions,
+            type,
+            organization,
+            await subjects.OfAsync(context, cancellationToken).ConfigureAwait(false),
+            time.GetUtcNow(),
+            [.. conferring.Select(one => one.Relationship)]);
+
+        var admitted = new Dictionary<Permission, HashSet<string>>();
+
+        foreach (AdmittedRecord record in await RowsAsync(
+            rule.ToAdmittedRecords(sources, resources), cancellationToken).ConfigureAwait(false))
+        {
+            foreach (ConferredDerivation one in conferring.Where(one =>
+                string.Equals(one.Relationship.Name, record.Relationship, StringComparison.Ordinal)))
             {
-                admitted.Add(permission, records);
+                foreach (Permission permission in permissions.Where(one.Confers.Contains))
+                {
+                    if (!admitted.TryGetValue(permission, out HashSet<string>? records))
+                    {
+                        records = new HashSet<string>(StringComparer.Ordinal);
+                        admitted.Add(permission, records);
+                    }
+
+                    records.Add(record.Resource);
+                }
             }
         }
 
-        return admitted;
+        return admitted.ToDictionary(
+            entry => entry.Key,
+            entry => (IReadOnlySet<string>)entry.Value);
+    }
+
+    // LIB-HOST-002, D-161: the query was composed from the rows the host supplied and
+    // carries the host's own provider, so reading it issues nothing of the library's
+    // own against a host table and takes none of its connections.
+    private static async ValueTask<IReadOnlyList<AdmittedRecord>> RowsAsync(
+        IQueryable<AdmittedRecord>? admitted,
+        CancellationToken cancellationToken)
+    {
+        if (admitted is null)
+        {
+            return [];
+        }
+
+        if (admitted is not IAsyncEnumerable<AdmittedRecord> rows)
+        {
+            throw new InvalidOperationException(
+                "The rows the host supplied are not read asynchronously, which the contract tables mapped into the host's own context are.");
+        }
+
+        var records = new List<AdmittedRecord>();
+
+        await foreach (AdmittedRecord record in rows
+            .WithCancellation(cancellationToken)
+            .ConfigureAwait(false))
+        {
+            records.Add(record);
+        }
+
+        return records;
     }
 
     // The records of the page a derivation admits, read in one query over the rows the

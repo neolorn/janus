@@ -12,6 +12,13 @@ grants least, keeps most or refuses, and are marked as such.
 Nothing under `docs/spec/` or `docs/decision-log.md` was edited. Each entry states the
 chapter text that should change so the owner can reconcile them.
 
+From entry 110 the ledger carries the corrections of D-162, which reviewed the entries
+before it. Each names the entry it replaces, what D-162 decided and what was built; the
+entry it replaces carries one line saying it is superseded and where the correction is.
+D-162 is the specification for every point it settles, so a correction states no
+readings of its own. The rows chapter 10 is owed for what those corrections add are
+listed once, at the end of this file.
+
 ---
 
 ## 1. The guide copy of the instruction file is committed
@@ -157,6 +164,8 @@ correctly, each of them one statement over the host's own relations.
 *Chapter text that should change.* `03` AUTHZ-GATE-005 AC1: "A list of 50 records
 returns capabilities in one query for the stored grants and one further query per
 permission a derivation confers, none of them per record."
+
+**Superseded by D-162.** Applied in entry 110.
 
 ---
 
@@ -3379,3 +3388,28 @@ CONV-CODE-004 AC2 admits it.
 member of the declared type and its type is the library's subject identifier, and
 chapter 10 section 1.5 should carry a row for the refusal if the owner wants it to
 carry its own code rather than be a malformed-model refusal.
+
+---
+
+## 110. A capability page is one query over the host's rows, whatever it asks for
+
+**Corrections 1 · 2026-09-22 · D-162 section B, correcting entry 4 · AUTHZ-GATE-005 AC1**
+
+*What D-162 decided.* The capability page is one host-context query: beside the
+stored-grant capabilities it projects one `EXISTS` per derivation reaching the type, and
+the role each derivation confers is model data mapped in memory. AUTHZ-GATE-005 AC1
+("without additional queries") stands as written.
+
+*What was built.* The page evaluates every derivation that reaches the type, whatever
+its role allows, in one query composed from the rows the host supplied: one clause per
+derivation, each carrying the relationship it followed from beside the record it
+admitted. What the conferred role allows is read where the model is read and mapped in
+memory afterwards, so the cost follows neither the page's size nor the number of
+permissions asked for. Entry 4's one-query-per-permission is gone.
+
+*Tests that pin it.*
+`GateBehaviourTests.AUTHZ_GATE_005_AC1_APageCostsOneStatementOverTheHostsRowsAsync`,
+which asks a page for three permissions and counts the statements the host's context
+sent,
+`GateBehaviourTests.AUTHZ_GATE_005_AC1_APageOfFiftyIsAnsweredWithoutAQueryPerRecordAsync`,
+`GateBehaviourTests.AUTHZ_GATE_005_AC2_ADerivedGrantReachesTheCapabilityPageAsync`.

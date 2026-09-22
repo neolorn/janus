@@ -784,6 +784,10 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- A page of capabilities now costs one query over the host's own rows however many
+  permissions it asks for. Every derivation reaching the type is evaluated in that one
+  query, and what the role each confers allows is read from the model, so a page that
+  offers three actions costs what a page offering one costs.
 - A sign-in whose password an invalidation left below the single-factor floor now
   completes and says so, so the person is asked for a new password at the next
   sign-in rather than being locked out.
