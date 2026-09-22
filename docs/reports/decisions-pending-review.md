@@ -5592,6 +5592,55 @@ them. `10` section 5b already names `OrganizationErased`; the row should say it 
 the organization and the count of memberships ended and no subject. `10` section 5 needs
 the new audit action `identity.organization.erased` (listed under "Rows for chapter 10").
 
+---
+
+## 156. The shipped lawful bases and sensitive categories exist
+
+**Corrections 1 · 2026-09-23 · D-162 section D · PRIV-BASIS-001, PRIV-BASIS-004,
+PRIV-SENS-001, `07` LIB-HOST-001, `10` sections 5.7 and 5.9**
+
+*What D-162 decided.* "Verify with one repository search that the shipped Egypt default
+declarations of PRIV-BASIS-001 and PRIV-SENS-001 exist in source."
+
+*What the search found.* They did not. `LawfulBasisDeclaration` and
+`AuthorizationDeclarationBuilder.SensitiveCategory` both existed and had since phase 4,
+but no file shipped the lists themselves. A search of `src/` for the six basis keys
+found one file, `CapabilityResidual.cs`, carrying `consent` as the wire name of
+something else; a search for the eight categories found `children` alone, in the
+register. Every test and fixture that needed a basis wrote its own, which is why
+nothing noticed. PRIV-BASIS-001 says "Egypt's six SHALL ship as the default
+declaration", PRIV-SENS-001 says "Egypt's list ships as the default", and `07`
+LIB-HOST-001 says the same of both, so they were built.
+
+*What was built.* Two shipped catalogues in `Janus.Core`, in the shape `ProviderRegister`
+already ships the provider register in: `LawfulBases.Default`, the six of `10` section
+5.7 in the order PRIV-BASIS-001 tables them, each carrying the four properties that
+table gives it, and `SensitiveCategories.Default`, the eight of `10` section 5.9 in its
+order. A deployment declares them; nothing registers them by itself, because the list is
+the host's declaration and the library holds no jurisdiction of its own.
+`SensitiveCategories.Children` is the one category the library reads by name, and the
+register now reads it from there rather than from a second spelling of its own.
+
+*Resolved by rule (Tier 1).* `DeclaredProcessingTests.PRIV_BASIS_001_AC4_NoLibrarySourceNamesABasis`
+asserted that one file in `src/` carries a basis key as a literal. The shipped
+declaration is a second, and is the thing PRIV-BASIS-001 requires to exist, so the gate
+as written could not admit the item it belongs to. AC4 says "No **conditional** in the
+library tests for a basis by name", so the test now asserts what the item says: no file
+carries a basis key on a line that also carries a construct choosing between two paths,
+the two files carrying the keys at all are named, and the same is asserted of the
+categories. The rule the test enforces is unchanged and no weaker; the same branch-token
+list the factor catalogue gate of AUTH-FACT-001 AC1 uses decides what a conditional is.
+
+*Tests that pin it.*
+`DeclaredProcessingTests.PRIV_BASIS_001_TheShippedDeclarationCarriesTheDeclaredProperties`,
+`DeclaredProcessingTests.PRIV_BASIS_001_AC4_NoLibrarySourceNamesABasis`,
+`DeclaredProcessingTests.PRIV_BASIS_004_AC1_NoLibrarySourceNamesABasisWhosePropertiesAreAllUnset`,
+`DeclaredProcessingTests.PRIV_SENS_001_TheShippedCategoriesAreLabelsNothingBranchesOn`.
+
+*Chapter text that should change.* None of substance. `07` LIB-HOST-001 could name the
+two catalogues a deployment declares from, as it names the other shipped defaults;
+they are listed under "Rows for chapter 10" for that purpose.
+
 
 # Rows for chapter 10
 
@@ -5623,6 +5672,17 @@ The subsection each row belongs in is named with it.
 | `PasskeyAddresses` (`changePassword`, `enrol`, `manage`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `passkeyAddresses` or the field of it that is empty. The addresses are the frontend pages `/.well-known/change-password` and `/.well-known/passkey-endpoints` point at (REG-PM-001). |
 | `AuthenticationAddresses` (`signIn`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `authenticationAddresses.signIn`. The address is where an authorization request that is not silent and holds no session is forwarded (AUTH-SESS-012 AC3). |
 | `ImageCodec` (`Reencode`) | optional, and required while any organization shows photos | Startup fails with `model.startup.declarationmissing` and `details.key` naming `imageCodec` where a `photo.enabled.<organization>` key is on and no codec is registered. The callback is `Func<ReadOnlyMemory<byte>, int, CancellationToken, ValueTask<ReadOnlyMemory<byte>?>>`: the uploaded bytes and the longest side in pixels the stored image is held to, answering the re-encoded JPEG with every metadata segment removed, or nothing where the bytes are not an image the deployment accepts. Nothing it answers chooses a code: a refusal is `identity.photo.invalid` (IDN-ATTR-002, IDN-ATTR-004). |
+
+## Shipped default declarations
+
+Two lists PRIV-BASIS-001, PRIV-SENS-001 and `07` LIB-HOST-001 require the library to
+ship and which no file held until now (D-162 item 156). They are declarations a
+deployment passes to the builder, not defaults the library registers by itself.
+
+| Catalogue | Holds | Read where |
+| --- | --- | --- |
+| `LawfulBases.Default` | The six of `10` section 5.7, in the order PRIV-BASIS-001 tables them, each carrying `IsConsent`, `RequiresWrittenConsentForSensitive`, `RequiresAssessment` and `IsObjectable` as that table gives them. | A deployment passes each to `AuthorizationDeclarationBuilder.LawfulBasis`. The library reads the four properties and never the key. |
+| `SensitiveCategories.Default` | The eight of `10` section 5.9, in its order. | A deployment passes each to `AuthorizationDeclarationBuilder.SensitiveCategory`. `SensitiveCategories.Children` is the one member the library reads by name, for the children's column of the register (PRIV-ROPA-001). |
 
 ## Section 3, the `resources` table
 

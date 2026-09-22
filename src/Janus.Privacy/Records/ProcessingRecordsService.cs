@@ -37,13 +37,6 @@ internal sealed class ProcessingRecordsService(
     IConfigurationStore configuration,
     TimeProvider time) : IProcessingRecords
 {
-    /// <summary>
-    /// The sensitivity category children's data is declared under, which is the one
-    /// category the library reads by name: the children's column of the register is
-    /// that category and the flag reports its absence (PRIV-SENS-001, PRIV-ROPA-001).
-    /// </summary>
-    internal const string ChildrensCategory = "children";
-
     // The three rows of the shipped register the library itself makes true, named as
     // ProviderRegister ships them (PRIV-ROPA-002, chapter 05 section 8).
     private const string MailServer = "mail server";
@@ -191,7 +184,7 @@ internal sealed class ProcessingRecordsService(
     // and the register's children's column is that category and no other property of
     // the deployment.
     private static bool Childrens(ResourceTypeDeclaration type) =>
-        type.SensitiveCategories.Contains(ChildrensCategory, StringComparer.Ordinal);
+        type.SensitiveCategories.Contains(SensitiveCategories.Children, StringComparer.Ordinal);
 
     // PRIV-SENS-001 AC2: sensitivity is a column and not a verdict on the purpose, so
     // a purpose declared on an ordinary type and a sensitive one is in both columns.
@@ -314,7 +307,7 @@ internal sealed class ProcessingRecordsService(
             purpose.Basis.Key,
             Ordinary(purpose),
             purpose.SensitiveCategories.Count > 0,
-            purpose.SensitiveCategories.Contains(ChildrensCategory, StringComparer.Ordinal),
+            purpose.SensitiveCategories.Contains(SensitiveCategories.Children, StringComparer.Ordinal),
             purpose.SensitiveCategories,
             await KeptAsync(purpose, flags, cancellationToken).ConfigureAwait(false),
             [.. recipients.Select(recipient => recipient.Name)],

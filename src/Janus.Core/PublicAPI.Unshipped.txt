@@ -1214,6 +1214,7 @@ Janus.Core.KeyEncryptionKeys.Equals(Janus.Core.KeyEncryptionKeys? other) -> bool
 Janus.Core.KeyEncryptionKeys.KeyEncryptionKeys(int CurrentVersion, System.Collections.Generic.IReadOnlyDictionary<int, System.ReadOnlyMemory<byte>>! Versions) -> void
 Janus.Core.KeyEncryptionKeys.Versions.get -> System.Collections.Generic.IReadOnlyDictionary<int, System.ReadOnlyMemory<byte>>!
 Janus.Core.KeyEncryptionKeys.Versions.init -> void
+Janus.Core.LawfulBases
 Janus.Core.LawfulBasisDeclaration
 Janus.Core.LawfulBasisDeclaration.<Clone>$() -> Janus.Core.LawfulBasisDeclaration!
 Janus.Core.LawfulBasisDeclaration.Deconstruct(out string! Key, out bool IsConsent, out bool RequiresWrittenConsentForSensitive, out bool RequiresAssessment, out bool IsObjectable) -> void
@@ -2061,6 +2062,7 @@ Janus.Core.SendingRestrictionGranted.Reason.init -> void
 Janus.Core.SendingRestrictionGranted.Restriction.get -> string!
 Janus.Core.SendingRestrictionGranted.Restriction.init -> void
 Janus.Core.SendingRestrictionGranted.SendingRestrictionGranted(System.DateTimeOffset RaisedAt, string! IdempotencyKey, string! Restriction, int Credit, string! Reason) -> void
+Janus.Core.SensitiveCategories
 Janus.Core.SessionDetail
 Janus.Core.SessionDetail.<Clone>$() -> Janus.Core.SessionDetail!
 Janus.Core.SessionDetail.AssuranceLevel.get -> Janus.Core.AssuranceLevel
@@ -2302,6 +2304,7 @@ const Janus.Core.EmailAddress.MaximumOctets = 254 -> int
 const Janus.Core.LegalName.MaximumLength = 200 -> int
 const Janus.Core.LegalName.MinimumLength = 1 -> int
 const Janus.Core.PhoneNumber.MaximumDigits = 15 -> int
+const Janus.Core.SensitiveCategories.Children = "children" -> string!
 const Janus.Core.Username.MaximumLength = 32 -> int
 const Janus.Core.Username.MinimumLength = 3 -> int
 override Janus.Core.AccessExplanation.Equals(object? obj) -> bool
@@ -3290,6 +3293,7 @@ static Janus.Core.JanusEvent.operator !=(Janus.Core.JanusEvent? left, Janus.Core
 static Janus.Core.JanusEvent.operator ==(Janus.Core.JanusEvent? left, Janus.Core.JanusEvent? right) -> bool
 static Janus.Core.KeyEncryptionKeys.operator !=(Janus.Core.KeyEncryptionKeys? left, Janus.Core.KeyEncryptionKeys? right) -> bool
 static Janus.Core.KeyEncryptionKeys.operator ==(Janus.Core.KeyEncryptionKeys? left, Janus.Core.KeyEncryptionKeys? right) -> bool
+static Janus.Core.LawfulBases.Default.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.LawfulBasisDeclaration!>!
 static Janus.Core.LawfulBasisDeclaration.operator !=(Janus.Core.LawfulBasisDeclaration? left, Janus.Core.LawfulBasisDeclaration? right) -> bool
 static Janus.Core.LawfulBasisDeclaration.operator ==(Janus.Core.LawfulBasisDeclaration? left, Janus.Core.LawfulBasisDeclaration? right) -> bool
 static Janus.Core.LegalName.TryParse(string! entered, out Janus.Core.LegalName name) -> bool
@@ -3471,6 +3475,7 @@ static Janus.Core.SendingRestrictionChanged.operator !=(Janus.Core.SendingRestri
 static Janus.Core.SendingRestrictionChanged.operator ==(Janus.Core.SendingRestrictionChanged? left, Janus.Core.SendingRestrictionChanged? right) -> bool
 static Janus.Core.SendingRestrictionGranted.operator !=(Janus.Core.SendingRestrictionGranted? left, Janus.Core.SendingRestrictionGranted? right) -> bool
 static Janus.Core.SendingRestrictionGranted.operator ==(Janus.Core.SendingRestrictionGranted? left, Janus.Core.SendingRestrictionGranted? right) -> bool
+static Janus.Core.SensitiveCategories.Default.get -> System.Collections.Generic.IReadOnlyList<string!>!
 static Janus.Core.SessionDetail.operator !=(Janus.Core.SessionDetail? left, Janus.Core.SessionDetail? right) -> bool
 static Janus.Core.SessionDetail.operator ==(Janus.Core.SessionDetail? left, Janus.Core.SessionDetail? right) -> bool
 static Janus.Core.SessionId.New(System.TimeProvider! time) -> Janus.Core.SessionId

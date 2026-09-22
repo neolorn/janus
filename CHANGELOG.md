@@ -148,6 +148,15 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The two default declarations the library was always meant to ship now exist:
+  `LawfulBases.Default`, the six lawful bases with the four properties the library
+  branches on, and `SensitiveCategories.Default`, the eight sensitive-data categories.
+  A deployment declares them instead of writing them out, and a deployment in another
+  jurisdiction declares its own list with its own flags and the library changes not at
+  all. Nothing in the library chooses a path by a basis or a category; the one category
+  read by name is the children's, which is the children's column of the records of
+  processing.
+
 - The erasure at the end of an organization deletion window is built: when the window
   elapses, every current membership of the organization ends, what the organization was
   called becomes its own identifier, and the instant the erasure executed is written
