@@ -20,6 +20,12 @@ internal readonly record struct OpaqueToken
     private OpaqueToken(string value) => Value = value;
 
     /// <summary>
+    /// How wide a drawn token is written, which is what a message carrying one is
+    /// measured against its budget with (INT-SMS-003).
+    /// </summary>
+    public static int Width { get; } = Base64Url.EncodeToString(new byte[Length]).Length;
+
+    /// <summary>
     /// The value as the cookie carries it.
     /// </summary>
     public string Value { get; }

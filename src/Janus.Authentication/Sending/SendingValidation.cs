@@ -136,9 +136,18 @@ internal sealed class SendingValidation(
                         return Absent(WrittenName.Of(message) + "." + WrittenName.Of(kind) + "." + language);
                     }
 
+                    if (kind is not SendKind.Sms)
+                    {
+                        continue;
+                    }
+
                     // One character past the budget costs a second message, which for
                     // a non-Latin language is seventy characters in (AUTH-ABUSE-005).
-                    if (kind is SendKind.Sms && MessageBudget.Exceeds(template.Text))
+                    // The template is measured with every place it names at its widest,
+                    // because nothing is measured at the moment of a send.
+                    string widest = MessagePlaceholders.Widest(template.Text);
+
+                    if (MessageBudget.Exceeds(widest))
                     {
                         return new Error(
                             ErrorCodes.ConfigurationValueNotAllowed,
@@ -147,7 +156,7 @@ internal sealed class SendingValidation(
                                 ["key"] = JsonSerializer.SerializeToElement(
                                     WrittenName.Of(message) + "." + WrittenName.Of(kind) + "." + language),
                                 ["allowed"] = JsonSerializer.SerializeToElement(
-                                    MessageBudget.Of(template.Text)),
+                                    MessageBudget.Of(widest)),
                             });
                     }
                 }

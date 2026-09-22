@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A text-message template is now checked against its budget with every place the
+  library fills at its widest, so a template that fits as it is written but not once a
+  code, a link or an alert's detail is in it stops the deployment instead of costing two
+  messages at every send. Nothing is measured at the moment of a send.
+
 - Every message the library sends is now written to its own outbox table inside the
   transaction that made it necessary, carried from that row, and removed once a
   transport has taken it. An operation that fails sends nothing, a message undertaken

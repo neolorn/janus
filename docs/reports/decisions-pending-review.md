@@ -897,6 +897,8 @@ write to.
 *Chapter text that should change.* INT-SMS-003 AC1 should say "any template" rather
 than "any rendered template", and should state how a placeholder is counted.
 
+**Superseded by D-162.** Applied in entry 120.
+
 ---
 
 ## 27. A plaintext endpoint is caught through a register the host declares, not a setting for each integration
@@ -3791,6 +3793,60 @@ written to, that the row is removed once a transport has taken it (IDN-PRIN-003)
 that the row's message is encrypted under a key of the row's own because a send may name
 no subject. `10` should carry the `send_outbox` table and its six columns.
 
+---
+
+## 120. A template is measured at startup with every place it names at its widest
+
+**Corrections 1 · 2026-09-22 · D-162 section B, correcting entry 26 · INT-SMS-003, INT-SMS-005a, AUTH-ABUSE-005**
+
+*What D-162 decided.* At startup every template in every language of
+`notification.languages` is rendered with the maximum-width value of each placeholder
+(defined once per placeholder beside the message kind) and refused where it exceeds the
+single-message budget (70 non-GSM, 160 GSM-7). No measurement at send. "Any rendered
+template" stands.
+
+*What was built.* `MessagePlaceholders`, beside `MessageChannels`, defines every place
+the library fills and the width each is measured at, once per place. The startup check
+now renders each text template with every place it names at that width and refuses the
+deployment where the result exceeds its language's budget. Nothing is measured at a
+send, as before.
+
+The widths the library fixes are derived rather than written down: a code is the
+verification code's digits, a token is the width of a drawn token, a condition is the
+widest written alert condition, an instant is the width of the round-trip form, a count
+is the width of an integer, an amount the width of a decimal and an identifier the width
+of a written identifier. The four places whose values are a deployment's or a host's (a
+restriction name, a governing document, a settings key, the subscribers still to confirm
+an erasure) carry the width past which the library will not promise one message. A place
+the library does not fill is left as it stands, at startup exactly as at a send.
+
+The filler is a letter of the default alphabet, so filling a template leaves it in the
+alphabet it was written in and the budget it is measured against unchanged.
+
+*Decided in the owner's absence (Tier 3, strictest reading).* A value wider than the
+width its place is defined at costs a second message and is not refused at the moment of
+the send, because D-162 says nothing is measured there. The four stated widths are
+therefore the library's promise and not a check: a deployment that names a restriction
+wider than 64 characters, or a host whose erasure subscribers are named at more than 128
+characters in total, pays for a second message rather than being refused. The alternative
+readings (truncating a value at send, or measuring the rendered text at send) both
+reintroduce the measurement D-162 removed, and truncation would corrupt a code or a link.
+
+*Tests that pin it.*
+`SendingValidationTests.INT_SMS_003_AC1_ATemplateIsMeasuredWithItsPlacesAtTheirWidestAsync`,
+`SendingValidationTests.INT_SMS_003_AC1_APlaceTheLibraryDoesNotFillIsMeasuredAsWrittenAsync`,
+`MessagePlaceholdersTests.INT_SMS_003_AC1_APlaceIsFilledToTheWidthItIsDefinedAt`,
+`MessagePlaceholdersTests.INT_SMS_003_AC1_TheValuesTheLibraryDrawsFitTheWidthsItMeasuresAt`,
+and the three that already stood:
+`SendingValidationTests.AUTH_ABUSE_005_AC3_AnOverBudgetTextMessageStopsStartupAsync`,
+`SendingValidationTests.INT_SMS_003_AC1_ALatinMessageOverItsBudgetStopsStartupAsync`,
+`SendingValidationTests.INT_SMS_003_AC2_EveryTextMessageIsMeasuredInEveryLanguageAsync`.
+
+*Chapter text that should change.* INT-SMS-003 AC1 stands as written ("any rendered
+template"), and the item should state that the render is done at startup with each place
+at its defined width, that the widths are defined once per place beside the message
+kinds, and that a place the library does not fill is left as it stands. `10` should carry
+the places and their widths, which are listed under "Rows for chapter 10".
 
 # Rows for chapter 10
 
@@ -3810,3 +3866,32 @@ D-162's.
 | Key | Type | Scope | Default | Named when |
 | --- | --- | --- | --- | --- |
 | `password.blocklist.selfhosted.address` | string | R | none | Required where `password.blocklist.source` is `selfHosted`. Where the deployment's own corpus serves the ranges the primary source serves. |
+
+## Section 5, message places
+
+The places a template leaves for the library's values, and the width each is measured at
+when a template is checked against its text-message budget at startup (INT-SMS-003,
+D-162 item 26). A place the library does not fill is left as it stands.
+
+| Place | Width | What it carries |
+| --- | --- | --- |
+| `code` | the verification code's digits | The code a person is to enter. |
+| `token` | the width of a drawn token | The link a person is to open. |
+| `condition` | the widest written alert condition | Which condition was raised. |
+| `raisedAt` | the width of an instant | When it was raised. |
+| `restriction` | 64 | The restriction a grant or a loosening names. |
+| `key` | the widest settings key | The setting a change names. |
+| `destinationsBefore` | the width of a count | How many alert destinations stood before a change. |
+| `destinationsAfter` | the width of a count | How many stand after it. |
+| `balance` | the width of an amount | What the gateway account stands at. |
+| `floor` | the width of an amount | The floor it is measured against. |
+| `spentLastHour` | the width of an amount | What the last hour cost. |
+| `document` | 64 | The governing document with no text. |
+| `delivery` | the width of an identifier | The erasure delivery that exhausted its attempts. |
+| `kind` | 32 | What that delivery carries. |
+| `attempts` | the width of a count | How many attempts it made. |
+| `outstanding` | 128 | The subscribers that have not confirmed it. |
+| `request` | the width of an identifier | The privacy request whose deadline was reached. |
+| `type` | the widest written request type | What was asked for. |
+| `status` | the widest written request status | Where it had got to. |
+| `decisionDue` | the width of an instant | When the decision was due. |

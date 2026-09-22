@@ -95,6 +95,47 @@ public sealed class SendingValidationTests
     }
 
     /// <summary>
+    /// INT-SMS-003 AC1: a template is measured with every place it names at its
+    /// widest, so one that fits as the catalogue holds it and not once the library
+    /// has filled it is refused at startup rather than costing two messages at every
+    /// send.
+    /// </summary>
+    [Fact]
+    public async Task INT_SMS_003_AC1_ATemplateIsMeasuredWithItsPlacesAtTheirWidestAsync()
+    {
+        string written = new string('a', 151) + "{token}";
+
+        Assert.False(MessageBudget.Exceeds(written));
+        Assert.True(MessageBudget.Exceeds(MessagePlaceholders.Widest(written)));
+
+        _templates.Set(MessageKind.VerificationCode, SendKind.Sms, "en", new MessageTemplate(null, written));
+
+        Error refusal = await RefusedAsync();
+
+        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, refusal.Code);
+        Assert.Equal("verification-code.sms.en", refusal.Details["key"].GetString());
+        Assert.Equal(160, refusal.Details["allowed"].GetInt32());
+    }
+
+    /// <summary>
+    /// INT-SMS-003 AC1: a place the library does not fill is left as it stands, here
+    /// as at a send, so a template naming one is measured as it is written.
+    /// </summary>
+    [Fact]
+    public async Task INT_SMS_003_AC1_APlaceTheLibraryDoesNotFillIsMeasuredAsWrittenAsync()
+    {
+        string written = new string('a', 148) + "{whatever}";
+
+        Assert.DoesNotContain("whatever", MessagePlaceholders.Widths.Keys, StringComparer.Ordinal);
+        Assert.False(MessageBudget.Exceeds(written));
+        Assert.Equal(written, MessagePlaceholders.Widest(written));
+
+        _templates.Set(MessageKind.VerificationCode, SendKind.Sms, "en", new MessageTemplate(null, written));
+
+        await PassedAsync();
+    }
+
+    /// <summary>
     /// INT-SMS-003 AC2: every message that goes out by text is measured in every
     /// configured language, so no language is budgeted by the one it was written in.
     /// </summary>
