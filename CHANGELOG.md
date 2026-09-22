@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- The children's column of the records of processing now follows the `children`
+  sensitivity category a resource type declares, like every other category, instead of
+  being true for every row wherever the deployment admits minors. A deployment that
+  admits minors and declares no children's type carries the new register flag
+  `children-undeclared`, so an empty column is reported rather than read as no
+  children's processing.
+
 - Deciding a privacy request now tells its three refusals apart for the member of staff
   working the queue: 403 `authz.denied` without the permission, 404
   `privacy.request.notfound` for an identifier naming no request, and 409

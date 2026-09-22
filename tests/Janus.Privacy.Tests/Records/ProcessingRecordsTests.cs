@@ -173,25 +173,73 @@ public sealed class ProcessingRecordsTests
         Assert.True(marketing.NonSensitive);
         Assert.Empty(marketing.SensitiveCategories);
 
-        // PRIV-MINOR-001: the affirmation is required by default, so the service is
-        // 18+ only and no row is in the children's column.
+        // PRIV-SENS-001: no type here declares the children's category, so no row is
+        // in the children's column.
         Assert.All(register.Records, record => Assert.False(record.Children));
     }
 
     /// <summary>
-    /// PRIV-MINOR-001: a deployment that admits minors is in the children's column,
-    /// because any purpose may then be over a child's data.
+    /// PRIV-SENS-001 AC2, PRIV-ROPA-001: the children's column is a sensitivity
+    /// category like any other, so a purpose is in it exactly where a type it is
+    /// declared on declares that category, and the rest of the register is not.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task PRIV_ROPA_001_AC1_ADeploymentAdmittingMinorsIsInTheChildrensColumnAsync()
+    public async Task PRIV_SENS_001_AC2_TheChildrensColumnFollowsTheDeclaredCategoryAsync()
+    {
+        ProcessingRegister register = Generated(await Records(Childrens())
+            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
+
+        Assert.True(Row(register, "schooling").Children);
+        Assert.False(Row(register, "marketing").Children);
+        Assert.Equal(["children"], Row(register, "schooling").SensitiveCategories);
+    }
+
+    /// <summary>
+    /// PRIV-ROPA-001, PRIV-MINOR-001: a deployment that admits minors and declares no
+    /// type as children's data is told so on the register, because a register showing
+    /// no children's processing at all is what a regulator would object to.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_ROPA_001_ADeploymentAdmittingMinorsAndDeclaringNoneIsFlaggedAsync()
     {
         _configuration.Set(Settings.RegistrationAdultAffirmation, AttributeRequirement.Off);
 
         ProcessingRegister register = Generated(await Records(Declaration.Declared().Build())
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
 
-        Assert.All(register.Records, record => Assert.True(record.Children));
+        Assert.Contains(
+            register.Flags,
+            flag => flag.Finding is RegisterFinding.ChildrenUndeclared);
+        Assert.All(register.Records, record => Assert.False(record.Children));
+    }
+
+    /// <summary>
+    /// PRIV-ROPA-001: the flag reports an absence, so a deployment admitting minors
+    /// that does declare a children's type carries none, and so does one that admits
+    /// no minors at all.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_ROPA_001_ADeploymentThatDeclaredOneIsNotFlaggedAsync()
+    {
+        _configuration.Set(Settings.RegistrationAdultAffirmation, AttributeRequirement.Off);
+
+        ProcessingRegister declared = Generated(await Records(Childrens())
+            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
+
+        _configuration.Set(Settings.RegistrationAdultAffirmation, AttributeRequirement.Required);
+
+        ProcessingRegister adults = Generated(await Records(Declaration.Declared().Build())
+            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
+
+        Assert.DoesNotContain(
+            declared.Flags,
+            flag => flag.Finding is RegisterFinding.ChildrenUndeclared);
+        Assert.DoesNotContain(
+            adults.Flags,
+            flag => flag.Finding is RegisterFinding.ChildrenUndeclared);
     }
 
     /// <summary>
@@ -520,6 +568,17 @@ public sealed class ProcessingRecordsTests
         outcome.Match(
             register => register,
             error => throw new InvalidOperationException(error.Code.ToString()));
+
+    // A deployment that declares one of its types as children's data, which is the
+    // category the register's children's column reports (PRIV-SENS-001).
+    private static AuthorizationDeclaration Childrens() =>
+        Declaration.Declared()
+            .SensitiveCategory("children")
+            .Resource<Declaration.Enrolment>("enrolment", enrolment => enrolment
+                .BelongsToOrganization()
+                .Sensitive("children")
+                .Purpose("schooling", "contract", data: ["identity"], subjects: ["pupils"]))
+            .Build();
 
     private static ProcessingRecord Row(ProcessingRegister register, string purpose) =>
         Assert.Single(register.Records, record => record.Purpose == purpose);

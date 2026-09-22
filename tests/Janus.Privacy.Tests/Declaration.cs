@@ -33,6 +33,16 @@ internal static class Declaration
     }
 
     /// <summary>
+    /// A pupil's enrolment, which a deployment taking minors declares as children's
+    /// data (PRIV-SENS-001).
+    /// </summary>
+    internal sealed class Enrolment
+    {
+        /// <summary>The enrolment.</summary>
+        public string Id { get; init; } = string.Empty;
+    }
+
+    /// <summary>
     /// The declaration itself, which the records of processing read the recipients
     /// and the resource types from.
     /// </summary>

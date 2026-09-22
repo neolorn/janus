@@ -1753,6 +1753,7 @@ Janus.Core.RegisterFinding
 Janus.Core.RegisterFinding.AgreementMissing = 4 -> Janus.Core.RegisterFinding
 Janus.Core.RegisterFinding.AssessmentLinksMissing = 2 -> Janus.Core.RegisterFinding
 Janus.Core.RegisterFinding.AssessmentMissing = 3 -> Janus.Core.RegisterFinding
+Janus.Core.RegisterFinding.ChildrenUndeclared = 6 -> Janus.Core.RegisterFinding
 Janus.Core.RegisterFinding.DataOwnerMissing = 0 -> Janus.Core.RegisterFinding
 Janus.Core.RegisterFinding.OrganisationalMeasuresMissing = 1 -> Janus.Core.RegisterFinding
 Janus.Core.RegisterFinding.RetentionMissing = 5 -> Janus.Core.RegisterFinding

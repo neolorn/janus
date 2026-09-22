@@ -38,6 +38,13 @@ internal sealed class ProcessingRecordsService(
     TimeProvider time) : IProcessingRecords
 {
     /// <summary>
+    /// The sensitivity category children's data is declared under, which is the one
+    /// category the library reads by name: the children's column of the register is
+    /// that category and the flag reports its absence (PRIV-SENS-001, PRIV-ROPA-001).
+    /// </summary>
+    internal const string ChildrensCategory = "children";
+
+    /// <summary>
     /// How the personal data is disposed of, which is one measure for the whole
     /// deployment because every personal field stands under one key (PRIV-RIGHT-005).
     /// </summary>
@@ -94,8 +101,10 @@ internal sealed class ProcessingRecordsService(
                 Settings.HostingCrossBorderBasis, string.Empty, cancellationToken)
             .ConfigureAwait(false);
 
-        // PRIV-MINOR-001: where the affirmation is required the service is 18+ only,
-        // so no row is in the children's column; where it is off any row may be.
+        // PRIV-MINOR-001: where the affirmation is required the service is adults
+        // only, so a deployment that declares no children's type is reporting the
+        // truth; where it is off and none is declared, the register says so rather
+        // than reporting no children's processing at all.
         bool minors = await ReadAsync(
                 Settings.RegistrationAdultAffirmation,
                 Settings.RegistrationAdultAffirmation.Default,
@@ -107,11 +116,16 @@ internal sealed class ProcessingRecordsService(
 
         Missing(flags, supplied, recipients);
 
+        if (minors && !declaration.ResourceTypes.Any(Childrens))
+        {
+            flags.Add(new RegisterFlag(RegisterFinding.ChildrenUndeclared, string.Empty));
+        }
+
         var records = new List<ProcessingRecord>(processing.Purposes.Count);
 
         foreach (DeclaredPurpose purpose in processing.Purposes)
         {
-            records.Add(await RecordedAsync(purpose, recipients, minors, flags, cancellationToken)
+            records.Add(await RecordedAsync(purpose, recipients, flags, cancellationToken)
                 .ConfigureAwait(false));
         }
 
@@ -151,6 +165,12 @@ internal sealed class ProcessingRecordsService(
     }
 
     private static string? Stated(string basis) => basis.Length is 0 ? null : basis;
+
+    // PRIV-SENS-001: children's data is one of the declared sensitivity categories,
+    // and the register's children's column is that category and no other property of
+    // the deployment.
+    private static bool Childrens(ResourceTypeDeclaration type) =>
+        type.SensitiveCategories.Contains(ChildrensCategory, StringComparer.Ordinal);
 
     // PRIV-SENS-001 AC2: sensitivity is a column and not a verdict on the purpose, so
     // a purpose declared on an ordinary type and a sensitive one is in both columns.
@@ -230,7 +250,6 @@ internal sealed class ProcessingRecordsService(
     private async ValueTask<ProcessingRecord> RecordedAsync(
         DeclaredPurpose purpose,
         IReadOnlyList<RecipientRecord> recipients,
-        bool minors,
         List<RegisterFlag> flags,
         CancellationToken cancellationToken)
     {
@@ -246,7 +265,7 @@ internal sealed class ProcessingRecordsService(
             purpose.Basis.Key,
             Ordinary(purpose),
             purpose.SensitiveCategories.Count > 0,
-            minors,
+            purpose.SensitiveCategories.Contains(ChildrensCategory, StringComparer.Ordinal),
             purpose.SensitiveCategories,
             await KeptAsync(purpose, flags, cancellationToken).ConfigureAwait(false),
             [.. recipients.Select(recipient => recipient.Name)],

@@ -49,4 +49,12 @@ public enum RegisterFinding
     /// </summary>
     [JsonStringEnumMemberName("retention-missing")]
     RetentionMissing = 5,
+
+    /// <summary>
+    /// The deployment admits minors and no resource type declares the children's
+    /// sensitivity category, so no row is in the children's column and the register
+    /// says so rather than reporting no children's processing.
+    /// </summary>
+    [JsonStringEnumMemberName("children-undeclared")]
+    ChildrenUndeclared = 6,
 }

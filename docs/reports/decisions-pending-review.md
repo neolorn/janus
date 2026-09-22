@@ -3250,6 +3250,8 @@ edit.
 *Chapter text that should change.* PRIV-ROPA-001 should say the children's column is
 derived from the registration affirmation and not from a sensitivity category.
 
+**Superseded by D-162.** Applied in entry 132.
+
 ---
 
 ## 105. The three supplied fields are one replaceable row, and the register is generated only for `format=template`
@@ -4409,6 +4411,37 @@ check and stops there.
 endpoints, and say that the concealment rule of AUTHZ-CONCEAL-005 reaches the permission
 and not what follows it.
 
+---
+
+## 132. The children's column is a declared category, and its absence is flagged
+
+**Corrections 1 · 2026-09-22 · D-162 section B, correcting entry 104 · PRIV-ROPA-001, PRIV-SENS-001, PRIV-MINOR-001**
+
+*What D-162 decided.* The children's column is true for a purpose exactly when its type
+declares the `children` sensitivity category; where `registration.adultaffirmation` is
+`off` and no type declares it, the register carries the flag `children-undeclared`
+instead of an invented column.
+
+*What was built.* The column reads the purpose's sensitivity categories, as the sensitive
+column does, so it is a category like any other. The register gains one flag,
+`children-undeclared`, raised once where minors are admitted and no declared type carries
+the category. The affirmation no longer reaches any row.
+
+`children` is the one sensitivity category the library reads by name, held as one
+constant on the records service and listed under **Rows for chapter 10** beside the new
+finding.
+
+*Tests that pin it.*
+`ProcessingRecordsTests.PRIV_SENS_001_AC2_TheChildrensColumnFollowsTheDeclaredCategoryAsync`,
+`ProcessingRecordsTests.PRIV_ROPA_001_ADeploymentAdmittingMinorsAndDeclaringNoneIsFlaggedAsync`,
+`ProcessingRecordsTests.PRIV_ROPA_001_ADeploymentThatDeclaredOneIsNotFlaggedAsync`,
+`ProcessingRecordsTests.PRIV_SENS_001_AC2_SensitivityIsAColumnOfItsOwnAsync`.
+
+*Chapter text that should change.* PRIV-ROPA-001 should say the children's column is the
+`children` sensitivity category and that its absence under an open registration is
+flagged. PRIV-SENS-001 says nothing in the library branches on a category; that sentence
+now has one exception, which it should name.
+
 # Rows for chapter 10
 
 D-162 section E names codes, keys, declarations and vocabularies the library now
@@ -4437,6 +4470,21 @@ The subsection each row belongs in is named with it.
 | --- | --- | --- |
 | `PasskeyAddresses` (`changePassword`, `enrol`, `manage`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `passkeyAddresses` or the field of it that is empty. The addresses are the frontend pages `/.well-known/change-password` and `/.well-known/passkey-endpoints` point at (REG-PM-001). |
 | `AuthenticationAddresses` (`signIn`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `authenticationAddresses.signIn`. The address is where an authorization request that is not silent and holds no session is forwarded (AUTH-SESS-012 AC3). |
+
+## Register findings
+
+`RegisterFinding` is a closed vocabulary; chapter 10 carries no list of it yet. This is
+the member added since (D-162 item 104).
+
+| Finding | Raised when |
+| --- | --- |
+| `children-undeclared` | `registration.adultaffirmation` is `off` and no resource type declares the `children` sensitivity category, so the children's column of the register is empty (PRIV-ROPA-001, PRIV-MINOR-001). |
+
+## Sensitivity categories the library reads by name
+
+| Category | Read where |
+| --- | --- |
+| `children` | The children's column of the records of processing is true for a purpose exactly where a type it is declared on declares this category (PRIV-SENS-001, PRIV-ROPA-001, D-162 item 104). It is the only category the library reads by name. |
 
 ## Section 4, configuration keys
 
