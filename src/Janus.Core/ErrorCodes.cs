@@ -772,6 +772,20 @@ public static class ErrorCodes
     public static ErrorCode PurposeNotObjectable { get; } = ErrorCode.Parse("privacy.purpose.notobjectable");
 
     /// <summary>
+    /// The request has already been decided, and a decision stands. Read the request
+    /// to see what was decided on it.
+    /// </summary>
+    /// <remarks>Implements PRIV-RIGHT-001, chapter 10 section 1.4.</remarks>
+    public static ErrorCode RequestDecided { get; } = ErrorCode.Parse("privacy.request.decided");
+
+    /// <summary>
+    /// No privacy request carries that identifier. Work the queue for the identifier
+    /// of the request being decided.
+    /// </summary>
+    /// <remarks>Implements PRIV-RIGHT-001, chapter 10 section 1.4.</remarks>
+    public static ErrorCode RequestNotFound { get; } = ErrorCode.Parse("privacy.request.notfound");
+
+    /// <summary>
     /// An identical request is already open. Wait for the decision on it rather than
     /// entering it twice.
     /// </summary>

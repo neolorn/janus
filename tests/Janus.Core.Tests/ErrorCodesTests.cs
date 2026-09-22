@@ -123,7 +123,9 @@ public sealed class ErrorCodesTests
         "privacy.notice.unpublished",
         "privacy.purpose.noconsent",
         "privacy.purpose.notobjectable",
+        "privacy.request.decided",
         "privacy.request.duplicate",
+        "privacy.request.notfound",
         "privacy.request.receivedfuture",
         "system.fault",
     ];

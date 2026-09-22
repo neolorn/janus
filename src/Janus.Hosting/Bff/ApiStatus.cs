@@ -63,6 +63,7 @@ internal static class ApiStatus
         [ErrorCodes.CredentialNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.GrantNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.DocumentNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.RequestNotFound] = StatusCodes.Status404NotFound,
 
         // A conflict with what is already there, or a precondition the state fails.
         [ErrorCodes.ChangePending] = StatusCodes.Status409Conflict,
@@ -81,6 +82,7 @@ internal static class ApiStatus
         [ErrorCodes.LossReportNotPermitted] = StatusCodes.Status409Conflict,
         [ErrorCodes.CredentialNotUpgradable] = StatusCodes.Status409Conflict,
         [ErrorCodes.RequestDuplicate] = StatusCodes.Status409Conflict,
+        [ErrorCodes.RequestDecided] = StatusCodes.Status409Conflict,
         [ErrorCodes.ErasureNotFailed] = StatusCodes.Status409Conflict,
         [ErrorCodes.TakedownActive] = StatusCodes.Status409Conflict,
         [ErrorCodes.AccountAdministrativelySuspended] = StatusCodes.Status409Conflict,

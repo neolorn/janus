@@ -2875,6 +2875,8 @@ answers a question the caller has no permission to ask (AUTHZ-CONCEAL-005), and 
 *Chapter text that should change.* `10` section 1.4 needs a row for a request that
 cannot be decided, or `09` section 8a should say the three answer alike.
 
+**Superseded by D-162.** Applied in entry 131.
+
 ---
 
 ## 94. A rectification that lapses is deemed refused, as an erasure is
@@ -4378,6 +4380,35 @@ carries.
 **Rows for chapter 10**. `09` section 7 should carry the three statuses on the consent
 and document endpoints.
 
+---
+
+## 131. The administrative routes conceal nothing from the staff who work them
+
+**Corrections 1 · 2026-09-22 · D-162 section B, correcting entry 93 · PRIV-RIGHT-001, PRIV-RIGHT-002, AUTHZ-CONCEAL-005, `10` section 1.4**
+
+*What D-162 decided.* Under `/admin` nothing is concealed: a missing permission is 403
+`authz.denied`, an identifier naming no row is 404 `privacy.request.notfound`, a request
+already decided is 409 `privacy.request.decided`. Two new `10` section 1.4 rows.
+
+*What was built.* `DecidableAsync` answers a result rather than a value or nothing, so
+the three are distinct where they arise: the scope's own refusal, the absent row, and the
+decision that already stands. `FulfilAsync` and `RefuseAsync` return what it gives them.
+
+The reading entry 93 rested on was that AUTHZ-CONCEAL-005 covers these routes. It covers
+what a caller with no business with a record is told. A member of staff holding
+`privacyrequest:manage` has that business, so the concealment rule reaches the permission
+check and stops there.
+
+*Tests that pin it.*
+`PrivacyRequestTests.PRIV_RIGHT_002_AC5_ARequestIsDecidedOnceAsync`,
+`PrivacyRequestTests.PRIV_RIGHT_001_AC2_TheThreeWaysADecisionIsRefusedAreToldApartAsync`,
+`PrivacyRequestTests.PRIV_RIGHT_001_AC2_EnteringWithoutThePermissionIsRefusedAsync`.
+
+*Chapter text that should change.* `10` section 1.4 needs the two rows, listed under
+**Rows for chapter 10**. `09` section 8a should carry the three statuses on the decision
+endpoints, and say that the concealment rule of AUTHZ-CONCEAL-005 reaches the permission
+and not what follows it.
+
 # Rows for chapter 10
 
 D-162 section E names codes, keys, declarations and vocabularies the library now
@@ -4397,6 +4428,8 @@ The subsection each row belongs in is named with it.
 | `privacy.document.notfound` | 1.4 | 404 | A legal document, or a named version of one, that does not exist or was never published is read, or a translation is filed against one. |
 | `privacy.notice.unpublished` | 1.4 | 409 | A consent is granted before any privacy-notice version has been published, so there is no version for it to stand against (PRIV-CONS-005). |
 | `privacy.purpose.noconsent` | 1.4 | 422 | A consent is granted or withdrawn on a purpose the deployment did not declare, or one that rests on a basis other than consent, so it is not the subject's to agree to (PRIV-CONS-008a). |
+| `privacy.request.notfound` | 1.4 | 404 | A decision is made on an identifier that names no privacy request, by a caller holding `privacyrequest:manage` (PRIV-RIGHT-001). |
+| `privacy.request.decided` | 1.4 | 409 | A decision is made on a privacy request that is already decided; the standing decision is not replaced (PRIV-RIGHT-002 AC5). |
 
 ## LIB-HOST-001, host declarations
 

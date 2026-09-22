@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- Deciding a privacy request now tells its three refusals apart for the member of staff
+  working the queue: 403 `authz.denied` without the permission, 404
+  `privacy.request.notfound` for an identifier naming no request, and 409
+  `privacy.request.decided` where a decision already stands. All three used to answer
+  alike, which left the queue unworkable without guessing.
+
 - Three privacy refusals now carry codes of their own instead of the general denial. A
   document or version that was never published answers 404 `privacy.document.notfound`; a
   grant or withdrawal on a purpose that is undeclared or rests on another basis answers

@@ -186,10 +186,15 @@ internal sealed class PrivacyRequestService(
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (await DecidableAsync(context, request, cancellationToken).ConfigureAwait(false)
-            is not QueuedRequest held)
+        Error? failure = null;
+
+        QueuedRequest held = (await DecidableAsync(context, request, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<QueuedRequest>(error, ref failure));
+
+        if (failure is not null)
         {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
+            return Result.Failure(failure);
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -223,10 +228,15 @@ internal sealed class PrivacyRequestService(
         ArgumentNullException.ThrowIfNull(context);
         ArgumentException.ThrowIfNullOrWhiteSpace(reason);
 
-        if (await DecidableAsync(context, request, cancellationToken).ConfigureAwait(false)
-            is not QueuedRequest held)
+        Error? failure = null;
+
+        QueuedRequest held = (await DecidableAsync(context, request, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<QueuedRequest>(error, ref failure));
+
+        if (failure is not null)
         {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
+            return Result.Failure(failure);
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -261,22 +271,33 @@ internal sealed class PrivacyRequestService(
     // PRIV-RIGHT-001 AC3, AUTHZ-CONCEAL-005: a request the caller may not work, one
     // that does not exist, and one already decided are one answer, because telling
     // them apart would answer a question the caller has no permission to ask.
-    private async ValueTask<QueuedRequest?> DecidableAsync(
+    // AUTHZ-CONCEAL-005 governs what a caller with no business here is told; a member
+    // of staff working the queue under `privacyrequest:manage` has that business, so
+    // what they are told apart is the permission, the identifier and the decision that
+    // already stands (PRIV-RIGHT-001).
+    private async ValueTask<Result<QueuedRequest>> DecidableAsync(
         AccessContext context,
         PrivacyRequestId request,
         CancellationToken cancellationToken)
     {
         if (await scope
                 .RefusedAsync(context, Permissions.PrivacyRequestManage, cancellationToken)
-                .ConfigureAwait(false) is not null)
+                .ConfigureAwait(false) is Error refused)
         {
-            return null;
+            return Result.Failure<QueuedRequest>(refused);
         }
 
         QueuedRequest? held = await requests.FindAsync(request, cancellationToken)
             .ConfigureAwait(false);
 
-        return held is { Open: true } ? held : null;
+        if (held is null)
+        {
+            return Result.Failure<QueuedRequest>(Error.From(ErrorCodes.RequestNotFound));
+        }
+
+        return held.Open
+            ? Result.Success(held)
+            : Result.Failure<QueuedRequest>(Error.From(ErrorCodes.RequestDecided));
     }
 
     private async ValueTask DoneAsync(
