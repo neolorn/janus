@@ -28,8 +28,6 @@ internal static class PrivacyEndpoints
 
     private static readonly IResult Nothing = TypedResults.NoContent();
 
-    private static readonly IResult Malformed = TypedResults.BadRequest();
-
     /// <summary>
     /// Mounts them.
     /// </summary>
@@ -176,7 +174,7 @@ internal static class PrivacyEndpoints
 
         if (Asked(body.Type) is not PrivacyRequestType type)
         {
-            return Malformed;
+            return Answers.Malformed("type");
         }
 
         return Asking(browser) is not AccessContext holder
@@ -200,7 +198,7 @@ internal static class PrivacyEndpoints
 
         if (Arranged(format) is not Func<SubjectExport, IResult> arrangement)
         {
-            return Malformed;
+            return Answers.Malformed("format");
         }
 
         return Asking(browser) is not AccessContext holder || browser.Live is null
@@ -271,7 +269,7 @@ internal static class PrivacyEndpoints
 
         if (format is not "template")
         {
-            return Malformed;
+            return Answers.Malformed("format");
         }
 
         return Asking(browser) is not AccessContext holder
@@ -337,18 +335,34 @@ internal static class PrivacyEndpoints
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(requests);
 
-        if (Asked(body.Type) is not PrivacyRequestType type
-            || !Guid.TryParse(body.Subject, out Guid subject)
-            || !DateOnly.TryParseExact(
-                body.ReceivedAt,
-                "yyyy-MM-dd",
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out DateOnly receivedAt)
-            || body.Channel is not { Length: > 0 } channel
-            || body.IdentityConfirmation is not { Length: > 0 } confirmation)
+        if (Asked(body.Type) is not PrivacyRequestType type)
         {
-            return Malformed;
+            return Answers.Malformed("type");
+        }
+
+        if (!Guid.TryParse(body.Subject, out Guid subject))
+        {
+            return Answers.Malformed("subject");
+        }
+
+        if (!DateOnly.TryParseExact(
+            body.ReceivedAt,
+            "yyyy-MM-dd",
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out DateOnly receivedAt))
+        {
+            return Answers.Malformed("receivedAt");
+        }
+
+        if (body.Channel is not { Length: > 0 } channel)
+        {
+            return Answers.Malformed("channel");
+        }
+
+        if (body.IdentityConfirmation is not { Length: > 0 } confirmation)
+        {
+            return Answers.Malformed("identityConfirmation");
         }
 
         return Asking(browser) is not AccessContext holder
@@ -398,7 +412,7 @@ internal static class PrivacyEndpoints
 
         if (body.Reason is not { Length: > 0 } reason)
         {
-            return Malformed;
+            return Answers.Malformed("reason");
         }
 
         return Asking(browser) is not AccessContext holder
@@ -475,7 +489,7 @@ internal static class PrivacyEndpoints
         ArgumentNullException.ThrowIfNull(documents);
 
         return document is not { Length: > 0 }
-            ? TypedResults.BadRequest()
+            ? Answers.Malformed("document")
             : Answers.Of(
                 await documents.ReadAsync(document, version, cancellationToken).ConfigureAwait(false),
                 Published);

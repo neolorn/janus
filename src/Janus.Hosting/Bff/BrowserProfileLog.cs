@@ -76,6 +76,18 @@ internal static partial class BrowserProfileLog
     public static partial void FirstContactRefused(ILogger log, string correlationId, string code);
 
     /// <summary>
+    /// A request whose body the reader could not turn into what the endpoint takes.
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    /// <param name="member">The member the reader stopped at, or nothing.</param>
+    [LoggerMessage(
+        EventId = 7,
+        Level = LogLevel.Information,
+        Message = "A request body could not be read at {Member} and was refused ({CorrelationId}).")]
+    public static partial void BodyUnreadable(ILogger log, string correlationId, string? member);
+
+    /// <summary>
     /// A request to a machine endpoint that carried a session cookie.
     /// </summary>
     /// <param name="log">The logger.</param>

@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- A request the library cannot read is now answered with the same body as every other
+  refusal: `api.request.malformed`, a correlation identifier, and a `details.member`
+  naming the member the reader stopped at or the one the endpoint required. A 400 used
+  to carry no body at all, which left the one refusal a caller could not trace.
+
 - A browser that already holds a session and asks to register is now refused with
   `identity.registration.signedin` and 409. It used to be answered with the account
   document, which put an account's own details on a registration route. Nothing is

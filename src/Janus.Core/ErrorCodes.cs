@@ -764,6 +764,14 @@ public static class ErrorCodes
     public static ErrorCode RequestReceivedFuture { get; } = ErrorCode.Parse("privacy.request.receivedfuture");
 
     /// <summary>
+    /// The request could not be read: its body is not the shape the endpoint takes, or
+    /// a member it requires is absent. Where the offending member is known,
+    /// <c>details.member</c> names it and carries nothing of its value.
+    /// </summary>
+    /// <remarks>Implements API-CONV-002, chapter 10 sections 1.5 and 6.</remarks>
+    public static ErrorCode RequestMalformed { get; } = ErrorCode.Parse("api.request.malformed");
+
+    /// <summary>
     /// An unhandled fault. The body carries the correlation identifier and nothing
     /// else; quote it when reporting the fault.
     /// </summary>

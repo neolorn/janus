@@ -3053,6 +3053,7 @@ static Janus.Core.ErrorCodes.RecoveryTokenInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RegistrationIncomplete.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RegistrationSignedIn.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RequestDuplicate.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.RequestMalformed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RequestReceivedFuture.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.Restricted.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RestrictionExceeded.get -> Janus.Core.ErrorCode

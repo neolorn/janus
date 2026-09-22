@@ -487,6 +487,7 @@ internal sealed class Deployment : IAsyncDisposable
 
         _ = services.AddSingleton(new BrowserSessionCookies(application));
         _ = services.AddScoped<SynchronizerTokens>();
+        _ = services.AddScoped<MalformedRequest>();
         _ = services.AddScoped<ResourceIsolation>();
         _ = services.AddScoped<CustomRequestHeader>();
         _ = services.AddScoped<OriginValidation>();
@@ -495,6 +496,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<FirstContact>();
         _ = services.AddScoped<SynchronizerToken>();
         _ = services.AddScoped<MachineProfile>();
+
+        _ = services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
 
         _ = services.ConfigureHttpJsonOptions(options =>
         {

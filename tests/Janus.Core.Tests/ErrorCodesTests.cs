@@ -17,6 +17,7 @@ public sealed class ErrorCodesTests
 {
     private static readonly string[] Catalogue =
     [
+        "api.request.malformed",
         "auth.challenge.required",
         "auth.code.expired",
         "auth.code.invalid",

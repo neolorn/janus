@@ -24,8 +24,6 @@ namespace Janus.Hosting.Recovery;
 /// </remarks>
 internal static class RecoveryEndpoints
 {
-    private static readonly IResult Malformed = TypedResults.BadRequest();
-
     private static readonly IResult Nothing = TypedResults.NoContent();
 
     private static readonly IResult Accepted = TypedResults.StatusCode(StatusCodes.Status202Accepted);
@@ -66,7 +64,7 @@ internal static class RecoveryEndpoints
         ArgumentNullException.ThrowIfNull(context);
 
         return request.Identifier is not { Length: > 0 } identifier
-            ? Malformed
+            ? Answers.Malformed("identifier")
             : Answers.Of(
                 await recovery
                     .BeginAsync(
@@ -90,10 +88,17 @@ internal static class RecoveryEndpoints
         ArgumentNullException.ThrowIfNull(recovery);
         ArgumentNullException.ThrowIfNull(context);
 
-        return request.Token is not { Length: > 0 } token
-            || request.Password is not { Length: > 0 } password
-            ? Malformed
-            : Answers.Of(
+        if (request.Token is not { Length: > 0 } token)
+        {
+            return Answers.Malformed("token");
+        }
+
+        if (request.Password is not { Length: > 0 } password)
+        {
+            return Answers.Malformed("password");
+        }
+
+        return Answers.Of(
                 await recovery
                     .CompleteAsync(
                         token,
@@ -125,7 +130,7 @@ internal static class RecoveryEndpoints
         }
 
         return !Guid.TryParse(request.CredentialId, out Guid credential)
-            ? Malformed
+            ? Answers.Malformed("credentialId")
             : Answers.Of(
                 await recovery
                     .ReportLossAsync(
@@ -184,10 +189,17 @@ internal static class RecoveryEndpoints
             return Nobody();
         }
 
-        return !Guid.TryParse(request.Subject, out Guid subject)
-            || request.ChannelUsed is not { Length: > 0 } channel
-            ? Malformed
-            : Answers.Of(
+        if (!Guid.TryParse(request.Subject, out Guid subject))
+        {
+            return Answers.Malformed("subject");
+        }
+
+        if (request.ChannelUsed is not { Length: > 0 } channel)
+        {
+            return Answers.Malformed("channelUsed");
+        }
+
+        return Answers.Of(
                 await recovery
                     .ApproveAsync(
                         approver,
@@ -224,7 +236,7 @@ internal static class RecoveryEndpoints
 
         if (request.Token is not { Length: > 0 } token)
         {
-            return Malformed;
+            return Answers.Malformed("token");
         }
 
         if (browser.FirstContact is not PreAuthentication contact)

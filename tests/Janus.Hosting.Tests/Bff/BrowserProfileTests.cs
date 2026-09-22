@@ -773,6 +773,7 @@ public sealed class BrowserProfileTests : IDisposable
         services.AddSingleton(origin);
         services.AddSingleton(token);
         services.AddSingleton<ILogger<FirstContact>>(new LogInMemory<FirstContact>());
+        services.AddSingleton<ILogger<MalformedRequest>>(new LogInMemory<MalformedRequest>());
         services.AddSingleton<ISessionStore>(_sessions);
         services.AddSingleton<ISessionAudit>(_audit);
         services.AddSingleton<IMembershipLookup>(_memberships);
@@ -789,6 +790,7 @@ public sealed class BrowserProfileTests : IDisposable
         services.AddScoped<SessionService>();
         services.AddScoped<PreAuthenticationService>();
         services.AddScoped<SynchronizerTokens>();
+        services.AddScoped<MalformedRequest>();
         services.AddScoped<ResourceIsolation>();
         services.AddScoped<CustomRequestHeader>();
         services.AddScoped<OriginValidation>();

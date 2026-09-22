@@ -40,6 +40,10 @@ internal static class ApiStatus
         [ErrorCodes.DerivationSourcesMissing] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.SystemFault] = StatusCodes.Status500InternalServerError,
 
+        // The request itself could not be read, so nothing about the deployment was
+        // reached and nothing about it is answered.
+        [ErrorCodes.RequestMalformed] = StatusCodes.Status400BadRequest,
+
         // Session death, and nothing else.
         [ErrorCodes.SessionExpired] = StatusCodes.Status401Unauthorized,
 

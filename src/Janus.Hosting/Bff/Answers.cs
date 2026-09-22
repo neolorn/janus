@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json;
 using Janus.Core;
 using Microsoft.AspNetCore.Http;
 
@@ -56,4 +57,14 @@ internal static class Answers
     /// <param name="code">What was refused.</param>
     /// <returns>The answer.</returns>
     public static IResult Refused(ErrorCode code) => Refused(Error.From(code));
+
+    /// <summary>
+    /// A request the endpoint cannot read: a member it requires is absent, empty or not
+    /// of the shape it takes.
+    /// </summary>
+    /// <param name="member">Which member.</param>
+    /// <returns>The answer, naming the member and nothing of its value.</returns>
+    /// <remarks>Implements API-CONV-002.</remarks>
+    public static IResult Malformed(string member) => Refused(
+        Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member)));
 }

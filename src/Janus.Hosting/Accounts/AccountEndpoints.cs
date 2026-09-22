@@ -25,8 +25,6 @@ internal static class AccountEndpoints
     private static readonly IReadOnlyDictionary<string, string> NoPreferences =
         new Dictionary<string, string>(StringComparer.Ordinal);
 
-    private static readonly IResult Malformed = TypedResults.BadRequest();
-
     private static readonly IResult Nothing = TypedResults.NoContent();
 
     private static readonly IResult Accepted = TypedResults.StatusCode(StatusCodes.Status202Accepted);
@@ -177,7 +175,7 @@ internal static class AccountEndpoints
         }
 
         return request.Value is not { Length: > 0 } value
-            ? Malformed
+            ? Answers.Malformed("value")
             : Answers.Of(
                 await identifiers
                     .AddAsync(
@@ -219,7 +217,7 @@ internal static class AccountEndpoints
 
         if (request.Code is not { Length: > 0 } code)
         {
-            return Malformed;
+            return Answers.Malformed("code");
         }
 
         if (Asking(browser) is not AccessContext holder)
@@ -281,7 +279,7 @@ internal static class AccountEndpoints
 
         if (!Chosen(request.Setting, out BackupChoice choice, out IdentifierId? named))
         {
-            return Malformed;
+            return Answers.Malformed("setting");
         }
 
         return Answers.Of(
@@ -330,7 +328,7 @@ internal static class AccountEndpoints
         ArgumentNullException.ThrowIfNull(account);
 
         return request.LinkToken is not { Length: > 0 } token
-            ? Malformed
+            ? Answers.Malformed("linkToken")
             : Answers.Of(
                 await account.ReactivateAsync(token, cancellationToken).ConfigureAwait(false),
                 Nothing);
@@ -371,7 +369,7 @@ internal static class AccountEndpoints
         ArgumentNullException.ThrowIfNull(account);
 
         return request.LinkToken is not { Length: > 0 } token
-            ? Malformed
+            ? Answers.Malformed("linkToken")
             : Answers.Of(
                 await account.CancelDeletionAsync(token, cancellationToken).ConfigureAwait(false),
                 Nothing);
@@ -415,7 +413,7 @@ internal static class AccountEndpoints
         ArgumentNullException.ThrowIfNull(context);
 
         return request.LinkToken is not { Length: > 0 } token
-            ? Malformed
+            ? Answers.Malformed("linkToken")
             : Answers.Of(
                 await identifiers
                     .UndoAsync(token, RequestOrigin.Source(context.Request), cancellationToken)
@@ -437,7 +435,7 @@ internal static class AccountEndpoints
 
         if (request.Value is not { Length: > 0 } value)
         {
-            return Malformed;
+            return Answers.Malformed("value");
         }
 
         string source = RequestOrigin.Source(context.Request);
@@ -485,7 +483,7 @@ internal static class AccountEndpoints
         ArgumentNullException.ThrowIfNull(identifiers);
 
         return request.LinkToken is not { Length: > 0 } token
-            ? Malformed
+            ? Answers.Malformed("linkToken")
             : Answers.Of(
                 await identifiers.AbandonAsync(token, cancellationToken).ConfigureAwait(false),
                 Nothing);
@@ -525,7 +523,7 @@ internal static class AccountEndpoints
         }
 
         return request.Label is not { } label
-            ? Malformed
+            ? Answers.Malformed("label")
             : Answers.Of(
                 await accounts
                     .LabelCredentialAsync(holder, new AuthenticatorId(id), label, cancellationToken)
@@ -548,7 +546,7 @@ internal static class AccountEndpoints
         }
 
         return request.Credential is not Guid credential
-            ? Malformed
+            ? Answers.Malformed("credential")
             : Answers.Of(
                 await accounts
                     .PreferSecondStepAsync(holder, new AuthenticatorId(credential), cancellationToken)

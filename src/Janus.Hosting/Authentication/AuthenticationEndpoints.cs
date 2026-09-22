@@ -27,8 +27,6 @@ namespace Janus.Hosting.Authentication;
 /// </remarks>
 internal static class AuthenticationEndpoints
 {
-    private static readonly IResult Malformed = TypedResults.BadRequest();
-
     private static readonly IResult Nothing = TypedResults.NoContent();
 
     private static readonly IResult Accepted = TypedResults.StatusCode(StatusCodes.Status202Accepted);
@@ -77,7 +75,7 @@ internal static class AuthenticationEndpoints
         ArgumentNullException.ThrowIfNull(context);
 
         return request.Identifier is not { Length: > 0 } identifier
-            ? Malformed
+            ? Answers.Malformed("identifier")
             : Answers.Of(
                 await authentication
                     .BeginAsync(
@@ -110,7 +108,7 @@ internal static class AuthenticationEndpoints
 
         if (request.ChallengeId is not { Length: > 0 } challenge)
         {
-            return Malformed;
+            return Answers.Malformed("challengeId");
         }
 
         SessionOrigin origin = RequestOrigin.Of(context.Request);
@@ -167,10 +165,14 @@ internal static class AuthenticationEndpoints
         ArgumentNullException.ThrowIfNull(authentication);
         ArgumentNullException.ThrowIfNull(context);
 
-        if (request.ChallengeId is not { Length: > 0 } challenge
-            || request.Code is not { Length: > 0 } code)
+        if (request.ChallengeId is not { Length: > 0 } challenge)
         {
-            return Malformed;
+            return Answers.Malformed("challengeId");
+        }
+
+        if (request.Code is not { Length: > 0 } code)
+        {
+            return Answers.Malformed("code");
         }
 
         return await ReachedAsync(
@@ -211,7 +213,7 @@ internal static class AuthenticationEndpoints
 
         if (request.ChallengeId is not { Length: > 0 } challenge)
         {
-            return Malformed;
+            return Answers.Malformed("challengeId");
         }
 
         return await ReachedAsync(
@@ -244,7 +246,7 @@ internal static class AuthenticationEndpoints
         ArgumentNullException.ThrowIfNull(context);
 
         return request.Identifier is not { Length: > 0 } identifier
-            ? Malformed
+            ? Answers.Malformed("identifier")
             : Answers.Of(
                 await authentication
                     .SendLinkAsync(
@@ -268,7 +270,7 @@ internal static class AuthenticationEndpoints
         ArgumentNullException.ThrowIfNull(context);
 
         return request.Identifier is not { Length: > 0 } identifier
-            ? Malformed
+            ? Answers.Malformed("identifier")
             : Answers.Of(
                 await authentication
                     .SendCodeAsync(

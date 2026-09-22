@@ -43,6 +43,8 @@ using Janus.Privacy.Policies;
 using Janus.Privacy.Records;
 using Janus.Privacy.Requests;
 using Janus.Storage;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -119,10 +121,16 @@ public static class JanusRegistration
             services.GetRequiredService<AuthorizationModel>(),
             services.GetService<IAssuranceProvider>()));
 
+        // API-CONV-002: a body the reader could not parse is answered by the library
+        // with a code and a correlation identifier, so the reader raises the failure
+        // instead of writing a bare status the pipeline never sees.
+        _ = services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
+
         // BFF-OWN-001: the browser boundary is the library's, so what issues a cookie
         // and what validates a token are registered here and not left to the host.
         services.AddSingleton(new BrowserSessionCookies(application));
         services.AddScoped<SynchronizerTokens>();
+        services.AddScoped<MalformedRequest>();
         services.AddScoped<ResourceIsolation>();
         services.AddScoped<CustomRequestHeader>();
         services.AddScoped<OriginValidation>();

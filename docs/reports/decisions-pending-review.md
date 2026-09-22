@@ -1556,6 +1556,8 @@ body in the meantime.
 *Chapter text that should change.* `10` should carry a code for a malformed request, or
 API-CONV-002 should say that 400 carries no body.
 
+**Superseded by D-162.** Applied in entry 126.
+
 ---
 
 ## 50. The addresses of the frontend's passkey pages are declared by the host
@@ -4161,6 +4163,55 @@ browser's own state takes.
 *Chapter text that should change.* `09` section 2 should say the request is refused 409
 with `identity.registration.signedin` rather than "answered with the account landing".
 Chapter 10 section 1.1 needs the row, listed under **Rows for chapter 10**.
+
+---
+
+## 126. A request the library cannot read is answered like every other refusal
+
+**Corrections 1 · 2026-09-22 · D-162 section B, correcting entry 49 · API-CONV-002, API-CONV-003**
+
+*What D-162 decided.* A request the reader cannot parse answers 400 with the
+API-CONV-002 body: `api.request.malformed`, `correlationId`, `details` naming the
+offending member and nothing of its value.
+
+*What was built.* The code, at 400 in the status table. A body that never reaches an
+endpoint fails at binding, so the reader is told to raise the failure
+(`RouteHandlerOptions.ThrowOnBadRequest`) instead of writing a bare status the pipeline
+never sees, and one layer, mounted outermost in both profiles, turns it into the usual
+refusal. The member it names is the reader's own path, which names members and carries
+nothing of the values between them; where the body failed before any member, the refusal
+carries the code alone. The layer records the refusal and answers nothing it did not
+record.
+
+Every other 400 the library answered went the same way. Each endpoint held a shared
+`TypedResults.BadRequest()` with no body, so a caller could not trace the one refusal
+that told them least. They now answer through `Answers.Malformed`, naming the member the
+endpoint required. Where a site tested several members in one condition, the tests are
+now one per member, so the answer names the member that was actually wanting.
+
+*Decided in the owner's absence.* Two points.
+
+1. *Whether the endpoints' own 400 is in scope (Tier 2).* D-162 item 49 names the parse
+   failure. Answering only that would have left the library with two ways of refusing a
+   400, one with a body and one without, and API-CONV-002 AC2 requires a correlation
+   identifier on every error. Every 400 therefore carries the body.
+
+2. *Where the layer is mounted (Tier 2).* BFF-ORDER-001 stage 11 is error translation,
+   which is last on the way out and therefore first on the way in. It is mounted there in
+   both profiles; nothing between the stages moved, and every stage inside it answers as
+   it did before.
+
+*Residue.* The layer catches what the reader raises about the request and nothing else.
+Stage 11's concealment is not built here.
+
+*Tests that pin it.*
+`ApiConventionTests.MapRegistration_ABodyThatDoesNotParse_AnswersTheUsualBodyAsync`,
+`ApiConventionTests.MapRegistration_ABodyMissingAMember_NamesTheMemberAsync`,
+`ErrorCodesTests.CONV_NAME_003_AC2_ChangingACodeFailsTheContractTest`.
+
+*Chapter text that should change.* Chapter 10 section 1.5 needs the row, listed under
+**Rows for chapter 10**. API-CONV-003 should say that 400 carries the API-CONV-002 body
+like every other status.
 
 
 # Rows for chapter 10

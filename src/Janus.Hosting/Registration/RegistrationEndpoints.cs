@@ -30,8 +30,6 @@ internal static class RegistrationEndpoints
     private static readonly IReadOnlyDictionary<string, bool> NoConsents =
         new Dictionary<string, bool>(StringComparer.Ordinal);
 
-    private static readonly IResult Malformed = TypedResults.BadRequest();
-
     private static readonly IResult Nothing = TypedResults.NoContent();
 
     private static readonly IResult Made = TypedResults.StatusCode(StatusCodes.Status201Created);
@@ -92,7 +90,7 @@ internal static class RegistrationEndpoints
 
         if (request.ClientId is not { Length: > 0 } client)
         {
-            return Malformed;
+            return Answers.Malformed("clientId");
         }
 
         if (browser.FirstContact is not PreAuthentication contact)
@@ -164,7 +162,7 @@ internal static class RegistrationEndpoints
         }
 
         return request.DateOfBirth is not DateOnly born
-            ? Malformed
+            ? Answers.Malformed("dateOfBirth")
             : Answers.Of(
                 await registration
                     .RecordAgeAsync(session, born, cancellationToken)
@@ -215,7 +213,7 @@ internal static class RegistrationEndpoints
         }
 
         return request.Value is not { Length: > 0 } value
-            ? Malformed
+            ? Answers.Malformed("value")
             : Answers.Of(
                 await registration
                     .AddAsync(session, request.Kind, value, cancellationToken)
@@ -239,7 +237,7 @@ internal static class RegistrationEndpoints
         }
 
         return request.Value is not { Length: > 0 } value
-            ? Malformed
+            ? Answers.Malformed("value")
             : Answers.Of(
                 await registration
                     .ChangeAsync(session, new IdentifierId(id), value, cancellationToken)
@@ -328,10 +326,14 @@ internal static class RegistrationEndpoints
             return Gone();
         }
 
-        if (request.TermsVersion is not { Length: > 0 } terms
-            || request.NoticeVersion is not { Length: > 0 } notice)
+        if (request.TermsVersion is not { Length: > 0 } terms)
         {
-            return Malformed;
+            return Answers.Malformed("termsVersion");
+        }
+
+        if (request.NoticeVersion is not { Length: > 0 } notice)
+        {
+            return Answers.Malformed("noticeVersion");
         }
 
         SessionOrigin origin = RequestOrigin.Of(context.Request);
@@ -409,7 +411,7 @@ internal static class RegistrationEndpoints
         }
 
         return request.Code is not { Length: > 0 } code
-            ? Malformed
+            ? Answers.Malformed("code")
             : Answers.Of(
                 await registration
                     .VerifyAsync(session, new IdentifierId(id), code, cancellationToken)
@@ -462,7 +464,7 @@ internal static class RegistrationEndpoints
 
         // API-CONV-005: accepted whether or not the identifier belongs to an account.
         return request.Value is not { Length: > 0 } value
-            ? Malformed
+            ? Answers.Malformed("value")
             : Answers.Of(
                 await registration
                     .StageAsync(session, kind, value, cancellationToken)
