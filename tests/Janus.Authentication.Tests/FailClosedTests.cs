@@ -94,6 +94,12 @@ public sealed class FailClosedTests
 
             for (int at = text.IndexOf("catch", StringComparison.Ordinal); at >= 0;)
             {
+                if (!Clause(text, at))
+                {
+                    at = text.IndexOf("catch", at + 1, StringComparison.Ordinal);
+                    continue;
+                }
+
                 int opened = text.IndexOf('{', at);
                 int closed = Closing(text, opened);
 
@@ -102,6 +108,20 @@ public sealed class FailClosedTests
                 at = text.IndexOf("catch", closed, StringComparison.Ordinal);
             }
         }
+    }
+
+    // A catch clause and not a word that holds one: what follows it is the exception
+    // it takes or the block it opens.
+    private static bool Clause(string text, int at)
+    {
+        int after = at + "catch".Length;
+
+        while (after < text.Length && char.IsWhiteSpace(text[after]))
+        {
+            after++;
+        }
+
+        return after < text.Length && text[after] is '(' or '{';
     }
 
     // Where the brace that closes the one at this position is.
