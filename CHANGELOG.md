@@ -111,6 +111,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The client registry is the one list of return destinations. Every registered client's
+  return address is read at startup and a deployment holding one that is not an absolute
+  origin does not start. The client a destination falls back to is named in the new
+  protected key `redirect.defaultclient`, read against the registry at startup, and a
+  registration begun with a client identifier the registry does not hold now stores that
+  default rather than nothing, so the completion returns the person to it. A deployment
+  that names no default starts and returns nothing, as before.
+
 - An account shows a photo. `GET`, `PUT` and `DELETE /account/photo` read it, replace
   it and give it up, and the image is served through the session gate as `image/jpeg`
   from no address a cache could share. Availability is the organization's, held in the

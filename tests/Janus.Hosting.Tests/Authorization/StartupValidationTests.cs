@@ -31,6 +31,16 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     private static readonly string Forgotten =
         "DELETE FROM janus.settings WHERE key = '" + Showing + "';";
 
+    private static readonly string Defaulting =
+        "INSERT INTO janus.settings (key, value) VALUES ('"
+        + Settings.RedirectDefaultClient.Key
+        + "', 'nobody');";
+
+    private static readonly string Undefaulted =
+        "DELETE FROM janus.settings WHERE key = '"
+        + Settings.RedirectDefaultClient.Key
+        + "';";
+
 
     /// <summary>
     /// AUTHZ-MODEL-004, AUTHZ-DERIVE-004 AC1: the deployment's roles allow what it
@@ -216,6 +226,37 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         finally
         {
             await WriteAsync(Forgotten, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// API-REDIR-001: the default a destination falls back to is read against the
+    /// registry as the deployment starts, so a key naming a client nothing registered
+    /// stops it there rather than at the registration that would resolve to nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task API_REDIR_001_ADeploymentNamingADefaultClientTheRegistryLacksIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await WriteAsync(Defaulting, cancellationToken);
+
+        try
+        {
+            using IHost deployment = Deployed();
+
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await deployment.StartAsync(cancellationToken));
+
+            Assert.Equal(ErrorCodes.StartupRedirectClient, refused.Failure?.Code);
+            Assert.Equal(
+                Settings.RedirectDefaultClient.Key.ToString(),
+                refused.Failure?.Details["key"].GetString());
+        }
+        finally
+        {
+            await WriteAsync(Undefaulted, cancellationToken);
         }
     }
 

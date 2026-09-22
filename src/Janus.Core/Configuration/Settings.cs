@@ -839,6 +839,14 @@ public static class Settings
         new("oidc.code.lifetime", SettingScope.Runtime, "PT60S", ceiling: "PT10M");
 
     /// <summary>
+    /// The registered client a browser falls back to where the one a request named is
+    /// not one the registry holds. Empty while the deployment names none, and refused
+    /// at startup where it names a client the registry does not hold (API-REDIR-001).
+    /// </summary>
+    public static TextSetting RedirectDefaultClient { get; } =
+        new("redirect.defaultclient", SettingScope.Protected, string.Empty);
+
+    /// <summary>
     /// The algorithm tokens are signed with. The one place the value is held.
     /// </summary>
     public static ChoiceSetting<string> TokenSigningAlgorithm { get; } =
@@ -1033,6 +1041,7 @@ public static class Settings
         TokenSignatureVerification,
         OidcAccessTokenLifetime,
         OidcCodeLifetime,
+        RedirectDefaultClient,
         TokenSigningAlgorithm,
         TokenSigningRotation,
     ];

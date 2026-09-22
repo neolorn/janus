@@ -14,9 +14,9 @@ namespace Janus.Core.Tests;
 [Trait("kind", "contract")]
 public sealed class SettingsCatalogueTests
 {
-    // Every key chapter 10 section 4 marks P: the nine of section 4.8 and the four
-    // more that are marked where they are declared, because they are facts about the
-    // deployment rather than runtime controls.
+    // Every key chapter 10 section 4 marks P: the nine of section 4.8 and the ones
+    // marked where they are declared, because they are facts about the deployment
+    // rather than runtime controls.
     private static readonly string[] Protected =
     [
         .. ProtectedBySectionFourEight,
@@ -24,6 +24,7 @@ public sealed class SettingsCatalogueTests
         "hosting.location",
         "integration.mail.endpoint",
         "integration.sms.endpoint",
+        "redirect.defaultclient",
         "webauthn.algorithms",
         "webauthn.origins",
     ];

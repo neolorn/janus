@@ -114,6 +114,7 @@ public sealed class ErrorCodesTests
         "model.startup.kekunavailable",
         "model.startup.labellimit",
         "model.startup.preferencedeclaration",
+        "model.startup.redirectclient",
         "model.startup.rpid",
         "model.type.noorganizationpath",
         "model.type.undeclaredreference",

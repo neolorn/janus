@@ -314,6 +314,7 @@ public static class JanusRegistration
         services.AddScoped<IAccessGate, AccessGate>();
         services.AddScoped<IDerivationMaterialiser, DerivationMaterialiser>();
         services.AddScoped<ModelValidation>();
+        services.AddScoped<RedirectValidation>();
 
         // AUTHZ-MODEL-004 AC2 (D-160): what a hosted service starts before is what was
         // registered after it, and the web server is one, so the checks that read the
@@ -323,6 +324,7 @@ public static class JanusRegistration
         services.Insert(2, ServiceDescriptor.Singleton<IHostedService, HandlerValidationService>());
         services.Insert(3, ServiceDescriptor.Singleton<IHostedService, ConfigurationValidationService>());
         services.Insert(4, ServiceDescriptor.Singleton<IHostedService, DeclarationValidationService>());
+        services.Insert(5, ServiceDescriptor.Singleton<IHostedService, RedirectValidationService>());
 
         return services;
     }

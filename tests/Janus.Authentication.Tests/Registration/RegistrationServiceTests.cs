@@ -968,8 +968,8 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
 
     /// <summary>
     /// API-REDIR-002 AC2: an identifier the registry does not hold registers a person
-    /// exactly as a registered one does, and the return falls back to the deployment's
-    /// default rather than to anything the request named.
+    /// exactly as a registered one does, and a deployment that named no default has
+    /// nothing to fall back to, so the return is left to the frontend.
     /// </summary>
     [Fact]
     public async Task API_REDIR_002_AC2_AnUnrecognisedIdentifierIsTheDefaultAndNoRefusalAsync()
@@ -978,6 +978,32 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
 
         Assert.Empty(Live(session).Client);
         Assert.Empty(Ok(await AcceptedAsync(session)).Landing);
+    }
+
+    /// <summary>
+    /// API-REDIR-002 AC2, API-REDIR-001: where the deployment named a default client,
+    /// an identifier the registry does not hold is stored as that client at capture,
+    /// and the return is the one the registry holds for it.
+    /// </summary>
+    [Fact]
+    public async Task API_REDIR_002_AC2_AnUnrecognisedIdentifierIsStoredAsTheNamedDefaultAsync()
+    {
+        await _clients.RecordAsync(
+            new OidcClient(
+                "fallback",
+                "fallback",
+                OidcClientKind.BrowserApplication,
+                "https://fallback.example.test/welcome",
+                ["openid"]),
+            [7, 8, 9],
+            TestContext.Current.CancellationToken);
+
+        _configuration.Set(Settings.RedirectDefaultClient, "fallback");
+
+        RegistrationSessionId session = await SecuredAsync();
+
+        Assert.Equal("fallback", Live(session).Client);
+        Assert.Equal("https://fallback.example.test/welcome", Ok(await AcceptedAsync(session)).Landing);
     }
 
     /// <summary>

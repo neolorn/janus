@@ -92,15 +92,16 @@ internal sealed class RegistrationService(
         }
 
         // API-REDIR-002 AC1 and AC2: the identifier is resolved where it is captured,
-        // and one the registry does not hold is stored as the default rather than
-        // refused, so by the last step there is nothing left to validate.
+        // and one the registry does not hold is stored as the configured default
+        // rather than refused, so by the last step there is nothing left to validate.
         OidcClient? originating =
             await clients.FindAsync(client, cancellationToken).ConfigureAwait(false);
 
         var session = RegistrationSession.Open(
             RegistrationSessionId.New(time),
             SubjectId.New(randomness),
-            originating?.ClientId ?? string.Empty,
+            originating?.ClientId
+                ?? await DefaultClientAsync(cancellationToken).ConfigureAwait(false),
             language,
             source,
             time.GetUtcNow(),
@@ -642,6 +643,14 @@ internal sealed class RegistrationService(
                     new RegistrationCompleted(outcome.Subject, outcome.Session.Id, landing)),
                 Result.Failure<RegistrationCompleted>);
     }
+
+    // API-REDIR-001: the one destination the library falls back to is a client the
+    // deployment named, which startup has already read against the registry, so a
+    // deployment that named none stores nothing and the frontend decides.
+    private async ValueTask<string> DefaultClientAsync(CancellationToken cancellationToken) =>
+        (await configuration
+            .ReadAsync(Settings.RedirectDefaultClient, cancellationToken).ConfigureAwait(false))
+        .Match(value => value, _ => string.Empty);
 
     private async ValueTask<string> LandingAsync(
         RegistrationSessionId session,

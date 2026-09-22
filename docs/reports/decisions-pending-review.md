@@ -1879,6 +1879,8 @@ no pattern is read.
 *Chapter text that should change.* `09` API-REDIR-001 should name the list and the
 default for each endpoint that redirects.
 
+**Superseded by D-162.** Applied in entry 145.
+
 ---
 
 ## 61. Where a browser holding no session is sent
@@ -4955,6 +4957,83 @@ host's and that the library stores what it answers. `09` section 6 should say th
 upload is the request body and that `DELETE` is not held to the policy. `10` section 1.1
 should drop the **(new)** mark from the three photo codes, which are now raised.
 
+---
+
+## 145. The registry is the list, and the default is a client it holds
+
+**Corrections 1 · 2026-09-23 · D-162 section C, item 60 · API-REDIR-001, API-REDIR-002,
+LIB-HOST-001 AC3, `10` sections 1.5 and 4**
+
+*What D-162 decided.* API-REDIR-001's configured list is the set of origins of the
+registered clients' return addresses, and the default is a named first-party client in a
+new key `redirect.defaultclient`, validated against the registry at startup. Entry 60
+chose the other reading: no key at all, and the list read from whatever each endpoint's
+own chapter already registered, `webauthn.origins` at a landing and the client's one
+registered address at the authorization endpoint. D-057 says it in as many words: the
+registry is where the browser applications are registered, and it is therefore the
+source of both the valid destinations and the origin list, which cannot drift apart.
+
+*What was built.* `RedirectValidation` reads the registry and the key once, before the
+web server starts, as the five checks of D-160 already do, and is registered behind
+them. A registered client whose return address is not an absolute address with a host
+stops the deployment with `model.startup.redirectclient` and `details.client` naming it.
+Where `redirect.defaultclient` is set and names no registered browser application, the
+same code stops it with `details.key` naming the key. Registration resolves the key at
+capture: an identifier the registry does not hold is stored as the default client, and
+the completion returns the person to the address the registry holds for it, so the
+resolution happens once and the last step has nothing left to validate. The
+`webauthn.origins` check stays where it is; it was AUTH-FACT-010's own and only its
+citation was wrong.
+
+*Three points D-162 does not settle, taken at the strictest reading.*
+
+1. **The key is optional, and a deployment that names no default starts.** LIB-HOST-001
+   AC3 states that no key outside its list fails startup when unset, and D-162 adds the
+   key to `10` section 4 and not to LIB-HOST-001. A deployment that names none falls
+   back to nothing and the frontend decides where the person goes, which is what entry
+   61 settled for the sign-in address and what the completion already carried.
+2. **The default names a browser application or startup refuses it.** D-162 says a
+   first-party client, and every registered client is first-party (D-057), so the word
+   that does work is the kind: a protocol client's address is a token endpoint's
+   callback and no place to land a person. Refusing is the reading that grants least.
+3. **The authorization endpoint still replaces an unknown `redirect_uri` with the
+   requesting client's own registered address, not with the default.** Sending an
+   authorization code to another application's address is worse than sending it to the
+   one that asked, the exact match of RFC 9700 is what chapter 02 requires there, and
+   AUTH-OIDC-001 AC2 refuses an unregistered client outright rather than forwarding it
+   anywhere. The default is for the flows that carry no code.
+
+*What is not checked.* The address is held to being absolute with a host and to nothing
+else. No chapter asks a client's return address to be TLS, as INT-GEN-001 asks of the
+two integration endpoints, and refusing one would be a behaviour no chapter describes.
+
+*Tests that pin it.*
+`RedirectValidationTests.API_REDIR_001_AC3_ARegistryOfAbsoluteOriginsStartsAsync`,
+`RedirectValidationTests.API_REDIR_001_AC3_AnEntryThatIsNotAnAbsoluteOriginFailsAsync`,
+`RedirectValidationTests.LIB_HOST_001_AC3_ADeploymentThatNamesNoDefaultStartsAsync`,
+`RedirectValidationTests.API_REDIR_001_ADefaultNamingNoRegisteredClientIsRefusedAsync`,
+`RedirectValidationTests.API_REDIR_001_ADefaultNamingAProtocolClientIsRefusedAsync`,
+`RedirectValidationTests.API_REDIR_001_ADefaultNamingARegisteredApplicationStartsAsync`,
+`StartupValidationTests.API_REDIR_001_ADeploymentNamingADefaultClientTheRegistryLacksIsRefusedAsync`,
+`RegistrationServiceTests.API_REDIR_002_AC2_AnUnrecognisedIdentifierIsStoredAsTheNamedDefaultAsync`,
+`RegistrationServiceTests.API_REDIR_002_AC2_AnUnrecognisedIdentifierIsTheDefaultAndNoRefusalAsync`,
+`RegistrationServiceTests.API_REDIR_002_AC4_TheReturnIsTheStoredClientsAndNoOthersAsync`,
+`OidcFlowTests.API_REDIR_001_AC1_AnUnknownDestinationIsReplacedAndLoggedAsync`,
+`OidcFlowTests.API_REDIR_001_AC4_OnlyTheReplacedDestinationIsRecordedAsync`,
+`OidcServiceTests.API_REDIR_001_AC2_ADestinationContainingAKnownOneIsNotAcceptedAsync`,
+`RelyingPartyTests.AUTH_FACT_010_AnEntryThatIsNotAnAbsoluteOriginFails`,
+`SettingsCatalogueTests.LIB_API_001_AC2_TheKeyNamesAreTheContract`,
+`ErrorCodesTests.CONV_NAME_003_AC2_ChangingACodeFailsTheContractTest`.
+
+*Chapter text that should change.* API-REDIR-001 should say that the list is the origins
+of the registered clients' return addresses and that the default is
+`redirect.defaultclient`, and AC3 should say that it is the registry that is read at
+startup. It should also say that the authorization endpoint replaces an unknown
+destination with the requesting client's own, the default standing for the flows that
+carry no code. API-REDIR-002 AC2 should say that the default is the configured client
+and that a deployment naming none stores nothing. `10` section 4 should carry
+`redirect.defaultclient` and section 1.5 `model.startup.redirectclient`, both below.
+
 
 # Rows for chapter 10
 
@@ -4977,6 +5056,7 @@ The subsection each row belongs in is named with it.
 | `privacy.purpose.noconsent` | 1.4 | 422 | A consent is granted or withdrawn on a purpose the deployment did not declare, or one that rests on a basis other than consent, so it is not the subject's to agree to (PRIV-CONS-008a). |
 | `privacy.request.notfound` | 1.4 | 404 | A decision is made on an identifier that names no privacy request, by a caller holding `privacyrequest:manage` (PRIV-RIGHT-001). |
 | `privacy.request.decided` | 1.4 | 409 | A decision is made on a privacy request that is already decided; the standing decision is not replaced (PRIV-RIGHT-002 AC5). |
+| `model.startup.redirectclient` | 1.5 | 500 | Startup: a registered client's return address is not an absolute address with a host, or `redirect.defaultclient` names no registered browser application. `details.client` names the client the bad address was read from; `details.key` names the setting where the configured default will not resolve (API-REDIR-001). |
 
 ## LIB-HOST-001, host declarations
 
@@ -5022,6 +5102,7 @@ the member added since (D-162 item 104).
 | `integration.sms.endpoint` | string | P | none | Where the shipped default SMS transport is called. Empty while the deployment supplies a transport of its own; required only when the shipped one is used, and refused at startup where it is not TLS (INT-GEN-001, INT-SMS-001). |
 | `photo.enabled.<organization>` | flag | R, one key per organization | `false` | Whether the organization's accounts show a profile photo (IDN-ATTR-002). It is not a field of the policy object of section 4.1a, as `stepup.enforcement.<organization>` is not: the object states six fields. The administrative organization's key is written `true` at bootstrap, as that organization's policy is. An account of no organization shows no photo; an account of several shows one only where every one of them shows one. Turning it on is loosening (OPS-CFG-002). |
 | `registration.events.pollinterval` | duration | R | `PT1S`, floor `PT1S` | How often the waiting screen's stream reads the registration state back where no signal has reached it. The database channel is what usually wakes it; the interval is the fallback, and the floor is the default because a press has to feel immediate (REG-SESS-003, FE-VER-001). |
+| `redirect.defaultclient` | string | P | none | The registered client a browser falls back to where the identifier a request carried is not one the registry holds. It names a client of kind `browser-application`, and startup refuses a value that names a client the registry does not hold or one of kind `protocol`. Empty while the deployment names none, in which case a registration begun with an unrecognised identifier stores nothing and its completion carries no return address (API-REDIR-001, API-REDIR-002). |
 
 ## Section 5, message places
 

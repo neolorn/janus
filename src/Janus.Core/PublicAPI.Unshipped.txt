@@ -2953,6 +2953,7 @@ static Janus.Core.Configuration.Settings.RecoveryInvalidationWindow.get -> Janus
 static Janus.Core.Configuration.Settings.RecoveryLinkLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.RecoveryRateLimitAccount.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.RecoveryRateLimitApprover.get -> Janus.Core.Configuration.IntegerSetting!
+static Janus.Core.Configuration.Settings.RedirectDefaultClient.get -> Janus.Core.Configuration.TextSetting!
 static Janus.Core.Configuration.Settings.RegistrationAdultAffirmation.get -> Janus.Core.Configuration.ChoiceSetting<Janus.Core.Configuration.AttributeRequirement>!
 static Janus.Core.Configuration.Settings.RegistrationEventsPollInterval.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.RegistrationPhone.get -> Janus.Core.Configuration.ChoiceSetting<Janus.Core.Configuration.AttributeRequirement>!
@@ -3138,6 +3139,7 @@ static Janus.Core.ErrorCodes.StartupLabelLimit.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupMissingAssessment.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupNoOrganizationPath.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupPreferenceDeclaration.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.StartupRedirectClient.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupRelyingPartyId.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupUndeclaredDerivationReference.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupUndeclaredPermission.get -> Janus.Core.ErrorCode

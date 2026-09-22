@@ -210,12 +210,12 @@ public sealed class RelyingPartyTests
     }
 
     /// <summary>
-    /// API-REDIR-001 AC3: the list of known application origins is read at startup, and
-    /// an entry that is not an absolute origin stops the deployment rather than being
-    /// carried as something a destination could later be matched against.
+    /// AUTH-FACT-010: the origins a ceremony may run from are read at startup, and an
+    /// entry that is not an absolute origin stops the deployment rather than being
+    /// carried as something a ceremony could later be matched against.
     /// </summary>
     [Fact]
-    public void API_REDIR_001_AC3_AnEntryThatIsNotAnAbsoluteOriginFails() =>
+    public void AUTH_FACT_010_AnEntryThatIsNotAnAbsoluteOriginFails() =>
         Assert.Equal(
             ErrorCodes.StartupRelyingPartyId,
             Refusal("example.com", ["https://app.example.com", "/signin/callback"]));

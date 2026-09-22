@@ -36,6 +36,7 @@ internal static class ApiStatus
         [ErrorCodes.StartupKeyUnavailable] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupRelyingPartyId] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupLabelLimit] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupRedirectClient] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.PolicyUnregistered] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.DerivationSourcesMissing] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.SystemFault] = StatusCodes.Status500InternalServerError,

@@ -146,6 +146,15 @@ public static class ErrorCodes
     public static ErrorCode StartupLabelLimit { get; } = ErrorCode.Parse("model.startup.labellimit");
 
     /// <summary>
+    /// Startup: a registered client's return destination is not an absolute origin,
+    /// or <c>redirect.defaultclient</c> names no registered browser application. The
+    /// details name the client under <c>client</c> or the setting under <c>key</c>;
+    /// correct the destination, or name a client the registry holds.
+    /// </summary>
+    /// <remarks>Implements API-REDIR-001, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupRedirectClient { get; } = ErrorCode.Parse("model.startup.redirectclient");
+
+    /// <summary>
     /// The organization named is the administrative one, which is not deletable.
     /// Delete another organization, or none.
     /// </summary>

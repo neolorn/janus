@@ -109,6 +109,7 @@ recovery.invalidation.window
 recovery.link.lifetime
 recovery.ratelimit.account
 recovery.ratelimit.approver
+redirect.defaultclient
 registration.adultaffirmation
 registration.events.pollinterval
 registration.phone
