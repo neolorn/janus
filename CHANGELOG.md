@@ -784,6 +784,10 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- Notification handling is now a contract a deployment can replace: `INotificationHandler`
+  in `Janus.Core` takes which message goes to which destination in which language, and
+  the shipped handler that renders the deployment's templates and hands them to the mail
+  and SMS transports is registered only if the deployment registers none of its own.
 - The city shown on a session is now resolved by the library from the address the
   session was used from, and no longer given by the caller: it is not a field on any
   request. While no location database is present the listing shows no city and the

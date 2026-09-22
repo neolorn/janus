@@ -56,12 +56,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
 
     private readonly RegistrationSessionStoreInMemory _sessions = new();
     private readonly RegistrationDirectoryInMemory _directory = new();
-    private readonly SendLedgerInMemory _ledger = new();
     private readonly NoticeLedgerInMemory _notices = new();
-    private readonly MessageTemplatesInMemory _templates = new();
-    private readonly MailTransportInMemory _mail = new();
-    private readonly SmsTransportInMemory _sms = new();
-    private readonly SmsBalanceLedgerInMemory _balances = new();
     private readonly PasswordStoreInMemory _passwords = new();
     private readonly LeakedPasswordCorpusInMemory _corpus = new();
     private readonly WordListInMemory _words = new();
@@ -78,6 +73,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
     private readonly AccessGateInMemory _gate = new();
     private readonly LocationResolverInMemory _locations = new();
     private readonly ConfigurationInMemory _configuration = new();
+    private readonly NotificationHandlerInMemory _notifications = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
@@ -85,43 +81,14 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
 
     /// <summary>
     /// A deployment that has named the one key with no default, and a catalogue whose
-    /// verification message carries exactly what the message carries in production:
-    /// the code and the link token.
     /// </summary>
-    public RegistrationServiceTests()
-    {
-        _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
-
-        foreach (SendKind kind in Enum.GetValues<SendKind>())
-        {
-            foreach (MessageKind message in new[] { MessageKind.VerificationCode, MessageKind.AccountExists })
-            {
-                _templates.Set(
-                    message,
-                    kind,
-                    Language,
-                    new MessageTemplate(kind is SendKind.Email ? "subject" : null, "{code} {token}"));
-            }
-        }
-    }
+    public RegistrationServiceTests() => _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
 
     private RegistrationService Service =>
         new(
             _sessions,
             _directory,
-            new SendingService(
-                _configuration,
-                _ledger,
-                _templates,
-                _mail,
-                _sms,
-                RestrictionKeySuppliers.None,
-                Considered.Nothing(_work, _clock),
-                new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
-                _work,
-                _events,
-                _clock,
-                _randomness),
+            _notifications,
             _notices,
             new PasswordService(
                 _passwords,
@@ -601,8 +568,8 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
             Number,
             TestContext.Current.CancellationToken));
 
-        Assert.Equal(Number, _sms.Taken[^1].Destination.Value);
-        Assert.Equal(1, _sms.Taken.Count(message => message.Destination.Value == Mistyped));
+        Assert.Equal(Number, _notifications.Texts[^1].Destination.Canonical);
+        Assert.Equal(1, _notifications.Texts.Count(sent => sent.Destination.Canonical == Mistyped));
     }
 
     /// <summary>
@@ -651,7 +618,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
 
     /// <summary>
     /// REG-SESS-005 AC2: what reaches the holder carries neither the code nor the
-    /// link, which is what the unfilled placeholders show.
+    /// link, so the deployment's template has nothing to put either in.
     /// </summary>
     [Fact]
     public async Task REG_SESS_005_AC2_TheHoldersNoticeCarriesNoCodeAndNoLinkAsync()
@@ -666,7 +633,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
             Address,
             TestContext.Current.CancellationToken));
 
-        Assert.Equal("{code} {token}", Assert.Single(_mail.Taken).Body);
+        Assert.Empty(Assert.Single(_notifications.Mail).Values);
     }
 
     /// <summary>
@@ -1066,7 +1033,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
                 TestContext.Current.CancellationToken)));
 
         Assert.Empty(Live(session).Identifiers);
-        Assert.Empty(_mail.Taken);
+        Assert.Empty(_notifications.Mail);
     }
 
     /// <summary>
@@ -1421,7 +1388,8 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
     // The link token never touches the session: it is in the message, as it is for
     // the person reading it.
     private string Token(IdentifierKind kind) =>
-        (kind is IdentifierKind.Email ? _mail.Taken[^1].Body : _sms.Taken[^1].Text).Split(' ')[1];
+        (kind is IdentifierKind.Email ? _notifications.Mail[^1] : _notifications.Texts[^1])
+            .Values["token"];
 
     // What a completed WebAuthn ceremony stages, with the material a test does not
     // care about drawn once.

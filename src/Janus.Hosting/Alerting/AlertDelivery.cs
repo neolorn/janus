@@ -1,4 +1,4 @@
-namespace Janus.Authentication.Alerting;
+namespace Janus.Hosting.Alerting;
 
 /// <summary>
 /// What became of one alert: how many destinations took it on each channel, and

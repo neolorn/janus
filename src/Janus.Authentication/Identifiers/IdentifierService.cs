@@ -40,7 +40,7 @@ namespace Janus.Authentication.Identifiers;
 internal sealed class IdentifierService(
     IIdentifierDirectory directory,
     IPendingVerificationStore pending,
-    SendingService sending,
+    INotificationHandler sending,
     INoticeLedger notices,
     ISessionStore sessions,
     StepUpGuard stepUp,

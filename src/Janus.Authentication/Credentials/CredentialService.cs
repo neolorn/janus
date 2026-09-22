@@ -62,7 +62,7 @@ internal sealed class CredentialService(
     IPasswordStore held,
     IIdentifierDirectory identifiers,
     ISessionStore sessions,
-    SendingService sending,
+    INotificationHandler sending,
     ICredentialAudit audit,
     IConfigurationStore configuration,
     IUnitOfWork work,

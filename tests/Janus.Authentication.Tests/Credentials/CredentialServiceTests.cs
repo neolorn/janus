@@ -75,13 +75,9 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     private readonly AccessGateInMemory _gate = new();
     private readonly LocationResolverInMemory _locations = new();
     private readonly ThrottleLedgerInMemory _throttle = new();
-    private readonly SendLedgerInMemory _ledger = new();
     private readonly NoticeLedgerInMemory _notices = new();
-    private readonly MessageTemplatesInMemory _templates = new();
-    private readonly MailTransportInMemory _mail = new();
-    private readonly SmsTransportInMemory _sms = new();
-    private readonly SmsBalanceLedgerInMemory _balances = new();
     private readonly ConfigurationInMemory _configuration = new();
+    private readonly NotificationHandlerInMemory _notifications = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
@@ -99,19 +95,6 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             Settings.WebAuthnOrigins,
             (IReadOnlyList<string>)[Origin, "https://id.example.com"]);
 
-        MessageKind[] messages = [MessageKind.SecurityNotice, MessageKind.CredentialEnrolled];
-
-        foreach (MessageKind message in messages)
-        {
-            foreach (SendKind kind in Enum.GetValues<SendKind>())
-            {
-                _templates.Set(
-                    message,
-                    kind,
-                    Language,
-                    new MessageTemplate(kind is SendKind.Email ? "subject" : null, "body"));
-            }
-        }
     }
 
     /// <inheritdoc/>
@@ -131,13 +114,12 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     {
         (SubjectId subject, SessionId session) = await SignedInAsync();
 
-        _mail.Taken.Clear();
-        _sms.Taken.Clear();
+        _notifications.Sent.Clear();
 
         _ = await ConfirmedAsync(subject, session);
 
-        Assert.NotEmpty(_mail.Taken);
-        Assert.NotEmpty(_sms.Taken);
+        Assert.NotEmpty(_notifications.Mail);
+        Assert.NotEmpty(_notifications.Texts);
     }
 
     /// <summary>
@@ -636,7 +618,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             _passwords,
             _identifiers,
             _live,
-            Sending,
+            _notifications,
             _credentials,
             _configuration,
             _work,
@@ -678,7 +660,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             _sets,
             _identifiers,
             Policies,
-            Sending,
+            _notifications,
             _credentials,
             _configuration,
             _work,
@@ -702,8 +684,8 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             Sessions,
             Guard,
             _gate,
-            Sending,
-            new NonExistenceNotice(_configuration, Sending, _notices, _work, _events, _clock),
+            _notifications,
+            new NonExistenceNotice(_configuration, _notifications, _notices, _work, _events, _clock),
             Throttle,
             _events,
             _configuration,
@@ -719,21 +701,6 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             _configuration,
             _work,
             _clock);
-
-    private SendingService Sending =>
-        new(
-            _configuration,
-            _ledger,
-            _templates,
-            _mail,
-            _sms,
-            RestrictionKeySuppliers.None,
-            Considered.Nothing(_work, _clock),
-            new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
-            _work,
-            _events,
-            _clock,
-            _randomness);
 
     private static CredentialAuthority Authority(SubjectId subject, SessionId session) =>
         CredentialAuthority.Of(AccessContext.Of(subject), session);

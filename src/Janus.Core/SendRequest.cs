@@ -1,7 +1,5 @@
 using System.Collections.Generic;
-using Janus.Core;
-
-namespace Janus.Authentication.Sending;
+namespace Janus.Core;
 
 /// <summary>
 /// One message the library needs delivered, before any restriction has looked at it.
@@ -15,7 +13,7 @@ namespace Janus.Authentication.Sending;
 /// Implements AUTH-ABUSE-004, INT-SMS-001 and CONV-CONTENT-001. The library states
 /// which message in which language; the words are the deployment's.
 /// </remarks>
-internal sealed record SendRequest(
+public sealed record SendRequest(
     SendDestination Destination,
     MessageKind Message,
     RestrictionPurpose Purpose,
@@ -39,14 +37,6 @@ internal sealed record SendRequest(
     /// The channel the message goes out on.
     /// </summary>
     public SendKind Kind => Destination.Kind;
-
-    /// <summary>
-    /// Whether this is a security notice to an address an account already holds,
-    /// which is outside the destination restrictions so that an attacker who drains a
-    /// bucket cannot silence the notice that says so (AUTH-ABUSE-004).
-    /// </summary>
-    public bool IsNoticeToHolder =>
-        MessageChannels.Notices.Contains(Message) && Subject is not null;
 
     /// <summary>
     /// Whether this is an alert to an operator destination, which continues below the

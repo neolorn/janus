@@ -770,6 +770,8 @@ everything. Phase 5 decides which; nothing in phase 4 forecloses it.
 *Chapter text that should change.* CONV-LAYOUT-001's `Janus.Authentication` row should
 read "factors, sessions, flows, and the sending path the flows use".
 
+**Superseded by D-162.** Applied in entry 118.
+
 ---
 
 ## 23. A transport that would not take a message is a refusal to the caller; the durable retry is the outbox publisher's
@@ -3655,6 +3657,66 @@ port, not another signature.
 *Chapter text that should change.* None in `05` or `09`, which name a location only
 where a session is listed. The implementation plan should name the phase that builds
 the file and its refresh behind this port.
+
+---
+
+## 118. The restrictions stay in the area; the pipeline, the templates and the router are the host's
+
+**Corrections 1 · 2026-09-22 · D-162 section B, correcting entry 22 · CONV-LAYOUT-001, LIB-EXT-001, AUTH-ABUSE-004, OPS-ALERT-001**
+
+*What D-162 decided.* The restriction model (keys, purposes, buckets, grants,
+evaluation) stays in `Janus.Authentication`. The notification-handling contract (send a
+message kind to a subject in a language) is declared in `Janus.Core` beside the
+transport ports; the pipeline with retry, template resolution, the outbox publisher and
+the alert router live in `Janus.Hosting` with the hosted worker.
+
+*What was built.* `Janus.Core` declares `INotificationHandler`, the one member of which
+takes a `SendRequest` (which message, to which destination, for which purpose, from
+which address, in which language, with the values the library supplies) and answers the
+correlation reference it was taken under or the refusal. `SendRequest`,
+`SendDestination` and `SendReference` moved to `Janus.Core` with it; nothing else did.
+The hash a reference is kept as is not part of the contract, so it moved the other way,
+to `Janus.Authentication.Sending.SendReferences`, and the public surface hands out no
+`byte[]` (CONV-CODE-003).
+
+`SendingService` and `MessageRendering` moved to `Janus.Hosting.Sending`, and
+`AlertRouter`, `AlertAudience`, `AlertDelivery` and `AlertDestinationChange` to
+`Janus.Hosting.Alerting`. `AddJanus` registers the shipped handler with `TryAddScoped`,
+so a deployment that registers its own keeps it (LIB-EXT-001 AC1, AC2). The restriction
+model, the throttles, the budgets, the phone signals, the gateway balance, the
+non-existence notice, the delivery reports, the alert vocabulary (`Alerts`) and every
+persistence port stayed in `Janus.Authentication`, which is what `Janus.Storage`
+implements against. What a restriction makes of one send moved from the request to
+`Restrictions.IsNoticeToHolder`, where the rest of that reasoning already was.
+
+The nine services of the authentication area now take `INotificationHandler`, so the
+area sends without knowing what carries it, and their tests take a handler that records
+what was asked for. What the words look like once a template has them is now tested
+where the rendering is: `MessageRenderingTests` in the hosting suite carries the
+guarantee that a place the values do not name is left as it stands. The two test classes
+of the pipeline and the router moved with their subjects, as did the one restriction
+test that proved an edit reaches the next send. The hosting suite had a second
+`MessageTemplatesInMemory` of its own; it is gone, and one fake answers for the
+catalogue.
+
+*Tests that pin it.*
+`LibraryStructureTests.CONV_LAYOUT_001_AC3_DependenciesAreExactlyTheOnesTheTableGives`,
+`PublicSurfaceTests.CONV_CODE_003_AC1_NoContractMemberExposesAMutableCollection`,
+`SendingServiceTests` in full (now in the hosting suite), including
+`AUTH_ABUSE_004_AC3_AnEditAppliesToTheNextSendAsync`,
+`AlertRouterTests` and `AlertDestinationChangeTests` in full (now in the hosting suite),
+`MessageRenderingTests.CONV_CONTENT_001_AC1_TheNamedPlacesAreFilledAndTheWordsAreNotTouched`,
+`MessageRenderingTests.Fill_APlaceTheValuesDoNotName_IsLeftAsItStands`,
+and every test of the nine sending services, which now read what the library asked for
+rather than what a transport was handed.
+
+*Chapter text that should change.* CONV-LAYOUT-001's `Janus.Authentication` row should
+read "factors, sessions, flows, and the restriction model the sending path answers to",
+and its `Janus.Hosting` row should name the notification pipeline, template resolution,
+the outbox publisher and the alert router beside the hosted worker. LIB-EXT-001's
+"Notification handling" row should name `INotificationHandler` as the contract, and
+LIB-API-001 should carry it, `SendRequest`, `SendDestination` and `SendReference` in the
+public surface.
 
 
 # Rows for chapter 10

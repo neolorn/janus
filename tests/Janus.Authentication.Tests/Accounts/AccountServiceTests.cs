@@ -52,17 +52,13 @@ public sealed class AccountServiceTests : IAsyncDisposable
     private readonly RecoveryCodeStoreInMemory _recoveryCodes = new();
     private readonly AccountAuditInMemory _audit = new();
     private readonly LifecycleLinkStoreInMemory _links = new();
-    private readonly SendLedgerInMemory _ledger = new();
-    private readonly MessageTemplatesInMemory _templates = new();
-    private readonly MailTransportInMemory _mail = new();
-    private readonly SmsTransportInMemory _sms = new();
-    private readonly SmsBalanceLedgerInMemory _balances = new();
     private readonly EventsInMemory _events = new();
     private readonly SessionStoreInMemory _sessions = new();
     private readonly PasswordStoreInMemory _passwords = new();
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly ConfigurationInMemory _configuration = new();
+    private readonly NotificationHandlerInMemory _notifications = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
@@ -87,19 +83,7 @@ public sealed class AccountServiceTests : IAsyncDisposable
                 _identifiers,
                 _links,
                 _sessions,
-                new SendingService(
-                    _configuration,
-                    _ledger,
-                    _templates,
-                    _mail,
-                    _sms,
-                    RestrictionKeySuppliers.None,
-                    Considered.Nothing(_work, _clock),
-                    new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
-                    _work,
-                    _events,
-                    _clock,
-                    _randomness),
+                _notifications,
                 _audit,
                 Gate,
                 _events,

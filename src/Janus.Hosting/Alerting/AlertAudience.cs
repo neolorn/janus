@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace Janus.Authentication.Alerting;
+namespace Janus.Hosting.Alerting;
 
 /// <summary>
 /// Who one alert goes to on each channel. Destinations are lists, never single

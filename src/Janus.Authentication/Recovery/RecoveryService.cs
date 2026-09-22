@@ -64,7 +64,7 @@ internal sealed class RecoveryService(
     SessionService sessions,
     StepUpGuard stepUp,
     IAccessGate gate,
-    SendingService sending,
+    INotificationHandler sending,
     NonExistenceNotice nonExistence,
     ThrottleService throttle,
     IEvents events,

@@ -6,12 +6,16 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Janus.Authentication.Factors;
 using Janus.Authentication.Sending;
+using Janus.Authentication.Tests;
+using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Hosting.Sending;
 using Xunit;
 
-namespace Janus.Authentication.Tests.Sending;
+namespace Janus.Hosting.Tests.Sending;
 
 /// <summary>
 /// The one path every message takes: what the named restrictions decide, what a
@@ -29,8 +33,12 @@ public sealed class SendingServiceTests : IAsyncDisposable
 
     private static readonly PhoneNumber Phone = Number("+201001234567");
 
+    private static readonly StepUpChallenge Satisfied =
+        new(StepUpOutcome.Satisfied, AssuranceLevel.Aal2, PhishingResistant: false, [], null);
+
     private readonly ConfigurationInMemory _configuration = new();
     private readonly SendLedgerInMemory _ledger = new();
+    private readonly SendAuditInMemory _audit = new();
     private readonly MessageTemplatesInMemory _templates = new();
     private readonly MailTransportInMemory _mail = new();
     private readonly SmsTransportInMemory _sms = new();
@@ -64,6 +72,16 @@ public sealed class SendingServiceTests : IAsyncDisposable
             _events,
             _clock,
             _randomness);
+
+    private RestrictionAdministration Administration =>
+        new(
+            _configuration,
+            _ledger,
+            _audit,
+            RestrictionKeySuppliers.None,
+            _work,
+            _events,
+            _clock);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
@@ -501,6 +519,35 @@ public sealed class SendingServiceTests : IAsyncDisposable
 
     // What one member takes and gives: the types a send could be told a preference
     // through.
+    /// <summary>
+    /// AUTH-ABUSE-004 AC3: an edit that goes through applies to the very next send,
+    /// with nothing restarted in between.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC3_AnEditAppliesToTheNextSendAsync()
+    {
+        await SentAsync(Texted());
+
+        (await Administration.EditAsync(
+            "sms.destination",
+            new Restriction(
+                "sms.destination",
+                RestrictionKeyKind.Destination,
+                null,
+                RestrictionPurpose.Any,
+                [new Bucket(1, TimeSpan.FromHours(24), BucketWindow.Sliding)]),
+            "an incident",
+            Satisfied,
+            SubjectId.New(_randomness),
+            TestContext.Current.CancellationToken)).Switch(
+            () => { },
+            error => throw new Xunit.Sdk.XunitException($"The edit was refused: {error.Code}."));
+
+        Assert.Equal(
+            ErrorCodes.RestrictionExceeded,
+            Refusal(await Service.SendAsync(Texted(), TestContext.Current.CancellationToken)));
+    }
+
     private static IEnumerable<Type> Carried(MemberInfo member) =>
         member switch
         {

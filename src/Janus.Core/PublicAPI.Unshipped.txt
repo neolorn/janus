@@ -984,6 +984,8 @@ Janus.Core.IMailTransport
 Janus.Core.IMailTransport.SendAsync(Janus.Core.MailMessage! mail, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IMessageTemplates
 Janus.Core.IMessageTemplates.Find(Janus.Core.MessageKind message, Janus.Core.SendKind kind, string! language) -> Janus.Core.Result<Janus.Core.MessageTemplate!>
+Janus.Core.INotificationHandler
+Janus.Core.INotificationHandler.SendAsync(Janus.Core.SendRequest! request, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.SendReference>>
 Janus.Core.IOidc
 Janus.Core.IOidc.ClaimsAsync(Janus.Core.SubjectId subject, string! scope, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.OidcClaims!>>
 Janus.Core.IOidc.FindClientAsync(string! clientId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.OidcClient!>>
@@ -1945,9 +1947,42 @@ Janus.Core.SendContext.Source.get -> string!
 Janus.Core.SendContext.Source.init -> void
 Janus.Core.SendContext.Subject.get -> Janus.Core.SubjectId?
 Janus.Core.SendContext.Subject.init -> void
+Janus.Core.SendDestination
+Janus.Core.SendDestination.<Clone>$() -> Janus.Core.SendDestination!
+Janus.Core.SendDestination.Canonical.get -> string!
+Janus.Core.SendDestination.Equals(Janus.Core.SendDestination? other) -> bool
+Janus.Core.SendDestination.Kind.get -> Janus.Core.SendKind
+Janus.Core.SendDestination.Mail.get -> Janus.Core.EmailAddress
+Janus.Core.SendDestination.Phone.get -> Janus.Core.PhoneNumber
 Janus.Core.SendKind
 Janus.Core.SendKind.Email = 0 -> Janus.Core.SendKind
 Janus.Core.SendKind.Sms = 1 -> Janus.Core.SendKind
+Janus.Core.SendReference
+Janus.Core.SendReference.Equals(Janus.Core.SendReference other) -> bool
+Janus.Core.SendReference.SendReference() -> void
+Janus.Core.SendReference.Value.get -> string!
+Janus.Core.SendRequest
+Janus.Core.SendRequest.<Clone>$() -> Janus.Core.SendRequest!
+Janus.Core.SendRequest.Context.get -> Janus.Core.SendContext!
+Janus.Core.SendRequest.Deconstruct(out Janus.Core.SendDestination! Destination, out Janus.Core.MessageKind Message, out Janus.Core.RestrictionPurpose Purpose, out string! Source, out string! Language) -> void
+Janus.Core.SendRequest.Destination.get -> Janus.Core.SendDestination!
+Janus.Core.SendRequest.Destination.init -> void
+Janus.Core.SendRequest.Equals(Janus.Core.SendRequest? other) -> bool
+Janus.Core.SendRequest.IsAlert.get -> bool
+Janus.Core.SendRequest.Kind.get -> Janus.Core.SendKind
+Janus.Core.SendRequest.Language.get -> string!
+Janus.Core.SendRequest.Language.init -> void
+Janus.Core.SendRequest.Message.get -> Janus.Core.MessageKind
+Janus.Core.SendRequest.Message.init -> void
+Janus.Core.SendRequest.Purpose.get -> Janus.Core.RestrictionPurpose
+Janus.Core.SendRequest.Purpose.init -> void
+Janus.Core.SendRequest.SendRequest(Janus.Core.SendDestination! Destination, Janus.Core.MessageKind Message, Janus.Core.RestrictionPurpose Purpose, string! Source, string! Language) -> void
+Janus.Core.SendRequest.Source.get -> string!
+Janus.Core.SendRequest.Source.init -> void
+Janus.Core.SendRequest.Subject.get -> Janus.Core.SubjectId?
+Janus.Core.SendRequest.Subject.init -> void
+Janus.Core.SendRequest.Values.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!
+Janus.Core.SendRequest.Values.init -> void
 Janus.Core.SendingRestrictionChanged
 Janus.Core.SendingRestrictionChanged.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out string! Restriction, out bool Loosening) -> void
 Janus.Core.SendingRestrictionChanged.Equals(Janus.Core.SendingRestrictionChanged? other) -> bool
@@ -2593,6 +2628,14 @@ override Janus.Core.RoleName.ToString() -> string!
 override Janus.Core.SendContext.Equals(object? obj) -> bool
 override Janus.Core.SendContext.GetHashCode() -> int
 override Janus.Core.SendContext.ToString() -> string!
+override Janus.Core.SendDestination.Equals(object? obj) -> bool
+override Janus.Core.SendDestination.GetHashCode() -> int
+override Janus.Core.SendDestination.ToString() -> string!
+override Janus.Core.SendReference.GetHashCode() -> int
+override Janus.Core.SendReference.ToString() -> string!
+override Janus.Core.SendRequest.Equals(object? obj) -> bool
+override Janus.Core.SendRequest.GetHashCode() -> int
+override Janus.Core.SendRequest.ToString() -> string!
 override Janus.Core.SendingRestrictionChanged.<Clone>$() -> Janus.Core.SendingRestrictionChanged!
 override Janus.Core.SendingRestrictionChanged.Equals(object? obj) -> bool
 override Janus.Core.SendingRestrictionChanged.GetHashCode() -> int
@@ -3259,6 +3302,15 @@ static Janus.Core.RoleName.operator ==(Janus.Core.RoleName left, Janus.Core.Role
 static Janus.Core.ScriptMixing.IsSingleScriptPerWord(string! value) -> bool
 static Janus.Core.SendContext.operator !=(Janus.Core.SendContext? left, Janus.Core.SendContext? right) -> bool
 static Janus.Core.SendContext.operator ==(Janus.Core.SendContext? left, Janus.Core.SendContext? right) -> bool
+static Janus.Core.SendDestination.Of(Janus.Core.EmailAddress address) -> Janus.Core.SendDestination!
+static Janus.Core.SendDestination.Of(Janus.Core.PhoneNumber number) -> Janus.Core.SendDestination!
+static Janus.Core.SendDestination.operator !=(Janus.Core.SendDestination? left, Janus.Core.SendDestination? right) -> bool
+static Janus.Core.SendDestination.operator ==(Janus.Core.SendDestination? left, Janus.Core.SendDestination? right) -> bool
+static Janus.Core.SendReference.Draw(System.Security.Cryptography.RandomNumberGenerator! randomness) -> Janus.Core.SendReference
+static Janus.Core.SendReference.operator !=(Janus.Core.SendReference left, Janus.Core.SendReference right) -> bool
+static Janus.Core.SendReference.operator ==(Janus.Core.SendReference left, Janus.Core.SendReference right) -> bool
+static Janus.Core.SendRequest.operator !=(Janus.Core.SendRequest? left, Janus.Core.SendRequest? right) -> bool
+static Janus.Core.SendRequest.operator ==(Janus.Core.SendRequest? left, Janus.Core.SendRequest? right) -> bool
 static Janus.Core.SendingRestrictionChanged.operator !=(Janus.Core.SendingRestrictionChanged? left, Janus.Core.SendingRestrictionChanged? right) -> bool
 static Janus.Core.SendingRestrictionChanged.operator ==(Janus.Core.SendingRestrictionChanged? left, Janus.Core.SendingRestrictionChanged? right) -> bool
 static Janus.Core.SendingRestrictionGranted.operator !=(Janus.Core.SendingRestrictionGranted? left, Janus.Core.SendingRestrictionGranted? right) -> bool
@@ -3335,6 +3387,7 @@ virtual Janus.Core.SubjectEvent.Equals(Janus.Core.SubjectEvent? other) -> bool
 ~override Janus.Core.Result<TValue>.Equals(object obj) -> bool
 ~override Janus.Core.Result<TValue>.ToString() -> string
 ~override Janus.Core.RoleName.Equals(object obj) -> bool
+~override Janus.Core.SendReference.Equals(object obj) -> bool
 ~override Janus.Core.SessionId.Equals(object obj) -> bool
 ~override Janus.Core.SubjectId.Equals(object obj) -> bool
 ~override Janus.Core.Username.Equals(object obj) -> bool

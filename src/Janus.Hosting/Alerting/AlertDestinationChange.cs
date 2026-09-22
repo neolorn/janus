@@ -3,11 +3,12 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
 using Janus.Core;
 using Janus.Core.Configuration;
 
-namespace Janus.Authentication.Alerting;
+namespace Janus.Hosting.Alerting;
 
 /// <summary>
 /// Changing where alerts go. The destinations being replaced are told first and the

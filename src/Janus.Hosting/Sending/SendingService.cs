@@ -5,10 +5,11 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 
-namespace Janus.Authentication.Sending;
+namespace Janus.Hosting.Sending;
 
 /// <summary>
 /// The one path every message the library sends takes: the named restrictions decide
@@ -45,17 +46,9 @@ internal sealed class SendingService(
     IUnitOfWork work,
     IEvents events,
     TimeProvider time,
-    RandomNumberGenerator randomness)
+    RandomNumberGenerator randomness) : INotificationHandler
 {
-    /// <summary>
-    /// Sends one message, or says why it was not sent.
-    /// </summary>
-    /// <param name="request">What is to be sent.</param>
-    /// <param name="cancellationToken">Abandons the send.</param>
-    /// <returns>
-    /// The correlation reference the transport took it under, or the failure. A
-    /// refusal by a restriction carries <c>retryAt</c>.
-    /// </returns>
+    /// <inheritdoc/>
     /// <exception cref="ArgumentNullException">The request is absent.</exception>
     public async ValueTask<Result<SendReference>> SendAsync(
         SendRequest request,
@@ -119,7 +112,7 @@ internal sealed class SendingService(
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
         await ledger
-            .RecordAsync(reference.Fingerprint(), plan.Counted, plan.Spent, now, cancellationToken)
+            .RecordAsync(SendReferences.Of(reference), plan.Counted, plan.Spent, now, cancellationToken)
             .ConfigureAwait(false);
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);

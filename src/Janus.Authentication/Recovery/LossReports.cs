@@ -44,7 +44,7 @@ internal sealed class LossReports(
     IRecoveryCodeStore recoveryCodes,
     IIdentifierDirectory identifiers,
     PolicyResolution policies,
-    SendingService sending,
+    INotificationHandler sending,
     ICredentialAudit audit,
     IConfigurationStore configuration,
     IUnitOfWork work,

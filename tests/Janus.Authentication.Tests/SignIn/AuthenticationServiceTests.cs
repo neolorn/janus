@@ -62,14 +62,10 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     private readonly AccessGateInMemory _gate = new();
     private readonly LocationResolverInMemory _locations = new();
     private readonly ThrottleLedgerInMemory _throttle = new();
-    private readonly SendLedgerInMemory _ledger = new();
     private readonly NoticeLedgerInMemory _notices = new();
-    private readonly MessageTemplatesInMemory _templates = new();
-    private readonly MailTransportInMemory _mail = new();
-    private readonly SmsTransportInMemory _sms = new();
-    private readonly SmsBalanceLedgerInMemory _balances = new();
     private readonly VerificationCodeStoreInMemory _codes = new();
     private readonly ConfigurationInMemory _configuration = new();
+    private readonly NotificationHandlerInMemory _notifications = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
@@ -84,25 +80,6 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.WebAuthnRelyingPartyId, "example.test");
         _configuration.Set(Settings.WebAuthnOrigins, ["https://example.test"]);
-
-        MessageKind[] messages =
-        [
-            MessageKind.VerificationCode,
-            MessageKind.SignInLink,
-            MessageKind.NoAccount,
-        ];
-
-        foreach (SendKind kind in Enum.GetValues<SendKind>())
-        {
-            foreach (MessageKind message in messages)
-            {
-                _templates.Set(
-                    message,
-                    kind,
-                    Language,
-                    new MessageTemplate(kind is SendKind.Email ? "subject" : null, "{code} {token}"));
-            }
-        }
     }
 
     private AuthenticationService Service =>
@@ -135,7 +112,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             Sessions,
             Policies,
             Throttle,
-            Sending,
+            _notifications,
             Codes,
             _configuration,
             _work,
@@ -151,8 +128,8 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             _identifiers,
             _accounts,
             Policies,
-            Sending,
-            new NonExistenceNotice(_configuration, Sending, _notices, _work, _events, _clock),
+            _notifications,
+            new NonExistenceNotice(_configuration, _notifications, _notices, _work, _events, _clock),
             Throttle,
             _configuration,
             _work,
@@ -187,21 +164,6 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             _configuration,
             _work,
             _clock);
-
-    private SendingService Sending =>
-        new(
-            _configuration,
-            _ledger,
-            _templates,
-            _mail,
-            _sms,
-            RestrictionKeySuppliers.None,
-            Considered.Nothing(_work, _clock),
-            new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
-            _work,
-            _events,
-            _clock,
-            _randomness);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
@@ -417,7 +379,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         Assert.True(asked.Match(() => true, _ => false));
         Assert.Null(await _pending.FindAsync(subject, Factor.EmailLink, TestContext.Current.CancellationToken));
-        Assert.Empty(_mail.Taken);
+        Assert.Empty(_notifications.Mail);
     }
 
     /// <summary>
@@ -441,7 +403,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             browser: null,
             TestContext.Current.CancellationToken);
 
-        string carried = _sms.Taken[^1].Text.Split(' ')[1];
+        string carried = _notifications.Texts[^1].Values["token"];
 
         Assert.NotNull(await _pending.FindAsync(
             subject,
@@ -474,7 +436,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
                 TestContext.Current.CancellationToken))
             .Match(() => true, _ => false));
 
-        Assert.Empty(_sms.Taken);
+        Assert.Empty(_notifications.Texts);
         Assert.Null(await _pending.FindAsync(
             subject,
             Factor.PhoneLink,
@@ -489,7 +451,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             browser: null,
             TestContext.Current.CancellationToken);
 
-        Assert.NotEmpty(_sms.Taken);
+        Assert.NotEmpty(_notifications.Texts);
     }
 
     /// <summary>
@@ -543,7 +505,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         Assert.Equal(SignInStatus.DeviceVerificationRequired, reached.Status);
         Assert.Null(reached.Session);
-        Assert.Single(_mail.Taken);
+        Assert.Single(_notifications.Mail);
     }
 
     /// <summary>
@@ -861,9 +823,9 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
     // The message body is the code and the link token in that order, so the test reads
     // what the person reads rather than what the store holds.
-    private string Code() => _mail.Taken[^1].Body.Split(' ')[0];
+    private string Code() => _notifications.Mail[^1].Values["code"];
 
-    private string Token() => _mail.Taken[^1].Body.Split(' ')[1];
+    private string Token() => _notifications.Mail[^1].Values["token"];
 
     private static SignInProgress Reached(Result<SignInProgress> outcome) =>
         outcome.Match(

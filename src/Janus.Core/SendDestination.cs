@@ -1,6 +1,4 @@
-using Janus.Core;
-
-namespace Janus.Authentication.Sending;
+namespace Janus.Core;
 
 /// <summary>
 /// Where one message goes: an address or a number, in the canonical form the
@@ -10,7 +8,7 @@ namespace Janus.Authentication.Sending;
 /// Implements AUTH-ABUSE-004 and chapter 10 section 5.14. The canonical form is what
 /// the destination key hashes, so two spellings of one address share a bucket.
 /// </remarks>
-internal sealed record SendDestination
+public sealed record SendDestination
 {
     private SendDestination(SendKind kind, EmailAddress mail, PhoneNumber phone)
     {

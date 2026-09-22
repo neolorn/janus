@@ -39,7 +39,7 @@ internal sealed class AccountLifecycle(
     IIdentifierDirectory identifiers,
     ILifecycleLinkStore links,
     ISessionStore sessions,
-    SendingService sending,
+    INotificationHandler sending,
     IAccountAudit audit,
     StepUpGuard stepUp,
     IEvents events,

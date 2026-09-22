@@ -30,6 +30,7 @@ using Janus.Hosting.Passwords;
 using Janus.Hosting.Privacy;
 using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
+using Janus.Hosting.Sending;
 using Janus.Hosting.Sessions;
 using Janus.Privacy;
 using Janus.Privacy.Consents;
@@ -141,6 +142,11 @@ public static class JanusRegistration
         // decides whether it goes.
         services.AddScoped<SmsBalance>();
         services.AddScoped<SendingService>();
+
+        // LIB-EXT-001: the shipped handler carries email and SMS; a deployment that
+        // registers its own before this runs keeps it.
+        services.TryAddScoped<INotificationHandler>(
+            provider => provider.GetRequiredService<SendingService>());
         services.AddScoped(services => new PhoneSignals(
             services.GetService<PhoneSignalProvider>(),
             services.GetRequiredService<IPhoneSignalAudit>(),

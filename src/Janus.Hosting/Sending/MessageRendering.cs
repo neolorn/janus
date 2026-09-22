@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace Janus.Authentication.Sending;
+namespace Janus.Hosting.Sending;
 
 /// <summary>
 /// Putting the library's values into the places a template leaves for them. The

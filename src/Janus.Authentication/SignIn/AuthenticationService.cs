@@ -68,7 +68,7 @@ internal sealed class AuthenticationService(
     SessionService sessions,
     PolicyResolution policies,
     ThrottleService throttle,
-    SendingService sending,
+    INotificationHandler sending,
     VerificationCodes codes,
     IConfigurationStore configuration,
     IUnitOfWork work,

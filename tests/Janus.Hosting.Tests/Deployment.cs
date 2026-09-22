@@ -39,6 +39,7 @@ using Janus.Hosting.Oidc;
 using Janus.Hosting.Privacy;
 using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
+using Janus.Hosting.Sending;
 using Janus.Hosting.Tests.Bff;
 using Janus.Privacy;
 using Janus.Privacy.Consents;
@@ -408,6 +409,8 @@ internal sealed class Deployment : IAsyncDisposable
 
         _ = services.AddScoped<SmsBalance>();
         _ = services.AddScoped<SendingService>();
+        _ = services.AddScoped<INotificationHandler>(
+            provider => provider.GetRequiredService<SendingService>());
         _ = services.AddSingleton<IPhoneSignalAudit, PhoneSignalAuditInMemory>();
         _ = services.AddScoped(provider => new PhoneSignals(
             provider.GetService<PhoneSignalProvider>(),

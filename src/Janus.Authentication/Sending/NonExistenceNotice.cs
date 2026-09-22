@@ -25,7 +25,7 @@ namespace Janus.Authentication.Sending;
 /// </remarks>
 internal sealed class NonExistenceNotice(
     IConfigurationStore configuration,
-    SendingService sending,
+    INotificationHandler sending,
     INoticeLedger ledger,
     IUnitOfWork work,
     IEvents events,

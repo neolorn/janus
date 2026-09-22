@@ -4,12 +4,16 @@ using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Sending;
+using Janus.Authentication.Tests;
+using Janus.Authentication.Tests.Alerting;
 using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Hosting.Alerting;
+using Janus.Hosting.Sending;
 using Xunit;
 
-namespace Janus.Authentication.Tests.Alerting;
+namespace Janus.Hosting.Tests.Alerting;
 
 /// <summary>
 /// What carries a raised condition to the people who have to see it: email for all

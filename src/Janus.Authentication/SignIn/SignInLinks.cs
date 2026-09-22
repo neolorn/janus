@@ -42,7 +42,7 @@ internal sealed class SignInLinks(
     IIdentifierDirectory identifiers,
     IAccountDirectory accounts,
     PolicyResolution policies,
-    SendingService sending,
+    INotificationHandler sending,
     NonExistenceNotice nonExistence,
     ThrottleService throttle,
     IConfigurationStore configuration,

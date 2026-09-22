@@ -53,33 +53,16 @@ public sealed class LossReportsTests : IAsyncDisposable
     private readonly CredentialAuditInMemory _credentials = new();
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
-    private readonly SendLedgerInMemory _ledger = new();
-    private readonly MessageTemplatesInMemory _templates = new();
-    private readonly MailTransportInMemory _mail = new();
-    private readonly SmsTransportInMemory _sms = new();
-    private readonly SmsBalanceLedgerInMemory _balances = new();
     private readonly ConfigurationInMemory _configuration = new();
+    private readonly NotificationHandlerInMemory _notifications = new();
     private readonly UnitOfWorkInMemory _work = new();
-    private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
 
     /// <summary>
     /// A deployment that can send the notices the window carries.
     /// </summary>
-    public LossReportsTests()
-    {
-        _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
-
-        foreach (SendKind kind in Enum.GetValues<SendKind>())
-        {
-            _templates.Set(
-                MessageKind.SecurityNotice,
-                kind,
-                Language,
-                new MessageTemplate(kind is SendKind.Email ? "subject" : null, "{token}"));
-        }
-    }
+    public LossReportsTests() => _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
@@ -108,7 +91,7 @@ public sealed class LossReportsTests : IAsyncDisposable
         Assert.NotNull(reported);
         Assert.Equal(_clock.GetUtcNow() + TimeSpan.FromDays(7), reported.InvalidatesAt);
         Assert.Equal(AuthenticatorState.Suspended, await StateAsync(generator));
-        Assert.NotEmpty(_mail.Taken);
+        Assert.NotEmpty(_notifications.Mail);
     }
 
     /// <summary>
@@ -222,7 +205,7 @@ public sealed class LossReportsTests : IAsyncDisposable
         Assert.True(Succeeded(await Service.CancelAsync(
             AccessContext.Of(new SubjectId(Guid.NewGuid())),
             generator,
-            _mail.Taken[^1].Body.Trim(),
+            _notifications.Mail[^1].Values["token"],
             TestContext.Current.CancellationToken)));
 
         Assert.Equal(AuthenticatorState.Active, await StateAsync(generator));
@@ -239,8 +222,7 @@ public sealed class LossReportsTests : IAsyncDisposable
         SubjectId subject = await AccountAsync();
         AuthenticatorId generator = await EnrolledAsync(subject);
 
-        _mail.Accepts = false;
-        _sms.Accepts = false;
+        _notifications.Refusal = Error.From(ErrorCodes.SystemFault);
 
         _ = await Service.ReportAsync(
             AccessContext.Of(subject),
@@ -413,15 +395,15 @@ public sealed class LossReportsTests : IAsyncDisposable
             Source,
             TestContext.Current.CancellationToken);
 
-        string first = _mail.Taken[^1].Body.Trim();
-        int sent = _mail.Taken.Count;
+        string first = _notifications.Mail[^1].Values["token"];
+        int sent = _notifications.Mail.Count;
 
         _clock.Advance(TimeSpan.FromDays(1));
 
         _ = await Service.AdvanceAsync(TestContext.Current.CancellationToken);
 
-        Assert.True(_mail.Taken.Count > sent);
-        Assert.Equal(first, _mail.Taken[^1].Body.Trim());
+        Assert.True(_notifications.Mail.Count > sent);
+        Assert.Equal(first, _notifications.Mail[^1].Values["token"]);
     }
 
     private LossReports Service =>
@@ -432,7 +414,7 @@ public sealed class LossReportsTests : IAsyncDisposable
             _sets,
             _identifiers,
             Policies,
-            Sending,
+            _notifications,
             _credentials,
             _configuration,
             _work,
@@ -461,21 +443,6 @@ public sealed class LossReportsTests : IAsyncDisposable
             _configuration,
             _work,
             _clock);
-
-    private SendingService Sending =>
-        new(
-            _configuration,
-            _ledger,
-            _templates,
-            _mail,
-            _sms,
-            RestrictionKeySuppliers.None,
-            Considered.Nothing(_work, _clock),
-            new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
-            _work,
-            _events,
-            _clock,
-            _randomness);
 
     private string Code(AuthenticatorId generator) =>
         new Totp(

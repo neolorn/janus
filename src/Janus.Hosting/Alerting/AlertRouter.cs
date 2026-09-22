@@ -4,11 +4,12 @@ using System.Globalization;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 
-namespace Janus.Authentication.Alerting;
+namespace Janus.Hosting.Alerting;
 
 /// <summary>
 /// What carries a raised condition to the people who have to see it: email for every
@@ -27,7 +28,7 @@ namespace Janus.Authentication.Alerting;
 /// </remarks>
 internal sealed class AlertRouter(
     IConfigurationStore configuration,
-    SendingService sending,
+    INotificationHandler sending,
     IAlertLedger ledger,
     IUnitOfWork work,
     IAlertLog log)

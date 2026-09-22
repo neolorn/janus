@@ -68,46 +68,18 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     private readonly AccessGateInMemory _gate = new();
     private readonly LocationResolverInMemory _locations = new();
     private readonly ThrottleLedgerInMemory _throttle = new();
-    private readonly SendLedgerInMemory _ledger = new();
     private readonly NoticeLedgerInMemory _notices = new();
-    private readonly MessageTemplatesInMemory _templates = new();
-    private readonly MailTransportInMemory _mail = new();
-    private readonly SmsTransportInMemory _sms = new();
-    private readonly SmsBalanceLedgerInMemory _balances = new();
     private readonly ConfigurationInMemory _configuration = new();
+    private readonly NotificationHandlerInMemory _notifications = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
 
     /// <summary>
-    /// A deployment that can send, whose templates carry the token the message is
-    /// read back from in these tests.
+    /// A deployment that can send.
     /// </summary>
-    public RecoveryServiceTests()
-    {
-        _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
-
-        MessageKind[] messages =
-        [
-            MessageKind.RecoveryLink,
-            MessageKind.EnrolmentLink,
-            MessageKind.SecurityNotice,
-            MessageKind.NoAccount,
-        ];
-
-        foreach (SendKind kind in Enum.GetValues<SendKind>())
-        {
-            foreach (MessageKind message in messages)
-            {
-                _templates.Set(
-                    message,
-                    kind,
-                    Language,
-                    new MessageTemplate(kind is SendKind.Email ? "subject" : null, "{token}"));
-            }
-        }
-    }
+    public RecoveryServiceTests() => _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
@@ -289,7 +261,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             Source,
             TestContext.Current.CancellationToken)));
 
-        Assert.Empty(_mail.Taken);
+        Assert.Empty(_notifications.Mail);
     }
 
     /// <summary>
@@ -319,7 +291,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
                 Source,
                 TestContext.Current.CancellationToken)));
 
-        _mail.Taken.Clear();
+        _notifications.Sent.Clear();
         _clock.Advance(TimeSpan.FromMinutes(5));
 
         _ = await Service.BeginAsync(Address, Language, Source, TestContext.Current.CancellationToken);
@@ -373,10 +345,10 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
         _configuration.Set(Settings.RecoveryApproversRequired, 2);
 
         Assert.Null(Value(await Approving(first, opened, subject, Reason))!.EnrolmentLinkExpiresAt);
-        Assert.Empty(_mail.Taken);
+        Assert.Empty(_notifications.Mail);
 
         Assert.NotNull(Value(await Approving(second, another, subject, Reason))!.EnrolmentLinkExpiresAt);
-        Assert.NotEmpty(_mail.Taken);
+        Assert.NotEmpty(_notifications.Mail);
     }
 
     /// <summary>
@@ -418,9 +390,9 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             ErrorCodes.RecoveryChannelNotOnAccount,
             Refused(await Approving(approver, session, subject, Reason, Elsewhere)));
 
-        Assert.Empty(_mail.Taken);
+        Assert.Empty(_notifications.Mail);
         Assert.NotNull(Value(await Approving(approver, session, subject, Reason, Address)));
-        Assert.Equal(Address, _mail.Taken[0].Destination.Value);
+        Assert.Equal(Address, _notifications.Mail[0].Destination.Canonical);
     }
 
     /// <summary>
@@ -493,7 +465,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
                 recovery,
                 TestContext.Current.CancellationToken)));
 
-        _mail.Taken.Clear();
+        _notifications.Sent.Clear();
         _clock.Advance(TimeSpan.FromMinutes(5));
 
         _ = await Approving(approver, session, subject, Reason);
@@ -534,7 +506,9 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
 
         Assert.NotNull(opened);
         Assert.True(opened.MailboxLost);
-        Assert.Contains(_mail.Taken, sent => string.Equals(sent.Destination.Value, Address, StringComparison.Ordinal));
+        Assert.Contains(
+            _notifications.Mail,
+            sent => string.Equals(sent.Destination.Canonical, Address, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -553,14 +527,14 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             ErrorCodes.RecoveryChannelNotOnAccount,
             Refused(await Approving(approver, session, subject, Reason, Elsewhere)));
         Assert.DoesNotContain(
-            _mail.Taken,
-            sent => string.Equals(sent.Destination.Value, Elsewhere, StringComparison.Ordinal));
+            _notifications.Mail,
+            sent => string.Equals(sent.Destination.Canonical, Elsewhere, StringComparison.Ordinal));
 
         _ = await Approving(approver, session, subject, Reason, "  PERSON@Example.TEST ");
 
         Assert.Contains(
-            _mail.Taken,
-            sent => string.Equals(sent.Destination.Value, Address, StringComparison.Ordinal));
+            _notifications.Mail,
+            sent => string.Equals(sent.Destination.Canonical, Address, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -578,12 +552,12 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
         Assert.Equal(
             ErrorCodes.RecoveryReasonRequired,
             Refused(await Approving(approver, session, subject, "  ", Number)));
-        Assert.Empty(_sms.Taken);
+        Assert.Empty(_notifications.Texts);
         Assert.Empty(_approvals.All);
 
         _ = await Approving(approver, session, subject, Reason, Number);
 
-        Assert.NotEmpty(_sms.Taken);
+        Assert.NotEmpty(_notifications.Texts);
         Assert.Equal(IdentifierKind.Phone, Assert.Single(_recorded.Written).Channel);
         Assert.Equal(Reason, _recorded.Written[^1].Reason);
     }
@@ -623,7 +597,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             Source,
             TestContext.Current.CancellationToken)));
 
-        Assert.Equal(Elsewhere, _mail.Taken[0].Destination.Value);
+        Assert.Equal(Elsewhere, _notifications.Mail[0].Destination.Canonical);
     }
 
     private RecoveryService Service =>
@@ -641,8 +615,8 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             Sessions,
             new StepUpGuard(_live, _authenticators, _passwords, Policies, _clock),
             _gate,
-            Sending,
-            new NonExistenceNotice(_configuration, Sending, _notices, _work, _events, _clock),
+            _notifications,
+            new NonExistenceNotice(_configuration, _notifications, _notices, _work, _events, _clock),
             Throttle,
             _events,
             _configuration,
@@ -658,7 +632,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             _sets,
             _identifiers,
             Policies,
-            Sending,
+            _notifications,
             _credentials,
             _configuration,
             _work,
@@ -691,21 +665,6 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             _work,
             _clock);
 
-    private SendingService Sending =>
-        new(
-            _configuration,
-            _ledger,
-            _templates,
-            _mail,
-            _sms,
-            RestrictionKeySuppliers.None,
-            Considered.Nothing(_work, _clock),
-            new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
-            _work,
-            _events,
-            _clock,
-            _randomness);
-
     private static CredentialLabel Label(string entered) =>
         CredentialLabel.TryParse(entered, out CredentialLabel label)
             ? label
@@ -731,9 +690,9 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken);
 
     // The token the last message carried, which is what a person would open.
-    private string Sent() => _mail.Taken[^1].Body.Trim();
+    private string Sent() => _notifications.Mail[^1].Values["token"];
 
-    private string Texted() => _sms.Taken[^1].Text.Trim();
+    private string Texted() => _notifications.Texts[^1].Values["token"];
 
     private AuthenticatorId Enrolled(SubjectId subject, Factor factor)
     {

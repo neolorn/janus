@@ -46,18 +46,14 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     private readonly IdentifierDirectoryInMemory _directory = new();
     private readonly PendingVerificationStoreInMemory _pending = new();
     private readonly RecoveryLinkStoreInMemory _links = new();
-    private readonly SendLedgerInMemory _ledger = new();
     private readonly NoticeLedgerInMemory _notices = new();
-    private readonly MessageTemplatesInMemory _templates = new();
-    private readonly MailTransportInMemory _mail = new();
-    private readonly SmsTransportInMemory _sms = new();
-    private readonly SmsBalanceLedgerInMemory _balances = new();
     private readonly SessionStoreInMemory _sessions = new();
     private readonly AuthenticatorStoreInMemory _authenticators = new();
     private readonly PasswordStoreInMemory _passwords = new();
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly ConfigurationInMemory _configuration = new();
+    private readonly NotificationHandlerInMemory _notifications = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
@@ -75,32 +71,13 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
         _person = SubjectId.New(_randomness);
         _passwords.Hold(_person, Noon);
 
-        Template(MessageKind.VerificationCode, "code", "{code} {token}");
-        Template(MessageKind.AccountExists, "exists", "exists");
-        Template(MessageKind.IdentifierAdded, "added", "added");
-        Template(MessageKind.IdentifierRemoved, "removed", "{token}");
-        Template(MessageKind.IdentifierDetached, "detached", "detached");
-        Template(MessageKind.IdentifierSettingsChanged, "settings", "settings");
-        Template(MessageKind.IdentifierChangeConfirm, "confirm", "{token}");
     }
 
     private IdentifierService Service =>
         new(
             _directory,
             _pending,
-            new SendingService(
-                _configuration,
-                _ledger,
-                _templates,
-                _mail,
-                _sms,
-                RestrictionKeySuppliers.None,
-                Considered.Nothing(_work, _clock),
-                new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
-                _work,
-                _events,
-                _clock,
-                _randomness),
+            _notifications,
             _notices,
             _sessions,
             new StepUpGuard(
@@ -180,9 +157,9 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
         await AddedAsync(Third);
 
-        string[] told = [.. _mail.Taken
-            .Where(message => message.Subject is "added")
-            .Select(message => message.Destination.Value)];
+        string[] told = [.. _notifications.Mail
+            .Where(sent => sent.Message is MessageKind.IdentifierAdded)
+            .Select(sent => sent.Destination.Canonical)];
 
         Assert.Equal([Primary, Second], [.. told.Order(StringComparer.Ordinal)]);
     }
@@ -347,15 +324,15 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
             Source,
             TestContext.Current.CancellationToken));
 
-        MailMessage left = _mail.Taken.Single(message =>
-            string.Equals(message.Destination.Value, Second, StringComparison.Ordinal));
-        MailMessage kept = _mail.Taken.Single(message =>
-            string.Equals(message.Destination.Value, Primary, StringComparison.Ordinal));
+        SendRequest left = _notifications.Mail.Single(sent =>
+            string.Equals(sent.Destination.Canonical, Second, StringComparison.Ordinal));
+        SendRequest kept = _notifications.Mail.Single(sent =>
+            string.Equals(sent.Destination.Canonical, Primary, StringComparison.Ordinal));
 
-        Assert.Equal("detached", left.Subject);
-        Assert.Equal("detached", left.Body);
-        Assert.Equal("removed", kept.Subject);
-        Assert.NotEqual("{token}", kept.Body);
+        Assert.Equal(MessageKind.IdentifierDetached, left.Message);
+        Assert.Empty(left.Values);
+        Assert.Equal(MessageKind.IdentifierRemoved, kept.Message);
+        Assert.NotEmpty(kept.Values["token"]);
 
         Assert.True(await _directory.IsReservedAsync(
             IdentifierKind.Email,
@@ -433,7 +410,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
         // What went out is the notice the holder of the number gets, not a code the
         // account asking could enter (REG-SESS-005).
-        Assert.Equal("exists", Assert.Single(_sms.Taken).Text);
+        Assert.Equal(MessageKind.AccountExists, Assert.Single(_notifications.Texts).Message);
         Assert.Empty(_pending.All);
         Assert.Equal(other, await _directory.OwnerAsync(
             IdentifierKind.Phone,
@@ -505,9 +482,9 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
             Source,
             TestContext.Current.CancellationToken));
 
-        string[] told = [.. _mail.Taken
-            .Where(message => message.Subject is "settings")
-            .Select(message => message.Destination.Value)
+        string[] told = [.. _notifications.Mail
+            .Where(sent => sent.Message is MessageKind.IdentifierSettingsChanged)
+            .Select(sent => sent.Destination.Canonical)
             .Order(StringComparer.Ordinal)];
 
         Assert.Equal([Primary, Second], told);
@@ -541,7 +518,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
         Assert.DoesNotContain(
             await HeldAsync(),
             identifier => string.Equals(identifier.Canonical, Primary, StringComparison.Ordinal));
-        Assert.Contains(_sms.Taken, message => message.Text is not "exists");
+        Assert.Contains(_notifications.Texts, sent => sent.Message is not MessageKind.AccountExists);
     }
 
     /// <summary>
@@ -567,11 +544,12 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
         Assert.Equal(Primary, Named(await HeldAsync(), Primary).Canonical);
 
-        MailMessage asked = _mail.Taken.Last(message => message.Subject is "confirm");
+        SendRequest asked = _notifications.Mail.Last(
+            sent => sent.Message is MessageKind.IdentifierChangeConfirm);
 
         Accepted(await Service.LandAsync(
             session: null,
-            asked.Body,
+            asked.Values["token"],
             press: true,
             Source,
             TestContext.Current.CancellationToken));
@@ -599,7 +577,9 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
             Source,
             TestContext.Current.CancellationToken));
 
-        Assert.DoesNotContain(_mail.Taken, message => message.Subject is "confirm");
+        Assert.DoesNotContain(
+            _notifications.Mail,
+            sent => sent.Message is MessageKind.IdentifierChangeConfirm);
 
         Accepted(await Service.VerifyAsync(
             opened,
@@ -742,9 +722,10 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken));
     }
 
-    // The undo the remaining channels were sent, which is the whole body of the
-    // message the template put it in.
-    private string Undo() => _mail.Taken.Last(message => message.Subject is "removed").Body;
+    // The undo the remaining channels were sent, which is what the removal notice
+    // carries for the deployment's template to put in its words.
+    private string Undo() =>
+        _notifications.Mail.Last(sent => sent.Message is MessageKind.IdentifierRemoved).Values["token"];
 
     private async Task<IReadOnlyList<HeldIdentifier>> HeldAsync() =>
         (await _directory.HeldAsync(_person, TestContext.Current.CancellationToken)).All;
@@ -766,18 +747,4 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
         outcome.Match<ErrorCode>(
             () => throw new Xunit.Sdk.XunitException("The operation was admitted."),
             error => error.Code);
-
-    // The catalogue as a deployment fills it, with a subject a test can read the
-    // message kind off and a text that carries whatever the send put in it.
-    private void Template(MessageKind message, string subject, string text)
-    {
-        foreach (SendKind kind in Enum.GetValues<SendKind>())
-        {
-            _templates.Set(
-                message,
-                kind,
-                "en",
-                new MessageTemplate(kind is SendKind.Email ? subject : null, text));
-        }
-    }
 }

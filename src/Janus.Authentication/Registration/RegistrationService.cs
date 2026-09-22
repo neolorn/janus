@@ -49,7 +49,7 @@ namespace Janus.Authentication.Registration;
 internal sealed class RegistrationService(
     IRegistrationSessionStore sessions,
     IRegistrationDirectory directory,
-    SendingService sending,
+    INotificationHandler sending,
     INoticeLedger notices,
     PasswordService passwords,
     IPasswordStore passwordStore,

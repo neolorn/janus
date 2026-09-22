@@ -6,12 +6,16 @@ using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Sending;
+using Janus.Authentication.Tests;
+using Janus.Authentication.Tests.Alerting;
 using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Hosting.Alerting;
+using Janus.Hosting.Sending;
 using Xunit;
 
-namespace Janus.Authentication.Tests.Alerting;
+namespace Janus.Hosting.Tests.Alerting;
 
 /// <summary>
 /// Moving the alerting somewhere else, which is the one change that could blind a

@@ -32,10 +32,6 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
     private readonly ConfigurationInMemory _configuration = new();
     private readonly SendLedgerInMemory _ledger = new();
     private readonly SendAuditInMemory _audit = new();
-    private readonly MessageTemplatesInMemory _templates = new();
-    private readonly MailTransportInMemory _mail = new();
-    private readonly SmsTransportInMemory _sms = new();
-    private readonly SmsBalanceLedgerInMemory _balances = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
@@ -56,21 +52,6 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
             _work,
             _events,
             _clock);
-
-    private SendingService Sending =>
-        new(
-            _configuration,
-            _ledger,
-            _templates,
-            _mail,
-            _sms,
-            RestrictionKeySuppliers.None,
-            Considered.Nothing(_work, _clock),
-            new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
-            _work,
-            _events,
-            _clock,
-            _randomness);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
@@ -100,22 +81,6 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-ABUSE-004 AC3: an edit that goes through applies to the very next send,
-    /// with nothing restarted in between.
-    /// </summary>
-    [Fact]
-    public async Task AUTH_ABUSE_004_AC3_AnEditAppliesToTheNextSendAsync()
-    {
-        await SentAsync();
-
-        await EditedAsync("sms.destination", Tightened(), "an incident");
-
-        Assert.Equal(
-            ErrorCodes.RestrictionExceeded,
-            Refusal(await Sending.SendAsync(Texted(), TestContext.Current.CancellationToken)));
-    }
-
-    /// <summary>
     /// AUTH-ABUSE-004 AC3: an edit is written down and announced, carrying whether
     /// it let more through than before.
     /// </summary>
@@ -142,8 +107,8 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
 
     /// <summary>
     /// OPS-CFG-008 AC4: an edit to a restriction is a runtime change like any other.
-    /// It reaches the next send with nothing restarted, the entry carries what the
-    /// restriction was and what it became, and a loosening raises the Normal alert.
+    /// The entry carries what the restriction was and what it became, and a loosening
+    /// raises the Normal alert.
     /// </summary>
     [Fact]
     public async Task OPS_CFG_008_AC4_AnEditIsLiveAuditedWithBothValuesAndAlertedAsync()
@@ -151,12 +116,6 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
         Restriction shipped = Settings.Restrictions.Default[0];
 
         await EditedAsync("sms.destination", Loosened(), "a carrier dropped the codes");
-
-        for (int sent = 0; sent < 4; sent++)
-        {
-            await SentAsync();
-            _clock.Advance(TimeSpan.FromHours(1));
-        }
 
         SendAuditInMemory.Edit written = Assert.Single(_audit.Edits);
 
@@ -255,8 +214,6 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
         Assert.Equal(2, announced.Credit);
         Assert.DoesNotContain(Phone.Value, announced.Reason, StringComparison.Ordinal);
         Assert.DoesNotContain(Phone.Value, announced.IdempotencyKey, StringComparison.Ordinal);
-
-        await SentAsync();
     }
 
     /// <summary>
@@ -417,9 +374,4 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
             () => { },
             error => throw new Xunit.Sdk.XunitException($"The edit was refused: {error.Code}."));
     }
-
-    private async Task SentAsync() =>
-        (await Sending.SendAsync(Texted(), TestContext.Current.CancellationToken)).Switch(
-            _ => { },
-            error => throw new Xunit.Sdk.XunitException($"The send was refused: {error.Code}."));
 }

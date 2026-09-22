@@ -104,7 +104,7 @@ internal sealed class DeliveryReports(
         }
 
         bool released = await ledger
-            .ReleaseAsync(SendReference.FingerprintOf(reference), cancellationToken)
+            .ReleaseAsync(SendReferences.Of(reference), cancellationToken)
             .ConfigureAwait(false);
 
         if (!released)
