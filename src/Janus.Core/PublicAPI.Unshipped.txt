@@ -560,8 +560,10 @@ Janus.Core.DeclaredPurpose.Consent.get -> Janus.Core.ConsentKind?
 Janus.Core.DeclaredPurpose.Consent.init -> void
 Janus.Core.DeclaredPurpose.DataCategories.get -> System.Collections.Generic.IReadOnlyList<string!>!
 Janus.Core.DeclaredPurpose.DataCategories.init -> void
-Janus.Core.DeclaredPurpose.DeclaredPurpose(string! Name, Janus.Core.LawfulBasisDeclaration! Basis, Janus.Core.ConsentKind? Consent, string? Assessment, System.Collections.Generic.IReadOnlyList<string!>! DataCategories, System.Collections.Generic.IReadOnlyList<string!>! SubjectCategories, System.Collections.Generic.IReadOnlyList<string!>! SensitiveCategories, System.Collections.Generic.IReadOnlyList<Janus.Core.ResourceType>! Types) -> void
-Janus.Core.DeclaredPurpose.Deconstruct(out string! Name, out Janus.Core.LawfulBasisDeclaration! Basis, out Janus.Core.ConsentKind? Consent, out string? Assessment, out System.Collections.Generic.IReadOnlyList<string!>! DataCategories, out System.Collections.Generic.IReadOnlyList<string!>! SubjectCategories, out System.Collections.Generic.IReadOnlyList<string!>! SensitiveCategories, out System.Collections.Generic.IReadOnlyList<Janus.Core.ResourceType>! Types) -> void
+Janus.Core.DeclaredPurpose.DeclaredPurpose(string! Name, Janus.Core.LawfulBasisDeclaration! Basis, Janus.Core.ConsentKind? Consent, string? Assessment, System.Collections.Generic.IReadOnlyList<string!>! DataCategories, System.Collections.Generic.IReadOnlyList<string!>! SubjectCategories, System.Collections.Generic.IReadOnlyList<string!>! SensitiveCategories, System.Collections.Generic.IReadOnlyList<Janus.Core.ResourceType>! Types, string? Document) -> void
+Janus.Core.DeclaredPurpose.Deconstruct(out string! Name, out Janus.Core.LawfulBasisDeclaration! Basis, out Janus.Core.ConsentKind? Consent, out string? Assessment, out System.Collections.Generic.IReadOnlyList<string!>! DataCategories, out System.Collections.Generic.IReadOnlyList<string!>! SubjectCategories, out System.Collections.Generic.IReadOnlyList<string!>! SensitiveCategories, out System.Collections.Generic.IReadOnlyList<Janus.Core.ResourceType>! Types, out string? Document) -> void
+Janus.Core.DeclaredPurpose.Document.get -> string?
+Janus.Core.DeclaredPurpose.Document.init -> void
 Janus.Core.DeclaredPurpose.Equals(Janus.Core.DeclaredPurpose? other) -> bool
 Janus.Core.DeclaredPurpose.Name.get -> string!
 Janus.Core.DeclaredPurpose.Name.init -> void
@@ -1644,11 +1646,13 @@ Janus.Core.PurposeDeclaration.Consent.get -> Janus.Core.ConsentKind?
 Janus.Core.PurposeDeclaration.Consent.init -> void
 Janus.Core.PurposeDeclaration.DataCategories.get -> System.Collections.Generic.IReadOnlyList<string!>!
 Janus.Core.PurposeDeclaration.DataCategories.init -> void
-Janus.Core.PurposeDeclaration.Deconstruct(out string! Name, out string! Basis, out string? Assessment, out System.Collections.Generic.IReadOnlyList<string!>! DataCategories, out System.Collections.Generic.IReadOnlyList<string!>! SubjectCategories, out Janus.Core.ConsentKind? Consent) -> void
+Janus.Core.PurposeDeclaration.Deconstruct(out string! Name, out string! Basis, out string? Assessment, out System.Collections.Generic.IReadOnlyList<string!>! DataCategories, out System.Collections.Generic.IReadOnlyList<string!>! SubjectCategories, out Janus.Core.ConsentKind? Consent, out string? Document) -> void
+Janus.Core.PurposeDeclaration.Document.get -> string?
+Janus.Core.PurposeDeclaration.Document.init -> void
 Janus.Core.PurposeDeclaration.Equals(Janus.Core.PurposeDeclaration? other) -> bool
 Janus.Core.PurposeDeclaration.Name.get -> string!
 Janus.Core.PurposeDeclaration.Name.init -> void
-Janus.Core.PurposeDeclaration.PurposeDeclaration(string! Name, string! Basis, string? Assessment, System.Collections.Generic.IReadOnlyList<string!>! DataCategories, System.Collections.Generic.IReadOnlyList<string!>! SubjectCategories, Janus.Core.ConsentKind? Consent) -> void
+Janus.Core.PurposeDeclaration.PurposeDeclaration(string! Name, string! Basis, string? Assessment, System.Collections.Generic.IReadOnlyList<string!>! DataCategories, System.Collections.Generic.IReadOnlyList<string!>! SubjectCategories, Janus.Core.ConsentKind? Consent, string? Document) -> void
 Janus.Core.PurposeDeclaration.SubjectCategories.get -> System.Collections.Generic.IReadOnlyList<string!>!
 Janus.Core.PurposeDeclaration.SubjectCategories.init -> void
 Janus.Core.ReauthenticationKind
@@ -1887,7 +1891,7 @@ Janus.Core.ResourceTypeDeclarationBuilder<TResource>.ContainedIn(string! contain
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Derivation(string! relationship, string! role, bool materialised = false) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Discloses() -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Encrypted(System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! field, System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! subject) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
-Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Purpose(string! name, string! basis, string? assessment = null, System.Collections.Generic.IReadOnlyList<string!>? data = null, System.Collections.Generic.IReadOnlyList<string!>? subjects = null, Janus.Core.ConsentKind? consent = null) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
+Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Purpose(string! name, string! basis, string? assessment = null, System.Collections.Generic.IReadOnlyList<string!>? data = null, System.Collections.Generic.IReadOnlyList<string!>? subjects = null, Janus.Core.ConsentKind? consent = null, string? document = null) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Sensitive(string! category) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.Restriction
 Janus.Core.Restriction.<Clone>$() -> Janus.Core.Restriction!

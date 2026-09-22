@@ -27,6 +27,8 @@ public sealed class SupersessionTests : IAsyncDisposable
 
     private const string Security = "security";
 
+    private const string Newsletter = "newsletter";
+
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly SubjectId Ahmed =
@@ -70,7 +72,7 @@ public sealed class SupersessionTests : IAsyncDisposable
         new(
             _documents,
             new AdministrativeScope(_gate, _memberships),
-            new Supersession(_consents, _events),
+            new Supersession(_consents, Declaration.Processing, _events),
             _configuration,
             _audit,
             _alerts,
@@ -208,8 +210,8 @@ public sealed class SupersessionTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// PRIV-CONS-007: a material revision of another document ends no consent,
-    /// because a consent record names the version of the notice and of nothing else.
+    /// PRIV-CONS-007: a material revision of a document no purpose names ends no
+    /// consent, because there is nothing it governs.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -224,6 +226,95 @@ public sealed class SupersessionTests : IAsyncDisposable
 
         Assert.True(Assert.Single(await HeldAsync(Ahmed)).Live);
     }
+
+    /// <summary>
+    /// PRIV-CONS-001, PRIV-CONS-007: a consent is recorded against the version of the
+    /// document its purpose names, and not against the notice's, which is the same
+    /// document a material revision of ends it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_007_AConsentNamesTheVersionOfItsOwnGoverningDocumentAsync()
+    {
+        Holds(Declaration.Newsletter, "7");
+
+        await GrantAsync(Ahmed, Newsletter);
+
+        Assert.Equal("7", Assert.Single(await HeldAsync(Ahmed)).NoticeVersion);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-007: a material revision of a document ends the live consents of the
+    /// purposes that name it, and of no others.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_007_AC1_AMaterialRevisionEndsTheConsentsOfThePurposesNamingItAsync()
+    {
+        Holds(Declaration.Newsletter, "1");
+
+        await GrantAsync(Ahmed, Recommendations);
+        await GrantAsync(Ahmed, Newsletter);
+
+        await PublishAsync(Declaration.Newsletter, material: true);
+
+        IReadOnlyList<ConsentRecord> held = await HeldAsync(Ahmed);
+
+        Assert.True(Assert.Single(held, record => record.Purpose == Recommendations).Live);
+        Assert.False(Assert.Single(held, record => record.Purpose == Newsletter).Live);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-007: a purpose that names a document of its own is untouched by a
+    /// material revision of the notice, although the version it was recorded against
+    /// is not the notice version just published.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_007_AC2_ARevisionOfTheNoticeLeavesAPurposeNamingAnotherDocumentAsync()
+    {
+        Holds(Declaration.Newsletter, "1");
+
+        await GrantAsync(Ahmed, Recommendations);
+        await GrantAsync(Ahmed, Newsletter);
+
+        await PublishAsync(material: true);
+
+        IReadOnlyList<ConsentRecord> held = await HeldAsync(Ahmed);
+
+        Assert.False(Assert.Single(held, record => record.Purpose == Recommendations).Live);
+        Assert.True(Assert.Single(held, record => record.Purpose == Newsletter).Live);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-005: a consent stands against a version of the document that governs
+    /// it, so before any version of that document is published there is nothing for
+    /// it to stand against, whatever the notice stands at.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_005_AGrantIsRefusedBeforeItsGoverningDocumentIsPublishedAsync()
+    {
+        Result granted = await Consents.GrantAsync(
+            AccessContext.Of(Ahmed),
+            Newsletter,
+            ConsentMechanism.Dashboard,
+            CancellationToken.None);
+
+        Assert.Equal(
+            ErrorCodes.NoticeUnpublished,
+            granted.Match(() => (ErrorCode?)null, error => error.Code));
+        Assert.Empty(await HeldAsync(Ahmed));
+    }
+
+    private void Holds(string document, string version) =>
+        _documents.Hold(new DocumentVersion(document, version, "ar", "النص", [], Noon));
+
+    private async Task PublishAsync(string document, bool material) =>
+        _ = await Documents.PublishAsync(
+            AccessContext.Of(Officer),
+            new DocumentPublication(document, "النص الجديد", "ar", [], material),
+            CancellationToken.None);
 
     private async Task GrantAsync(SubjectId subject, string purpose) =>
         _ = await Consents.GrantAsync(

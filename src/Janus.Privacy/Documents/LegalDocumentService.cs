@@ -201,14 +201,18 @@ internal sealed class LegalDocumentService(
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await store.AddAsync(version, cancellationToken).ConfigureAwait(false);
 
-        // PRIV-CONS-007: only the notice is what a consent record names the version
-        // of, so a material revision of anything else ends no consent.
-        Result<int> ended =
-            publication.Material && string.Equals(version.DocumentName, ConsentService.Notice, StringComparison.Ordinal)
-                ? await supersession
-                    .OfAsync(version.Version, version.PublishedAt, cancellationToken)
-                    .ConfigureAwait(false)
-                : Result.Success(0);
+        // PRIV-CONS-007: a material revision ends the live consents on the purposes
+        // this document governs, which are the ones declaring it and, for the privacy
+        // notice, the ones declaring nothing.
+        Result<int> ended = publication.Material
+            ? await supersession
+                .OfAsync(
+                    version.DocumentName,
+                    version.Version,
+                    version.PublishedAt,
+                    cancellationToken)
+                .ConfigureAwait(false)
+            : Result.Success(0);
 
         if (ended.Match(_ => (Error?)null, error => error) is Error unended)
         {

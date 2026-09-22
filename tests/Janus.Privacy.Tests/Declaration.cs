@@ -8,11 +8,18 @@ namespace Janus.Privacy.Tests;
 /// consent nor objectable, and one that is objectable.
 /// </summary>
 /// <remarks>
-/// CONV-TEST-005: the four purposes are what a privacy test needs to tell the paths
-/// apart. Nothing here is the library's; a host declares its own.
+/// CONV-TEST-005: the five purposes are what a privacy test needs to tell the paths
+/// apart, the last of them governed by a document of its own. Nothing here is the
+/// library's; a host declares its own.
 /// </remarks>
 internal static class Declaration
 {
+    /// <summary>
+    /// The document governing the one purpose that names one rather than leaving the
+    /// privacy notice to govern it (PRIV-CONS-007).
+    /// </summary>
+    public const string Newsletter = "newsletter-consent";
+
     /// <summary>
     /// A person's order, which is sensitive and carries purposes on three bases at
     /// once.
@@ -83,7 +90,13 @@ internal static class Declaration
                     subjects: ["customers"]))
             .Resource<Mailing>("mailing", mailing => mailing
                 .BelongsToOrganization()
-                .Purpose("marketing", "agreement", data: ["identity"], subjects: ["customers"]));
+                .Purpose("marketing", "agreement", data: ["identity"], subjects: ["customers"])
+                .Purpose(
+                    "newsletter",
+                    "agreement",
+                    data: ["identity"],
+                    subjects: ["customers"],
+                    document: Newsletter));
 
     private static AuthorizationDeclaration Reached()
     {

@@ -54,7 +54,7 @@ public sealed class LegalDocumentTests : IAsyncDisposable
         new LegalDocumentService(
             _store,
             new AdministrativeScope(_gate, _memberships),
-            new Supersession(_consents, _events),
+            new Supersession(_consents, Declaration.Processing, _events),
             _configuration,
             _audit,
             _alerts,

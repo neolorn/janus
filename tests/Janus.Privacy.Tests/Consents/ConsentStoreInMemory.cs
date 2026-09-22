@@ -72,14 +72,20 @@ internal sealed class ConsentStoreInMemory : IConsentStore
 
     /// <inheritdoc/>
     public ValueTask<IReadOnlyList<HeldConsent>> LiveAgainstAnotherAsync(
-        string noticeVersion,
-        CancellationToken cancellationToken) =>
-        ValueTask.FromResult<IReadOnlyList<HeldConsent>>(
+        IReadOnlyCollection<string> purposes,
+        string version,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(purposes);
+
+        return ValueTask.FromResult<IReadOnlyList<HeldConsent>>(
         [
             .. _consents
                 .Where(held => held.Value.Live
-                    && !string.Equals(held.Value.NoticeVersion, noticeVersion, StringComparison.Ordinal))
+                    && purposes.Contains(held.Value.Purpose)
+                    && !string.Equals(held.Value.NoticeVersion, version, StringComparison.Ordinal))
                 .Select(held => new HeldConsent(held.Key.Subject, held.Value))
                 .OrderBy(one => one.Consent.GrantedAt),
         ]);
+    }
 }

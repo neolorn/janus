@@ -2554,6 +2554,8 @@ notice that points at it.
 the consents given against an earlier version of the privacy notice, and PRIV-CONS-007
 should drop the phrase naming the purposes the document covers.
 
+**Superseded by D-162.** Applied in entry 147.
+
 ---
 
 ## 83. A refusal `10` gives no code for is refused as denied
@@ -5101,6 +5103,72 @@ sign-in with nothing left is refused with `auth.factor.rejected`. It should say 
 question is asked of the number and that the answer to an ask is the same whether or not
 an account holds it, so AUTH-ABUSE-003 AC1 still holds. `09` section 3 should add
 `auth.factor.rejected` to what `POST /auth/link` can answer.
+
+---
+
+## 147. A purpose names the document that governs its consent
+
+**Corrections 1 · 2026-09-23 · D-162 section C, item 82 · PRIV-CONS-001 AC2,
+PRIV-CONS-005, PRIV-CONS-007, LIB-HOST-001, `09` section 7**
+
+*What D-162 decided.* A purpose declaration names the document that governs its
+consent, defaulting to the privacy notice; a material revision of a document supersedes
+the live consents of the purposes that name it; the consent record names that document's
+version. Entry 82 chose the other reading, that the privacy notice governs every consent
+and a revision of any other document supersedes none, on the ground that nothing
+declared which purposes a document covered. D-162 makes the purpose declaration that
+place.
+
+*What was built.* `PurposeDeclaration` and the resource builder take a `document`, and
+`DeclaredPurpose` carries it; absent, the privacy notice governs. A grant reads the
+current version of that document and refuses with `privacy.notice.unpublished` where it
+has none, which is the rule the notice already carried, now read of whichever document
+governs. Publication hands the document and the version to supersession, which resolves
+the purposes the document governs from the declaration and ends their live consents
+recorded against an earlier version. `IConsentStore.LiveAgainstAnotherAsync` takes those
+purposes, because a version counter is per document: two documents both stand at `1`,
+and without the purposes a revision of one would end the consents given against the
+other.
+
+*Four points D-162 does not settle, taken at the strictest reading.*
+
+1. **The record's field keeps the name `noticeVersion`.** `09` section 7 gives
+   `GET /privacy/consents` the field by that name, and a chapter wins. What changed is
+   what goes in it: the version of the document that governs the consent, which for a
+   purpose naming none is still the notice's, unchanged.
+2. **A purpose declared on two types against two documents fails startup.** One purpose
+   is one thing to the person exercising a right over it, and the document a consent is
+   recorded against has to be the document a revision of it ends. A declaration that
+   says two is a deployment that cannot answer which revision ends the consent, so it
+   is refused where the two-bases disagreement already is, in `DeclaredProcessing`. A
+   purpose naming a document on one type and nothing on another is the same
+   disagreement, because naming nothing names the notice.
+3. **An objection still stands against the notice.** A purpose on an objectable basis
+   holds no consent, so it has no consent for a document to govern; the objection record
+   goes on naming the notice version in force, which is what PRIV-RIGHT-001a has it do.
+4. **A document no purpose names supersedes nothing, and so does a material revision of
+   it.** Nothing about a document is declared except by the purposes that name it, so
+   the terms of service end no consent unless a purpose says they govern one.
+
+*Tests that pin it.*
+`SupersessionTests.PRIV_CONS_007_AConsentNamesTheVersionOfItsOwnGoverningDocumentAsync`,
+`SupersessionTests.PRIV_CONS_007_AC1_AMaterialRevisionEndsTheConsentsOfThePurposesNamingItAsync`,
+`SupersessionTests.PRIV_CONS_007_AC2_ARevisionOfTheNoticeLeavesAPurposeNamingAnotherDocumentAsync`,
+`SupersessionTests.PRIV_CONS_005_AGrantIsRefusedBeforeItsGoverningDocumentIsPublishedAsync`,
+`SupersessionTests.PRIV_CONS_007_AC1_AMaterialChangeIdentifiesWhoMustBeAskedAgainAsync`,
+`SupersessionTests.PRIV_CONS_007_AC2_AMaterialRevisionOfAnotherDocumentEndsNoConsentAsync`,
+`SupersessionTests.PRIV_CONS_007_AC2_OnlyTheConsentBasedPurposesAreSuspendedAsync`,
+`DeclaredProcessingTests.PRIV_CONS_007_APurposeDeclaredAgainstTwoDocumentsIsRefused`,
+`DeclaredProcessingTests.PRIV_CONS_007_APurposeDeclaredAgainstOneDocumentTwiceStands`,
+`ConsentStoreTests.PRIV_CONS_007_AC1_OnlyLiveConsentsAgainstAnEarlierVersionAreFoundAsync`.
+
+*Chapter text that should change.* PRIV-CONS-007's values note should say that a
+material revision supersedes the live consents of the purposes that name the document,
+and that a purpose naming none is governed by the privacy notice, rather than "the
+purposes the document covers". PRIV-CONS-001 AC2 should say that the version resolves
+to the exact text of the governing document. LIB-HOST-001's purpose declaration should
+carry the governing document. `09` section 7 should say that `noticeVersion` carries the
+version of the document that governs the purpose.
 
 
 # Rows for chapter 10

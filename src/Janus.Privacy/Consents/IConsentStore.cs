@@ -62,14 +62,16 @@ internal interface IConsentStore
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Every subject holding a live consent recorded against a version of the notice
-    /// other than the one named, which is the version just published and which
-    /// nobody has been shown yet.
+    /// Every subject holding a live consent on one of the purposes named, recorded
+    /// against a version other than the one named, which is the version just
+    /// published and which nobody has been shown yet.
     /// </summary>
-    /// <param name="noticeVersion">The version just published.</param>
+    /// <param name="purposes">The purposes the published document governs.</param>
+    /// <param name="version">The version just published.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The consents and their holders, oldest first.</returns>
     ValueTask<IReadOnlyList<HeldConsent>> LiveAgainstAnotherAsync(
-        string noticeVersion,
+        IReadOnlyCollection<string> purposes,
+        string version,
         CancellationToken cancellationToken);
 }

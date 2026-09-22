@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- A purpose declaration now names the legal document that governs its consent, and the
+  privacy notice governs the purposes that name none. A consent is recorded against the
+  version of that document, and a material revision of it ends the live consents of the
+  purposes that name it and of no others, so revising a consent text no longer leaves
+  those consents standing and revising the notice no longer ends consents a separate
+  text governs. A purpose declared on two types against two documents fails startup.
+
 - A carrier reporting a recent change of SIM or of network now withholds the entry a
   text would carry, instead of only being written down. The second-step challenge
   offers the account's other methods in its place, and a sign-in that had no other

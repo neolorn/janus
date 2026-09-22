@@ -14,7 +14,7 @@ namespace Janus.Privacy.Consents;
 /// The consent and objection records one subject holds.
 /// </summary>
 /// <param name="consents">Where the records are.</param>
-/// <param name="documents">Where the notice version a record is given against is read.</param>
+/// <param name="documents">Where the version a record is given against is read.</param>
 /// <param name="processing">What the deployment declared it processes and on what basis.</param>
 /// <param name="events">Where the change is announced.</param>
 /// <param name="audit">Where the change is written down.</param>
@@ -35,7 +35,8 @@ internal sealed class ConsentService(
     TimeProvider time) : IConsents
 {
     /// <summary>
-    /// The document a consent record names the version of (PRIV-CONS-001).
+    /// The document that governs a consent whose purpose names none, and whose
+    /// version that consent is recorded against (PRIV-CONS-001, PRIV-CONS-007).
     /// </summary>
     internal const string Notice = "privacy-notice";
 
@@ -78,15 +79,16 @@ internal sealed class ConsentService(
 
         // A purpose that rests on another basis is not the subject's to agree to, and
         // recording their agreement would imply it were (PRIV-CONS-008a).
-        if (processing.Find(purpose) is not { Consent: ConsentKind kind })
+        if (processing.Find(purpose) is not { Consent: ConsentKind kind } declared)
         {
             return Result.Failure(Error.From(ErrorCodes.PurposeNoConsent));
         }
 
-        // A consent is given against the notice version in force, so before any
-        // notice is published there is nothing for it to stand against
-        // (PRIV-CONS-005).
-        if (await VersionAsync(cancellationToken).ConfigureAwait(false) is not string version)
+        // A consent is given against the version in force of the document that
+        // governs it, so before any version of that document is published there is
+        // nothing for it to stand against (PRIV-CONS-005).
+        if (await VersionAsync(declared.Document, cancellationToken).ConfigureAwait(false)
+            is not string version)
         {
             return Result.Failure(Error.From(ErrorCodes.NoticeUnpublished));
         }
@@ -213,7 +215,8 @@ internal sealed class ConsentService(
                 JsonSerializer.SerializeToElement(purpose)));
         }
 
-        if (await VersionAsync(cancellationToken).ConfigureAwait(false) is not string version)
+        if (await VersionAsync(document: null, cancellationToken).ConfigureAwait(false)
+            is not string version)
         {
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
@@ -319,8 +322,14 @@ internal sealed class ConsentService(
         return details;
     }
 
-    private async ValueTask<string?> VersionAsync(CancellationToken cancellationToken) =>
-        (await documents.CurrentAsync(Notice, cancellationToken).ConfigureAwait(false))?.Version;
+    // PRIV-CONS-001, PRIV-CONS-007: a consent is recorded against the version of the
+    // document its purpose names, and the privacy notice where it names none, which
+    // is the same document a material revision of ends it.
+    private async ValueTask<string?> VersionAsync(
+        string? document,
+        CancellationToken cancellationToken) =>
+        (await documents.CurrentAsync(document ?? Notice, cancellationToken).ConfigureAwait(false))
+        ?.Version;
 
     private async ValueTask AnnouncedAsync(
         SubjectId subject,

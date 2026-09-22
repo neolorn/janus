@@ -92,6 +92,10 @@ public sealed class ResourceTypeDeclarationBuilder<TResource>
     /// The capture path a consent for it runs through, where the deployment states
     /// one rather than leaving it to follow from the basis and the sensitivity.
     /// </param>
+    /// <param name="document">
+    /// The legal document whose version a consent for it is recorded against, where
+    /// the deployment names one rather than leaving the privacy notice to govern it.
+    /// </param>
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentException">The purpose or the basis is absent or blank.</exception>
     public ResourceTypeDeclarationBuilder<TResource> Purpose(
@@ -100,11 +104,13 @@ public sealed class ResourceTypeDeclarationBuilder<TResource>
         string? assessment = null,
         IReadOnlyList<string>? data = null,
         IReadOnlyList<string>? subjects = null,
-        ConsentKind? consent = null)
+        ConsentKind? consent = null,
+        string? document = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(basis);
-        _purposes.Add(new PurposeDeclaration(name, basis, assessment, data ?? [], subjects ?? [], consent));
+        _purposes.Add(
+            new PurposeDeclaration(name, basis, assessment, data ?? [], subjects ?? [], consent, document));
 
         return this;
     }
