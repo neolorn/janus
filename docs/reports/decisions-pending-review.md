@@ -3060,6 +3060,8 @@ of two.
 *Chapter text that should change.* The `POST /account/reactivate` entry's JSON block
 should read `{ "linkToken": "..." }`.
 
+**Superseded by D-162.** Applied in entry 149.
+
 ---
 
 ## 99. The export asks for step-up through a Core port the authentication area implements
@@ -5214,6 +5216,30 @@ has to tell them apart.
 records `reconsent` where the subject holds a superseded, unwithdrawn consent for the
 purpose and `dashboard` otherwise, and that a host calling the contract names its own
 mechanism. `10` section 5.21's `reconsent` row should say the library writes it.
+
+---
+
+## 149. Reactivation's body is `linkToken`, as it was built
+
+**Corrections 1 · 2026-09-23 · D-162 section C, item 98 · `09` sections 6 and 6a,
+IDN-LIFE-013**
+
+*What D-162 decided.* `POST /account/reactivate` takes `linkToken`; the `09` block is
+corrected. That is the reading entry 98 took, so nothing in the code changes: the
+endpoint reads `linkToken`, answers `api.request.malformed` naming `linkToken` where the
+member is absent, and the four link-borne account paths keep one request shape between
+them.
+
+*What was built.* Nothing new. This entry records that D-162 settled the point the way
+entry 98 did, so the owner's reconciliation pass corrects the chapter's JSON block
+rather than the code.
+
+*Tests that pin it.*
+`AccountLifecycleFlowTests.IDN_LIFE_013_AC1_TheNoticesLinkStandsTheAccountBackUpAsync`,
+`AccountLifecycleFlowTests.IDN_ACCT_007_AC4_TheLinkEndsTheWindowAsync`.
+
+*Chapter text that should change.* The `POST /account/reactivate` entry's JSON block
+should read `{ "linkToken": "..." }`.
 
 
 # Rows for chapter 10
