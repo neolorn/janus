@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -253,6 +254,50 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
         Answer polled = await browser.SendAsync("GET", "/register");
 
         Assert.Equal(polled.Body, streamed);
+    }
+
+    /// <summary>
+    /// REG-SESS-003: what wakes the stream is the session being signalled, and the
+    /// interval is the fallback. With the interval set far enough out that the test
+    /// would still be waiting for it, what reaches the waiting screen reaches it
+    /// because the session was signalled.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_SESS_003_TheSignalWakesTheStreamBeforeTheIntervalAsync()
+    {
+        _deployment.Configuration.Set(
+            Settings.RegistrationEventsPollInterval,
+            TimeSpan.FromMinutes(5));
+
+        Browser browser = await Flow.AwaitingAsync(_deployment);
+
+        using var abort = new CancellationTokenSource();
+
+        (Task running, ResponseBody written) = browser.Open("/register/events", abort.Token);
+
+        await SettledAsync(written);
+        await Flow.VerifiedAsync(_deployment, browser, IdentifierKind.Email);
+
+        // The step is verified and the screen has heard nothing: the interval it would
+        // otherwise read on is five minutes out.
+        await SettledAsync(written);
+
+        _deployment.Signals.Raise(_deployment.Registrations.All.Single().Id);
+
+        string streamed = await SentAsync(written);
+
+        await abort.CancelAsync();
+
+        try
+        {
+            await running;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        Assert.Equal((await browser.SendAsync("GET", "/register")).Body, streamed);
     }
 
     /// <summary>

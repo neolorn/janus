@@ -583,6 +583,14 @@ public static class Settings
         new("registration.session.lifetime", SettingScope.Runtime, "PT24H", ceiling: "PT72H");
 
     /// <summary>
+    /// How often the waiting screen's stream reads the registration state back where
+    /// no signal has reached it. The floor is the interval: a press has to feel
+    /// immediate to the person waiting, and the signal is what usually answers first.
+    /// </summary>
+    public static DurationSetting RegistrationEventsPollInterval { get; } =
+        new("registration.events.pollinterval", SettingScope.Runtime, "PT1S", floor: "PT1S");
+
+    /// <summary>
     /// Verified email addresses an account may hold. One is single-address mode, where
     /// a replacement happens in one operation.
     /// </summary>
@@ -978,6 +986,7 @@ public static class Settings
         RegistrationPhone,
         RegistrationAdultAffirmation,
         RegistrationSessionLifetime,
+        RegistrationEventsPollInterval,
         IdentifiersEmailMax,
         IdentifiersPhoneMax,
         IdentifiersUsernameEnabled,

@@ -440,12 +440,19 @@ internal static class RegistrationEndpoints
     private static Task EventsAsync(
         IRegistration registration,
         RequestSession browser,
-        TimeProvider time,
+        IRegistrationSignals signals,
+        IConfigurationStore configuration,
         HttpContext context,
         CancellationToken cancellationToken) =>
         Carried(browser) is not RegistrationSessionId session
             ? RegistrationStream.NothingAsync(context)
-            : RegistrationStream.RunAsync(registration, session, time, context, cancellationToken);
+            : RegistrationStream.RunAsync(
+                registration,
+                session,
+                signals,
+                configuration,
+                context,
+                cancellationToken);
 
     private static async Task<IResult> StageAsync(
         IdentifierValueRequest request,

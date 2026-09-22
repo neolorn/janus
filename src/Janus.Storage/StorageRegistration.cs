@@ -115,6 +115,9 @@ internal static class StorageRegistration
                 JanusDbContext.Schema)));
 
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddSingleton<IRegistrationSignals>(provider => new RegistrationSignals(
+            connectionString,
+            provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<DataConnections>();
 
         services.AddSingleton<RandomNumberGenerator>(_ => RandomNumberGenerator.Create());
@@ -169,6 +172,7 @@ internal static class StorageRegistration
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IRegistrationSessionStore>(provider => new RegistrationSessionStore(
             provider.GetRequiredService<JanusDbContext>(),
+            provider.GetRequiredService<DataConnections>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IRegistrationDirectory>(provider => new RegistrationDirectory(

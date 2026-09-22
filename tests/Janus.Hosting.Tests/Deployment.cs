@@ -104,6 +104,8 @@ internal sealed class Deployment : IAsyncDisposable
 
         builder.Logging.ClearProviders();
 
+        Signals = new RegistrationSignalsInMemory(Clock);
+
         Declared = preferences ?? PreferenceDeclarations.None;
         Accounts = new AccountDirectoryInMemory(Declared);
 
@@ -167,6 +169,11 @@ internal sealed class Deployment : IAsyncDisposable
     /// The registration sessions as they stand.
     /// </summary>
     public RegistrationSessionStoreInMemory Registrations { get; } = new();
+
+    /// <summary>
+    /// The channel the waiting screen's stream waits on.
+    /// </summary>
+    public RegistrationSignalsInMemory Signals { get; }
 
     /// <summary>
     /// The accounts registration created.
@@ -372,6 +379,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IEvents>(Events);
 
         _ = services.AddSingleton<IRegistrationSessionStore>(Registrations);
+        _ = services.AddSingleton<IRegistrationSignals>(Signals);
         _ = services.AddSingleton<IRegistrationDirectory>(Directory);
         _ = services.AddSingleton<IPreAuthenticationStore>(Contacts);
         _ = services.AddSingleton<ISessionStore>(Sessions);

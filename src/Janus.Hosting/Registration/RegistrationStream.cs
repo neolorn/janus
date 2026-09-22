@@ -2,7 +2,9 @@ using System;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Registration;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
 
 namespace Janus.Hosting.Registration;
@@ -15,15 +17,14 @@ namespace Janus.Hosting.Registration;
 /// authenticated by the cookie alone: no token is in the URL, so nothing of it
 /// reaches a proxy log, a history or a referrer. What it carries is the state
 /// document of <c>GET /register</c>, so a frontend that falls back to polling reads
-/// the same shape. The state is read back rather than signalled in process, because
-/// the browser that presses a verification link is not promised to reach the
-/// instance the stream is open on.
+/// the same shape. What wakes the stream is the database channel, raised in the
+/// transaction that verified or completed the step, because the browser that presses
+/// a verification link is not promised to reach the instance the stream is open on.
+/// The state is read back on the poll interval as well, so a channel that is not
+/// heard costs promptness and never an event.
 /// </remarks>
 internal static class RegistrationStream
 {
-    // Short enough that a press feels immediate to the person waiting, long enough
-    // that a waiting screen is not a load generator.
-    private static readonly TimeSpan Interval = TimeSpan.FromSeconds(1);
 
     /// <summary>
     /// Answers a browser that carries no registration session, which is a browser
@@ -46,7 +47,8 @@ internal static class RegistrationStream
     /// </summary>
     /// <param name="registration">What reads the state.</param>
     /// <param name="session">The registration session.</param>
-    /// <param name="time">What the interval is waited on.</param>
+    /// <param name="signals">What tells the stream the session has changed.</param>
+    /// <param name="configuration">Where the poll interval is read from.</param>
     /// <param name="context">The request.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of streaming it.</returns>
@@ -54,16 +56,23 @@ internal static class RegistrationStream
     public static async Task RunAsync(
         IRegistration registration,
         RegistrationSessionId session,
-        TimeProvider time,
+        IRegistrationSignals signals,
+        IConfigurationStore configuration,
         HttpContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(registration);
-        ArgumentNullException.ThrowIfNull(time);
+        ArgumentNullException.ThrowIfNull(signals);
+        ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(context);
 
         context.Response.ContentType = "text/event-stream";
         context.Response.Headers.CacheControl = "no-store";
+
+        TimeSpan interval = (await configuration
+                .ReadAsync(Settings.RegistrationEventsPollInterval, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(read => read, _ => Settings.RegistrationEventsPollInterval.Default);
 
         string? last = null;
 
@@ -94,7 +103,9 @@ internal static class RegistrationStream
 
             last = written;
 
-            await Task.Delay(Interval, time, cancellationToken).ConfigureAwait(false);
+            await signals
+                .WaitAsync(session, interval, cancellationToken)
+                .ConfigureAwait(false);
         }
     }
 

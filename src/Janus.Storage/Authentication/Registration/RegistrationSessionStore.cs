@@ -18,6 +18,7 @@ namespace Janus.Storage.Authentication.Registration;
 /// Registration sessions, over the <c>registration_sessions</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
+/// <param name="connections">The operation's connection, for the channel.</param>
 /// <param name="keyEncryptionKeys">The versions a data key may be wrapped under.</param>
 /// <param name="randomness">The randomness the key and the vectors are drawn from.</param>
 /// <remarks>
@@ -27,6 +28,7 @@ namespace Janus.Storage.Authentication.Registration;
 /// </remarks>
 internal sealed class RegistrationSessionStore(
     JanusDbContext context,
+    DataConnections connections,
     KeyEncryptionKeys keyEncryptionKeys,
     RandomNumberGenerator randomness) : IRegistrationSessionStore
 {
@@ -115,6 +117,8 @@ internal sealed class RegistrationSessionStore(
             .ConfigureAwait(false);
 
         Relink(session, held);
+
+        await AnnounceAsync(session.Id, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -129,7 +133,24 @@ internal sealed class RegistrationSessionStore(
         if (record is not null)
         {
             context.RegistrationSessions.Remove(record);
+
+            await AnnounceAsync(id, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    // REG-SESS-003: what the waiting screen is watching changed, and the stream the
+    // browser holds open is on whichever instance it reached.
+    private async ValueTask AnnounceAsync(
+        RegistrationSessionId session,
+        CancellationToken cancellationToken)
+    {
+        AmbientConnection ambient = await connections
+            .UseAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        await RegistrationChannel
+            .RaiseAsync(ambient, session, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>

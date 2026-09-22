@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- The waiting screen's event stream is woken by the database: the transaction that
+  verifies or completes a registration step announces the session on a PostgreSQL
+  channel, and every instance holding a stream open for it hears the announcement.
+  The stream still reads the state back on an interval, now the configuration key
+  `registration.events.pollinterval`, so a deployment that cannot hear the channel
+  loses promptness and never an event.
+
 - A session cookie that no longer resolves no longer refuses the request. The
   pipeline clears the cookie and carries the request on as anonymous, so a person
   whose session ended can reach the sign-in endpoints with the dead cookie still in

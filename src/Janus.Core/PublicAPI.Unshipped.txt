@@ -2939,6 +2939,7 @@ static Janus.Core.Configuration.Settings.RecoveryLinkLifetime.get -> Janus.Core.
 static Janus.Core.Configuration.Settings.RecoveryRateLimitAccount.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.RecoveryRateLimitApprover.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.RegistrationAdultAffirmation.get -> Janus.Core.Configuration.ChoiceSetting<Janus.Core.Configuration.AttributeRequirement>!
+static Janus.Core.Configuration.Settings.RegistrationEventsPollInterval.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.RegistrationPhone.get -> Janus.Core.Configuration.ChoiceSetting<Janus.Core.Configuration.AttributeRequirement>!
 static Janus.Core.Configuration.Settings.RegistrationSessionLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.Required.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Configuration.Setting!>!

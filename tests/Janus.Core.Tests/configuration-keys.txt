@@ -110,6 +110,7 @@ recovery.link.lifetime
 recovery.ratelimit.account
 recovery.ratelimit.approver
 registration.adultaffirmation
+registration.events.pollinterval
 registration.phone
 registration.session.lifetime
 restrictions

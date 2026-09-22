@@ -1534,6 +1534,8 @@ waiting screen is not a load generator.
 
 *Chapter text that should change.* None.
 
+**Superseded by D-162.** Applied in entry 143.
+
 ---
 
 ## 49. A request the reader cannot parse is answered 400 with no body
@@ -4811,6 +4813,53 @@ BFF-CSRF-001 AC2 and AUTH-SESS-007 AC2 should say that no endpoint can be exclud
 a stage, which is what they mean, rather than that no stage reads what an endpoint
 carries.
 
+---
+
+## 143. The stream is woken by a database channel and reads back on a key
+
+**Corrections 1 · 2026-09-22 · D-162 section C, item 48 · REG-SESS-003, FE-VER-001,
+CONV-DESIGN-008, `10` section 4**
+
+*What D-162 decided.* The registration event stream is driven by PostgreSQL
+`LISTEN`/`NOTIFY` raised in the transaction that verifies or completes a step, with a
+poll fallback every `registration.events.pollinterval`, a new key with default `PT1S`
+and floor `PT1S`. Entry 48 read the state back on a hard-coded second and nothing else,
+on the ground that a database channel would be a package the conventions do not admit.
+It is not one: the channel is the driver the conventions already name.
+
+*What was built.* The registration session store announces the session on the channel
+`janus_registration` whenever it records a change to one or removes one, through the
+operation's own connection and inside its transaction, so the database releases the
+announcement when that transaction commits and never for one that rolls back. One
+listening connection per instance serves every stream that instance holds open, and a
+stream's wait ends on the channel or on the interval, whichever comes first. The
+interval is now the new key rather than a constant.
+
+*Three points D-162 does not settle, taken at the strictest reading.*
+
+1. The announcement is made by the store rather than by each of the fourteen operations
+   that commit a change, because the store is the one place that cannot be forgotten and
+   is inside the transaction by construction.
+2. A listening connection that drops is not retried in a loop and not logged, because
+   `Janus.Storage` has no logger and adding one would be a package the conventions do
+   not name. The failure is taken by the next wait, which opens the connection again;
+   every wait ends on the interval as well, so a deployment that never hears the channel
+   behaves exactly as it did before this change.
+3. `Npgsql` is used directly for the listening connection. It is not a new package: it
+   is the driver `Npgsql.EntityFrameworkCore.PostgreSQL` carries, which CONV-DESIGN-008
+   names for relational access, and no project reference was added.
+
+*Tests that pin it.*
+`RegistrationSignalsTests.REG_SESS_003_AWaitNothingSignalsEndsOnTheIntervalAsync`,
+`RegistrationSignalsTests.REG_SESS_003_AWaitHearsTheCommittedAnnouncementAndNoOtherAsync`,
+`RegistrationFlowTests.REG_SESS_003_TheSignalWakesTheStreamBeforeTheIntervalAsync`,
+`RegistrationFlowTests.BFF_CSRF_005b_AC3_TheStreamAndThePollCarryTheSameStateAsync`,
+`SettingsCatalogueTests.LIB_API_001_AC2_TheKeyNamesAreTheContract`.
+
+*Chapter text that should change.* `10` section 4 should carry
+`registration.events.pollinterval`, from the row below. REG-SESS-003 should say what
+drives the stream and that the interval is the fallback.
+
 
 # Rows for chapter 10
 
@@ -4875,6 +4924,7 @@ the member added since (D-162 item 104).
 | `password.blocklist.selfhosted.address` | string | R | none | Required where `password.blocklist.source` is `selfHosted`. Where the deployment's own corpus serves the ranges the primary source serves. |
 | `integration.mail.endpoint` | string | P | none | Where the shipped default mail transport is called. Empty while the deployment supplies a transport of its own; required only when the shipped one is used, and refused at startup where it is not TLS (INT-GEN-001, LIB-EXT-001). |
 | `integration.sms.endpoint` | string | P | none | Where the shipped default SMS transport is called. Empty while the deployment supplies a transport of its own; required only when the shipped one is used, and refused at startup where it is not TLS (INT-GEN-001, INT-SMS-001). |
+| `registration.events.pollinterval` | duration | R | `PT1S`, floor `PT1S` | How often the waiting screen's stream reads the registration state back where no signal has reached it. The database channel is what usually wakes it; the interval is the fallback, and the floor is the default because a press has to feel immediate (REG-SESS-003, FE-VER-001). |
 
 ## Section 5, message places
 
