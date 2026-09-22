@@ -147,6 +147,11 @@ public static class JanusRegistration
         // registers its own before this runs keeps it.
         services.TryAddScoped<INotificationHandler>(
             provider => provider.GetRequiredService<SendingService>());
+
+        // LIB-EXT-001: the shipped catalogue words every message in the languages the
+        // library carries, and is likewise kept only where the deployment registered
+        // none of its own. A deployment that registers neither still starts.
+        services.TryAddSingleton<IMessageTemplates, DefaultMessageTemplates>();
         services.AddScoped(services => new PhoneSignals(
             services.GetService<PhoneSignalProvider>(),
             services.GetRequiredService<IPhoneSignalAudit>(),
@@ -154,7 +159,7 @@ public static class JanusRegistration
             services.GetRequiredService<TimeProvider>()));
         services.AddScoped(provider => new SendingValidation(
             provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetService<IMessageTemplates>(),
+            provider.GetRequiredService<IMessageTemplates>(),
             provider.GetRequiredService<RestrictionKeySuppliers>(),
             provider.GetRequiredService<IntegrationEndpoints>()));
         services.AddScoped<RestrictionAdministration>();

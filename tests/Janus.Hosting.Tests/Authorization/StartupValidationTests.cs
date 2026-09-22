@@ -7,6 +7,7 @@ using Dapper;
 using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Sending;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Npgsql;
@@ -73,22 +74,25 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
-    /// AUTH-ABUSE-005 AC3 and LIB-HOST-001: a deployment that has declared no
-    /// message catalogue can answer in no language, and is stopped as it starts
-    /// rather than at the first message a person waits for.
+    /// AUTH-ABUSE-005 AC3 and LIB-EXT-001: a deployment that has declared no message
+    /// catalogue answers out of the one the library ships, in the language it declared,
+    /// and starts. What the check refuses is a language with no words, not the absence
+    /// of a catalogue of the deployment's own.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task AUTH_ABUSE_005_AC3_ADeploymentThatDeclaredNoMessagesIsRefusedAsync()
+    public async Task AUTH_ABUSE_005_AC3_ADeploymentThatDeclaredNoMessagesStartsOnTheShippedOnesAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
         using IHost deployment = Deployed(catalogue: false);
 
-        StartupException refused = await Assert.ThrowsAsync<StartupException>(
-            async () => await deployment.StartAsync(cancellationToken));
+        await deployment.StartAsync(cancellationToken);
 
-        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        _ = Assert.IsType<DefaultMessageTemplates>(
+            deployment.Services.GetRequiredService<IMessageTemplates>());
+
+        await deployment.StopAsync(cancellationToken);
     }
 
     /// <summary>

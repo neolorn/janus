@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The library now ships the words of every message it sends, in English and in Arabic.
+  A deployment that registers a catalogue of its own keeps it; one that registers none
+  sends out of the shipped texts instead of failing to start. The startup check still
+  refuses a deployment whose catalogue has no text for a declared language, or a text
+  message that does not fit one message.
+
 - Publishing an event now answers for itself. An operation records its event inside the
   transaction that made it true and commits nothing it could not publish, so a change
   never reaches the database without its event reaching a consumer. Every method of the

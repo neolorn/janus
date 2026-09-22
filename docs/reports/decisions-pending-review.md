@@ -1081,6 +1081,8 @@ rather than which constructor failed.
 *Chapter text that should change.* AUTH-ABUSE-005 AC3 should name the missing
 declaration beside the over-budget and the untranslated message.
 
+**Superseded by D-162.** Applied in entry 123.
+
 ---
 
 ## 33. The authentication services deferred from phase 3 are registered in this phase
@@ -3971,6 +3973,63 @@ schedule behind it. D-162 asks for it there and nowhere else.
 deleted and against what, and should say whether the interval is taken over the
 destination restrictions or over all of them. PRIV-RET-005 AC2 should say that the
 retention of a counter follows the declaration as it now stands.
+
+---
+
+## 123. The library ships the words, and declaring no catalogue is not a refusal
+
+**Corrections 1 · 2026-09-22 · D-162 section B, correcting entry 32 · LIB-EXT-001, AUTH-ABUSE-005 AC3, CONV-CONTENT-001, LIB-HOST-001**
+
+*What D-162 decided.* `Janus.Hosting` ships the default message catalogue (LIB-EXT-001)
+in the languages the library carries; a host may replace it. The startup check refuses
+only a message with no text in a declared language or over budget. No deployment fails
+startup for declaring no catalogue. The default texts are the owner's to review before
+release.
+
+*What was built.* `DefaultMessageTemplates` in `Janus.Hosting` holds one text for every
+message the library sends, on every channel that message goes out on, in English and in
+Arabic. It is registered the way the shipped notification handler is: a deployment that
+registered a catalogue of its own keeps it, and one that registered none gets this. The
+startup check now takes the catalogue in force rather than an optional one, so the only
+refusals it can produce are a message with no text in a declared language and a text
+message over its budget.
+
+Every shipped text message is measured with its places at their widest, as entry 120
+requires of any catalogue, and fits one message: the Arabic texts of the messages that
+carry a token are written short enough to hold a forty-three character token inside the
+seventy units a non-Latin message gets.
+
+*The texts are for review.* They are plain, they say what happened and what to do, and
+they are the owner's to rewrite before release. Nothing in the library reads them; a
+deployment that wants other words registers a catalogue.
+
+*Decided in the owner's absence (Tier 3, strictest reading).* Two points:
+
+1. *Which languages the library carries.* English and Arabic. `00` names Arabic as
+   first-class and never a lagging translation, and no chapter names a third. Carrying
+   fewer would make the shipped catalogue useless to the default deployment; carrying
+   more would be words nobody has reviewed.
+2. *How a language is matched.* Exactly, as the tag is written. A deployment declaring
+   `en-GB` is not answered out of `en`: matching by prefix would let a deployment start
+   on words written for another variant without anybody deciding that they serve, and
+   the check that refuses it names the key the deployment has to supply.
+
+*Tests that pin it.*
+`DefaultMessageTemplatesTests.LIB_EXT_001_EveryMessageIsWordedOnEveryChannelInEveryLanguageCarried`,
+`DefaultMessageTemplatesTests.AUTH_ABUSE_005_EveryShippedTextMessageFitsOneMessageAtItsWidest`,
+`DefaultMessageTemplatesTests.CONV_CONTENT_001_EveryPlaceAShippedTextNamesIsOneTheLibraryFills`,
+`DefaultMessageTemplatesTests.LIB_EXT_001_AC1_ADeploymentThatRegistersNoCatalogueGetsTheShippedOne`,
+`DefaultMessageTemplatesTests.LIB_EXT_001_AC2_TheCatalogueTheDeploymentRegistersIsTheOneInForce`,
+`DefaultMessageTemplatesTests.AUTH_ABUSE_005_AC3_ADeploymentOnTheShippedCatalogueStartsAsync`,
+`DefaultMessageTemplatesTests.AUTH_ABUSE_005_AC3_ALanguageTheShippedCatalogueLacksStopsStartupAsync`,
+`StartupValidationTests.AUTH_ABUSE_005_AC3_ADeploymentThatDeclaredNoMessagesStartsOnTheShippedOnesAsync`.
+
+*Chapter text that should change.* LIB-EXT-001's row for message templates should name
+the languages the shipped catalogue is written in. AUTH-ABUSE-005 AC3 should say that
+what is refused is a message with no text in a declared language or over budget, and
+that a deployment which registers no catalogue is answered out of the shipped one.
+LIB-HOST-001 should not list a message catalogue among the declarations a deployment
+must make.
 
 
 # Rows for chapter 10
