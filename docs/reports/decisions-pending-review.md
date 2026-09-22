@@ -3197,6 +3197,8 @@ authenticators in a file they may forward is an exposure the right does not ask 
 *Chapter text that should change.* PRIV-RIGHT-003 should list the sections the export
 carries and say that credentials are not among them.
 
+**Superseded by D-162.** Applied in entry 150.
+
 ---
 
 ## 103. The provider register of chapter 05 section 8 ships as a default the host takes, and a row that names no location follows the hosting
@@ -5240,6 +5242,65 @@ rather than the code.
 
 *Chapter text that should change.* The `POST /account/reactivate` entry's JSON block
 should read `{ "linkToken": "..." }`.
+
+---
+
+## 150. The export carries the credentials group and the whole standing group
+
+**Corrections 1 · 2026-09-23 · D-162 section C, item 102 · PRIV-RIGHT-003,
+REG-ACCT-001, REG-SESS-007**
+
+*What D-162 decided.* The export carries every group `GET /account` shows the person,
+credentials included, and the whole Standing group. Entry 102 was right that the three
+things PRIV-RIGHT-003 names are a floor and not the whole, and wrong to leave the
+credentials out: what signs in to an account is held about the person, and REG-ACCT-001
+puts it in the table the export answers from. Nothing the person may see is withheld
+from a copy of their own record.
+
+*What was built.* The sections are now, in order: `account`, `profile`, `identifiers`,
+`identifier-backup`, `credentials`, `recovery-codes`, `devices`, `preferences`,
+`memberships`, `grants`, `assurance`, `sessions`, and then `consents` and `objections`
+from the export service as before.
+
+- `credentials` carries one record per enrolment, by identifier, catalogue entry,
+  label, state, whether it is the second step offered first, when it was added, when it
+  was last presented, when a reported loss invalidates it, and the two WebAuthn backup
+  properties. The password is one record of the group, carrying when it was set and
+  whether a change is required. No secret material crosses: not a hash, not a TOTP
+  secret, not a public key, not a credential identifier.
+- `recovery-codes` carries how the set stands (remaining, generated, viewed, exported)
+  and never a code of it, which is all AUTH-FACT-008 AC2 admits.
+- `devices` carries the browsers the account is known at, by label, kind and the three
+  instants, never the fingerprint the row is matched by.
+- `memberships` carries every membership including one that has ended, with the instant
+  it ended on it, because the row is held either way.
+- `grants` carries the live grants the account holds itself, in every organization its
+  memberships name. A grant a group holds is the group's record and is not carried
+  here.
+- `assurance` carries the tier the account can reach with what still stands against it,
+  and whether what reaches it resists relay.
+- `account` gains the terms step's record (REG-SESS-007): the terms version accepted,
+  the notice version presented, when the age screen was answered, and the affirmation
+  it derived or the band recorded in its place.
+
+*Three points decided inside the item.* Revoked and expired grants are not carried: the
+standing group is where the account stands, and `IGrantStore.HeldByAsync` is the read
+that answers it. Ended memberships are carried, because the membership row persists by
+IDN-MEM-001 and ending it is an instant on the record rather than a removal. The
+preferred second step is derived through `SecondStep.Preferred`, not read off the
+stored flag, so the export and the account page agree on which one is offered first.
+
+*Tests that pin it.*
+`ExportSourceTests.REG_ACCT_001_AC1_TheExportCarriesTheCredentialsTheAccountShowsAsync`,
+`ExportSourceTests.REG_ACCT_001_TheExportCarriesTheWholeStandingGroupAsync`,
+`ExportSourceTests.REG_SESS_007_AC2_TheExportCarriesTheNoticeAndAffirmationRecordsAsync`,
+`ExportSourceTests.PRIV_RIGHT_003_AnAccountThatHasSettledNothingStillExportsAsync`,
+`ExportSourceTests.PRIV_RIGHT_003_AC3_TheExportCarriesThePreferencesIdentifiersAndSessionsAsync`.
+
+*Chapter text that should change.* PRIV-RIGHT-003 should say that the export carries
+every group of REG-ACCT-001 the person may see and the whole of the standing group, and
+list the sections above, in place of the three it names now. The sentence entry 102
+asked for, that credentials are not among them, should not be written.
 
 
 # Rows for chapter 10

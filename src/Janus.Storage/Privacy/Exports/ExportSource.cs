@@ -5,30 +5,52 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Accounts;
+using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
+using Janus.Authentication.Passwords;
 using Janus.Authentication.Sessions;
+using Janus.Authorization.Grants;
 using Janus.Core;
+using Janus.Identity.Accounts;
+using Janus.Identity.Organizations;
 using Janus.Privacy.Exports;
 
 namespace Janus.Storage.Privacy.Exports;
 
 /// <summary>
-/// The parts of an export the identity and authentication tables hold, read through
-/// the same ports the account page reads them through.
+/// The parts of an export the identity, authentication and authorization tables hold,
+/// read through the same ports the account page reads them through.
 /// </summary>
-/// <param name="directory">Where the standing, the profile and the preferences are.</param>
+/// <param name="accounts">Where the account row, its standing and its registration are.</param>
+/// <param name="directory">Where the profile and the preferences are.</param>
 /// <param name="identifiers">Where the identifiers and their roles are.</param>
+/// <param name="authenticators">Where the enrolled credentials are.</param>
+/// <param name="passwords">Where the account's password is.</param>
+/// <param name="recoveryCodes">Where the single-use codes are.</param>
+/// <param name="devices">Where the browsers the account knows are.</param>
+/// <param name="memberships">Where the account's memberships are.</param>
+/// <param name="grants">Where the roles the account holds are.</param>
 /// <param name="sessions">Where the live sessions and their location records are.</param>
 /// <param name="declarations">The preference keys the host declared.</param>
 /// <param name="time">The clock a session's expiry is judged against.</param>
 /// <remarks>
-/// Implements PRIV-RIGHT-003, REG-PREF-001, REG-IDENT-002, AUTH-SESS-013 and
-/// CONV-DESIGN-003. Every value crosses as text: an export is read, not computed
-/// with, and one representation is one thing that can disagree with the account page.
+/// Implements PRIV-RIGHT-003, REG-ACCT-001, REG-PREF-001, REG-IDENT-002, AUTH-SESS-013
+/// and CONV-DESIGN-003. The groups of REG-ACCT-001 are carried whole, so the export and
+/// the account page answer the same question with the same facts. Every value crosses as
+/// text: an export is read, not computed with, and one representation is one thing that
+/// can disagree with the account page. No secret material crosses: a credential is
+/// carried by property and label, as the account page carries it.
 /// </remarks>
 internal sealed class ExportSource(
+    IAccountStore accounts,
     IAccountDirectory directory,
     IIdentifierDirectory identifiers,
+    IAuthenticatorStore authenticators,
+    IPasswordStore passwords,
+    IRecoveryCodeStore recoveryCodes,
+    IDeviceStore devices,
+    IMembershipStore memberships,
+    IGrantStore grants,
     ISessionStore sessions,
     PreferenceDeclarations declarations,
     TimeProvider time) : IExportSource
@@ -38,7 +60,30 @@ internal sealed class ExportSource(
         SubjectId subject,
         CancellationToken cancellationToken)
     {
+        DateTimeOffset now = time.GetUtcNow();
+
+        Account? account = await accounts.FindBySubjectAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
         HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        IReadOnlyList<Authenticator> enrolled = await authenticators
+            .OfAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        Password? password = await passwords.FindAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        RecoveryCodeSet? codes = await recoveryCodes.FindAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        IReadOnlyList<Device> browsers = await devices
+            .StandingOfAsync(subject, now, cancellationToken)
+            .ConfigureAwait(false);
+
+        IReadOnlyList<Membership> joined = await memberships
+            .FindBySubjectAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
         HeldProfile profile = await directory.ProfileAsync(subject, cancellationToken)
@@ -48,16 +93,24 @@ internal sealed class ExportSource(
             .ConfigureAwait(false);
 
         IReadOnlyList<Session> live = await sessions
-            .LiveOfAsync(subject, time.GetUtcNow(), cancellationToken)
+            .LiveOfAsync(subject, now, cancellationToken)
             .ConfigureAwait(false);
 
         return
         [
-            new ExportSection("account", [new ExportRecord(await StandingAsync(subject, cancellationToken).ConfigureAwait(false))]),
+            new ExportSection("account", [new ExportRecord(Standing(subject, account))]),
             new ExportSection("profile", [new ExportRecord(Filled(profile))]),
             Listed("identifiers", held.All.Select(identifier => Named(identifier, held))),
             Listed("identifier-backup", held.Backups.Select(Chosen)),
+            Listed("credentials", Enrolled(enrolled, password)),
+            Listed("recovery-codes", Kept(codes)),
+            Listed("devices", browsers.Select(Remembered)),
             new ExportSection("preferences", [new ExportRecord(Settled(preferences))]),
+            Listed("memberships", joined.Select(Joined)),
+            Listed(
+                "grants",
+                await ConferredAsync(subject, joined, now, cancellationToken).ConfigureAwait(false)),
+            new ExportSection("assurance", [new ExportRecord(Reaches(enrolled, password))]),
             Listed("sessions", live.Select(Used)),
         ];
     }
@@ -72,6 +125,8 @@ internal sealed class ExportSource(
 
     private static string Moment(DateTimeOffset at) =>
         at.ToString("O", CultureInfo.InvariantCulture);
+
+    private static string Told(bool answer) => answer ? "true" : "false";
 
     private static Dictionary<string, string> Filled(HeldProfile profile)
     {
@@ -108,11 +163,11 @@ internal sealed class ExportSource(
 
         values["kind"] = identifier.Kind.ToString();
         values["value"] = identifier.Entered;
-        values["verified"] = identifier.IsVerified ? "true" : "false";
-        values["primary"] = identifier.IsPrimary ? "true" : "false";
-        values["locked"] = identifier.IsLocked ? "true" : "false";
+        values["verified"] = Told(identifier.IsVerified);
+        values["primary"] = Told(identifier.IsPrimary);
+        values["locked"] = Told(identifier.IsLocked);
         values["securityNotice"] =
-            held.NoticeSet.Any(reached => reached.Id == identifier.Id) ? "true" : "false";
+            Told(held.NoticeSet.Any(reached => reached.Id == identifier.Id));
 
         if (identifier.VerifiedAt is DateTimeOffset verified)
         {
@@ -133,6 +188,179 @@ internal sealed class ExportSource(
         {
             values["named"] = named.Value.ToString();
         }
+
+        return values;
+    }
+
+    // REG-ACCT-001: the credentials group, by property and label and never by secret
+    // material. The password is one of them and is held apart from the enrolments, so
+    // it is carried as the row the account page derives its own answers from.
+    private static List<Dictionary<string, string>> Enrolled(
+        IReadOnlyList<Authenticator> enrolled,
+        Password? password)
+    {
+        Authenticator? preferred = SecondStep.Preferred(enrolled);
+
+        var credentials = new List<Dictionary<string, string>>(enrolled.Count + 1);
+
+        if (password is not null)
+        {
+            Dictionary<string, string> set = Values(capacity: 3);
+
+            set["kind"] = nameof(Factor.Password);
+            set["setAt"] = Moment(password.SetAt);
+            set["changeRequired"] = Told(password.ChangeRequired);
+
+            credentials.Add(set);
+        }
+
+        foreach (Authenticator credential in enrolled)
+        {
+            credentials.Add(Presented(credential, preferred));
+        }
+
+        return credentials;
+    }
+
+    private static Dictionary<string, string> Presented(
+        Authenticator credential,
+        Authenticator? preferred)
+    {
+        Dictionary<string, string> values = Values(capacity: 10);
+
+        values["credential"] = credential.Id.Value.ToString();
+        values["kind"] = credential.Factor.ToString();
+        values["label"] = credential.Label.Value;
+        values["state"] = credential.State.ToString();
+        values["preferred"] = Told(preferred is not null && preferred.Id == credential.Id);
+        values["addedAt"] = Moment(credential.AddedAt);
+
+        if (credential.LastUsedAt is DateTimeOffset used)
+        {
+            values["lastUsedAt"] = Moment(used);
+        }
+
+        if (credential.InvalidatesAt is DateTimeOffset invalidates)
+        {
+            values["invalidatesAt"] = Moment(invalidates);
+        }
+
+        if (credential.WebAuthn is WebAuthnMaterial material)
+        {
+            values["backupEligible"] = Told(material.BackupEligible);
+            values["backupState"] = Told(material.BackupState);
+        }
+
+        return values;
+    }
+
+    // AUTH-FACT-008 AC2 and AUTH-FACT-009 AC2: how the set stands and never a code
+    // of it, which is what the account shows and all an export may carry of a secret
+    // that is not retrievable after the screen that issued it.
+    private static List<Dictionary<string, string>> Kept(RecoveryCodeSet? codes)
+    {
+        if (codes is null)
+        {
+            return [];
+        }
+
+        Dictionary<string, string> values = Values(capacity: 4);
+
+        values["remaining"] = codes.Remaining.ToString(CultureInfo.InvariantCulture);
+        values["generatedAt"] = Moment(codes.GeneratedAt);
+
+        if (codes.ViewedAt is DateTimeOffset viewed)
+        {
+            values["viewedAt"] = Moment(viewed);
+        }
+
+        if (codes.ExportedAt is DateTimeOffset exported)
+        {
+            values["exportedAt"] = Moment(exported);
+        }
+
+        return [values];
+    }
+
+    // AUTH-FACT-015: the browsers the account is known at. The row holds a
+    // fingerprint of the token and never the token, so what crosses is what the
+    // person would recognise and nothing that would sign anyone in.
+    private static Dictionary<string, string> Remembered(Device device)
+    {
+        Dictionary<string, string> values = Values(capacity: 6);
+
+        values["device"] = device.Id.Value.ToString();
+        values["kind"] = device.Kind.ToString();
+        values["label"] = device.Label.Value;
+        values["knownSince"] = Moment(device.CreatedAt);
+        values["lastUsedAt"] = Moment(device.LastUsedAt);
+        values["expiresAt"] = Moment(device.ExpiresAt);
+
+        return values;
+    }
+
+    // IDN-MEM-001: a membership is a record of its own, and one that has ended is
+    // still held, so the export carries it with the instant it ended on it.
+    private static Dictionary<string, string> Joined(Membership membership)
+    {
+        Dictionary<string, string> values = Values(capacity: 4);
+
+        values["membership"] = membership.Id.Value.ToString();
+        values["organization"] = membership.Organization.Value.ToString();
+        values["joinedAt"] = Moment(membership.CreatedAt);
+
+        if (membership.EndedAt is DateTimeOffset ended)
+        {
+            values["endedAt"] = Moment(ended);
+        }
+
+        return values;
+    }
+
+    // AUTHZ-GRANT-001: what the account holds itself. A grant a group holds is the
+    // group's record, and it reaches the person through a membership of the group.
+    private static Dictionary<string, string> Conferred(Grant grant)
+    {
+        Dictionary<string, string> values = Values(capacity: 9);
+
+        values["grant"] = grant.Id.Value.ToString();
+        values["organization"] = grant.Organization.Value.ToString();
+        values["role"] = grant.Role.ToString();
+        values["deny"] = Told(grant.Deny);
+        values["kind"] = grant.Kind.ToString();
+        values["grantedAt"] = Moment(grant.GrantedAt);
+
+        if (grant.ResourceType is ResourceType type)
+        {
+            values["resourceType"] = type.ToString();
+        }
+
+        if (grant.ResourceId is ResourceId resource)
+        {
+            values["resource"] = resource.ToString();
+        }
+
+        if (grant.ExpiresAt is DateTimeOffset expires)
+        {
+            values["expiresAt"] = Moment(expires);
+        }
+
+        return values;
+    }
+
+    // AUTH-STEP-002: the tier the account can reach with what still stands against
+    // it, which is the standing REG-ACCT-001 names and not the tier of one session.
+    private static Dictionary<string, string> Reaches(
+        IReadOnlyList<Authenticator> enrolled,
+        Password? password)
+    {
+        Assurance reachable = StepUp.Reachable(
+            HeldFactors.Of(enrolled, password is not null).Standing);
+
+        Dictionary<string, string> values = Values(capacity: 2);
+
+        values["reachable"] = reachable.Level.ToString();
+        values["phishingResistant"] = Told(reachable.PhishingResistant);
 
         return values;
     }
@@ -171,6 +399,45 @@ internal sealed class ExportSource(
         }
     }
 
+    // REG-ACCT-001: the standing group's own fields, the terms step's record among
+    // them (REG-SESS-007): the notice the person was shown and the affirmation the
+    // age screen derived.
+    private static Dictionary<string, string> Standing(SubjectId subject, Account? account)
+    {
+        Dictionary<string, string> values = Values(capacity: 8);
+
+        values["subject"] = subject.Value.ToString();
+
+        if (account is null)
+        {
+            return values;
+        }
+
+        values["state"] = account.State.ToString();
+        values["registeredAt"] = Moment(account.CreatedAt);
+
+        if (account.Registration is not AccountRegistration registered)
+        {
+            return values;
+        }
+
+        values["termsVersion"] = registered.TermsVersion;
+        values["noticeVersion"] = registered.NoticeVersion;
+        values["answeredAgeAt"] = Moment(registered.AnsweredAgeAt);
+
+        if (registered.AdultAffirmed is bool adult)
+        {
+            values["adultAffirmed"] = Told(adult);
+        }
+
+        if (registered.Group is AgeGroup band)
+        {
+            values["ageGroup"] = band.ToString();
+        }
+
+        return values;
+    }
+
     private Dictionary<string, string> Settled(HeldPreferences preferences)
     {
         Dictionary<string, string> values = Values(capacity: 2 + declarations.All.Count);
@@ -198,26 +465,31 @@ internal sealed class ExportSource(
         return values;
     }
 
-    private async ValueTask<Dictionary<string, string>> StandingAsync(
+    private async ValueTask<List<Dictionary<string, string>>> ConferredAsync(
         SubjectId subject,
+        IReadOnlyList<Membership> joined,
+        DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        Dictionary<string, string> values = Values(capacity: 3);
+        GrantSubject[] holder = [GrantSubject.Of(subject)];
 
-        values["subject"] = subject.Value.ToString();
+        var conferred = new List<Dictionary<string, string>>();
+        var asked = new HashSet<OrganizationId>();
 
-        if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false)
-            is AccountState state)
+        foreach (Membership membership in joined)
         {
-            values["state"] = state.ToString();
+            if (!asked.Add(membership.Organization))
+            {
+                continue;
+            }
+
+            IReadOnlyList<Grant> held = await grants
+                .HeldByAsync(holder, membership.Organization, now, cancellationToken)
+                .ConfigureAwait(false);
+
+            conferred.AddRange(held.Select(Conferred));
         }
 
-        if (await directory.CreatedAtAsync(subject, cancellationToken).ConfigureAwait(false)
-            is DateTimeOffset created)
-        {
-            values["registeredAt"] = Moment(created);
-        }
-
-        return values;
+        return conferred;
     }
 }

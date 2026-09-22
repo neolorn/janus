@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- The subject access export now carries every group the account page shows the person,
+  the credentials among them, and the whole standing group. Beside the profile, the
+  identifiers, the preferences and the live sessions it carries the enrolled
+  credentials and the password by property and label, how the recovery code set
+  stands, the browsers the account is known at, its memberships, the roles it holds,
+  the assurance it can reach, and the terms version, notice version and affirmation
+  the terms step recorded. No secret material crosses.
+
 - The privacy dashboard's grant records which of the two things it was: a grant made on
   the subject's own pages records `dashboard`, and one answering the prompt a material
   revision raised, over a consent the revision ended and the subject never took back,
