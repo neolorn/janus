@@ -60,6 +60,8 @@ identifiers.phone.max
 identifiers.username.changecooloff
 identifiers.username.enabled
 integration.callback.ratelimit
+integration.mail.endpoint
+integration.sms.endpoint
 legal.governinglanguage
 link.invitation.lifetime
 link.magic.lifetime

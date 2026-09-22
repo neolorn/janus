@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- The outbound addresses the library calls are two configuration keys of its own,
+  `integration.mail.endpoint` and `integration.sms.endpoint`, both protected. A
+  deployment that supplies its own mail or SMS transport leaves them empty and calls
+  its provider wherever it decides. The register a host used to declare its endpoints
+  in is gone: the library checked addresses it never calls, and a host's own outbound
+  calls are the host's to check.
+
 - The audit actions the library records are now one catalogue, `AuditActions`, instead
   of a code spelled where it happened to be written. The set is closed and a contract
   test fails on an action added or respelled without the catalogue saying so, as the

@@ -137,8 +137,7 @@ public sealed class DefaultMessageTemplatesTests
         return await new SendingValidation(
                 configuration,
                 Shipped,
-                RestrictionKeySuppliers.None,
-                IntegrationEndpoints.None)
+                RestrictionKeySuppliers.None)
             .ValidateAsync(TestContext.Current.CancellationToken);
     }
 

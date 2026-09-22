@@ -24,7 +24,6 @@ public sealed class SendingValidationTests
     private readonly MessageTemplatesInMemory _templates = new();
 
     private RestrictionKeySuppliers _suppliers = RestrictionKeySuppliers.None;
-    private IntegrationEndpoints _endpoints = IntegrationEndpoints.None;
 
     /// <summary>
     /// A deployment answering in two languages.
@@ -33,7 +32,7 @@ public sealed class SendingValidationTests
         _configuration.Set(Settings.NotificationLanguages, Languages);
 
     private SendingValidation Validation =>
-        new(_configuration, _templates, _suppliers, _endpoints);
+        new(_configuration, _templates, _suppliers);
 
     /// <summary>
     /// AUTH-ABUSE-005 AC3 and INT-SMS-003 AC1: a text message over its language's
@@ -185,34 +184,42 @@ public sealed class SendingValidationTests
 
     /// <summary>
     /// INT-GEN-001 AC1 and AC2: an endpoint reached over plain HTTP stops the
-    /// deployment, and the failure names which integration and which setting.
+    /// deployment, and the failure names the key it was read from, which is the key
+    /// of the integration it belongs to.
     /// </summary>
-    [Fact]
-    public async Task INT_GEN_001_AC1_APlaintextEndpointStopsStartupAsync()
+    /// <param name="key">The endpoint that is not over TLS.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("integration.mail.endpoint")]
+    [InlineData("integration.sms.endpoint")]
+    public async Task INT_GEN_001_AC1_APlaintextEndpointStopsStartupAsync(string key)
     {
-        _endpoints = IntegrationEndpoints.Of(
-        [
-            new IntegrationEndpoint("sms", "sms.gateway.baseurl", new Uri("https://sms.example.test")),
-            new IntegrationEndpoint("shipping", "shipping.baseurl", new Uri("http://ship.example.test")),
-        ]);
+        _configuration.Set(Settings.IntegrationMailEndpoint, "https://mail.example.test");
+        _configuration.Set(Settings.IntegrationSmsEndpoint, "https://sms.example.test");
+        _configuration.Set(
+            key.Contains("mail", StringComparison.Ordinal)
+                ? Settings.IntegrationMailEndpoint
+                : Settings.IntegrationSmsEndpoint,
+            "http://plain.example.test");
 
         Error refusal = await RefusedAsync();
 
         Assert.Equal(ErrorCodes.EndpointInsecure, refusal.Code);
-        Assert.Equal("shipping", refusal.Details["integration"].GetString());
-        Assert.Equal("shipping.baseurl", refusal.Details["key"].GetString());
+        Assert.Equal(key, refusal.Details["key"].GetString());
     }
 
     /// <summary>
-    /// INT-GEN-001 AC1: a deployment whose endpoints all use TLS starts.
+    /// INT-GEN-001 AC1: a deployment whose endpoints use TLS starts, and so does one
+    /// that names neither because it supplies transports of its own.
     /// </summary>
+    /// <returns>The work of running it.</returns>
     [Fact]
     public async Task INT_GEN_001_AC1_EveryEndpointOverTlsStartsAsync()
     {
-        _endpoints = IntegrationEndpoints.Of(
-        [
-            new IntegrationEndpoint("sms", "sms.gateway.baseurl", new Uri("https://sms.example.test")),
-        ]);
+        await PassedAsync();
+
+        _configuration.Set(Settings.IntegrationMailEndpoint, "https://mail.example.test");
+        _configuration.Set(Settings.IntegrationSmsEndpoint, "https://sms.example.test");
 
         await PassedAsync();
     }

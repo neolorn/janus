@@ -1117,20 +1117,6 @@ Janus.Core.IdentifierSummary.Value.get -> string!
 Janus.Core.IdentifierSummary.Value.init -> void
 Janus.Core.IdentifierSummary.Verified.get -> bool
 Janus.Core.IdentifierSummary.Verified.init -> void
-Janus.Core.IntegrationEndpoint
-Janus.Core.IntegrationEndpoint.<Clone>$() -> Janus.Core.IntegrationEndpoint!
-Janus.Core.IntegrationEndpoint.Address.get -> System.Uri!
-Janus.Core.IntegrationEndpoint.Address.init -> void
-Janus.Core.IntegrationEndpoint.Deconstruct(out string! Integration, out string! Key, out System.Uri! Address) -> void
-Janus.Core.IntegrationEndpoint.Equals(Janus.Core.IntegrationEndpoint? other) -> bool
-Janus.Core.IntegrationEndpoint.Integration.get -> string!
-Janus.Core.IntegrationEndpoint.Integration.init -> void
-Janus.Core.IntegrationEndpoint.IntegrationEndpoint(string! Integration, string! Key, System.Uri! Address) -> void
-Janus.Core.IntegrationEndpoint.Key.get -> string!
-Janus.Core.IntegrationEndpoint.Key.init -> void
-Janus.Core.IntegrationEndpoints
-Janus.Core.IntegrationEndpoints.All.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.IntegrationEndpoint!>!
-Janus.Core.IntegrationEndpoints.Insecure.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.IntegrationEndpoint!>!
 Janus.Core.IssuedCode
 Janus.Core.IssuedCode.<Clone>$() -> Janus.Core.IssuedCode!
 Janus.Core.IssuedCode.Code.get -> string!
@@ -2484,9 +2470,6 @@ override Janus.Core.IdentifierRemoved.ToString() -> string!
 override Janus.Core.IdentifierSummary.Equals(object? obj) -> bool
 override Janus.Core.IdentifierSummary.GetHashCode() -> int
 override Janus.Core.IdentifierSummary.ToString() -> string!
-override Janus.Core.IntegrationEndpoint.Equals(object? obj) -> bool
-override Janus.Core.IntegrationEndpoint.GetHashCode() -> int
-override Janus.Core.IntegrationEndpoint.ToString() -> string!
 override Janus.Core.IssuedCode.Equals(object? obj) -> bool
 override Janus.Core.IssuedCode.GetHashCode() -> int
 override Janus.Core.IssuedCode.ToString() -> string!
@@ -2904,6 +2887,8 @@ static Janus.Core.Configuration.Settings.IdentifiersPhoneMax.get -> Janus.Core.C
 static Janus.Core.Configuration.Settings.IdentifiersUsernameChangeCoolOff.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.IdentifiersUsernameEnabled.get -> Janus.Core.Configuration.FlagSetting!
 static Janus.Core.Configuration.Settings.IntegrationCallbackRateLimit.get -> Janus.Core.Configuration.IntegerSetting!
+static Janus.Core.Configuration.Settings.IntegrationMailEndpoint.get -> Janus.Core.Configuration.TextSetting!
+static Janus.Core.Configuration.Settings.IntegrationSmsEndpoint.get -> Janus.Core.Configuration.TextSetting!
 static Janus.Core.Configuration.Settings.LegalGoverningLanguage.get -> Janus.Core.Configuration.TextSetting!
 static Janus.Core.Configuration.Settings.LinkInvitationLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.LinkMagicLifetime.get -> Janus.Core.Configuration.DurationSetting!
@@ -3192,10 +3177,6 @@ static Janus.Core.IdentifierRemoved.operator !=(Janus.Core.IdentifierRemoved? le
 static Janus.Core.IdentifierRemoved.operator ==(Janus.Core.IdentifierRemoved? left, Janus.Core.IdentifierRemoved? right) -> bool
 static Janus.Core.IdentifierSummary.operator !=(Janus.Core.IdentifierSummary? left, Janus.Core.IdentifierSummary? right) -> bool
 static Janus.Core.IdentifierSummary.operator ==(Janus.Core.IdentifierSummary? left, Janus.Core.IdentifierSummary? right) -> bool
-static Janus.Core.IntegrationEndpoint.operator !=(Janus.Core.IntegrationEndpoint? left, Janus.Core.IntegrationEndpoint? right) -> bool
-static Janus.Core.IntegrationEndpoint.operator ==(Janus.Core.IntegrationEndpoint? left, Janus.Core.IntegrationEndpoint? right) -> bool
-static Janus.Core.IntegrationEndpoints.None.get -> Janus.Core.IntegrationEndpoints!
-static Janus.Core.IntegrationEndpoints.Of(System.Collections.Generic.IEnumerable<Janus.Core.IntegrationEndpoint!>! declared) -> Janus.Core.IntegrationEndpoints!
 static Janus.Core.IssuedCode.operator !=(Janus.Core.IssuedCode? left, Janus.Core.IssuedCode? right) -> bool
 static Janus.Core.IssuedCode.operator ==(Janus.Core.IssuedCode? left, Janus.Core.IssuedCode? right) -> bool
 static Janus.Core.IssuedToken.operator !=(Janus.Core.IssuedToken? left, Janus.Core.IssuedToken? right) -> bool

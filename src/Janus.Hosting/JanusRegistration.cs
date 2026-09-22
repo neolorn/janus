@@ -144,7 +144,6 @@ public static class JanusRegistration
         // A deployment that declares none of it starts, and the checks that would have
         // read a declaration find nothing to read.
         services.TryAddSingleton(RestrictionKeySuppliers.None);
-        services.TryAddSingleton(IntegrationEndpoints.None);
         services.TryAddSingleton(Recipients.Shipped);
 
         // AUTH-ABUSE-004, OPS-ALERT-001: the one path every message takes, and what
@@ -169,8 +168,7 @@ public static class JanusRegistration
         services.AddScoped(provider => new SendingValidation(
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<IMessageTemplates>(),
-            provider.GetRequiredService<RestrictionKeySuppliers>(),
-            provider.GetRequiredService<IntegrationEndpoints>()));
+            provider.GetRequiredService<RestrictionKeySuppliers>()));
         services.AddScoped<ConfigurationAdministration>();
         services.AddScoped<RestrictionAdministration>();
         services.AddScoped<ThrottleService>();

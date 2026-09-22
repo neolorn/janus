@@ -19,7 +19,6 @@ namespace Janus.Authentication.Sending;
 /// The catalogue in force, the deployment's own or the one the library ships.
 /// </param>
 /// <param name="suppliers">The host-registered key suppliers.</param>
-/// <param name="endpoints">The declared outbound addresses.</param>
 /// <remarks>
 /// Implements AUTH-ABUSE-005, INT-SMS-003, INT-SMS-005a, INT-GEN-001 and
 /// LIB-HOST-001. A recipient is never resolved to a language the catalogue cannot
@@ -30,8 +29,7 @@ namespace Janus.Authentication.Sending;
 internal sealed class SendingValidation(
     IConfigurationStore configuration,
     IMessageTemplates templates,
-    RestrictionKeySuppliers suppliers,
-    IntegrationEndpoints endpoints)
+    RestrictionKeySuppliers suppliers)
 {
     /// <summary>
     /// Runs every check, answering with the first that fails.
@@ -40,7 +38,7 @@ internal sealed class SendingValidation(
     /// <returns>Nothing, or the failure that stops startup.</returns>
     public async ValueTask<Result> ValidateAsync(CancellationToken cancellationToken)
     {
-        if (Insecure() is Error insecure)
+        if (await InsecureAsync(cancellationToken).ConfigureAwait(false) is Error insecure)
         {
             return Result.Failure(insecure);
         }
@@ -83,21 +81,35 @@ internal sealed class SendingValidation(
             "key",
             JsonSerializer.SerializeToElement(key));
 
-    private Error? Insecure()
+    // INT-GEN-001: the two addresses the library itself calls out to. A deployment
+    // that supplies a transport of its own leaves them empty and calls its provider
+    // wherever it decides; nothing of the host's is registered here.
+    private async ValueTask<Error?> InsecureAsync(CancellationToken cancellationToken)
     {
-        foreach (IntegrationEndpoint endpoint in endpoints.Insecure)
+        foreach (TextSetting key in
+            new[] { Settings.IntegrationMailEndpoint, Settings.IntegrationSmsEndpoint })
         {
-            return new Error(
-                ErrorCodes.EndpointInsecure,
-                new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
-                {
-                    ["integration"] = JsonSerializer.SerializeToElement(endpoint.Integration),
-                    ["key"] = JsonSerializer.SerializeToElement(endpoint.Key),
-                });
+            string address = (await configuration.ReadAsync(key, cancellationToken)
+                .ConfigureAwait(false))
+                .Match(value => value, _ => string.Empty);
+
+            if (address.Length is not 0 && !Secure(address))
+            {
+                return Error.From(
+                    ErrorCodes.EndpointInsecure,
+                    "key",
+                    JsonSerializer.SerializeToElement(key.Key.ToString()));
+            }
         }
 
         return null;
     }
+
+    // An address that is not an absolute https address is not one the library calls,
+    // whether it names another scheme or is not an address at all.
+    private static bool Secure(string address) =>
+        Uri.TryCreate(address, UriKind.Absolute, out Uri? parsed)
+        && string.Equals(parsed.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal);
 
     private Error? Unsupplied(IReadOnlyList<Restriction> declared)
     {

@@ -20,8 +20,9 @@ public sealed class SettingWrittenFormTests
 {
     /// <summary>
     /// Every key of the catalogue writes its default and reads the same value back.
-    /// The two keys whose default is no value at all, one derived at startup and one
-    /// the deployment names, are the only ones the round trip passes over.
+    /// The keys whose default is no value at all, one derived at startup, two named
+    /// only where the shipped transport is used and one the deployment names, are the
+    /// only ones the round trip passes over.
     /// </summary>
     [Fact]
     public void Written_EveryDefaultOfTheCatalogue_ReadsBackAsItself()
@@ -36,7 +37,14 @@ public sealed class SettingWrittenFormTests
             }
         }
 
-        Assert.Equal(["webauthn.rpid", "backup.restoretest.canary"], passedOver);
+        Assert.Equal(
+            [
+                "webauthn.rpid",
+                "integration.mail.endpoint",
+                "integration.sms.endpoint",
+                "backup.restoretest.canary",
+            ],
+            passedOver);
     }
 
     /// <summary>

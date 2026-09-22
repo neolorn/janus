@@ -304,6 +304,21 @@ public static class Settings
     public static IntegerSetting AbuseBotDefenceRepeatedAttempts { get; } =
         new("abuse.botdefence.repeatedattempts", SettingScope.Runtime, 3, loosening: SettingDirection.Increase);
 
+    /// <summary>
+    /// Where the shipped default mail transport is called. Empty while the deployment
+    /// supplies a transport of its own, which is called wherever it decides
+    /// (LIB-EXT-001, INT-MAIL-008).
+    /// </summary>
+    public static TextSetting IntegrationMailEndpoint { get; } =
+        new("integration.mail.endpoint", SettingScope.Protected, string.Empty);
+
+    /// <summary>
+    /// Where the shipped default SMS transport is called. Empty while the deployment
+    /// supplies a transport of its own (LIB-EXT-001, INT-SMS-001).
+    /// </summary>
+    public static TextSetting IntegrationSmsEndpoint { get; } =
+        new("integration.sms.endpoint", SettingScope.Protected, string.Empty);
+
     /// <summary>Callbacks accepted from one source a minute, before any lookup.</summary>
     public static IntegerSetting IntegrationCallbackRateLimit { get; } =
         new("integration.callback.ratelimit", SettingScope.Runtime, 60, loosening: SettingDirection.Increase);
@@ -918,6 +933,8 @@ public static class Settings
         AbuseSourceRateLimit,
         AbuseBotDefenceRepeatedAttempts,
         IntegrationCallbackRateLimit,
+        IntegrationMailEndpoint,
+        IntegrationSmsEndpoint,
         Restrictions,
         CodeVerificationLifetime,
         CodeVerificationAttempts,

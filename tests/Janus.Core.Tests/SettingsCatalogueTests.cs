@@ -22,6 +22,8 @@ public sealed class SettingsCatalogueTests
         .. ProtectedBySectionFourEight,
         "hosting.crossborderbasis",
         "hosting.location",
+        "integration.mail.endpoint",
+        "integration.sms.endpoint",
         "webauthn.algorithms",
         "webauthn.origins",
     ];

@@ -4685,6 +4685,42 @@ against the name the frontend writes.
 *Chapter text that should change.* D-153's sentence naming one header, as D-162 says.
 `10` should carry both header names.
 
+---
+
+## 140. The two endpoints the library calls are keys of its own
+
+**Corrections 1 · 2026-09-22 · D-162 section C, item 27 · INT-GEN-001, LIB-EXT-001, `10` section 4**
+
+*What D-162 decided.* The shipped default transports take the `10` keys
+`integration.mail.endpoint` and `integration.sms.endpoint`, protected, required only
+when the default transport is used. INT-GEN-001's check names the key. There is no
+host-declared endpoint register.
+
+*What was built.* The register, `IntegrationEndpoints` and `IntegrationEndpoint`, is
+removed from the public surface, and with it the idea that a host lists its own outbound
+addresses for the library to check. Startup now reads the two keys and refuses a
+deployment whose mail or SMS endpoint is not an absolute `https` address, naming the key
+it stopped at. Both keys are protected and default to empty.
+
+*One point D-162 does not settle, taken at the strictest reading.* The shipped default
+transports themselves are not built yet, so "required only when the default transport is
+used" has nothing to require against today: the key defaults to empty, an empty key is
+not checked, and a non-empty one that is not TLS refuses. The transport that reads the
+key requires it when it is built. An address that is not an absolute address at all is
+treated exactly as a plaintext one, because it is not an address the library will call
+either.
+
+*Tests that pin it.*
+`SendingValidationTests.INT_GEN_001_AC1_APlaintextEndpointStopsStartupAsync`,
+`SendingValidationTests.INT_GEN_001_AC1_EveryEndpointOverTlsStartsAsync`,
+`SettingsCatalogueTests.LIB_API_001_AC2_TheKeyNamesAreTheContract`,
+`SettingsCatalogueTests.Scope_TheCatalogue_ProtectsTheKeysSectionFourMarks`,
+`SettingWrittenFormTests.Written_EveryDefaultOfTheCatalogue_ReadsBackAsItself`.
+
+*Chapter text that should change.* `10` section 4 should carry the two keys, from the
+rows below. INT-GEN-001's acceptance criteria should say the error names the key, which
+names the integration. LIB-EXT-001 should say where the shipped transports are called.
+
 
 # Rows for chapter 10
 
@@ -4747,6 +4783,8 @@ the member added since (D-162 item 104).
 | Key | Type | Scope | Default | Named when |
 | --- | --- | --- | --- | --- |
 | `password.blocklist.selfhosted.address` | string | R | none | Required where `password.blocklist.source` is `selfHosted`. Where the deployment's own corpus serves the ranges the primary source serves. |
+| `integration.mail.endpoint` | string | P | none | Where the shipped default mail transport is called. Empty while the deployment supplies a transport of its own; required only when the shipped one is used, and refused at startup where it is not TLS (INT-GEN-001, LIB-EXT-001). |
+| `integration.sms.endpoint` | string | P | none | Where the shipped default SMS transport is called. Empty while the deployment supplies a transport of its own; required only when the shipped one is used, and refused at startup where it is not TLS (INT-GEN-001, INT-SMS-001). |
 
 ## Section 5, message places
 
