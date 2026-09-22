@@ -315,16 +315,19 @@ public static class JanusRegistration
         services.AddScoped<IDerivationMaterialiser, DerivationMaterialiser>();
         services.AddScoped<ModelValidation>();
         services.AddScoped<RedirectValidation>();
+        services.AddScoped<SchemaValidation>();
 
         // AUTHZ-MODEL-004 AC2 (D-160): what a hosted service starts before is what was
         // registered after it, and the web server is one, so the checks that read the
-        // database go at the head of the collection.
-        services.Insert(0, ServiceDescriptor.Singleton<IHostedService, ModelValidationService>());
-        services.Insert(1, ServiceDescriptor.Singleton<IHostedService, SendingValidationService>());
-        services.Insert(2, ServiceDescriptor.Singleton<IHostedService, HandlerValidationService>());
-        services.Insert(3, ServiceDescriptor.Singleton<IHostedService, ConfigurationValidationService>());
-        services.Insert(4, ServiceDescriptor.Singleton<IHostedService, DeclarationValidationService>());
-        services.Insert(5, ServiceDescriptor.Singleton<IHostedService, RedirectValidationService>());
+        // database go at the head of the collection. OPS-MIG-002 leads them, because
+        // every one of the others reads a table.
+        services.Insert(0, ServiceDescriptor.Singleton<IHostedService, SchemaValidationService>());
+        services.Insert(1, ServiceDescriptor.Singleton<IHostedService, ModelValidationService>());
+        services.Insert(2, ServiceDescriptor.Singleton<IHostedService, SendingValidationService>());
+        services.Insert(3, ServiceDescriptor.Singleton<IHostedService, HandlerValidationService>());
+        services.Insert(4, ServiceDescriptor.Singleton<IHostedService, ConfigurationValidationService>());
+        services.Insert(5, ServiceDescriptor.Singleton<IHostedService, DeclarationValidationService>());
+        services.Insert(6, ServiceDescriptor.Singleton<IHostedService, RedirectValidationService>());
 
         return services;
     }

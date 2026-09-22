@@ -36,6 +36,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         + Settings.RedirectDefaultClient.Key
         + "', 'nobody');";
 
+    private const string Unmigrated = "behind";
+
     private static readonly string Undefaulted =
         "DELETE FROM janus.settings WHERE key = '"
         + Settings.RedirectDefaultClient.Key
@@ -279,7 +281,41 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
             service => service.ServiceType == typeof(IHostedService));
 
         Assert.Equal(0, services.IndexOf(first));
-        Assert.Equal(typeof(ModelValidationService), first.ImplementationType);
+        Assert.Equal(typeof(SchemaValidationService), first.ImplementationType);
+    }
+
+    /// <summary>
+    /// OPS-MIG-002 AC1, AC2: a deployment pointed at a database the pipeline did not
+    /// migrate is stopped as it starts, by name and before the web server registered
+    /// after the library has served anything.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_MIG_002_AC1_ADeploymentOnAnUnmigratedDatabaseIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await WriteAsync(
+            "CREATE DATABASE " + Unmigrated + " TEMPLATE template0 "
+                + "LOCALE_PROVIDER icu ICU_LOCALE 'und' LC_COLLATE 'C' LC_CTYPE 'C'",
+            cancellationToken);
+
+        var served = new ServerStandIn();
+        using IHost deployment = new HostBuilder()
+            .ConfigureServices(services => Declared(
+                services.AddSingleton<IHostedService>(served),
+                connection: new NpgsqlConnectionStringBuilder(host.ConnectionString)
+                {
+                    Database = Unmigrated,
+                }.ConnectionString))
+            .Build();
+
+        StartupException refused = await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(cancellationToken));
+
+        Assert.Equal(ErrorCodes.StartupSchemaMismatch, refused.Failure?.Code);
+        Assert.NotEqual(0, refused.Failure?.Details["pending"].GetArrayLength());
+        Assert.False(served.Started);
     }
 
     private IHost Deployed(
@@ -300,7 +336,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool handlers = true,
         bool addresses = true,
         bool signIn = true,
-        bool codec = false)
+        bool codec = false,
+        string? connection = null)
     {
         if (codec)
         {
@@ -331,7 +368,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         }
 
         return services.AddJanus(
-            host.ConnectionString,
+            connection ?? host.ConnectionString,
             new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
             new byte[32],
             HostFixture.Declaration(),
@@ -358,7 +395,14 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     // for the web server the deployment starts.
     private sealed class ServerStandIn : IHostedService
     {
-        public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public bool Started { get; private set; }
+
+        public Task StartAsync(CancellationToken cancellationToken)
+        {
+            Started = true;
+
+            return Task.CompletedTask;
+        }
 
         public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }

@@ -5410,6 +5410,64 @@ and reported again, and three reports of one credential are three facts.
 *Chapter text that should change.* None. `10` section 5b already names all four and
 says what each is raised for.
 
+---
+
+## 153. Startup verifies the schema, and refuses only a database behind the model
+
+**Corrections 1 · 2026-09-23 · D-162 section D · OPS-MIG-002, OPS-MIG-001, OPS-MIG-005,
+`10` section 1.5**
+
+*What D-162 decided.* Build now, in the phase whose item it is:
+`model.startup.schemamismatch` raised by the phase 1 schema check. Phase 1 deferred
+OPS-MIG-002 for want of a startup path; phase 6 built one, and the check was never
+picked up.
+
+*What was built.* A check over the library's own context that reads the migration
+history against the migrations this build declares, registered as the first hosted
+service of the six that already run before the host's web server. A database owing at
+least one migration stops the application with `model.startup.schemamismatch` and the
+names of the migrations owed under `pending`. The check issues no DDL and applies
+nothing, so the database it refused is as un-migrated afterwards as it was before, which
+is what OPS-MIG-001 AC1 asks of a starting application.
+
+*Decided in the owner's absence (Tier 3, strictest reading).* A startup gate is security
+semantics, so the reading that refuses most was taken as far as the chapters allow.
+
+- **Reading one.** "The schema matches the model" is read both ways: a database owing a
+  migration and a database holding one this build does not declare are both mismatches
+  and both refuse.
+- **Reading two.** Only a database behind the model refuses.
+
+Reading two was taken. OPS-MIG-005 says every migration "SHALL work against the
+**previous** application version" and that "Both versions run briefly during rollout",
+and OPS-MIG-001 leaves migration to the pipeline, which runs before the deployment. A
+schema ahead of the model is therefore the ordinary state of every instance of the
+outgoing version during a rollout, and refusing it would stop the running application on
+every deploy, which no chapter asks for. Reading one is the stricter of the two but
+contradicts a chapter that speaks; reading two is the strictest reading left. Within
+reading two the gate still fails closed: any pending migration at all refuses, one is
+enough, and nothing about the database's own contents is consulted.
+
+*Also decided: where the check runs.* The schema check is registered ahead of the five
+checks D-160 put at the head of the collection, because every one of them reads a table
+and would otherwise meet a missing column with a failure that does not name the cause.
+The order test that pinned `ModelValidationService` at index 0 now pins
+`SchemaValidationService` there; AUTHZ-MODEL-004 AC2 is about the checks standing before
+the web server, which is unchanged.
+
+*Tests that pin it.*
+`SchemaValidationTests.OPS_MIG_002_AC1_TheMigratedDatabaseMatchesTheModelAsync`,
+`SchemaValidationTests.OPS_MIG_002_AC1_ADatabaseBehindTheModelIsRefusedByNameAsync`,
+`SchemaValidationTests.OPS_MIG_001_AC1_TheCheckLeavesTheDatabaseUnmigratedAsync`,
+`StartupValidationTests.OPS_MIG_002_AC1_ADeploymentOnAnUnmigratedDatabaseIsRefusedAsync`,
+`StartupValidationTests.AUTHZ_MODEL_004_AC2_TheChecksStartBeforeEverythingElseRegistered`.
+
+*Chapter text that should change.* OPS-MIG-002 should say which direction of mismatch
+refuses: a schema behind the model, and not a schema ahead of it, which OPS-MIG-005
+requires the previous application version to run against. `10` section 1.5 already
+carries the row for `model.startup.schemamismatch`; the description should name
+`pending` as the detail it carries.
+
 
 # Rows for chapter 10
 

@@ -3207,6 +3207,7 @@ static Janus.Core.ErrorCodes.StartupNoOrganizationPath.get -> Janus.Core.ErrorCo
 static Janus.Core.ErrorCodes.StartupPreferenceDeclaration.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupRedirectClient.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupRelyingPartyId.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.StartupSchemaMismatch.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupUndeclaredDerivationReference.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupUndeclaredPermission.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupUndeclaredTypeReference.get -> Janus.Core.ErrorCode

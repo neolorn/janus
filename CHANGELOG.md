@@ -148,6 +148,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Startup now verifies that the database carries the schema this build was compiled
+  against, before any other check reads a table and before the host's web server
+  starts. A database behind the model answers `model.startup.schemamismatch`, names
+  every migration still owed, and stops the application with a non-zero exit. The check
+  applies nothing, so an un-migrated database is left exactly as it was found, and a
+  database ahead of the model starts, which is the expand half of a rollout.
+
 - Four events reach the host that were missing from the emitted contract:
   `CredentialEnrolled` when an authenticator reaches active, and `CredentialSuspended`,
   `CredentialRestored` and `CredentialInvalidated` as a loss report opens, is cancelled

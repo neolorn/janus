@@ -155,6 +155,15 @@ public static class ErrorCodes
     public static ErrorCode StartupRedirectClient { get; } = ErrorCode.Parse("model.startup.redirectclient");
 
     /// <summary>
+    /// Startup: the database schema is behind the model, so a migration the pipeline
+    /// should have applied has not been. The details name the migrations still to
+    /// apply under <c>pending</c>; apply them and start again. A schema ahead of the
+    /// model is the expand half of a rollout and is not this fault.
+    /// </summary>
+    /// <remarks>Implements OPS-MIG-002, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupSchemaMismatch { get; } = ErrorCode.Parse("model.startup.schemamismatch");
+
+    /// <summary>
     /// The organization named is the administrative one, which is not deletable.
     /// Delete another organization, or none.
     /// </summary>
