@@ -119,6 +119,45 @@ public sealed class SessionStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// PRIV-RET-005 AC1: the location is kept with the session record and no longer.
+    /// Erasing the person leaves it unreadable, and the sweep that takes the expired
+    /// session takes the location with it.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RET_005_AC1_TheLocationIsUnreadableAfterErasureAndGoneWithTheSessionAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        Session record = Record(subject, absolute: TimeSpan.FromDays(1));
+
+        await WrittenAsync(record);
+        await _deployment.EraseAsync(subject);
+
+        await using (JanusDbContext reading = database.Context())
+        {
+            SessionRecord stored = await reading.Sessions
+                .SingleAsync(session => session.Id == record.Id, TestContext.Current.CancellationToken);
+
+            Assert.NotEmpty(stored.OriginPlace);
+
+            await Assert.ThrowsAsync<CryptographicException>(async () =>
+                await Store(reading).FindAsync(record.Id, TestContext.Current.CancellationToken));
+        }
+
+        await using (JanusDbContext sweeping = database.Context())
+        {
+            _ = await Store(sweeping).SweepAsync(
+                Noon + TimeSpan.FromDays(2),
+                TestContext.Current.CancellationToken);
+        }
+
+        await using JanusDbContext after = database.Context();
+
+        Assert.False(await after.Sessions.AnyAsync(
+            session => session.Id == record.Id,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// AUTH-SESS-013 AC4: neither the address nor the city stands in the table in
     /// plain, so a dump alone says nothing about where the person signed in from.
     /// </summary>

@@ -351,13 +351,13 @@ public sealed class ProcessingRecordsTests
     }
 
     /// <summary>
-    /// PRIV-RET-001, PRIV-SENS-002: the retention of each category the purpose is
-    /// over is on the row, longest first, and a category the deployment declares none
-    /// for is reported.
+    /// PRIV-RET-001 AC3, PRIV-ROPA-001: the retention of each category the purpose
+    /// is over is on the row, longest first, and a category the deployment declares
+    /// none for is reported.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task PRIV_ROPA_001_TheRetentionOfEachCategoryIsOnTheRowAsync()
+    public async Task PRIV_RET_001_AC3_TheRetentionOfEachCategoryIsOnTheRowAsync()
     {
         _configuration.Set(Settings.HostCategoryRetention, "identity", TimeSpan.FromDays(365));
         _configuration.Set(Settings.HostCategoryRetention, "order", TimeSpan.FromDays(1826));

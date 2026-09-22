@@ -248,6 +248,7 @@ public static class JanusRegistration
         // the host wrote it and not only as the model rebuilt it.
         services.AddSingleton(declaration);
         services.AddScoped<HandlerCoverage>();
+        services.AddScoped<ConfigurationCoverage>();
 
         services.AddScoped<IPrivacyAlerts, PrivacyAlerts>();
         services.AddScoped<ILegalDocuments, LegalDocumentService>();
@@ -281,6 +282,7 @@ public static class JanusRegistration
         services.Insert(0, ServiceDescriptor.Singleton<IHostedService, ModelValidationService>());
         services.Insert(1, ServiceDescriptor.Singleton<IHostedService, SendingValidationService>());
         services.Insert(2, ServiceDescriptor.Singleton<IHostedService, HandlerValidationService>());
+        services.Insert(3, ServiceDescriptor.Singleton<IHostedService, ConfigurationValidationService>());
 
         return services;
     }

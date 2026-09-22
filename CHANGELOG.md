@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Startup now refuses a deployment whose declared data categories have no retention
+  period, naming the `retention.<category>` key nobody set, and one that is open to
+  minors (`registration.adultaffirmation` off) without a written-consent lawful basis
+  to hold a child's data under.
+
 - The audit trail now answers "who was affected" after an erasure. Reading one
   subject's records goes through the index that carries the subject, and a record
   whose subject key has been destroyed comes back anonymised (what happened, when, to
