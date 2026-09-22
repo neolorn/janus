@@ -38,6 +38,7 @@ public sealed class AuditActionsTests
         "identity.credential.labelled",
         "identity.deletion.cancelled",
         "identity.deletion.requested",
+        "identity.organization.erased",
         "identity.preferences.changed",
         "identity.profile.changed",
         "identity.secondstep.preferred",
