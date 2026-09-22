@@ -11,7 +11,7 @@ platform constraints.
 defaults. Anything not addressed here follows standard .NET practice.
 
 **Nothing in this document is a suggestion.** Every design and code choice below is
-fixed so that the implementer, human or agent, decides none of them. Where a choice is
+fixed so that the implementer decides none of them. Where a choice is
 not covered here or by another chapter, the implementer stops and reports rather than
 choosing (D-149).
 

@@ -2,18 +2,18 @@
 
 **Status:** supplementary document. The specification (`spec/00` to `spec/20`) is the
 authority for *what* is built; this plan states the *order* in which it is built, what
-each phase must prove before the next begins, and the rules the implementing agent works
+each phase must prove before the next begins, and the rules the implementer works
 under. It adds no requirement. Where this plan and a chapter disagree, the chapter wins.
 
-**Audience:** the implementing agent and the person directing it. The agent's working
+**Audience:** the implementer and the person directing it. The implementer's working
 rules are in the working guide; this plan is the order of work.
 
-**Two milestones.** Milestone 1 is the library: everything the agent can build and
+**Two milestones.** Milestone 1 is the library: everything the implementer can build and
 prove alone against the specification with a database, a cache and a shell, with every
 external system met at its abstraction. It runs autonomously, phase by phase, on phase
 reports alone. Milestone 2 is the deployment: everything that needs the real world or
 the owner (a machine, a credential, a purchase, a physical envelope, a decision). It is
-a checklist of the owner's actions with the agent's work between them, and it does not
+a checklist of the owner's actions with the implementer's work between them, and it does not
 start until Milestone 1's exit gate is green.
 
 ---
@@ -39,7 +39,7 @@ start until Milestone 1's exit gate is green.
 ## 2. Working rules
 
 - **One phase at a time.** A phase ends with a report: items implemented, criteria proven
-  (test names), items deferred with reason, spec defects found. In Milestone 1 the agent
+  (test names), items deferred with reason, spec defects found. In Milestone 1 the implementer
   continues to the next phase on its own when the report lists no defect, no deferred
   item and a green gate; otherwise it stops and waits. Milestone 2 never starts without
   the owner.
@@ -81,7 +81,7 @@ running the criteria of the items listed, not by inspection.
 criterion of every item in chapters 01 to 10, 17 and 20, and the code-side items of 06,
 12 and 19, has a passing test carrying its identifier (CONV-TEST-007); the full gate is
 green; `PublicAPI.Unshipped.txt` holds the complete surface; no spec defect is open.
-The agent stops here and does not begin Milestone 2 on its own.
+The implementer stops here and does not begin Milestone 2 on its own.
 
 What Milestone 1 does **not** touch: a real mail server, SMS gateway, secrets manager,
 DNS, certificates, host machine, package feed or frontend. Each is met at its
@@ -90,24 +90,24 @@ the integration tests run against.
 
 ## 4. Milestone 2: the deployment
 
-Sequential; each step names who acts. "Owner" steps need the person; "agent" steps
-are done by the agent once the owner step before them is complete. Nothing here is
+Sequential; each step names who acts. "Owner" steps need the person; "implementer" steps
+are done by the implementer once the owner step before them is complete. Nothing here is
 autonomous end to end.
 
 | # | Step | Who | What | Done when |
 |---|---|---|---|---|
-| 1 | Repository workflows | agent | Pipeline definitions for the gates of CONV-GATE-001/002, release workflow (tag, MinVer, changelog check, package publish), dependency alerting, secret scanning | Every gate runs on a pull request; a tagged commit produces a versioned package |
-| 2 | Package feed | owner, then agent | Owner provisions the private feed and its credential (LIB-PKG-003); agent wires the release workflow to it | The package installs from the feed into the sample host |
-| 3 | Infrastructure definition | agent, owner reviews | Container arrangement, reverse proxy, DNS records, volumes, certificate mechanism, pipeline target, committed per DR-017; PostgreSQL with ICU collation, Redis, secrets manager, clock sync per `19` | Owner approves the definition; DR-007 test builds from it |
-| 4 | Host and secrets | owner | Provision the host outside Egypt (INF-HOST-004), the secrets manager (INF-HOST-003), the database credentials (INF-DB-003), TLS (INF-TLS-001 to 003), alert channels (INF-OBS-001), the reachability check (INF-OBS-003) | Agent's connectivity checks pass from the pipeline |
-| 5 | Mail server | owner, then agent | Owner deploys the mail server and registers the sending domains (INT-MAIL-011); agent configures the OIDC client, provisioning and reconciliation against it (INT-MAIL-001 to 010) | A staff invitation creates a disabled mailbox; acknowledgement enables it; reconciliation reports no drift |
-| 6 | SMS gateway | owner, then agent | Owner contracts the gateway and sets the balance floor; agent wires the transport, delivery report and balance polling (INT-SMS) | A verification code arrives on a real number; a failed delivery does not count |
-| 7 | Configuration | owner with agent | The eight required values (`10` section 4), the governing language (`legal.governinglanguage`), the legal documents and their versions, the host's purposes and lawful bases, the preference declaration, the holiday list | Startup succeeds with no default overridden except the eight; compliance texts publish |
+| 1 | Repository workflows | implementer | Pipeline definitions for the gates of CONV-GATE-001/002, release workflow (tag, MinVer, changelog check, package publish), dependency alerting, secret scanning | Every gate runs on a pull request; a tagged commit produces a versioned package |
+| 2 | Package feed | owner, then implementer | Owner provisions the private feed and its credential (LIB-PKG-003); implementer wires the release workflow to it | The package installs from the feed into the sample host |
+| 3 | Infrastructure definition | implementer, owner reviews | Container arrangement, reverse proxy, DNS records, volumes, certificate mechanism, pipeline target, committed per DR-017; PostgreSQL with ICU collation, Redis, secrets manager, clock sync per `19` | Owner approves the definition; DR-007 test builds from it |
+| 4 | Host and secrets | owner | Provision the host outside Egypt (INF-HOST-004), the secrets manager (INF-HOST-003), the database credentials (INF-DB-003), TLS (INF-TLS-001 to 003), alert channels (INF-OBS-001), the reachability check (INF-OBS-003) | The implementer's connectivity checks pass from the pipeline |
+| 5 | Mail server | owner, then implementer | Owner deploys the mail server and registers the sending domains (INT-MAIL-011); implementer configures the OIDC client, provisioning and reconciliation against it (INT-MAIL-001 to 010) | A staff invitation creates a disabled mailbox; acknowledgement enables it; reconciliation reports no drift |
+| 6 | SMS gateway | owner, then implementer | Owner contracts the gateway and sets the balance floor; implementer wires the transport, delivery report and balance polling (INT-SMS) | A verification code arrives on a real number; a failed delivery does not count |
+| 7 | Configuration | owner with implementer | The eight required values (`10` section 4), the governing language (`legal.governinglanguage`), the legal documents and their versions, the host's purposes and lawful bases, the preference declaration, the holiday list | Startup succeeds with no default overridden except the eight; compliance texts publish |
 | 8 | Bootstrap | owner | Run the bootstrap command on the real host (OPS-BOOT-001): first organization, first administrator's enrolment link, `emergency`; complete the enrolment with a passkey; issue the break-glass credential from the management app and seal the envelope (OPS-BOOT-002 to 004, DR-009) | The envelope holds the code, the three keys and the deployment credentials; the escrow copy exists; the annual reseal is on the maintenance log |
-| 9 | Backups and restore | agent, owner verifies | Continuous archiving, base backups, encryption under the backup key, the erasure ledger off host, the scheduled restore test (`12`) | First restore test passes on the real host; DR-011 rebuild rehearsed once from the envelope and the repository |
-| 10 | Frontends | agent | Authentication, account and management applications per `18` against the real BFF; wording written natively per language (CONV-CONTENT-001) | Every FE item's criteria pass end to end against the deployed BFF |
+| 9 | Backups and restore | implementer, owner verifies | Continuous archiving, base backups, encryption under the backup key, the erasure ledger off host, the scheduled restore test (`12`) | First restore test passes on the real host; DR-011 rebuild rehearsed once from the envelope and the repository |
+| 10 | Frontends | implementer | Authentication, account and management applications per `18` against the real BFF; wording written natively per language (CONV-CONTENT-001) | Every FE item's criteria pass end to end against the deployed BFF |
 | 11 | Business actions | owner | The outstanding actions of the decision log (counsel confirmations, DPO, licences, permits) | Each recorded as done in the log's table |
-| 12 | Release 1.0.0 | agent, owner approves | Move `Unreleased` to `1.0.0`, ship the public-surface file, tag, publish (CONV-VCS-005) | Version 1.0.0 on the feed; changelog and migration note published |
+| 12 | Release 1.0.0 | implementer, owner approves | Move `Unreleased` to `1.0.0`, ship the public-surface file, tag, publish (CONV-VCS-005) | Version 1.0.0 on the feed; changelog and migration note published |
 
 The frontend applications (`18`) are built in step 10 against the deployed BFF;
 Milestone 1 phases 5 and 8 deliver the server side they need.
