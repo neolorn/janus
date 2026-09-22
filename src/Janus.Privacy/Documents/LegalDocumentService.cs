@@ -203,12 +203,19 @@ internal sealed class LegalDocumentService(
 
         // PRIV-CONS-007: only the notice is what a consent record names the version
         // of, so a material revision of anything else ends no consent.
-        int superseded =
+        Result<int> ended =
             publication.Material && string.Equals(version.DocumentName, ConsentService.Notice, StringComparison.Ordinal)
                 ? await supersession
                     .OfAsync(version.Version, version.PublishedAt, cancellationToken)
                     .ConfigureAwait(false)
-                : 0;
+                : Result.Success(0);
+
+        if (ended.Match(_ => (Error?)null, error => error) is Error unended)
+        {
+            return Result.Failure<DocumentVersion>(unended);
+        }
+
+        int superseded = ended.Match(count => count, _ => 0);
 
         await audit
             .RecordedAsync(

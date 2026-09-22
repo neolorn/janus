@@ -989,6 +989,8 @@ something.
 *Chapter text that should change.* CONV-DESIGN-005 should name the ports its AC1 does
 not reach, or `07` should state that a publication port is not an operation contract.
 
+**Superseded by D-162.** Applied in entry 121.
+
 ---
 
 ## 30. The message catalogue answers with an outcome, not with a missing template
@@ -3847,6 +3849,73 @@ template"), and the item should state that the render is done at startup with ea
 at its defined width, that the widths are defined once per place beside the message
 kinds, and that a place the library does not fill is left as it stands. `10` should carry
 the places and their widths, which are listed under "Rows for chapter 10".
+
+---
+
+## 121. Publishing answers for itself, and the operation that made the event carries it
+
+**Corrections 1 · 2026-09-22 · D-162 section B, correcting entry 29 · CONV-DESIGN-005 AC1, LIB-API-001, IDN-LIFE-003a, INT-GEN-006**
+
+*What D-162 decided.* `IEvents.PublishAsync` returns `ValueTask<Result>`; on failure the
+outbox row stays unmarked for the publisher and the degradation is raised; on success
+the row is marked. No exemption for ports from CONV-DESIGN-005.
+
+*What was built.* `IEvents.PublishAsync` answers with an outcome, and every one of the
+twenty-seven places that publishes now carries it. `IEvents` is out of the gate test's
+exemption list, and the two that remain there are justified by CONV-ERR-001 (their
+failures are faults and throw) rather than by being ports.
+
+Three publications were made after the commit of the transaction that made them true
+(the account a registration creates, and the two changes a restriction administration
+records). They are now made inside that transaction, which is what lets the failure be
+carried: an operation that cannot record its event commits nothing. The balance reading
+and the alert it raises likewise commit together.
+
+`ILocationResolver.ResolveAsync` answers with an outcome for the same reason: the
+shipped resolver's job is to answer no location *and* raise the degradation, and one of
+those failing is the resolver failing. `Supersession.OfAsync` and
+`IdentifierService.SettleAsync` answer with outcomes because each publishes on behalf of
+its caller.
+
+*Decided in the owner's absence (Tier 3, strictest reading).* Three points:
+
+1. *What a caller does with a failed publication.* It fails the operation. A failure
+   from the port cannot tell a caller whether an outbox row was written (and so will be
+   retried) or not written at all (and so is lost), and the safe reading of the two is
+   the second: a state change whose event may never arrive is not committed. The
+   alternative, continuing and letting the publisher catch up, is only safe under the
+   reading the caller cannot verify.
+2. *Where the publication happens.* Inside the transaction that made the event true,
+   not after its commit. The other reading (publish after the commit, as three sites
+   did) makes the outcome uncarryable: the account exists, so returning a failure would
+   tell the caller a registration failed that in fact succeeded. `IEvents` is documented
+   accordingly: the publication is part of the operation.
+3. *"No exemption for ports."* Applied to the reason, which entry 29 used and which
+   D-162 reverses: being a port buys no exemption. `ISecretSource` and `IUnitOfWork`
+   stay outside the gate's list on a different ground, that they carry no expected
+   failure at all (CONV-ERR-001 makes theirs faults, which throw). Reading the sentence
+   to cover them as well would make a commit answer with an expected outcome that can
+   only ever be success, which is ceremony CONV-DESIGN-005 does not ask for. The owner
+   may disagree, and this is the one line of D-162 item 29 not applied literally.
+
+*Not built, by D-162's own terms.* The outbox row a publication is recorded in, the
+marking of it, and the degradation raised on exhaustion belong to the publisher of phase
+9. No implementation of `IEvents` is shipped yet.
+
+*Tests that pin it.*
+`ResultContractTests.CONV_DESIGN_005_AC1_EveryContractMethodReturnsAnOutcome`, which now
+reaches `IEvents`,
+`AccountLifecycleTests.CONV_DESIGN_005_AC1_AnEventThatIsNotTakenFailsTheOperationAsync`,
+`SessionServiceTests.INT_GEN_006_AResolverThatCouldNotReportFailsTheSignInAsync`,
+and every existing test of the twenty-seven publishing operations, which still pass
+because a publication that is taken changes nothing.
+
+*Chapter text that should change.* CONV-DESIGN-005 should say that AC1 reaches every
+public contract including the ports, and name what it does not reach and why. LIB-API-001
+should carry `IEvents.PublishAsync` with its new return. An item of `02` should state
+that an operation publishes inside its transaction and commits nothing it could not
+publish.
+
 
 # Rows for chapter 10
 

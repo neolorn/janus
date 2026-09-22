@@ -137,11 +137,16 @@ internal sealed class ThrottleService(
 
             if (scope is ThrottleScope.Account && standing + 1 >= threshold)
             {
-                await events
+                Result published = await events
                     .PublishAsync(
                         Alerts.Of(AlertCondition.AuthFailuresSustained, key, now),
                         cancellationToken)
                     .ConfigureAwait(false);
+
+                if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+                {
+                    return Result.Failure(unpublished);
+                }
             }
         }
 

@@ -100,9 +100,14 @@ internal sealed class NonExistenceNotice(
 
         if (recent > threshold)
         {
-            await events
+            Result published = await events
                 .PublishAsync(Alerts.Of(AlertCondition.NonexistentNoticeRate, null, now), cancellationToken)
                 .ConfigureAwait(false);
+
+            if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+            {
+                return Result.Failure<bool>(unpublished);
+            }
         }
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);

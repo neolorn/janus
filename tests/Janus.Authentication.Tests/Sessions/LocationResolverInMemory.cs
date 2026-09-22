@@ -26,13 +26,21 @@ internal sealed class LocationResolverInMemory : ILocationResolver
     /// <param name="place">Where it is.</param>
     public void Holds(string address, SessionLocation place) => _places[address] = place;
 
+    /// <summary>
+    /// What the resolver answers with instead of a place, where a test stands in for
+    /// a database that could not report what it had to report.
+    /// </summary>
+    public Error? Refusal { get; set; }
+
     /// <inheritdoc/>
-    public ValueTask<SessionLocation?> ResolveAsync(
+    public ValueTask<Result<SessionLocation?>> ResolveAsync(
         string address,
         CancellationToken cancellationToken)
     {
         Asked.Add(address);
 
-        return ValueTask.FromResult(_places.GetValueOrDefault(address));
+        return ValueTask.FromResult(Refusal is Error refused
+            ? Result.Failure<SessionLocation?>(refused)
+            : Result.Success(_places.GetValueOrDefault(address)));
     }
 }

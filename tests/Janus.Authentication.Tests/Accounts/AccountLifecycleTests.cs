@@ -386,6 +386,29 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
         _ = Assert.Single(_events.Of<AccountDeletionCancelled>());
     }
 
+    /// <summary>
+    /// CONV-DESIGN-005 AC1 and D-022: an event the port would not take fails the
+    /// operation that made it, so nothing is committed that no consumer was told of.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_005_AC1_AnEventThatIsNotTakenFailsTheOperationAsync()
+    {
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            Refused(await Lifecycle.DeactivateAsync(
+                Acting,
+                Stepped(),
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.Equal(0, _work.Committed);
+        Assert.Empty(_events.Published);
+        Assert.Empty(_audit.Recorded);
+    }
+
     private static void Accepted(Result outcome) =>
         outcome.Switch(() => { }, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
 

@@ -133,9 +133,7 @@ internal sealed class RestrictionAdministration(
             .EditedAsync(name, before, replacement, loosening, reason, actor, now, cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
-        await events
+        Result published = await events
             .PublishAsync(
                 new SendingRestrictionChanged(now, Edit + ":" + name + ":" + now.Ticks, name, loosening)
                 {
@@ -144,14 +142,26 @@ internal sealed class RestrictionAdministration(
                 cancellationToken)
             .ConfigureAwait(false);
 
+        if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+        {
+            return Result.Failure(unpublished);
+        }
+
         if (loosening)
         {
-            await events
+            Result alerted = await events
                 .PublishAsync(
                     Alerts.Of(AlertCondition.RestrictionLoosened, name, now, Named(name)),
                     cancellationToken)
                 .ConfigureAwait(false);
+
+            if (alerted.Match(() => (Error?)null, error => error) is Error unalerted)
+            {
+                return Result.Failure(unalerted);
+            }
         }
+
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success();
     }
@@ -230,11 +240,9 @@ internal sealed class RestrictionAdministration(
             .GrantedAsync(name, credit, reason, actor, now, cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
         // The plain key value never leaves this method: the event carries the
         // restriction, the credit and the reason (AUTH-ABUSE-004, chapter 10 5b).
-        await events
+        Result published = await events
             .PublishAsync(
                 new SendingRestrictionGranted(
                     now,
@@ -248,11 +256,23 @@ internal sealed class RestrictionAdministration(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        await events
+        if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+        {
+            return Result.Failure(unpublished);
+        }
+
+        Result alerted = await events
             .PublishAsync(
                 Alerts.Of(AlertCondition.RestrictionGranted, name, now, Named(name)),
                 cancellationToken)
             .ConfigureAwait(false);
+
+        if (alerted.Match(() => (Error?)null, error => error) is Error unalerted)
+        {
+            return Result.Failure(unalerted);
+        }
+
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success();
     }

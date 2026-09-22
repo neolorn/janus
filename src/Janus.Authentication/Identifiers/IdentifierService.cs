@@ -228,7 +228,14 @@ internal sealed class IdentifierService(
 
         staged.Verify(now);
 
-        await SettleAsync(waiting, now, source, cancellationToken).ConfigureAwait(false);
+        Result settled = await SettleAsync(waiting, now, source, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (settled.Match(() => (Error?)null, error => error) is Error unsettled)
+        {
+            return Result.Failure(unsettled);
+        }
+
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success();
@@ -267,7 +274,14 @@ internal sealed class IdentifierService(
 
             waiting.ConfirmOld(now);
 
-            await SettleAsync(waiting, now, source, cancellationToken).ConfigureAwait(false);
+            Result settled = await SettleAsync(waiting, now, source, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (settled.Match(() => (Error?)null, error => error) is Error unsettled)
+            {
+                return Result.Failure<LinkLanding>(unsettled);
+            }
+
             await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
             return Result.Success(new LinkLanding(Verified: true, SameBrowser: false, Code: null));
@@ -295,7 +309,14 @@ internal sealed class IdentifierService(
 
         staged.Verify(now);
 
-        await SettleAsync(waiting, now, source, cancellationToken).ConfigureAwait(false);
+        Result landed = await SettleAsync(waiting, now, source, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (landed.Match(() => (Error?)null, error => error) is Error unlanded)
+        {
+            return Result.Failure<LinkLanding>(unlanded);
+        }
+
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success(new LinkLanding(Verified: true, SameBrowser: true, Code: null));
@@ -372,7 +393,7 @@ internal sealed class IdentifierService(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        await events
+        Result published = await events
             .PublishAsync(
                 new IdentifierPrimaryChanged(now, Key(identifier, now), identifier, promoted.Kind)
                 {
@@ -380,6 +401,11 @@ internal sealed class IdentifierService(
                 },
                 cancellationToken)
             .ConfigureAwait(false);
+
+        if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+        {
+            return Result.Failure(unpublished);
+        }
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
@@ -504,7 +530,7 @@ internal sealed class IdentifierService(
             await directory.DiscardAsync(subject, identifier, cancellationToken).ConfigureAwait(false);
         }
 
-        await events
+        Result published = await events
             .PublishAsync(
                 new IdentifierRemoved(now, Key(identifier, now), identifier, going.Kind)
                 {
@@ -512,6 +538,11 @@ internal sealed class IdentifierService(
                 },
                 cancellationToken)
             .ConfigureAwait(false);
+
+        if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+        {
+            return Result.Failure(unpublished);
+        }
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
@@ -569,7 +600,7 @@ internal sealed class IdentifierService(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        await events
+        Result published = await events
             .PublishAsync(
                 new IdentifierAdded(now, Key(given.Id, now), given.Id, given.Kind)
                 {
@@ -577,6 +608,11 @@ internal sealed class IdentifierService(
                 },
                 cancellationToken)
             .ConfigureAwait(false);
+
+        if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+        {
+            return Result.Failure(unpublished);
+        }
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
@@ -1249,7 +1285,7 @@ internal sealed class IdentifierService(
     // What a completed verification does to the account: an add proves the identifier
     // it wrote, a replace swaps the value of the one it named and holds the displaced
     // value for the undo.
-    private async ValueTask SettleAsync(
+    private async ValueTask<Result> SettleAsync(
         PendingVerification waiting,
         DateTimeOffset now,
         string source,
@@ -1259,7 +1295,7 @@ internal sealed class IdentifierService(
         {
             await pending.RecordAsync(waiting, cancellationToken).ConfigureAwait(false);
 
-            return;
+            return Result.Success();
         }
 
         StagedIdentity staged = waiting.Staged;
@@ -1277,7 +1313,7 @@ internal sealed class IdentifierService(
 
         await pending.RemoveAsync(staged.Id, cancellationToken).ConfigureAwait(false);
 
-        await events
+        Result published = await events
             .PublishAsync(
                 new IdentifierAdded(now, Key(staged.Id, now), staged.Id, staged.Kind)
                 {
@@ -1285,6 +1321,13 @@ internal sealed class IdentifierService(
                 },
                 cancellationToken)
             .ConfigureAwait(false);
+
+        if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+        {
+            return Result.Failure(unpublished);
+        }
+
+        return Result.Success();
     }
 
     private async ValueTask SwapAsync(

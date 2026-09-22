@@ -23,6 +23,11 @@ internal interface ILocationResolver
     /// </summary>
     /// <param name="address">The address the request came from.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The location, or nothing where the database could not say.</returns>
-    ValueTask<SessionLocation?> ResolveAsync(string address, CancellationToken cancellationToken);
+    /// <returns>
+    /// The location, nothing where the database could not say, or the failure where
+    /// the resolver could not report what it had to report.
+    /// </returns>
+    ValueTask<Result<SessionLocation?>> ResolveAsync(
+        string address,
+        CancellationToken cancellationToken);
 }

@@ -29,8 +29,8 @@ internal sealed class Supersession(IConsentStore consents, IEvents events)
     /// <param name="noticeVersion">The version just published.</param>
     /// <param name="at">When it was published.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>How many consents it ended.</returns>
-    public async ValueTask<int> OfAsync(
+    /// <returns>How many consents it ended, or the failure where one was not announced.</returns>
+    public async ValueTask<Result<int>> OfAsync(
         string noticeVersion,
         DateTimeOffset at,
         CancellationToken cancellationToken)
@@ -44,7 +44,7 @@ internal sealed class Supersession(IConsentStore consents, IEvents events)
             await consents
                 .RecordAsync(one.Subject, one.Consent with { SupersededAt = at }, cancellationToken)
                 .ConfigureAwait(false);
-            await events
+            Result published = await events
                 .PublishAsync(
                     new ConsentChanged(
                         at,
@@ -56,9 +56,14 @@ internal sealed class Supersession(IConsentStore consents, IEvents events)
                     },
                     cancellationToken)
                 .ConfigureAwait(false);
+
+            if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+            {
+                return Result.Failure<int>(unpublished);
+            }
         }
 
-        return held.Count;
+        return Result.Success(held.Count);
     }
 
     private static string Key(HeldConsent one, DateTimeOffset at) =>

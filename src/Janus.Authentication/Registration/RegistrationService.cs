@@ -781,9 +781,8 @@ internal sealed class RegistrationService(
         // Nothing of the session survives it: an account exists now, and a staged
         // copy of what made it would be a second place the same facts live.
         await sessions.RemoveAsync(live.Id, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-        await events
+        Result published = await events
             .PublishAsync(
                 new AccountRegistered(now, live.Provisional.ToString())
                 {
@@ -791,6 +790,13 @@ internal sealed class RegistrationService(
                 },
                 cancellationToken)
             .ConfigureAwait(false);
+
+        if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+        {
+            return Result.Failure<RegistrationOutcome>(unpublished);
+        }
+
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success(new RegistrationOutcome(live.Provisional, issued, browser));
     }

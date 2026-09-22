@@ -48,11 +48,13 @@ public sealed class LocationDatabaseTests
     [Fact]
     public async Task INT_GEN_006_AC3_WithNoFileAvailableNoLocationIsAnsweredAsync()
     {
-        SessionLocation? where = await Database.ResolveAsync(
+        Result<SessionLocation?> where = await Database.ResolveAsync(
             "198.51.100.7",
             TestContext.Current.CancellationToken);
 
-        Assert.Null(where);
+        Assert.Null(where.Match(
+            place => place,
+            error => throw new Xunit.Sdk.XunitException($"The resolve was refused: {error.Code}.")));
     }
 
     /// <summary>

@@ -114,7 +114,14 @@ internal sealed class AlertDestinationChange(
             return Result.Failure(failure);
         }
 
-        await events.PublishAsync(raised with { Actor = actor }, cancellationToken).ConfigureAwait(false);
+        Result published = await events
+            .PublishAsync(raised with { Actor = actor }, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+        {
+            return Result.Failure(unpublished);
+        }
 
         return Result.Success();
     }

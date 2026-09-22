@@ -164,7 +164,15 @@ internal sealed class SessionService(
         (TimeSpan inactivity, TimeSpan _) =
             await LifetimesAsync(policy, cancellationToken).ConfigureAwait(false);
 
-        SessionOrigin used = await LocatedAsync(origin, cancellationToken).ConfigureAwait(false);
+        Result<SessionOrigin> located = await LocatedAsync(origin, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (located.Match(_ => (Error?)null, error => error) is Error unlocated)
+        {
+            return Result.Failure<Session>(unlocated);
+        }
+
+        SessionOrigin used = located.Match(one => one, _ => origin);
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
@@ -298,13 +306,18 @@ internal sealed class SessionService(
         var restored = OpaqueToken.Draw(randomness);
         var restoredToken = OpaqueToken.Draw(randomness);
 
+        Result<SessionOrigin> located = await LocatedAsync(origin, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (located.Match(_ => (Error?)null, error => error) is Error unlocated)
+        {
+            return Result.Failure<IssuedSession>(unlocated);
+        }
+
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
         session.Present(proved, now);
-        session.Touch(
-            await LocatedAsync(origin, cancellationToken).ConfigureAwait(false),
-            now,
-            inactivity);
+        session.Touch(located.Match(one => one, _ => origin), now, inactivity);
         await sessions.RecordAsync(session, cancellationToken).ConfigureAwait(false);
         await sessions
             .ReplaceSecretAsync(
@@ -394,10 +407,18 @@ internal sealed class SessionService(
         (TimeSpan inactivity, TimeSpan _) =
             await LifetimesAsync(policy, cancellationToken).ConfigureAwait(false);
 
+        Result<SessionOrigin> located = await LocatedAsync(origin, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (located.Match(_ => (Error?)null, error => error) is Error unlocated)
+        {
+            return Result.Failure<IssuedSession>(unlocated);
+        }
+
         Session derived = record.Derive(
             SessionId.New(time),
             type,
-            await LocatedAsync(origin, cancellationToken).ConfigureAwait(false),
+            located.Match(one => one, _ => origin),
             now,
             inactivity);
         var secret = OpaqueToken.Draw(randomness);
@@ -648,15 +669,13 @@ internal sealed class SessionService(
 
     // INT-GEN-006: the address is the session's own and the city is what the local
     // database makes of it, so nothing outside the library writes a place into one.
-    private async ValueTask<SessionOrigin> LocatedAsync(
+    private async ValueTask<Result<SessionOrigin>> LocatedAsync(
         SessionOrigin origin,
         CancellationToken cancellationToken) =>
-        origin with
-        {
-            Location = await locations
-                .ResolveAsync(origin.Address, cancellationToken)
-                .ConfigureAwait(false),
-        };
+        (await locations.ResolveAsync(origin.Address, cancellationToken).ConfigureAwait(false))
+            .Match(
+                place => Result.Success(origin with { Location = place }),
+                Result.Failure<SessionOrigin>);
 
     private async ValueTask<Result<IssuedSession>> BeginAsync(
         SubjectId subject,
@@ -700,11 +719,20 @@ internal sealed class SessionService(
             await LifetimesAsync(policy, cancellationToken).ConfigureAwait(false);
 
         DateTimeOffset now = time.GetUtcNow();
+
+        Result<SessionOrigin> located = await LocatedAsync(origin, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (located.Match(_ => (Error?)null, error => error) is Error unlocated)
+        {
+            return Result.Failure<IssuedSession>(unlocated);
+        }
+
         var session = Session.Begin(
             SessionId.New(time),
             subject,
             reached.Value,
-            await LocatedAsync(origin, cancellationToken).ConfigureAwait(false),
+            located.Match(one => one, _ => origin),
             now,
             inactivity,
             absolute,

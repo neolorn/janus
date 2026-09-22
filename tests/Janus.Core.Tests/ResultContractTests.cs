@@ -24,18 +24,16 @@ public sealed class ResultContractTests
     ];
 
     // CONV-DESIGN-005 AC1 is about the service contracts of LIB-API-005, the operations
-    // the library performs. These three are not operations: the secret source is the
-    // extension point of LIB-EXT-001, which a host implements and whose absence
-    // CONV-ERR-001 makes a startup fault, the unit of work is the persistence port of
-    // CONV-DESIGN-003, and the event port publishes after the transaction the event
-    // describes has committed, so nothing a caller could act on comes back. An
-    // interface added outside this list is an operation contract and is held to the
-    // rule.
+    // the library performs. Being a port buys no exemption: what these two have is no
+    // expected failure to carry. The secret source is the extension point of
+    // LIB-EXT-001, whose absence CONV-ERR-001 makes a startup fault, and the unit of
+    // work is the transaction primitive of CONV-DESIGN-003, whose failures are faults
+    // and throw (CONV-ERR-001). An interface added outside this list is an operation
+    // contract and is held to the rule.
     private static readonly Type[] NotOperationContracts =
     [
         typeof(ISecretSource),
         typeof(IUnitOfWork),
-        typeof(IEvents),
     ];
 
     /// <summary>

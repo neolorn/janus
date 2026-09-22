@@ -274,7 +274,7 @@ internal sealed class SendingService(
         var reference = SendReference.Draw(randomness);
         string body = MessageRendering.Fill(template.Text, request.Values);
 
-        await events
+        Result published = await events
             .PublishAsync(
                 new NotificationRequested(
                     time.GetUtcNow(),
@@ -286,6 +286,11 @@ internal sealed class SendingService(
                 },
                 cancellationToken)
             .ConfigureAwait(false);
+
+        if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+        {
+            return Result.Failure<SendReference>(unpublished);
+        }
 
         // INT-GEN-005: the payload of an outbound message is built here and nowhere
         // else, so its field set is one thing to read and one thing to test.

@@ -577,6 +577,25 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// INT-GEN-006 and CONV-DESIGN-005 AC1: a resolver that could not report what it
+    /// had to report fails the sign-in, because the degradation it exists to raise is
+    /// the deployment's only sight of an absent database.
+    /// </summary>
+    [Fact]
+    public async Task INT_GEN_006_AResolverThatCouldNotReportFailsTheSignInAsync()
+    {
+        _locations.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            Refusal(await Service.BeginAsync(
+                Subject(),
+                [Factor.Password],
+                Somewhere,
+                TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
     /// AUTH-SESS-013 AC3: ending one session leaves the others intact.
     /// </summary>
     [Fact]

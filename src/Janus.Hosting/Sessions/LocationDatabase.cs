@@ -23,7 +23,7 @@ internal sealed class LocationDatabase(IEvents events, TimeProvider time) : ILoc
     private const string Absent = "location.database.absent";
 
     /// <inheritdoc/>
-    public async ValueTask<SessionLocation?> ResolveAsync(
+    public async ValueTask<Result<SessionLocation?>> ResolveAsync(
         string address,
         CancellationToken cancellationToken)
     {
@@ -33,12 +33,14 @@ internal sealed class LocationDatabase(IEvents events, TimeProvider time) : ILoc
         // raised under the absent file and the router carries one alert a window
         // rather than one a sign-in (OPS-ALERT-002). The session is recorded without
         // a location either way (INT-GEN-006).
-        await events
+        Result published = await events
             .PublishAsync(
                 Alerts.Of(AlertCondition.Degradation, Absent, time.GetUtcNow()),
                 cancellationToken)
             .ConfigureAwait(false);
 
-        return null;
+        return published.Match(
+            () => Result.Success<SessionLocation?>(null),
+            Result.Failure<SessionLocation?>);
     }
 }
