@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The audit trail now answers "who was affected" after an erasure. Reading one
+  subject's records goes through the index that carries the subject, and a record
+  whose subject key has been destroyed comes back anonymised (what happened, when, to
+  whom by opaque identifier) instead of failing the whole read.
+
 - Records of processing are now generated rather than kept. `GET /admin/ropa?format=template`
   answers with the regulator's template: a row a declared purpose carrying its data and
   subject categories, its lawful basis, the non-sensitive, sensitive and children's

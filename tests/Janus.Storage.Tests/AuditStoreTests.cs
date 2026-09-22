@@ -225,8 +225,12 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
 
         await using JanusDbContext reading = database.Context();
 
-        await Assert.ThrowsAsync<CryptographicException>(async () =>
-            await Store(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+        AuditRecord anonymised = Assert.Single(await Store(reading).FindBySubjectAsync(
+            subject,
+            TestContext.Current.CancellationToken));
+
+        Assert.Empty(anonymised.PersonalDetails);
+        Assert.Equal("identity.identifier.added", anonymised.Action.ToString());
 
         await using NpgsqlConnection connection = await database.OpenAsync();
         (string action, DateTime at) = await connection.QuerySingleAsync<(string, DateTime)>(
@@ -235,6 +239,106 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
 
         Assert.Equal("identity.identifier.added", action);
         Assert.Equal(occurred.UtcDateTime, at, TimeSpan.FromSeconds(1));
+    }
+
+    /// <summary>
+    /// PRIV-BREACH-002 AC1: the trail is read by subject through the index that
+    /// carries the subject, so answering who was affected reads the rows of one
+    /// account and never the whole table.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_BREACH_002_AC1_TheReadBySubjectTakesTheIndexAndNotAScanAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Now());
+
+        await AppendAsync(AuditRecord.Of(
+            NewId(),
+            AuditCategory.Security,
+            Suspended,
+            Now(),
+            subject,
+            subject,
+            organization: null));
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        // A trail worth reading by subject has other subjects in it; with a handful of
+        // rows every plan is a scan and the question the item asks cannot be put.
+        _ = await connection.ExecuteAsync(
+            "INSERT INTO janus.audit_records "
+                + "(id, category, occurred_at, action, acting_subject, effective_subject, details) "
+                + "SELECT gen_random_uuid(), 'security', now(), 'identity.account.read', "
+                + "gen_random_uuid(), gen_random_uuid(), '{}'::jsonb "
+                + "FROM generate_series(1, 20000)");
+
+        _ = await connection.ExecuteAsync("ANALYZE janus.audit_records");
+
+        IEnumerable<string> plan = await connection.QueryAsync<string>(
+            "EXPLAIN SELECT id, action, occurred_at FROM janus.audit_records "
+                + "WHERE effective_subject = @subject ORDER BY occurred_at DESC",
+            new { subject = subject.Value });
+
+        string leaf = (await connection.QuerySingleAsync<string>(
+            "SELECT tableoid::regclass::text FROM janus.audit_records "
+                + "WHERE effective_subject = @subject",
+            new { subject = subject.Value }))["janus.".Length..];
+
+        // The empty months cost nothing to walk; what the item asks is that the
+        // partition holding the subject's rows is read through the index.
+        Assert.Contains(
+            plan,
+            line => line.Contains("Index Scan", StringComparison.Ordinal)
+                && line.Contains(leaf, StringComparison.Ordinal));
+
+        Assert.DoesNotContain(
+            plan,
+            line => line.Contains("Seq Scan on " + leaf, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// PRIV-BREACH-002 AC2: the read still answers after the subject is erased. The
+    /// rows are there, they still say what happened and when, and what was held under
+    /// the destroyed key is simply not among them.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_BREACH_002_AC2_TheReadAnswersAfterErasureWithTheRecordsAnonymisedAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Now());
+        DateTimeOffset occurred = Now();
+
+        await AppendAsync(AuditRecord.Of(
+            NewId(),
+            AuditCategory.Security,
+            Suspended,
+            occurred,
+            subject,
+            subject,
+            organization: null,
+            personalDetails: Fields(("reason", "ahmed@example.com"))));
+
+        await AppendAsync(AuditRecord.Of(
+            NewId(),
+            AuditCategory.Routine,
+            AuditAction.Parse("identity.account.read"),
+            occurred - TimeSpan.FromMinutes(5),
+            subject,
+            subject,
+            organization: null));
+
+        await _deployment.EraseAsync(subject);
+
+        await using JanusDbContext reading = database.Context();
+
+        IReadOnlyList<AuditRecord> records = await Store(reading).FindBySubjectAsync(
+            subject,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, records.Count);
+        Assert.All(records, record => Assert.Empty(record.PersonalDetails));
+
+        Assert.Equal(
+            [Suspended, AuditAction.Parse("identity.account.read")],
+            records.Select(record => record.Action));
     }
 
     /// <summary>

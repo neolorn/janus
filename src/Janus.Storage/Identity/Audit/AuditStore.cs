@@ -67,14 +67,16 @@ internal sealed class AuditStore(
 
         var records = new List<AuditRecord>(rows.Count);
         byte[]? dataKey = null;
+        bool sought = false;
 
         try
         {
             foreach (AuditRowRecord row in rows)
             {
-                if (row.PersonalDetails is not null)
+                if (row.PersonalDetails is not null && !sought)
                 {
-                    dataKey ??= await DataKeyAsync(subject, cancellationToken).ConfigureAwait(false);
+                    sought = true;
+                    dataKey = await ReadableKeyAsync(subject, cancellationToken).ConfigureAwait(false);
                 }
 
                 records.Add(Read(row, dataKey));
@@ -103,7 +105,9 @@ internal sealed class AuditStore(
         JsonSerializer.Deserialize(utf8, AuditDocument.Default.DictionaryStringJsonElement)
             ?? throw new InvalidOperationException("The stored audit fields are not a document.");
 
-    private static AuditRecord Read(AuditRowRecord row, ReadOnlySpan<byte> dataKey) =>
+    // PRIV-BREACH-002: a record whose subject key is gone comes back anonymised, so
+    // the question the trail exists to answer is still answerable after an erasure.
+    private static AuditRecord Read(AuditRowRecord row, byte[]? dataKey) =>
         AuditRecord.Existing(
             row.Id,
             row.Category,
@@ -113,7 +117,7 @@ internal sealed class AuditStore(
             row.EffectiveSubject,
             row.Organization,
             Fields(Encoding.UTF8.GetBytes(row.Details)),
-            row.PersonalDetails is null
+            row.PersonalDetails is null || dataKey is null
                 ? new Dictionary<string, JsonElement>(capacity: 0, StringComparer.Ordinal)
                 : Fields(PersonalFieldCipher.Decrypt(
                     dataKey,
@@ -139,6 +143,21 @@ internal sealed class AuditStore(
         {
             CryptographicOperations.ZeroMemory(dataKey);
         }
+    }
+
+    // The key as a read finds it: absent where the subject has none, and absent where
+    // erasure destroyed it (PRIV-RIGHT-005, PRIV-RET-002).
+    private async ValueTask<byte[]?> ReadableKeyAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        SubjectKeyRecord? key = await context.SubjectKeys
+            .FindAsync([subject], cancellationToken)
+            .ConfigureAwait(false);
+
+        return key is null || key.FormatMarker == PersonalDataFormat.ErasedMarker
+            ? null
+            : PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, keyEncryptionKeys);
     }
 
     private async ValueTask<byte[]> DataKeyAsync(SubjectId subject, CancellationToken cancellationToken)
