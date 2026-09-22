@@ -134,6 +134,6 @@ public sealed class SendOutboxTests(DatabaseFixture database)
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
-    private SendOutbox Outbox(JanusDbContext context) =>
+    private SendDeliveryStore Outbox(JanusDbContext context) =>
         new(context, _deployment.Keys, _deployment.Randomness);
 }

@@ -231,7 +231,7 @@ internal static class StorageRegistration
         services.AddScoped<IRecordedConsents, RecordedConsents>();
         services.AddScoped<IAccessAudit, AccessAudit>();
 
-        services.AddScoped<ISendOutbox>(provider => new SendOutbox(
+        services.AddScoped<ISendOutbox>(provider => new SendDeliveryStore(
             provider.GetRequiredService<JanusDbContext>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));

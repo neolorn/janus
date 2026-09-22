@@ -21,7 +21,7 @@ namespace Janus.Storage.Authentication.Sending;
 /// encrypted document under a key the row carries, so removing the row removes both
 /// the message and the only key that reads it.
 /// </remarks>
-internal sealed class SendOutbox(
+internal sealed class SendDeliveryStore(
     JanusDbContext context,
     KeyEncryptionKeys keyEncryptionKeys,
     RandomNumberGenerator randomness) : ISendOutbox
