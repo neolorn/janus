@@ -16,6 +16,22 @@ namespace Janus.Core.Tests;
 [Trait("kind", "unit")]
 public sealed class PrivacyContractTests
 {
+    // What an order's contents would be named by, in the spellings a payload to a
+    // provider would use. PRIV-MIN-001 is a search of the codebase, so the search is
+    // written down here and run on every build.
+    private static readonly string[] OrderContents =
+    [
+        "productname",
+        "producttitle",
+        "lineitem",
+        "lineitems",
+        "cart",
+        "cartitems",
+        "sku",
+        "packagedescription",
+        "packagecontents",
+    ];
+
     // The field names a card would be held under, in the spellings a schema or a
     // request shape would use. PRIV-SENS-004 AC2 is a search of the codebase, so the
     // search is written down here and run on every build.
@@ -82,6 +98,26 @@ public sealed class PrivacyContractTests
         Assert.DoesNotContain(
             typeof(Result).Assembly.GetTypes().SelectMany(type => type.GetProperties()),
             property => CardData.Contains(property.Name, StringComparer.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// PRIV-MIN-001 AC1, AC2: nothing of an order's contents is reachable in the
+    /// library. It holds no cart, no line and no product, so no field of a payload it
+    /// composes could carry a product name to a provider, and what a recipient
+    /// receives is the categories the host declares and nothing derived.
+    /// </summary>
+    [Fact]
+    public void PRIV_MIN_001_AC1_NoLibrarySourceNamesAnOrdersContents()
+    {
+        Assert.Empty(Naming(OrderContents));
+
+        Assert.DoesNotContain(
+            typeof(Result).Assembly.GetTypes().SelectMany(type => type.GetProperties()),
+            property => OrderContents.Contains(property.Name, StringComparer.OrdinalIgnoreCase));
+
+        Assert.Equal(
+            typeof(IReadOnlyList<string>),
+            typeof(RecipientDeclaration).GetProperty("DataReceived")!.PropertyType);
     }
 
     /// <summary>
