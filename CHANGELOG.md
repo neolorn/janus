@@ -148,6 +148,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- An account holds one membership unless the deployment enables
+  `organization.multiplememberships`. A second one answers
+  `identity.membership.limitreached` and nothing is written; enabling the setting
+  admits it, with no migration and no deploy. A membership the account ended leaves
+  room for another, and a second membership of an organization the account is already
+  a member of is refused whatever the setting says, naming that organization.
+
 - Startup now verifies that the database carries the schema this build was compiled
   against, before any other check reads a table and before the host's web server
   starts. A database behind the model answers `model.startup.schemamismatch`, names

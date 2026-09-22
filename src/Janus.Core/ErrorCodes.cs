@@ -164,6 +164,15 @@ public static class ErrorCodes
     public static ErrorCode StartupSchemaMismatch { get; } = ErrorCode.Parse("model.startup.schemamismatch");
 
     /// <summary>
+    /// The account already holds a membership, and this deployment allows one. Enable
+    /// <c>organization.multiplememberships</c>, or end the membership held first. The
+    /// details name the organization where the membership offered is of the one the
+    /// account is already a member of.
+    /// </summary>
+    /// <remarks>Implements IDN-MEM-002, chapter 10 section 1.1.</remarks>
+    public static ErrorCode MembershipLimitReached { get; } = ErrorCode.Parse("identity.membership.limitreached");
+
+    /// <summary>
     /// The organization named is the administrative one, which is not deletable.
     /// Delete another organization, or none.
     /// </summary>

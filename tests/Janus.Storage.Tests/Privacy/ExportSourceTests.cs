@@ -573,11 +573,15 @@ public sealed class ExportSourceTests(DatabaseFixture database)
         OrganizationId organization,
         DateTimeOffset? until)
     {
-        var membership = Membership.Create(
-            new MembershipId(Guid.CreateVersion7()),
-            subject,
-            organization,
-            Noon);
+        Membership membership = Membership
+            .Create(
+                new MembershipId(Guid.CreateVersion7()),
+                subject,
+                organization,
+                [],
+                multiple: true,
+                Noon)
+            .Match(made => made, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
 
         if (until is DateTimeOffset ended)
         {

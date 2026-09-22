@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Text.Json;
 using Janus.Core;
 
 namespace Janus.Identity.Organizations;
@@ -10,6 +12,9 @@ namespace Janus.Identity.Organizations;
 /// <remarks>
 /// Implements IDN-MEM-001, IDN-MEM-002 and IDN-PRIN-003. Ending a membership leaves
 /// both sides where they are and removes no row: the end is an instant on the record.
+/// How many memberships an account may hold at once is
+/// <c>organization.multiplememberships</c>, which the caller reads and this type
+/// applies: the schema takes any number and the rule lives here.
 /// </remarks>
 internal sealed class Membership
 {
@@ -56,19 +61,60 @@ internal sealed class Membership
     public bool IsCurrent => EndedAt is null;
 
     /// <summary>
-    /// A new membership.
+    /// A new membership, where the account may hold one more.
     /// </summary>
     /// <param name="id">The identifier issued for it.</param>
     /// <param name="subject">Whose it is.</param>
     /// <param name="organization">Which organization it is of.</param>
+    /// <param name="held">
+    /// Every membership the account already holds, ended ones included.
+    /// </param>
+    /// <param name="multiple">What <c>organization.multiplememberships</c> allows.</param>
     /// <param name="createdAt">When it begins.</param>
-    /// <returns>The membership.</returns>
-    public static Membership Create(
+    /// <returns>The membership, or the refusal and its code.</returns>
+    /// <exception cref="ArgumentNullException">The memberships held are absent.</exception>
+    /// <exception cref="ArgumentException">One of them belongs to another account.</exception>
+    public static Result<Membership> Create(
         MembershipId id,
         SubjectId subject,
         OrganizationId organization,
-        DateTimeOffset createdAt) =>
-        new(id, subject, organization, createdAt);
+        IEnumerable<Membership> held,
+        bool multiple,
+        DateTimeOffset createdAt)
+    {
+        ArgumentNullException.ThrowIfNull(held);
+
+        int current = 0;
+
+        foreach (Membership membership in held)
+        {
+            if (membership.Subject != subject)
+            {
+                throw new ArgumentException(
+                    "The membership belongs to another account.",
+                    nameof(held));
+            }
+
+            if (!membership.IsCurrent)
+            {
+                continue;
+            }
+
+            current++;
+
+            if (membership.Organization == organization)
+            {
+                return Result.Failure<Membership>(Error.From(
+                    ErrorCodes.MembershipLimitReached,
+                    "organization",
+                    JsonSerializer.SerializeToElement(organization.Value)));
+            }
+        }
+
+        return current is not 0 && !multiple
+            ? Result.Failure<Membership>(Error.From(ErrorCodes.MembershipLimitReached))
+            : Result.Success(new Membership(id, subject, organization, createdAt));
+    }
 
     /// <summary>
     /// The membership as it already stands. This is the store's translation of a

@@ -82,6 +82,7 @@ public sealed class ErrorCodesTests
         "identity.identifier.maximum",
         "identity.identifier.mixedscript",
         "identity.identifier.primary",
+        "identity.membership.limitreached",
         "identity.organization.protected",
         "identity.photo.invalid",
         "identity.photo.notenabled",

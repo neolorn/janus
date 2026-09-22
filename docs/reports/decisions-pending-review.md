@@ -5468,6 +5468,56 @@ requires the previous application version to run against. `10` section 1.5 alrea
 carries the row for `model.startup.schemamismatch`; the description should name
 `pending` as the detail it carries.
 
+---
+
+## 154. The membership aggregate refuses the second membership
+
+**Corrections 1 · 2026-09-23 · D-162 section D · IDN-MEM-002, `10` section 1.1**
+
+*What D-162 decided.* Build now, in the phase whose item it is: the
+`identity.membership.limitreached` refusal in the membership aggregate. Phase 1 built
+the schema that takes any number of memberships (AC1) and deferred AC2 and AC3 to phase
+2 as "stated over the setting"; phase 2 did not pick them up, and no code has read
+`organization.multiplememberships` since.
+
+*What was built.* The one factory that makes a new membership now takes the memberships
+the account already holds and what the setting allows, and answers `Result<Membership>`.
+The rule lives with the aggregate and not with a caller, so there is no second door:
+the schema takes any number of rows and the aggregate decides how many an account holds
+at once, which is exactly the division IDN-MEM-002 draws. An ended membership is not one
+the account holds, so an account whose membership ended joins again on the default. A
+caller handing over another account's memberships throws, because such a list would
+otherwise answer the question about the wrong account.
+
+*Decided in the owner's absence (Tier 3, strictest reading).* Two points, both failing
+closed where the readings differ on what is allowed.
+
+- **What "a second membership" counts.** Reading one: any second current membership.
+  Reading two: a second membership of a different organization, the same organization
+  being the same membership. Reading one was taken; it grants least, and IDN-MEM-002
+  says "Policy SHALL forbid more than one by default" without qualifying which one.
+- **A second membership of an organization the account is already a member of, with
+  the setting enabled.** Reading one: refuse; one membership of an organization is one
+  membership of it, and no chapter contemplates two live rows for one pair. Reading two:
+  allow; IDN-MEM-002 permits "zero or more" and names no other limit. Reading one was
+  taken. It is the only refusal in this item that is not the setting's, so it carries
+  the organization under `organization` in the details, which tells a caller the two
+  cases apart. The owner may want a code of its own here; the chapters name none.
+
+*Tests that pin it.*
+`MembershipTests.IDN_MEM_002_AC2_ASecondMembershipIsRefusedByDefault`,
+`MembershipTests.IDN_MEM_002_AC3_TheSettingAloneAdmitsTheSecondMembership`,
+`MembershipTests.IDN_MEM_002_AC2_AMembershipThatEndedLeavesRoomForAnother`,
+`MembershipTests.IDN_MEM_002_ASecondMembershipOfTheSameOrganizationIsRefused`,
+`MembershipTests.Create_MembershipsOfAnotherAccount_Throws`,
+`OrganizationStoreTests.IDN_MEM_002_AC1_TheSchemaTakesMoreThanOneMembershipPerAccountAsync`.
+
+*Chapter text that should change.* IDN-MEM-002 should say that the memberships counted
+are the current ones, and what happens to a second membership of an organization the
+account already belongs to. `10` section 1.1 carries the row for
+`identity.membership.limitreached`; its description should say the code covers both, and
+that the details name the organization in the second case.
+
 
 # Rows for chapter 10
 

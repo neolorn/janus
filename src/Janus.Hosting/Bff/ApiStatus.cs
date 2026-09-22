@@ -77,6 +77,7 @@ internal static class ApiStatus
         [ErrorCodes.UsernameTaken] = StatusCodes.Status409Conflict,
         [ErrorCodes.UsernameReserved] = StatusCodes.Status409Conflict,
         [ErrorCodes.UsernameCoolingOff] = StatusCodes.Status409Conflict,
+        [ErrorCodes.MembershipLimitReached] = StatusCodes.Status409Conflict,
         [ErrorCodes.OrganizationProtected] = StatusCodes.Status409Conflict,
         [ErrorCodes.GrantDuplicate] = StatusCodes.Status409Conflict,
         [ErrorCodes.GrantExpired] = StatusCodes.Status409Conflict,

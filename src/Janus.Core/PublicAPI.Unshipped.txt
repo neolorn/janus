@@ -3157,6 +3157,7 @@ static Janus.Core.ErrorCodes.IdentifierMixedScript.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierPrimary.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.LossReportNotPermitted.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.LossReportPending.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.MembershipLimitReached.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.NoticeGoverningTextMissing.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.NoticeUnpublished.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.OrganizationProtected.get -> Janus.Core.ErrorCode
