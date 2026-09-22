@@ -109,6 +109,7 @@ internal static class ApiStatus
         [ErrorCodes.RecoveryChannelNotOnAccount] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.RecoverySelfApproval] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.PasswordBlocklisted] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.PasswordTooLong] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.PasswordTooShort] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ScreeningUnavailable] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.WebAuthnAlgorithmNotAllowed] = StatusCodes.Status422UnprocessableEntity,

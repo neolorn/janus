@@ -784,6 +784,9 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- A password longer than `password.maximum` is now refused with
+  `auth.password.toolong` rather than with the configuration code for a value above a
+  ceiling. A password field no longer answers with a sentence about configuration.
 - A check, a capability page or an explanation on a type a derivation reaches is now
   refused without the host's rows whatever that derivation confers, rather than only
   where the role it confers allows what is being asked. A call site that passes today

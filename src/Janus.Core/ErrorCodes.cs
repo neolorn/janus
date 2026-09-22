@@ -499,6 +499,13 @@ public static class ErrorCodes
     public static ErrorCode PasswordBlocklisted { get; } = ErrorCode.Parse("auth.password.blocklisted");
 
     /// <summary>
+    /// The password is longer than the deployment accepts. Nothing is truncated to make
+    /// it fit, because a truncated password is not the password that was chosen.
+    /// </summary>
+    /// <remarks>Implements AUTH-PASS-001, chapter 10 section 1.2.</remarks>
+    public static ErrorCode PasswordTooLong { get; } = ErrorCode.Parse("auth.password.toolong");
+
+    /// <summary>
     /// The password is below the floor that applies to it. The shorter floor is reached
     /// by holding a second factor, not by choosing it.
     /// </summary>

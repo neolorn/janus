@@ -56,7 +56,7 @@ public sealed class PasswordFloorTests
     {
         Assert.Null(Refusal(Admits(Maximum, AssuranceLevel.Aal1)));
         Assert.Equal(
-            ErrorCodes.ConfigurationValueAboveCeiling,
+            ErrorCodes.PasswordTooLong,
             Refusal(Admits(Maximum + 1, AssuranceLevel.Aal1)));
     }
 

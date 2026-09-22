@@ -418,6 +418,8 @@ surface wins.
 *Chapter text that should change.* `10` section 1.2 should state which code a password
 beyond `password.maximum` carries.
 
+**Superseded by D-162.** Applied in entry 113.
+
 ---
 
 ## 12. The offline and self-hosted corpora are files the deployment holds
@@ -3475,3 +3477,37 @@ asks for a permission the reviewer's role does not confer and expects the fault,
 checks a record of a type no derivation reaches and is answered,
 `MaterialisationTests.AUTHZ_DERIVE_005_AC2_AnExplanationNamesTheGrantAsMaterialisedAsync`,
 which explains a materialised deployment's record without rows.
+
+---
+
+## 113. A password beyond the maximum is refused as a password
+
+**Corrections 1 · 2026-09-22 · D-162 section B, correcting entry 11 · AUTH-PASS-001 AC3, `10` section 1.2**
+
+*What D-162 decided.* A password beyond `password.maximum` is refused with
+`auth.password.toolong` (422), a new `10` section 1.2 row.
+`config.value.aboveceiling` is a configuration-management code and would put a
+configuration sentence on a password field.
+
+*What was built.* `ErrorCodes.PasswordTooLong` is `auth.password.toolong`, mapped to
+422 in the status table, and the length rule refuses an over-long password with it. The
+refusal carries no detail, as the floor's refusal carries none: the deployment's maximum
+is not a password field's business, and the key the old refusal named was the
+configuration code's detail, not this one's.
+
+*Tests that pin it.*
+`PasswordFloorTests.AUTH_PASS_001_AC3_TheMaximumIsAcceptedAndOneBeyondItIsRefused`,
+`ApiStatusTests.Of_ACodeTheLibraryRaises_HasAStatusOfItsOwn`.
+
+# Rows for chapter 10
+
+D-162 section E names codes, keys, declarations and vocabularies the library now
+carries and chapter 10 does not yet hold rows for. Each is listed with what the code
+does, so the row can be written from it. Nothing here is a decision; the shapes are
+D-162's.
+
+## Section 1.2, error codes
+
+| Code | Status | Raised when |
+| --- | --- | --- |
+| `auth.password.toolong` | 422 | A password longer than `password.maximum` is set, at registration, at a password change or at a reset. Nothing is truncated. |
