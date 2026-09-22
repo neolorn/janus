@@ -185,7 +185,7 @@ public sealed class GrantTests
             GrantSubject.Of(Identifiers.Subject()),
             RoleName.Parse("reader"),
             Identifiers.Organization(),
-            Identifiers.Resource("document"),
+            Identifiers.Resource("article"),
             deny: false,
             GrantKind.Stored,
             expiresAt: null,

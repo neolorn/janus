@@ -44,7 +44,7 @@ public sealed class DeclaredProcessingTests
             purpose => Assert.NotEmpty(purpose.DataCategories));
         Assert.Throws<StartupException>(
             () => AuthorizationModel.Of(
-                Declaring(document => document.Purpose("collaboration", "contract"))));
+                Declaring(article => article.Purpose("collaboration", "contract"))));
     }
 
     /// <summary>
@@ -56,7 +56,7 @@ public sealed class DeclaredProcessingTests
     {
         StartupException refused = Assert.Throws<StartupException>(
             () => AuthorizationModel.Of(
-                Declaring(document => document.Encrypted(item => item.Body, item => item.Author))));
+                Declaring(article => article.Encrypted(item => item.Body, item => item.Author))));
 
         Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
     }
@@ -70,7 +70,7 @@ public sealed class DeclaredProcessingTests
     public void PRIV_BASIS_001_AC1_APurposeOnAnUndeclaredBasisFailsStartup() =>
         Assert.Throws<StartupException>(
             () => AuthorizationModel.Of(
-                Declaring(document => document.Purpose("collaboration", "consent", data: ["identity"]))));
+                Declaring(article => article.Purpose("collaboration", "consent", data: ["identity"]))));
 
     /// <summary>
     /// PRIV-BASIS-001 AC3: a purpose resting on nothing is refused where it is
@@ -79,9 +79,9 @@ public sealed class DeclaredProcessingTests
     [Fact]
     public void PRIV_BASIS_001_AC3_APurposeWithoutABasisIsRefusedWhereItIsDeclared() =>
         Assert.Throws<ArgumentException>(
-            () => new AuthorizationDeclarationBuilder().Resource<HostDomain.Document>(
-                "document",
-                document => document.Purpose("collaboration", " ")));
+            () => new AuthorizationDeclarationBuilder().Resource<HostDomain.Article>(
+                "article",
+                article => article.Purpose("collaboration", " ")));
 
     /// <summary>
     /// PRIV-BASIS-001 AC4: no library source carries a basis of the default
@@ -191,16 +191,16 @@ public sealed class DeclaredProcessingTests
     public void PRIV_SENS_001_AC1_SensitivityIsACategoryOfTheDeclaredList()
     {
         var model = AuthorizationModel.Of(
-            Declaring(document => document
+            Declaring(article => article
                 .Sensitive("financial")
                 .Purpose("collaboration", "contract", data: ["identity"])));
 
         Assert.Equal(
             ["financial"],
-            model.Find(ResourceType.Parse("document"))!.SensitiveCategories);
+            model.Find(ResourceType.Parse("article"))!.SensitiveCategories);
         Assert.Throws<StartupException>(
             () => AuthorizationModel.Of(
-                Declaring(document => document
+                Declaring(article => article
                     .Sensitive("health")
                     .Purpose("collaboration", "contract", data: ["identity"]))));
     }
@@ -253,14 +253,14 @@ public sealed class DeclaredProcessingTests
     // One type of the host's, declared as the test needs it, with everything else the
     // model requires already in place.
     private static AuthorizationDeclaration Declaring(
-        Action<ResourceTypeDeclarationBuilder<HostDomain.Document>> declared) =>
+        Action<ResourceTypeDeclarationBuilder<HostDomain.Article>> declared) =>
         new AuthorizationDeclarationBuilder()
             .LawfulBasis(new LawfulBasisDeclaration("contract", false, false, false, false))
             .SensitiveCategory("financial")
-            .Resource<HostDomain.Document>("document", document =>
+            .Resource<HostDomain.Article>("article", article =>
             {
-                _ = document.BelongsToOrganization();
-                declared(document);
+                _ = article.BelongsToOrganization();
+                declared(article);
             })
             .Build();
 

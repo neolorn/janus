@@ -22,7 +22,7 @@ public sealed class AuthorizationModelTests
     [
         nameof(HostDomain.Workspace),
         nameof(HostDomain.Folder),
-        nameof(HostDomain.Document),
+        nameof(HostDomain.Article),
         nameof(HostDomain.Draft),
         nameof(OtherDomain.Depot),
         nameof(OtherDomain.Vehicle),
@@ -57,7 +57,7 @@ public sealed class AuthorizationModelTests
         var other = AuthorizationModel.Of(OtherDomain.Declared().Build());
 
         Assert.Equal(
-            ["workspace", "folder", "document"],
+            ["workspace", "folder", "article"],
             one.ResourceTypes.Select(type => type.Name.ToString()));
         Assert.Equal(
             ["depot", "vehicle", "journey"],
@@ -74,14 +74,14 @@ public sealed class AuthorizationModelTests
     public void AUTHZ_MODEL_001_AC3_AFieldIsNamedByACompilerCheckedReference()
     {
         AuthorizationDeclaration declared = HostDomain.Declared().Build();
-        ResourceTypeDeclaration document = declared.ResourceTypes.Single(
-            type => type.Name == ResourceType.Parse("document"));
+        ResourceTypeDeclaration article = declared.ResourceTypes.Single(
+            type => type.Name == ResourceType.Parse("article"));
 
         Assert.Equal(
             new EncryptedFieldDeclaration(
-                nameof(HostDomain.Document.Body),
-                nameof(HostDomain.Document.Author)),
-            document.EncryptedFields.Single());
+                nameof(HostDomain.Article.Body),
+                nameof(HostDomain.Article.Author)),
+            article.EncryptedFields.Single());
         Assert.Equal(
             nameof(HostDomain.Folder.Reviewer),
             Assert.IsAssignableFrom<MemberExpression>(
@@ -186,12 +186,12 @@ public sealed class AuthorizationModelTests
         var model = AuthorizationModel.Of(HostDomain.Declared().Build());
         HostDomain.Workspace workspace = HostDomain.NewWorkspace(Guid.CreateVersion7());
         HostDomain.Folder folder = HostDomain.NewFolder(workspace.Id, default);
-        HostDomain.Document document = HostDomain.NewDocument(folder.Id, default);
+        HostDomain.Article article = HostDomain.NewArticle(folder.Id, default);
         OtherDomain.Journey journey = OtherDomain.NewJourney(
             OtherDomain.NewVehicle(OtherDomain.NewDepot(Guid.CreateVersion7()).Id, default).Id);
 
         Assert.All(
-            new object[] { workspace, folder, document },
+            new object[] { workspace, folder, article },
             entity => Assert.NotNull(model.Find(entity.GetType())));
         Assert.Null(model.Find(journey.GetType()));
     }
@@ -274,7 +274,7 @@ public sealed class AuthorizationModelTests
             model.Find(ResourceType.Parse("draft"))?.Concealment);
         Assert.Equal(
             ConcealmentBehaviour.Conceal,
-            model.Find(ResourceType.Parse("document"))?.Concealment);
+            model.Find(ResourceType.Parse("article"))?.Concealment);
     }
 
     /// <summary>
@@ -287,8 +287,8 @@ public sealed class AuthorizationModelTests
         var model = AuthorizationModel.Of(HostDomain.Declared().Build());
 
         Assert.Equal(
-            ["document", "folder", "workspace"],
-            model.Containment(ResourceType.Parse("document")).Select(type => type.ToString()));
+            ["article", "folder", "workspace"],
+            model.Containment(ResourceType.Parse("article")).Select(type => type.ToString()));
     }
 
     /// <summary>
@@ -300,9 +300,9 @@ public sealed class AuthorizationModelTests
     {
         var model = AuthorizationModel.Of(HostDomain.Declared().Build());
 
-        Assert.True(model.Declares(Permission.Parse("document:read")));
+        Assert.True(model.Declares(Permission.Parse("article:read")));
         Assert.True(model.Declares(Permissions.AuditRead));
-        Assert.False(model.Declares(Permission.Parse("document:destroy")));
+        Assert.False(model.Declares(Permission.Parse("article:destroy")));
     }
 
     /// <summary>
@@ -313,15 +313,15 @@ public sealed class AuthorizationModelTests
     public void IsReading_AnActionNobodyClassified_Modifies()
     {
         var model = AuthorizationModel.Of(HostDomain.Declared()
-            .Permission("document:preview", reading: true)
+            .Permission("article:preview", reading: true)
             .Build());
 
-        Assert.True(model.IsReading(Permission.Parse("document:read")));
+        Assert.True(model.IsReading(Permission.Parse("article:read")));
         Assert.True(model.IsReading(Permission.Parse("folder:list")));
-        Assert.True(model.IsReading(Permission.Parse("document:export")));
-        Assert.True(model.IsReading(Permission.Parse("document:preview")));
-        Assert.False(model.IsReading(Permission.Parse("document:edit")));
-        Assert.False(model.IsReading(Permission.Parse("document:archive")));
+        Assert.True(model.IsReading(Permission.Parse("article:export")));
+        Assert.True(model.IsReading(Permission.Parse("article:preview")));
+        Assert.False(model.IsReading(Permission.Parse("article:edit")));
+        Assert.False(model.IsReading(Permission.Parse("article:archive")));
     }
 
     /// <summary>
@@ -332,12 +332,12 @@ public sealed class AuthorizationModelTests
     public void GateOf_ABoundAction_NamesTheGateItIsBoundTo()
     {
         var model = AuthorizationModel.Of(HostDomain.Declared()
-            .Permission("document:publish")
-            .StepUpGate("document:publish", "document:publish")
+            .Permission("article:publish")
+            .StepUpGate("article:publish", "article:publish")
             .Build());
 
-        Assert.Equal("document:publish", model.GateOf(Permission.Parse("document:publish")));
-        Assert.Null(model.GateOf(Permission.Parse("document:read")));
+        Assert.Equal("article:publish", model.GateOf(Permission.Parse("article:publish")));
+        Assert.Null(model.GateOf(Permission.Parse("article:read")));
     }
 
     /// <summary>
@@ -346,10 +346,10 @@ public sealed class AuthorizationModelTests
     /// </summary>
     /// <param name="permission">A string that is not a permission.</param>
     [Theory]
-    [InlineData("Document:read")]
-    [InlineData("document:Read")]
-    [InlineData("document")]
-    [InlineData("document:read:draft")]
+    [InlineData("Article:read")]
+    [InlineData("article:Read")]
+    [InlineData("article")]
+    [InlineData("article:read:draft")]
     public void CONV_NAME_002_AC1_APermissionOutsideThePatternFailsModelValidation(string permission) =>
         Assert.Throws<ArgumentException>(
             () => new AuthorizationDeclarationBuilder().Permission(permission));
@@ -361,7 +361,7 @@ public sealed class AuthorizationModelTests
     {
         AuthorizationDeclaration declared = new AuthorizationDeclarationBuilder()
             .LawfulBasis(Contract())
-            .Resource<HostDomain.Document>("document", document => document
+            .Resource<HostDomain.Article>("article", article => article
                 .BelongsToOrganization()
                 .Purpose("collaboration", "contract", data: ["identity"]))
             .Build();
@@ -377,33 +377,33 @@ public sealed class AuthorizationModelTests
         0 => new AuthorizationDeclarationBuilder()
             .LawfulBasis(Contract())
             .Resource<HostDomain.Folder>("folder", folder => folder
-                .ContainedIn("document")
+                .ContainedIn("article")
                 .BelongsToOrganization()
                 .Purpose("collaboration", "contract", data: ["identity"]))
-            .Resource<HostDomain.Document>("document", document => document
+            .Resource<HostDomain.Article>("article", article => article
                 .ContainedIn("folder")
                 .Purpose("collaboration", "contract", data: ["identity"]))
             .Build(),
         1 => new AuthorizationDeclarationBuilder()
             .LawfulBasis(Contract())
-            .Resource<HostDomain.Document>("document", document => document
+            .Resource<HostDomain.Article>("article", article => article
                 .ContainedIn("folder")
                 .Purpose("collaboration", "contract", data: ["identity"]))
             .Build(),
         2 => new AuthorizationDeclarationBuilder()
             .LawfulBasis(Contract())
-            .Resource<HostDomain.Document>("document", document => document
+            .Resource<HostDomain.Article>("article", article => article
                 .Purpose("collaboration", "contract", data: ["identity"]))
             .Build(),
         3 => new AuthorizationDeclarationBuilder()
             .LawfulBasis(new LawfulBasisDeclaration("interest", false, false, true, true))
-            .Resource<HostDomain.Document>("document", document => document
+            .Resource<HostDomain.Article>("article", article => article
                 .BelongsToOrganization()
                 .Purpose("fraud-prevention", "interest"))
             .Build(),
         _ => new AuthorizationDeclarationBuilder()
             .LawfulBasis(Contract())
-            .Resource<HostDomain.Document>("document", document => document
+            .Resource<HostDomain.Article>("article", article => article
                 .BelongsToOrganization()
                 .Purpose("collaboration", "contract", data: ["identity"])
                 .Derivation("reviewer", "reader"))

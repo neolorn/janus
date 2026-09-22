@@ -27,7 +27,7 @@ public sealed class ModelValidationTests
         var roles = new RolesInMemory();
 
         await roles.CreateAsync(
-            Role.Of(RoleName.Parse("archivist"), [Permission.Parse("document:archive")]),
+            Role.Of(RoleName.Parse("archivist"), [Permission.Parse("article:archive")]),
             TestContext.Current.CancellationToken);
 
         StartupException refused = await Assert.ThrowsAsync<StartupException>(
@@ -70,7 +70,7 @@ public sealed class ModelValidationTests
         var roles = new RolesInMemory();
 
         await roles.CreateAsync(
-            Role.Of(RoleName.Parse("reader"), [Permission.Parse("document:read")]),
+            Role.Of(RoleName.Parse("reader"), [Permission.Parse("article:read")]),
             TestContext.Current.CancellationToken);
 
         await Validation(roles, Indexed()).ValidateAsync(TestContext.Current.CancellationToken);

@@ -20,12 +20,12 @@ public sealed class RegisteredResourceTests
     public void Create_InsideAContainer_CarriesTheContainer()
     {
         ResourceReference folder = Identifiers.Resource("folder");
-        ResourceReference document = Identifiers.Resource("document");
+        ResourceReference article = Identifiers.Resource("article");
         OrganizationId organization = Identifiers.Organization();
 
-        var resource = RegisteredResource.Create(document, organization, subject: null, folder);
+        var resource = RegisteredResource.Create(article, organization, subject: null, folder);
 
-        Assert.Equal(document, resource.Reference);
+        Assert.Equal(article, resource.Reference);
         Assert.Equal(organization, resource.Organization);
         Assert.Equal(folder, resource.ContainedIn);
     }
@@ -53,7 +53,7 @@ public sealed class RegisteredResourceTests
     {
         ResourceReference elsewhere = Identifiers.Resource("folder");
         var resource = RegisteredResource.Create(
-            Identifiers.Resource("document"),
+            Identifiers.Resource("article"),
             Identifiers.Organization(),
             subject: null,
             Identifiers.Resource("folder"));
@@ -70,7 +70,7 @@ public sealed class RegisteredResourceTests
     public void MoveTo_OutOfEveryContainer_HasNoContainer()
     {
         var resource = RegisteredResource.Create(
-            Identifiers.Resource("document"),
+            Identifiers.Resource("article"),
             Identifiers.Organization(),
             subject: null,
             Identifiers.Resource("folder"));
@@ -86,14 +86,14 @@ public sealed class RegisteredResourceTests
     [Fact]
     public void Existing_ARow_CarriesWhatWasWritten()
     {
-        ResourceReference document = Identifiers.Resource("document");
+        ResourceReference article = Identifiers.Resource("article");
         ResourceReference folder = Identifiers.Resource("folder");
         OrganizationId organization = Identifiers.Organization();
         var whose = new SubjectId(Guid.Parse("22222222-2222-4222-8222-222222222222"));
 
-        var resource = RegisteredResource.Existing(document, organization, whose, folder);
+        var resource = RegisteredResource.Existing(article, organization, whose, folder);
 
-        Assert.Equal(document, resource.Reference);
+        Assert.Equal(article, resource.Reference);
         Assert.Equal(organization, resource.Organization);
         Assert.Equal(whose, resource.Subject);
         Assert.Equal(folder, resource.ContainedIn);
