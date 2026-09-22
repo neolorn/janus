@@ -561,6 +561,25 @@ public sealed class SendingServiceTests : IAsyncDisposable
     // What one member takes and gives: the types a send could be told a preference
     // through.
     /// <summary>
+    /// AUTH-ABUSE-004 AC6: what a record is kept for is the longest interval the
+    /// restrictions now declare, so the read before a send takes with it every record
+    /// older than that, including the records of keys this send never names.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC6_ARecordOlderThanTheLongestIntervalGoesWithTheNextReadAsync()
+    {
+        var untouched = new RestrictionKey("sms.destination", "+201009999999");
+
+        _ledger.Given(untouched, Noon - TimeSpan.FromHours(25));
+
+        Assert.Contains(untouched, _ledger.Keys);
+
+        await SentAsync(Texted());
+
+        Assert.DoesNotContain(untouched, _ledger.Keys);
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-004 AC3: an edit that goes through applies to the very next send,
     /// with nothing restarted in between.
     /// </summary>

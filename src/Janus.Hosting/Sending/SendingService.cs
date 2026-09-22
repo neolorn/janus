@@ -183,8 +183,15 @@ internal sealed class SendingService(
             }
         }
 
+        // AUTH-ABUSE-004 AC6: what the record is kept for is the restrictions as they
+        // now stand, so the sweep reads the declaration and not what a send was written
+        // under; shortening an interval reaches the sends already counted.
+        TimeSpan longest = declared.Count == 0
+            ? TimeSpan.Zero
+            : declared.Max(Restrictions.Retain);
+
         IReadOnlyDictionary<RestrictionKey, SendCounter> counters = await ledger
-            .CountersAsync([.. keyed.Select(one => one.Key)], cancellationToken)
+            .CountersAsync([.. keyed.Select(one => one.Key)], now - longest, cancellationToken)
             .ConfigureAwait(false);
 
         var counted = new List<SendCount>(keyed.Count);

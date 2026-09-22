@@ -801,6 +801,11 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- How long a send counter is kept now follows the restrictions as they stand rather than
+  the interval the send was counted under. The record holds the keyed hash and the times
+  and nothing else, and the read before every send takes with it every record whose
+  newest time is older than the longest interval now declared, so shortening an interval
+  reaches the sends already counted.
 - Notification handling is now a contract a deployment can replace: `INotificationHandler`
   in `Janus.Core` takes which message goes to which destination in which language, and
   the shipped handler that renders the deployment's templates and hands them to the mail

@@ -47,8 +47,17 @@ internal sealed class SendLedgerInMemory : ISendLedger
     /// <inheritdoc/>
     public ValueTask<IReadOnlyDictionary<RestrictionKey, SendCounter>> CountersAsync(
         IReadOnlyCollection<RestrictionKey> keys,
+        DateTimeOffset stale,
         CancellationToken cancellationToken)
     {
+        foreach (RestrictionKey held in _sends
+            .Where(one => one.Value.Count > 0 && one.Value[^1] < stale)
+            .Select(one => one.Key)
+            .ToArray())
+        {
+            _ = _sends.Remove(held);
+        }
+
         var standing = new Dictionary<RestrictionKey, SendCounter>();
 
         foreach (RestrictionKey key in keys)

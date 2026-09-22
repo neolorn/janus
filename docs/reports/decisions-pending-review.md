@@ -1050,6 +1050,8 @@ before the counters of the next send are read.
 *Chapter text that should change.* AUTH-ABUSE-004's last sentence should say when the
 record is deleted, not only that it is.
 
+**Superseded by D-162.** Applied in entry 122.
+
 ---
 
 ## 32. A deployment that declares no message catalogue is refused at startup
@@ -3915,6 +3917,60 @@ public contract including the ports, and name what it does not reach and why. LI
 should carry `IEvents.PublishAsync` with its new return. An item of `02` should state
 that an operation publishes inside its transaction and commits nothing it could not
 publish.
+
+---
+
+## 122. A send counter is kept for what the restrictions now declare, not for what a send was written under
+
+**Corrections 1 · 2026-09-22 · D-162 section B, correcting entry 31 · AUTH-ABUSE-004 AC6, PRIV-RET-005 AC2, INT-SMS-005**
+
+*What D-162 decided.* No settle column on a destination record. Before a send's counters
+are read, destination rows whose newest timestamp is older than the longest interval any
+current destination restriction declares are deleted (one indexed delete). The record
+holds the HMAC and timestamps only, and a tightened interval is honoured for sends
+already counted.
+
+*What was built.* `send_counters` holds the key and the times and nothing else. The
+`settles_at` column and its index are dropped. The sweep moved from the recording path to
+the read: `ISendLedger.CountersAsync` takes the instant before which a time decides
+nothing and deletes every record whose newest time is older than it before it reads
+anything. The sending service computes that instant as the clock less the longest
+interval the restrictions it has just read declare, so a host that shortens an interval
+reaches the records already written, which the derived column could not.
+
+The times are written oldest first, so the newest is the last element of the array. No
+model builder expresses an index over an expression, and PostgreSQL matches an expression
+index only on the expression as written, so the migration writes the index over the
+statement the sweep generates, element for element, and a unit test holds the two
+together.
+
+*Decided in the owner's absence (Tier 3, strictest reading).* One point: *which
+restrictions the longest interval is taken over.* D-162 says the longest any current
+destination restriction declares. The record is the keyed hash of the restriction name
+and the value and nothing else, so the table cannot say which rows are destination rows
+and a single delete cannot be narrowed to them. The longest over all current restrictions
+is the only interval the delete can be written against, and it is also the reading that
+deletes least: it is greater than or equal to the destination-only interval, so the
+instant it computes is earlier and every row the narrower reading would keep is kept. A
+row is therefore never deleted while a restriction could still count it.
+
+*Residue.* A record of a key the deployment stops sending to altogether stands until the
+next send of any kind is planned, because the sweep runs on the read and there is no
+schedule behind it. D-162 asks for it there and nowhere else.
+
+*Tests that pin it.*
+`SendLedgerTests.AUTH_ABUSE_004_AC6_TheRecordHoldsAHashAndTimesAndNothingElseAsync`,
+`SendLedgerTests.AUTH_ABUSE_004_AC6_TheRecordIsGoneOnceItsBucketsAreEmptyAsync`,
+`SendLedgerTests.AUTH_ABUSE_004_AC6_AShortenedIntervalReachesTheSendsAlreadyCountedAsync`,
+`SendLedgerTests.PRIV_RET_005_AC2_TheRecordLivesAtMostTheLongestBucketIntervalAsync`,
+`SendCounterSweepTests.AUTH_ABUSE_004_AC6_TheSweepReadsTheExpressionTheIndexIsOver`,
+`SendingServiceTests.AUTH_ABUSE_004_AC6_ARecordOlderThanTheLongestIntervalGoesWithTheNextReadAsync`,
+`ModelTests.REG_ACCT_001_AC2_NoFieldExistsOutsideTheGroupsTheTableNames`.
+
+*Chapter text that should change.* AUTH-ABUSE-004 AC6 should say when the record is
+deleted and against what, and should say whether the interval is taken over the
+destination restrictions or over all of them. PRIV-RET-005 AC2 should say that the
+retention of a counter follows the declaration as it now stands.
 
 
 # Rows for chapter 10

@@ -548,7 +548,6 @@ public sealed class ModelTests
             // kept apart from them.
             "send_counters.key",
             "send_counters.sent_at",
-            "send_counters.settles_at",
             "send_grants.credit",
             "send_grants.key",
 
