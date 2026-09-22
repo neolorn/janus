@@ -161,6 +161,63 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     /// <summary>
+    /// REG-IDENT-006 AC2: the value a removal gave up belongs to nobody and is still
+    /// out of reach, matched on the keyed fingerprint, until the moment the undo stops
+    /// working.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_AC2_AGivenUpValueIsOutOfReachUntilTheUndoLapsesAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        string given = Fresh("Hana");
+
+        IdentifierId first = await WriteAsync(subject, _entered);
+        IdentifierId second = await WriteAsync(subject, given);
+        DateTimeOffset lapses = Noon.AddHours(72);
+
+        await using (JanusDbContext giving = database.Context())
+        {
+            IdentifierStore store = Store(giving);
+            IdentifierSet set = await store.FindBySubjectAsync(
+                subject,
+                TestContext.Current.CancellationToken);
+
+            // The first is verified before the second, so the primary of the kind is the
+            // one that stays and the second is free to leave.
+            set.Verify(first, Noon.AddHours(1));
+            set.Verify(second, Noon.AddHours(1));
+
+            await store.RecordRemovalAsync(
+                IdentifierRemoval.Of(set.Remove(second), Noon.AddHours(2), lapses, [7, 3, 9]),
+                TestContext.Current.CancellationToken);
+
+            await store.RecordAsync(set, TestContext.Current.CancellationToken);
+            await giving.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using JanusDbContext reading = database.Context();
+        IdentifierStore held = Store(reading);
+
+        Assert.Null(await held.FindOwnerAsync(
+            IdentifierKind.Email,
+            Canonicalised(given),
+            TestContext.Current.CancellationToken));
+
+        Assert.True(await held.IsReservedAsync(
+            IdentifierKind.Email,
+            Canonicalised(given),
+            lapses.AddSeconds(-1),
+            TestContext.Current.CancellationToken));
+
+        Assert.False(await held.IsReservedAsync(
+            IdentifierKind.Email,
+            Canonicalised(given),
+            lapses,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-005a AC12: reading an account's identifiers takes the subject's data
     /// key out once, however many encrypted columns the read decrypts.
     /// </summary>

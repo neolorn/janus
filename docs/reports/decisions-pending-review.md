@@ -1181,6 +1181,8 @@ address. The reservation is a unique fingerprint on `identifier_removals`, and
 *Chapter text that should change.* REG-IDENT-006 should say that the value is
 unavailable to other accounts until the undo window ends.
 
+**Superseded by D-162.** Applied in entry 141.
+
 ---
 
 ## 36. The username hold after erasure is its own table
@@ -4720,6 +4722,34 @@ either.
 *Chapter text that should change.* `10` section 4 should carry the two keys, from the
 rows below. INT-GEN-001's acceptance criteria should say the error names the key, which
 names the integration. LIB-EXT-001 should say where the shipped transports are called.
+
+---
+
+## 141. A reserved value is answered exactly as a held one
+
+**Corrections 1 · 2026-09-22 · D-162 section C, item 35 · REG-IDENT-006, REG-IDENT-001,
+REG-SESS-005**
+
+*What D-162 decided.* A removed identifier stays reserved for the undo window, and an
+attempt to take it answers exactly as a duplicate does. Entry 35 chose the reservation
+and stopped there; the second half is what D-162 adds.
+
+*What was built.* Nothing in the library changed: the path that takes an address already
+treats a reserved value and a value another account holds as one outcome, and neither
+stages anything nor tells the account asking which it met. What was missing was the test
+that holds it there. Two now do, one over the service and one over the real database:
+an account offering a value that was given up hours ago is accepted with nothing staged
+and nobody told, the value belongs to nobody while the undo can still restore it, and
+the moment the window runs out the same offer stages a verification.
+
+*Tests that pin it.*
+`IdentifierServiceTests.REG_IDENT_006_AC2_AReservedAddressIsAnsweredAsAHeldOneIsAsync`,
+`IdentifierStoreTests.REG_IDENT_006_AC2_AGivenUpValueIsOutOfReachUntilTheUndoLapsesAsync`,
+`IdentifierServiceTests.REG_IDENT_001_AC2_ANumberOnOneAccountDoesNotVerifyOnAnotherAsync`.
+
+*Chapter text that should change.* REG-IDENT-006 should say that the value is
+unavailable to other accounts until the undo window ends, and that an account offering it
+meanwhile is answered as REG-IDENT-001 AC2 answers an account offering a held value.
 
 
 # Rows for chapter 10

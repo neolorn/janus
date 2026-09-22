@@ -342,6 +342,64 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-006 AC2: a removed address stays out of reach while the undo can
+    /// still restore it, and an account offering it is answered exactly as an account
+    /// offering an address another holds is answered. Once the window has run out the
+    /// address is free.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_AC2_AReservedAddressIsAnsweredAsAHeldOneIsAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
+
+        Accepted(await Service.RemoveAsync(
+            Acting,
+            Stepped(),
+            second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        var other = SubjectId.New(_randomness);
+
+        _passwords.Hold(other, Noon);
+        _ = _directory.Verified(other, IdentifierKind.Email, Third);
+
+        int told = _notifications.Sent.Count;
+
+        Accepted(await Service.AddAsync(
+            AccessContext.Of(other),
+            Stepped(other),
+            IdentifierKind.Email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        // Nothing was staged, so no code can be entered against the address, and the
+        // account asking cannot tell a reserved value from a held one (REG-SESS-005).
+        // Nobody was told either, because a reserved value has no holder to tell.
+        Assert.Empty(_pending.All);
+        Assert.Equal(told, _notifications.Sent.Count);
+        Assert.Null(await _directory.OwnerAsync(
+            IdentifierKind.Email,
+            Second,
+            TestContext.Current.CancellationToken));
+
+        _clock.Advance(Settings.IdentifierChangeCoolingOff.Default + TimeSpan.FromMinutes(1));
+
+        Accepted(await Service.AddAsync(
+            AccessContext.Of(other),
+            Stepped(other),
+            IdentifierKind.Email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(Second, Assert.Single(_pending.All).Staged.Canonical);
+    }
+
+    /// <summary>
     /// REG-IDENT-006 AC4: the sessions the account holds elsewhere end with the
     /// identifier, and the one that asked is left alone.
     /// </summary>
@@ -638,16 +696,18 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     // just presented what it holds, and one whose evidence is too old for a gate.
     private AccessContext Acting => AccessContext.Of(_person);
 
-    private SessionId Stepped() => Opened(Noon);
+    private SessionId Stepped() => Opened(Noon, _person);
+
+    private SessionId Stepped(SubjectId subject) => Opened(_clock.GetUtcNow(), subject);
 
     private SessionId Stale() =>
-        Opened(Noon - Settings.SessionStepUpRecency.Default - TimeSpan.FromMinutes(1));
+        Opened(Noon - Settings.SessionStepUpRecency.Default - TimeSpan.FromMinutes(1), _person);
 
-    private SessionId Opened(DateTimeOffset at)
+    private SessionId Opened(DateTimeOffset at, SubjectId subject)
     {
         var session = Session.Begin(
             SessionId.New(_clock),
-            _person,
+            subject,
             new Assurance(AssuranceLevel.Aal1, PhishingResistant: false),
             Somewhere,
             at,
