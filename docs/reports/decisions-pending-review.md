@@ -662,6 +662,8 @@ test supplies a fake that honours it.
 *Chapter text that should change.* None. The implementation plan should say which phase
 implements the configuration store.
 
+**Superseded by D-162.** Applied in entry 116.
+
 ---
 
 ## 20. INT-GEN-006 is built with the background jobs, and the session degrades to no location until then
@@ -3585,6 +3587,31 @@ which D-162 does not reverse.
 `AuthenticationServiceTests.AUTH_FACT_016_AC3_WrongCodesInvalidateTheHeldSignInAsync`,
 `ModelTests.REG_ACCT_001_AC2_NoFieldExistsOutsideTheGroupsTheTableNames`, which carries
 the new table's columns and no longer the challenge's two.
+
+---
+
+## 116. The configuration store stands, and the area's services are the container's
+
+**Corrections 1 · 2026-09-22 · D-162 section B, correcting entry 19 · OPS-CFG-008, `10` section 4**
+
+*What D-162 decided.* `IConfigurationStore` is implemented in `Janus.Storage` over the
+`settings` table using the `10` section 4 value grammar (a stored value that does not
+parse is a fault), and every authentication service is registered in `AddJanus`. This
+was phase 0's item.
+
+*What was built.* Both halves stand in the code as D-162 requires, phase 4 having built
+what entry 19 deferred: `Janus.Storage.Settings.ConfigurationStore` reads and writes the
+`settings` table through each key's own written form, is registered as
+`IConfigurationStore`, and every service of the authentication area is registered in
+`AddJanus` (a repository search over the area's service types found none missing). What
+was not pinned was the fault: a row whose text the key cannot read was answered
+correctly and no test said so. It now has one, so a later change cannot quietly let a
+malformed row read as the key's default.
+
+*Tests that pin it.*
+`ConfigurationStoreTests.ReadAsync_AStoredValueThatDoesNotParse_IsAFaultAsync`,
+beside `ConfigurationStoreTests.OPS_CFG_008_AC1_AChangedSettingIsInForceForTheNextReadAsync`
+and the registration the hosting tests exercise end to end.
 
 
 # Rows for chapter 10
