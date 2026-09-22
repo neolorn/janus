@@ -33,7 +33,7 @@ public sealed class AccountApplicationTests : IAsyncDisposable
 
     private static readonly PreferenceDeclarations Declared = PreferenceDeclarations.Of(
     [
-        new PreferenceDeclaration("theme", PreferenceKind.Text, "system"),
+        new PreferenceDeclaration("theme", PreferenceKind.String, "system"),
     ]);
 
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();

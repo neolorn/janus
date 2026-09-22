@@ -15,6 +15,10 @@ against the public contract of LIB-API-001.
   test fails on an action added or respelled without the catalogue saying so, as the
   error codes already do.
 
+- The four preference types are now spelled as the specification spells them:
+  `PreferenceKind.String`, `Boolean`, `Integer` and `Enum`. The names a host reads on
+  the wire are unchanged.
+
 - A refusal from the access gate now carries a correlation identifier whatever the
   request was made under, background work included. The trail records the refusal with
   neither identity named, which is the recorded fact rather than an omission, and the

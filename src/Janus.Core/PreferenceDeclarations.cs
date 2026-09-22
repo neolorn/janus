@@ -81,7 +81,7 @@ public sealed class PreferenceDeclarations
 
     private static void Wellformed(PreferenceDeclaration declaration)
     {
-        bool choice = declaration.Kind is PreferenceKind.Choice;
+        bool choice = declaration.Kind is PreferenceKind.Enum;
 
         if (choice && (declaration.Choices is null || declaration.Choices.Count == 0))
         {

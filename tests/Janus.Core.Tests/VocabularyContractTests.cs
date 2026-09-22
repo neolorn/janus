@@ -256,6 +256,16 @@ public sealed class VocabularyContractTests
     }
 
     /// <summary>
+    /// REG-PREF-001: the four types a host declares a preference key with, spelled as
+    /// the item spells them, because a host writes the declaration in those words.
+    /// </summary>
+    [Fact]
+    public void REG_PREF_001_ThePreferenceTypesAreTheOnesTheItemNames() =>
+        Assert.Equal(
+            ["boolean", "enum", "integer", "string"],
+            WireNames<PreferenceKind>());
+
+    /// <summary>
     /// The catalogue a deployment declares is asked by message and by channel, so
     /// what the library asks it for is a written name and never the compiler's
     /// (CONV-CONTENT-001, LIB-HOST-001).
@@ -324,6 +334,7 @@ public sealed class VocabularyContractTests
             typeof(BucketWindow),
             typeof(AlertSeverity),
             typeof(MessageKind),
+            typeof(PreferenceKind),
             typeof(SendKind),
             typeof(RegistrationStep),
         ];

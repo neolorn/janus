@@ -38,10 +38,10 @@ public sealed class ExportSourceTests(DatabaseFixture database)
     [
         new PreferenceDeclaration(
             "theme",
-            PreferenceKind.Choice,
+            PreferenceKind.Enum,
             "dark",
             Choices: new HashSet<string> { "dark", "light" }),
-        new PreferenceDeclaration("text-size", PreferenceKind.Number, "16"),
+        new PreferenceDeclaration("text-size", PreferenceKind.Integer, "16"),
     ]);
 
     private readonly Deployment _deployment = new(database);

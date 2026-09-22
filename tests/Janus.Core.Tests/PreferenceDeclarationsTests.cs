@@ -21,7 +21,7 @@ public sealed class PreferenceDeclarationsTests
     public void REG_PREF_001_AC1_ADeclarationWithoutANameFailsStartup()
     {
         StartupException fault = Assert.Throws<StartupException>(() =>
-            PreferenceDeclarations.Of([new PreferenceDeclaration(" ", PreferenceKind.Text, "dark")]));
+            PreferenceDeclarations.Of([new PreferenceDeclaration(" ", PreferenceKind.String, "dark")]));
 
         Assert.Equal(ErrorCodes.StartupPreferenceDeclaration, fault.Failure?.Code);
     }
@@ -36,8 +36,8 @@ public sealed class PreferenceDeclarationsTests
         StartupException fault = Assert.Throws<StartupException>(() =>
             PreferenceDeclarations.Of(
             [
-                new PreferenceDeclaration("theme", PreferenceKind.Text, "dark"),
-                new PreferenceDeclaration("theme", PreferenceKind.Text, "light"),
+                new PreferenceDeclaration("theme", PreferenceKind.String, "dark"),
+                new PreferenceDeclaration("theme", PreferenceKind.String, "light"),
             ]));
 
         Assert.Equal(ErrorCodes.StartupPreferenceDeclaration, fault.Failure?.Code);
@@ -52,7 +52,7 @@ public sealed class PreferenceDeclarationsTests
     {
         StartupException fault = Assert.Throws<StartupException>(() =>
             PreferenceDeclarations.Of(
-                [new PreferenceDeclaration("theme", PreferenceKind.Choice, "dark")]));
+                [new PreferenceDeclaration("theme", PreferenceKind.Enum, "dark")]));
 
         Assert.Equal(ErrorCodes.StartupPreferenceDeclaration, fault.Failure?.Code);
     }
@@ -69,7 +69,7 @@ public sealed class PreferenceDeclarationsTests
             [
                 new PreferenceDeclaration(
                     "theme",
-                    PreferenceKind.Text,
+                    PreferenceKind.String,
                     "dark",
                     Choices: new HashSet<string> { "dark", "light" }),
             ]));
@@ -86,7 +86,7 @@ public sealed class PreferenceDeclarationsTests
     {
         StartupException fault = Assert.Throws<StartupException>(() =>
             PreferenceDeclarations.Of(
-                [new PreferenceDeclaration("reduced-motion", PreferenceKind.Flag, "yes")]));
+                [new PreferenceDeclaration("reduced-motion", PreferenceKind.Boolean, "yes")]));
 
         Assert.Equal(ErrorCodes.StartupPreferenceDeclaration, fault.Failure?.Code);
     }
@@ -100,7 +100,7 @@ public sealed class PreferenceDeclarationsTests
     {
         StartupException fault = Assert.Throws<StartupException>(() =>
             PreferenceDeclarations.Of(
-                [new PreferenceDeclaration("text-size", PreferenceKind.Number, "large")]));
+                [new PreferenceDeclaration("text-size", PreferenceKind.Integer, "large")]));
 
         Assert.Equal("text-size", fault.Failure?.Details["preference"].GetString());
     }
@@ -126,19 +126,19 @@ public sealed class PreferenceDeclarationsTests
     {
         var declarations = PreferenceDeclarations.Of(
         [
-            new PreferenceDeclaration("date-format", PreferenceKind.Text, "iso"),
-            new PreferenceDeclaration("reduced-motion", PreferenceKind.Flag, "false"),
-            new PreferenceDeclaration("text-size", PreferenceKind.Number, "16"),
+            new PreferenceDeclaration("date-format", PreferenceKind.String, "iso"),
+            new PreferenceDeclaration("reduced-motion", PreferenceKind.Boolean, "false"),
+            new PreferenceDeclaration("text-size", PreferenceKind.Integer, "16"),
             new PreferenceDeclaration(
                 "theme",
-                PreferenceKind.Choice,
+                PreferenceKind.Enum,
                 "dark",
                 Choices: new HashSet<string> { "dark", "light" }),
         ]);
 
         Assert.Equal(4, declarations.All.Count);
         Assert.True(declarations.TryFind("theme", out PreferenceDeclaration theme));
-        Assert.Equal(PreferenceKind.Choice, theme.Kind);
+        Assert.Equal(PreferenceKind.Enum, theme.Kind);
     }
 
     /// <summary>
@@ -148,7 +148,7 @@ public sealed class PreferenceDeclarationsTests
     public void TryFind_AnUndeclaredKey_IsNotFound()
     {
         var declarations = PreferenceDeclarations.Of(
-            [new PreferenceDeclaration("theme", PreferenceKind.Text, "dark")]);
+            [new PreferenceDeclaration("theme", PreferenceKind.String, "dark")]);
 
         Assert.False(declarations.TryFind("Theme", out _));
     }
@@ -161,18 +161,18 @@ public sealed class PreferenceDeclarationsTests
     /// <param name="value">The value as it was sent.</param>
     /// <param name="admitted">Whether the type takes it.</param>
     [Theory]
-    [InlineData(PreferenceKind.Flag, "true", true)]
-    [InlineData(PreferenceKind.Flag, "false", true)]
-    [InlineData(PreferenceKind.Flag, "True", false)]
-    [InlineData(PreferenceKind.Flag, "1", false)]
-    [InlineData(PreferenceKind.Number, "16", true)]
-    [InlineData(PreferenceKind.Number, "-16", true)]
-    [InlineData(PreferenceKind.Number, "16.5", false)]
-    [InlineData(PreferenceKind.Number, "", false)]
-    [InlineData(PreferenceKind.Text, "anything at all", true)]
+    [InlineData(PreferenceKind.Boolean, "true", true)]
+    [InlineData(PreferenceKind.Boolean, "false", true)]
+    [InlineData(PreferenceKind.Boolean, "True", false)]
+    [InlineData(PreferenceKind.Boolean, "1", false)]
+    [InlineData(PreferenceKind.Integer, "16", true)]
+    [InlineData(PreferenceKind.Integer, "-16", true)]
+    [InlineData(PreferenceKind.Integer, "16.5", false)]
+    [InlineData(PreferenceKind.Integer, "", false)]
+    [InlineData(PreferenceKind.String, "anything at all", true)]
     public void Admits_AValueOfAKind_AnswersForTheKind(PreferenceKind kind, string value, bool admitted)
     {
-        var declaration = new PreferenceDeclaration("key", kind, kind is PreferenceKind.Flag ? "false" : "0");
+        var declaration = new PreferenceDeclaration("key", kind, kind is PreferenceKind.Boolean ? "false" : "0");
 
         Assert.Equal(admitted, declaration.Admits(value));
     }
@@ -185,7 +185,7 @@ public sealed class PreferenceDeclarationsTests
     {
         var declaration = new PreferenceDeclaration(
             "theme",
-            PreferenceKind.Choice,
+            PreferenceKind.Enum,
             "dark",
             Choices: new HashSet<string> { "dark", "light" });
 

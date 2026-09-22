@@ -4638,6 +4638,31 @@ should say the audit actions are catalogued and stable as the error codes are.
 
 ---
 
+## 138. The preference types are spelled as the item spells them
+
+**Corrections 1 · 2026-09-22 · D-162 section B, Tier 1 reversal · REG-PREF-001, LIB-HOST-001**
+
+*What D-162 decided.* `PreferenceKind` spells its members as LIB-HOST-001 does: `string`,
+`boolean`, `integer`, `enum`. They had been `Text`, `Flag`, `Number` and `Choice`.
+
+*What was built.* The four members are renamed to `String`, `Boolean`, `Integer` and
+`Enum`. The wire names, which were already the item's four words, are unchanged and are
+now pinned by name like every other vocabulary.
+
+*One point D-162 does not settle, taken at the strictest reading.* `CA1720` fires on
+`String` and `Integer`. It is suppressed on the type, with the justification in place,
+rather than the names being bent back: REG-PREF-001 names those four types and a host
+writes its declaration in those words.
+
+*Tests that pin it.*
+`VocabularyContractTests.REG_PREF_001_ThePreferenceTypesAreTheOnesTheItemNames`,
+`VocabularyContractTests.WireNames_EveryVocabularyMember_CarriesOne`,
+`PreferenceDeclarationsTests.REG_PREF_001_AC1_ADefaultTheKindRefusesFailsStartup`.
+
+*Chapter text that should change.* None; the item already spells them this way.
+
+---
+
 # Rows for chapter 10
 
 D-162 section E names codes, keys, declarations and vocabularies the library now

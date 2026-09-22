@@ -1447,10 +1447,10 @@ Janus.Core.PreferenceDeclarations
 Janus.Core.PreferenceDeclarations.All.get -> System.Collections.Generic.IReadOnlyCollection<Janus.Core.PreferenceDeclaration!>!
 Janus.Core.PreferenceDeclarations.TryFind(string! name, out Janus.Core.PreferenceDeclaration! declaration) -> bool
 Janus.Core.PreferenceKind
-Janus.Core.PreferenceKind.Choice = 3 -> Janus.Core.PreferenceKind
-Janus.Core.PreferenceKind.Flag = 1 -> Janus.Core.PreferenceKind
-Janus.Core.PreferenceKind.Number = 2 -> Janus.Core.PreferenceKind
-Janus.Core.PreferenceKind.Text = 0 -> Janus.Core.PreferenceKind
+Janus.Core.PreferenceKind.Boolean = 1 -> Janus.Core.PreferenceKind
+Janus.Core.PreferenceKind.Enum = 3 -> Janus.Core.PreferenceKind
+Janus.Core.PreferenceKind.Integer = 2 -> Janus.Core.PreferenceKind
+Janus.Core.PreferenceKind.String = 0 -> Janus.Core.PreferenceKind
 Janus.Core.PreferenceValues
 Janus.Core.PreferenceValues.<Clone>$() -> Janus.Core.PreferenceValues!
 Janus.Core.PreferenceValues.Declared.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!

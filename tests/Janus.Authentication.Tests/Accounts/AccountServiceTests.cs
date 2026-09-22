@@ -41,9 +41,9 @@ public sealed class AccountServiceTests : IAsyncDisposable
 
     private static readonly PreferenceDeclarations Declared = PreferenceDeclarations.Of(
     [
-        new PreferenceDeclaration("theme", PreferenceKind.Text, "system"),
-        new PreferenceDeclaration("reducedMotion", PreferenceKind.Flag, "false"),
-        new PreferenceDeclaration("tier", PreferenceKind.Text, "standard", AdministratorOnly: true),
+        new PreferenceDeclaration("theme", PreferenceKind.String, "system"),
+        new PreferenceDeclaration("reducedMotion", PreferenceKind.Boolean, "false"),
+        new PreferenceDeclaration("tier", PreferenceKind.String, "standard", AdministratorOnly: true),
     ]);
 
     private readonly AccountDirectoryInMemory _directory = new(Declared);
