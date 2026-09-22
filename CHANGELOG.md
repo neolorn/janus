@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- A session cookie that no longer resolves no longer refuses the request. The
+  pipeline clears the cookie and carries the request on as anonymous, so a person
+  whose session ended can reach the sign-in endpoints with the dead cookie still in
+  the browser. The endpoints that answer only a signed-in person are held to a
+  session in one stage, which answers 401 `auth.session.expired`, carrying what has
+  to be done again where the session had ended.
+
 - The outbound addresses the library calls are two configuration keys of its own,
   `integration.mail.endpoint` and `integration.sms.endpoint`, both protected. A
   deployment that supplies its own mail or SMS transport leaves them empty and calls

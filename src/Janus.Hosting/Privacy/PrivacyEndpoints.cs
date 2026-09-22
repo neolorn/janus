@@ -43,26 +43,26 @@ internal static class PrivacyEndpoints
         _ = group.MapGet("/notice", NoticeAsync);
         _ = group.MapGet("/documents/{document}", DocumentAsync);
 
-        _ = group.MapGet("/consents", ConsentsAsync);
-        _ = group.MapPost("/consents/{purpose}/grant", GrantAsync);
-        _ = group.MapPost("/consents/{purpose}/withdraw", WithdrawAsync);
+        _ = SessionRequired.On(group.MapGet("/consents", ConsentsAsync));
+        _ = SessionRequired.On(group.MapPost("/consents/{purpose}/grant", GrantAsync));
+        _ = SessionRequired.On(group.MapPost("/consents/{purpose}/withdraw", WithdrawAsync));
 
-        _ = group.MapGet("/objections", ObjectionsAsync);
-        _ = group.MapPost("/objections/{purpose}", ObjectAsync);
-        _ = group.MapDelete("/objections/{purpose}", WithdrawObjectionAsync);
+        _ = SessionRequired.On(group.MapGet("/objections", ObjectionsAsync));
+        _ = SessionRequired.On(group.MapPost("/objections/{purpose}", ObjectAsync));
+        _ = SessionRequired.On(group.MapDelete("/objections/{purpose}", WithdrawObjectionAsync));
 
-        _ = group.MapPost("/requests", SubmitAsync);
-        _ = group.MapGet("/export", ExportAsync);
+        _ = SessionRequired.On(group.MapPost("/requests", SubmitAsync));
+        _ = SessionRequired.On(group.MapGet("/export", ExportAsync));
 
-        _ = endpoints.MapGet("/admin/ropa", RegisterAsync);
-        _ = endpoints.MapPut("/admin/compliance/assessments", AssessmentsAsync);
+        _ = SessionRequired.On(endpoints.MapGet("/admin/ropa", RegisterAsync));
+        _ = SessionRequired.On(endpoints.MapPut("/admin/compliance/assessments", AssessmentsAsync));
 
         RouteGroupBuilder queue = endpoints.MapGroup("/admin/privacy/requests");
 
-        _ = queue.MapGet("/", QueueAsync);
-        _ = queue.MapPost("/", EnterAsync);
-        _ = queue.MapPost("/{request:guid}/fulfil", FulfilAsync);
-        _ = queue.MapPost("/{request:guid}/refuse", RefuseAsync);
+        _ = SessionRequired.On(queue.MapGet("/", QueueAsync));
+        _ = SessionRequired.On(queue.MapPost("/", EnterAsync));
+        _ = SessionRequired.On(queue.MapPost("/{request:guid}/fulfil", FulfilAsync));
+        _ = SessionRequired.On(queue.MapPost("/{request:guid}/refuse", RefuseAsync));
 
         return endpoints;
     }
@@ -74,11 +74,11 @@ internal static class PrivacyEndpoints
     {
         ArgumentNullException.ThrowIfNull(consents);
 
-        return Asking(browser) is not AccessContext holder
-            ? Nobody()
-            : Answers.Of(
-                await consents.ReadAsync(holder, cancellationToken).ConfigureAwait(false),
-                Held);
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await consents.ReadAsync(holder, cancellationToken).ConfigureAwait(false),
+            Held);
     }
 
     private static async Task<IResult> GrantAsync(
@@ -89,13 +89,13 @@ internal static class PrivacyEndpoints
     {
         ArgumentNullException.ThrowIfNull(consents);
 
-        return Asking(browser) is not AccessContext holder
-            ? Nobody()
-            : Answers.Of(
-                await consents
-                    .GrantAsync(holder, purpose, ConsentMechanism.Dashboard, cancellationToken)
-                    .ConfigureAwait(false),
-                Nothing);
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await consents
+                .GrantAsync(holder, purpose, ConsentMechanism.Dashboard, cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
     }
 
     private static async Task<IResult> WithdrawAsync(
@@ -106,11 +106,11 @@ internal static class PrivacyEndpoints
     {
         ArgumentNullException.ThrowIfNull(consents);
 
-        return Asking(browser) is not AccessContext holder
-            ? Nobody()
-            : Answers.Of(
-                await consents.WithdrawAsync(holder, purpose, cancellationToken).ConfigureAwait(false),
-                Nothing);
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await consents.WithdrawAsync(holder, purpose, cancellationToken).ConfigureAwait(false),
+            Nothing);
     }
 
     private static async Task<IResult> ObjectionsAsync(
@@ -120,11 +120,11 @@ internal static class PrivacyEndpoints
     {
         ArgumentNullException.ThrowIfNull(consents);
 
-        return Asking(browser) is not AccessContext holder
-            ? Nobody()
-            : Answers.Of(
-                await consents.ObjectionsAsync(holder, cancellationToken).ConfigureAwait(false),
-                Standing);
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await consents.ObjectionsAsync(holder, cancellationToken).ConfigureAwait(false),
+            Standing);
     }
 
     private static async Task<IResult> ObjectAsync(
@@ -135,13 +135,13 @@ internal static class PrivacyEndpoints
     {
         ArgumentNullException.ThrowIfNull(consents);
 
-        return Asking(browser) is not AccessContext holder
-            ? Nobody()
-            : Answers.Of(
-                await consents
-                    .ObjectAsync(holder, purpose, ConsentMechanism.Dashboard, cancellationToken)
-                    .ConfigureAwait(false),
-                Nothing);
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await consents
+                .ObjectAsync(holder, purpose, ConsentMechanism.Dashboard, cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
     }
 
     private static async Task<IResult> WithdrawObjectionAsync(
@@ -152,13 +152,13 @@ internal static class PrivacyEndpoints
     {
         ArgumentNullException.ThrowIfNull(consents);
 
-        return Asking(browser) is not AccessContext holder
-            ? Nobody()
-            : Answers.Of(
-                await consents
-                    .WithdrawObjectionAsync(holder, purpose, cancellationToken)
-                    .ConfigureAwait(false),
-                Nothing);
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await consents
+                .WithdrawObjectionAsync(holder, purpose, cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
     }
 
     // PRIV-RIGHT-001: the subject asks for themselves, and the receipt tells them
@@ -177,13 +177,13 @@ internal static class PrivacyEndpoints
             return Answers.Malformed("type");
         }
 
-        return Asking(browser) is not AccessContext holder
-            ? Nobody()
-            : Answers.Of(
-                await requests
-                    .SubmitAsync(holder, type, body.Detail ?? string.Empty, cancellationToken)
-                    .ConfigureAwait(false),
-                Receipted);
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await requests
+                .SubmitAsync(holder, type, body.Detail ?? string.Empty, cancellationToken)
+                .ConfigureAwait(false),
+            Receipted);
     }
 
     // D-054: one routine and two arrangements of what it returns. A format the
@@ -201,13 +201,13 @@ internal static class PrivacyEndpoints
             return Answers.Malformed("format");
         }
 
-        return Asking(browser) is not AccessContext holder || browser.Live is null
-            ? Nobody()
-            : Answers.Of(
-                await exports
-                    .AssembleAsync(holder, browser.Live.Id, cancellationToken)
-                    .ConfigureAwait(false),
-                arrangement);
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await exports
+                .AssembleAsync(holder, browser.Required.Id, cancellationToken)
+                .ConfigureAwait(false),
+            arrangement);
     }
 
     private static Func<SubjectExport, IResult>? Arranged(string? format) => format switch
@@ -272,11 +272,11 @@ internal static class PrivacyEndpoints
             return Answers.Malformed("format");
         }
 
-        return Asking(browser) is not AccessContext holder
-            ? Nobody()
-            : Answers.Of(
-                await records.GenerateAsync(holder, cancellationToken).ConfigureAwait(false),
-                Generated);
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await records.GenerateAsync(holder, cancellationToken).ConfigureAwait(false),
+            Generated);
     }
 
     private static async Task<IResult> AssessmentsAsync(
@@ -288,19 +288,19 @@ internal static class PrivacyEndpoints
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(records);
 
-        return Asking(browser) is not AccessContext holder
-            ? Nobody()
-            : Answers.Of(
-                await records
-                    .DeclareAsync(
-                        holder,
-                        new ComplianceRecord(
-                            request.DataOwner,
-                            request.OrganisationalSecurityMeasures,
-                            request.AssessmentLinks ?? []),
-                        cancellationToken)
-                    .ConfigureAwait(false),
-                Nothing);
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await records
+                .DeclareAsync(
+                    holder,
+                    new ComplianceRecord(
+                        request.DataOwner,
+                        request.OrganisationalSecurityMeasures,
+                        request.AssessmentLinks ?? []),
+                    cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
     }
 
     private static JsonHttpResult<ProcessingRegisterView> Generated(ProcessingRegister register) =>
@@ -317,11 +317,11 @@ internal static class PrivacyEndpoints
     {
         ArgumentNullException.ThrowIfNull(requests);
 
-        return Asking(browser) is not AccessContext holder
-            ? Nobody()
-            : Answers.Of(
-                await requests.QueueAsync(holder, cancellationToken).ConfigureAwait(false),
-                Queued);
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await requests.QueueAsync(holder, cancellationToken).ConfigureAwait(false),
+            Queued);
     }
 
     // 09 section 8a, D-113: the human entering it records the channel, what they did
@@ -365,22 +365,22 @@ internal static class PrivacyEndpoints
             return Answers.Malformed("identityConfirmation");
         }
 
-        return Asking(browser) is not AccessContext holder
-            ? Nobody()
-            : Answers.Of(
-                await requests
-                    .EnterAsync(
-                        holder,
-                        new PrivacyRequestEntry(
-                            new SubjectId(subject),
-                            type,
-                            body.Detail ?? string.Empty,
-                            receivedAt,
-                            channel,
-                            confirmation),
-                        cancellationToken)
-                    .ConfigureAwait(false),
-                Receipted);
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await requests
+                .EnterAsync(
+                    holder,
+                    new PrivacyRequestEntry(
+                        new SubjectId(subject),
+                        type,
+                        body.Detail ?? string.Empty,
+                        receivedAt,
+                        channel,
+                        confirmation),
+                    cancellationToken)
+                .ConfigureAwait(false),
+            Receipted);
     }
 
     private static async Task<IResult> FulfilAsync(
@@ -391,13 +391,13 @@ internal static class PrivacyEndpoints
     {
         ArgumentNullException.ThrowIfNull(requests);
 
-        return Asking(browser) is not AccessContext holder
-            ? Nobody()
-            : Answers.Of(
-                await requests
-                    .FulfilAsync(holder, new PrivacyRequestId(request), cancellationToken)
-                    .ConfigureAwait(false),
-                Nothing);
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await requests
+                .FulfilAsync(holder, new PrivacyRequestId(request), cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
     }
 
     private static async Task<IResult> RefuseAsync(
@@ -415,13 +415,13 @@ internal static class PrivacyEndpoints
             return Answers.Malformed("reason");
         }
 
-        return Asking(browser) is not AccessContext holder
-            ? Nobody()
-            : Answers.Of(
-                await requests
-                    .RefuseAsync(holder, new PrivacyRequestId(request), reason, cancellationToken)
-                    .ConfigureAwait(false),
-                Nothing);
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await requests
+                .RefuseAsync(holder, new PrivacyRequestId(request), reason, cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
     }
 
     // 10 section 5.12c gives the three spellings, and a body carrying anything else
@@ -541,14 +541,13 @@ internal static class PrivacyEndpoints
             contentType: null,
             StatusCodes.Status200OK);
 
-    private static AccessContext? Asking(RequestSession browser)
+    // BFF-STEP-001: the endpoints that read this are mounted as ones that need a
+    // session, so the stage that requires one has already answered a request that
+    // arrived without it.
+    private static AccessContext Asking(RequestSession browser)
     {
         ArgumentNullException.ThrowIfNull(browser);
 
-        return browser.Context;
+        return AccessContext.Of(browser.Required.Subject);
     }
-
-    // API-CONV-003: nobody is asking, which is what 401 is for and what nothing else
-    // is for.
-    private static IResult Nobody() => Answers.Refused(ErrorCodes.SessionExpired);
 }

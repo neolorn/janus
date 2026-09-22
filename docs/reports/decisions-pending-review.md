@@ -1351,6 +1351,8 @@ dead pair is cleared in the same answer so the browser stops presenting it.
 *Chapter text that should change.* `17` should say that stage 5 answers session death
 itself.
 
+**Superseded by D-162.** Applied in entry 142.
+
 ---
 
 ## 42. A session records no location until a local database can resolve one
@@ -4750,6 +4752,64 @@ the moment the window runs out the same offer stages a verification.
 *Chapter text that should change.* REG-IDENT-006 should say that the value is
 unavailable to other accounts until the undo window ends, and that an account offering it
 meanwhile is answered as REG-IDENT-001 AC2 answers an account offering a held value.
+
+---
+
+## 142. A dead cookie leaves the request anonymous and one stage requires a session
+
+**Corrections 1 · 2026-09-22 · D-162 section C, item 41 · BFF-ORDER-001 stage 5,
+BFF-STEP-001, BFF-CSRF-001, AUTH-SESS-007, API-CONV-003**
+
+*What D-162 decided.* Stage 5 clears a dead cookie and leaves the request anonymous;
+the requirement of a session is asserted once in the pipeline for endpoints that need
+one and answers 401 `auth.session.expired` there. Entry 41 chose the opposite and is
+reversed.
+
+*What was built.* Session resolution no longer answers a cookie that fails to resolve:
+it clears the pair, keeps what resolving it answered, and carries the request on as the
+request of a browser that carried nothing. A person whose session ended can therefore
+reach the endpoints that sign them in again while the browser still holds the dead
+cookie, which under entry 41 answered 401 to every endpoint including those. A new
+stage, mounted once after the token check, holds the endpoints that answer only a
+signed-in person to having a session and answers them all the same way: the refusal
+the resolution kept, which carries what has to be done again (BFF-STEP-001 AC3), or the
+code alone where the browser never held a session. The thirty-six endpoints that need
+one say so where they are mounted, and the thirty-eight refusals their handlers each
+carried are gone.
+
+*Three points D-162 does not settle, taken at the strictest reading.*
+
+1. Which endpoints need a session is read from endpoint metadata, which the two gate
+   tests of BFF-CSRF-001 AC2 and AUTH-SESS-007 AC2 forbade any file of the boundary to
+   read. Those criteria say that no endpoint can opt out of the token requirement or be
+   excluded from it; what an endpoint carries here can only add a refusal, never take
+   one away, and no stage that enforces the token reads it. The two tests now name the
+   two files that read it and stay closed against every other, so a third file reading
+   an endpoint still fails them.
+2. The endpoints that answer an enrolment session as well as a session are not held to
+   one: the eight credential endpoints and the two account endpoints that a browser
+   recovering a lost mailbox reaches. They need a session or an enrolment session, which
+   is not the requirement this stage asserts, so they keep the answer of their own.
+   The endpoint that needs a first contact rather than a session keeps its own likewise.
+3. A handler of a held endpoint reads the session through a member that throws where the
+   endpoint was mounted without the mark. That is a mounting error, not something a
+   caller can produce, and the catalogue test below fails on it before it can ship.
+
+*Tests that pin it.*
+`SessionRequirementTests.BFF_STEP_001_TheEndpointsThatNeedASessionAreTheOnesListed`,
+`SessionRequirementTests.BFF_STEP_001_AC3_AnEndedSessionIsAnsweredWithWhatMustBeRedoneAsync`,
+`SessionRequirementTests.BFF_ORDER_001_AnEndedSessionDoesNotRefuseAnEndpointThatNeedsNoneAsync`,
+`SessionRequirementTests.API_CONV_003_ABrowserThatHeldNoSessionIsAnsweredWithTheCodeAloneAsync`,
+`BrowserProfileTests.BFF_ORDER_001_AnEndedSessionIsClearedAndLeavesTheRequestAnonymousAsync`,
+`BrowserProfileTests.AUTH_SESS_007_AC2_NoEndpointCanOptOut`,
+`BrowserProfileTests.BFF_CSRF_001_AC2_NoEndpointCanBeExcludedByConfigurationOrAttribute`.
+
+*Chapter text that should change.* BFF-ORDER-001 should say that stage 5 clears a
+cookie that no longer resolves and leaves the request anonymous, and that the
+requirement of a session is asserted at stage 8 for the endpoints that carry it.
+BFF-CSRF-001 AC2 and AUTH-SESS-007 AC2 should say that no endpoint can be excluded from
+a stage, which is what they mean, rather than that no stage reads what an endpoint
+carries.
 
 
 # Rows for chapter 10

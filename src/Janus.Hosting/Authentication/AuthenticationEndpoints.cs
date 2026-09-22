@@ -46,20 +46,20 @@ internal static class AuthenticationEndpoints
         _ = group.MapPost("/begin", BeginAsync);
         _ = group.MapPost("/factor", PresentAsync);
         _ = group.MapPost("/device/verify", VerifyDeviceAsync);
-        _ = group.MapPost("/step-up", StepUpAsync);
+        _ = SessionRequired.On(group.MapPost("/step-up", StepUpAsync));
         _ = group.MapPost("/link", LinkAsync);
         _ = group.MapPost("/link/abandon", AbandonLinkAsync);
         _ = group.MapPost("/email-otp", CodeAsync);
-        _ = group.MapPost("/logout", LogoutAsync);
-        _ = group.MapGet("/session", SessionAsync);
+        _ = SessionRequired.On(group.MapPost("/logout", LogoutAsync));
+        _ = SessionRequired.On(group.MapGet("/session", SessionAsync));
 
         // Chapter 09 section 3 lists the browsers the account knows under the account
         // and the sessions elsewhere, so the two lists are never read as one
         // (AUTH-SESS-013).
         RouteGroupBuilder devices = endpoints.MapGroup("/account/devices");
 
-        _ = devices.MapGet("/", ListDevicesAsync);
-        _ = devices.MapDelete("/{id:guid}", ForgetDeviceAsync);
+        _ = SessionRequired.On(devices.MapGet("/", ListDevicesAsync));
+        _ = SessionRequired.On(devices.MapDelete("/{id:guid}", ForgetDeviceAsync));
 
         return endpoints;
     }
@@ -206,10 +206,7 @@ internal static class AuthenticationEndpoints
         ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(context);
 
-        if (browser.Context is not AccessContext holder || browser.Live is null)
-        {
-            return Nobody();
-        }
+        AccessContext holder = Asking(browser);
 
         if (request.ChallengeId is not { Length: > 0 } challenge)
         {
@@ -220,7 +217,7 @@ internal static class AuthenticationEndpoints
                 await authentication
                     .RaiseAsync(
                         holder,
-                        browser.Live.Id,
+                        browser.Required.Id,
                         challenge,
                         Presented(request),
                         cancellationToken)
@@ -313,10 +310,7 @@ internal static class AuthenticationEndpoints
         ArgumentNullException.ThrowIfNull(cookies);
         ArgumentNullException.ThrowIfNull(context);
 
-        if (browser.Context is not AccessContext holder)
-        {
-            return Nobody();
-        }
+        AccessContext holder = Asking(browser);
 
         Error? failure = null;
 
@@ -341,17 +335,17 @@ internal static class AuthenticationEndpoints
         ArgumentNullException.ThrowIfNull(sessions);
         ArgumentNullException.ThrowIfNull(browser);
 
-        return browser.Context is not AccessContext holder || browser.Live is null
-            ? Nobody()
-            : Answers.Of(
-                await sessions
-                    .ReadAsync(holder, browser.Live.Id, cancellationToken)
-                    .ConfigureAwait(false),
-                session => TypedResults.Json(
-                    SessionDetailView.Of(session),
-                    AuthenticationJson.Default.SessionDetailView,
-                    contentType: null,
-                    StatusCodes.Status200OK));
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await sessions
+                .ReadAsync(holder, browser.Required.Id, cancellationToken)
+                .ConfigureAwait(false),
+            session => TypedResults.Json(
+                SessionDetailView.Of(session),
+                AuthenticationJson.Default.SessionDetailView,
+                contentType: null,
+                StatusCodes.Status200OK));
     }
 
     private static async Task<IResult> ListDevicesAsync(
@@ -362,17 +356,17 @@ internal static class AuthenticationEndpoints
         ArgumentNullException.ThrowIfNull(authentication);
         ArgumentNullException.ThrowIfNull(browser);
 
-        return browser.Context is not AccessContext holder
-            ? Nobody()
-            : Answers.Of(
-                await authentication
-                    .ListDevicesAsync(holder, cancellationToken)
-                    .ConfigureAwait(false),
-                known => TypedResults.Json<IReadOnlyList<DeviceView>>(
-                    [.. known.Select(DeviceView.Of)],
-                    AuthenticationJson.Default.IReadOnlyListDeviceView,
-                    contentType: null,
-                    StatusCodes.Status200OK));
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await authentication
+                .ListDevicesAsync(holder, cancellationToken)
+                .ConfigureAwait(false),
+            known => TypedResults.Json<IReadOnlyList<DeviceView>>(
+                [.. known.Select(DeviceView.Of)],
+                AuthenticationJson.Default.IReadOnlyListDeviceView,
+                contentType: null,
+                StatusCodes.Status200OK));
     }
 
     private static async Task<IResult> ForgetDeviceAsync(
@@ -384,13 +378,13 @@ internal static class AuthenticationEndpoints
         ArgumentNullException.ThrowIfNull(authentication);
         ArgumentNullException.ThrowIfNull(browser);
 
-        return browser.Context is not AccessContext holder
-            ? Nobody()
-            : Answers.Of(
-                await authentication
-                    .ForgetDeviceAsync(holder, new DeviceId(id), cancellationToken)
-                    .ConfigureAwait(false),
-                Nothing);
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await authentication
+                .ForgetDeviceAsync(holder, new DeviceId(id), cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
     }
 
     private static FactorPresentation Presented(PresentFactorRequest request) =>
@@ -504,6 +498,16 @@ internal static class AuthenticationEndpoints
             StatusCodes.Status200OK);
     }
 
+    // BFF-STEP-001: the endpoints that read this are mounted as ones that need a
+    // session, so the stage that requires one has already answered a request that
+    // arrived without it.
+    private static AccessContext Asking(RequestSession browser)
+    {
+        ArgumentNullException.ThrowIfNull(browser);
+
+        return AccessContext.Of(browser.Required.Subject);
+    }
+
     // How long the browser is to carry what it was just handed. A deployment that has
     // set nothing gets the shipped default, which is what the store answers with.
     private static async ValueTask<TimeSpan> ForAsync(
@@ -515,10 +519,6 @@ internal static class AuthenticationEndpoints
 
     private static string? Carried(HttpRequest request, string cookie) =>
         request.Cookies[cookie] is { Length: > 0 } value ? value : null;
-
-    // API-CONV-003: nobody is asking, which is what 401 is for and what nothing else
-    // is for.
-    private static IResult Nobody() => Answers.Refused(ErrorCodes.SessionExpired);
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)
     {

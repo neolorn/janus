@@ -17,12 +17,11 @@ namespace Janus.Hosting.Bff;
 /// <param name="cookies">What the browser carries.</param>
 /// <remarks>
 /// Implements BFF-ORDER-001 stage 5, BFF-SESS-001, BFF-CSRF-005a and BFF-STEP-001.
-/// A cookie that no longer resolves is session death and is answered as such here,
-/// once, by the pipeline: an endpoint that had to notice it for itself would be an
-/// endpoint that could forget to. The dead pair is cleared in the same answer, so the
-/// browser starts again rather than presenting it on every request afterwards. A
-/// browser carrying nothing is nobody, which is not a refusal: what each endpoint
-/// requires of a caller is the endpoint's own business.
+/// A cookie that no longer resolves is cleared, so the browser stops presenting it,
+/// and the request goes on as the request of a browser that carried nothing: a
+/// person whose session ended has to reach the endpoints that sign them in again.
+/// What resolving it answered is kept for the stage that requires a session, which
+/// is the one place that refuses on account of there being none.
 /// </remarks>
 internal sealed class SessionResolution(
     SessionService sessions,
@@ -44,30 +43,28 @@ internal sealed class SessionResolution(
 
         string secret = context.Request.Cookies[BrowserCookies.Session] ?? string.Empty;
 
-        if (secret.Length is 0)
+        if (secret.Length is not 0)
         {
-            await CarriedAsync(context, context.RequestAborted).ConfigureAwait(false);
-            await next(context).ConfigureAwait(false);
+            Error? failure = null;
 
-            return;
+            (await sessions
+                    .ResolveAsync(
+                        OpaqueToken.Of(secret),
+                        RequestOrigin.Of(context.Request),
+                        context.RequestAborted)
+                    .ConfigureAwait(false))
+                .Switch(session => resolved.Resolved(session), error => failure = error);
+
+            if (failure is Error ended)
+            {
+                cookies.Clear(context.Response);
+                resolved.Ended(ended);
+            }
         }
 
-        Error? failure = null;
-
-        (await sessions
-                .ResolveAsync(
-                    OpaqueToken.Of(secret),
-                    RequestOrigin.Of(context.Request),
-                    context.RequestAborted)
-                .ConfigureAwait(false))
-            .Switch(session => resolved.Resolved(session), error => failure = error);
-
-        if (failure is not null)
+        if (resolved.Live is null)
         {
-            cookies.Clear(context.Response);
-            await Refusal.WriteAsync(context, failure, context.RequestAborted).ConfigureAwait(false);
-
-            return;
+            await CarriedAsync(context, context.RequestAborted).ConfigureAwait(false);
         }
 
         await next(context).ConfigureAwait(false);

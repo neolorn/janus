@@ -402,18 +402,20 @@ public sealed class BrowserProfileTests : IDisposable
 
     /// <summary>
     /// AUTH-SESS-007 AC2: enforcement is the pipeline's, so nothing an endpoint
-    /// carries and no key of chapter 10 section 4 takes it out of the layer.
+    /// carries and no key of chapter 10 section 4 takes it out of the layer. What an
+    /// endpoint carries is read in two files and only ever adds a refusal to it: an
+    /// endpoint says that it needs a session, and nothing says it needs less than the
+    /// stages give it (BFF-STEP-001).
     /// </summary>
     [Fact]
-    public void AUTH_SESS_007_AC2_NoEndpointCanOptOut() => Assert.Empty(
-        Repository
-            .Sources()
-            .Where(file => File.ReadLines(file).Any(line =>
-                line.Contains("GetEndpoint", StringComparison.Ordinal)
-                || line.Contains("Metadata", StringComparison.Ordinal)
-                || line.Contains("IConfigurationStore", StringComparison.Ordinal)))
-            .Select(Path.GetFileName)
-            .Order(StringComparer.Ordinal));
+    public void AUTH_SESS_007_AC2_NoEndpointCanOptOut()
+    {
+        Assert.Equal(
+            ["SessionRequired.cs", "SessionRequirement.cs"],
+            Reading("GetEndpoint", "Metadata"));
+
+        Assert.Empty(Reading("IConfigurationStore"));
+    }
 
     /// <summary>
     /// BFF-SESS-004 AC2: the secret the session answered to before is invalidated,
@@ -474,14 +476,16 @@ public sealed class BrowserProfileTests : IDisposable
 
     /// <summary>
     /// BFF-CSRF-001 AC2 and BFF-MACH-001 AC1: no endpoint can be excluded by
-    /// configuration or attribute, the pipeline reading neither the endpoint nor its
-    /// metadata; the one thing a path decides is which profile carries a request, and
-    /// that is settled in the one place the library names the routes.
+    /// configuration or attribute, no stage that enforces the token reading the
+    /// endpoint or its metadata; the one thing a path decides is which profile carries
+    /// a request, and that is settled in the one place the library names the routes.
     /// </summary>
     [Fact]
     public void BFF_CSRF_001_AC2_NoEndpointCanBeExcludedByConfigurationOrAttribute()
     {
-        Assert.Empty(Reading("GetEndpoint", "Metadata"));
+        Assert.Equal(
+            ["SessionRequired.cs", "SessionRequirement.cs"],
+            Reading("GetEndpoint", "Metadata"));
 
         Assert.Equal(["JanusPipeline.cs"], Reading("Request.Path"));
     }
@@ -658,11 +662,13 @@ public sealed class BrowserProfileTests : IDisposable
     }
 
     /// <summary>
-    /// BFF-STEP-001 AC3: an expired session is refused with what has to be done
-    /// again, and the pair it answered to is cleared rather than presented for ever.
+    /// BFF-ORDER-001 stage 5: a cookie that no longer resolves is cleared, so the
+    /// browser stops presenting it, and the request goes on with nobody on it. What a
+    /// person whose session ended may reach is the endpoint's to say, and the stage
+    /// that requires a session says it for all of them at once (BFF-STEP-001 AC3).
     /// </summary>
     [Fact]
-    public async Task BFF_STEP_001_AC3_AnExpiredSessionIsRefusedWithWhatMustBeRedoneAsync()
+    public async Task BFF_ORDER_001_AnEndedSessionIsClearedAndLeavesTheRequestAnonymousAsync()
     {
         (OpaqueToken secret, OpaqueToken _) = await LiveAsync();
 
@@ -674,13 +680,10 @@ public sealed class BrowserProfileTests : IDisposable
 
         await Mounted()(context);
 
-        Assert.False(_reached);
-        Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
-
-        string answered = await AnsweredAsync(context);
-
-        Assert.Contains("\"code\":\"auth.session.expired\"", answered, StringComparison.Ordinal);
-        Assert.Contains("\"reauthenticate\":", answered, StringComparison.Ordinal);
+        Assert.True(_reached);
+        Assert.NotNull(_resolved);
+        Assert.Null(_resolved.Live);
+        Assert.Equal(ErrorCodes.SessionExpired, _resolved.Expiry?.Code);
         Assert.Contains(
             BrowserCookies.Session + "=;",
             context.Response.Headers.SetCookie.ToString(),
@@ -810,6 +813,7 @@ public sealed class BrowserProfileTests : IDisposable
         services.AddScoped<SessionResolution>();
         services.AddScoped<FirstContact>();
         services.AddScoped<SynchronizerToken>();
+        services.AddScoped<SessionRequirement>();
 
         ServiceProvider provider = services.BuildServiceProvider();
         var building = new ApplicationBuilder(provider);

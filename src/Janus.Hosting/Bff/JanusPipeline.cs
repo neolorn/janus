@@ -45,6 +45,11 @@ public static class JanusPipeline
         _ = application.UseMiddleware<FirstContact>();
         _ = application.UseMiddleware<SynchronizerToken>();
 
+        // Stage 8's floor: an endpoint that answers only a signed-in person is held
+        // to one here, after the stages that establish what the browser carries and
+        // before anything reads a body (BFF-STEP-001).
+        _ = application.UseMiddleware<SessionRequirement>();
+
         // AUTH-SESS-012: the authorization endpoint is answered here, after the layers
         // that established what the browser carries, because what it issues a code
         // against is the session it found.

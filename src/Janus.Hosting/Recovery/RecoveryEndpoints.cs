@@ -42,10 +42,10 @@ internal static class RecoveryEndpoints
 
         _ = group.MapPost("/begin", BeginAsync);
         _ = group.MapPost("/complete", CompleteAsync);
-        _ = group.MapPost("/report-loss", ReportLossAsync);
+        _ = SessionRequired.On(group.MapPost("/report-loss", ReportLossAsync));
         _ = group.MapPost("/report-loss/{id:guid}/cancel", CancelLossAsync);
 
-        _ = endpoints.MapPost("/admin/recovery/approve", ApproveAsync);
+        _ = SessionRequired.On(endpoints.MapPost("/admin/recovery/approve", ApproveAsync));
         _ = endpoints.MapPost("/enrol/begin", EnrolAsync);
 
         return endpoints;
@@ -124,10 +124,7 @@ internal static class RecoveryEndpoints
         ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(context);
 
-        if (browser.Context is not AccessContext holder)
-        {
-            return Nobody();
-        }
+        AccessContext holder = Asking(browser);
 
         return !Guid.TryParse(request.CredentialId, out Guid credential)
             ? Answers.Malformed("credentialId")
@@ -184,10 +181,7 @@ internal static class RecoveryEndpoints
         ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(context);
 
-        if (browser.Context is not AccessContext approver || browser.Live is null)
-        {
-            return Nobody();
-        }
+        AccessContext approver = Asking(browser);
 
         if (!Guid.TryParse(request.Subject, out Guid subject))
         {
@@ -203,7 +197,7 @@ internal static class RecoveryEndpoints
                 await recovery
                     .ApproveAsync(
                         approver,
-                        browser.Live.Id,
+                        browser.Required.Id,
                         new SubjectId(subject),
                         request.Reason ?? string.Empty,
                         channel,
@@ -265,6 +259,16 @@ internal static class RecoveryEndpoints
             RecoveryJson.Default.EnrolmentSessionView,
             contentType: null,
             StatusCodes.Status200OK);
+    }
+
+    // BFF-STEP-001: the endpoints that read this are mounted as ones that need a
+    // session, so the stage that requires one has already answered a request that
+    // arrived without it.
+    private static AccessContext Asking(RequestSession browser)
+    {
+        ArgumentNullException.ThrowIfNull(browser);
+
+        return AccessContext.Of(browser.Required.Subject);
     }
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)

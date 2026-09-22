@@ -507,6 +507,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<SessionResolution>();
         _ = services.AddScoped<FirstContact>();
         _ = services.AddScoped<SynchronizerToken>();
+        _ = services.AddScoped<SessionRequirement>();
         _ = services.AddScoped<MachineProfile>();
 
         _ = services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);

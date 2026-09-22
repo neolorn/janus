@@ -138,6 +138,7 @@ public static class JanusRegistration
         services.AddScoped<SessionResolution>();
         services.AddScoped<FirstContact>();
         services.AddScoped<SynchronizerToken>();
+        services.AddScoped<SessionRequirement>();
         services.AddScoped<MachineProfile>();
 
         // LIB-HOST-001: what the host declares about its own messaging is the host's.

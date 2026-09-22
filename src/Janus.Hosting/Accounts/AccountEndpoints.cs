@@ -41,30 +41,30 @@ internal static class AccountEndpoints
 
         RouteGroupBuilder group = endpoints.MapGroup("/account");
 
-        _ = group.MapGet("/", ReadAsync);
-        _ = group.MapPut("/profile", EditProfileAsync);
-        _ = group.MapGet("/preferences", ReadPreferencesAsync);
-        _ = group.MapPut("/preferences", SetPreferencesAsync);
+        _ = SessionRequired.On(group.MapGet("/", ReadAsync));
+        _ = SessionRequired.On(group.MapPut("/profile", EditProfileAsync));
+        _ = SessionRequired.On(group.MapGet("/preferences", ReadPreferencesAsync));
+        _ = SessionRequired.On(group.MapPut("/preferences", SetPreferencesAsync));
 
-        _ = group.MapPost("/identifiers", AddIdentifierAsync);
+        _ = SessionRequired.On(group.MapPost("/identifiers", AddIdentifierAsync));
         _ = group.MapPost("/identifiers/{id:guid}/verify", VerifyIdentifierAsync);
-        _ = group.MapPost("/identifiers/{id:guid}/primary", MakePrimaryAsync);
-        _ = group.MapPut("/identifiers/backup", SetBackupAsync);
-        _ = group.MapDelete("/identifiers/{id:guid}", RemoveIdentifierAsync);
+        _ = SessionRequired.On(group.MapPost("/identifiers/{id:guid}/primary", MakePrimaryAsync));
+        _ = SessionRequired.On(group.MapPut("/identifiers/backup", SetBackupAsync));
+        _ = SessionRequired.On(group.MapDelete("/identifiers/{id:guid}", RemoveIdentifierAsync));
         _ = group.MapPost("/identifiers/{id:guid}/undo", UndoIdentifierAsync);
         _ = group.MapPut("/identifiers/{id:guid}/replace", ReplaceIdentifierAsync);
         _ = group.MapPost("/identifiers/{id:guid}/abandon", AbandonIdentifierAsync);
 
-        _ = group.MapGet("/credentials", ListCredentialsAsync);
-        _ = group.MapPatch("/credentials/{id:guid}", LabelCredentialAsync);
-        _ = group.MapPut("/secondstep/preferred", PreferSecondStepAsync);
+        _ = SessionRequired.On(group.MapGet("/credentials", ListCredentialsAsync));
+        _ = SessionRequired.On(group.MapPatch("/credentials/{id:guid}", LabelCredentialAsync));
+        _ = SessionRequired.On(group.MapPut("/secondstep/preferred", PreferSecondStepAsync));
 
-        _ = group.MapGet("/sessions", ListSessionsAsync);
-        _ = group.MapDelete("/sessions/{id:guid}", EndSessionAsync);
+        _ = SessionRequired.On(group.MapGet("/sessions", ListSessionsAsync));
+        _ = SessionRequired.On(group.MapDelete("/sessions/{id:guid}", EndSessionAsync));
 
-        _ = group.MapPost("/deactivate", DeactivateAsync);
+        _ = SessionRequired.On(group.MapPost("/deactivate", DeactivateAsync));
         _ = group.MapPost("/reactivate", ReactivateAsync);
-        _ = group.MapPost("/delete", DeleteAsync);
+        _ = SessionRequired.On(group.MapPost("/delete", DeleteAsync));
         _ = group.MapPost("/delete/cancel", CancelDeletionAsync);
 
         return endpoints;
@@ -77,15 +77,15 @@ internal static class AccountEndpoints
     {
         ArgumentNullException.ThrowIfNull(accounts);
 
-        return Asking(browser) is not AccessContext holder
-            ? Nobody()
-            : Answers.Of(
-                await accounts.ReadAsync(holder, cancellationToken).ConfigureAwait(false),
-                account => TypedResults.Json(
-                    AccountView.Of(account),
-                    AccountJson.Default.AccountView,
-                    contentType: null,
-                    StatusCodes.Status200OK));
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await accounts.ReadAsync(holder, cancellationToken).ConfigureAwait(false),
+            account => TypedResults.Json(
+                AccountView.Of(account),
+                AccountJson.Default.AccountView,
+                contentType: null,
+                StatusCodes.Status200OK));
     }
 
     private static async Task<IResult> EditProfileAsync(
@@ -97,10 +97,7 @@ internal static class AccountEndpoints
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(accounts);
 
-        if (Asking(browser) is not AccessContext holder || browser.Live is null)
-        {
-            return Nobody();
-        }
+        AccessContext holder = Asking(browser);
 
         var edit = new ProfileEdit(
             request.DisplayName,
@@ -110,7 +107,7 @@ internal static class AccountEndpoints
 
         return Answers.Of(
             await accounts
-                .EditProfileAsync(holder, browser.Live.Id, edit, cancellationToken)
+                .EditProfileAsync(holder, browser.Required.Id, edit, cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }
@@ -122,15 +119,15 @@ internal static class AccountEndpoints
     {
         ArgumentNullException.ThrowIfNull(accounts);
 
-        return Asking(browser) is not AccessContext holder
-            ? Nobody()
-            : Answers.Of(
-                await accounts.ReadPreferencesAsync(holder, cancellationToken).ConfigureAwait(false),
-                preferences => TypedResults.Json(
-                    PreferencesView.Of(preferences),
-                    AccountJson.Default.PreferencesView,
-                    contentType: null,
-                    StatusCodes.Status200OK));
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await accounts.ReadPreferencesAsync(holder, cancellationToken).ConfigureAwait(false),
+            preferences => TypedResults.Json(
+                PreferencesView.Of(preferences),
+                AccountJson.Default.PreferencesView,
+                contentType: null,
+                StatusCodes.Status200OK));
     }
 
     private static async Task<IResult> SetPreferencesAsync(
@@ -142,18 +139,18 @@ internal static class AccountEndpoints
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(accounts);
 
-        return Asking(browser) is not AccessContext holder
-            ? Nobody()
-            : Answers.Of(
-                await accounts
-                    .SetPreferencesAsync(
-                        holder,
-                        request.Language,
-                        request.TimeZone,
-                        request.Declared ?? NoPreferences,
-                        cancellationToken)
-                    .ConfigureAwait(false),
-                Nothing);
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await accounts
+                .SetPreferencesAsync(
+                    holder,
+                    request.Language,
+                    request.TimeZone,
+                    request.Declared ?? NoPreferences,
+                    cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
     }
 
     // API-CONV-005: accepted whether or not the identifier belongs to another
@@ -169,10 +166,7 @@ internal static class AccountEndpoints
         ArgumentNullException.ThrowIfNull(identifiers);
         ArgumentNullException.ThrowIfNull(context);
 
-        if (Asking(browser) is not AccessContext holder || browser.Live is null)
-        {
-            return Nobody();
-        }
+        AccessContext holder = Asking(browser);
 
         return request.Value is not { Length: > 0 } value
             ? Answers.Malformed("value")
@@ -180,7 +174,7 @@ internal static class AccountEndpoints
                 await identifiers
                     .AddAsync(
                         holder,
-                        browser.Live.Id,
+                        browser.Required.Id,
                         request.Kind,
                         value,
                         RequestOrigin.Source(context.Request),
@@ -220,7 +214,7 @@ internal static class AccountEndpoints
             return Answers.Malformed("code");
         }
 
-        if (Asking(browser) is not AccessContext holder)
+        if (browser.Context is not AccessContext holder)
         {
             return Opened(browser) is not EnrolmentSessionId enrolment
                 ? Nobody()
@@ -248,17 +242,17 @@ internal static class AccountEndpoints
         ArgumentNullException.ThrowIfNull(identifiers);
         ArgumentNullException.ThrowIfNull(context);
 
-        return Asking(browser) is not AccessContext holder
-            ? Nobody()
-            : Answers.Of(
-                await identifiers
-                    .MakePrimaryAsync(
-                        holder,
-                        new IdentifierId(id),
-                        RequestOrigin.Source(context.Request),
-                        cancellationToken)
-                    .ConfigureAwait(false),
-                Nothing);
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await identifiers
+                .MakePrimaryAsync(
+                    holder,
+                    new IdentifierId(id),
+                    RequestOrigin.Source(context.Request),
+                    cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
     }
 
     private static async Task<IResult> SetBackupAsync(
@@ -272,10 +266,7 @@ internal static class AccountEndpoints
         ArgumentNullException.ThrowIfNull(identifiers);
         ArgumentNullException.ThrowIfNull(context);
 
-        if (Asking(browser) is not AccessContext holder)
-        {
-            return Nobody();
-        }
+        AccessContext holder = Asking(browser);
 
         if (!Chosen(request.Setting, out BackupChoice choice, out IdentifierId? named))
         {
@@ -304,17 +295,17 @@ internal static class AccountEndpoints
         ArgumentNullException.ThrowIfNull(account);
         ArgumentNullException.ThrowIfNull(context);
 
-        return Asking(browser) is not AccessContext holder || browser.Live is null
-            ? Nobody()
-            : Answers.Of(
-                await account
-                    .DeactivateAsync(
-                        holder,
-                        browser.Live.Id,
-                        RequestOrigin.Source(context.Request),
-                        cancellationToken)
-                    .ConfigureAwait(false),
-                Accepted);
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await account
+                .DeactivateAsync(
+                    holder,
+                    browser.Required.Id,
+                    RequestOrigin.Source(context.Request),
+                    cancellationToken)
+                .ConfigureAwait(false),
+            Accepted);
     }
 
     // IDN-LIFE-013: link-borne, because a suspended account cannot sign in and so has
@@ -343,19 +334,19 @@ internal static class AccountEndpoints
         ArgumentNullException.ThrowIfNull(account);
         ArgumentNullException.ThrowIfNull(context);
 
-        return Asking(browser) is not AccessContext holder || browser.Live is null
-            ? Nobody()
-            : Answers.Of(
-                await account
-                    .DeleteAsync(
-                        holder,
-                        browser.Live.Id,
-                        RequestOrigin.Source(context.Request),
-                        cancellationToken)
-                    .ConfigureAwait(false),
-                erasesAt => TypedResults.Accepted(
-                    (string?)null,
-                    new DeletionView(erasesAt)));
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await account
+                .DeleteAsync(
+                    holder,
+                    browser.Required.Id,
+                    RequestOrigin.Source(context.Request),
+                    cancellationToken)
+                .ConfigureAwait(false),
+            erasesAt => TypedResults.Accepted(
+                (string?)null,
+                new DeletionView(erasesAt)));
     }
 
     // IDN-LIFE-014: the deletion notice carries the link, because a deleting account
@@ -385,18 +376,18 @@ internal static class AccountEndpoints
         ArgumentNullException.ThrowIfNull(identifiers);
         ArgumentNullException.ThrowIfNull(context);
 
-        return Asking(browser) is not AccessContext holder || browser.Live is null
-            ? Nobody()
-            : Answers.Of(
-                await identifiers
-                    .RemoveAsync(
-                        holder,
-                        browser.Live.Id,
-                        new IdentifierId(id),
-                        RequestOrigin.Source(context.Request),
-                        cancellationToken)
-                    .ConfigureAwait(false),
-                Nothing);
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await identifiers
+                .RemoveAsync(
+                    holder,
+                    browser.Required.Id,
+                    new IdentifierId(id),
+                    RequestOrigin.Source(context.Request),
+                    cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
     }
 
     // REG-IDENT-006: link-borne, because after a hostile removal the account has no
@@ -442,7 +433,7 @@ internal static class AccountEndpoints
 
         // AUTH-RECOV-002: the enrolment session an approver opened for a lost mailbox
         // reaches this endpoint, where the new address confirms alone (REG-IDENT-007).
-        if (Asking(browser) is not AccessContext holder || browser.Live is null)
+        if (browser.Context is not AccessContext holder || browser.Live is null)
         {
             return Opened(browser) is not EnrolmentSessionId enrolment
                 ? Nobody()
@@ -496,15 +487,15 @@ internal static class AccountEndpoints
     {
         ArgumentNullException.ThrowIfNull(accounts);
 
-        return Asking(browser) is not AccessContext holder
-            ? Nobody()
-            : Answers.Of(
-                await accounts.ListCredentialsAsync(holder, cancellationToken).ConfigureAwait(false),
-                credentials => TypedResults.Json<IReadOnlyList<CredentialView>>(
-                    [.. credentials.Select(CredentialView.Of)],
-                    AccountJson.Default.IReadOnlyListCredentialView,
-                    contentType: null,
-                    StatusCodes.Status200OK));
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await accounts.ListCredentialsAsync(holder, cancellationToken).ConfigureAwait(false),
+            credentials => TypedResults.Json<IReadOnlyList<CredentialView>>(
+                [.. credentials.Select(CredentialView.Of)],
+                AccountJson.Default.IReadOnlyListCredentialView,
+                contentType: null,
+                StatusCodes.Status200OK));
     }
 
     private static async Task<IResult> LabelCredentialAsync(
@@ -517,10 +508,7 @@ internal static class AccountEndpoints
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(accounts);
 
-        if (Asking(browser) is not AccessContext holder)
-        {
-            return Nobody();
-        }
+        AccessContext holder = Asking(browser);
 
         return request.Label is not { } label
             ? Answers.Malformed("label")
@@ -540,10 +528,7 @@ internal static class AccountEndpoints
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(accounts);
 
-        if (Asking(browser) is not AccessContext holder)
-        {
-            return Nobody();
-        }
+        AccessContext holder = Asking(browser);
 
         return request.Credential is not Guid credential
             ? Answers.Malformed("credential")
@@ -561,17 +546,17 @@ internal static class AccountEndpoints
     {
         ArgumentNullException.ThrowIfNull(sessions);
 
-        return Asking(browser) is not AccessContext holder || browser.Live is null
-            ? Nobody()
-            : Answers.Of(
-                await sessions
-                    .ListAsync(holder, browser.Live.Id, cancellationToken)
-                    .ConfigureAwait(false),
-                held => TypedResults.Json<IReadOnlyList<SessionView>>(
-                    [.. held.Select(SessionView.Of)],
-                    AccountJson.Default.IReadOnlyListSessionView,
-                    contentType: null,
-                    StatusCodes.Status200OK));
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await sessions
+                .ListAsync(holder, browser.Required.Id, cancellationToken)
+                .ConfigureAwait(false),
+            held => TypedResults.Json<IReadOnlyList<SessionView>>(
+                [.. held.Select(SessionView.Of)],
+                AccountJson.Default.IReadOnlyListSessionView,
+                contentType: null,
+                StatusCodes.Status200OK));
     }
 
     private static async Task<IResult> EndSessionAsync(
@@ -582,13 +567,13 @@ internal static class AccountEndpoints
     {
         ArgumentNullException.ThrowIfNull(sessions);
 
-        return Asking(browser) is not AccessContext holder
-            ? Nobody()
-            : Answers.Of(
-                await sessions
-                    .EndAsync(holder, new SessionId(id), cancellationToken)
-                    .ConfigureAwait(false),
-                Nothing);
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await sessions
+                .EndAsync(holder, new SessionId(id), cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
     }
 
     // REG-IDENT-002: the setting is one of the two rules or the identifier of one
@@ -623,11 +608,14 @@ internal static class AccountEndpoints
         }
     }
 
-    private static AccessContext? Asking(RequestSession browser)
+    // BFF-STEP-001: the endpoints that read this are mounted as ones that need a
+    // session, so the stage that requires one has already answered a request that
+    // arrived without it.
+    private static AccessContext Asking(RequestSession browser)
     {
         ArgumentNullException.ThrowIfNull(browser);
 
-        return browser.Context;
+        return AccessContext.Of(browser.Required.Subject);
     }
 
     // D-148: the enrolment session the browser's first contact carries, which reaches

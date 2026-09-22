@@ -27,6 +27,24 @@ internal sealed class RequestSession
     public PreAuthentication? FirstContact { get; private set; }
 
     /// <summary>
+    /// The session the request arrived on, where the stage that requires one let the
+    /// request through.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The endpoint was reached without being marked as one that needs a session,
+    /// which is a mounting error and not something a caller can produce.
+    /// </exception>
+    public Session Required =>
+        Live ?? throw new InvalidOperationException(
+            "The endpoint is not mounted as one that requires a session.");
+
+    /// <summary>
+    /// What the cookie resolved to where it named a session that has ended, or
+    /// nothing where the browser carried no session cookie at all.
+    /// </summary>
+    public Error? Expiry { get; private set; }
+
+    /// <summary>
     /// Who is asking, or nothing where nobody is.
     /// </summary>
     public AccessContext? Context =>
@@ -42,6 +60,18 @@ internal sealed class RequestSession
         ArgumentNullException.ThrowIfNull(session);
 
         Live = session;
+    }
+
+    /// <summary>
+    /// Records that the cookie named a session that has ended.
+    /// </summary>
+    /// <param name="refusal">What resolving it answered.</param>
+    /// <exception cref="ArgumentNullException">The refusal is absent.</exception>
+    public void Ended(Error refusal)
+    {
+        ArgumentNullException.ThrowIfNull(refusal);
+
+        Expiry = refusal;
     }
 
     /// <summary>
