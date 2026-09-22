@@ -344,6 +344,11 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     public DbSet<VerificationCodeRecord> VerificationCodes => Set<VerificationCodeRecord>();
 
     /// <summary>
+    /// The messages undertaken and not yet carried.
+    /// </summary>
+    public DbSet<SendDeliveryRecord> SendOutbox => Set<SendDeliveryRecord>();
+
+    /// <summary>
     /// The credential creation ceremonies accounts have open.
     /// </summary>
     public DbSet<KeyCeremonyRecord> KeyCeremonies => Set<KeyCeremonyRecord>();
@@ -459,6 +464,7 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new PendingVerificationConfiguration());
         modelBuilder.ApplyConfiguration(new ChallengeConfiguration());
         modelBuilder.ApplyConfiguration(new VerificationCodeConfiguration());
+        modelBuilder.ApplyConfiguration(new SendDeliveryConfiguration());
         modelBuilder.ApplyConfiguration(new KeyCeremonyConfiguration());
         modelBuilder.ApplyConfiguration(new PendingSignInConfiguration());
         modelBuilder.ApplyConfiguration(new PolicyRaiseConfiguration());

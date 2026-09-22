@@ -231,6 +231,10 @@ internal static class StorageRegistration
         services.AddScoped<IRecordedConsents, RecordedConsents>();
         services.AddScoped<IAccessAudit, AccessAudit>();
 
+        services.AddScoped<ISendOutbox>(provider => new SendOutbox(
+            provider.GetRequiredService<JanusDbContext>(),
+            keyEncryptionKeys,
+            provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<ISendLedger>(provider => new SendLedger(
             provider.GetRequiredService<JanusDbContext>(),
             fingerprintKey));

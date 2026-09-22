@@ -80,6 +80,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
                 new SendingService(
                     _configuration,
                     _ledger,
+                    new SendOutboxInMemory(),
                     _templates,
                     _mail,
                     _sms,

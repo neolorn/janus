@@ -38,6 +38,7 @@ public sealed class SendingServiceTests : IAsyncDisposable
 
     private readonly ConfigurationInMemory _configuration = new();
     private readonly SendLedgerInMemory _ledger = new();
+    private readonly SendOutboxInMemory _outbox = new();
     private readonly SendAuditInMemory _audit = new();
     private readonly MessageTemplatesInMemory _templates = new();
     private readonly MailTransportInMemory _mail = new();
@@ -62,6 +63,7 @@ public sealed class SendingServiceTests : IAsyncDisposable
         new(
             _configuration,
             _ledger,
+            _outbox,
             _templates,
             _mail,
             _sms,
@@ -229,6 +231,45 @@ public sealed class SendingServiceTests : IAsyncDisposable
         await SentAsync(Texted());
 
         Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
+    }
+
+    /// <summary>
+    /// D-022: the message is written to the outbox in the transaction that undertook
+    /// it, carried from there, and removed once a transport has taken it, so nothing
+    /// outstanding is lost and nothing taken is kept (IDN-PRIN-003).
+    /// </summary>
+    [Fact]
+    public async Task D_022_TheMessageIsWrittenToTheOutboxAndRemovedOnceTakenAsync()
+    {
+        await SentAsync(Mailed());
+
+        SendDelivery written = Assert.Single(_outbox.Written);
+
+        Assert.Equal(Noon, written.RecordedAt);
+        Assert.Equal(Mailbox.Value, written.Requested.Destination.Canonical);
+        Assert.Equal(MessageKind.VerificationCode, written.Requested.Message);
+        Assert.Empty(_outbox.Waiting);
+        Assert.Single(_mail.Taken);
+    }
+
+    /// <summary>
+    /// D-022: a transport that would not take the message leaves it in the outbox as
+    /// it was recorded, which is what a publisher retries from; a refused delivery
+    /// counts against no bucket (AUTH-ABUSE-004 AC2).
+    /// </summary>
+    [Fact]
+    public async Task D_022_ATransportRefusalLeavesTheMessageRecordedAsync()
+    {
+        _mail.Accepts = false;
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            Refusal(await Service.SendAsync(Mailed(), TestContext.Current.CancellationToken)));
+
+        SendDelivery waiting = Assert.Single(_outbox.Waiting);
+
+        Assert.Equal(Mailbox.Value, waiting.Requested.Destination.Canonical);
+        Assert.Empty(_ledger.Keys);
     }
 
     /// <summary>

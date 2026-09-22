@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Every message the library sends is now written to its own outbox table inside the
+  transaction that made it necessary, carried from that row, and removed once a
+  transport has taken it. An operation that fails sends nothing, a message undertaken
+  by one that succeeds is not lost with the process, and a transport that refuses
+  leaves the message waiting rather than dropped. The row holds the whole of the
+  message encrypted under a key of its own.
+
 - Startup now refuses a declaration whose encrypted field names no subject column, a
   column the declared type does not hold, or one holding something that is not a
   subject. Ciphertext an erasure could not reach stops the deployment instead of

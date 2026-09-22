@@ -804,6 +804,8 @@ library itself re-attempts.
 a send is the outbox publisher's, built in phase 9, or an item should state the
 schedule.
 
+**Superseded by D-162.** Applied in entry 119.
+
 ---
 
 ## 24. A refused send carries `retryAt` and nothing else
@@ -3717,6 +3719,77 @@ the outbox publisher and the alert router beside the hosted worker. LIB-EXT-001'
 "Notification handling" row should name `INotificationHandler` as the contract, and
 LIB-API-001 should carry it, `SendRequest`, `SendDestination` and `SendReference` in the
 public surface.
+
+---
+
+## 119. Every send is written to the library's own outbox and carried from the row
+
+**Corrections 1 · 2026-09-22 · D-162 section B, correcting entry 23 · D-022, IDN-PRIN-003, PRIV-RIGHT-005a, AUTH-ABUSE-004**
+
+*What D-162 decided.* Every send is written as a row in the library's own outbox table
+inside the caller's transaction and delivered by the worker under `outbox.retry.*` with
+status recorded. Until the publisher exists (phase 9) the send path attempts once at
+commit and leaves the row in its recorded state. A refused or failed delivery counts
+against no bucket. Exhaustion raises the `degradation` condition.
+
+*What was built.* `Janus.Authentication.Sending` declares the outbox: `SendDelivery`
+(what is to be sent, when it was undertaken, under which identifier), `SendDeliveryId`
+(a version 7 value, so the messages written together sit together in the index a
+publisher reads them in) and `ISendOutbox` (add, find, remove). `Janus.Storage`
+implements it over the new `send_outbox` table, which holds `id`, `recorded_at`,
+`subject`, `key_version`, `wrapped_key` and `enc_message` and nothing else.
+
+The send path now writes the row once the restrictions have let the message through and
+before any transport is asked, reads the message back from the row, carries it, and
+removes the row in the transaction that counts the send. A transport that refuses
+leaves the row exactly as it was recorded, which is what the publisher will retry from,
+and counts nothing. Because the caller holds the transaction and the unit of work is
+re-entrant with no after-commit hook, the row joins the caller's transaction: a message
+undertaken by an operation that then fails is never sent, because the row and the change
+roll back together, and one taken immediately leaves no row at all.
+
+*Decided in the owner's absence (Tier 3, strictest reading).* Three points D-162 does
+not settle:
+
+1. *What the row holds.* The destination, the source address and the template values are
+   all personal, and nothing queries inside an undelivered message, so the whole request
+   is one encrypted column, as `registration_sessions` holds a staged registration
+   (PRIV-RIGHT-005a). The table holds no destination, no address and no value in plain.
+2. *Which key it is held under.* The row's own data key, wrapped under the
+   key-encryption key, not the subject's. A send may name a subject that holds no key
+   yet (a registration in progress names its provisional subject) and a send may name no
+   subject at all (a notice to an address no account holds, an alert to an operator
+   destination), so a subject key cannot serve every row and two shapes in one table
+   would be worse than one. The consequence, stated rather than implied: a message
+   outstanding for a subject erased between its recording and its carriage stays
+   readable to a holder of the key-encryption key until the row is spent. The `subject`
+   column is what an erasure sweep would find those rows by.
+3. *What "attempts once at commit" means with a caller's transaction open.* The library
+   has no after-commit hook, so the attempt is made after the send path's own commit
+   call, which is the outermost commit only when no caller holds one. With a caller's
+   transaction open the transport is asked before that transaction commits. This is the
+   residue the publisher removes in phase 9: once it exists, the send path writes the row
+   and nothing else asks a transport inside a caller's transaction.
+
+*Not built, by D-162's own terms.* The retry schedule (`outbox.retry.*`) and the
+`degradation` condition on exhaustion belong to the publisher, which counts the attempts;
+D-162 places it in phase 9. One attempt is not exhaustion, and the row is left recorded
+for that publisher.
+
+*Tests that pin it.*
+`SendingServiceTests.D_022_TheMessageIsWrittenToTheOutboxAndRemovedOnceTakenAsync`,
+`SendingServiceTests.D_022_ATransportRefusalLeavesTheMessageRecordedAsync`,
+`SendOutboxTests.D_022_TheMessageReadsBackAsItWasUndertakenAsync`,
+`SendOutboxTests.PRIV_RIGHT_005a_AC8_TheTableYieldsNoDestinationInPlainAsync`,
+`SendOutboxTests.IDN_PRIN_003_AMessageTakenLeavesNoRowAsync`,
+`ModelTests` on the six columns,
+and `SendingServiceTests.AUTH_ABUSE_004_AC2_ATransportRefusalCountsNothingAsync`, which
+still holds: a refused delivery counts against no bucket.
+
+*Chapter text that should change.* An item of `02` should state the outbox a send is
+written to, that the row is removed once a transport has taken it (IDN-PRIN-003), and
+that the row's message is encrypted under a key of the row's own because a send may name
+no subject. `10` should carry the `send_outbox` table and its six columns.
 
 
 # Rows for chapter 10

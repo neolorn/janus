@@ -552,6 +552,16 @@ public sealed class ModelTests
             "send_grants.credit",
             "send_grants.key",
 
+            // The messages undertaken and not yet carried (D-022), each the whole of
+            // what is to be sent under a key of the row's own, so that removing the row
+            // removes the message with it (IDN-PRIN-003, PRIV-RIGHT-005a).
+            "send_outbox.enc_message",
+            "send_outbox.id",
+            "send_outbox.key_version",
+            "send_outbox.recorded_at",
+            "send_outbox.subject",
+            "send_outbox.wrapped_key",
+
             // Not an account field: the message a transport took (AUTH-ABUSE-004,
             // INT-SMS-005), held by the hash of its correlation reference so that a
             // delivery report can take its counts back out.

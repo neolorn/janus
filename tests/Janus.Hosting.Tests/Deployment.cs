@@ -373,6 +373,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IPasswordStore>(Passwords);
 
         _ = services.AddSingleton<ISendLedger, SendLedgerInMemory>();
+        _ = services.AddSingleton<ISendOutbox, SendOutboxInMemory>();
         _ = services.AddSingleton<INoticeLedger, NoticeLedgerInMemory>();
         _ = services.AddSingleton<ISmsBalanceLedger, SmsBalanceLedgerInMemory>();
         _ = services.AddSingleton<ILeakedPasswordCorpus, LeakedPasswordCorpusInMemory>();

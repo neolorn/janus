@@ -18,6 +18,7 @@ namespace Janus.Hosting.Sending;
 /// </summary>
 /// <param name="configuration">Where the restrictions and the languages come from.</param>
 /// <param name="ledger">Where what has been sent is counted.</param>
+/// <param name="outbox">Where a message undertaken is written until it is carried.</param>
 /// <param name="templates">Where the words come from.</param>
 /// <param name="mail">What carries a mail.</param>
 /// <param name="sms">What carries a text message.</param>
@@ -30,13 +31,14 @@ namespace Janus.Hosting.Sending;
 /// <param name="randomness">Where a correlation reference is drawn from.</param>
 /// <remarks>
 /// Implements AUTH-ABUSE-004, AUTH-ABUSE-002, AUTH-ABUSE-006, AUTH-FACT-002b,
-/// INT-SMS-001, INT-GEN-005 and CONV-CONTENT-001. The refusal a restriction produces is the same
-/// whether or not the destination belongs to an account: nothing on this path reads
-/// the account to decide it.
+/// INT-SMS-001, INT-GEN-005, CONV-CONTENT-001 and D-022. The refusal a restriction
+/// produces is the same whether or not the destination belongs to an account: nothing
+/// on this path reads the account to decide it.
 /// </remarks>
 internal sealed class SendingService(
     IConfigurationStore configuration,
     ISendLedger ledger,
+    ISendOutbox outbox,
     IMessageTemplates templates,
     IMailTransport mail,
     ISmsTransport sms,
@@ -99,17 +101,36 @@ internal sealed class SendingService(
         // send through and before a transport takes it.
         await signals.ConsiderAsync(request, cancellationToken).ConfigureAwait(false);
 
-        SendReference reference = (await CarryAsync(request, cancellationToken).ConfigureAwait(false))
+        // D-022: the message is written in the transaction that made it necessary, so
+        // that one undertaken by an operation which then fails is never sent, and one
+        // undertaken by an operation which succeeds survives the process.
+        var delivery = SendDelivery.Of(request, now);
+
+        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+
+        await outbox.AddAsync(delivery, cancellationToken).ConfigureAwait(false);
+
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        SendDelivery written = await outbox.FindAsync(delivery.Id, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("The message just written has no row.");
+
+        SendReference reference = (await CarryAsync(written.Requested, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Held<SendReference>(error, ref failure));
 
         if (failure is not null)
         {
             // A transport that would not take it is an attempt to retry, never a
-            // reason to count the send (AUTH-ABUSE-004).
+            // reason to count the send (AUTH-ABUSE-004). The row stays as it was
+            // recorded, which is what the publisher retries from.
             return Result.Failure<SendReference>(failure);
         }
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+
+        // IDN-PRIN-003: a message a transport has taken is spent, and what is spent is
+        // removed rather than kept as a record of where somebody was written to.
+        await outbox.RemoveAsync(delivery.Id, cancellationToken).ConfigureAwait(false);
 
         await ledger
             .RecordAsync(SendReferences.Of(reference), plan.Counted, plan.Spent, now, cancellationToken)
