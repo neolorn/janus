@@ -1475,6 +1475,8 @@ a refusal would make the frontend ask a second time for what it was about to sho
 *Chapter text that should change.* `09` section 2 should give the status and the body of
 that answer.
 
+**Superseded by D-162.** Applied in entry 125.
+
 ---
 
 ## 47. Every event of the stream carries the state document
@@ -4135,6 +4137,30 @@ list says and what D-162 item 34 decides. Chapter 10 section 4 should say that a
 whose chapter states its direction governs, naming the restriction set as the one that
 does. Chapter 10 needs a row for the audit action `ops.configuration.changed`, listed
 under **Rows for chapter 10**.
+
+---
+
+## 125. A signed-in browser asking to register is refused, and no account document crosses a registration route
+
+**Corrections 1 · 2026-09-22 · D-162 section B, correcting entry 46 · REG-SESS-002, API-LAND-001**
+
+*What D-162 decided.* `POST /register` from a browser holding a live session creates
+nothing and answers 409 with `identity.registration.signedin`; the frontend navigates to
+the account application. No account document crosses that boundary.
+
+*What was built.* The endpoint refuses with the new code and stages nothing. The
+`Landing` answer, which rendered the account document from a registration route, is gone
+along with the route's dependency on `IAccount`: a registration route has no business
+reading an account, and the account application fetches its own document behind its own
+gate. The code is 409 in the status table, which is the status a conflict with the
+browser's own state takes.
+
+*Tests that pin it.*
+`RegistrationFlowTests.BeginAsync_ABrowserAlreadySignedIn_IsRefusedAndStagesNothingAsync`.
+
+*Chapter text that should change.* `09` section 2 should say the request is refused 409
+with `identity.registration.signedin` rather than "answered with the account landing".
+Chapter 10 section 1.1 needs the row, listed under **Rows for chapter 10**.
 
 
 # Rows for chapter 10

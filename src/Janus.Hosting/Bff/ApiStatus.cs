@@ -79,6 +79,7 @@ internal static class ApiStatus
         [ErrorCodes.ErasureNotFailed] = StatusCodes.Status409Conflict,
         [ErrorCodes.TakedownActive] = StatusCodes.Status409Conflict,
         [ErrorCodes.AccountAdministrativelySuspended] = StatusCodes.Status409Conflict,
+        [ErrorCodes.RegistrationSignedIn] = StatusCodes.Status409Conflict,
 
         // Well formed, and refused on what it says.
         [ErrorCodes.AffirmationRequired] = StatusCodes.Status422UnprocessableEntity,

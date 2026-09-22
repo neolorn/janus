@@ -7,7 +7,6 @@ using Janus.Authentication.Registration;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Core.Configuration;
-using Janus.Hosting.Accounts;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -68,12 +67,11 @@ internal static class RegistrationEndpoints
         return endpoints;
     }
 
-    // REG-SESS-002: a person already signed in is sent to their account, and no
-    // registration session is created for them.
+    // REG-SESS-002: a person already signed in is refused and sent to their account,
+    // and no registration session is created for them.
     private static async Task<IResult> BeginAsync(
         BeginRegistrationRequest request,
         IRegistration registration,
-        IAccount accounts,
         RequestSession browser,
         PreAuthenticationService contacts,
         HttpContext context,
@@ -81,16 +79,15 @@ internal static class RegistrationEndpoints
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(registration);
-        ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(contacts);
         ArgumentNullException.ThrowIfNull(context);
 
-        if (browser.Context is AccessContext holder)
+        if (browser.Context is not null)
         {
-            return Answers.Of(
-                await accounts.ReadAsync(holder, cancellationToken).ConfigureAwait(false),
-                Landing);
+            // The account document is the account application's to fetch behind its own
+            // gate; a registration route does not hand it out (REG-SESS-002).
+            return Answers.Refused(ErrorCodes.RegistrationSignedIn);
         }
 
         if (request.ClientId is not { Length: > 0 } client)
@@ -504,13 +501,6 @@ internal static class RegistrationEndpoints
             RegistrationJson.Default.RegistrationStateView,
             contentType: null,
             status);
-
-    private static IResult Landing(AccountDetail account) =>
-        TypedResults.Json(
-            AccountView.Of(account),
-            AccountJson.Default.AccountView,
-            contentType: null,
-            StatusCodes.Status200OK);
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)
     {

@@ -172,23 +172,26 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// A browser that already holds a session is answered with its account, and no
-    /// registration is staged for it (REG-SESS-002).
+    /// A browser that already holds a session is refused, nothing is staged for it, and
+    /// no account document crosses a registration route (REG-SESS-002).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task BeginAsync_ABrowserAlreadySignedIn_IsAnsweredWithTheAccountAsync()
+    public async Task BeginAsync_ABrowserAlreadySignedIn_IsRefusedAndStagesNothingAsync()
     {
         Browser browser = await Flow.SignedInAsync(_deployment);
 
         int staged = _deployment.Registrations.All.Count;
 
-        Answer landing = await browser.SendAsync("POST", "/register", ("clientId", "web"));
+        Answer refused = await browser.SendAsync("POST", "/register", ("clientId", "web"));
+
+        Assert.Equal(StatusCodes.Status409Conflict, refused.Status);
+        Assert.Equal(ErrorCodes.RegistrationSignedIn.ToString(), refused.Text("code"));
+        Assert.Equal(staged, _deployment.Registrations.All.Count);
+
         Answer account = await browser.SendAsync("GET", "/account");
 
-        Assert.Equal(StatusCodes.Status200OK, landing.Status);
-        Assert.Equal(account.Body, landing.Body);
-        Assert.Equal(staged, _deployment.Registrations.All.Count);
+        Assert.NotEqual(account.Body, refused.Body);
     }
 
     /// <summary>

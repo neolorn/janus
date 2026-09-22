@@ -288,6 +288,13 @@ public static class ErrorCodes
     public static ErrorCode RegistrationIncomplete { get; } = ErrorCode.Parse("identity.registration.incomplete");
 
     /// <summary>
+    /// The browser asking to register already holds a session. Nothing is staged for
+    /// it; send it to the account application instead.
+    /// </summary>
+    /// <remarks>Implements REG-SESS-002, chapter 10 section 1.1.</remarks>
+    public static ErrorCode RegistrationSignedIn { get; } = ErrorCode.Parse("identity.registration.signedin");
+
+    /// <summary>
     /// The date of birth is under eighteen where the deployment takes an adult
     /// affirmation. The registration session has ended; nothing further is accepted in
     /// it.

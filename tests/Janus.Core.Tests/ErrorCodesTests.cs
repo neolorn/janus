@@ -91,6 +91,7 @@ public sealed class ErrorCodesTests
         "identity.profile.underage",
         "identity.reactivation.tokeninvalid",
         "identity.registration.incomplete",
+        "identity.registration.signedin",
         "identity.takedown.active",
         "identity.username.coolingoff",
         "identity.username.invalid",

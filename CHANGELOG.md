@@ -8,6 +8,13 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+### Changed
+
+- A browser that already holds a session and asks to register is now refused with
+  `identity.registration.signedin` and 409. It used to be answered with the account
+  document, which put an account's own details on a registration route. Nothing is
+  staged for it either way; the frontend navigates to the account application.
+
 ### Added
 
 - Every runtime configuration change now goes through one operation that classifies it,
