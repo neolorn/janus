@@ -725,7 +725,7 @@ them, and adding one is a change to the table.
 
 1. `Janus.Core`, because every area sends. Core holds contracts and no behaviour, so
    this would put the first behaviour there.
-2. A new project. CONV-LAYOUT-001 states the list; adding to it is not the agent's.
+2. A new project. CONV-LAYOUT-001 states the list; adding to it is not the implementer's.
 3. `Janus.Authentication`, because the items are `02` section 7 and the chapter the
    restrictions are stated in is the authentication chapter.
 
