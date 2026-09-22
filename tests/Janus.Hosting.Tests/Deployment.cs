@@ -156,6 +156,16 @@ internal sealed class Deployment : IAsyncDisposable
     public ConfigurationInMemory Configuration { get; } = new();
 
     /// <summary>
+    /// Which organizations a principal belongs to.
+    /// </summary>
+    public MembershipLookupInMemory Memberships { get; } = new();
+
+    /// <summary>
+    /// What an uploaded image is read and re-encoded by.
+    /// </summary>
+    public ImageCodecInMemory Codec { get; } = new();
+
+    /// <summary>
     /// What went out by mail.
     /// </summary>
     public MailTransportInMemory Mail { get; } = new();
@@ -402,7 +412,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IRecoveryCodeStore, RecoveryCodeStoreInMemory>();
         _ = services.AddSingleton<IDeviceStore, DeviceStoreInMemory>();
         _ = services.AddSingleton<ISessionAudit, SessionAuditInMemory>();
-        _ = services.AddSingleton<IMembershipLookup, MembershipLookupInMemory>();
+        _ = services.AddSingleton<IMembershipLookup>(Memberships);
+        _ = services.AddSingleton(Codec.Declared);
         _ = services.AddSingleton<IPolicyRaiseStore, PolicyRaiseStoreInMemory>();
         _ = services.AddSingleton<IChallengeStore, ChallengeStoreInMemory>();
         _ = services.AddSingleton<IVerificationCodeStore, VerificationCodeStoreInMemory>();
@@ -461,6 +472,14 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IIdentifiers>(provider =>
             provider.GetRequiredService<IdentifierService>());
         _ = services.AddScoped<AccountLifecycle>();
+        _ = services.AddScoped(provider => new ProfilePhotos(
+            provider.GetRequiredService<IAccountDirectory>(),
+            provider.GetRequiredService<IMembershipLookup>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IAccountAudit>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<ImageCodec>(),
+            provider.GetRequiredService<TimeProvider>()));
         _ = services.AddScoped<AccountService>();
         _ = services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
         _ = services.AddScoped<TotpService>();

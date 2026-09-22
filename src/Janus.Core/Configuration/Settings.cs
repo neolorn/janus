@@ -863,6 +863,13 @@ public static class Settings
         new("policy", SettingScope.Runtime, SettingForms.Override, PolicyOverride.None);
 
     /// <summary>
+    /// Whether an organization's accounts show a profile photo: one key per
+    /// organization, off until the organization is given one.
+    /// </summary>
+    public static SettingFamily<bool> OrganizationPhoto { get; } =
+        new("photo.enabled", SettingScope.Runtime, SettingForms.Flag, false);
+
+    /// <summary>
     /// How long a host-declared category of data is kept: one key per declared
     /// category, whose floor the host declares. Startup fails for a declared category
     /// without one.
@@ -1035,7 +1042,7 @@ public static class Settings
     /// per host-declared category.
     /// </summary>
     public static IReadOnlyList<SettingFamily> Families { get; } =
-        [OrganizationPolicy, HostCategoryRetention, OrganizationStepUpEnforcement];
+        [OrganizationPhoto, OrganizationPolicy, HostCategoryRetention, OrganizationStepUpEnforcement];
 
     /// <summary>
     /// The keys a deployment has to name, because they name the deployment and the

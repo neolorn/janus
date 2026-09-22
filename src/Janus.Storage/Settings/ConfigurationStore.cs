@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Settings;
 
@@ -61,6 +63,49 @@ internal sealed class ConfigurationStore(JanusDbContext context) : IConfiguratio
     }
 
     /// <inheritdoc/>
+    public async ValueTask<Result<IReadOnlyDictionary<string, TValue>>> ReadWrittenAsync<TValue>(
+        SettingFamily<TValue> family,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(family);
+
+        string prefix = family.Prefix + ".";
+
+        // The table holds a row only for a key the deployment changed, so the whole of
+        // it is a short list and the prefix is matched here rather than in a query the
+        // key's conversion would have to be written round.
+        List<SettingRecord> rows = await context.Settings
+            .AsNoTracking()
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        Dictionary<string, TValue> written = new(StringComparer.Ordinal);
+
+        foreach (SettingRecord row in rows)
+        {
+            string key = row.Key.ToString();
+
+            if (!key.StartsWith(prefix, StringComparison.Ordinal) || Deployment(row.Key))
+            {
+                continue;
+            }
+
+            string parameter = key[prefix.Length..];
+            Error? refused = null;
+
+            family.Read(parameter, row.Value)
+                .Switch(value => written[parameter] = value, error => refused = error);
+
+            if (refused is Error failure)
+            {
+                return Result.Failure<IReadOnlyDictionary<string, TValue>>(failure);
+            }
+        }
+
+        return Result.Success<IReadOnlyDictionary<string, TValue>>(written);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<Result<TValue>> WriteAsync<TValue>(
         Setting<TValue> setting,
         TValue value,
@@ -98,6 +143,12 @@ internal sealed class ConfigurationStore(JanusDbContext context) : IConfiguratio
 
         return before;
     }
+
+    // A key that exists once for the deployment can sit under a family's prefix, as
+    // policy.default sits under policy; it is not a member of the family and the
+    // catalogue is what says so.
+    private static bool Deployment(ConfigurationKey key) =>
+        Janus.Core.Configuration.Settings.All.Any(setting => setting.Key == key);
 
     private static Error Undeclared(ConfigurationKey key) =>
         new(ErrorCodes.StartupDeclarationMissing, Naming(key));

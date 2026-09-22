@@ -4,8 +4,10 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Sending;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Sending;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,6 +25,13 @@ namespace Janus.Hosting.Tests.Authorization;
 [Trait("kind", "integration")]
 public sealed class StartupValidationTests(HostFixture host) : IClassFixture<HostFixture>
 {
+    private static readonly string Showing =
+        Settings.OrganizationPhoto.For("2f8d4c1e-0000-7000-8000-000000000001").ToString();
+
+    private static readonly string Forgotten =
+        "DELETE FROM janus.settings WHERE key = '" + Showing + "';";
+
+
     /// <summary>
     /// AUTHZ-MODEL-004, AUTHZ-DERIVE-004 AC1: the deployment's roles allow what it
     /// declares and the columns its derivation names are indexed, so it starts.
@@ -157,6 +166,60 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// IDN-ATTR-002, LIB-HOST-001: the library reads no image, so a deployment whose
+    /// policy shows photos and which declared no codec is stopped as it starts rather
+    /// than meeting the first upload with nothing to read it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_ATTR_002_ADeploymentThatShowsPhotosWithNoCodecIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await ShowingPhotosAsync(cancellationToken);
+
+        try
+        {
+            using IHost deployment = Deployed();
+
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await deployment.StartAsync(cancellationToken));
+
+            Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+            Assert.Equal("imageCodec", refused.Failure?.Details["key"].GetString());
+        }
+        finally
+        {
+            await WriteAsync(Forgotten, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// IDN-ATTR-002, LIB-HOST-001: the same deployment starts once it declares the
+    /// codec, which is the whole of what the check asks of it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_ATTR_002_ADeploymentThatShowsPhotosAndDeclaredACodecStartsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await ShowingPhotosAsync(cancellationToken);
+
+        try
+        {
+            using IHost deployment = Deployed(codec: true);
+
+            await deployment.StartAsync(cancellationToken);
+            await deployment.StopAsync(cancellationToken);
+        }
+        finally
+        {
+            await WriteAsync(Forgotten, cancellationToken);
+        }
+    }
+
+    /// <summary>
     /// AUTHZ-MODEL-004 AC2: the web server is a hosted service of the host's, and
     /// hosted services start in the order they were registered, so the checks that read
     /// the database stand at the head of the collection and no request is served
@@ -182,9 +245,10 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool catalogue = true,
         bool handlers = true,
         bool addresses = true,
-        bool signIn = true) =>
+        bool signIn = true,
+        bool codec = false) =>
         new HostBuilder()
-            .ConfigureServices(services => Declared(services, catalogue, handlers, addresses, signIn))
+            .ConfigureServices(services => Declared(services, catalogue, handlers, addresses, signIn, codec))
             .Build();
 
     // The library registered over this deployment, as the host's own code registers
@@ -194,8 +258,14 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool catalogue = true,
         bool handlers = true,
         bool addresses = true,
-        bool signIn = true)
+        bool signIn = true,
+        bool codec = false)
     {
+        if (codec)
+        {
+            services.AddSingleton(new ImageCodecInMemory().Declared);
+        }
+
         if (catalogue)
         {
             services.AddSingleton<IMessageTemplates>(new MessageTemplatesInMemory());
@@ -226,6 +296,13 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
             HostFixture.Declaration(),
             JanusApplication.Public);
     }
+
+    // IDN-ATTR-002: an organization shows photos by its key, which is a settings row
+    // and nothing the declaration can carry.
+    private async Task ShowingPhotosAsync(CancellationToken cancellationToken) =>
+        await WriteAsync(
+            "INSERT INTO janus.settings (key, value) VALUES ('" + Showing + "', 'true');",
+            cancellationToken);
 
     private async Task WriteAsync(string statement, CancellationToken cancellationToken)
     {

@@ -22,6 +22,7 @@ namespace Janus.Authentication.Accounts;
 /// <param name="stepUp">What a username change asks of the session.</param>
 /// <param name="reserved">The usernames no account takes.</param>
 /// <param name="declarations">The preference keys the host declared.</param>
+/// <param name="photos">The image the account shows for itself.</param>
 /// <param name="configuration">Where the settings that switch fields on are read.</param>
 /// <param name="work">The transaction the whole of one operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
@@ -40,6 +41,7 @@ internal sealed class AccountService(
     StepUpGuard stepUp,
     ReservedUsernames reserved,
     PreferenceDeclarations declarations,
+    ProfilePhotos photos,
     IConfigurationStore configuration,
     IUnitOfWork work,
     TimeProvider time) : IAccount
@@ -192,6 +194,25 @@ internal sealed class AccountService(
 
         return Result.Success();
     }
+
+    /// <inheritdoc/>
+    public ValueTask<Result<ReadOnlyMemory<byte>>> ReadPhotoAsync(
+        AccessContext context,
+        CancellationToken cancellationToken) =>
+        photos.ReadAsync(context, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> SetPhotoAsync(
+        AccessContext context,
+        ReadOnlyMemory<byte> upload,
+        CancellationToken cancellationToken) =>
+        photos.SetAsync(context, upload, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> RemovePhotoAsync(
+        AccessContext context,
+        CancellationToken cancellationToken) =>
+        photos.RemoveAsync(context, cancellationToken);
 
     /// <inheritdoc/>
     public async ValueTask<Result<PreferenceValues>> ReadPreferencesAsync(

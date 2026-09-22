@@ -133,7 +133,7 @@ public sealed class SettingsCatalogueTests
     {
         string[] declared = [.. Settings.Families.Select(family => family.Prefix).Order(StringComparer.Ordinal)];
 
-        Assert.Equal(["policy", "retention", "stepup.enforcement"], declared);
+        Assert.Equal(["photo.enabled", "policy", "retention", "stepup.enforcement"], declared);
     }
 
     /// <summary>

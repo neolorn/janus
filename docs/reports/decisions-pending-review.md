@@ -1733,6 +1733,8 @@ to them.
 *Chapter text that should change.* CONV-DESIGN-008 needs a row for an imaging package, or
 IDN-ATTR-002 to IDN-ATTR-004 need to leave the photo to the host.
 
+**Superseded by D-162.** Applied in entry 144.
+
 ---
 
 ## 56. The preferred second step is presented by the challenge that phase 6 builds
@@ -4860,6 +4862,99 @@ interval is now the new key rather than a constant.
 `registration.events.pollinterval`, from the row below. REG-SESS-003 should say what
 drives the stream and that the interval is the fallback.
 
+---
+
+## 144. The photo is the library's and the codec is the host's
+
+**Corrections 1 · 2026-09-23 · D-162 section C, item 55 · IDN-ATTR-002, IDN-ATTR-003,
+IDN-ATTR-004, PRIV-RIGHT-005 AC4, LIB-HOST-001, `09` section 6, `10` sections 1.1 and 4**
+
+*What D-162 decided.* The photo stays in the library and the codec does not: a
+host-declared image codec, optional in LIB-HOST-001, validates by content, bounds and
+re-encodes to JPEG with metadata removed; the library stores what it returns, encrypted;
+while any policy enables photos and no codec is declared, startup fails with
+`model.startup.declarationmissing`. The photo endpoints and their three codes are built.
+Entry 55 built none of them, on the ground that no permitted package decodes an image.
+
+*What was built.* `ImageCodec` is a declaration of the same shape as the challenge
+verifier and the phone signal provider: one callback taking the uploaded bytes and the
+longest side the stored image is held to, answering the re-encoded image or nothing.
+Nothing the callback answers chooses a code: bytes it refuses are
+`identity.photo.invalid`, whatever the request called them. `GET`, `PUT` and
+`DELETE /account/photo` are mounted as endpoints that need a session. `GET` serves the
+stored JPEG with `Cache-Control: no-store` and no entity tag, and answers 404 where the
+account shows none and where the policy shows none, in the same bytes. `PUT` refuses an
+upload longer than `photo.maxbytes` with `identity.photo.toolarge` before the codec
+reads it, hands the codec `photo.maxdimension`, and stores what the codec answered.
+Setting and giving up a photo are audited as profile changes.
+
+*Five points D-162 does not settle, taken at the strictest reading.*
+
+1. **Availability is a key of its own, not a seventh field of the policy object.**
+   `10` section 4.1a states six fields and says `stepup.enforcement.<organization>` is
+   not one of them, which is the precedent for an organization-scoped value outside the
+   object. The new family is `photo.enabled.<organization>`, runtime, default `false`.
+   IDN-ATTR-002's "enabled for the administrative organization" is therefore a bootstrap
+   value, exactly as that organization's policy is, and no code special-cases it.
+2. **An account of no organization shows no photo, and an account of several shows one
+   only where every one of them shows one.** AUTH-PRIN-002 resolves several memberships
+   to the strictest, and "disabled elsewhere" reads on an account that belongs nowhere.
+3. **The upload is the request body, not a field of a document.** IDN-ATTR-004 decides
+   what an upload is by reading it, so the endpoint takes the bytes, reads at most the
+   ceiling of `photo.maxbytes` and one chunk of them, and says nothing about the content
+   type the request claimed.
+4. **A removal is not held to the policy.** An organization that stops showing photos
+   withholds the image from every read of it, and the account can still take it down:
+   refusing the removal would leave an image its subject could never take down again,
+   which IDN-PRIN-003 does not intend and no chapter asks for. Setting one is refused,
+   reading one answers as no photo.
+5. **A subject whose key is erased shows no photo rather than failing on ciphertext.**
+   PRIV-RIGHT-005 AC4 says `GET /account/photo` answers as for an account with no photo;
+   the photo port throws on an erased key by contract, so the directory reads the
+   subject key first and answers empty where it is gone, which needs no catch and
+   weakens nothing (D-157).
+
+*One addition to a public interface.* The startup check has to know whether any
+organization shows photos, which no read of one member can answer, so
+`IConfigurationStore` gains `ReadWrittenAsync`: every member of a family the deployment
+has written a value for. It is one method, it reads, and the admin configuration screens
+of a later phase need the same answer.
+
+*Tests that pin it.*
+`ProfilePhotosTests.IDN_ATTR_002_AC1_AnAccountInNoOrganizationShowsNoPhotoAsync`,
+`ProfilePhotosTests.IDN_ATTR_002_AC2_AnOrganizationIsGivenPhotosByItsKeyAloneAsync`,
+`ProfilePhotosTests.IDN_ATTR_002_AnOrganizationThatShowsNoPhotoWithholdsItFromItsMembersAsync`,
+`ProfilePhotosTests.IDN_ATTR_002_AnImageIsWithheldByAPolicyAndStillGivenUpByItsAccountAsync`,
+`ProfilePhotosTests.LIB_HOST_001_AnUploadIsRefusedWhereTheDeploymentDeclaredNoCodecAsync`,
+`ProfilePhotosTests.IDN_ATTR_004_AC1_AnUploadTheCodecDoesNotRecogniseIsRefusedAsync`,
+`ProfilePhotosTests.IDN_ATTR_004_AC2_WhatIsStoredIsWhatTheCodecAnsweredAsync`,
+`ProfilePhotosTests.IDN_ATTR_004_TheCodecIsHandedTheConfiguredLongestSideAsync`,
+`ProfilePhotosTests.IDN_ATTR_004_AnUploadOverTheConfiguredLengthIsRefusedUnreadAsync`,
+`ProfilePhotosTests.IDN_ATTR_003_AnAccountGivesUpTheImageItShowsAsync`,
+`ProfilePhotosTests.IDN_AUD_001_SettingAndGivingUpAPhotoAreRecordedAsProfileChangesAsync`,
+`PhotoFlowTests.IDN_ATTR_002_AnAccountThatShowsNoPhotoAndOneWithNoPolicyAnswerAlikeAsync`,
+`PhotoFlowTests.IDN_ATTR_004_AnUploadIsStoredReencodedAndServedAsAJpegAsync`,
+`PhotoFlowTests.IDN_ATTR_003_AC3_TheImageIsServedWithNothingACacheCouldShareAsync`,
+`PhotoFlowTests.IDN_ATTR_002_AnUploadIsRefusedWhereTheOrganizationShowsNoPhotoAsync`,
+`PhotoFlowTests.IDN_ATTR_004_AC1_BytesTheCodecRefusesAreRefusedWhateverTheRequestCalledThemAsync`,
+`PhotoFlowTests.IDN_ATTR_004_AnUploadOverTheConfiguredLengthIsRefusedAsync`,
+`PhotoFlowTests.IDN_ATTR_003_AnAccountGivesUpTheImageItShowsAsync`,
+`SubjectEraserTests.PRIV_RIGHT_005_AC4_TheDirectoryShowsAnErasedSubjectAsOneWithNoPhotoAsync`,
+`StartupValidationTests.IDN_ATTR_002_ADeploymentThatShowsPhotosWithNoCodecIsRefusedAsync`,
+`StartupValidationTests.IDN_ATTR_002_ADeploymentThatShowsPhotosAndDeclaredACodecStartsAsync`,
+`SessionRequirementTests.BFF_STEP_001_TheEndpointsThatNeedASessionAreTheOnesListed`,
+`SettingsCatalogueTests.LIB_API_001_AC2_TheFamiliesAreTheContract`,
+`ErrorCodesTests.CONV_NAME_003_AC2_ChangingACodeFailsTheContractTest`.
+
+*Chapter text that should change.* LIB-HOST-001 should carry the image codec row below.
+`10` section 4 should carry `photo.enabled.<organization>`, and its section 4.1a should
+say that the key is not a field of the policy object, as it already says of
+`stepup.enforcement.<organization>`. IDN-ATTR-002 should say that the administrative
+organization's key is written at bootstrap. IDN-ATTR-004 should say that the codec is the
+host's and that the library stores what it answers. `09` section 6 should say that the
+upload is the request body and that `DELETE` is not held to the policy. `10` section 1.1
+should drop the **(new)** mark from the three photo codes, which are now raised.
+
 
 # Rows for chapter 10
 
@@ -4889,6 +4984,7 @@ The subsection each row belongs in is named with it.
 | --- | --- | --- |
 | `PasskeyAddresses` (`changePassword`, `enrol`, `manage`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `passkeyAddresses` or the field of it that is empty. The addresses are the frontend pages `/.well-known/change-password` and `/.well-known/passkey-endpoints` point at (REG-PM-001). |
 | `AuthenticationAddresses` (`signIn`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `authenticationAddresses.signIn`. The address is where an authorization request that is not silent and holds no session is forwarded (AUTH-SESS-012 AC3). |
+| `ImageCodec` (`Reencode`) | optional, and required while any organization shows photos | Startup fails with `model.startup.declarationmissing` and `details.key` naming `imageCodec` where a `photo.enabled.<organization>` key is on and no codec is registered. The callback is `Func<ReadOnlyMemory<byte>, int, CancellationToken, ValueTask<ReadOnlyMemory<byte>?>>`: the uploaded bytes and the longest side in pixels the stored image is held to, answering the re-encoded JPEG with every metadata segment removed, or nothing where the bytes are not an image the deployment accepts. Nothing it answers chooses a code: a refusal is `identity.photo.invalid` (IDN-ATTR-002, IDN-ATTR-004). |
 
 ## Section 3, the `resources` table
 
@@ -4924,6 +5020,7 @@ the member added since (D-162 item 104).
 | `password.blocklist.selfhosted.address` | string | R | none | Required where `password.blocklist.source` is `selfHosted`. Where the deployment's own corpus serves the ranges the primary source serves. |
 | `integration.mail.endpoint` | string | P | none | Where the shipped default mail transport is called. Empty while the deployment supplies a transport of its own; required only when the shipped one is used, and refused at startup where it is not TLS (INT-GEN-001, LIB-EXT-001). |
 | `integration.sms.endpoint` | string | P | none | Where the shipped default SMS transport is called. Empty while the deployment supplies a transport of its own; required only when the shipped one is used, and refused at startup where it is not TLS (INT-GEN-001, INT-SMS-001). |
+| `photo.enabled.<organization>` | flag | R, one key per organization | `false` | Whether the organization's accounts show a profile photo (IDN-ATTR-002). It is not a field of the policy object of section 4.1a, as `stepup.enforcement.<organization>` is not: the object states six fields. The administrative organization's key is written `true` at bootstrap, as that organization's policy is. An account of no organization shows no photo; an account of several shows one only where every one of them shows one. Turning it on is loosening (OPS-CFG-002). |
 | `registration.events.pollinterval` | duration | R | `PT1S`, floor `PT1S` | How often the waiting screen's stream reads the registration state back where no signal has reached it. The database channel is what usually wakes it; the interval is the fallback, and the floor is the default because a press has to feel immediate (REG-SESS-003, FE-VER-001). |
 
 ## Section 5, message places

@@ -229,7 +229,9 @@ public static class JanusRegistration
         // none is stopped at startup and none is registered here.
         services.AddScoped(provider => new DeclarationCoverage(
             provider.GetService<PasskeyAddresses>(),
-            provider.GetService<AuthenticationAddresses>()));
+            provider.GetService<AuthenticationAddresses>(),
+            provider.GetService<ImageCodec>(),
+            provider.GetRequiredService<IConfigurationStore>()));
 
         // CONV-DESIGN-006: every request and response of the library's endpoints is
         // read and written by the generated contexts, never by reflection.
@@ -252,6 +254,17 @@ public static class JanusRegistration
         services.AddScoped<IdentifierService>();
         services.AddScoped<IIdentifiers>(provider => provider.GetRequiredService<IdentifierService>());
         services.AddScoped<AccountLifecycle>();
+
+        // IDN-ATTR-002, LIB-HOST-001: the codec is the deployment's and may be absent,
+        // so what needs it takes it as it was registered and refuses without it.
+        services.AddScoped(provider => new ProfilePhotos(
+            provider.GetRequiredService<IAccountDirectory>(),
+            provider.GetRequiredService<Janus.Authentication.Policies.IMembershipLookup>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IAccountAudit>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetService<ImageCodec>(),
+            provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<AccountService>();
         services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
         services.AddScoped<SignInLinks>();

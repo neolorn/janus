@@ -411,6 +411,7 @@ Janus.Core.Configuration.HostingLocation.Outside = 1 -> Janus.Core.Configuration
 Janus.Core.Configuration.IConfigurationStore
 Janus.Core.Configuration.IConfigurationStore.ReadAsync<TValue>(Janus.Core.Configuration.Setting<TValue>! setting, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<TValue>>
 Janus.Core.Configuration.IConfigurationStore.ReadAsync<TValue>(Janus.Core.Configuration.SettingFamily<TValue>! family, string! parameter, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<TValue>>
+Janus.Core.Configuration.IConfigurationStore.ReadWrittenAsync<TValue>(Janus.Core.Configuration.SettingFamily<TValue>! family, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyDictionary<string!, TValue>!>>
 Janus.Core.Configuration.IConfigurationStore.WriteAsync<TValue>(Janus.Core.Configuration.Setting<TValue>! setting, TValue value, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<TValue>>
 Janus.Core.Configuration.IntegerListSetting
 Janus.Core.Configuration.IntegerListSetting.Unremovable.get -> System.Collections.Generic.IReadOnlySet<int>!
@@ -941,7 +942,10 @@ Janus.Core.IAccount.ListCredentialsAsync(Janus.Core.AccessContext! context, Syst
 Janus.Core.IAccount.PreferSecondStepAsync(Janus.Core.AccessContext! context, Janus.Core.AuthenticatorId credential, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAccount.ReactivateAsync(string! linkToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAccount.ReadAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AccountDetail!>>
+Janus.Core.IAccount.ReadPhotoAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.ReadOnlyMemory<byte>>>
 Janus.Core.IAccount.ReadPreferencesAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.PreferenceValues!>>
+Janus.Core.IAccount.RemovePhotoAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IAccount.SetPhotoAsync(Janus.Core.AccessContext! context, System.ReadOnlyMemory<byte> upload, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAccount.SetPreferencesAsync(Janus.Core.AccessContext! context, string? language, string? timeZone, System.Collections.Generic.IReadOnlyDictionary<string!, string!>! declared, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAssuranceProvider
 Janus.Core.IAssuranceProvider.LevelAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AssuranceLevel>>
@@ -1117,6 +1121,13 @@ Janus.Core.IdentifierSummary.Value.get -> string!
 Janus.Core.IdentifierSummary.Value.init -> void
 Janus.Core.IdentifierSummary.Verified.get -> bool
 Janus.Core.IdentifierSummary.Verified.init -> void
+Janus.Core.ImageCodec
+Janus.Core.ImageCodec.<Clone>$() -> Janus.Core.ImageCodec!
+Janus.Core.ImageCodec.Deconstruct(out System.Func<System.ReadOnlyMemory<byte>, int, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<System.ReadOnlyMemory<byte>?>>! Reencode) -> void
+Janus.Core.ImageCodec.Equals(Janus.Core.ImageCodec? other) -> bool
+Janus.Core.ImageCodec.ImageCodec(System.Func<System.ReadOnlyMemory<byte>, int, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<System.ReadOnlyMemory<byte>?>>! Reencode) -> void
+Janus.Core.ImageCodec.Reencode.get -> System.Func<System.ReadOnlyMemory<byte>, int, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<System.ReadOnlyMemory<byte>?>>!
+Janus.Core.ImageCodec.Reencode.init -> void
 Janus.Core.IssuedCode
 Janus.Core.IssuedCode.<Clone>$() -> Janus.Core.IssuedCode!
 Janus.Core.IssuedCode.Code.get -> string!
@@ -2470,6 +2481,9 @@ override Janus.Core.IdentifierRemoved.ToString() -> string!
 override Janus.Core.IdentifierSummary.Equals(object? obj) -> bool
 override Janus.Core.IdentifierSummary.GetHashCode() -> int
 override Janus.Core.IdentifierSummary.ToString() -> string!
+override Janus.Core.ImageCodec.Equals(object? obj) -> bool
+override Janus.Core.ImageCodec.GetHashCode() -> int
+override Janus.Core.ImageCodec.ToString() -> string!
 override Janus.Core.IssuedCode.Equals(object? obj) -> bool
 override Janus.Core.IssuedCode.GetHashCode() -> int
 override Janus.Core.IssuedCode.ToString() -> string!
@@ -2902,6 +2916,7 @@ static Janus.Core.Configuration.Settings.OidcAccessTokenLifetime.get -> Janus.Co
 static Janus.Core.Configuration.Settings.OidcCodeLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.OrganizationDeletionGrace.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.OrganizationMultipleMemberships.get -> Janus.Core.Configuration.FlagSetting!
+static Janus.Core.Configuration.Settings.OrganizationPhoto.get -> Janus.Core.Configuration.SettingFamily<bool>!
 static Janus.Core.Configuration.Settings.OrganizationPolicy.get -> Janus.Core.Configuration.SettingFamily<Janus.Core.PolicyOverride!>!
 static Janus.Core.Configuration.Settings.OrganizationStepUpEnforcement.get -> Janus.Core.Configuration.SettingFamily<bool>!
 static Janus.Core.Configuration.Settings.OutboxPollInterval.get -> Janus.Core.Configuration.DurationSetting!
@@ -3081,6 +3096,9 @@ static Janus.Core.ErrorCodes.OrganizationProtected.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PasswordBlocklisted.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PasswordTooLong.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PasswordTooShort.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.PhotoInvalid.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.PhotoNotEnabled.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.PhotoTooLarge.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PolicyGraceExpired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PolicyUnregistered.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PreferenceAdministratorOnly.get -> Janus.Core.ErrorCode
@@ -3178,6 +3196,8 @@ static Janus.Core.IdentifierRemoved.operator !=(Janus.Core.IdentifierRemoved? le
 static Janus.Core.IdentifierRemoved.operator ==(Janus.Core.IdentifierRemoved? left, Janus.Core.IdentifierRemoved? right) -> bool
 static Janus.Core.IdentifierSummary.operator !=(Janus.Core.IdentifierSummary? left, Janus.Core.IdentifierSummary? right) -> bool
 static Janus.Core.IdentifierSummary.operator ==(Janus.Core.IdentifierSummary? left, Janus.Core.IdentifierSummary? right) -> bool
+static Janus.Core.ImageCodec.operator !=(Janus.Core.ImageCodec? left, Janus.Core.ImageCodec? right) -> bool
+static Janus.Core.ImageCodec.operator ==(Janus.Core.ImageCodec? left, Janus.Core.ImageCodec? right) -> bool
 static Janus.Core.IssuedCode.operator !=(Janus.Core.IssuedCode? left, Janus.Core.IssuedCode? right) -> bool
 static Janus.Core.IssuedCode.operator ==(Janus.Core.IssuedCode? left, Janus.Core.IssuedCode? right) -> bool
 static Janus.Core.IssuedToken.operator !=(Janus.Core.IssuedToken? left, Janus.Core.IssuedToken? right) -> bool

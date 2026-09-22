@@ -318,6 +318,27 @@ public static class ErrorCodes
     public static ErrorCode ProfileNotAccepted { get; } = ErrorCode.Parse("identity.profile.notaccepted");
 
     /// <summary>
+    /// The upload is not an image the deployment's codec accepts: the bytes are read
+    /// for what they are and never for what the request called them. Send a JPEG, PNG
+    /// or WebP image.
+    /// </summary>
+    /// <remarks>Implements IDN-ATTR-004, chapter 10 section 1.1.</remarks>
+    public static ErrorCode PhotoInvalid { get; } = ErrorCode.Parse("identity.photo.invalid");
+
+    /// <summary>
+    /// The upload is longer than <c>photo.maxbytes</c> allows. Send a smaller image.
+    /// </summary>
+    /// <remarks>Implements IDN-ATTR-004, chapter 10 section 1.1.</remarks>
+    public static ErrorCode PhotoTooLarge { get; } = ErrorCode.Parse("identity.photo.toolarge");
+
+    /// <summary>
+    /// No organization the account belongs to shows a photo, so there is none to set
+    /// or to read. Ask an administrator to give the organization photos.
+    /// </summary>
+    /// <remarks>Implements IDN-ATTR-002, chapter 10 section 1.1.</remarks>
+    public static ErrorCode PhotoNotEnabled { get; } = ErrorCode.Parse("identity.photo.notenabled");
+
+    /// <summary>
     /// A second username change fell inside <c>identifiers.username.changecooloff</c>.
     /// Repeat it after the end the details carry.
     /// </summary>

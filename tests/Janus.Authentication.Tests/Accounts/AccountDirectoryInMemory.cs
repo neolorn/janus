@@ -21,6 +21,7 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
     private readonly Dictionary<SubjectId, DateTimeOffset> _created = [];
     private readonly Dictionary<SubjectId, SuspensionOrigin> _suspensions = [];
     private readonly Dictionary<SubjectId, HeldDeletion> _deletions = [];
+    private readonly Dictionary<SubjectId, ReadOnlyMemory<byte>> _photos = [];
 
     /// <summary>
     /// Puts an account in a state, which is what makes it exist here at all.
@@ -54,6 +55,13 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
     /// <param name="subject">Whose profile.</param>
     /// <param name="profile">What it holds.</param>
     public void Holds(SubjectId subject, HeldProfile profile) => _profiles[subject] = profile;
+
+    /// <summary>
+    /// Puts an image on an account, as an upload would have left it.
+    /// </summary>
+    /// <param name="subject">Whose photo.</param>
+    /// <param name="image">The stored image.</param>
+    public void Shows(SubjectId subject, ReadOnlyMemory<byte> image) => _photos[subject] = image;
 
     /// <inheritdoc/>
     public ValueTask<AccountState?> StateAsync(SubjectId subject, CancellationToken cancellationToken) =>
@@ -150,6 +158,34 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
         HeldProfile held = Profile(subject);
 
         _profiles[subject] = held with { DisplayName = displayName, LegalName = legalName };
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<ReadOnlyMemory<byte>> PhotoAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_photos.TryGetValue(subject, out ReadOnlyMemory<byte> image)
+            ? image
+            : ReadOnlyMemory<byte>.Empty);
+
+    /// <inheritdoc/>
+    public ValueTask RecordPhotoAsync(
+        SubjectId subject,
+        ReadOnlyMemory<byte> image,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        _photos[subject] = image;
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask RemovePhotoAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        _ = _photos.Remove(subject);
 
         return ValueTask.CompletedTask;
     }

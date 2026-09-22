@@ -111,6 +111,17 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- An account shows a photo. `GET`, `PUT` and `DELETE /account/photo` read it, replace
+  it and give it up, and the image is served through the session gate as `image/jpeg`
+  from no address a cache could share. Availability is the organization's, held in the
+  new key `photo.enabled.<organization>` and off until an organization is given it; an
+  account of no organization, and one whose organization shows none, is answered as an
+  account with no photo. The library reads no image itself: a deployment declares an
+  `ImageCodec`, which decides by content what an upload is, holds it to
+  `photo.maxdimension` and answers the JPEG that is stored, encrypted under the
+  subject key like any other personal field. A deployment whose policy shows photos
+  and which declared no codec does not start.
+
 - Every runtime configuration change now goes through one operation that classifies it,
   gates it and writes it down. A change that loosens the deployment, and any change to a
   key that has no direction, needs the step-up gate met and a written reason; a

@@ -99,9 +99,20 @@ public sealed class AccountServiceTests : IAsyncDisposable
             Gate,
             ReservedUsernames.Default,
             Declared,
+            Photos,
             _configuration,
             _work,
             _clock);
+
+    // The photo has its own tests and its own codec; nothing here reaches one.
+    private ProfilePhotos Photos => new(
+        _directory,
+        _memberships,
+        _configuration,
+        _audit,
+        _work,
+        codec: null,
+        _clock);
 
     private StepUpGuard Gate => new(
         _sessions,

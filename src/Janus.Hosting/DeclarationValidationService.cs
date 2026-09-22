@@ -19,20 +19,19 @@ internal sealed class DeclarationValidationService(IServiceScopeFactory scopes) 
 {
     /// <inheritdoc/>
     /// <exception cref="StartupException">A required declaration is absent or empty.</exception>
-    public Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
         using IServiceScope scope = scopes.CreateScope();
 
-        scope.ServiceProvider
-            .GetRequiredService<DeclarationCoverage>()
-            .Validate()
+        (await scope.ServiceProvider
+                .GetRequiredService<DeclarationCoverage>()
+                .ValidateAsync(cancellationToken)
+                .ConfigureAwait(false))
             .Switch(
                 () => { },
                 failure => throw new StartupException(
                     "A value LIB-HOST-001 requires the deployment to declare is absent.",
                     failure));
-
-        return Task.CompletedTask;
     }
 
     /// <inheritdoc/>

@@ -119,6 +119,41 @@ internal interface IAccountDirectory
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// The image an account shows for itself.
+    /// </summary>
+    /// <param name="subject">Whose photo.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The stored JPEG, empty where the account shows none and where erasure has put
+    /// the image out of reach (PRIV-RIGHT-005 AC4).
+    /// </returns>
+    ValueTask<ReadOnlyMemory<byte>> PhotoAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Carries the image an account shows onto its photo, replacing what it showed.
+    /// What arrives here is what the codec answered, so it is stored as it is.
+    /// </summary>
+    /// <param name="subject">Whose photo.</param>
+    /// <param name="image">The re-encoded image.</param>
+    /// <param name="at">When it was uploaded.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask RecordPhotoAsync(
+        SubjectId subject,
+        ReadOnlyMemory<byte> image,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Gives up the image an account shows, which an account that shows none is
+    /// unchanged by.
+    /// </summary>
+    /// <param name="subject">Whose photo.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of giving it up.</returns>
+    ValueTask RemovePhotoAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
     /// One account's preferences as they stand, carrying only what the account set.
     /// </summary>
     /// <param name="subject">Whose preferences.</param>

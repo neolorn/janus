@@ -29,6 +29,13 @@ internal static class AccountEndpoints
 
     private static readonly IResult Accepted = TypedResults.StatusCode(StatusCodes.Status202Accepted);
 
+    // 09 section 6: an account that shows no photo, and one whose policy shows none,
+    // answer alike and say nothing of which of the two they are.
+    private static readonly IResult NoPhoto = TypedResults.NotFound();
+
+    // IDN-ATTR-004: what is stored is JPEG, whatever was uploaded.
+    private const string StoredPhoto = "image/jpeg";
+
     /// <summary>
     /// Mounts them.
     /// </summary>
@@ -43,6 +50,9 @@ internal static class AccountEndpoints
 
         _ = SessionRequired.On(group.MapGet("/", ReadAsync));
         _ = SessionRequired.On(group.MapPut("/profile", EditProfileAsync));
+        _ = SessionRequired.On(group.MapGet("/photo", ReadPhotoAsync));
+        _ = SessionRequired.On(group.MapPut("/photo", SetPhotoAsync));
+        _ = SessionRequired.On(group.MapDelete("/photo", RemovePhotoAsync));
         _ = SessionRequired.On(group.MapGet("/preferences", ReadPreferencesAsync));
         _ = SessionRequired.On(group.MapPut("/preferences", SetPreferencesAsync));
 
@@ -109,6 +119,62 @@ internal static class AccountEndpoints
             await accounts
                 .EditProfileAsync(holder, browser.Required.Id, edit, cancellationToken)
                 .ConfigureAwait(false),
+            Nothing);
+    }
+
+    private static async Task<IResult> ReadPhotoAsync(
+        IAccount accounts,
+        RequestSession browser,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(context);
+
+        AccessContext holder = Asking(browser);
+
+        // IDN-ATTR-003 AC3: the image is served through the gate the session is, and
+        // carries nothing a shared cache could hand to anyone else.
+        context.Response.Headers.CacheControl = "no-store";
+
+        return Answers.Of(
+            await accounts.ReadPhotoAsync(holder, cancellationToken).ConfigureAwait(false),
+            image => image.IsEmpty
+                ? NoPhoto
+                : TypedResults.Bytes(image, StoredPhoto));
+    }
+
+    private static async Task<IResult> SetPhotoAsync(
+        IAccount accounts,
+        RequestSession browser,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(context);
+
+        AccessContext holder = Asking(browser);
+
+        ReadOnlyMemory<byte> upload = await UploadedImage
+            .ReadAsync(context.Request, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Answers.Of(
+            await accounts.SetPhotoAsync(holder, upload, cancellationToken).ConfigureAwait(false),
+            Nothing);
+    }
+
+    private static async Task<IResult> RemovePhotoAsync(
+        IAccount accounts,
+        RequestSession browser,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(accounts);
+
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await accounts.RemovePhotoAsync(holder, cancellationToken).ConfigureAwait(false),
             Nothing);
     }
 

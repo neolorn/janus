@@ -58,6 +58,7 @@ internal static class ApiStatus
         [ErrorCodes.ConfigurationChangeStepUpRequired] = StatusCodes.Status403Forbidden,
         [ErrorCodes.PolicyGraceExpired] = StatusCodes.Status403Forbidden,
         [ErrorCodes.ConsentRequired] = StatusCodes.Status403Forbidden,
+        [ErrorCodes.PhotoNotEnabled] = StatusCodes.Status403Forbidden,
 
         // Not found, and the concealed denial that answers the same way.
         [ErrorCodes.CredentialNotFound] = StatusCodes.Status404NotFound,
@@ -97,6 +98,8 @@ internal static class ApiStatus
         [ErrorCodes.ProfileInvalid] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ProfileNotAccepted] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ProfileUnderage] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.PhotoInvalid] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.PhotoTooLarge] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.RegistrationIncomplete] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.UsernameInvalid] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.PreferenceUndeclared] = StatusCodes.Status422UnprocessableEntity,
