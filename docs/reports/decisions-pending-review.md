@@ -5641,6 +5641,41 @@ list the factor catalogue gate of AUTH-FACT-001 AC1 uses decides what a conditio
 two catalogues a deployment declares from, as it names the other shipped defaults;
 they are listed under "Rows for chapter 10" for that purpose.
 
+---
+
+## 157. Two points of section D were already true, and one chapter row is stale
+
+**Corrections 1 · 2026-09-23 · D-162 section D · `10` sections 1.1 and 5b, OPS-ALERT-001,
+IDN-ACCT-007, AUTHZ-CONCEAL-004**
+
+D-162 names two things in section D that the search shows the library already does.
+Neither needed code; both are recorded so the owner does not look for them, and one
+leaves a chapter row to delete.
+
+*`AlertRaised` as a 5b event.* It already is one. `Janus.Core.AlertRaised` derives from
+`JanusEvent` and carries the condition identifier of `10` section 5.23, the severity and
+the structured details of the row, exactly as the 5b row describes. Every place that
+raises one publishes it through `IEvents.PublishAsync`, and there are nine:
+`RecoveryService` (recovery clustering, approver volume), `DeliveryReports` (callback
+verification failed), `NonExistenceNotice` (nonexistent notice rate),
+`RestrictionAdministration` (restriction loosened, restriction granted), `SmsBalance`,
+`ThrottleService` (sustained authentication failures) and `PrivacyAlerts`, with
+`AlertDestinationChange` publishing one that names the actor. `Alerts.Of` is the only
+constructor of one and every call of it is an argument to `PublishAsync`. Nothing to
+build.
+
+*`identity.account.restricted` retired in favour of `authz.restricted`.* Also already
+true. A search of `src/` for `identity.account.restricted` finds nothing at all: no
+`ErrorCodes` member, no status row, no caller. What a restricted subject meets is
+`ErrorCodes.Restricted`, which is `authz.restricted`, and the catalogue test pins the
+whole closed set, so no path can raise the retired code.
+
+**Chapter text that should change.** `10` section 1.1 still carries the row
+`` `identity.account.restricted` **(new)** | Processing restricted at the subject's
+request | IDN-ACCT-007 ``. D-162 retires it, and no code has ever raised it, so the row
+should be deleted or struck through in the way the chapter already strikes
+`identity.identifier.duplicate`, naming `authz.restricted` as its successor.
+
 
 # Rows for chapter 10
 
