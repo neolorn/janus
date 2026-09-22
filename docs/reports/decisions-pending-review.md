@@ -4489,6 +4489,41 @@ the `resources` row because LIB-HOST-002 forbids it the host's table. AUTHZ-MODE
 should list the new startup refusal, and `10` should carry the `subject` column of
 `resources`.
 
+---
+
+## 134. The collation is created in the schema the library owns
+
+**Corrections 1 · 2026-09-22 · D-162 section B, Tier 1 reversal, correcting the phase 1 Tier 1 resolution recorded in `docs/reports/phase-01.md` · OPS-DB-001, OPS-DB-002 AC1**
+
+*What D-162 decided.* `janus_ci` is created in the `janus` schema; `COLLATE
+janus.janus_ci` is valid and OPS-DB-002 applies to the collation as it does to every
+other object of the library's. Phase 1 had moved it to `public` on the reading that a
+column names a collation by one identifier and cannot reach one held elsewhere.
+
+*What was built.* The context creates the collation in the library's own schema. The
+migration creates it there, moves `organizations.name` onto it and only then drops the
+one in `public`, in that order, because the column depends on the collation it carries.
+The schema the collation lives in is now asserted rather than assumed.
+
+*One point the reversal does not settle, taken at the strictest reading.* The provider
+writes a column's collation as one quoted identifier, so `COLLATE janus.janus_ci` cannot
+be produced by the model's `UseCollation`, which yields `COLLATE "janus.janus_ci"` and
+fails with `42704`. The model therefore records the collation's name, `janus_ci`, which
+is what it is called, and the one statement that names its schema is written out in the
+migration. A later migration that puts a column on this collation writes its own
+statement the same way; one that does not fails at once with `42704` rather than
+silently taking another collation, so the constraint is loud where it is broken.
+
+*Tests that pin it.*
+`SchemaTests.OPS_DB_002_AC1_TheCollationLivesInTheLibrarysSchemaAsync`,
+`SchemaTests.OPS_DB_001_AC2_TheCaseInsensitiveCollationIgnoresCaseAsync`,
+`SchemaTests.OPS_MIG_007_AC1_TheMigrationsApplyASecondTimeAsync`,
+`OrganizationStoreTests.OPS_DB_001_AC2_TheOrganizationNameComparesWithoutRegardToCaseAsync`.
+
+*Chapter text that should change.* OPS-DB-001's values should say the collation is
+created in the library's schema and that a column names it by that schema.
+
+
 # Rows for chapter 10
 
 D-162 section E names codes, keys, declarations and vocabularies the library now

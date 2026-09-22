@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- The case-insensitive collation moves out of the default schema and into the schema
+  the library owns, so nothing of the library's can collide with an object a host holds
+  in `public`. A database already carrying it is moved by a migration.
+
 - A consent is now read against the data subject of the record being acted on rather
   than against the caller. A host says who that subject is when it registers a record,
   reading the column its resource type declares for its encrypted fields, and the gate
@@ -917,8 +921,8 @@ against the public contract of LIB-API-001.
 - A sign-in whose password an invalidation left below the single-factor floor now
   completes and says so, so the person is asked for a new password at the next
   sign-in rather than being locked out.
-- The case-insensitive collation is created in the default schema, because a column
-  names a collation by one identifier and cannot reach one held in another schema.
+- The case-insensitive collation is created in the schema the library owns, like
+  everything else of the library's, and a column names it by that schema.
 - A configuration key loosens the way its row states. Where a row states nothing, a
   key with only a ceiling loosens upward, a key with only a floor loosens downward,
   and a flag loosens away from its default, so a tightening no longer costs the

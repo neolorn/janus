@@ -57,16 +57,11 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     public const string MigrationsHistoryTable = "__janus_migrations_history";
 
     /// <summary>
-    /// The case-insensitive collation the plaintext columns a person spells carry.
+    /// The case-insensitive collation the plaintext columns a person spells carry,
+    /// created in the schema the library owns like everything else of the library's
+    /// (OPS-DB-002).
     /// </summary>
     public const string CaseInsensitiveCollation = "janus_ci";
-
-    /// <summary>
-    /// The schema the collation is created in. A column names a collation by one
-    /// identifier and never by a schema and a name, so the collation has to be
-    /// reachable from the search path; the library's own schema is not.
-    /// </summary>
-    public const string CollationSchema = "public";
 
     /// <summary>
     /// The accounts.
@@ -414,7 +409,7 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         // created here rather than by hand so that a database built from the migrations
         // alone carries it.
         modelBuilder.HasCollation(
-            CollationSchema,
+            Schema,
             CaseInsensitiveCollation,
             locale: "und-u-ks-level2",
             provider: "icu",
