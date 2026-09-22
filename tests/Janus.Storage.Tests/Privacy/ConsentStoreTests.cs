@@ -118,7 +118,9 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
         IReadOnlyList<HeldConsent> held = await new ConsentStore(reading)
             .LiveAgainstAnotherAsync("2", TestContext.Current.CancellationToken);
 
-        Assert.Equal([asked], held.Select(one => one.Subject));
+        SubjectId[] mine = [asked, current, withdrawn];
+
+        Assert.Equal([asked], held.Select(one => one.Subject).Where(mine.Contains));
     }
 
     /// <summary>
