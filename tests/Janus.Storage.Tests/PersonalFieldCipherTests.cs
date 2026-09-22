@@ -128,6 +128,26 @@ public sealed class PersonalFieldCipherTests
     }
 
     /// <summary>
+    /// PRIV-RIGHT-005a AC7: the scheme a value is read under is the byte the value
+    /// carries and not the one the deployment writes today, so a value of this scheme
+    /// keeps reading with a value of a later one, of whatever shape, stored beside it.
+    /// </summary>
+    [Fact]
+    public void PRIV_RIGHT_005a_AC7_AValueOfTheEarlierSchemeReadsBesideALaterOne()
+    {
+        using var randomness = RandomNumberGenerator.Create();
+        byte[] dataKey = PersonalFieldCipher.NewDataKey(randomness);
+        var field = new PersonalFieldLocation(Ahmed, "accounts", "enc_legal_name");
+        byte[] earlier = PersonalFieldCipher.Encrypt(dataKey, field, Plaintext, randomness);
+
+        byte[] later = [0x02, .. RandomNumberGenerator.GetBytes(24), .. earlier[1..]];
+
+        Assert.Equal(Scheme, earlier[0]);
+        Assert.Equal(Plaintext, PersonalFieldCipher.Decrypt(dataKey, field, earlier));
+        Assert.ThrowsAny<CryptographicException>(() => PersonalFieldCipher.Decrypt(dataKey, field, later));
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-005a AC9: once the wrapped key is overwritten nothing encrypted under
     /// it can be read, wherever the ciphertext was written.
     /// </summary>

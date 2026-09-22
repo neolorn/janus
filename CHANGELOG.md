@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Startup now refuses a declaration whose encrypted field names no subject column, a
+  column the declared type does not hold, or one holding something that is not a
+  subject. Ciphertext an erasure could not reach stops the deployment instead of
+  reaching production.
+
 - Startup now refuses a deployment whose declared data categories have no retention
   period, naming the `retention.<category>` key nobody set, and one that is open to
   minors (`registration.adultaffirmation` off) without a written-consent lawful basis

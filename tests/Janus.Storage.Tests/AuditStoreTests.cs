@@ -389,8 +389,59 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
         Assert.Equal(6, months);
     }
 
+    /// <summary>
+    /// PRIV-RIGHT-005a AC11: an aggregate over the columns that are not encrypted
+    /// reads no key and no ciphertext, so it answers the same with a subject's fields
+    /// readable and after their key is destroyed.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_005a_AC11_AnAggregateOverPlainColumnsIsUnaffectedAsync()
+    {
+        SubjectId erased = await _deployment.AccountAsync(Now());
+        SubjectId kept = await _deployment.AccountAsync(Now());
+        Guid[] subjects = [erased.Value, kept.Value];
+
+        foreach (SubjectId subject in new[] { erased, kept })
+        {
+            await AppendAsync(AuditRecord.Of(
+                NewId(),
+                AuditCategory.Security,
+                Suspended,
+                Now(),
+                subject,
+                subject,
+                organization: null,
+                personalDetails: Fields(("reason", "ahmed@example.com"))));
+
+            await AppendAsync(AuditRecord.Of(
+                NewId(),
+                AuditCategory.Routine,
+                AuditAction.Parse("identity.account.read"),
+                Now(),
+                subject,
+                subject,
+                organization: null));
+        }
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+        IReadOnlyList<(string Category, long Records)> before = await CountedAsync(connection, subjects);
+
+        await _deployment.EraseAsync(erased);
+
+        Assert.Equal([("routine", 2L), ("security", 2L)], before);
+        Assert.Equal(before, await CountedAsync(connection, subjects));
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
+
+    private static async Task<IReadOnlyList<(string Category, long Records)>> CountedAsync(
+        NpgsqlConnection connection,
+        Guid[] subjects) =>
+        [.. await connection.QueryAsync<(string, long)>(
+            "SELECT category, count(*) FROM janus.audit_records "
+                + "WHERE effective_subject = ANY(@subjects) GROUP BY category ORDER BY category",
+            new { subjects })];
 
     private static AuditRecordId NewId() => new(Guid.CreateVersion7());
 

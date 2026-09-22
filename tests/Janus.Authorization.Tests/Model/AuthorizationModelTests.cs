@@ -13,7 +13,7 @@ namespace Janus.Authorization.Tests.Model;
 /// <summary>
 /// The model a host declares and what building it refuses
 /// (AUTHZ-MODEL-001 to AUTHZ-MODEL-004, AUTHZ-MODEL-006, AUTHZ-GATE-001,
-/// AUTHZ-CONCEAL-001).
+/// AUTHZ-CONCEAL-001, PRIV-RIGHT-005a).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class AuthorizationModelTests
@@ -123,6 +123,36 @@ public sealed class AuthorizationModelTests
             () => AuthorizationModel.Of(declared));
 
         Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005a AC1: an encrypted field naming no subject column is ciphertext
+    /// no erasure could reach, so the deployment stops rather than start with it.
+    /// </summary>
+    [Fact]
+    public void PRIV_RIGHT_005a_AC1_AnEncryptedFieldNamingNoSubjectColumnFailsStartup()
+    {
+        StartupException refused = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", ""))));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005a AC2: a subject column the type does not hold, and one holding
+    /// something that is not a subject, both stop the deployment; the same declaration
+    /// naming the subject builds, so the column is what the refusal is about.
+    /// </summary>
+    /// <param name="column">The column the encrypted field names as its subject.</param>
+    [Theory]
+    [InlineData("Owner")]
+    [InlineData("FolderId")]
+    public void PRIV_RIGHT_005a_AC2_ASubjectColumnNamingNoSubjectFailsStartup(string column)
+    {
+        Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", column))));
+
+        Assert.NotNull(AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "Author"))));
     }
 
     /// <summary>
@@ -323,6 +353,24 @@ public sealed class AuthorizationModelTests
     public void CONV_NAME_002_AC1_APermissionOutsideThePatternFailsModelValidation(string permission) =>
         Assert.Throws<ArgumentException>(
             () => new AuthorizationDeclarationBuilder().Permission(permission));
+
+    // The builder takes an expression for each side of an encrypted field, so what it
+    // produces always names members that exist. A host writing the declaration itself
+    // does not, which is what the startup check is there for.
+    private static AuthorizationDeclaration Encrypting(EncryptedFieldDeclaration field)
+    {
+        AuthorizationDeclaration declared = new AuthorizationDeclarationBuilder()
+            .LawfulBasis(Contract())
+            .Resource<HostDomain.Document>("document", document => document
+                .BelongsToOrganization()
+                .Purpose("collaboration", "contract", data: ["identity"]))
+            .Build();
+
+        return declared with
+        {
+            ResourceTypes = [declared.ResourceTypes[0] with { EncryptedFields = [field] }],
+        };
+    }
 
     private static AuthorizationDeclaration Malformed(int index) => index switch
     {

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text.Json;
 using Janus.Core;
 
@@ -18,6 +19,12 @@ namespace Janus.Authorization.Model;
 /// </remarks>
 internal sealed class AuthorizationModel
 {
+    // A declaration names a member of the host's own type, which the host writes and
+    // may keep to itself. The reflection reading it is the model builder's, which is
+    // the one place CONV-CODE-004 admits it.
+    private const BindingFlags Carried =
+        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+
     // The three actions that read by their name alone; every other action modifies
     // unless the host declared it reading (AUTHZ-GATE-006, D-160).
     private static readonly string[] Reading = ["read", "list", "export"];
@@ -415,7 +422,43 @@ internal sealed class AuthorizationModel
         CheckSensitivity(type, categories);
         CheckPurposes(type, bases);
         CheckDerivations(type, relationships);
+        CheckEncryptedFields(type);
     }
+
+    // PRIV-RIGHT-005a: the subject column is how erasure reaches ciphertext sitting in
+    // a host's own table. One naming nothing, or naming something that is not a
+    // subject, leaves fields nothing can erase, so the deployment stops here.
+    private static void CheckEncryptedFields(ResourceTypeDeclaration type)
+    {
+        foreach (EncryptedFieldDeclaration field in type.EncryptedFields)
+        {
+            if (string.IsNullOrWhiteSpace(field.SubjectColumn))
+            {
+                throw Refused(
+                    ErrorCodes.StartupDeclarationMissing,
+                    "key",
+                    type.Name + "." + field.Field,
+                    "an encrypted field is declared with the column naming its subject");
+            }
+
+            Held(type, field.Field);
+            Type subject = Held(type, field.SubjectColumn);
+
+            if ((Nullable.GetUnderlyingType(subject) ?? subject) != typeof(SubjectId))
+            {
+                throw Malformed(
+                    "the type " + type.Name + " holds " + field.Field + " under "
+                    + field.SubjectColumn + ", which names no subject");
+            }
+        }
+    }
+
+    private static Type Held(ResourceTypeDeclaration type, string member) =>
+        type.Entity.GetProperty(member, Carried)?.PropertyType
+            ?? type.Entity.GetField(member, Carried)?.FieldType
+            ?? throw Malformed(
+                "the type " + type.Name + " declares " + member + ", which "
+                + type.Entity.Name + " does not hold");
 
     private static void CheckSensitivity(
         ResourceTypeDeclaration type,
