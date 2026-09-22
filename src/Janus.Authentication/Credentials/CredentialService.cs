@@ -39,6 +39,7 @@ namespace Janus.Authentication.Credentials;
 /// <param name="sessions">Where the account's other sessions are ended.</param>
 /// <param name="sending">Where a message goes out.</param>
 /// <param name="audit">Where what became of a credential is recorded.</param>
+/// <param name="events">Where a completed enrolment is announced.</param>
 /// <param name="configuration">Where the lifetimes and the service name come from.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
@@ -67,11 +68,16 @@ internal sealed class CredentialService(
     ISessionStore sessions,
     INotificationHandler sending,
     ICredentialAudit audit,
+    IEvents events,
     IConfigurationStore configuration,
     IUnitOfWork work,
     TimeProvider time) : ICredentials
 {
     private static readonly AuditAction Enrolled = AuditActions.CredentialEnrolled;
+
+    // What a consumer recognises the repeat of one enrolment by, which is the
+    // credential enrolled: one credential is enrolled once.
+    private const string Announced = "credential-enrolled";
 
     private static readonly AuditAction Removed = AuditActions.CredentialRemoved;
 
@@ -739,6 +745,27 @@ internal sealed class CredentialService(
             .ConfigureAwait(false);
 
         await CompletedAsync(acting, cancellationToken).ConfigureAwait(false);
+
+        // AUTH-STEP-007, chapter 10 section 5b: the authenticator reached active,
+        // which is the fact the event states.
+        Result published = await events
+            .PublishAsync(
+                new CredentialEnrolled(
+                    time.GetUtcNow(),
+                    Announced + ":" + credential,
+                    credential,
+                    kind)
+                {
+                    Subject = acting.Subject,
+                    Actor = acting.Subject,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+        {
+            return Result.Failure<EnrolledCredential>(unpublished);
+        }
 
         return Result.Success(new EnrolledCredential(
             credential,

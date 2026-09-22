@@ -123,6 +123,27 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-STEP-007, chapter 10 section 5b: an authenticator that reached active is
+    /// announced once, carrying what was enrolled and whose it is.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_STEP_007_AnEnrolmentThatReachedActiveIsAnnouncedAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+
+        EnrolledCredential enrolled = await ConfirmedAsync(subject, session);
+
+        CredentialEnrolled announced = Assert.Single(_events.Of<CredentialEnrolled>());
+
+        Assert.Equal(enrolled.Credential, announced.Credential);
+        Assert.Equal(FactorCatalogue.Generated, announced.Kind);
+        Assert.Equal(subject, announced.Subject);
+        Assert.Equal(subject, announced.Actor);
+        Assert.Equal(Noon, announced.RaisedAt);
+    }
+
+    /// <summary>
     /// AUTH-STEP-007 AC2: a password-only customer enrols a passkey on the strength of
     /// the password, because the gate is the lower of what the account reaches and what
     /// the credential contributes.
@@ -644,6 +665,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             _live,
             _notifications,
             _credentials,
+            _events,
             _configuration,
             _work,
             _clock);
@@ -686,6 +708,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             Policies,
             _notifications,
             _credentials,
+            _events,
             _configuration,
             _work,
             _clock,

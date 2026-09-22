@@ -5366,6 +5366,50 @@ declares from, that an unstated location is the hosting location at generation, 
 should read `inside` or `outside` for every row that states one and "follows hosting"
 for every row that does not.
 
+---
+
+## 152. The four credential events of section 5b are emitted
+
+**Corrections 1 · 2026-09-23 · D-162 section D · AUTH-STEP-007, AUTH-RECOV-007,
+`10` section 5b**
+
+*What D-162 decided.* Build now, in the phase whose item it is: `CredentialEnrolled`
+(AUTH-STEP-007); `CredentialSuspended`, `CredentialRestored`, `CredentialInvalidated`
+(AUTH-RECOV-007). All four were in the emitted contract of `10` section 5b and none was
+built.
+
+*What was built.* Four public events on `JanusEvent`, each carrying the credential
+identifier, its catalogue entry, and the subject, and none carrying material that
+proves anything.
+
+- `CredentialEnrolled` is published from the one place every completed enrolment passes
+  through, after the notice to every recorded channel and after the enrolment session
+  ends, so a refusal to take the event cannot cost the notification AUTH-STEP-007 AC1
+  requires.
+- `CredentialSuspended` carries when the window ends, which is the fact a loss report
+  states; it is published where a report is opened, whether by a report or by a removal
+  that would lower reachable assurance.
+- `CredentialRestored` is published where a report is cancelled, from the link or from
+  a session, and only where there is still a credential to restore.
+- `CredentialInvalidated` is published where the window completes, which AUTH-RECOV-007
+  makes the one point at which reachable assurance is recomputed.
+
+The invalidation sweep now carries a `Result<int>` through `CarryAsync` and
+`InvalidateAsync`, so a refused announcement stops `AdvanceAsync` with the refusal
+rather than being counted as work carried.
+
+*One point decided inside the item.* Each event's idempotency key is the credential and
+the instant, not the credential alone: one credential may be reported lost, cancelled
+and reported again, and three reports of one credential are three facts.
+
+*Tests that pin it.*
+`CredentialServiceTests.AUTH_STEP_007_AnEnrolmentThatReachedActiveIsAnnouncedAsync`,
+`LossReportsTests.AUTH_RECOV_007_EachTurnOfAReportIsAnnouncedAsync`,
+`LossReportsTests.AUTH_RECOV_007_ASweepWhoseAnnouncementIsRefusedAnswersWithTheRefusalAsync`.
+
+*Chapter text that should change.* None. `10` section 5b already names all four and
+says what each is raised for.
+
 
 # Rows for chapter 10
 

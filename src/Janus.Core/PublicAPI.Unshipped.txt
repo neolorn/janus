@@ -515,6 +515,22 @@ Janus.Core.CredentialCeremony.RelyingPartyId.get -> string!
 Janus.Core.CredentialCeremony.RelyingPartyId.init -> void
 Janus.Core.CredentialCeremony.User.get -> Janus.Core.CeremonyUser!
 Janus.Core.CredentialCeremony.User.init -> void
+Janus.Core.CredentialEnrolled
+Janus.Core.CredentialEnrolled.Credential.get -> Janus.Core.AuthenticatorId
+Janus.Core.CredentialEnrolled.Credential.init -> void
+Janus.Core.CredentialEnrolled.CredentialEnrolled(System.DateTimeOffset RaisedAt, string! IdempotencyKey, Janus.Core.AuthenticatorId Credential, Janus.Core.Factor Kind) -> void
+Janus.Core.CredentialEnrolled.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.AuthenticatorId Credential, out Janus.Core.Factor Kind) -> void
+Janus.Core.CredentialEnrolled.Equals(Janus.Core.CredentialEnrolled? other) -> bool
+Janus.Core.CredentialEnrolled.Kind.get -> Janus.Core.Factor
+Janus.Core.CredentialEnrolled.Kind.init -> void
+Janus.Core.CredentialInvalidated
+Janus.Core.CredentialInvalidated.Credential.get -> Janus.Core.AuthenticatorId
+Janus.Core.CredentialInvalidated.Credential.init -> void
+Janus.Core.CredentialInvalidated.CredentialInvalidated(System.DateTimeOffset RaisedAt, string! IdempotencyKey, Janus.Core.AuthenticatorId Credential, Janus.Core.Factor Kind) -> void
+Janus.Core.CredentialInvalidated.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.AuthenticatorId Credential, out Janus.Core.Factor Kind) -> void
+Janus.Core.CredentialInvalidated.Equals(Janus.Core.CredentialInvalidated? other) -> bool
+Janus.Core.CredentialInvalidated.Kind.get -> Janus.Core.Factor
+Janus.Core.CredentialInvalidated.Kind.init -> void
 Janus.Core.CredentialLabel
 Janus.Core.CredentialLabel.CredentialLabel() -> void
 Janus.Core.CredentialLabel.Equals(Janus.Core.CredentialLabel other) -> bool
@@ -522,6 +538,14 @@ Janus.Core.CredentialLabel.Value.get -> string!
 Janus.Core.CredentialRedundancy
 Janus.Core.CredentialRedundancy.Advisory = 0 -> Janus.Core.CredentialRedundancy
 Janus.Core.CredentialRedundancy.Enforced = 1 -> Janus.Core.CredentialRedundancy
+Janus.Core.CredentialRestored
+Janus.Core.CredentialRestored.Credential.get -> Janus.Core.AuthenticatorId
+Janus.Core.CredentialRestored.Credential.init -> void
+Janus.Core.CredentialRestored.CredentialRestored(System.DateTimeOffset RaisedAt, string! IdempotencyKey, Janus.Core.AuthenticatorId Credential, Janus.Core.Factor Kind) -> void
+Janus.Core.CredentialRestored.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.AuthenticatorId Credential, out Janus.Core.Factor Kind) -> void
+Janus.Core.CredentialRestored.Equals(Janus.Core.CredentialRestored? other) -> bool
+Janus.Core.CredentialRestored.Kind.get -> Janus.Core.Factor
+Janus.Core.CredentialRestored.Kind.init -> void
 Janus.Core.CredentialSummary
 Janus.Core.CredentialSummary.<Clone>$() -> Janus.Core.CredentialSummary!
 Janus.Core.CredentialSummary.AddedAt.get -> System.DateTimeOffset
@@ -547,6 +571,16 @@ Janus.Core.CredentialSummary.Preferred.get -> bool
 Janus.Core.CredentialSummary.Preferred.init -> void
 Janus.Core.CredentialSummary.State.get -> Janus.Core.AuthenticatorState
 Janus.Core.CredentialSummary.State.init -> void
+Janus.Core.CredentialSuspended
+Janus.Core.CredentialSuspended.Credential.get -> Janus.Core.AuthenticatorId
+Janus.Core.CredentialSuspended.Credential.init -> void
+Janus.Core.CredentialSuspended.CredentialSuspended(System.DateTimeOffset RaisedAt, string! IdempotencyKey, Janus.Core.AuthenticatorId Credential, Janus.Core.Factor Kind, System.DateTimeOffset InvalidatesAt) -> void
+Janus.Core.CredentialSuspended.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.AuthenticatorId Credential, out Janus.Core.Factor Kind, out System.DateTimeOffset InvalidatesAt) -> void
+Janus.Core.CredentialSuspended.Equals(Janus.Core.CredentialSuspended? other) -> bool
+Janus.Core.CredentialSuspended.InvalidatesAt.get -> System.DateTimeOffset
+Janus.Core.CredentialSuspended.InvalidatesAt.init -> void
+Janus.Core.CredentialSuspended.Kind.get -> Janus.Core.Factor
+Janus.Core.CredentialSuspended.Kind.init -> void
 Janus.Core.DeclaredProcessing
 Janus.Core.DeclaredProcessing.Find(string! purpose) -> Janus.Core.DeclaredPurpose?
 Janus.Core.DeclaredProcessing.Purposes.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.DeclaredPurpose!>!
@@ -2374,11 +2408,27 @@ override Janus.Core.CredentialAuthority.ToString() -> string!
 override Janus.Core.CredentialCeremony.Equals(object? obj) -> bool
 override Janus.Core.CredentialCeremony.GetHashCode() -> int
 override Janus.Core.CredentialCeremony.ToString() -> string!
+override Janus.Core.CredentialEnrolled.<Clone>$() -> Janus.Core.CredentialEnrolled!
+override Janus.Core.CredentialEnrolled.Equals(object? obj) -> bool
+override Janus.Core.CredentialEnrolled.GetHashCode() -> int
+override Janus.Core.CredentialEnrolled.ToString() -> string!
+override Janus.Core.CredentialInvalidated.<Clone>$() -> Janus.Core.CredentialInvalidated!
+override Janus.Core.CredentialInvalidated.Equals(object? obj) -> bool
+override Janus.Core.CredentialInvalidated.GetHashCode() -> int
+override Janus.Core.CredentialInvalidated.ToString() -> string!
 override Janus.Core.CredentialLabel.GetHashCode() -> int
 override Janus.Core.CredentialLabel.ToString() -> string!
+override Janus.Core.CredentialRestored.<Clone>$() -> Janus.Core.CredentialRestored!
+override Janus.Core.CredentialRestored.Equals(object? obj) -> bool
+override Janus.Core.CredentialRestored.GetHashCode() -> int
+override Janus.Core.CredentialRestored.ToString() -> string!
 override Janus.Core.CredentialSummary.Equals(object? obj) -> bool
 override Janus.Core.CredentialSummary.GetHashCode() -> int
 override Janus.Core.CredentialSummary.ToString() -> string!
+override Janus.Core.CredentialSuspended.<Clone>$() -> Janus.Core.CredentialSuspended!
+override Janus.Core.CredentialSuspended.Equals(object? obj) -> bool
+override Janus.Core.CredentialSuspended.GetHashCode() -> int
+override Janus.Core.CredentialSuspended.ToString() -> string!
 override Janus.Core.DeclaredPurpose.Equals(object? obj) -> bool
 override Janus.Core.DeclaredPurpose.GetHashCode() -> int
 override Janus.Core.DeclaredPurpose.ToString() -> string!
@@ -2719,6 +2769,10 @@ override sealed Janus.Core.AccountRegistered.Equals(Janus.Core.JanusEvent? other
 override sealed Janus.Core.AccountSuspended.Equals(Janus.Core.JanusEvent? other) -> bool
 override sealed Janus.Core.AlertRaised.Equals(Janus.Core.JanusEvent? other) -> bool
 override sealed Janus.Core.ConsentChanged.Equals(Janus.Core.JanusEvent? other) -> bool
+override sealed Janus.Core.CredentialEnrolled.Equals(Janus.Core.JanusEvent? other) -> bool
+override sealed Janus.Core.CredentialInvalidated.Equals(Janus.Core.JanusEvent? other) -> bool
+override sealed Janus.Core.CredentialRestored.Equals(Janus.Core.JanusEvent? other) -> bool
+override sealed Janus.Core.CredentialSuspended.Equals(Janus.Core.JanusEvent? other) -> bool
 override sealed Janus.Core.DeviceVerified.Equals(Janus.Core.JanusEvent? other) -> bool
 override sealed Janus.Core.ErasureRequested.Equals(Janus.Core.SubjectEvent? other) -> bool
 override sealed Janus.Core.ExportRequested.Equals(Janus.Core.SubjectEvent? other) -> bool
@@ -2993,12 +3047,20 @@ static Janus.Core.CredentialAuthority.operator !=(Janus.Core.CredentialAuthority
 static Janus.Core.CredentialAuthority.operator ==(Janus.Core.CredentialAuthority? left, Janus.Core.CredentialAuthority? right) -> bool
 static Janus.Core.CredentialCeremony.operator !=(Janus.Core.CredentialCeremony? left, Janus.Core.CredentialCeremony? right) -> bool
 static Janus.Core.CredentialCeremony.operator ==(Janus.Core.CredentialCeremony? left, Janus.Core.CredentialCeremony? right) -> bool
+static Janus.Core.CredentialEnrolled.operator !=(Janus.Core.CredentialEnrolled? left, Janus.Core.CredentialEnrolled? right) -> bool
+static Janus.Core.CredentialEnrolled.operator ==(Janus.Core.CredentialEnrolled? left, Janus.Core.CredentialEnrolled? right) -> bool
+static Janus.Core.CredentialInvalidated.operator !=(Janus.Core.CredentialInvalidated? left, Janus.Core.CredentialInvalidated? right) -> bool
+static Janus.Core.CredentialInvalidated.operator ==(Janus.Core.CredentialInvalidated? left, Janus.Core.CredentialInvalidated? right) -> bool
 static Janus.Core.CredentialLabel.Of(Janus.Core.DeviceDescription! device) -> Janus.Core.CredentialLabel
 static Janus.Core.CredentialLabel.TryParse(string! entered, out Janus.Core.CredentialLabel label) -> bool
 static Janus.Core.CredentialLabel.operator !=(Janus.Core.CredentialLabel left, Janus.Core.CredentialLabel right) -> bool
 static Janus.Core.CredentialLabel.operator ==(Janus.Core.CredentialLabel left, Janus.Core.CredentialLabel right) -> bool
+static Janus.Core.CredentialRestored.operator !=(Janus.Core.CredentialRestored? left, Janus.Core.CredentialRestored? right) -> bool
+static Janus.Core.CredentialRestored.operator ==(Janus.Core.CredentialRestored? left, Janus.Core.CredentialRestored? right) -> bool
 static Janus.Core.CredentialSummary.operator !=(Janus.Core.CredentialSummary? left, Janus.Core.CredentialSummary? right) -> bool
 static Janus.Core.CredentialSummary.operator ==(Janus.Core.CredentialSummary? left, Janus.Core.CredentialSummary? right) -> bool
+static Janus.Core.CredentialSuspended.operator !=(Janus.Core.CredentialSuspended? left, Janus.Core.CredentialSuspended? right) -> bool
+static Janus.Core.CredentialSuspended.operator ==(Janus.Core.CredentialSuspended? left, Janus.Core.CredentialSuspended? right) -> bool
 static Janus.Core.DeclaredProcessing.Of(Janus.Core.AuthorizationDeclaration! declaration) -> Janus.Core.DeclaredProcessing!
 static Janus.Core.DeclaredPurpose.operator !=(Janus.Core.DeclaredPurpose? left, Janus.Core.DeclaredPurpose? right) -> bool
 static Janus.Core.DeclaredPurpose.operator ==(Janus.Core.DeclaredPurpose? left, Janus.Core.DeclaredPurpose? right) -> bool

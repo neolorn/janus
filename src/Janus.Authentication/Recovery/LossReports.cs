@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -28,6 +29,7 @@ namespace Janus.Authentication.Recovery;
 /// <param name="policies">What policy governs the account.</param>
 /// <param name="sending">Where a message goes out.</param>
 /// <param name="audit">Where what became of a credential is recorded.</param>
+/// <param name="events">Where what became of a credential is announced.</param>
 /// <param name="configuration">Where the window and the notice interval come from.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
@@ -46,6 +48,7 @@ internal sealed class LossReports(
     PolicyResolution policies,
     INotificationHandler sending,
     ICredentialAudit audit,
+    IEvents events,
     IConfigurationStore configuration,
     IUnitOfWork work,
     TimeProvider time,
@@ -58,6 +61,14 @@ internal sealed class LossReports(
     private static readonly AuditAction Invalidated = AuditActions.CredentialInvalidated;
 
     private static readonly AuditAction Held = AuditActions.CredentialInvalidationHeld;
+
+    // What a consumer recognises the repeat of one report by: the credential and
+    // the instant, because one credential may be reported again after a cancel.
+    private const string Opened = "credential-suspended";
+
+    private const string Ended = "credential-restored";
+
+    private const string Completed = "credential-invalidated";
 
     // The notices the window carries are asked for by no request, so they count
     // against the deployment itself and not against a person's address.
@@ -177,6 +188,22 @@ internal sealed class LossReports(
             .RecordedAsync(Reported, held.Subject, held.Id, now, cancellationToken)
             .ConfigureAwait(false);
 
+        if (await AnnouncedAsync(
+                new CredentialSuspended(
+                    now,
+                    Key(Opened, held.Id, now),
+                    held.Id,
+                    held.Factor,
+                    report.InvalidatesAt)
+                {
+                    Subject = held.Subject,
+                },
+                cancellationToken)
+            .ConfigureAwait(false) is Error unannounced)
+        {
+            return Result.Failure<LossReported>(unannounced);
+        }
+
         return Result.Success(new LossReported(held.Id, report.InvalidatesAt));
     }
 
@@ -233,6 +260,25 @@ internal sealed class LossReports(
             .RecordedAsync(Cancelled, report.Subject, credential, now, cancellationToken)
             .ConfigureAwait(false);
 
+        // AUTH-RECOV-007: a report is cancelled whether or not the credential is
+        // still there to restore, and the event states what was restored.
+        if (held is not null
+            && await AnnouncedAsync(
+                new CredentialRestored(
+                    now,
+                    Key(Ended, credential, now),
+                    credential,
+                    held.Factor)
+                {
+                    Subject = report.Subject,
+                    Actor = context?.Effective,
+                },
+                cancellationToken)
+            .ConfigureAwait(false) is Error unannounced)
+        {
+            return Result.Failure(unannounced);
+        }
+
         return Result.Success();
     }
 
@@ -267,14 +313,19 @@ internal sealed class LossReports(
 
         foreach (LossReport report in outstanding)
         {
-            carried += await CarryAsync(report, now, interval, cancellationToken)
-                .ConfigureAwait(false);
+            (await CarryAsync(report, now, interval, cancellationToken).ConfigureAwait(false))
+                .Switch(count => carried += count, error => failure = error);
+
+            if (failure is not null)
+            {
+                return Result.Failure<int>(failure);
+            }
         }
 
         return Result.Success(carried);
     }
 
-    private async ValueTask<int> CarryAsync(
+    private async ValueTask<Result<int>> CarryAsync(
         LossReport report,
         DateTimeOffset now,
         TimeSpan interval,
@@ -282,9 +333,9 @@ internal sealed class LossReports(
     {
         if (now < report.InvalidatesAt)
         {
-            return report.NoticeDue(now, interval)
+            return Result.Success(report.NoticeDue(now, interval)
                 ? await RepeatAsync(report, now, cancellationToken).ConfigureAwait(false)
-                : 0;
+                : 0);
         }
 
         // AUTH-RECOV-007: a window nobody was told of completes nothing. The report
@@ -301,7 +352,7 @@ internal sealed class LossReports(
                 .RecordedAsync(Held, report.Subject, report.Credential, now, cancellationToken)
                 .ConfigureAwait(false);
 
-            return 1;
+            return Result.Success(1);
         }
 
         return await InvalidateAsync(report, now, cancellationToken).ConfigureAwait(false);
@@ -325,7 +376,7 @@ internal sealed class LossReports(
         return 1;
     }
 
-    private async ValueTask<int> InvalidateAsync(
+    private async ValueTask<Result<int>> InvalidateAsync(
         LossReport report,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -376,7 +427,25 @@ internal sealed class LossReports(
             .RecordedAsync(Invalidated, report.Subject, report.Credential, now, cancellationToken)
             .ConfigureAwait(false);
 
-        return 1;
+        // AUTH-RECOV-007: invalidation is the one point at which the account's
+        // reachable assurance is recomputed, so it is the one a consumer hears about.
+        if (held is not null
+            && await AnnouncedAsync(
+                new CredentialInvalidated(
+                    now,
+                    Key(Completed, report.Credential, now),
+                    report.Credential,
+                    held.Factor)
+                {
+                    Subject = report.Subject,
+                },
+                cancellationToken)
+            .ConfigureAwait(false) is Error unannounced)
+        {
+            return Result.Failure<int>(unannounced);
+        }
+
+        return Result.Success(1);
     }
 
     // Every recorded channel hears of the report, and each notice carries the link
@@ -445,6 +514,16 @@ internal sealed class LossReports(
 
         return default!;
     }
+
+    private static string Key(string what, AuthenticatorId credential, DateTimeOffset at) =>
+        string.Create(CultureInfo.InvariantCulture, $"{what}:{credential.Value}@{at.UtcTicks}");
+
+    private async ValueTask<Error?> AnnouncedAsync<TEvent>(
+        TEvent raised,
+        CancellationToken cancellationToken)
+        where TEvent : JanusEvent =>
+        (await events.PublishAsync(raised, cancellationToken).ConfigureAwait(false))
+            .Match(() => (Error?)null, error => error);
 
     private async ValueTask<string> LanguageAsync(
         SubjectId subject,

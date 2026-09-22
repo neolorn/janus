@@ -55,6 +55,7 @@ public sealed class LossReportsTests : IAsyncDisposable
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly EventsInMemory _events = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
@@ -92,6 +93,86 @@ public sealed class LossReportsTests : IAsyncDisposable
         Assert.Equal(_clock.GetUtcNow() + TimeSpan.FromDays(7), reported.InvalidatesAt);
         Assert.Equal(AuthenticatorState.Suspended, await StateAsync(generator));
         Assert.NotEmpty(_notifications.Mail);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007, chapter 10 section 5b: the three things that become of a
+    /// reported credential are each announced, carrying what it is and, for the
+    /// suspension, when the window ends.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_007_EachTurnOfAReportIsAnnouncedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        AuthenticatorId generator = await EnrolledAsync(subject);
+
+        _ = await Service.ReportAsync(
+            AccessContext.Of(subject),
+            generator,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        CredentialSuspended suspended = Assert.Single(_events.Of<CredentialSuspended>());
+
+        Assert.Equal(generator, suspended.Credential);
+        Assert.Equal(FactorCatalogue.Generated, suspended.Kind);
+        Assert.Equal(subject, suspended.Subject);
+        Assert.Equal(_clock.GetUtcNow() + TimeSpan.FromDays(7), suspended.InvalidatesAt);
+
+        _ = await Service.CancelAsync(
+            AccessContext.Of(subject),
+            generator,
+            cancelToken: null,
+            TestContext.Current.CancellationToken);
+
+        CredentialRestored restored = Assert.Single(_events.Of<CredentialRestored>());
+
+        Assert.Equal(generator, restored.Credential);
+        Assert.Equal(subject, restored.Subject);
+        Assert.Equal(subject, restored.Actor);
+
+        _ = await Service.ReportAsync(
+            AccessContext.Of(subject),
+            generator,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        _clock.Advance(TimeSpan.FromDays(8));
+
+        _ = await Service.AdvanceAsync(TestContext.Current.CancellationToken);
+
+        CredentialInvalidated invalidated = Assert.Single(_events.Of<CredentialInvalidated>());
+
+        Assert.Equal(generator, invalidated.Credential);
+        Assert.Equal(FactorCatalogue.Generated, invalidated.Kind);
+        Assert.Equal(subject, invalidated.Subject);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007: a sweep whose announcement was refused answers with the
+    /// refusal, so an invalidation no consumer was told of is not reported as work
+    /// the sweep carried (LIB-API-001).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_007_ASweepWhoseAnnouncementIsRefusedAnswersWithTheRefusalAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        AuthenticatorId generator = await EnrolledAsync(subject);
+
+        _ = await Service.ReportAsync(
+            AccessContext.Of(subject),
+            generator,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        _clock.Advance(TimeSpan.FromDays(8));
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            Refused(await Service.AdvanceAsync(TestContext.Current.CancellationToken)));
     }
 
     /// <summary>
@@ -416,6 +497,7 @@ public sealed class LossReportsTests : IAsyncDisposable
             Policies,
             _notifications,
             _credentials,
+            _events,
             _configuration,
             _work,
             _clock,

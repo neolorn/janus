@@ -148,6 +148,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Four events reach the host that were missing from the emitted contract:
+  `CredentialEnrolled` when an authenticator reaches active, and `CredentialSuspended`,
+  `CredentialRestored` and `CredentialInvalidated` as a loss report opens, is cancelled
+  and completes. Each carries the credential, its catalogue entry and whose account it
+  is, and the suspension carries when its window ends. None carries secret material.
+
 - The client registry is the one list of return destinations. Every registered client's
   return address is read at startup and a deployment holding one that is not an absolute
   origin does not start. The client a destination falls back to is named in the new

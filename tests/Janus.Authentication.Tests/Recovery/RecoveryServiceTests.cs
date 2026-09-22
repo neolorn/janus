@@ -634,6 +634,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             Policies,
             _notifications,
             _credentials,
+            _events,
             _configuration,
             _work,
             _clock,
