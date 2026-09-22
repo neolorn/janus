@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- The addresses of the frontend's password and passkey pages are now a declaration with
+  no default. A deployment that registers none does not start, naming the declaration it
+  left out, instead of serving neither well-known document to a password manager. Both
+  documents therefore always answer.
+
 - A request the library cannot read is now answered with the same body as every other
   refusal: `api.request.malformed`, a correlation identifier, and a `details.member`
   naming the member the reader stopped at or the one the endpoint required. A 400 used

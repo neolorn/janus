@@ -6,6 +6,7 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 
 namespace Janus.Hosting.Accounts;
@@ -16,8 +17,8 @@ namespace Janus.Hosting.Accounts;
 /// <remarks>
 /// Implements REG-PM-001, AUTH-FACT-012 and LIB-HOST-003. They sit at the site root
 /// by definition and are therefore mounted apart from everything the host puts under a
-/// prefix. A deployment that has declared no addresses serves neither, which is what a
-/// password manager reads as "this site does not offer that".
+/// prefix. Both always answer: the addresses they carry are a declaration the
+/// deployment cannot start without (LIB-HOST-001).
 /// </remarks>
 internal static class WellKnownEndpoints
 {
@@ -53,25 +54,21 @@ internal static class WellKnownEndpoints
         return TypedResults.Text(party.Allowlist(), "application/json");
     }
 
-    private static IResult ChangePassword(PasskeyAddresses addresses)
+    private static RedirectHttpResult ChangePassword(PasskeyAddresses addresses)
     {
         ArgumentNullException.ThrowIfNull(addresses);
 
-        return addresses.ChangePassword.Length is 0
-            ? TypedResults.NotFound()
-            : TypedResults.Redirect(addresses.ChangePassword);
+        return TypedResults.Redirect(addresses.ChangePassword);
     }
 
-    private static IResult PasskeyEndpoints(PasskeyAddresses addresses)
+    private static JsonHttpResult<PasskeyEndpointsView> PasskeyEndpoints(PasskeyAddresses addresses)
     {
         ArgumentNullException.ThrowIfNull(addresses);
 
-        return addresses.Enrol.Length is 0 || addresses.Manage.Length is 0
-            ? TypedResults.NotFound()
-            : TypedResults.Json(
-                new PasskeyEndpointsView(addresses.Enrol, addresses.Manage),
-                WellKnownJson.Default.PasskeyEndpointsView,
-                contentType: null,
-                StatusCodes.Status200OK);
+        return TypedResults.Json(
+            new PasskeyEndpointsView(addresses.Enrol, addresses.Manage),
+            WellKnownJson.Default.PasskeyEndpointsView,
+            contentType: null,
+            StatusCodes.Status200OK);
     }
 }

@@ -54,10 +54,14 @@ public sealed class ApiConventionTests
         Assert.Equal(StatusCodes.Status404NotFound, elsewhere.Status);
 
         // The two documents of REG-PM-001 sit at the site root by definition, so the
-        // prefix does not move them.
+        // prefix does not move them: they answer there and not under it.
+        Assert.Equal(
+            StatusCodes.Status200OK,
+            (await browser.SendAsync("GET", "/.well-known/passkey-endpoints")).Status);
+
         Assert.Equal(
             StatusCodes.Status404NotFound,
-            (await browser.SendAsync("GET", "/.well-known/passkey-endpoints")).Status);
+            (await browser.SendAsync("GET", Prefix + "/.well-known/passkey-endpoints")).Status);
     }
 
     /// <summary>

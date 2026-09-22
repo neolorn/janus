@@ -1584,6 +1584,8 @@ are absent.
 *Chapter text that should change.* REG-PM-001 should name the declaration the host
 registers.
 
+**Superseded by D-162.** Applied in entry 127.
+
 ---
 
 ## 51. The last-of-kind refusal is unreachable where the primary cannot be removed
@@ -4212,6 +4214,42 @@ Stage 11's concealment is not built here.
 *Chapter text that should change.* Chapter 10 section 1.5 needs the row, listed under
 **Rows for chapter 10**. API-CONV-003 should say that 400 carries the API-CONV-002 body
 like every other status.
+
+---
+
+## 127. The frontend's passkey pages are a declaration the deployment cannot start without
+
+**Corrections 1 · 2026-09-22 · D-162 section B, correcting entry 50 · REG-PM-001, LIB-HOST-001, LIB-HOST-003**
+
+*What D-162 decided.* The passkey-pages declaration is required with no default and its
+absence fails startup with `model.startup.declarationmissing`; it joins LIB-HOST-001's
+table.
+
+*What was built.* `PasskeyAddresses.None` is gone and nothing registers a default, so a
+deployment either declares the three addresses or does not start. A new startup check,
+`DeclarationCoverage`, reads what LIB-HOST-001 requires against what the host registered
+and names what is absent: the declaration itself, or the field of it that is empty. It
+runs from a hosted service registered behind the other four, before the web server.
+
+Both well-known documents now always answer, which is what REG-PM-001 AC2 states without
+qualification: the redirect and the JSON no longer have an absence to answer for, and the
+404 branches are gone.
+
+*Decided in the owner's absence.* One point, Tier 2: *what the refusal names.* The other
+startup checks name a `key`, a `handler` or a `supplier`. A host declaration is nearest a
+key, so this one names `key` and spells the declaration as the host writes it,
+`passkeyAddresses`, with the empty field appended where the declaration is present but
+incomplete.
+
+*Tests that pin it.*
+`StartupValidationTests.REG_PM_001_ADeploymentThatDeclaredNoPasskeyPagesIsRefusedAsync`,
+`WellKnownTests.REG_PM_001_AC2_TheWellKnownDocumentsAnswerAndTheProbeDoesNotAsync`,
+`WellKnownTests.MapWellKnown_TheDeclaredAddresses_AreWhatBothDocumentsCarryAsync`,
+`ApiConventionTests.API_CONV_001_AC1_TheHostMountsTheLibraryWhereItLikesAsync`.
+
+*Chapter text that should change.* REG-PM-001 should name the declaration the host
+registers and say that its absence stops the deployment. LIB-HOST-001's table needs the
+row, listed under **Rows for chapter 10**.
 
 
 # Rows for chapter 10

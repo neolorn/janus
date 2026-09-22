@@ -225,9 +225,10 @@ public static class JanusRegistration
         services.TryAddSingleton(PreferenceDeclarations.None);
         services.TryAddSingleton(ReservedUsernames.Default);
 
-        // REG-PM-001: a deployment that declares no frontend addresses serves neither
-        // well-known document rather than pointing at a page that is not there.
-        services.TryAddSingleton(PasskeyAddresses.None);
+        // REG-PM-001, LIB-HOST-001: the frontend's pages are the host's to declare and
+        // the library has no address to fall back on, so a deployment that registered
+        // none is stopped at startup and none is registered here.
+        services.AddScoped(provider => new DeclarationCoverage(provider.GetService<PasskeyAddresses>()));
 
         // CONV-DESIGN-006: every request and response of the library's endpoints is
         // read and written by the generated contexts, never by reflection.
@@ -307,6 +308,7 @@ public static class JanusRegistration
         services.Insert(1, ServiceDescriptor.Singleton<IHostedService, SendingValidationService>());
         services.Insert(2, ServiceDescriptor.Singleton<IHostedService, HandlerValidationService>());
         services.Insert(3, ServiceDescriptor.Singleton<IHostedService, ConfigurationValidationService>());
+        services.Insert(4, ServiceDescriptor.Singleton<IHostedService, DeclarationValidationService>());
 
         return services;
     }

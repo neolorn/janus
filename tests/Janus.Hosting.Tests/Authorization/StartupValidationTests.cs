@@ -116,6 +116,26 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// LIB-HOST-001, REG-PM-001: the frontend's pages are a declaration with no
+    /// default, so a deployment that registered none is stopped as it starts rather
+    /// than answering a password manager as a site that offers neither page.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_PM_001_ADeploymentThatDeclaredNoPasskeyPagesIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using IHost deployment = Deployed(addresses: false);
+
+        StartupException refused = await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(cancellationToken));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        Assert.Equal("passkeyAddresses", refused.Failure?.Details["key"].GetString());
+    }
+
+    /// <summary>
     /// AUTHZ-MODEL-004 AC2: the web server is a hosted service of the host's, and
     /// hosted services start in the order they were registered, so the checks that read
     /// the database stand at the head of the collection and no request is served
@@ -137,16 +157,18 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         Assert.Equal(typeof(ModelValidationService), first.ImplementationType);
     }
 
-    private IHost Deployed(bool catalogue = true, bool handlers = true) => new HostBuilder()
-        .ConfigureServices(services => Declared(services, catalogue, handlers))
-        .Build();
+    private IHost Deployed(bool catalogue = true, bool handlers = true, bool addresses = true) =>
+        new HostBuilder()
+            .ConfigureServices(services => Declared(services, catalogue, handlers, addresses))
+            .Build();
 
     // The library registered over this deployment, as the host's own code registers
     // it, with the messages the deployment has written (LIB-HOST-001).
     private IServiceCollection Declared(
         IServiceCollection services,
         bool catalogue = true,
-        bool handlers = true)
+        bool handlers = true,
+        bool addresses = true)
     {
         if (catalogue)
         {
@@ -156,6 +178,14 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         if (handlers)
         {
             services.AddSingleton<ISubjectEventSubscriber>(new HostSubjectEvents());
+        }
+
+        if (addresses)
+        {
+            services.AddSingleton(new PasskeyAddresses(
+                "https://accounts.example.test/password",
+                "https://accounts.example.test/passkeys/new",
+                "https://accounts.example.test/passkeys"));
         }
 
         return services.AddJanus(

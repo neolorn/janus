@@ -46,12 +46,13 @@ public sealed class WellKnownTests
     }
 
     /// <summary>
-    /// REG-PM-001: a deployment that declared no addresses serves neither document,
-    /// rather than pointing a password manager at a page that is not there.
+    /// REG-PM-001 AC2: both documents answer whatever the deployment declared, because
+    /// the addresses are a declaration it could not have started without
+    /// (LIB-HOST-001).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task MapWellKnown_NoDeclaredAddresses_ServesNeitherDocumentAsync()
+    public async Task MapWellKnown_TheDeclaredAddresses_AreWhatBothDocumentsCarryAsync()
     {
         await using var deployment = new Deployment();
         var browser = new Browser(deployment);
@@ -59,7 +60,9 @@ public sealed class WellKnownTests
         Answer redirected = await browser.SendAsync("GET", "/.well-known/change-password");
         Answer passkeys = await browser.SendAsync("GET", "/.well-known/passkey-endpoints");
 
-        Assert.Equal(StatusCodes.Status404NotFound, redirected.Status);
-        Assert.Equal(StatusCodes.Status404NotFound, passkeys.Status);
+        Assert.Equal(StatusCodes.Status302Found, redirected.Status);
+        Assert.Equal(StatusCodes.Status200OK, passkeys.Status);
+        Assert.NotEmpty(passkeys.Text("enroll"));
+        Assert.NotEmpty(passkeys.Text("manage"));
     }
 }

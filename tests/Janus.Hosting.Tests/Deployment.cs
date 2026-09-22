@@ -73,6 +73,13 @@ internal sealed class Deployment : IAsyncDisposable
     private readonly WebApplication _application;
     private readonly RequestDelegate _pipeline;
 
+    // LIB-HOST-001: the frontend's pages are a declaration no deployment starts
+    // without, so every deployment here carries one (REG-PM-001).
+    private static readonly PasskeyAddresses Pages = new(
+        "https://accounts.example.test/password",
+        "https://accounts.example.test/passkeys/new",
+        "https://accounts.example.test/passkeys");
+
     /// <summary>
     /// Mounts the library over fakes.
     /// </summary>
@@ -103,7 +110,7 @@ internal sealed class Deployment : IAsyncDisposable
         Register(
             builder.Services,
             application,
-            addresses ?? PasskeyAddresses.None,
+            addresses ?? Pages,
             signIn ?? AuthenticationAddresses.None);
 
         _application = builder.Build();

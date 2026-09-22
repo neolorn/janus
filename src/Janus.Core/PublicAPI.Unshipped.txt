@@ -3169,7 +3169,6 @@ static Janus.Core.OidcClient.operator ==(Janus.Core.OidcClient? left, Janus.Core
 static Janus.Core.OrganizationId.New(System.TimeProvider! time) -> Janus.Core.OrganizationId
 static Janus.Core.OrganizationId.operator !=(Janus.Core.OrganizationId left, Janus.Core.OrganizationId right) -> bool
 static Janus.Core.OrganizationId.operator ==(Janus.Core.OrganizationId left, Janus.Core.OrganizationId right) -> bool
-static Janus.Core.PasskeyAddresses.None.get -> Janus.Core.PasskeyAddresses!
 static Janus.Core.PasskeyAddresses.operator !=(Janus.Core.PasskeyAddresses? left, Janus.Core.PasskeyAddresses? right) -> bool
 static Janus.Core.PasskeyAddresses.operator ==(Janus.Core.PasskeyAddresses? left, Janus.Core.PasskeyAddresses? right) -> bool
 static Janus.Core.Permission.Parse(string! value) -> Janus.Core.Permission
