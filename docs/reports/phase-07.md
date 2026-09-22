@@ -1,7 +1,6 @@
 # Phase 7: Privacy
 
-Status: complete, no open question, full gate pending the pipeline run on
-this branch. What a deployment processes and
+Status: complete, full gate green, no open question. What a deployment processes and
 on what basis, with the closed category list and the capture path a consent runs
 through; the consent and objection records, written consent among them, with the
 supersession a material revision of the notice causes; the legal documents with one
@@ -164,5 +163,12 @@ runs `dotnet test` unchanged. The local counts at the end of the phase:
 111, `Janus.Core.Tests` 429, `Janus.Hosting.Tests` 292, `Janus.Identity.Tests` 62,
 `Janus.Privacy.Tests` 128 and `Janus.Storage.Tests` 251, none failing.
 
-Full gate: pending the pipeline run on this branch. The commit after the runs changes
-this section and the status line above, and nothing else.
+Full gate: GitHub Actions runs `35689671635` (push) and `35689674588` (pull request)
+on branch `phase-07-privacy`, pull request #15, green on every job. `Integration
+tests`, `Double migration run`, `Destructive-operation detection report`,
+`Truth-table suite` and `Dependency vulnerability alerting` run on the
+pull-request event and `Secret scanning` on the push event, as CONV-GATE-002
+states, so the two runs together are one pass of the table of CONV-GATE-001.
+
+The commit after the two runs above changes this section and the status line
+alone.
