@@ -5,9 +5,8 @@ using Janus.Core;
 namespace Janus.Authentication.SignIn;
 
 /// <summary>
-/// One sign-in in progress: who it resolved to, what has been presented so far, the
-/// WebAuthn challenge it issued, and the code the new-device check may be holding it
-/// for.
+/// One sign-in in progress: who it resolved to, what has been presented so far and
+/// the WebAuthn challenge it issued.
 /// </summary>
 /// <remarks>
 /// Implements AUTH-ABUSE-003, AUTH-FACT-014 and AUTH-FACT-016. A challenge exists for
@@ -55,15 +54,6 @@ internal sealed class Challenge
     /// <summary>What has been presented against it and accepted.</summary>
     public IReadOnlyList<Factor> Presented => _presented;
 
-    /// <summary>The new-device code sent, absent while none is outstanding.</summary>
-    public byte[]? DeviceCode { get; private set; }
-
-    /// <summary>How many wrong codes have been entered against it.</summary>
-    public int DeviceAttempts { get; private set; }
-
-    /// <summary>Whether the new-device check is holding it.</summary>
-    public bool IsHeld => DeviceCode is not null;
-
     /// <summary>
     /// Opens one.
     /// </summary>
@@ -90,8 +80,6 @@ internal sealed class Challenge
     /// <param name="createdAt">When it opened.</param>
     /// <param name="expiresAt">When it stops answering.</param>
     /// <param name="presented">What has been accepted against it.</param>
-    /// <param name="deviceCode">The outstanding new-device code, or nothing.</param>
-    /// <param name="deviceAttempts">Wrong codes entered against it.</param>
     /// <returns>The challenge.</returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public static Challenge Existing(
@@ -100,18 +88,12 @@ internal sealed class Challenge
         string webAuthn,
         DateTimeOffset createdAt,
         DateTimeOffset expiresAt,
-        IReadOnlyCollection<Factor> presented,
-        byte[]? deviceCode,
-        int deviceAttempts)
+        IReadOnlyCollection<Factor> presented)
     {
         ArgumentNullException.ThrowIfNull(fingerprint);
         ArgumentNullException.ThrowIfNull(presented);
 
-        return new Challenge(fingerprint, subject, webAuthn, createdAt, expiresAt, [.. presented])
-        {
-            DeviceCode = deviceCode,
-            DeviceAttempts = deviceAttempts,
-        };
+        return new Challenge(fingerprint, subject, webAuthn, createdAt, expiresAt, [.. presented]);
     }
 
     /// <summary>
@@ -133,26 +115,4 @@ internal sealed class Challenge
         }
     }
 
-    /// <summary>
-    /// Holds the sign-in for a code sent to the account's primary email.
-    /// </summary>
-    /// <param name="code">What was sent, held as it is compared.</param>
-    /// <exception cref="ArgumentNullException">The code is absent.</exception>
-    public void Holding(byte[] code)
-    {
-        ArgumentNullException.ThrowIfNull(code);
-
-        DeviceCode = code;
-        DeviceAttempts = 0;
-    }
-
-    /// <summary>
-    /// A wrong code was entered against the hold.
-    /// </summary>
-    public void Missed() => DeviceAttempts++;
-
-    /// <summary>
-    /// The code is spent, whether it was right or its attempts ran out.
-    /// </summary>
-    public void Spent() => DeviceCode = null;
 }

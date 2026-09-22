@@ -230,6 +230,7 @@ public static class JanusRegistration
         services.AddScoped<AccountService>();
         services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
         services.AddScoped<SignInLinks>();
+        services.AddScoped<VerificationCodes>();
         services.AddScoped<AuthenticationService>();
         services.AddScoped<IAuthentication>(provider =>
             provider.GetRequiredService<AuthenticationService>());

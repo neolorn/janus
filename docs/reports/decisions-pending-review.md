@@ -601,6 +601,8 @@ forbids.
 *Chapter text that should change.* None. The implementation plan should say which phase
 owns AUTH-FACT-004 AC2 and AC3.
 
+**Superseded by D-162.** Applied in entry 115.
+
 ---
 
 ## 18. Nothing of the emitted-event surface is built in phase 3
@@ -3541,6 +3543,49 @@ which holds no file at all,
 `ScreeningTests.ScreenAsync_ACorpusWithNoDate_RefusesAsync`,
 `StartupConfigurationTests.ThrowIfIncomplete_TheCorpusIsSelfHosted_RequiresItsAddress`,
 `StartupConfigurationTests.ThrowIfIncomplete_TheCorpusIsNotSelfHosted_NeedsNoAddress`.
+
+---
+
+## 115. The verification code is an aggregate of its own, and the device check issues through it
+
+**Corrections 1 · 2026-09-22 · D-162 section B, correcting entry 17 · AUTH-FACT-004, AUTH-FACT-016**
+
+*What D-162 decided.* The verification-code aggregate of AUTH-FACT-004 and its port are
+built in `Janus.Authentication` now (lifetime `code.verification.lifetime`, attempt cap
+`code.verification.attempts`, invalidation on the cap, single use, its own storage per
+AC2); the device check of AUTH-FACT-016 issues its code through it. AC2 and AC3 are
+proved.
+
+*What was built.* `VerificationCode` is the aggregate: what it was issued against, the
+digits, when it was issued, when it stops answering, and the wrong tries entered against
+it. `IVerificationCodeStore` is its port and `verification_codes` its table, which no
+credential is reachable through. `VerificationCodes` issues and answers: a code lives
+`code.verification.lifetime` whatever issued it, a wrong try is counted, the try that
+reaches `code.verification.attempts` ends the code, and the first right try spends it,
+so the same digits never answer twice. Issuing again replaces whatever the holder had
+outstanding. The value helpers the registration area held (drawing, holding, reading and
+the fixed-time comparison) moved into the aggregate, so there is one verification code in
+the library and not two.
+
+The new-device check of AUTH-FACT-016 now issues and answers through it, and the sign-in
+challenge no longer carries a code or a counter: `signin_challenges.device_code` and
+`device_attempts` are dropped by the migration that creates the table. What the check
+answers with is unchanged, a wrong code while tries remain and the expiry once they are
+gone, so no behaviour of the sign-in moved with the storage. The other issuers
+(registration, identifier verification and the sign-in link) keep their own arrangement,
+which D-162 does not reverse.
+
+*Tests that pin it.*
+`VerificationCodesTests.AUTH_FACT_004_AC2_ACodeIsHeldApartAndLivesItsOwnLifetimeAsync`,
+`VerificationCodesTests.AUTH_FACT_004_AC2_TheLifetimeIsWhatTheDeploymentConfiguresAsync`,
+`VerificationCodesTests.AUTH_FACT_004_AC3_TheCapEndsTheCodeAndAReplacementLeavesItDeadAsync`,
+`VerificationCodesTests.AUTH_FACT_004_AC3_TheRightCodeIsSpentOnceAsync`,
+`VerificationCodesTests.IssueAsync_ACodeIsOutstanding_ReplacesItAsync`,
+`VerificationCodesTests.PresentAsync_NoCodeIsOutstanding_RefusesAsync`,
+`AuthenticationServiceTests.AUTH_FACT_016_AC3_WrongCodesInvalidateTheHeldSignInAsync`,
+`ModelTests.REG_ACCT_001_AC2_NoFieldExistsOutsideTheGroupsTheTableNames`, which carries
+the new table's columns and no longer the challenge's two.
+
 
 # Rows for chapter 10
 

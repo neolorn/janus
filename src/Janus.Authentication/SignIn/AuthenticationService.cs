@@ -40,6 +40,7 @@ namespace Janus.Authentication.SignIn;
 /// <param name="policies">What policy governs the account, and what it has raised.</param>
 /// <param name="throttle">The progressive delay.</param>
 /// <param name="sending">Where a message goes out.</param>
+/// <param name="codes">The verification codes, which live and die on their own rules.</param>
 /// <param name="configuration">Where the lifetimes and the limits come from.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
@@ -68,6 +69,7 @@ internal sealed class AuthenticationService(
     PolicyResolution policies,
     ThrottleService throttle,
     SendingService sending,
+    VerificationCodes codes,
     IConfigurationStore configuration,
     IUnitOfWork work,
     TimeProvider time,
@@ -342,47 +344,25 @@ internal sealed class AuthenticationService(
 
         Challenge? open = await OpenAsync(challenge, cancellationToken).ConfigureAwait(false);
 
-        if (open?.Subject is not SubjectId subject || open.DeviceCode is null)
+        if (open?.Subject is not SubjectId subject)
         {
             return Result.Failure<SignInOutcome>(Error.From(ErrorCodes.CodeExpired));
         }
 
         Error? failure = null;
 
-        int attempts = (await configuration
-                .ReadAsync(Settings.CodeVerificationAttempts, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(value => value, error => Withheld<int>(error, ref failure));
+        // AUTH-FACT-004: the code answers to its own rules, so the sign-in learns only
+        // whether it was the one outstanding and never holds it.
+        Result presented = await codes
+            .PresentAsync(open.Fingerprint, code, cancellationToken)
+            .ConfigureAwait(false);
 
-        if (failure is not null)
+        Error? refused = presented.Match<Error?>(() => null, error => error);
+
+        if (refused is not null)
         {
-            return Result.Failure<SignInOutcome>(failure);
+            return Result.Failure<SignInOutcome>(refused);
         }
-
-        if (!VerificationCode.Matches(open.DeviceCode, code))
-        {
-            open.Missed();
-
-            // Enough wrong codes end the code, and the sign-in with it: a correct one
-            // afterwards is refused too (AUTH-FACT-004).
-            if (open.DeviceAttempts >= attempts)
-            {
-                open.Spent();
-            }
-
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-            await challenges.RecordAsync(open, cancellationToken).ConfigureAwait(false);
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
-            return Result.Failure<SignInOutcome>(
-                Error.From(open.IsHeld ? ErrorCodes.CodeInvalid : ErrorCodes.CodeExpired));
-        }
-
-        open.Spent();
-
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-        await challenges.RecordAsync(open, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         OpaqueToken? browser = (await devices
                 .VerifiedAsync(subject, origin.Device, cancellationToken)
@@ -1022,7 +1002,15 @@ internal sealed class AuthenticationService(
 
         string language = await identifiers.LanguageAsync(subject, cancellationToken)
             .ConfigureAwait(false) ?? string.Empty;
-        string code = VerificationCode.Draw(randomness);
+
+        string code = (await codes.IssueAsync(open.Fingerprint, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(drawn => drawn, error => Withheld<string>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<SignInOutcome>(failure);
+        }
 
         _ = (await sending
                 .SendAsync(
@@ -1047,12 +1035,6 @@ internal sealed class AuthenticationService(
         {
             return Result.Failure<SignInOutcome>(failure);
         }
-
-        open.Holding(VerificationCode.Held(code));
-
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-        await challenges.RecordAsync(open, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success(new SignInOutcome(
             new SignInProgress(

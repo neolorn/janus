@@ -67,6 +67,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     private readonly MailTransportInMemory _mail = new();
     private readonly SmsTransportInMemory _sms = new();
     private readonly SmsBalanceLedgerInMemory _balances = new();
+    private readonly VerificationCodeStoreInMemory _codes = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
@@ -134,10 +135,14 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             Policies,
             Throttle,
             Sending,
+            Codes,
             _configuration,
             _work,
             _clock,
             _randomness);
+
+    private VerificationCodes Codes =>
+        new(_codes, _configuration, _work, _clock, _randomness);
 
     private SignInLinks Links =>
         new(

@@ -189,6 +189,7 @@ internal static class StorageRegistration
         services.AddScoped<IMembershipLookup, MembershipLookup>();
         services.AddScoped<IPreAuthenticationStore, PreAuthenticationStore>();
         services.AddScoped<IChallengeStore, ChallengeStore>();
+        services.AddScoped<IVerificationCodeStore, VerificationCodeStore>();
         services.AddScoped<IKeyCeremonyStore, KeyCeremonyStore>();
         services.AddScoped<IPendingSignInStore>(provider => new PendingSignInStore(
             provider.GetRequiredService<JanusDbContext>(),

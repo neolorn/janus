@@ -1,5 +1,6 @@
 using System;
 using System.Security.Cryptography;
+using Janus.Authentication.Factors;
 using Janus.Core;
 
 namespace Janus.Authentication.SignIn;
@@ -135,12 +136,12 @@ internal sealed class PendingSignIn
     /// </summary>
     /// <param name="entered">What was typed.</param>
     /// <returns>Whether it matches.</returns>
-    public bool Matches(string entered) => Registration.VerificationCode.Matches(Code, entered);
+    public bool Matches(string entered) => VerificationCode.Matches(Code, entered);
 
     /// <summary>
     /// A wrong code was typed against it.
     /// </summary>
     public void Missed() => WrongAttempts++;
 
-    private static byte[] Held(string code) => Registration.VerificationCode.Held(code);
+    private static byte[] Held(string code) => VerificationCode.Held(code);
 }

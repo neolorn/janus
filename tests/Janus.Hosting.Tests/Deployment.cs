@@ -383,6 +383,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IMembershipLookup, MembershipLookupInMemory>();
         _ = services.AddSingleton<IPolicyRaiseStore, PolicyRaiseStoreInMemory>();
         _ = services.AddSingleton<IChallengeStore, ChallengeStoreInMemory>();
+        _ = services.AddSingleton<IVerificationCodeStore, VerificationCodeStoreInMemory>();
         _ = services.AddSingleton<IPendingSignInStore, PendingSignInStoreInMemory>();
         _ = services.AddSingleton<IAccessGate>(Gate);
         _ = services.AddSingleton<IAccountAudit, AccountAuditInMemory>();
@@ -440,6 +441,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<TotpService>();
         _ = services.AddScoped<WebAuthnService>();
         _ = services.AddScoped<SignInLinks>();
+        _ = services.AddScoped<VerificationCodes>();
         _ = services.AddScoped<AuthenticationService>();
         _ = services.AddScoped<IAuthentication>(provider =>
             provider.GetRequiredService<AuthenticationService>());

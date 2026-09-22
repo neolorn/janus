@@ -38,9 +38,7 @@ internal sealed class ChallengeStore(JanusDbContext context) : IChallengeStore
                 record.WebAuthn,
                 record.CreatedAt,
                 record.ExpiresAt,
-                [.. record.Presented.Select(VocabularyConverter<Factor>.Read)],
-                record.DeviceCode,
-                record.DeviceAttempts);
+                [.. record.Presented.Select(VocabularyConverter<Factor>.Read)]);
     }
 
     /// <inheritdoc/>
@@ -58,8 +56,6 @@ internal sealed class ChallengeStore(JanusDbContext context) : IChallengeStore
                     CreatedAt = challenge.CreatedAt,
                     ExpiresAt = challenge.ExpiresAt,
                     Presented = Spellings(challenge),
-                    DeviceCode = challenge.DeviceCode,
-                    DeviceAttempts = challenge.DeviceAttempts,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -76,8 +72,6 @@ internal sealed class ChallengeStore(JanusDbContext context) : IChallengeStore
             ?? throw new InvalidOperationException("The sign-in has no row to carry the change.");
 
         record.Presented = Spellings(challenge);
-        record.DeviceCode = challenge.DeviceCode;
-        record.DeviceAttempts = challenge.DeviceAttempts;
     }
 
     /// <inheritdoc/>

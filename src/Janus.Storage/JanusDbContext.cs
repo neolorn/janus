@@ -338,6 +338,12 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     public DbSet<ChallengeRecord> SignInChallenges => Set<ChallengeRecord>();
 
     /// <summary>
+    /// The verification codes outstanding, which are no credential of anyone's
+    /// (AUTH-FACT-004).
+    /// </summary>
+    public DbSet<VerificationCodeRecord> VerificationCodes => Set<VerificationCodeRecord>();
+
+    /// <summary>
     /// The credential creation ceremonies accounts have open.
     /// </summary>
     public DbSet<KeyCeremonyRecord> KeyCeremonies => Set<KeyCeremonyRecord>();
@@ -452,6 +458,7 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new PreAuthenticationConfiguration());
         modelBuilder.ApplyConfiguration(new PendingVerificationConfiguration());
         modelBuilder.ApplyConfiguration(new ChallengeConfiguration());
+        modelBuilder.ApplyConfiguration(new VerificationCodeConfiguration());
         modelBuilder.ApplyConfiguration(new KeyCeremonyConfiguration());
         modelBuilder.ApplyConfiguration(new PendingSignInConfiguration());
         modelBuilder.ApplyConfiguration(new PolicyRaiseConfiguration());

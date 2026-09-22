@@ -32,10 +32,4 @@ internal sealed class ChallengeRecord
 
     /// <summary>The <c>presented</c> column: the catalogue entries accepted so far.</summary>
     public string[] Presented { get; set; } = [];
-
-    /// <summary>The <c>device_code</c> column: the new-device code outstanding.</summary>
-    public byte[]? DeviceCode { get; set; }
-
-    /// <summary>The <c>device_attempts</c> column.</summary>
-    public int DeviceAttempts { get; set; }
 }

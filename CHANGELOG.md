@@ -784,6 +784,11 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- A verification code is now an aggregate with a table of its own. It lives
+  `code.verification.lifetime` whatever issued it, dies on the try that reaches
+  `code.verification.attempts`, and is spent by the first right one. The new-device
+  check issues and answers through it, and a sign-in in progress no longer carries a
+  code or a count of wrong ones.
 - The offline leaked-password list now travels in the package. A deployment that holds
   no corpus file of its own still falls back to a dated list when the range API cannot
   answer, and the list is refreshed with each release rather than by the operator.

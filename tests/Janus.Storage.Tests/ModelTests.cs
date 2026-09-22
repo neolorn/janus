@@ -593,8 +593,6 @@ public sealed class ModelTests
             // Not an account field: a sign-in in flight, keyed by what the caller's handle
             // hashes to and carrying what it has presented so far (AUTH-FACT-001).
             "signin_challenges.created_at",
-            "signin_challenges.device_attempts",
-            "signin_challenges.device_code",
             "signin_challenges.expires_at",
             "signin_challenges.handle",
             "signin_challenges.presented",
@@ -651,6 +649,15 @@ public sealed class ModelTests
             "username_holds.fingerprint",
             "username_holds.held_from",
             "username_holds.releases_at",
+
+            // Not an account field: a code the library sent to prove control of a
+            // channel, held apart from every credential and spent on presentation
+            // (AUTH-FACT-004).
+            "verification_codes.attempts",
+            "verification_codes.code",
+            "verification_codes.expires_at",
+            "verification_codes.holder",
+            "verification_codes.issued_at",
         ];
 
         Assert.Equal(expected, Columns().OrderBy(name => name, StringComparer.Ordinal));
