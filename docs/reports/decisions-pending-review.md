@@ -5518,6 +5518,80 @@ account already belongs to. `10` section 1.1 carries the row for
 `identity.membership.limitreached`; its description should say the code covers both, and
 that the details name the organization in the second case.
 
+---
+
+## 155. The organization erasure executes, and announces itself
+
+**Corrections 1 · 2026-09-23 · D-162 section D · IDN-ORG-003, IDN-ORG-005, IDN-PRIN-003,
+`10` sections 5 and 5b**
+
+*What D-162 decided.* Build now, in the phase whose item it is: `OrganizationErased`
+with the grace-window execution it reports; the scheduling may wait for phase 9, the
+operation may not. Phase 1 built the four stages on the aggregate and nothing ever
+called the last of them, so `ErasureReason.OrganizationErasure` and the `10` section 5b
+row both stood with no code behind them.
+
+*What was built.* One pass over the organization windows the clock has run out on,
+shaped exactly as the account pass of IDN-LIFE-014 is: the window's length is read from
+`organization.deletion.grace`, the organizations whose window began on or before that
+are read, and each is erased in a transaction of its own. The erasure ends every current
+membership of the organization, replaces what the organization was called with its own
+identifier, and writes the instant it executed onto the row. Nothing is removed. The
+pass then writes the audit row and announces `OrganizationErased`, which carries the
+organization and how many memberships ended and names no person, because an
+organization erasure is nobody's act.
+
+*Decided in the owner's absence (Tier 3, strictest reading).* Three points.
+
+- **What "its identifying data is rendered unreadable" reaches.** Reading one: the
+  organization's own name, which is the only thing about the organization a person
+  spells. Reading two: nothing of the organization, only the members' personal
+  attributes inside the trail, which the subject erasure already renders unreadable.
+  Reading one was taken, as the reading that keeps least of what identifies. The name
+  becomes the identifier, which is the pseudonymisation D-026.1 describes rather than a
+  destruction, and IDN-ORG-003 AC5 still holds: the row exists and the identifier
+  resolves.
+- **Whether the erasure erases the member accounts.** Reading one: it does, since
+  `organization-erasure` is an erasure reason and the erasures table is per subject.
+  Reading two: it does not; it ends the memberships. Reading two was taken. An
+  organization is not a tenancy or an isolation boundary (IDN-ORG-001), an account may
+  hold memberships of several organizations (IDN-MEM-002), and REG-MAIL-003 describes
+  what happens to an account's primary identifier when a membership ends, which is a
+  rule about an account that outlives its membership. Erasing a person's account
+  because a company was deleted is not something any criterion asks for, and it cannot
+  be undone. **This leaves `ErasureReason.OrganizationErasure` with no producer**; the
+  owner should say which subjects, if any, an organization erasure erases.
+- **Whether the erasure takes back the grants made within the organization.** Reading
+  one: it does, because D-038 says the deletion cascades to "members, grants, owned
+  data" and a live grant of an erased organization would go on conferring access.
+  Reading two: it does not; no acceptance criterion of IDN-ORG-003 names grants, and
+  the access stop the item does name is the suspension of AC1. Reading two was taken,
+  for a reason the schema settles: `ck_grants_revocation` requires `revoked_by` on any
+  revoked grant, so a revocation the library makes by itself cannot be written without
+  either a migration that weakens that constraint or a person the library invents, and
+  neither is this run's to decide. **This is the one point of the three that leaves a
+  hole**: IDN-ORG-003 AC1, the stop on member access within one request cycle, was
+  deferred by phase 1 to phase 3 and has not been built, so nothing today refuses
+  access through a suspended or erased organization. The owner should say whether the
+  erasure revokes, and if it does, what a revocation with no revoker looks like.
+
+*Tests that pin it.*
+`OrganizationErasureSweepTests.IDN_ORG_003_AC3_TheErasureDoesNotExecuteBeforeTheWindowElapsesAsync`,
+`OrganizationErasureSweepTests.IDN_ORG_003_AC2_ACancelledWindowIsNotReachedByThePassAsync`,
+`OrganizationErasureSweepTests.IDN_ORG_003_TheErasureIsAnnouncedWithWhatItEndedAsync`,
+`OrganizationErasureSweepTests.IDN_ORG_003_TheErasureIsWrittenDownAsync`,
+`OrganizationErasureSweepTests.IDN_ORG_003_APassWhoseAnnouncementIsRefusedAnswersWithTheRefusalAsync`,
+`OrganizationStatesTests.IDN_ORG_003_TheWindowsThatHaveRunOutAreWhatThePassReadsAsync`,
+`OrganizationStatesTests.IDN_ORG_003_AC5_TheRowSurvivesAndTheNameBecomesTheIdentifierAsync`,
+`OrganizationStatesTests.IDN_ORG_003_TheErasureEndsEveryCurrentMembershipAsync`,
+`OrganizationStatesTests.IDN_ORG_003_AC3_AnErasureBeforeTheWindowElapsesWritesNothingAsync`.
+
+*Chapter text that should change.* IDN-ORG-003 should say what the erasure reaches:
+the memberships and the name, and whether the grants and the member accounts are among
+them. `10` section 5b already names `OrganizationErased`; the row should say it carries
+the organization and the count of memberships ended and no subject. `10` section 5 needs
+the new audit action `identity.organization.erased` (listed under "Rows for chapter 10").
+
 
 # Rows for chapter 10
 
@@ -5646,6 +5720,7 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `identity.credential.labelled` | routine | `AuditActions.CredentialLabelled` | A credential was given or renamed a label by its holder. (REG-PM-002) |
 | `identity.deletion.cancelled` | routine | `AuditActions.DeletionCancelled` | A deletion was cancelled inside its grace window. (IDN-LIFE-014) |
 | `identity.deletion.requested` | routine | `AuditActions.DeletionRequested` | A deletion was requested, which opens the grace window it can be brought back from. (IDN-LIFE-014) |
+| `identity.organization.erased` | routine | `AuditActions.OrganizationErased` | An organization's deletion grace window elapsed and the erasure executed. Details carry `organization`, `deletingSince` and `membershipsEnded`; the row names no subject and no actor. (IDN-ORG-003) |
 | `identity.preferences.changed` | routine | `AuditActions.PreferencesChanged` | The account's preference values were changed, recorded by key and never by value. (REG-PREF-001) |
 | `identity.profile.changed` | routine | `AuditActions.ProfileChanged` | A profile attribute of the account was changed. (IDN-ATTR-001) |
 | `identity.secondstep.preferred` | routine | `AuditActions.SecondStepPreferred` | The account's preferred second step was changed. (AUTH-FACT-007) |

@@ -148,6 +148,15 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The erasure at the end of an organization deletion window is built: when the window
+  elapses, every current membership of the organization ends, what the organization was
+  called becomes its own identifier, and the instant the erasure executed is written
+  onto the row. No row is removed and the identifier goes on resolving. The new
+  `OrganizationErased` event carries the organization and how many memberships ended,
+  and the erasure is written to the audit trail as `identity.organization.erased`. A
+  window cancelled inside itself is never reached, and an erasure asked for before the
+  window elapses writes nothing.
+
 - An account holds one membership unless the deployment enables
   `organization.multiplememberships`. A second one answers
   `identity.membership.limitreached` and nothing is written; enabling the setting

@@ -111,6 +111,13 @@ public static class AuditActions
     public static AuditAction DeletionRequested { get; } = AuditAction.Parse("identity.deletion.requested");
 
     /// <summary>
+    /// An organization's deletion grace window elapsed and the erasure executed,
+    /// which ends the memberships of it and leaves the row resolving.
+    /// </summary>
+    /// <remarks>Implements IDN-ORG-003, chapter 10 section 5.</remarks>
+    public static AuditAction OrganizationErased { get; } = AuditAction.Parse("identity.organization.erased");
+
+    /// <summary>
     /// A version of a legal document was published in the governing language.
     /// </summary>
     /// <remarks>Implements PRIV-CONS-005, chapter 10 section 5.</remarks>

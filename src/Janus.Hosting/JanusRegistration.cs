@@ -300,6 +300,7 @@ public static class JanusRegistration
         services.AddScoped<DeadlineSweep>();
         services.AddScoped<IPrivacyRequests, PrivacyRequestService>();
         services.AddScoped<DeletionSweep>();
+        services.AddScoped<OrganizationErasureSweep>();
         services.AddScoped<IExports, ExportService>();
         services.AddScoped<IProcessingRecords, ProcessingRecordsService>();
         services.AddScoped<OutboxPublisher>();

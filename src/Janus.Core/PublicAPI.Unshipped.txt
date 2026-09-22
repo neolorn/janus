@@ -1371,6 +1371,14 @@ Janus.Core.OidcClient.Scopes.init -> void
 Janus.Core.OidcClientKind
 Janus.Core.OidcClientKind.BrowserApplication = 0 -> Janus.Core.OidcClientKind
 Janus.Core.OidcClientKind.Protocol = 1 -> Janus.Core.OidcClientKind
+Janus.Core.OrganizationErased
+Janus.Core.OrganizationErased.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.OrganizationId Organization, out int MembershipsEnded) -> void
+Janus.Core.OrganizationErased.Equals(Janus.Core.OrganizationErased? other) -> bool
+Janus.Core.OrganizationErased.MembershipsEnded.get -> int
+Janus.Core.OrganizationErased.MembershipsEnded.init -> void
+Janus.Core.OrganizationErased.Organization.get -> Janus.Core.OrganizationId
+Janus.Core.OrganizationErased.Organization.init -> void
+Janus.Core.OrganizationErased.OrganizationErased(System.DateTimeOffset RaisedAt, string! IdempotencyKey, Janus.Core.OrganizationId Organization, int MembershipsEnded) -> void
 Janus.Core.OrganizationId
 Janus.Core.OrganizationId.Deconstruct(out System.Guid Value) -> void
 Janus.Core.OrganizationId.Equals(Janus.Core.OrganizationId other) -> bool
@@ -2586,6 +2594,10 @@ override Janus.Core.OidcClaims.ToString() -> string!
 override Janus.Core.OidcClient.Equals(object? obj) -> bool
 override Janus.Core.OidcClient.GetHashCode() -> int
 override Janus.Core.OidcClient.ToString() -> string!
+override Janus.Core.OrganizationErased.<Clone>$() -> Janus.Core.OrganizationErased!
+override Janus.Core.OrganizationErased.Equals(object? obj) -> bool
+override Janus.Core.OrganizationErased.GetHashCode() -> int
+override Janus.Core.OrganizationErased.ToString() -> string!
 override Janus.Core.OrganizationId.GetHashCode() -> int
 override Janus.Core.OrganizationId.ToString() -> string!
 override Janus.Core.PasskeyAddresses.Equals(object? obj) -> bool
@@ -2781,6 +2793,7 @@ override sealed Janus.Core.IdentifierPrimaryChanged.Equals(Janus.Core.JanusEvent
 override sealed Janus.Core.IdentifierRemoved.Equals(Janus.Core.JanusEvent? other) -> bool
 override sealed Janus.Core.NotificationRequested.Equals(Janus.Core.JanusEvent? other) -> bool
 override sealed Janus.Core.ObjectionChanged.Equals(Janus.Core.JanusEvent? other) -> bool
+override sealed Janus.Core.OrganizationErased.Equals(Janus.Core.JanusEvent? other) -> bool
 override sealed Janus.Core.RestrictionChanged.Equals(Janus.Core.SubjectEvent? other) -> bool
 override sealed Janus.Core.SendingRestrictionChanged.Equals(Janus.Core.JanusEvent? other) -> bool
 override sealed Janus.Core.SendingRestrictionGranted.Equals(Janus.Core.JanusEvent? other) -> bool
@@ -2836,6 +2849,7 @@ static Janus.Core.AuditActions.ErasureExecuted.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ExportAssembled.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ObjectionRecorded.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ObjectionWithdrawn.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.OrganizationErased.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.PhoneSignalConsidered.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.PreferencesChanged.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ProfileChanged.get -> Janus.Core.AuditAction
@@ -3302,6 +3316,8 @@ static Janus.Core.OidcClaims.operator !=(Janus.Core.OidcClaims? left, Janus.Core
 static Janus.Core.OidcClaims.operator ==(Janus.Core.OidcClaims? left, Janus.Core.OidcClaims? right) -> bool
 static Janus.Core.OidcClient.operator !=(Janus.Core.OidcClient? left, Janus.Core.OidcClient? right) -> bool
 static Janus.Core.OidcClient.operator ==(Janus.Core.OidcClient? left, Janus.Core.OidcClient? right) -> bool
+static Janus.Core.OrganizationErased.operator !=(Janus.Core.OrganizationErased? left, Janus.Core.OrganizationErased? right) -> bool
+static Janus.Core.OrganizationErased.operator ==(Janus.Core.OrganizationErased? left, Janus.Core.OrganizationErased? right) -> bool
 static Janus.Core.OrganizationId.New(System.TimeProvider! time) -> Janus.Core.OrganizationId
 static Janus.Core.OrganizationId.operator !=(Janus.Core.OrganizationId left, Janus.Core.OrganizationId right) -> bool
 static Janus.Core.OrganizationId.operator ==(Janus.Core.OrganizationId left, Janus.Core.OrganizationId right) -> bool

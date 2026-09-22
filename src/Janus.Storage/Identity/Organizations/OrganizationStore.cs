@@ -61,6 +61,9 @@ internal sealed class OrganizationStore(JanusDbContext context) : IOrganizationS
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The organization has no row to carry the change.");
 
+        // IDN-ORG-003: the erasure is the one change that touches the name, which it
+        // replaces with the identifier the row goes on resolving under.
+        record.Name = organization.Name;
         record.DeletionRequestedAt = organization.DeletionRequestedAt;
         record.ErasedAt = organization.ErasedAt;
     }

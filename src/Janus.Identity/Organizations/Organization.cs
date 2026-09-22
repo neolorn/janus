@@ -41,7 +41,7 @@ internal sealed class Organization
     /// person spells, so it is compared and sorted under the case-insensitive
     /// collation.
     /// </summary>
-    public string Name { get; }
+    public string Name { get; private set; }
 
     /// <summary>
     /// When the organization was created.
@@ -200,6 +200,12 @@ internal sealed class Organization
     /// No window is running, the window has not elapsed, or the erasure has already
     /// executed.
     /// </exception>
+    /// <remarks>
+    /// What the organization was called is the identifying data IDN-ORG-003 renders
+    /// unreadable: the row stays, the identifier goes on resolving, and the name
+    /// becomes that identifier, which is the pseudonymisation of D-026.1 rather than a
+    /// destruction (IDN-PRIN-003, IDN-ORG-005).
+    /// </remarks>
     public void RecordErasure(DateTimeOffset at, TimeSpan window)
     {
         if (ErasedAt is not null)
@@ -218,5 +224,6 @@ internal sealed class Organization
         }
 
         ErasedAt = at;
+        Name = Id.ToString();
     }
 }

@@ -140,6 +140,7 @@ internal static class StorageRegistration
         services.AddScoped<IRegisterRoles, RegisterRoles>();
         services.AddScoped<IOrganizationStore, OrganizationStore>();
         services.AddScoped<IMembershipStore, MembershipStore>();
+        services.AddScoped<Janus.Privacy.Erasures.IOrganizationStates, OrganizationStates>();
         services.AddScoped<IIdentifierStore>(provider => new IdentifierStore(
             provider.GetRequiredService<JanusDbContext>(),
             keyEncryptionKeys,
