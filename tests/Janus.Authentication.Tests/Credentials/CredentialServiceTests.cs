@@ -153,6 +153,29 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-PM-001: the ceremony an account opens carries that account's own subject
+    /// identifier as the handle and its primary email as the name, and the display
+    /// name is empty where the account shows none.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_PM_001_TheCeremonyCarriesTheAccountsHandleAndPrimaryEmailAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+
+        CredentialCeremony ceremony = Value(await Service.BeginKeyAsync(
+            Authority(subject, session),
+            Factor.Passkey,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            subject.Value,
+            new Guid(Base64Url.DecodeFromChars(ceremony.User.Id), bigEndian: true));
+        Assert.Equal(Address, ceremony.User.Name);
+        Assert.Equal(string.Empty, ceremony.User.DisplayName);
+    }
+
+    /// <summary>
     /// AUTH-STEP-007 AC2: an account that reaches AAL2 has to present AAL2, so the
     /// session that presented the password alone is sent to step up.
     /// </summary>
@@ -606,6 +629,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     private CredentialService Service =>
         new(
             Keys,
+            _accounts,
             Totp,
             Codes,
             Passwords,

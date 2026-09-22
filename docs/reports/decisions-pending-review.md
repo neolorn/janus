@@ -2314,6 +2314,8 @@ person can reach it.
 no user handle satisfies it, since a frontend that builds the browser's request decides
 what goes in that field.
 
+**Superseded by D-162.** Applied in entry 129.
+
 ---
 
 ## 76. A prefix moves the provider's endpoints with the rest
@@ -4289,6 +4291,56 @@ spells the declaration as the host writes it, with the absent field appended:
 declared and that its absence stops the deployment, and that `login_required` answers a
 silent request alone. LIB-HOST-001's table needs the row, listed under **Rows for chapter
 10**.
+
+---
+
+## 129. The ceremony carries the account it is for
+
+**Corrections 1 · 2026-09-22 · D-162 section B, correcting entry 75 · REG-PM-001, REG-SESS-001, AUTH-FACT-014**
+
+*What D-162 decided.* The creation ceremony's `begin` carries `user.id` equal to the
+subject identifier (the registration session's provisional handle, reserved as the future
+`SubjectId`), `user.name` the primary email and `user.displayName` the display name or
+empty; the assertion path resolves the account from the returned handle.
+
+*What was built.* `CeremonyUser` carries the three, and `WebAuthnCeremony` and the public
+`CredentialCeremony` carry one. `WebAuthnService.BeginAsync` takes the user rather than
+composing it, so the account path passes the account and the registration path will pass
+the session's provisional handle without a second way of building one.
+`CredentialService` reads the primary email from the identifier directory and the display
+name from the account directory, exactly as the userinfo claims do.
+
+`AuthenticatorAssertion` and the verified `WebAuthnAssertion` carry the handle the
+authenticator returned. `PresentAsync` refuses an assertion whose handle names an account
+other than the credential's owner, or decodes to nothing the library ever issued. The
+refusal is the ordinary `auth.factor.rejected`, so whose credential it is stays
+undisclosed.
+
+*Decided in the owner's absence.* Two points.
+
+Tier 2: *the shape on the wire.* D-162 names the three members with dots, so they are a
+nested `user` object of `id`, `name` and `displayName` rather than three flat fields:
+that is what a frontend passes straight to the browser, and `09` section 4 describes the
+ceremony in WebAuthn's own vocabulary.
+
+Tier 3: *what the returned handle decides.* Two readings: the handle replaces the
+credential lookup, or the handle must agree with it. The handle is not covered by the
+assertion signature, so it cannot be the only thing consulted; the strictest reading is
+that the credential is still found by its identifier and a handle that disagrees is a
+refusal. A credential that returns no handle, which is what a second-factor security key
+does, is judged as before.
+
+*Tests that pin it.*
+`WebAuthnServiceTests.REG_PM_001_AC1_TheHandleIsTheSubjectIdentifierAndNothingElseAsync`,
+`WebAuthnServiceTests.REG_PM_001_TheCeremonyCarriesTheNameAndTheDisplayNameAsync`,
+`WebAuthnServiceTests.REG_PM_001_AnAssertionWhoseHandleNamesAnotherAccountIsRefusedAsync`,
+`WebAuthnServiceTests.REG_PM_001_AnAssertionWhoseHandleIsNotOneWeIssuedIsRefusedAsync`,
+`CredentialServiceTests.REG_PM_001_TheCeremonyCarriesTheAccountsHandleAndPrimaryEmailAsync`.
+
+*Chapter text that should change.* `09` section 4 should give the response shape of
+`POST /auth/webauthn/register/begin`, including the `user` object, and say that the
+assertion may carry the handle the authenticator returned.
+
 
 # Rows for chapter 10
 

@@ -149,7 +149,8 @@ internal static class WebAuthnCeremonies
                 held.CredentialId,
                 held.RelyingPartyId,
                 asserted.UserVerified,
-                asserted.Counter));
+                asserted.Counter,
+                answered.UserHandle));
     }
 
     private static Result<TValue> Rejected<TValue>() =>

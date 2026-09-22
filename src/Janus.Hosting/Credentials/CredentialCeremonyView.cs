@@ -8,12 +8,14 @@ namespace Janus.Hosting.Credentials;
 /// What the browser is asked for.
 /// </summary>
 /// <param name="RelyingPartyId">What the credential is bound to.</param>
+/// <param name="User">Who the credential is created for (REG-PM-001).</param>
 /// <param name="Algorithms">The COSE algorithms, in preference order.</param>
 /// <param name="DiscoverableCredential">Whether the authenticator keeps the credential.</param>
 /// <param name="Challenge">The value the authenticator signs over.</param>
 /// <remarks>Implements AUTH-FACT-002b and AUTH-FACT-014.</remarks>
 internal sealed record CredentialCeremonyView(
     string RelyingPartyId,
+    CeremonyUser User,
     IReadOnlyList<int> Algorithms,
     bool DiscoverableCredential,
     string Challenge)
@@ -30,6 +32,7 @@ internal sealed record CredentialCeremonyView(
 
         return new CredentialCeremonyView(
             ceremony.RelyingPartyId,
+            ceremony.User,
             ceremony.Algorithms,
             ceremony.DiscoverableCredential,
             ceremony.Challenge);

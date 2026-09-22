@@ -44,15 +44,20 @@ internal sealed class WebAuthnService(
     /// Begins a creation ceremony of the kind asked for.
     /// </summary>
     /// <param name="kind">A passkey or a second-factor security key.</param>
+    /// <param name="user">Who the credential is created for.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// What the browser is asked for, or the failure where the kind is not one a
     /// ceremony creates.
     /// </returns>
+    /// <exception cref="ArgumentNullException">The user is absent.</exception>
     public async ValueTask<Result<WebAuthnCeremony>> BeginAsync(
         Factor kind,
+        CeremonyUser user,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(user);
+
         FactorProperties entry = FactorCatalogue.Of(kind);
 
         if (!entry.IsWebAuthn)
@@ -65,10 +70,19 @@ internal sealed class WebAuthnService(
 
         return Result.Success(new WebAuthnCeremony(
             party.Id,
+            user,
             party.Algorithms,
             entry.IsDiscoverable,
             OpaqueToken.Draw(randomness).Value));
     }
+
+    /// <summary>
+    /// The handle an account's credentials are created under (REG-PM-001).
+    /// </summary>
+    /// <param name="subject">Whose credential.</param>
+    /// <returns>The subject identifier as a WebAuthn user handle.</returns>
+    public static string Handle(SubjectId subject) =>
+        Base64Url.EncodeToString(subject.Value.ToByteArray(bigEndian: true));
 
     /// <summary>
     /// Records the credential a completed ceremony produced.
@@ -296,6 +310,15 @@ internal sealed class WebAuthnService(
             return Result.Failure<Authenticator>(Error.From(ErrorCodes.FactorRejected));
         }
 
+        // REG-PM-001: the handle a discoverable credential returns is the account it
+        // was created for, so it is what says whose credential answered. A handle
+        // naming another account, or none the library ever issued, is refused exactly
+        // as a wrong credential is: whose it is is not disclosed.
+        if (assertion.UserHandle is { Length: > 0 } returned && Named(returned) != held.Subject)
+        {
+            return Result.Failure<Authenticator>(Error.From(ErrorCodes.FactorRejected));
+        }
+
         RelyingParty party = await RelyingParty.ForAsync(configuration, cancellationToken)
             .ConfigureAwait(false);
 
@@ -360,6 +383,11 @@ internal sealed class WebAuthnService(
     }
 
     private static bool Kept(uint? counter) => counter is > 0;
+
+    private static SubjectId? Named(string handle) =>
+        Read(handle) is { Length: 16 } bytes
+            ? new SubjectId(new Guid(bytes, bigEndian: true))
+            : null;
 
     private static byte[]? Read(string value) =>
         value is not null && Base64Url.IsValid(value) ? Base64Url.DecodeFromChars(value) : null;

@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- A WebAuthn creation ceremony now carries who the credential is for: the handle is the
+  account's subject identifier, the name is its primary email and the display name is
+  what the account shows or empty. An authenticator can therefore offer the credential
+  back unprompted. An assertion that returns a handle naming another account, or one the
+  library never issued, is refused as a wrong credential is.
+
 - Where a browser holding no session is sent to sign in is now a declaration with no
   default. A deployment that registers none does not start, instead of meeting an
   interactive authorization request with nowhere to forward it. `login_required` is now

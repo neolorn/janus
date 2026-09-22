@@ -181,17 +181,19 @@ Janus.Core.AuthenticationAddresses.SignIn.get -> string!
 Janus.Core.AuthenticationAddresses.SignIn.init -> void
 Janus.Core.AuthenticatorAssertion
 Janus.Core.AuthenticatorAssertion.<Clone>$() -> Janus.Core.AuthenticatorAssertion!
-Janus.Core.AuthenticatorAssertion.AuthenticatorAssertion(string! CredentialId, string! ClientDataJson, string! AuthenticatorData, string! Signature) -> void
+Janus.Core.AuthenticatorAssertion.AuthenticatorAssertion(string! CredentialId, string! ClientDataJson, string! AuthenticatorData, string! Signature, string? UserHandle = null) -> void
 Janus.Core.AuthenticatorAssertion.AuthenticatorData.get -> string!
 Janus.Core.AuthenticatorAssertion.AuthenticatorData.init -> void
 Janus.Core.AuthenticatorAssertion.ClientDataJson.get -> string!
 Janus.Core.AuthenticatorAssertion.ClientDataJson.init -> void
 Janus.Core.AuthenticatorAssertion.CredentialId.get -> string!
 Janus.Core.AuthenticatorAssertion.CredentialId.init -> void
-Janus.Core.AuthenticatorAssertion.Deconstruct(out string! CredentialId, out string! ClientDataJson, out string! AuthenticatorData, out string! Signature) -> void
+Janus.Core.AuthenticatorAssertion.Deconstruct(out string! CredentialId, out string! ClientDataJson, out string! AuthenticatorData, out string! Signature, out string? UserHandle) -> void
 Janus.Core.AuthenticatorAssertion.Equals(Janus.Core.AuthenticatorAssertion? other) -> bool
 Janus.Core.AuthenticatorAssertion.Signature.get -> string!
 Janus.Core.AuthenticatorAssertion.Signature.init -> void
+Janus.Core.AuthenticatorAssertion.UserHandle.get -> string?
+Janus.Core.AuthenticatorAssertion.UserHandle.init -> void
 Janus.Core.AuthenticatorAttestation
 Janus.Core.AuthenticatorAttestation.<Clone>$() -> Janus.Core.AuthenticatorAttestation!
 Janus.Core.AuthenticatorAttestation.Algorithm.get -> int
@@ -319,6 +321,17 @@ Janus.Core.CapabilityResidual.Consent = 3 -> Janus.Core.CapabilityResidual
 Janus.Core.CapabilityResidual.Reauthenticate = 1 -> Janus.Core.CapabilityResidual
 Janus.Core.CapabilityResidual.Restricted = 2 -> Janus.Core.CapabilityResidual
 Janus.Core.CapabilityResidual.StepUp = 0 -> Janus.Core.CapabilityResidual
+Janus.Core.CeremonyUser
+Janus.Core.CeremonyUser.<Clone>$() -> Janus.Core.CeremonyUser!
+Janus.Core.CeremonyUser.CeremonyUser(string! Id, string! Name, string! DisplayName) -> void
+Janus.Core.CeremonyUser.Deconstruct(out string! Id, out string! Name, out string! DisplayName) -> void
+Janus.Core.CeremonyUser.DisplayName.get -> string!
+Janus.Core.CeremonyUser.DisplayName.init -> void
+Janus.Core.CeremonyUser.Equals(Janus.Core.CeremonyUser? other) -> bool
+Janus.Core.CeremonyUser.Id.get -> string!
+Janus.Core.CeremonyUser.Id.init -> void
+Janus.Core.CeremonyUser.Name.get -> string!
+Janus.Core.CeremonyUser.Name.init -> void
 Janus.Core.ChallengeVerifier
 Janus.Core.ChallengeVerifier.<Clone>$() -> Janus.Core.ChallengeVerifier!
 Janus.Core.ChallengeVerifier.ChallengeVerifier(System.Func<string!, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<bool>>! Passes) -> void
@@ -491,13 +504,15 @@ Janus.Core.CredentialCeremony.Algorithms.get -> System.Collections.Generic.IRead
 Janus.Core.CredentialCeremony.Algorithms.init -> void
 Janus.Core.CredentialCeremony.Challenge.get -> string!
 Janus.Core.CredentialCeremony.Challenge.init -> void
-Janus.Core.CredentialCeremony.CredentialCeremony(string! RelyingPartyId, System.Collections.Generic.IReadOnlyList<int>! Algorithms, bool DiscoverableCredential, string! Challenge) -> void
-Janus.Core.CredentialCeremony.Deconstruct(out string! RelyingPartyId, out System.Collections.Generic.IReadOnlyList<int>! Algorithms, out bool DiscoverableCredential, out string! Challenge) -> void
+Janus.Core.CredentialCeremony.CredentialCeremony(string! RelyingPartyId, Janus.Core.CeremonyUser! User, System.Collections.Generic.IReadOnlyList<int>! Algorithms, bool DiscoverableCredential, string! Challenge) -> void
+Janus.Core.CredentialCeremony.Deconstruct(out string! RelyingPartyId, out Janus.Core.CeremonyUser! User, out System.Collections.Generic.IReadOnlyList<int>! Algorithms, out bool DiscoverableCredential, out string! Challenge) -> void
 Janus.Core.CredentialCeremony.DiscoverableCredential.get -> bool
 Janus.Core.CredentialCeremony.DiscoverableCredential.init -> void
 Janus.Core.CredentialCeremony.Equals(Janus.Core.CredentialCeremony? other) -> bool
 Janus.Core.CredentialCeremony.RelyingPartyId.get -> string!
 Janus.Core.CredentialCeremony.RelyingPartyId.init -> void
+Janus.Core.CredentialCeremony.User.get -> Janus.Core.CeremonyUser!
+Janus.Core.CredentialCeremony.User.init -> void
 Janus.Core.CredentialLabel
 Janus.Core.CredentialLabel.CredentialLabel() -> void
 Janus.Core.CredentialLabel.Equals(Janus.Core.CredentialLabel other) -> bool
@@ -2313,6 +2328,9 @@ override Janus.Core.Bucket.ToString() -> string!
 override Janus.Core.Capability.Equals(object? obj) -> bool
 override Janus.Core.Capability.GetHashCode() -> int
 override Janus.Core.Capability.ToString() -> string!
+override Janus.Core.CeremonyUser.Equals(object? obj) -> bool
+override Janus.Core.CeremonyUser.GetHashCode() -> int
+override Janus.Core.CeremonyUser.ToString() -> string!
 override Janus.Core.ChallengeVerifier.Equals(object? obj) -> bool
 override Janus.Core.ChallengeVerifier.GetHashCode() -> int
 override Janus.Core.ChallengeVerifier.ToString() -> string!
@@ -2763,6 +2781,8 @@ static Janus.Core.CanonicalForm.Of(string! value) -> string!
 static Janus.Core.CanonicalForm.UnicodeVersion.get -> string!
 static Janus.Core.Capability.operator !=(Janus.Core.Capability? left, Janus.Core.Capability? right) -> bool
 static Janus.Core.Capability.operator ==(Janus.Core.Capability? left, Janus.Core.Capability? right) -> bool
+static Janus.Core.CeremonyUser.operator !=(Janus.Core.CeremonyUser? left, Janus.Core.CeremonyUser? right) -> bool
+static Janus.Core.CeremonyUser.operator ==(Janus.Core.CeremonyUser? left, Janus.Core.CeremonyUser? right) -> bool
 static Janus.Core.ChallengeVerifier.operator !=(Janus.Core.ChallengeVerifier? left, Janus.Core.ChallengeVerifier? right) -> bool
 static Janus.Core.ChallengeVerifier.operator ==(Janus.Core.ChallengeVerifier? left, Janus.Core.ChallengeVerifier? right) -> bool
 static Janus.Core.CodeRedemption.operator !=(Janus.Core.CodeRedemption? left, Janus.Core.CodeRedemption? right) -> bool

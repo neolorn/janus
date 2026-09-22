@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Janus.Core;
 
 namespace Janus.Authentication.Factors;
 
@@ -8,6 +9,7 @@ namespace Janus.Authentication.Factors;
 /// discoverable, and the challenge it signs.
 /// </summary>
 /// <param name="RelyingPartyId">What the credential is bound to.</param>
+/// <param name="User">Who the credential is created for (REG-PM-001).</param>
 /// <param name="Algorithms">The COSE algorithms, in preference order.</param>
 /// <param name="DiscoverableCredential">
 /// Whether the authenticator keeps the credential and can offer it unprompted: a
@@ -20,6 +22,7 @@ namespace Janus.Authentication.Factors;
 /// </remarks>
 internal sealed record WebAuthnCeremony(
     string RelyingPartyId,
+    CeremonyUser User,
     IReadOnlyList<int> Algorithms,
     bool DiscoverableCredential,
     string Challenge);

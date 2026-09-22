@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Passwords;
@@ -23,6 +24,7 @@ namespace Janus.Authentication.Credentials;
 /// enrols a generator, takes a set of codes, and gives one up.
 /// </summary>
 /// <param name="keys">What creates and records a WebAuthn credential.</param>
+/// <param name="accounts">Where the display name a ceremony carries is read.</param>
 /// <param name="generators">What enrols a code generator.</param>
 /// <param name="codes">What issues a set of single-use codes.</param>
 /// <param name="passwords">What sets a password.</param>
@@ -50,6 +52,7 @@ namespace Janus.Authentication.Credentials;
 /// </remarks>
 internal sealed class CredentialService(
     WebAuthnService keys,
+    IAccountDirectory accounts,
     TotpService generators,
     RecoveryCodeService codes,
     PasswordService passwords,
@@ -608,7 +611,11 @@ internal sealed class CredentialService(
     {
         Error? failure = null;
 
-        WebAuthnCeremony ceremony = (await keys.BeginAsync(kind, cancellationToken)
+        WebAuthnCeremony ceremony = (await keys
+                .BeginAsync(
+                    kind,
+                    await CeremonyUserAsync(subject, cancellationToken).ConfigureAwait(false),
+                    cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<WebAuthnCeremony>(error, ref failure));
 
@@ -644,9 +651,40 @@ internal sealed class CredentialService(
 
         return Result.Success(new CredentialCeremony(
             ceremony.RelyingPartyId,
+            ceremony.User,
             ceremony.Algorithms,
             ceremony.DiscoverableCredential,
             ceremony.Challenge));
+    }
+
+    // REG-PM-001: the handle is the subject identifier, the name is the primary email
+    // and the display name is what the account shows or nothing. An authenticator
+    // stores all three and offers them unprompted, so what goes in them is the account
+    // as it already names itself and not a second description of the person.
+    private async ValueTask<CeremonyUser> CeremonyUserAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        string primary = string.Empty;
+
+        foreach (HeldIdentifier identifier in held.All)
+        {
+            if (identifier.Kind is IdentifierKind.Email && identifier.IsPrimary)
+            {
+                primary = identifier.Canonical;
+            }
+        }
+
+        HeldProfile shown = await accounts.ProfileAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        return new CeremonyUser(
+            WebAuthnService.Handle(subject),
+            primary,
+            shown.DisplayName?.Value ?? string.Empty);
     }
 
     // What every completed enrolment does: the codes a second step beside a password
