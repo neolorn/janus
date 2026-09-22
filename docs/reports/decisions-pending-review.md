@@ -4558,6 +4558,48 @@ migration and not listed fails that test.
 carries the maintenance credential's grants, which is the only part of it the host does
 not declare.
 
+---
+
+## 136. Every gate refusal carries a correlation identifier
+
+**Corrections 1 · 2026-09-22 · D-162 section B, Tier 1 reversal, correcting the phase 2 Tier 1 resolution recorded in `docs/reports/phase-02.md` · AUTHZ-CONCEAL-004, IDN-AUD-001 AC1**
+
+*What D-162 decided.* Every gate refusal carries `correlationId`, including one for an
+anonymous principal. Phase 2 had left the refusal of a context naming no account
+carrying the code alone, because both identity columns of `janus.audit_records` were
+accounts and IDN-AUD-001 AC1 requires both to be populated.
+
+*What was built.* The gate records every refusal and answers every refusal with the
+identifier of the row it recorded. A request made under no account, which today is
+background work asking as a system principal (IDN-PRIN-001), produces a row naming
+neither identity; the absence is the recorded fact, as IDN-AUD-001 already says of the
+organization. `ResolveAsync` reads such a row back and explains it with no principal,
+which `ExplainedPrincipal` already admitted.
+
+*Two points D-162 does not settle, taken at the strictest reading.* IDN-AUD-001 AC1
+still holds of every identity lifecycle event, so the relaxation is granted to the one
+action that needs it and to nothing else: a check constraint on `audit_records` admits
+an absent identity only where the action is `authz.access.denied`, and the database
+refuses every other event that names neither. The mapping of the table stays
+non-nullable on both identity columns for that reason: the refusal row is written and
+read by the gate's own statements, and every query that mapping serves names a subject
+or an action, so a row naming nobody never reaches it. The rollback of the migration
+restores the two `NOT NULL` constraints without deleting anything, so a rollback over a
+trail that already holds such a refusal fails rather than removing an audit row
+(PRIV-RET-002 AC1).
+
+*Tests that pin it.*
+`ExplanationTests.AUTHZ_CONCEAL_004_AC1_ARefusalUnderNoAccountCarriesAnIdentifierAsync`,
+`ExplanationTests.AUTHZ_IMP_001_AC2_BothIdentitiesAreWrittenToTheAuditRecordAsync`,
+`ExplanationTests.AUTHZ_CONCEAL_002_AC1_ARefusalIsTheSameAnswerWhetherTheRecordIsThereAsync`,
+`AuditStoreTests.IDN_AUD_001_AC1_AnEventNamingNobodyIsRefusedByTheDatabaseAsync`,
+`AuditStoreTests.IDN_AUD_001_AC1_BothIdentityFieldsArePopulatedAsync`.
+
+*Chapter text that should change.* IDN-AUD-001 should say that its AC1 is about identity
+lifecycle events and that an authorization refusal made under no account names neither
+identity, the absence being the recorded fact. AUTHZ-CONCEAL-004 should say the
+identifier is carried whoever asked.
+
 
 # Rows for chapter 10
 

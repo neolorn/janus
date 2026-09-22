@@ -847,9 +847,9 @@ internal sealed class AccessGate(
             $"The resource type '{type}' is not declared, so no policy governs it."));
 
     // AUTHZ-CONCEAL-004, CONV-LOG-005: one path answers every refusal, and the
-    // identifier it hands back is the row the refusal was recorded as. A context naming
-    // no account names nobody the trail can record the refusal against, both of its
-    // identity fields being accounts (IDN-AUD-001).
+    // identifier it hands back is the row the refusal was recorded as. A request made
+    // under no account is refused with an identifier like any other; the row names
+    // nobody, and that absence is the recorded fact.
     private async ValueTask<Result> RefusedAsync(
         AccessContext context,
         Permission permission,
@@ -859,19 +859,14 @@ internal sealed class AccessGate(
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (context.Acting is not SubjectId acting || context.Effective is not SubjectId effective)
-        {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
-        }
-
         var correlation = AuditRecordId.New(time);
 
         await audit
             .RecordAsync(
                 new DeniedAccess(
                     correlation,
-                    acting,
-                    effective,
+                    context.Acting,
+                    context.Effective,
                     organization,
                     permission,
                     type,

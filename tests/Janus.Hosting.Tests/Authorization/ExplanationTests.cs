@@ -288,6 +288,27 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
+    /// AUTHZ-CONCEAL-004 AC1: a request made under no account is refused with a
+    /// correlation identifier like every other refusal, and the row it resolves to is
+    /// there, naming the permission and naming nobody.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_CONCEAL_004_AC1_ARefusalUnderNoAccountCarriesAnIdentifierAsync()
+    {
+        Deployed deployed = await DeployAsync(granted: false);
+
+        AuditRecordId correlation = await RefusedAsync(
+            AccessContext.Of(SystemPrincipal.ForOrganization(
+                "import", "the nightly import", deployed.Deployment.Organization)),
+            deployed.Record,
+            HostPermissions.Read);
+
+        Assert.Equal(1, await RecordedAsync(correlation));
+        Assert.Equal(new Identified(null, null), await IdentifiedAsync(correlation));
+    }
+
+    /// <summary>
     /// AUTHZ-CONCEAL-002 AC1: a refusal about a record that is there and a refusal
     /// about one that is not are the same answer.
     /// </summary>
@@ -416,6 +437,12 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     private async Task<Error> ErrorAsync(
         Deployed deployed,
         ResourceReference resource,
+        Permission permission) =>
+        await ErrorAsync(AccessContext.Of(deployed.Account), resource, permission);
+
+    private async Task<Error> ErrorAsync(
+        AccessContext context,
+        ResourceReference resource,
         Permission permission)
     {
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
@@ -423,7 +450,7 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
 
         Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
             .RequireAsync(
-                AccessContext.Of(deployed.Account),
+                context,
                 permission,
                 resource,
                 Sources(reading),
@@ -475,15 +502,22 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     private async Task<AuditRecordId> RefusedAsync(
         Deployed deployed,
         ResourceReference resource,
+        Permission permission) =>
+        await RefusedAsync(AccessContext.Of(deployed.Account), resource, permission);
+
+    private async Task<AuditRecordId> RefusedAsync(
+        AccessContext context,
+        ResourceReference resource,
         Permission permission)
     {
-        Error refusal = await ErrorAsync(deployed, resource, permission);
+        Error refusal = await ErrorAsync(context, resource, permission);
 
         return new AuditRecordId(refusal.Details["correlation"].GetGuid());
     }
 
-    // The two identity columns of one record, read as the row holds them.
-    private sealed record Identified(Guid Acting, Guid Effective);
+    // The two identity columns of one record, read as the row holds them, either
+    // absent where the refusal names nobody.
+    private sealed record Identified(Guid? Acting, Guid? Effective);
 
     private async Task<Deployed> DeployAsync(bool granted)
     {

@@ -65,8 +65,8 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
                     category = VocabularyConverter<AuditCategory>.Write(AuditCategory.Security),
                     at = denial.At.ToUniversalTime(),
                     action = Denied.ToString(),
-                    acting = denial.Acting.Value,
-                    effective = denial.Effective.Value,
+                    acting = denial.Acting?.Value,
+                    effective = denial.Effective?.Value,
                     organization = denial.Organization?.Value,
                     details = Written(denial),
                 },
@@ -111,8 +111,8 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
 
         return new DeniedAccess(
             correlation,
-            new SubjectId(row.Acting),
-            new SubjectId(row.Effective),
+            row.Acting is Guid acting ? new SubjectId(acting) : null,
+            row.Effective is Guid effective ? new SubjectId(effective) : null,
             row.Organization is Guid organization ? new OrganizationId(organization) : null,
             Core.Permission.Parse(Field(details, Permission)),
             Core.ResourceType.Parse(Field(details, ResourceType)),
@@ -132,9 +132,9 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
     // The columns as the row holds them, before the fields are read back.
     private sealed class RecordedDenial
     {
-        public Guid Acting { get; init; }
+        public Guid? Acting { get; init; }
 
-        public Guid Effective { get; init; }
+        public Guid? Effective { get; init; }
 
         public Guid? Organization { get; init; }
 

@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- A refusal from the access gate now carries a correlation identifier whatever the
+  request was made under, background work included. The trail records the refusal with
+  neither identity named, which is the recorded fact rather than an omission, and the
+  database refuses any other kind of event that names neither.
+
 - The serialized model now lists what the maintenance credential may reach: the two
   audit partition functions it may execute and the rights it holds on the wrapped keys.
   A reviewer reads them in `artifacts/model.json` beside the rest of the model rather
