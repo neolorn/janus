@@ -3262,7 +3262,120 @@ and a declared category for which the deployment named no key is reported as
 period.
 
 *Tests that pin what is built.*
-`ProcessingRecordsTests.PRIV_ROPA_001_TheRetentionOfEachCategoryIsOnTheRowAsync`.
+`ProcessingRecordsTests.PRIV_RET_001_AC3_TheRetentionOfEachCategoryIsOnTheRowAsync`.
 
 *Chapter text that should change.* PRIV-ROPA-001's retention row should say the cell
 is one entry a data category, longest first, in ISO 8601 duration form.
+
+---
+
+## 107. A record whose subject key is destroyed is read anonymised, not refused
+
+**Phase 7 · 2026-09-22 · Tier 3 · PRIV-BREACH-002, PRIV-RET-002, PRIV-RIGHT-005**
+
+*The question.* PRIV-BREACH-002 AC2 requires the trail to answer who was affected
+within the hour for a period that may cover erased accounts, and the read by subject is
+what answers it. PRIV-RET-002 AC4 requires an erased subject's attributes to be
+unreadable while the row stays. The read decrypts a record's personal details under the
+subject key, and after an erasure that key refuses every unwrap, so one read of a
+period covering an erased subject either fails entirely or returns something.
+
+*The readings.*
+
+1. The read fails where any record in the range belongs to an erased subject. Nothing
+   erased is ever decrypted, and the operator answers the breach question from another
+   source.
+2. The read returns the record with its personal details empty: what happened, when,
+   and to whom by opaque identifier, which are not encrypted and which erasure does not
+   touch.
+
+*Chosen: 2.* Reading 1 makes the trail unable to answer the one question it exists to
+answer, at exactly the moment PRIV-BREACH-002 puts an hour on it, and it does so for
+the whole range rather than for the erased subject alone. Reading 2 discloses nothing:
+the fields erasure destroyed stay destroyed and are returned empty, and the identifiers
+returned are the pseudonymous ones IDN-PRIN-003 keeps in the trail by design. The
+branch is on the erased marker the wrapped key carries (`0x00`, PRIV-RIGHT-005a), not
+on a caught decryption failure, so a key that is present but unreadable for any other
+reason still fails the read.
+
+*Tests that pin what is built.*
+`AuditStoreTests.PRIV_BREACH_002_AC2_TheReadAnswersAfterErasureWithTheRecordsAnonymisedAsync`,
+`AuditStoreTests.PRIV_RET_002_AC4_ErasureLeavesTheAttributeUnreadableAndTheRowIntactAsync`.
+
+*Chapter text that should change.* PRIV-BREACH-002 should say that a record of an
+erased subject is answered with its personal details empty, and PRIV-RET-002 AC4 should
+say that unreadable means returned empty rather than refused.
+
+---
+
+## 108. A declared data category with no retention key stops the deployment
+
+**Phase 7 · 2026-09-22 · Tier 2 · PRIV-RET-001, LIB-HOST-001, `10` section 4.7**
+
+*The question.* Chapter 10 section 4.7 says startup fails for a declared data category
+that has no `retention.<category>` key. LIB-HOST-001 AC3 says a deployment that sets
+only the required values starts, and the retention keys are a family the host names per
+category rather than one of the eight. Read together, a host that declares a category
+and names no period either starts with no period for it or does not start.
+
+*The readings.*
+
+1. LIB-HOST-001 AC3 governs: the deployment starts, and the missing period is a finding
+   on the records of processing rather than a refusal.
+2. Chapter 10 section 4.7 governs: the deployment does not start, because a category
+   with no period is personal data with no end.
+
+*Chosen: 2.* Section 4.7 is written about this exact case and LIB-HOST-001 AC3 is
+written about the eight keys that have no default; a category the host itself declared
+is not one of those, so nothing it says is contradicted by refusing. Failing closed is
+also the reading that grants least: data held with no stated period is the failure
+PRIV-RET-001 exists to prevent. The check runs at startup over the declared purposes,
+before a request is served, and names the `retention.<category>` key that is missing.
+The records of processing keep their `retention-missing` finding for the case where the
+register is generated against a configuration read at runtime.
+
+*Tests that pin what is built.*
+`ConfigurationCoverageTests.PRIV_RET_001_AC1_ADeclaredCategoryWithNoPeriodFailsStartupAsync`,
+`ConfigurationCoverageTests.PRIV_RET_001_AC1_EveryDeclaredCategoryWithAPeriodStartsAsync`.
+
+*Chapter text that should change.* LIB-HOST-001 AC3 should say "only the required
+values and a retention period for each data category it declares".
+
+---
+
+## 109. A subject column is one the declared type holds and that holds a subject
+
+**Phase 7 · 2026-09-22 · Tier 2 · PRIV-RIGHT-005a, AUTHZ-MODEL-003, AUTHZ-MODEL-004**
+
+*The question.* PRIV-RIGHT-005a AC2 requires startup to fail for a declared subject
+column that does not exist or does not reference a subject. The library never sees the
+host's schema, so "does not exist" cannot mean a column of a table it does not know;
+what it has is the host's own type, which the declaration names, and the member names
+the declaration carries.
+
+*The readings.*
+
+1. The check is the compiler's: type the builder's second argument so that only a
+   subject-typed member can be passed, and nothing is checked at startup.
+2. The check is the model builder's: the declared field and the declared subject column
+   must both be members the declared type holds, and the subject column's member must
+   be a `SubjectId`.
+
+*Chosen: 2.* Reading 1 changes the public surface and still leaves the case open,
+because the declaration types are public records a host may construct directly, which
+is the path that reaches the model without an expression. Reading 2 covers both paths
+and adds nothing public. "Does not exist" is read as a member the declared type does
+not hold, and "does not reference a subject" as a member whose type is not `SubjectId`
+or a nullable one; an encrypted field naming no subject column at all is refused with
+`model.startup.declarationmissing`, and the other two with a refusal that names the
+type, the field and the column. The reflection is the model builder's, which is where
+CONV-CODE-004 AC2 admits it.
+
+*Tests that pin what is built.*
+`AuthorizationModelTests.PRIV_RIGHT_005a_AC1_AnEncryptedFieldNamingNoSubjectColumnFailsStartup`,
+`AuthorizationModelTests.PRIV_RIGHT_005a_AC2_ASubjectColumnNamingNoSubjectFailsStartup`.
+
+*Chapter text that should change.* PRIV-RIGHT-005a AC2 should say the column is a
+member of the declared type and its type is the library's subject identifier, and
+chapter 10 section 1.5 should carry a row for the refusal if the owner wants it to
+carry its own code rather than be a malformed-model refusal.
