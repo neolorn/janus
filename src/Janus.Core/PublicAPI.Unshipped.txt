@@ -775,10 +775,26 @@ Janus.Core.ExplainedPrincipal.Effective.init -> void
 Janus.Core.ExplainedPrincipal.Equals(Janus.Core.ExplainedPrincipal other) -> bool
 Janus.Core.ExplainedPrincipal.ExplainedPrincipal() -> void
 Janus.Core.ExplainedPrincipal.ExplainedPrincipal(Janus.Core.SubjectId? Acting, Janus.Core.SubjectId? Effective) -> void
+Janus.Core.ExportRecord
+Janus.Core.ExportRecord.<Clone>$() -> Janus.Core.ExportRecord!
+Janus.Core.ExportRecord.Deconstruct(out System.Collections.Generic.IReadOnlyDictionary<string!, string!>! Values) -> void
+Janus.Core.ExportRecord.Equals(Janus.Core.ExportRecord? other) -> bool
+Janus.Core.ExportRecord.ExportRecord(System.Collections.Generic.IReadOnlyDictionary<string!, string!>! Values) -> void
+Janus.Core.ExportRecord.Values.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!
+Janus.Core.ExportRecord.Values.init -> void
 Janus.Core.ExportRequested
 Janus.Core.ExportRequested.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey) -> void
 Janus.Core.ExportRequested.Equals(Janus.Core.ExportRequested? other) -> bool
 Janus.Core.ExportRequested.ExportRequested(System.DateTimeOffset RaisedAt, string! IdempotencyKey) -> void
+Janus.Core.ExportSection
+Janus.Core.ExportSection.<Clone>$() -> Janus.Core.ExportSection!
+Janus.Core.ExportSection.Deconstruct(out string! Name, out System.Collections.Generic.IReadOnlyList<Janus.Core.ExportRecord!>! Records) -> void
+Janus.Core.ExportSection.Equals(Janus.Core.ExportSection? other) -> bool
+Janus.Core.ExportSection.ExportSection(string! Name, System.Collections.Generic.IReadOnlyList<Janus.Core.ExportRecord!>! Records) -> void
+Janus.Core.ExportSection.Name.get -> string!
+Janus.Core.ExportSection.Name.init -> void
+Janus.Core.ExportSection.Records.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.ExportRecord!>!
+Janus.Core.ExportSection.Records.init -> void
 Janus.Core.Factor
 Janus.Core.Factor.Apple = 6 -> Janus.Core.Factor
 Janus.Core.Factor.BreakGlass = 11 -> Janus.Core.Factor
@@ -931,6 +947,8 @@ Janus.Core.IEventConsumer<TEvent>
 Janus.Core.IEventConsumer<TEvent>.HandleAsync(TEvent! raised, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IEvents
 Janus.Core.IEvents.PublishAsync<TEvent>(TEvent! raised, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+Janus.Core.IExports
+Janus.Core.IExports.AssembleAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.SubjectExport!>>
 Janus.Core.IIdentifiers
 Janus.Core.IIdentifiers.AbandonAsync(string! linkToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IIdentifiers.AddAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.IdentifierKind kind, string! value, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -1002,6 +1020,8 @@ Janus.Core.ISessions.RevokeEveryAsync(Janus.Core.AccessContext! context, Janus.C
 Janus.Core.ISmsTransport
 Janus.Core.ISmsTransport.BalanceAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<decimal>>
 Janus.Core.ISmsTransport.SendAsync(Janus.Core.SmsMessage! message, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IStepUpGate
+Janus.Core.IStepUpGate.RequireAsync(Janus.Core.SubjectId subject, Janus.Core.SessionId session, Janus.Core.StepUpAction action, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.ISubjectEventSubscriber
 Janus.Core.ISubjectEventSubscriber.Covers.get -> System.Collections.Generic.IReadOnlyCollection<Janus.Core.ResourceType>!
 Janus.Core.ISubjectEventSubscriber.HandleAsync(Janus.Core.SubjectEvent! raised, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -1991,6 +2011,17 @@ Janus.Core.SubjectEvent
 Janus.Core.SubjectEvent.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey) -> void
 Janus.Core.SubjectEvent.SubjectEvent(Janus.Core.SubjectEvent! original) -> void
 Janus.Core.SubjectEvent.SubjectEvent(System.DateTimeOffset RaisedAt, string! IdempotencyKey) -> void
+Janus.Core.SubjectExport
+Janus.Core.SubjectExport.<Clone>$() -> Janus.Core.SubjectExport!
+Janus.Core.SubjectExport.AssembledAt.get -> System.DateTimeOffset
+Janus.Core.SubjectExport.AssembledAt.init -> void
+Janus.Core.SubjectExport.Deconstruct(out Janus.Core.SubjectId Subject, out System.DateTimeOffset AssembledAt, out System.Collections.Generic.IReadOnlyList<Janus.Core.ExportSection!>! Sections) -> void
+Janus.Core.SubjectExport.Equals(Janus.Core.SubjectExport? other) -> bool
+Janus.Core.SubjectExport.Sections.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.ExportSection!>!
+Janus.Core.SubjectExport.Sections.init -> void
+Janus.Core.SubjectExport.Subject.get -> Janus.Core.SubjectId
+Janus.Core.SubjectExport.Subject.init -> void
+Janus.Core.SubjectExport.SubjectExport(Janus.Core.SubjectId Subject, System.DateTimeOffset AssembledAt, System.Collections.Generic.IReadOnlyList<Janus.Core.ExportSection!>! Sections) -> void
 Janus.Core.SubjectId
 Janus.Core.SubjectId.Deconstruct(out System.Guid Value) -> void
 Janus.Core.SubjectId.Equals(Janus.Core.SubjectId other) -> bool
@@ -2219,10 +2250,16 @@ override Janus.Core.ExplainedGrant.Equals(object? obj) -> bool
 override Janus.Core.ExplainedGrant.GetHashCode() -> int
 override Janus.Core.ExplainedGrant.ToString() -> string!
 override Janus.Core.ExplainedPrincipal.GetHashCode() -> int
+override Janus.Core.ExportRecord.Equals(object? obj) -> bool
+override Janus.Core.ExportRecord.GetHashCode() -> int
+override Janus.Core.ExportRecord.ToString() -> string!
 override Janus.Core.ExportRequested.<Clone>$() -> Janus.Core.ExportRequested!
 override Janus.Core.ExportRequested.Equals(object? obj) -> bool
 override Janus.Core.ExportRequested.GetHashCode() -> int
 override Janus.Core.ExportRequested.ToString() -> string!
+override Janus.Core.ExportSection.Equals(object? obj) -> bool
+override Janus.Core.ExportSection.GetHashCode() -> int
+override Janus.Core.ExportSection.ToString() -> string!
 override Janus.Core.FactorPresentation.Equals(object? obj) -> bool
 override Janus.Core.FactorPresentation.GetHashCode() -> int
 override Janus.Core.FactorPresentation.ToString() -> string!
@@ -2451,6 +2488,9 @@ override Janus.Core.SubjectEvent.Equals(object? obj) -> bool
 override Janus.Core.SubjectEvent.GetHashCode() -> int
 override Janus.Core.SubjectEvent.PrintMembers(System.Text.StringBuilder! builder) -> bool
 override Janus.Core.SubjectEvent.ToString() -> string!
+override Janus.Core.SubjectExport.Equals(object? obj) -> bool
+override Janus.Core.SubjectExport.GetHashCode() -> int
+override Janus.Core.SubjectExport.ToString() -> string!
 override Janus.Core.SubjectId.GetHashCode() -> int
 override Janus.Core.SubjectId.ToString() -> string!
 override Janus.Core.Username.GetHashCode() -> int
@@ -2853,8 +2893,12 @@ static Janus.Core.ExplainedGrant.operator !=(Janus.Core.ExplainedGrant? left, Ja
 static Janus.Core.ExplainedGrant.operator ==(Janus.Core.ExplainedGrant? left, Janus.Core.ExplainedGrant? right) -> bool
 static Janus.Core.ExplainedPrincipal.operator !=(Janus.Core.ExplainedPrincipal left, Janus.Core.ExplainedPrincipal right) -> bool
 static Janus.Core.ExplainedPrincipal.operator ==(Janus.Core.ExplainedPrincipal left, Janus.Core.ExplainedPrincipal right) -> bool
+static Janus.Core.ExportRecord.operator !=(Janus.Core.ExportRecord? left, Janus.Core.ExportRecord? right) -> bool
+static Janus.Core.ExportRecord.operator ==(Janus.Core.ExportRecord? left, Janus.Core.ExportRecord? right) -> bool
 static Janus.Core.ExportRequested.operator !=(Janus.Core.ExportRequested? left, Janus.Core.ExportRequested? right) -> bool
 static Janus.Core.ExportRequested.operator ==(Janus.Core.ExportRequested? left, Janus.Core.ExportRequested? right) -> bool
+static Janus.Core.ExportSection.operator !=(Janus.Core.ExportSection? left, Janus.Core.ExportSection? right) -> bool
+static Janus.Core.ExportSection.operator ==(Janus.Core.ExportSection? left, Janus.Core.ExportSection? right) -> bool
 static Janus.Core.FactorPresentation.operator !=(Janus.Core.FactorPresentation? left, Janus.Core.FactorPresentation? right) -> bool
 static Janus.Core.FactorPresentation.operator ==(Janus.Core.FactorPresentation? left, Janus.Core.FactorPresentation? right) -> bool
 static Janus.Core.Gate.operator !=(Janus.Core.Gate? left, Janus.Core.Gate? right) -> bool
@@ -3080,6 +3124,8 @@ static Janus.Core.StagedIdentifier.operator !=(Janus.Core.StagedIdentifier? left
 static Janus.Core.StagedIdentifier.operator ==(Janus.Core.StagedIdentifier? left, Janus.Core.StagedIdentifier? right) -> bool
 static Janus.Core.SubjectEvent.operator !=(Janus.Core.SubjectEvent? left, Janus.Core.SubjectEvent? right) -> bool
 static Janus.Core.SubjectEvent.operator ==(Janus.Core.SubjectEvent? left, Janus.Core.SubjectEvent? right) -> bool
+static Janus.Core.SubjectExport.operator !=(Janus.Core.SubjectExport? left, Janus.Core.SubjectExport? right) -> bool
+static Janus.Core.SubjectExport.operator ==(Janus.Core.SubjectExport? left, Janus.Core.SubjectExport? right) -> bool
 static Janus.Core.SubjectId.New(System.Security.Cryptography.RandomNumberGenerator! randomness) -> Janus.Core.SubjectId
 static Janus.Core.SubjectId.operator !=(Janus.Core.SubjectId left, Janus.Core.SubjectId right) -> bool
 static Janus.Core.SubjectId.operator ==(Janus.Core.SubjectId left, Janus.Core.SubjectId right) -> bool

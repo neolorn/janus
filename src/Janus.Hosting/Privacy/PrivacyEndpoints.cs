@@ -8,6 +8,7 @@ using Janus.Core;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 
 namespace Janus.Hosting.Privacy;
@@ -53,6 +54,7 @@ internal static class PrivacyEndpoints
         _ = group.MapDelete("/objections/{purpose}", WithdrawObjectionAsync);
 
         _ = group.MapPost("/requests", SubmitAsync);
+        _ = group.MapGet("/export", ExportAsync);
 
         RouteGroupBuilder queue = endpoints.MapGroup("/admin/privacy/requests");
 
@@ -181,6 +183,77 @@ internal static class PrivacyEndpoints
                     .SubmitAsync(holder, type, body.Detail ?? string.Empty, cancellationToken)
                     .ConfigureAwait(false),
                 Receipted);
+    }
+
+    // D-054: one routine and two arrangements of what it returns. A format the
+    // chapter does not name is a malformed request and never a silent choice of one.
+    private static async Task<IResult> ExportAsync(
+        IExports exports,
+        RequestSession browser,
+        string? format,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(exports);
+
+        if (Arranged(format) is not Func<SubjectExport, IResult> arrangement)
+        {
+            return Malformed;
+        }
+
+        return Asking(browser) is not AccessContext holder || browser.Live is null
+            ? Nobody()
+            : Answers.Of(
+                await exports
+                    .AssembleAsync(holder, browser.Live.Id, cancellationToken)
+                    .ConfigureAwait(false),
+                arrangement);
+    }
+
+    private static Func<SubjectExport, IResult>? Arranged(string? format) => format switch
+    {
+        "human" => Readable,
+        "machine" => Portable,
+        _ => null,
+    };
+
+    private static JsonHttpResult<ExportView> Readable(SubjectExport export) =>
+        TypedResults.Json(
+            new ExportView(
+                export.Subject.Value.ToString(),
+                export.AssembledAt,
+                [
+                    .. export.Sections.Select(section => new ExportSectionView(
+                        section.Name,
+                        [.. section.Records.Select(record => record.Values)])),
+                ]),
+            PrivacyJson.Default.ExportView,
+            contentType: null,
+            StatusCodes.Status200OK);
+
+    // PRIV-RIGHT-003 AC2: the name is the section, the record's place in it and the
+    // field, so a reader that met one export can read the next one.
+    private static JsonHttpResult<PortableExportView> Portable(SubjectExport export)
+    {
+        var values = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        foreach (ExportSection section in export.Sections)
+        {
+            for (int index = 0; index < section.Records.Count; index++)
+            {
+                foreach (KeyValuePair<string, string> value in section.Records[index].Values)
+                {
+                    values[string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{section.Name}.{index}.{value.Key}")] = value.Value;
+                }
+            }
+        }
+
+        return TypedResults.Json(
+            new PortableExportView(export.Subject.Value.ToString(), export.AssembledAt, values),
+            PrivacyJson.Default.PortableExportView,
+            contentType: null,
+            StatusCodes.Status200OK);
     }
 
     private static async Task<IResult> QueueAsync(

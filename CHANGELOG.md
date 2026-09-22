@@ -10,6 +10,17 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- An account can now take a copy of what is held about it. `GET /privacy/export`
+  answers in two arrangements of one assembly: `format=human` is grouped and labelled
+  for reading, `format=machine` is one flat object whose names are stable across
+  exports, and both carry the same data. The export covers the account's standing,
+  its profile, every identifier with its role and verification state, the backup
+  settings, the preferences in force, the live sessions with the locations resolved at
+  sign-in and at last use, and the consent and objection records. It is gated at the
+  account's own reachable assurance, limited to `privacy.export.ratelimit` a rolling
+  day (the refusal carries `Retry-After` and the instant the limit lifts), and it
+  raises `ExportRequested` so that each host can produce its own half.
+
 - A deletion grace window that runs out is now carried through: the sweep erases every
   account whose window elapsed without a cancellation, in one transaction per account,
   and puts the erasure on the outbox in the same transaction. The subject identifier

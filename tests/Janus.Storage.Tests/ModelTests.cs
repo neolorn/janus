@@ -427,6 +427,12 @@ public sealed class ModelTests
             "preauthentication_sessions.fingerprint",
             "preauthentication_sessions.registration",
 
+            // Not an account field: that an export was taken and when, which is what
+            // the rate limit of D-086 counts and nothing more.
+            "privacy_exports.assembled_at",
+            "privacy_exports.id",
+            "privacy_exports.subject",
+
             // Not an account field: the data subject requests of PRIV-RIGHT-001 with
             // the three instants the working-day clock gives each one (PRIV-RIGHT-002).
             "privacy_requests.channel",

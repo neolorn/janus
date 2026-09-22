@@ -2990,3 +2990,138 @@ of two.
 
 *Chapter text that should change.* The `POST /account/reactivate` entry's JSON block
 should read `{ "linkToken": "..." }`.
+
+---
+
+## 99. The export asks for step-up through a Core port the authentication area implements
+
+**Phase 7 · 2026-09-22 · Tier 2 · CONV-LAYOUT-001, LIB-API-001, LIB-API-005, chapter 09 section 7**
+
+*The question.* Chapter 09 requires `GET /privacy/export` to be gated at the account's
+reachable assurance (AUTH-STEP-002a, D-141). CONV-LAYOUT-001 puts erasure and export in
+`Janus.Privacy`, which references `Janus.Core` and nothing else, and the guard that
+resolves a step-up against the principal's policy is `StepUpGuard` in
+`Janus.Authentication`. Privacy cannot reach it.
+
+*The readings.*
+
+1. A public `IStepUpGate` in `Janus.Core`, implemented in `Janus.Authentication` over
+   the existing guard, which is the seam `IAccessGate` already is for authorization.
+2. Move the export into `Janus.Authentication`, which can reach the guard directly.
+3. Gate the export in the Hosting endpoint, before the contract is called.
+
+*Chosen: 1.* Reading 3 is refused by LIB-API-005 AC1 and AC2: an endpoint is a mapping
+onto one service contract and decides nothing itself, and a gate in the endpoint is a
+rule no other caller of the contract obeys. Reading 2 moves a chapter 04 item into the
+chapter 02 area and would need a second way for that area to announce a subject event,
+since the outbox is Privacy's; CONV-LAYOUT-001 assigns export to Privacy by name.
+Reading 1 adds one interface to the surface LIB-API-001 already carries the twin of,
+and no area learns anything about another.
+
+*Tests that pin what is built.*
+`ExportServiceTests.PRIV_RIGHT_003_TheGateIsAskedBeforeAnythingIsReadAsync`,
+`ExportEndpointTests.PRIV_RIGHT_003_AC1_BothFormatsContainTheSameDataAsync`.
+
+*Chapter text that should change.* CONV-LAYOUT-002 should name `IStepUpGate` beside
+`IAccessGate` as a seam `Janus.Core` carries for the areas, and LIB-API-001's
+operations row should say that the gates an area asks of another area are part of the
+public contract.
+
+---
+
+## 100. The export rate limit counts over a rolling day, and the refusal names the instant it lifts
+
+**Phase 7 · 2026-09-22 · Tier 2 · chapter 10 section 4.1 (`privacy.export.ratelimit`), D-086, API-CONV-003**
+
+*The question.* `privacy.export.ratelimit` is "3 per day". A day is either the calendar
+day of `privacy.calendar.timezone`, which resets at midnight, or a window of
+twenty-four hours that rolls.
+
+*The readings.*
+
+1. The calendar day: the count resets at local midnight, so an account may take three
+   exports before midnight and three after, six inside one sitting.
+2. A rolling twenty-four hours: an export counts until it is twenty-four hours old,
+   so no six exports can ever fall inside one day.
+
+*Chosen: 2.* The key is a rate limit and D-086's reason for it is the borrowed session
+that needs one successful pull; a boundary an attacker can wait ten minutes for is not
+a limit against that. Reading 2 grants strictly less than reading 1 and never more.
+The window is exclusive at its old end, so the `retryAt` the refusal carries is exactly
+the instant the oldest counted export falls out and the next one is allowed: a client
+that retries at the instant it was given is served rather than refused again.
+
+*Tests that pin what is built.*
+`ExportServiceTests.PRIV_RIGHT_003_AnExportThatHasFallenOutOfTheWindowNoLongerCountsAsync`,
+`ExportServiceTests.PRIV_RIGHT_003_TheExportAfterTheLastOneAllowedIsRefusedAsync`,
+`ExportEndpointTests.PRIV_RIGHT_003_TheSpentRateLimitAnswersWithWhenItLiftsAsync`.
+
+*Chapter text that should change.* The `privacy.export.ratelimit` row should read "3
+per rolling 24 hours" and say that the refusal carries the instant the window lifts.
+
+---
+
+## 101. A request naming no format, or one the chapter does not name, is malformed
+
+**Phase 7 · 2026-09-22 · Tier 2 · chapter 09 section 7 (`GET /privacy/export`)**
+
+*The question.* The entry is spelled `GET /privacy/export?format=human|machine` and
+says nothing about a request that carries no `format`, an empty one, or a third value.
+
+*The readings.*
+
+1. One of the two is the default, and a value the chapter does not name is served as
+   that default.
+2. The parameter is required and its two values are the whole of it, so anything else
+   is a malformed request answered 400.
+
+*Chosen: 2.* Reading 1 requires choosing a default the chapter does not give, and the
+two arrangements are not interchangeable to a caller: a reader that asked for the
+portable names and was handed the readable grouping fails on the data rather than on
+the request. Reading 2 grants less, invents nothing, and matches how the chapter's
+other enumerated bodies are handled (the request types of `POST /privacy/requests`).
+The match is exact and case-sensitive, as every other enumerated value in chapter 09
+is.
+
+*Tests that pin what is built.*
+`ExportEndpointTests.PRIV_RIGHT_003_AFormatTheChapterDoesNotNameIsMalformedAsync`.
+
+*Chapter text that should change.* The `GET /privacy/export` entry should say that
+`format` is required, that its two values are exact, and that anything else is 400.
+
+---
+
+## 102. The export carries every group of REG-ACCT-001 the account may see, not only the three PRIV-RIGHT-003 names
+
+**Phase 7 · 2026-09-22 · Tier 2 · PRIV-RIGHT-003, REG-ACCT-001, PRIV-RIGHT-005**
+
+*The question.* PRIV-RIGHT-003 names three things the export "SHALL include": the
+host-declared preferences, the identifiers with their roles and verification state, and
+the location records of the live sessions. It does not say whether those three are the
+whole of it.
+
+*The readings.*
+
+1. The three are the export. Anything else the account holds is reached through
+   `GET /account` and is not part of the access right the library serves.
+2. The three are a floor the item states because they are the parts most easily
+   missed, and the export is the access right: every group of REG-ACCT-001 the person
+   may see, plus the standing chapter 04 holds for them.
+
+*Chosen: 2.* An access export that leaves out the profile and the consent records
+would not satisfy the right it exists to satisfy, and PRIV-RIGHT-005's own reasoning
+treats the declared profile values and the preferences alike as the person's data. The
+sections built are `account` (the opaque subject, the state, when it was registered),
+`profile`, `identifiers`, `identifier-backup`, `preferences` (the value in force for
+every declared key, the declared default where the account set none), `sessions` (both
+location records), `consents` and `objections`. Credentials are not among them: what
+signs in to an account is not data held about the person, and a list of a person's
+authenticators in a file they may forward is an exposure the right does not ask for.
+
+*Tests that pin what is built.*
+`ExportSourceTests.PRIV_RIGHT_003_AC3_TheExportCarriesThePreferencesIdentifiersAndSessionsAsync`,
+`ExportSourceTests.PRIV_RIGHT_003_AnAccountThatHasSettledNothingStillExportsAsync`,
+`ExportServiceTests.PRIV_RIGHT_003_TheAreasAndTheDecisionsReachTheExportTogetherAsync`.
+
+*Chapter text that should change.* PRIV-RIGHT-003 should list the sections the export
+carries and say that credentials are not among them.

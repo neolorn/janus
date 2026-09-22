@@ -25,6 +25,7 @@ using Janus.Storage.Identity.Profiles;
 using Janus.Storage.Privacy.Consents;
 using Janus.Storage.Privacy.Documents;
 using Janus.Storage.Privacy.Erasures;
+using Janus.Storage.Privacy.Exports;
 using Janus.Storage.Privacy.Outbox;
 using Janus.Storage.Privacy.Requests;
 using Janus.Storage.Privacy.SubjectKeys;
@@ -147,6 +148,11 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     /// The data subject requests on the queue, decided ones included.
     /// </summary>
     public DbSet<PrivacyRequestRecord> PrivacyRequests => Set<PrivacyRequestRecord>();
+
+    /// <summary>
+    /// The exports the accounts have taken, one row an export.
+    /// </summary>
+    public DbSet<ExportRecordRow> PrivacyExports => Set<ExportRecordRow>();
 
     /// <summary>
     /// The published versions of the deployment's legal documents.
@@ -458,5 +464,6 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new DeliveryConfiguration());
         modelBuilder.ApplyConfiguration(new DeliveryConfirmationConfiguration());
         modelBuilder.ApplyConfiguration(new PrivacyRequestConfiguration());
+        modelBuilder.ApplyConfiguration(new ExportConfiguration());
     }
 }

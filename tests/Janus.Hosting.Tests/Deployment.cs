@@ -43,9 +43,11 @@ using Janus.Hosting.Tests.Bff;
 using Janus.Privacy;
 using Janus.Privacy.Consents;
 using Janus.Privacy.Documents;
+using Janus.Privacy.Exports;
 using Janus.Privacy.Requests;
 using Janus.Privacy.Tests.Consents;
 using Janus.Privacy.Tests.Documents;
+using Janus.Privacy.Tests.Exports;
 using Janus.Privacy.Tests.Outbox;
 using Janus.Privacy.Tests.Requests;
 using Microsoft.AspNetCore.Builder;
@@ -248,6 +250,16 @@ internal sealed class Deployment : IAsyncDisposable
     public OutboxStoreInMemory Outbox { get; } = new();
 
     /// <summary>
+    /// What the other areas hold of an export, so a test can arrange it.
+    /// </summary>
+    public ExportSourceInMemory ExportSource { get; } = new();
+
+    /// <summary>
+    /// The exports the accounts have taken, so a test can read what was counted.
+    /// </summary>
+    public ExportLedgerInMemory ExportLedger { get; } = new();
+
+    /// <summary>
     /// What the subject was told.
     /// </summary>
     public SubjectNoticesInMemory Notices { get; } = new();
@@ -401,6 +413,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<DeviceService>();
         _ = services.AddScoped<PolicyResolution>();
         _ = services.AddScoped<StepUpGuard>();
+        _ = services.AddScoped<IStepUpGate, StepUpGate>();
         _ = services.AddScoped<SessionService>();
         _ = services.AddScoped<ISessions>(provider => provider.GetRequiredService<SessionService>());
         _ = services.AddScoped<PreAuthenticationService>();
@@ -442,6 +455,9 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<RestrictionGrant>();
         _ = services.AddScoped<DeadlineSweep>();
         _ = services.AddScoped<IPrivacyRequests, PrivacyRequestService>();
+        _ = services.AddSingleton<IExportSource>(ExportSource);
+        _ = services.AddSingleton<IExportLedger>(ExportLedger);
+        _ = services.AddScoped<IExports, ExportService>();
         _ = services.AddScoped<SigningKeys>();
         _ = services.AddScoped<OidcService>();
         _ = services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
