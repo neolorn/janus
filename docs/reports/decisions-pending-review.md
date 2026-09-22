@@ -3237,6 +3237,8 @@ transfer is reported with the configured basis whatever else a host edits.
 declared by the host rather than applied, that an unstated location is the hosting
 location, and that `password screening` is fixed outside.
 
+**Superseded by D-162.** Applied in entry 151.
+
 ---
 
 ## 104. The children's column is true for every row exactly when the deployment admits minors
@@ -5301,6 +5303,68 @@ stored flag, so the export and the account page agree on which one is offered fi
 every group of REG-ACCT-001 the person may see and the whole of the standing group, and
 list the sections above, in place of the three it names now. The sentence entry 102
 asked for, that credentials are not among them, should not be written.
+
+---
+
+## 151. The three rows the library makes true are applied; the rest of the register is offered
+
+**Corrections 1 · 2026-09-23 · D-162 section C, item 103 · PRIV-ROPA-002,
+PRIV-ROPA-003, chapter 05 sections 7 and 8**
+
+*What D-162 decided.* The shipped provider register applies by default only the rows
+the library itself makes true (password screening while online screening is configured,
+the hosting provider from `hosting.location`, the mail server while mail is configured)
+and offers the rest; `location` stays `inside` and `outside`, resolved from
+`hosting.location` at generation.
+
+*What entry 103 had.* All seven rows were offered and none applied, on the ground that a
+register naming a processor the deployment does not have is a false statement to a
+regulator. That holds for the payment provider, the shipping provider, the SMS gateway
+and the developer, which the library cannot know a deployment has. It does not hold for
+three rows the library knows about: the deployment is hosted somewhere, and where
+`integration.mail.endpoint` is set or `password.blocklist.source` is `rangeApi` it is
+the library itself that calls those two providers. Leaving them out was the
+under-report, and PRIV-ROPA-003 requires the screening call to appear.
+
+*What was built.* `ProcessingRecordsService` reads `integration.mail.endpoint` and
+`password.blocklist.source` at generation and adds to the declared recipients, from
+`ProviderRegister.Default`:
+
+- `hosting provider`, always;
+- `mail server`, while `integration.mail.endpoint` is not empty, which is what marks a
+  deployment as using the library's own transport rather than one of its own
+  (INT-GEN-001);
+- `password screening`, while `password.blocklist.source` is `rangeApi`. `offline` is a
+  local copy and `selfHosted` is the deployment's own corpus, so neither reaches a
+  recipient at all.
+
+Each ships with no agreement reference, so each processor among them is flagged until
+the deployment gives it one. `password screening` is characterised as a recipient and
+not a processor, so no agreement is asked of it.
+
+*Two points decided inside the item.* A deployment that has declared a row of the same
+name has edited the shipped default, so its own row stands in place of the applied one
+and not beside it; the match is on the name, ignoring case, because the name is the
+register's column and editing a default means filling in its reference rather than
+renaming it. The `location` half of D-162's sentence needed no change: the declaration
+field is `inside` and `outside`, a row that states neither is read as the hosting
+location at generation, and `password screening` is the one shipped row fixed outside.
+
+*Tests that pin it.*
+`ProcessingRecordsTests.PRIV_ROPA_002_TheRowsTheLibraryMakesTrueAreAppliedWithoutADeclarationAsync`,
+`ProcessingRecordsTests.PRIV_ROPA_002_TheRestOfTheShippedRegisterIsOfferedAndNotAppliedAsync`,
+`ProcessingRecordsTests.PRIV_ROPA_002_AnUncalledProviderIsNotInTheRegisterAsync`,
+`ProcessingRecordsTests.PRIV_ROPA_002_AC2_AnEditedRowStandsInPlaceOfTheShippedDefaultAsync`,
+`ProcessingRecordsTests.PRIV_ROPA_002_AC1_EveryRecipientAppearsAndAProcessorWithoutAnAgreementIsFlaggedAsync`,
+`ProcessingRecordsTests.PRIV_ROPA_003_AC1_ThePasswordScreeningCallAppearsAsACrossBorderTransferAsync`.
+
+*Chapter text that should change.* PRIV-ROPA-002 should say that the library applies the
+three rows it makes true (the hosting provider, and the mail server and the screening
+service where the deployment uses them) and offers the other four as defaults the host
+declares from, that an unstated location is the hosting location at generation, and that
+`password screening` is fixed outside. Chapter 05 section 8's "Location field" column
+should read `inside` or `outside` for every row that states one and "follows hosting"
+for every row that does not.
 
 
 # Rows for chapter 10

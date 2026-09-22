@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- The records of processing now apply the three rows of the shipped provider register
+  the library itself makes true: the hosting provider always, the mail server while the
+  deployment uses the library's own mail transport, and the password screening service
+  while screening is online. They appear whether or not the deployment declared them,
+  each flagged for a missing agreement reference until it gives one. The rest of the
+  register is still offered rather than applied, and a deployment that declared one of
+  the three reports its own row in place of the shipped default.
+
 - The subject access export now carries every group the account page shows the person,
   the credentials among them, and the whole standing group. Beside the profile, the
   identifiers, the preferences and the live sessions it carries the enrolled

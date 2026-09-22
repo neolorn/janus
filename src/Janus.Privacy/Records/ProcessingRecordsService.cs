@@ -44,6 +44,14 @@ internal sealed class ProcessingRecordsService(
     /// </summary>
     internal const string ChildrensCategory = "children";
 
+    // The three rows of the shipped register the library itself makes true, named as
+    // ProviderRegister ships them (PRIV-ROPA-002, chapter 05 section 8).
+    private const string MailServer = "mail server";
+
+    private const string HostingProvider = "hosting provider";
+
+    private const string PasswordScreening = "password screening";
+
     /// <summary>
     /// How the personal data is disposed of, which is one measure for the whole
     /// deployment because every personal field stands under one key (PRIV-RIGHT-005).
@@ -111,7 +119,20 @@ internal sealed class ProcessingRecordsService(
                 cancellationToken)
             .ConfigureAwait(false) is AttributeRequirement.Off;
 
-        IReadOnlyList<RecipientRecord> recipients = Reached(location, basis);
+        // PRIV-ROPA-002: whether the library itself calls a mail server and the
+        // screening service, which is what makes those two rows of the shipped
+        // register true of this deployment.
+        bool mail = (await ReadAsync(
+                Settings.IntegrationMailEndpoint, string.Empty, cancellationToken)
+            .ConfigureAwait(false)).Length is not 0;
+
+        bool screening = await ReadAsync(
+                Settings.PasswordBlocklistSource,
+                Settings.PasswordBlocklistSource.Default,
+                cancellationToken)
+            .ConfigureAwait(false) is BlocklistSource.RangeApi;
+
+        IReadOnlyList<RecipientRecord> recipients = Reached(location, basis, mail, screening);
         var flags = new List<RegisterFlag>();
 
         Missing(flags, supplied, recipients);
@@ -216,9 +237,13 @@ internal sealed class ProcessingRecordsService(
 
     // PRIV-ROPA-003: a recipient outside the country is a cross-border transfer, and
     // the basis it stands on is the deployment's declared one and never a consent.
-    private IReadOnlyList<RecipientRecord> Reached(HostingLocation hosting, string basis) =>
+    private IReadOnlyList<RecipientRecord> Reached(
+        HostingLocation hosting,
+        string basis,
+        bool mail,
+        bool screening) =>
     [
-        .. declaration.Recipients.Select(recipient =>
+        .. Recipients(mail, screening).Select(recipient =>
         {
             HostingLocation where = recipient.Location ?? hosting;
 
@@ -232,6 +257,30 @@ internal sealed class ProcessingRecordsService(
                 recipient.Callback);
         }),
     ];
+
+    // PRIV-ROPA-002: the rest of the shipped register is offered, because a generic
+    // library cannot know that a deployment takes payments or ships anything; the
+    // three rows it makes true itself are applied, because it does know that. A
+    // deployment that edited one of them has declared it, and its own row stands in
+    // place of the shipped default rather than beside it.
+    private IEnumerable<RecipientDeclaration> Recipients(bool mail, bool screening) =>
+    [
+        .. declaration.Recipients,
+        .. ProviderRegister.Default.Where(row =>
+            Made(row.Name, mail, screening) && !Declares(row.Name)),
+    ];
+
+    private static bool Made(string row, bool mail, bool screening) => row switch
+    {
+        HostingProvider => true,
+        MailServer => mail,
+        PasswordScreening => screening,
+        _ => false,
+    };
+
+    private bool Declares(string row) =>
+        declaration.Recipients.Any(recipient =>
+            string.Equals(recipient.Name, row, StringComparison.OrdinalIgnoreCase));
 
     // A key the deployment names has no default to fall back on, so the fallback is
     // the caller's: an unnamed one leaves the cell empty rather than stopping the
