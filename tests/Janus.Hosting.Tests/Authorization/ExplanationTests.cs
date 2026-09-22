@@ -23,6 +23,9 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     private static readonly ResourceType Note = ResourceType.Parse("note");
     private static readonly ResourceType Workspace = ResourceType.Parse("workspace");
 
+    // The role the host's declaration says a reviewer holds on what they review.
+    private static readonly RoleName Reviewer = RoleName.Parse("reviewer");
+
     /// <summary>
     /// AUTHZ-GATE-004 AC1: a refusal names what was asked for and says that no grant
     /// matched.
@@ -68,6 +71,85 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
+    /// AUTHZ-GATE-004 AC2, AUTHZ-DERIVE-001, AUTHZ-DERIVE-005 (D-162): an explanation
+    /// asked with the rows the derivation is evaluated over names the grant the fact
+    /// produced. It carries no identifier, because no row holds it; it says it is
+    /// derived; and it names the role the derivation confers and the container the
+    /// relationship is declared on.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_004_AC2_AnApprovalNamesTheGrantAFactProducedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Deployed deployed = await DeployAsync(granted: false);
+
+        await deployed.Deployment.NamedRoleAsync(
+            Reviewer,
+            [HostPermissions.ReadNote],
+            cancellationToken);
+
+        await deployed.Deployment.ReviewAsync(deployed.Container, deployed.Account, cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        AccessExplanation explanation = Explained(
+            await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .ExplainAsync(
+                    AccessContext.Of(deployed.Account),
+                    HostPermissions.ReadNote,
+                    deployed.Note,
+                    Sources(reading),
+                    cancellationToken));
+
+        Assert.Equal(AccessOutcome.Allowed, explanation.Outcome);
+
+        ExplainedGrant grant = Assert.IsType<ExplainedGrant>(explanation.Grant);
+
+        Assert.Null(grant.Id);
+        Assert.Equal(GrantKind.Derived, grant.Kind);
+        Assert.Equal(SubjectType.User, grant.SubjectType);
+        Assert.Equal(deployed.Account.Value, grant.SubjectId);
+        Assert.Equal(Reviewer, grant.Role);
+        Assert.False(grant.Deny);
+        Assert.Equal(deployed.Container, grant.InheritedFrom);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-004 AC1, AUTHZ-DERIVE-002 AC1 (D-162): where no fact of the host's
+    /// admits the record either, the explanation asked with the rows says that no grant
+    /// matched rather than refusing the operation.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_004_AC1_ADenialWithTheHostsRowsStatesNoGrantMatchedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Deployed deployed = await DeployAsync(granted: false);
+
+        await deployed.Deployment.NamedRoleAsync(
+            Reviewer,
+            [HostPermissions.ReadNote],
+            cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        AccessExplanation explanation = Explained(
+            await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .ExplainAsync(
+                    AccessContext.Of(deployed.Account),
+                    HostPermissions.ReadNote,
+                    deployed.Note,
+                    Sources(reading),
+                    cancellationToken));
+
+        Assert.Equal(AccessOutcome.Denied, explanation.Outcome);
+        Assert.Null(explanation.Grant);
+    }
+
+    /// <summary>
     /// AUTHZ-GATE-004 AC3: a type whose refusal answers as a record that does not exist
     /// has no self-service explanation, because saying that no grant matched says that
     /// the record is there.
@@ -79,18 +161,21 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
         Deployed deployed = await DeployAsync(granted: false);
 
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
         IAccessGate gate = scope.ServiceProvider.GetRequiredService<IAccessGate>();
 
         Result<AccessExplanation> concealed = await gate.ExplainAsync(
             AccessContext.Of(deployed.Account),
             HostPermissions.Read,
             deployed.Record,
+            Sources(reading),
             TestContext.Current.CancellationToken);
 
         Result<AccessExplanation> disclosed = await gate.ExplainAsync(
             AccessContext.Of(deployed.Account),
             HostPermissions.ReadNote,
             deployed.Note,
+            Sources(reading),
             TestContext.Current.CancellationToken);
 
         Assert.Equal(ErrorCodes.Denied, Refusal(concealed).Code);
@@ -308,15 +393,23 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     private static ResourceReference Reference(ResourceType type) =>
         new(type, ResourceId.Parse(Guid.NewGuid().ToString()));
 
+    private static FilterSources<HostDocument> Sources(HostContext reading) =>
+        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, document => document.Id)
+            .Relationship("reviewer", reading.Reviewers);
+
+    // The type a note sits in declares a derivation, so the explanation is asked with
+    // the rows that derivation is evaluated over (AUTHZ-DERIVE-001, D-162).
     private async Task<AccessExplanation> ExplainedAsync(Deployed deployed, ResourceReference resource)
     {
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
 
         return Explained(await scope.ServiceProvider.GetRequiredService<IAccessGate>()
             .ExplainAsync(
                 AccessContext.Of(deployed.Account),
                 HostPermissions.ReadNote,
                 resource,
+                Sources(reading),
                 TestContext.Current.CancellationToken));
     }
 

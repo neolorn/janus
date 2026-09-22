@@ -784,6 +784,12 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- An explanation can now be asked with the host's own rows, and on a type a derivation
+  reaches it names the grant the fact produced: no identifier, the derived kind, the
+  role the derivation confers, and the container it was inherited from. Asked without
+  those rows such a type is refused rather than answered from the stored grants alone.
+  The identifier an explained grant carries is optional for the same reason: a derived
+  grant is a fact being true and no row holds it.
 - A page of capabilities now costs one query over the host's own rows however many
   permissions it asks for. Every derivation reaching the type is evaluated in that one
   query, and what the role each confers allows is read from the model, so a page that

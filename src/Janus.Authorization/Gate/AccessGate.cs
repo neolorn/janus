@@ -198,11 +198,39 @@ internal sealed class AccessGate(
         Decision decided = await DecideAsync(context, permission, resource, cancellationToken)
             .ConfigureAwait(false);
 
-        return Result.Success(new AccessExplanation(
-            decided.Grant is { Deny: false } ? AccessOutcome.Allowed : AccessOutcome.Denied,
-            permission,
-            new ExplainedPrincipal(context.Acting, context.Effective),
-            decided.Grant is null ? null : Explained(decided.Grant, resource)));
+        return Result.Success(Explanation(context, permission, resource, decided, derivedBy: null));
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result<AccessExplanation>> ExplainAsync<TResource>(
+        AccessContext context,
+        Permission permission,
+        ResourceReference resource,
+        FilterSources<TResource> sources,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(sources);
+
+        // AUTHZ-GATE-004: concealment is read first, so a concealing type answers one
+        // way whatever else is true of it (AUTHZ-CONCEAL-003).
+        if (Declared(resource.Type).Concealment is ConcealmentBehaviour.Conceal)
+        {
+            return Result.Failure<AccessExplanation>(Error.From(ErrorCodes.Denied));
+        }
+
+        Decision decided = await DecideAsync(context, permission, resource, cancellationToken)
+            .ConfigureAwait(false);
+
+        // AUTHZ-DERIVE-002 AC1: a deny defeats a derived grant as it defeats a stored
+        // one, so the host's relations are read only where nothing has decided yet.
+        ExplainedGrant? derivedGrant = decided.Grant is null
+            && decided.Organization is OrganizationId owner
+            ? await DerivedAsync(context, permission, resource, owner, sources, cancellationToken)
+                .ConfigureAwait(false)
+            : null;
+
+        return Result.Success(Explanation(context, permission, resource, decided, derivedGrant));
     }
 
     /// <inheritdoc/>
@@ -668,6 +696,88 @@ internal sealed class AccessGate(
             .. resources.Select(resource =>
                 new Capability(resource, new HashSet<Permission>(), NoResiduals)),
         ]);
+
+    // AUTHZ-GATE-004: one shape answers both paths, the derived grant being the one a
+    // fact in the host's data produced rather than one somebody wrote.
+    private static AccessExplanation Explanation(
+        AccessContext context,
+        Permission permission,
+        ResourceReference resource,
+        Decision decided,
+        ExplainedGrant? derivedBy)
+    {
+        ExplainedGrant? grant = decided.Grant is null
+            ? derivedBy
+            : Explained(decided.Grant, resource);
+
+        return new AccessExplanation(
+            grant is { Deny: false } ? AccessOutcome.Allowed : AccessOutcome.Denied,
+            permission,
+            new ExplainedPrincipal(context.Acting, context.Effective),
+            grant);
+    }
+
+    // AUTHZ-GATE-004, D-162: the grant a fact produced, as an explanation names it. It
+    // holds no identifier, because no row holds it; the role is the one the derivation
+    // confers, and the container is the one the relationship is declared on.
+    private async ValueTask<ExplainedGrant?> DerivedAsync<TResource>(
+        AccessContext context,
+        Permission permission,
+        ResourceReference resource,
+        OrganizationId organization,
+        FilterSources<TResource> sources,
+        CancellationToken cancellationToken)
+    {
+        if (context.Effective is not SubjectId subject)
+        {
+            return null;
+        }
+
+        IReadOnlyList<ConferredDerivation> conferring =
+        [
+            .. (await derived.ConferringAsync(resource.Type, cancellationToken).ConfigureAwait(false))
+                .Where(one => one.Confers.Contains(permission)),
+        ];
+
+        if (conferring.Count == 0)
+        {
+            return null;
+        }
+
+        var rule = new PermissionRule(
+            [permission],
+            resource.Type,
+            organization,
+            await subjects.OfAsync(context, cancellationToken).ConfigureAwait(false),
+            time.GetUtcNow(),
+            [.. conferring.Select(one => one.Relationship)]);
+
+        IReadOnlyList<AdmittedRecord> admitted = await RowsAsync(
+            rule.ToAdmittedRecords(sources, [resource.Id]), cancellationToken).ConfigureAwait(false);
+
+        if (admitted.Count == 0)
+        {
+            return null;
+        }
+
+        AdmittedRecord first = admitted[0];
+
+        ConferredDerivation deciding = conferring.First(one =>
+            string.Equals(one.Relationship.Name, first.Relationship, StringComparison.Ordinal));
+
+        var above = new ResourceReference(
+            deciding.Relationship.On,
+            ResourceId.Parse(first.Ancestor));
+
+        return new ExplainedGrant(
+            Id: null,
+            GrantKind.Derived,
+            SubjectType.User,
+            subject.Value,
+            deciding.Role,
+            Deny: false,
+            above == resource ? null : above);
+    }
 
     private static ExplainedGrant Explained(CandidateGrant decided, ResourceReference resource)
     {

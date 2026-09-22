@@ -232,7 +232,8 @@ internal sealed class PermissionRule
 
         foreach (RelationshipDeclaration relationship in _derivations)
         {
-            IQueryable<string> one = Admits(sources, ancestry, type, page, relationship);
+            IQueryable<string> one = Admits(sources, ancestry, type, page, relationship)
+                .Select(entry => entry.ResourceId);
 
             admitted = admitted is null ? one : admitted.Union(one);
         }
@@ -273,7 +274,7 @@ internal sealed class PermissionRule
             string named = relationship.Name;
 
             IQueryable<AdmittedRecord> one = Admits(sources, ancestry, type, page, relationship)
-                .Select(record => new AdmittedRecord(record, named));
+                .Select(entry => new AdmittedRecord(entry.ResourceId, entry.AncestorId, named));
 
             admitted = admitted is null ? one : admitted.Concat(one);
         }
@@ -433,7 +434,7 @@ internal sealed class PermissionRule
     // row: the records of the page with a container the relationship names, held by one
     // of the principal's subjects. One query per derivation, whatever the page's size
     // (AUTHZ-GATE-005 AC1).
-    private IQueryable<string> Admits<TResource>(
+    private IQueryable<AncestryEntry> Admits<TResource>(
         FilterSources<TResource> sources,
         IQueryable<AncestryEntry> ancestry,
         string type,
@@ -469,8 +470,7 @@ internal sealed class PermissionRule
         return ancestry
             .Where(Expression.Lambda<Func<AncestryEntry, bool>>(
                 Expression.AndAlso(scoped.Body, held),
-                above))
-            .Select(entry => entry.ResourceId);
+                above));
     }
 
     // Whether the row is held by one of the principal's subjects. The column is the

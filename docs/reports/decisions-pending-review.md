@@ -132,6 +132,8 @@ explanation for a disclosing type a derivation reaches and expects the fault.
 `authz.derivation.sourcesmissing` on a type a derivation reaches, until a shape exists
 for a grant with no row.
 
+**Superseded by D-162.** Applied in entry 111.
+
 ---
 
 ## 4. A capability page costs one query per permission a derivation confers
@@ -3413,3 +3415,34 @@ which asks a page for three permissions and counts the statements the host's con
 sent,
 `GateBehaviourTests.AUTHZ_GATE_005_AC1_APageOfFiftyIsAnsweredWithoutAQueryPerRecordAsync`,
 `GateBehaviourTests.AUTHZ_GATE_005_AC2_ADerivedGrantReachesTheCapabilityPageAsync`.
+
+---
+
+## 111. An explanation takes the host's rows and names the grant a fact produced
+
+**Corrections 1 · 2026-09-22 · D-162 section B, correcting entry 3 · AUTHZ-GATE-004, AUTHZ-DERIVE-001**
+
+*What D-162 decided.* `ExplainAsync` takes the same sources as the check and the page;
+without them on a derived type it is refused with `authz.derivation.sourcesmissing`;
+with them it names the deciding grant, a derived one as `{ id: null, kind: derived,
+subjectType, subjectId, role, deny: false, inheritedFrom }` (`10` 5.6 already has the
+kind). Refusing every explanation on such a type removed a SHALL operation.
+
+*What was built.* `IAccessGate` carries an `ExplainAsync` overload taking
+`FilterSources`, beside the check and the page that already took them. It reads
+concealment first, decides over the stored grants, and where none decided and the record
+is one of an organization's, evaluates the derivations whose role confers the permission
+over the rows the host supplied. A record one of them admits is explained as allowed by
+a grant carrying no identifier, the derived kind, the asking account, the role the
+derivation confers, no deny, and the container the relationship is declared on (nothing
+where that container is the record itself). `ExplainedGrant.Id` is optional for that
+reason; a stored or materialised grant still carries its row's identifier. A deny still
+defeats a derived grant, because the host's rows are read only where nothing has
+decided.
+
+*Tests that pin it.*
+`ExplanationTests.AUTHZ_GATE_004_AC2_AnApprovalNamesTheGrantAFactProducedAsync`,
+`ExplanationTests.AUTHZ_GATE_004_AC1_ADenialWithTheHostsRowsStatesNoGrantMatchedAsync`,
+`ExplanationTests.AUTHZ_GATE_004_AC2_AnApprovalNamesTheGrantAndWhatItWasInheritedFromAsync`,
+`ExplanationTests.AUTHZ_GATE_004_AC3_OnlyATypeThatDisclosesExplainsToTheCallerAsync`,
+`MaterialisationTests.AUTHZ_DERIVE_005_AC2_AnExplanationNamesTheGrantAsMaterialisedAsync`.

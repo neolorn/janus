@@ -5,7 +5,10 @@ namespace Janus.Core;
 /// <summary>
 /// The grant that decided an evaluation, as an explanation names it.
 /// </summary>
-/// <param name="Id">Which grant.</param>
+/// <param name="Id">
+/// Which grant, and nothing where the grant is one no row holds: a derived grant is
+/// the fact in the host's data being true, and has no identifier to name.
+/// </param>
 /// <param name="Kind">Whether someone wrote it, a fact produced it, or it was precomputed.</param>
 /// <param name="SubjectType">Whether it is held by an account or by a group.</param>
 /// <param name="SubjectId">The account or the group holding it.</param>
@@ -17,7 +20,7 @@ namespace Janus.Core;
 /// </param>
 /// <remarks>Implements AUTHZ-GATE-004 and CONV-DESIGN-004.</remarks>
 public sealed record ExplainedGrant(
-    GrantId Id,
+    GrantId? Id,
     GrantKind Kind,
     SubjectType SubjectType,
     Guid SubjectId,

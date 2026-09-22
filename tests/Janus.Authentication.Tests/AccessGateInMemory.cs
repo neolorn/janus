@@ -98,6 +98,15 @@ internal sealed class AccessGateInMemory : IAccessGate
     }
 
     /// <inheritdoc/>
+    public ValueTask<Result<AccessExplanation>> ExplainAsync<TResource>(
+        AccessContext context,
+        Permission permission,
+        ResourceReference resource,
+        FilterSources<TResource> sources,
+        CancellationToken cancellationToken) =>
+        ExplainAsync(context, permission, resource, cancellationToken);
+
+    /// <inheritdoc/>
     public ValueTask<Result<AccessExplanation>> ResolveAsync(
         AccessContext context,
         OrganizationId organization,
