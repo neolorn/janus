@@ -107,6 +107,18 @@ public sealed class BrowserProfileTests : IDisposable
     }
 
     /// <summary>
+    /// BFF-CSRF-001 AC1, BFF-CSRF-003 AC1: the two headers are separate, and each is
+    /// named on the wire as the frontend writes it. The token travels in one of them;
+    /// the other carries no value and is only ever looked for.
+    /// </summary>
+    [Fact]
+    public void BFF_CSRF_003_AC1_TheTwoHeadersAreNamedAsTheFrontendWritesThem()
+    {
+        Assert.Equal("X-Janus-Csrf", SynchronizerToken.Header);
+        Assert.Equal("X-Janus-Request", BrowserCookies.RequestHeader);
+    }
+
+    /// <summary>
     /// BFF-CSRF-003 AC1: the custom header is required whatever else the request
     /// carries, a valid session-bound token among it.
     /// </summary>

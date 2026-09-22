@@ -4663,6 +4663,29 @@ writes its declaration in those words.
 
 ---
 
+---
+
+## 139. The two browser headers are separate and each is named on the wire
+
+**Corrections 1 · 2026-09-22 · D-162 section C, item 10 · BFF-CSRF-001, BFF-CSRF-003, D-153**
+
+*What D-162 decided.* The synchronizer token travels in `X-Janus-Csrf`; `X-Janus-Request`
+stays a presence check. D-153's sentence naming one header is corrected.
+
+*What was built.* The library already carried both headers exactly this way, and
+nothing changed. What was missing is that neither wire name was asserted anywhere: both
+were constants a rename would have carried silently through every test. Each is now held
+against the name the frontend writes.
+
+*Tests that pin it.*
+`BrowserProfileTests.BFF_CSRF_003_AC1_TheTwoHeadersAreNamedAsTheFrontendWritesThem`,
+`BrowserProfileTests.BFF_CSRF_003_AC1_ARequestWithoutTheCustomHeaderIsRejectedAsync`,
+`BrowserProfileTests.BFF_CSRF_001_AC1_AStateChangeWithoutASessionBoundTokenIsRejectedAsync`.
+
+*Chapter text that should change.* D-153's sentence naming one header, as D-162 says.
+`10` should carry both header names.
+
+
 # Rows for chapter 10
 
 D-162 section E names codes, keys, declarations and vocabularies the library now
