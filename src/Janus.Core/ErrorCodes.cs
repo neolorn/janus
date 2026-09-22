@@ -728,6 +728,13 @@ public static class ErrorCodes
     public static ErrorCode ConsentWrittenRequired { get; } = ErrorCode.Parse("privacy.consent.writtenrequired");
 
     /// <summary>
+    /// The document or the version asked for does not exist, or was never published.
+    /// Ask for a version that was published, or the current one.
+    /// </summary>
+    /// <remarks>Implements PRIV-CONS-005, chapter 10 section 1.4.</remarks>
+    public static ErrorCode DocumentNotFound { get; } = ErrorCode.Parse("privacy.document.notfound");
+
+    /// <summary>
     /// An erasure that has not exhausted its retries cannot be completed by hand.
     /// Let the deliveries run out first.
     /// </summary>
@@ -741,6 +748,21 @@ public static class ErrorCodes
     /// <remarks>Implements PRIV-CONS-005, PRIV-CONS-006, chapter 10 section 1.4.</remarks>
     public static ErrorCode NoticeGoverningTextMissing { get; } =
         ErrorCode.Parse("privacy.notice.governingtextmissing");
+
+    /// <summary>
+    /// No privacy notice has been published, so there is no version a consent could
+    /// be given against. Publish one first.
+    /// </summary>
+    /// <remarks>Implements PRIV-CONS-005, PRIV-CONS-008a, chapter 10 section 1.4.</remarks>
+    public static ErrorCode NoticeUnpublished { get; } = ErrorCode.Parse("privacy.notice.unpublished");
+
+    /// <summary>
+    /// The purpose is undeclared, or rests on a basis other than consent, so it is
+    /// not the subject's to agree to or to withdraw. Act on a purpose the deployment
+    /// declared as resting on consent.
+    /// </summary>
+    /// <remarks>Implements PRIV-CONS-008a, PRIV-SENS-002a, chapter 10 section 1.4.</remarks>
+    public static ErrorCode PurposeNoConsent { get; } = ErrorCode.Parse("privacy.purpose.noconsent");
 
     /// <summary>
     /// The basis the purpose rests on carries no right to object. Withdraw the

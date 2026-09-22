@@ -62,6 +62,7 @@ internal static class ApiStatus
         // Not found, and the concealed denial that answers the same way.
         [ErrorCodes.CredentialNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.GrantNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.DocumentNotFound] = StatusCodes.Status404NotFound,
 
         // A conflict with what is already there, or a precondition the state fails.
         [ErrorCodes.ChangePending] = StatusCodes.Status409Conflict,
@@ -84,6 +85,7 @@ internal static class ApiStatus
         [ErrorCodes.TakedownActive] = StatusCodes.Status409Conflict,
         [ErrorCodes.AccountAdministrativelySuspended] = StatusCodes.Status409Conflict,
         [ErrorCodes.RegistrationSignedIn] = StatusCodes.Status409Conflict,
+        [ErrorCodes.NoticeUnpublished] = StatusCodes.Status409Conflict,
 
         // Well formed, and refused on what it says.
         [ErrorCodes.AffirmationRequired] = StatusCodes.Status422UnprocessableEntity,
@@ -131,6 +133,7 @@ internal static class ApiStatus
         [ErrorCodes.CallbackRejected] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.EndpointInsecure] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.SmsBalanceFloor] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.PurposeNoConsent] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.PurposeNotObjectable] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.NoticeGoverningTextMissing] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.RequestReceivedFuture] = StatusCodes.Status422UnprocessableEntity,

@@ -98,7 +98,8 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
 
         Answer refused = await browser.SendAsync("POST", "/privacy/consents/" + Fulfilment + "/grant");
 
-        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.PurposeNoConsent.ToString(), refused.Text("code"));
         Assert.Empty((await browser.SendAsync("GET", "/privacy/consents")).Json().EnumerateArray());
     }
 

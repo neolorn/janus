@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- Three privacy refusals now carry codes of their own instead of the general denial. A
+  document or version that was never published answers 404 `privacy.document.notfound`; a
+  grant or withdrawal on a purpose that is undeclared or rests on another basis answers
+  422 `privacy.purpose.noconsent`; a grant before any privacy notice has been published
+  answers 409 `privacy.notice.unpublished`. None of the three is a permission problem, and
+  none reads as one now.
+
 - A WebAuthn creation ceremony now carries who the credential is for: the handle is the
   account's subject identifier, the name is its primary email and the display name is
   what the account shows or empty. An authenticator can therefore offer the credential

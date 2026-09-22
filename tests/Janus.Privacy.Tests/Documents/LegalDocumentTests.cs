@@ -263,7 +263,9 @@ public sealed class LegalDocumentTests : IAsyncDisposable
             version: null,
             CancellationToken.None);
 
-        Assert.Equal(ErrorCodes.Denied, refused.Match(_ => default, error => error.Code));
+        Assert.Equal(
+            ErrorCodes.DocumentNotFound,
+            refused.Match(_ => default, error => error.Code));
     }
 
     /// <summary>

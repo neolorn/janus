@@ -80,12 +80,15 @@ internal sealed class ConsentService(
         // recording their agreement would imply it were (PRIV-CONS-008a).
         if (processing.Find(purpose) is not { Consent: ConsentKind kind })
         {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
+            return Result.Failure(Error.From(ErrorCodes.PurposeNoConsent));
         }
 
+        // A consent is given against the notice version in force, so before any
+        // notice is published there is nothing for it to stand against
+        // (PRIV-CONS-005).
         if (await VersionAsync(cancellationToken).ConfigureAwait(false) is not string version)
         {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
+            return Result.Failure(Error.From(ErrorCodes.NoticeUnpublished));
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -128,6 +131,13 @@ internal sealed class ConsentService(
         if (context.Effective is not SubjectId subject)
         {
             return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        // Withdrawal reaches the same purposes a grant does: one that is undeclared or
+        // rests on another basis holds no consent to withdraw (PRIV-CONS-008a).
+        if (processing.Find(purpose) is not { Consent: not null })
+        {
+            return Result.Failure(Error.From(ErrorCodes.PurposeNoConsent));
         }
 
         IReadOnlyList<ConsentRecord> held = await consents

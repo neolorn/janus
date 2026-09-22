@@ -2574,6 +2574,8 @@ grants least and keeps most. The owner adds the rows and the refusals take their
 that does not exist, a purpose that is not the subject's to consent to, and a consent
 asked for before any notice was published.
 
+**Superseded by D-162.** Applied in entry 130.
+
 ---
 
 ## 84. A consent record carries when it was superseded
@@ -4341,6 +4343,40 @@ does, is judged as before.
 `POST /auth/webauthn/register/begin`, including the `user` object, and say that the
 assertion may carry the handle the authenticator returned.
 
+---
+
+## 130. Three privacy refusals take names of their own
+
+**Corrections 1 · 2026-09-22 · D-162 section B, correcting entry 83 · PRIV-CONS-005, PRIV-CONS-008a, PRIV-SENS-002a, `10` section 1.4**
+
+*What D-162 decided.* No `privacy.denied` exists and `authz.denied` is wrong for the
+three cases. Three new `10` section 1.4 rows: `privacy.document.notfound` (404),
+`privacy.purpose.noconsent` (422), `privacy.notice.unpublished` (409).
+
+*What was built.* The three codes are in the catalogue and in the status table.
+`LegalDocumentService` answers `privacy.document.notfound` where the document or the
+named version does not exist, on the read and on the translation alike.
+`ConsentService.GrantAsync` answers `privacy.purpose.noconsent` where the purpose is
+undeclared or rests on another basis, and `privacy.notice.unpublished` where no notice
+version has been published. `WithdrawAsync` now makes the same purpose check as the
+grant, because D-162 names the withdrawal beside it.
+
+*Decided in the owner's absence.* One point, Tier 2: *what a withdrawal of a consent that
+was never granted answers.* D-162 names the undeclared and the non-consent purpose and
+nothing else, so the refusal for a declared consent purpose with no record held is left
+as it stands. Inventing a fourth code would put a name on the wire that no chapter
+carries.
+
+*Tests that pin it.*
+`ConsentTests.PRIV_CONS_008a_AC3_APurposeThatTakesNoConsentIsNamedAsSuchAsync`,
+`ConsentTests.PRIV_CONS_005_AConsentBeforeAnyNoticeIsPublishedIsRefusedAsync`,
+`LegalDocumentTests.PRIV_CONS_005_AC1_AnUnpublishedDocumentIsRefusedAsync`,
+`LegalDocumentEndpointTests.PRIV_CONS_005_AC1_AnUnpublishedDocumentIsRefusedAsync`,
+`ConsentEndpointTests.PRIV_CONS_008a_AC3_APurposeOnAnotherBasisTakesNoConsentAsync`.
+
+*Chapter text that should change.* `10` section 1.4 needs the three rows, listed under
+**Rows for chapter 10**. `09` section 7 should carry the three statuses on the consent
+and document endpoints.
 
 # Rows for chapter 10
 
@@ -4358,6 +4394,9 @@ The subsection each row belongs in is named with it.
 | `api.request.malformed` | 1.5 | 400 | The request could not be read: its body is not the shape the endpoint takes, or a member it requires is absent or empty. `details.member` names the member the reader stopped at, or the one the endpoint required, and carries nothing of its value; where the body failed before any member, the refusal carries the code alone (API-CONV-002). |
 | `identity.registration.signedin` | 1.1 | 409 | `POST /register` arrives from a browser holding a live session. Nothing is staged and no account document is answered; the frontend navigates to the account application (REG-SESS-002). |
 | `auth.password.toolong` | 1.2 | 422 | A password longer than `password.maximum` is set, at registration, at a password change or at a reset. Nothing is truncated. |
+| `privacy.document.notfound` | 1.4 | 404 | A legal document, or a named version of one, that does not exist or was never published is read, or a translation is filed against one. |
+| `privacy.notice.unpublished` | 1.4 | 409 | A consent is granted before any privacy-notice version has been published, so there is no version for it to stand against (PRIV-CONS-005). |
+| `privacy.purpose.noconsent` | 1.4 | 422 | A consent is granted or withdrawn on a purpose the deployment did not declare, or one that rests on a basis other than consent, so it is not the subject's to agree to (PRIV-CONS-008a). |
 
 ## LIB-HOST-001, host declarations
 

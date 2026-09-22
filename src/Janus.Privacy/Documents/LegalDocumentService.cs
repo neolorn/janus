@@ -56,7 +56,7 @@ internal sealed class LegalDocumentService(
             : await store.CurrentAsync(document, cancellationToken).ConfigureAwait(false);
 
         return found is null
-            ? Result.Failure<DocumentVersion>(Error.From(ErrorCodes.Denied))
+            ? Result.Failure<DocumentVersion>(Error.From(ErrorCodes.DocumentNotFound))
             : Result.Success(found);
     }
 
@@ -129,7 +129,7 @@ internal sealed class LegalDocumentService(
 
         if (await store.FindAsync(document, version, cancellationToken).ConfigureAwait(false) is null)
         {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
+            return Result.Failure(Error.From(ErrorCodes.DocumentNotFound));
         }
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
