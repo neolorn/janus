@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -33,6 +34,7 @@ namespace Janus.Authentication.Registration;
 /// <param name="policies">Where the policy in force is resolved.</param>
 /// <param name="issuing">What issues the session the person is signed in on.</param>
 /// <param name="devices">What remembers the registering browser.</param>
+/// <param name="capture">Where the consent controls the person ticked are recorded.</param>
 /// <param name="configuration">Where the registration settings are read.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="events">Where the emitted events go.</param>
@@ -58,6 +60,7 @@ internal sealed class RegistrationService(
     PolicyResolution policies,
     SessionService issuing,
     DeviceService devices,
+    IConsents capture,
     IConfigurationStore configuration,
     IUnitOfWork work,
     IEvents events,
@@ -770,6 +773,15 @@ internal sealed class RegistrationService(
             return Result.Failure<RegistrationOutcome>(failure);
         }
 
+        // A control the deployment takes no consent for, or a step reached before any
+        // notice was published, is a request that should not have been made: nothing
+        // is written and the person is not registered under a record we cannot keep.
+        if (await RecordedAsync(live.Provisional, consents, cancellationToken)
+                .ConfigureAwait(false) is Error unrecorded)
+        {
+            return Result.Failure<RegistrationOutcome>(unrecorded);
+        }
+
         // Nothing of the session survives it: an account exists now, and a staged
         // copy of what made it would be a second place the same facts live.
         await sessions.RemoveAsync(live.Id, cancellationToken).ConfigureAwait(false);
@@ -785,6 +797,39 @@ internal sealed class RegistrationService(
             .ConfigureAwait(false);
 
         return Result.Success(new RegistrationOutcome(live.Provisional, issued, browser));
+    }
+
+    // REG-SESS-007 AC1: one control per consent-based purpose, ticked by the person
+    // and never by the library. A control left unticked writes nothing and stops
+    // nothing, which is what lets registration complete with all of them unticked.
+    private async ValueTask<Error?> RecordedAsync(
+        SubjectId subject,
+        IReadOnlyDictionary<string, bool> consents,
+        CancellationToken cancellationToken)
+    {
+        var holder = AccessContext.Of(subject);
+
+        foreach (KeyValuePair<string, bool> control in consents.OrderBy(
+            control => control.Key,
+            StringComparer.Ordinal))
+        {
+            if (!control.Value)
+            {
+                continue;
+            }
+
+            Error? refused = (await capture
+                    .GrantAsync(holder, control.Key, ConsentMechanism.Registration, cancellationToken)
+                    .ConfigureAwait(false))
+                .Match(() => (Error?)null, error => error);
+
+            if (refused is not null)
+            {
+                return refused;
+            }
+        }
+
+        return null;
     }
 
     /// <inheritdoc/>

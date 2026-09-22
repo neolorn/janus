@@ -60,12 +60,17 @@ public sealed class HostFixture : IAsyncLifetime
 
         await using (NpgsqlConnection connection = await _database.OpenAsync())
         {
-            // LIB-HOST-001: the deployment names the keys the library cannot guess,
-            // and the check that runs before anything is served reads them.
+            // LIB-HOST-001 and PRIV-RET-001: the deployment names the keys the
+            // library cannot guess, a retention period for each category its purposes
+            // declare among them, and the check that runs before anything is served
+            // reads them.
             await connection.ExecuteAsync(
                 """
                 INSERT INTO janus.settings (key, value)
-                VALUES ('notification.languages', '["en"]');
+                VALUES
+                    ('notification.languages', '["en"]'),
+                    ('retention.identity', 'P7Y'),
+                    ('retention.history', 'P2Y');
 
                 CREATE SCHEMA host;
                 CREATE TABLE host.documents (id text PRIMARY KEY, title text NOT NULL);
@@ -93,6 +98,10 @@ public sealed class HostFixture : IAsyncLifetime
             Encoding.UTF8.GetBytes("the fingerprint key of this deployment"),
             Declaration(),
             JanusApplication.Public);
+
+        // PRIV-RIGHT-005b: the deployment declares its documents sensitive, so it
+        // registers what does the host-side work for them.
+        services.AddSingleton<ISubjectEventSubscriber>(new HostSubjectEvents());
 
         _services = services.BuildServiceProvider();
     }
@@ -127,11 +136,20 @@ public sealed class HostFixture : IAsyncLifetime
                 RequiresWrittenConsentForSensitive: false,
                 RequiresAssessment: false,
                 IsObjectable: false))
+            .LawfulBasis(new LawfulBasisDeclaration(
+                "agreement",
+                IsConsent: true,
+                RequiresWrittenConsentForSensitive: true,
+                RequiresAssessment: false,
+                IsObjectable: false))
+            .SensitiveCategory("financial")
             .Permission(HostPermissions.Read.ToString())
             .Permission(HostPermissions.Edit.ToString())
             .Permission(HostPermissions.Publish.ToString())
             .Permission(HostPermissions.ReadNote.ToString())
+            .Permission(HostPermissions.Recommend.ToString())
             .StepUpGate(HostPermissions.Publish.ToString(), "document:publish")
+            .ServesPurpose(HostPermissions.Recommend.ToString(), "recommendations")
             .Relationship<HostReviewer>(
                 "reviewer",
                 "workspace",
@@ -143,13 +161,19 @@ public sealed class HostFixture : IAsyncLifetime
             .Resource<HostWorkspace>("workspace", type => type
                 .BelongsToOrganization()
                 .Derivation("reviewer", "reviewer", materialised)
-                .Purpose("running the host", "contract"))
+                .Purpose("running the host", "contract", data: ["identity"], subjects: ["members"]))
             .Resource<HostDocument>("document", type => type
                 .ContainedIn("workspace")
-                .Purpose("running the host", "contract"))
+                .Sensitive("financial")
+                .Purpose("running the host", "contract", data: ["identity"], subjects: ["members"])
+                .Purpose(
+                    "recommendations",
+                    "agreement",
+                    data: ["history"],
+                    subjects: ["members"]))
             .Resource<HostNote>("note", type => type
                 .ContainedIn("workspace")
                 .Discloses()
-                .Purpose("running the host", "contract"))
+                .Purpose("running the host", "contract", data: ["identity"], subjects: ["members"]))
             .Build();
 }

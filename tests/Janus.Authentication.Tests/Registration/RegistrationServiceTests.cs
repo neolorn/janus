@@ -70,6 +70,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
     private readonly AuthenticatorStoreInMemory _authenticators = new();
     private readonly OidcClientStoreInMemory _clients = new();
     private readonly DeviceStoreInMemory _devices = new();
+    private readonly ConsentsInMemory _consents = new();
     private readonly SessionStoreInMemory _live = new();
     private readonly SessionAuditInMemory _audit = new();
     private readonly MembershipLookupInMemory _memberships = new();
@@ -150,6 +151,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
                 _clock,
                 _randomness),
             new DeviceService(_devices, _configuration, _work, _events, _clock, _randomness),
+            _consents,
             _configuration,
             _work,
             _events,
@@ -723,6 +725,100 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-CONS-003 AC1, AC2: nothing is ticked for the person, so a step submitted
+    /// with every control as it was drawn records no consent, and a purpose the
+    /// person was never shown a control for records none either.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_CONS_003_AC1_NoConsentIsRecordedForAControlLeftUntickedAsync()
+    {
+        _consents.Take("marketing");
+        _consents.Take("analytics");
+
+        RegistrationSessionId session = await SecuredAsync();
+
+        Dictionary<string, bool> untouched = new(StringComparer.Ordinal)
+        {
+            ["analytics"] = false,
+            ["marketing"] = false,
+        };
+
+        RegistrationCompleted completed = Ok(await Service.AcceptTermsAsync(
+            session,
+            Terms,
+            Notice,
+            untouched,
+            Browser,
+            location: null,
+            TestContext.Current.CancellationToken));
+
+        Assert.Empty(_consents.Of(completed.Subject));
+    }
+
+    /// <summary>
+    /// PRIV-CONS-001 AC1, PRIV-CONS-002 AC1: each control the person ticked is its
+    /// own record naming its own purpose, and the mechanism says where it was given.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_CONS_002_AC1_EachTickedControlIsItsOwnRecordAsync()
+    {
+        _consents.Take("marketing");
+        _consents.Take("analytics");
+
+        RegistrationSessionId session = await SecuredAsync();
+
+        Dictionary<string, bool> ticked = new(StringComparer.Ordinal)
+        {
+            ["analytics"] = true,
+            ["marketing"] = true,
+        };
+
+        RegistrationCompleted completed = Ok(await Service.AcceptTermsAsync(
+            session,
+            Terms,
+            Notice,
+            ticked,
+            Browser,
+            location: null,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            ["analytics", "marketing"],
+            _consents.Of(completed.Subject).Select(record => record.Purpose));
+        Assert.All(
+            _consents.Of(completed.Subject),
+            record => Assert.Equal(ConsentMechanism.Registration, record.Mechanism));
+    }
+
+    /// <summary>
+    /// PRIV-CONS-001 AC1: a record names a purpose the deployment takes consent for,
+    /// so a control naming anything else is a request that should not have been made
+    /// and the step refuses rather than recording a consent to nothing.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_CONS_001_AC1_AControlForAPurposeTakingNoConsentIsRefusedAsync()
+    {
+        RegistrationSessionId session = await SecuredAsync();
+
+        Dictionary<string, bool> ticked = new(StringComparer.Ordinal)
+        {
+            ["fulfilment"] = true,
+        };
+
+        Result<RegistrationCompleted> refused = await Service.AcceptTermsAsync(
+            session,
+            Terms,
+            Notice,
+            ticked,
+            Browser,
+            location: null,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.Denied, Refused(refused));
+        Assert.Equal(0, _consents.Recorded);
+    }
+
+    /// <summary>
     /// REG-SESS-007 AC2: what was accepted and what was presented are on the account
     /// the step creates.
     /// </summary>
@@ -738,6 +834,30 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
         Assert.Equal(Terms, created.TermsVersion);
         Assert.Equal(Notice, created.NoticeVersion);
         Assert.Equal(Noon, created.AnsweredAgeAt);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-008a AC2: what is recorded of the privacy notice is that a version
+    /// was presented at a time. The account carries the version and the instant, and
+    /// no field of what the step writes records an acceptance of it; the terms, which
+    /// are a contract, are the only thing accepted.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_CONS_008a_AC2_ThePresentationRecordCarriesTheVersionAndTheInstantAsync()
+    {
+        RegistrationSessionId session = await SecuredAsync();
+
+        _ = Ok(await AcceptedAsync(session));
+
+        NewAccount created = Assert.Single(_directory.Created);
+
+        Assert.Equal(Notice, created.NoticeVersion);
+        Assert.Equal(Noon, created.CreatedAt);
+
+        Assert.DoesNotContain(
+            typeof(NewAccount).GetProperties(),
+            property => property.Name.Contains("NoticeAccepted", StringComparison.Ordinal)
+                || property.Name.Contains("AcceptedNotice", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -1031,6 +1151,79 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
         Assert.Equal(AgeGroup.Adult, created.Group);
     }
 
+
+    /// <summary>
+    /// PRIV-MINOR-001 AC1, AC3: on an adults-only deployment nothing is taken before
+    /// the affirmation is derived, and an under-age answer ends the session, so no
+    /// account exists whose subject has not affirmed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_MINOR_001_AC1_NoAccountExistsWithoutTheDerivedAffirmationAsync()
+    {
+        _configuration.Set(Settings.RegistrationAdultAffirmation, AttributeRequirement.Required);
+
+        RegistrationSessionId unanswered = await StartedAsync();
+
+        Assert.Equal(
+            ErrorCodes.AffirmationRequired,
+            Refused(await Service.StageAsync(
+                unanswered,
+                IdentifierKind.Email,
+                Address,
+                TestContext.Current.CancellationToken)));
+
+        RegistrationSessionId underage = await StartedAsync();
+
+        Assert.Equal(
+            ErrorCodes.ProfileUnderage,
+            Refused(await Service.RecordAgeAsync(
+                underage,
+                Minor,
+                TestContext.Current.CancellationToken)));
+
+        Assert.Empty(_directory.Created);
+
+        RegistrationSessionId affirmed = await SecuredAsync();
+
+        _ = Ok(await AcceptedAsync(affirmed));
+
+        Assert.True(Assert.Single(_directory.Created).AdultAffirmed);
+    }
+
+    /// <summary>
+    /// PRIV-MINOR-001 AC2: with the date off, the affirmation is derived from the age
+    /// screen and the date itself reaches no record.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_MINOR_001_AC2_TheDateIsNotKeptWhereTheDeploymentDoesNotKeepItAsync()
+    {
+        _ = Ok(await AcceptedAsync(await SecuredAsync()));
+
+        NewAccount withheld = Assert.Single(_directory.Created);
+
+        Assert.True(withheld.AdultAffirmed);
+        Assert.Null(withheld.DateOfBirth);
+    }
+
+    /// <summary>
+    /// PRIV-MINOR-001 AC2: with the date on, it is on the account beside the
+    /// affirmation, as the personal field PRIV-RIGHT-005a holds under the subject key.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_MINOR_001_AC2_TheDateIsKeptWhereTheDeploymentKeepsItAsync()
+    {
+        _configuration.Set(Settings.ProfileDateOfBirth, AttributeRequirement.Optional);
+
+        _ = Ok(await AcceptedAsync(await SecuredAsync()));
+
+        NewAccount kept = Assert.Single(_directory.Created);
+
+        Assert.True(kept.AdultAffirmed);
+        Assert.Equal(Adult, kept.DateOfBirth);
+    }
 
     /// <summary>
     /// REG-IDENT-009 AC1: the username is chosen later, so a registration that never

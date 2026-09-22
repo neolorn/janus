@@ -1,4 +1,5 @@
 using System;
+using Janus.Storage.Authentication.Accounts;
 using Janus.Storage.Authentication.Alerting;
 using Janus.Storage.Authentication.Credentials;
 using Janus.Storage.Authentication.Factors;
@@ -21,7 +22,13 @@ using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Identity.Profiles;
+using Janus.Storage.Privacy.Consents;
+using Janus.Storage.Privacy.Documents;
 using Janus.Storage.Privacy.Erasures;
+using Janus.Storage.Privacy.Exports;
+using Janus.Storage.Privacy.Outbox;
+using Janus.Storage.Privacy.Records;
+using Janus.Storage.Privacy.Requests;
 using Janus.Storage.Privacy.SubjectKeys;
 using Janus.Storage.Settings;
 using Microsoft.EntityFrameworkCore;
@@ -116,6 +123,53 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     /// The erasures, each carrying the host-side work outstanding for one subject.
     /// </summary>
     public DbSet<ErasureRecord> Erasures => Set<ErasureRecord>();
+
+    /// <summary>
+    /// The consents the subjects gave, withdrew or had superseded.
+    /// </summary>
+    public DbSet<ConsentRecordRow> Consents => Set<ConsentRecordRow>();
+
+    /// <summary>
+    /// The objections the subjects recorded.
+    /// </summary>
+    public DbSet<ObjectionRecordRow> Objections => Set<ObjectionRecordRow>();
+
+    /// <summary>
+    /// The facts about a subject the host has its own half of, one row a delivery.
+    /// </summary>
+    public DbSet<DeliveryRecord> Outbox => Set<DeliveryRecord>();
+
+    /// <summary>
+    /// One subscriber's confirmation of one delivery.
+    /// </summary>
+    public DbSet<DeliveryConfirmationRecord> OutboxConfirmations =>
+        Set<DeliveryConfirmationRecord>();
+
+    /// <summary>
+    /// The data subject requests on the queue, decided ones included.
+    /// </summary>
+    public DbSet<PrivacyRequestRecord> PrivacyRequests => Set<PrivacyRequestRecord>();
+
+    /// <summary>
+    /// The exports the accounts have taken, one row an export.
+    /// </summary>
+    public DbSet<ExportRecordRow> PrivacyExports => Set<ExportRecordRow>();
+
+    /// <summary>
+    /// The supplied fields of the records of processing, at one row.
+    /// </summary>
+    public DbSet<ComplianceRow> ComplianceRecords => Set<ComplianceRow>();
+
+    /// <summary>
+    /// The published versions of the deployment's legal documents.
+    /// </summary>
+    public DbSet<DocumentVersionRecord> LegalDocumentVersions => Set<DocumentVersionRecord>();
+
+    /// <summary>
+    /// The translations attached to those versions.
+    /// </summary>
+    public DbSet<DocumentTranslationRecord> LegalDocumentTranslations =>
+        Set<DocumentTranslationRecord>();
 
     /// <summary>
     /// The wrapped per-subject data keys.
@@ -294,6 +348,11 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     public DbSet<PendingSignInRecord> SignInLinks => Set<PendingSignInRecord>();
 
     /// <summary>
+    /// The links the deactivation and deletion notices carried.
+    /// </summary>
+    public DbSet<LifecycleLinkRecord> LifecycleLinks => Set<LifecycleLinkRecord>();
+
+    /// <summary>
     /// The requirements the policies in force have raised.
     /// </summary>
     public DbSet<PolicyRaiseRecord> PolicyRaises => Set<PolicyRaiseRecord>();
@@ -399,9 +458,19 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new RecoveryLinkConfiguration());
         modelBuilder.ApplyConfiguration(new RecoveryApprovalConfiguration());
         modelBuilder.ApplyConfiguration(new LossReportConfiguration());
+        modelBuilder.ApplyConfiguration(new LifecycleLinkConfiguration());
         modelBuilder.ApplyConfiguration(new OidcClientConfiguration());
         modelBuilder.ApplyConfiguration(new AuthorizationCodeConfiguration());
         modelBuilder.ApplyConfiguration(new RefreshTokenConfiguration());
         modelBuilder.ApplyConfiguration(new SigningKeyConfiguration());
+        modelBuilder.ApplyConfiguration(new DocumentVersionConfiguration());
+        modelBuilder.ApplyConfiguration(new DocumentTranslationConfiguration());
+        modelBuilder.ApplyConfiguration(new ConsentConfiguration());
+        modelBuilder.ApplyConfiguration(new ObjectionConfiguration());
+        modelBuilder.ApplyConfiguration(new DeliveryConfiguration());
+        modelBuilder.ApplyConfiguration(new DeliveryConfirmationConfiguration());
+        modelBuilder.ApplyConfiguration(new PrivacyRequestConfiguration());
+        modelBuilder.ApplyConfiguration(new ExportConfiguration());
+        modelBuilder.ApplyConfiguration(new ComplianceConfiguration());
     }
 }

@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Authentication.Sending;
+using Janus.Core;
 using Janus.Storage.Authentication.Sending;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -79,6 +80,44 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
 
         Assert.Null(await FindAsync(destination));
         Assert.NotNull(await FindAsync(source));
+    }
+
+    /// <summary>
+    /// PRIV-RET-005 AC2: the record settles at the longest interval any bucket counts
+    /// over, so it lives at most that long and is gone the next time the ledger is
+    /// written after it.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RET_005_AC2_TheRecordLivesAtMostTheLongestBucketIntervalAsync()
+    {
+        RestrictionKey destination = Destination("+201001234567");
+        var other = new RestrictionKey("sms.source", "198.51.100.7");
+
+        TimeSpan longest = Restrictions.Retain(new Restriction(
+            "sms.destination",
+            RestrictionKeyKind.Destination,
+            HostKeyName: null,
+            RestrictionPurpose.Notification,
+            [
+                new Bucket(3, TimeSpan.FromHours(1), BucketWindow.Sliding),
+                new Bucket(10, Day, BucketWindow.Sliding),
+            ]));
+
+        Assert.Equal(Day, longest);
+
+        await RecordedAsync(Reference(8), [new SendCount(destination, longest)], Noon);
+
+        SendCounterRecord stored = await FindAsync(destination)
+            ?? throw new Xunit.Sdk.XunitException("The key was not counted.");
+
+        Assert.Equal(Noon + longest, stored.SettlesAt);
+
+        await RecordedAsync(
+            Reference(9),
+            [new SendCount(other, Day)],
+            Noon + longest + TimeSpan.FromSeconds(1));
+
+        Assert.Null(await FindAsync(destination));
     }
 
     /// <summary>

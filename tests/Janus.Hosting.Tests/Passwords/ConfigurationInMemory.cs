@@ -31,20 +31,27 @@ internal sealed class ConfigurationInMemory : IConfigurationStore
     public ValueTask<Result<TValue>> ReadAsync<TValue>(
         Setting<TValue> setting,
         CancellationToken cancellationToken) =>
-        ValueTask.FromResult(Result.Success(
-            _values.TryGetValue(setting.Key, out object? written)
-                ? (TValue)written
-                : setting.Default));
+        ValueTask.FromResult(Read(setting));
 
     /// <inheritdoc/>
     public ValueTask<Result<TValue>> ReadAsync<TValue>(
         SettingFamily<TValue> family,
         string parameter,
-        CancellationToken cancellationToken) =>
-        ValueTask.FromResult(Result.Success(
-            _values.TryGetValue(ConfigurationKey.Parse(family.Prefix + "." + parameter), out object? written)
-                ? (TValue)written
-                : family.Default));
+        CancellationToken cancellationToken)
+    {
+        if (_values.TryGetValue(
+            ConfigurationKey.Parse(family.Prefix + "." + parameter),
+            out object? written))
+        {
+            return ValueTask.FromResult(Result.Success((TValue)written));
+        }
+
+        // A family with no default is one the deployment names per parameter, and an
+        // unnamed one is undeclared rather than a value nobody wrote down.
+        return ValueTask.FromResult(family.HasDefault
+            ? Result.Success(family.Default)
+            : Result.Failure<TValue>(new Error(ErrorCodes.StartupDeclarationMissing, Nothing)));
+    }
 
     /// <inheritdoc/>
     public ValueTask<Result<TValue>> WriteAsync<TValue>(
@@ -58,8 +65,7 @@ internal sealed class ConfigurationInMemory : IConfigurationStore
                 Result.Failure<TValue>(new Error(ErrorCodes.ConfigurationKeyProtected, Nothing)));
         }
 
-        var before = Result.Success(
-            _values.TryGetValue(setting.Key, out object? written) ? (TValue)written : setting.Default);
+        Result<TValue> before = Read(setting);
 
         return ValueTask.FromResult(setting.Accept(value).Match(
             admitted =>
@@ -68,6 +74,20 @@ internal sealed class ConfigurationInMemory : IConfigurationStore
                 return before;
             },
             Result.Failure<TValue>));
+    }
+
+    // A required key the deployment never named is undeclared, not a value nobody
+    // wrote down; the store answers it the same way (LIB-HOST-001).
+    private Result<TValue> Read<TValue>(Setting<TValue> setting)
+    {
+        if (_values.TryGetValue(setting.Key, out object? written))
+        {
+            return Result.Success((TValue)written);
+        }
+
+        return setting.IsRequired
+            ? Result.Failure<TValue>(new Error(ErrorCodes.StartupDeclarationMissing, Nothing))
+            : Result.Success(setting.Default);
     }
 
     /// <summary>

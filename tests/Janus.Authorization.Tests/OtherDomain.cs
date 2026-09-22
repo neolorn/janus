@@ -96,14 +96,14 @@ internal static class OtherDomain
                 "id")
             .Resource<Depot>("depot", depot => depot
                 .BelongsToOrganization()
-                .Purpose("haulage", "contract"))
+                .Purpose("haulage", "contract", data: ["identity", "route"], subjects: ["drivers"]))
             .Resource<Vehicle>("vehicle", vehicle => vehicle
                 .ContainedIn("depot")
-                .Purpose("haulage", "contract")
+                .Purpose("haulage", "contract", data: ["identity", "route"], subjects: ["drivers"])
                 .Derivation("keeper", "keeper"))
             .Resource<Journey>("journey", journey => journey
                 .ContainedIn("vehicle")
-                .Purpose("haulage", "contract"));
+                .Purpose("haulage", "contract", data: ["identity", "route"], subjects: ["drivers"]));
 
     // A record is named by the host's own text, whatever the host makes that of.
     private static string Named() => Guid.CreateVersion7().ToString();

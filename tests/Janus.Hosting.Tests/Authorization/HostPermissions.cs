@@ -24,6 +24,12 @@ internal static class HostPermissions
     public static Permission Publish { get; } = Permission.Parse("document:publish");
 
     /// <summary>
+    /// Recommending from one of the host's records, which the host binds to a purpose
+    /// resting on consent.
+    /// </summary>
+    public static Permission Recommend { get; } = Permission.Parse("document:recommend");
+
+    /// <summary>
     /// Reading one of the host's records of the type that discloses.
     /// </summary>
     public static Permission ReadNote { get; } = Permission.Parse("note:read");

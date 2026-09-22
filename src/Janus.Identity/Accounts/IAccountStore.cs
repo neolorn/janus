@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -35,4 +37,15 @@ internal interface IAccountStore
     /// <returns>The work of recording the transition.</returns>
     /// <exception cref="System.InvalidOperationException">The account has no row.</exception>
     ValueTask RecordTransitionAsync(Account account, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads the accounts standing in a deletion grace window that began on or before
+    /// an instant.
+    /// </summary>
+    /// <param name="before">The instant the window must have begun by.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Them, oldest window first.</returns>
+    ValueTask<IReadOnlyList<Account>> DeletingSinceAsync(
+        DateTimeOffset before,
+        CancellationToken cancellationToken);
 }

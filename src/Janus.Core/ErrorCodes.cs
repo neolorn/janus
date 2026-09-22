@@ -209,6 +209,35 @@ public static class ErrorCodes
     public static ErrorCode ChangeWindowElapsed { get; } = ErrorCode.Parse("identity.change.windowelapsed");
 
     /// <summary>
+    /// The deletion grace window has closed, so there is nothing left to cancel. The
+    /// erasure has run.
+    /// </summary>
+    /// <remarks>Implements IDN-ACCT-007, chapter 10 section 1.1.</remarks>
+    public static ErrorCode DeletionWindowElapsed { get; } = ErrorCode.Parse("identity.deletion.windowelapsed");
+
+    /// <summary>
+    /// The deletion was a takedown, which the subject does not cancel. Only
+    /// <c>POST /admin/accounts/{subject}/takedown/reverse</c> undoes it.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-003, chapter 10 section 1.1.</remarks>
+    public static ErrorCode TakedownActive { get; } = ErrorCode.Parse("identity.takedown.active");
+
+    /// <summary>
+    /// The reactivation link is unknown, has lapsed with the state it belonged to, or
+    /// has already been used. Where the notice carrying it is lost, ordinary recovery
+    /// restores the account instead.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-013, chapter 10 section 1.1.</remarks>
+    public static ErrorCode ReactivationTokenInvalid { get; } = ErrorCode.Parse("identity.reactivation.tokeninvalid");
+
+    /// <summary>
+    /// The account was suspended by an administrator, so no link of the account's own
+    /// stands it back up. An administrator reverses it.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-013, chapter 10 section 1.1.</remarks>
+    public static ErrorCode AccountAdministrativelySuspended { get; } = ErrorCode.Parse("identity.account.adminsuspended");
+
+    /// <summary>
     /// The identifier is the primary of its kind, which is not removable. Set another
     /// primary first, then remove it.
     /// </summary>
@@ -655,6 +684,64 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements INT-SMS-004, AUTH-ABUSE-006, chapter 10 section 1.6.</remarks>
     public static ErrorCode SmsBalanceFloor { get; } = ErrorCode.Parse("integration.sms.balancefloor");
+
+    /// <summary>
+    /// The processing needs a consent the subject has not given. Ask for it on the
+    /// purpose it belongs to; the record continues to be processed on its other
+    /// bases.
+    /// </summary>
+    /// <remarks>Implements PRIV-SENS-002, chapter 10 section 1.4.</remarks>
+    public static ErrorCode ConsentRequired { get; } = ErrorCode.Parse("privacy.consent.required");
+
+    /// <summary>
+    /// The notice version the consent was given against is no longer current. Ask
+    /// again on the current version; nothing resting on another basis is affected.
+    /// </summary>
+    /// <remarks>Implements PRIV-CONS-007, chapter 10 section 1.4.</remarks>
+    public static ErrorCode ConsentSuperseded { get; } = ErrorCode.Parse("privacy.consent.superseded");
+
+    /// <summary>
+    /// The purpose is over sensitive data and its basis requires the written path.
+    /// Capture the consent in writing and record it as written.
+    /// </summary>
+    /// <remarks>Implements PRIV-BASIS-003, chapter 10 section 1.4.</remarks>
+    public static ErrorCode ConsentWrittenRequired { get; } = ErrorCode.Parse("privacy.consent.writtenrequired");
+
+    /// <summary>
+    /// An erasure that has not exhausted its retries cannot be completed by hand.
+    /// Let the deliveries run out first.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-003a, chapter 10 section 1.4.</remarks>
+    public static ErrorCode ErasureNotFailed { get; } = ErrorCode.Parse("privacy.erasure.notfailed");
+
+    /// <summary>
+    /// The document version carries no text in its governing language. Supply the
+    /// governing text; a translation never stands in for it.
+    /// </summary>
+    /// <remarks>Implements PRIV-CONS-005, PRIV-CONS-006, chapter 10 section 1.4.</remarks>
+    public static ErrorCode NoticeGoverningTextMissing { get; } =
+        ErrorCode.Parse("privacy.notice.governingtextmissing");
+
+    /// <summary>
+    /// The basis the purpose rests on carries no right to object. Withdraw the
+    /// consent instead where the basis is consent.
+    /// </summary>
+    /// <remarks>Implements PRIV-RIGHT-001a, chapter 10 section 1.4.</remarks>
+    public static ErrorCode PurposeNotObjectable { get; } = ErrorCode.Parse("privacy.purpose.notobjectable");
+
+    /// <summary>
+    /// An identical request is already open. Wait for the decision on it rather than
+    /// entering it twice.
+    /// </summary>
+    /// <remarks>Implements PRIV-RIGHT-001, chapter 10 section 1.4.</remarks>
+    public static ErrorCode RequestDuplicate { get; } = ErrorCode.Parse("privacy.request.duplicate");
+
+    /// <summary>
+    /// The date the request was received is later than today. Record the date it
+    /// actually reached the company.
+    /// </summary>
+    /// <remarks>Implements PRIV-RIGHT-002, chapter 10 section 1.4.</remarks>
+    public static ErrorCode RequestReceivedFuture { get; } = ErrorCode.Parse("privacy.request.receivedfuture");
 
     /// <summary>
     /// An unhandled fault. The body carries the correlation identifier and nothing

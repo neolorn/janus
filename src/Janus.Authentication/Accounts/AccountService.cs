@@ -13,6 +13,7 @@ namespace Janus.Authentication.Accounts;
 /// <summary>
 /// What an account reads and edits about itself.
 /// </summary>
+/// <param name="lifecycle">What the account does to its own standing.</param>
 /// <param name="directory">Where the standing, the profile and the preferences are.</param>
 /// <param name="identifiers">Where the account's identifiers are.</param>
 /// <param name="authenticators">Where the account's credentials are.</param>
@@ -30,6 +31,7 @@ namespace Janus.Authentication.Accounts;
 /// deployment and not the caller decides the shape of an answer.
 /// </remarks>
 internal sealed class AccountService(
+    AccountLifecycle lifecycle,
     IAccountDirectory directory,
     IIdentifierDirectory identifiers,
     IAuthenticatorStore authenticators,
@@ -418,6 +420,32 @@ internal sealed class AccountService(
 
         return Result.Success();
     }
+
+    /// <inheritdoc/>
+    public ValueTask<Result> DeactivateAsync(
+        AccessContext context,
+        SessionId session,
+        string source,
+        CancellationToken cancellationToken) =>
+        lifecycle.DeactivateAsync(context, session, source, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> ReactivateAsync(string linkToken, CancellationToken cancellationToken) =>
+        lifecycle.ReactivateAsync(linkToken, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result<DateTimeOffset>> DeleteAsync(
+        AccessContext context,
+        SessionId session,
+        string source,
+        CancellationToken cancellationToken) =>
+        lifecycle.DeleteAsync(context, session, source, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result> CancelDeletionAsync(
+        string linkToken,
+        CancellationToken cancellationToken) =>
+        lifecycle.CancelDeletionAsync(linkToken, cancellationToken);
 
     private static SubjectId Acting(AccessContext context, SubjectId subject) =>
         context.Acting ?? subject;

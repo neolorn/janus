@@ -39,6 +39,10 @@ internal static class MessageChannels
         MessageKind.CredentialEnrolled,
         MessageKind.IdentifierChangeConfirm,
         MessageKind.RecoveryLink,
+        MessageKind.PrivacyRequestReceived,
+        MessageKind.PrivacyRequestLapsed,
+        MessageKind.DeactivationNotice,
+        MessageKind.DeletionNotice,
     ];
 
     /// <summary>
@@ -56,6 +60,8 @@ internal static class MessageChannels
         MessageKind.IdentifierDetached,
         MessageKind.IdentifierSettingsChanged,
         MessageKind.CredentialEnrolled,
+        MessageKind.DeactivationNotice,
+        MessageKind.DeletionNotice,
     ]);
 
     /// <summary>

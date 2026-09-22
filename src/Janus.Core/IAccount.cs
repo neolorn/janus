@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -107,4 +108,54 @@ public interface IAccount
         AccessContext context,
         AuthenticatorId credential,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Deactivates the account at its own request, which suspends every grant
+    /// without removing one. The deactivation notice carries the link that stands it
+    /// back up.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
+    /// <param name="source">The address the request came from.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or the refusal and its code.</returns>
+    ValueTask<Result> DeactivateAsync(
+        AccessContext context,
+        SessionId session,
+        string source,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Stands a self-deactivated account back up from the link its deactivation
+    /// notice carried. It is not gated: a suspended account cannot sign in, so there
+    /// is no session to ask anything of.
+    /// </summary>
+    /// <param name="linkToken">The token the notice carried.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or the refusal and its code.</returns>
+    ValueTask<Result> ReactivateAsync(string linkToken, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Asks for the account's own erasure, which begins the grace window. This is
+    /// the exercise of the erasure right and creates no privacy request.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
+    /// <param name="source">The address the request came from.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>When the erasure runs if nothing cancels it, or the refusal.</returns>
+    ValueTask<Result<DateTimeOffset>> DeleteAsync(
+        AccessContext context,
+        SessionId session,
+        string source,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Cancels a deletion inside its grace window from the link the deletion notice
+    /// carried, which restores the account exactly as it stood.
+    /// </summary>
+    /// <param name="linkToken">The token the notice carried.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or the refusal and its code.</returns>
+    ValueTask<Result> CancelDeletionAsync(string linkToken, CancellationToken cancellationToken);
 }

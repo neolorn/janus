@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Authentication;
@@ -9,12 +10,16 @@ using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Identity.Accounts;
 using Janus.Identity.Audit;
+using Janus.Identity.Identifiers;
+using Janus.Identity.Preferences;
 using Janus.Identity.Profiles;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Audit;
+using Janus.Storage.Identity.Identifiers;
+using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Identity.Profiles;
 using Janus.Storage.Privacy.Erasures;
 using Janus.Storage.Privacy.SubjectKeys;
@@ -335,10 +340,424 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         });
     }
 
+    /// <summary>
+    /// IDN-LIFE-014 AC1: after the deletion nothing personal reads back. The rows are
+    /// where they were and the key that made sense of them is gone, so every read of
+    /// a personal attribute fails rather than returning a value.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_014_AC1_NoPersonalAttributeIsRetrievableAfterDeletionAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        byte[] image = new byte[256];
+        _deployment.Randomness.GetBytes(image);
+
+        await using (JanusDbContext writing = database.Context())
+        {
+            Assert.True(LegalName.TryParse("Ahmed Hassan", out LegalName legal));
+
+            var profile = Profile.Empty(subject);
+            profile.SetLegalName(legal);
+            profile.RecordDateOfBirth(new DateOnly(1990, 4, 17));
+
+            await new ProfileStore(writing, _deployment.Keys, _deployment.Randomness)
+                .RecordAsync(profile, TestContext.Current.CancellationToken);
+
+            await new ProfilePhotoStore(writing, _deployment.Keys, _deployment.Randomness)
+                .RecordAsync(ProfilePhoto.Of(subject, image, Noon), TestContext.Current.CancellationToken);
+
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using JanusDbContext reading = database.Context();
+
+        await Assert.ThrowsAsync<CryptographicException>(async () =>
+            await new ProfileStore(reading, _deployment.Keys, _deployment.Randomness)
+                .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+
+        await Assert.ThrowsAsync<CryptographicException>(async () =>
+            await new ProfilePhotoStore(reading, _deployment.Keys, _deployment.Randomness)
+                .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005 AC1, AC5: a record kept under its own lawful basis is outside
+    /// the erasure. The library writes in its own schema alone, so the row, its
+    /// count and its total read after the erasure exactly as before it.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_005_AC1_RecordsKeptUnderTheirOwnBasisAreUntouchedAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+
+        await BusinessRecordsAsync();
+
+        await using (NpgsqlConnection writing = await database.OpenAsync())
+        {
+            await writing.ExecuteAsync(
+                "INSERT INTO host.orders (id, buyer, district, total) "
+                    + "VALUES (@id, @subject, 'Al Malaz', 249.50)",
+                new { id = Guid.CreateVersion7(), subject = subject.Value });
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        Assert.Equal(
+            1,
+            await connection.ExecuteScalarAsync<int>(
+                "SELECT count(*) FROM host.orders WHERE buyer = @subject",
+                new { subject = subject.Value }));
+
+        Assert.Equal(
+            249.50m,
+            await connection.ExecuteScalarAsync<decimal>(
+                "SELECT sum(total) FROM host.orders WHERE buyer = @subject",
+                new { subject = subject.Value }));
+
+        Assert.Equal(
+            "Al Malaz",
+            await connection.ExecuteScalarAsync<string>(
+                "SELECT district FROM host.orders WHERE buyer = @subject",
+                new { subject = subject.Value }));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005 AC5: what the deployment counts is counted over its own rows,
+    /// and an erasure changes neither how many there are nor what they add up to.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_005_AC5_CountsAndTotalsAreUnchangedByAnErasureAsync()
+    {
+        SubjectId going = await DeletingAccountAsync();
+        SubjectId staying = await _deployment.AccountAsync(Noon);
+
+        await BusinessRecordsAsync();
+
+        await using (NpgsqlConnection writing = await database.OpenAsync())
+        {
+            await writing.ExecuteAsync(
+                "INSERT INTO host.orders (id, buyer, district, total) VALUES "
+                    + "(@first, @going, 'Al Malaz', 100.00), "
+                    + "(@second, @staying, 'Al Olaya', 50.25)",
+                new
+                {
+                    first = Guid.CreateVersion7(),
+                    second = Guid.CreateVersion7(),
+                    going = going.Value,
+                    staying = staying.Value,
+                });
+        }
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        int before = await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM host.orders");
+        decimal total = await connection.ExecuteScalarAsync<decimal>(
+            "SELECT sum(total) FROM host.orders");
+
+        await EraseAsync(going, ErasureReason.ErasureRequest);
+
+        Assert.Equal(
+            before,
+            await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM host.orders"));
+
+        Assert.Equal(
+            total,
+            await connection.ExecuteScalarAsync<decimal>("SELECT sum(total) FROM host.orders"));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005 AC2: the trail is not personal data under the subject's key,
+    /// so what happened and when it happened still read after the erasure.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_005_AC2_TheAuditTrailSurvivesTheErasureAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        var deactivated = AuditAction.Parse("identity.account.deactivated");
+        DateTimeOffset occurred = Noon.AddHours(-2);
+
+        await using (JanusDbContext writing = database.Context())
+        {
+            await new AuditStore(writing, _deployment.Keys, _deployment.Randomness).AppendAsync(
+                AuditRecord.Of(
+                    new AuditRecordId(Guid.CreateVersion7()),
+                    AuditCategory.Security,
+                    deactivated,
+                    occurred,
+                    subject,
+                    subject,
+                    organization: null),
+                TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        Assert.Equal(
+            deactivated.ToString(),
+            await connection.ExecuteScalarAsync<string>(
+                "SELECT action FROM janus.audit_records WHERE effective_subject = @subject",
+                new { subject = subject.Value }));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005 AC3: the account row outlives the erasure, so the identifier it
+    /// was known by is never handed to a later account.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_005_AC3_TheIdentifierIsNeverReissuedAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        PostgresException refusal = await Assert.ThrowsAsync<PostgresException>(async () =>
+            await connection.ExecuteAsync(
+                "INSERT INTO janus.accounts (subject, state, created_at) "
+                    + "VALUES (@subject, 'active', @at)",
+                new { subject = subject.Value, at = Noon }));
+
+        Assert.Equal("23505", refusal.SqlState);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005 AC7: the name the erased account went by is held for
+    /// <c>retention.consent</c> and is claimable the moment that has run out.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_005_AC7_TheUsernameIsHeldAndThenClaimableAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        string chosen = "kestrel" + Guid.NewGuid().ToString("N")[..8];
+
+        Assert.True(Username.TryParse(chosen, out Username username));
+
+        await using (JanusDbContext writing = database.Context())
+        {
+            IdentifierStore store = Identifiers(writing);
+            IdentifierSet set = await store.FindBySubjectAsync(
+                subject,
+                TestContext.Current.CancellationToken);
+
+            set.Add(
+                Identifier.Username(IdentifierId.New(TimeProvider.System), subject, username, Noon),
+                maximum: 5);
+
+            await store.RecordAsync(set, TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        TimeSpan held = Janus.Core.Configuration.Settings.RetentionConsent.Default;
+
+        await using JanusDbContext reading = database.Context();
+        IdentifierStore identifiers = Identifiers(reading);
+
+        Assert.True(await identifiers.IsHeldAsync(
+            username.Value,
+            Noon + held - TimeSpan.FromDays(1),
+            TestContext.Current.CancellationToken));
+
+        Assert.False(await identifiers.IsHeldAsync(
+            username.Value,
+            Noon + held,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// IDN-ORG-005 AC1, AC2: an organization's erasure runs over its members, and
+    /// afterwards the audit records naming the organization are still there to be
+    /// queried, with the personal details they carried no longer readable.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ORG_005_AC1_TheOrganizationsTrailSurvivesItsErasureAsync()
+    {
+        SubjectId member = await DeletingAccountAsync();
+        var organization = new OrganizationId(Guid.CreateVersion7());
+        var suspended = AuditAction.Parse("identity.account.suspended");
+
+        await using (JanusDbContext writing = database.Context())
+        {
+            await new AuditStore(writing, _deployment.Keys, _deployment.Randomness).AppendAsync(
+                AuditRecord.Of(
+                    new AuditRecordId(Guid.CreateVersion7()),
+                    AuditCategory.Security,
+                    suspended,
+                    Noon.AddHours(-1),
+                    member,
+                    member,
+                    organization,
+                    personalDetails: new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+                    {
+                        ["reason"] = JsonSerializer.SerializeToElement("ahmed@example.com"),
+                    }),
+                TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await EraseAsync(member, ErasureReason.OrganizationErasure);
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        Assert.Equal(
+            1,
+            await connection.ExecuteScalarAsync<int>(
+                "SELECT count(*) FROM janus.audit_records WHERE organization = @organization",
+                new { organization = organization.Value }));
+
+        await using JanusDbContext reading = database.Context();
+
+        AuditRecord read = Assert.Single(
+            await new AuditStore(reading, _deployment.Keys, _deployment.Randomness)
+                .FindBySubjectAsync(member, TestContext.Current.CancellationToken));
+
+        Assert.Equal(organization, read.Organization);
+        Assert.Equal(suspended, read.Action);
+        Assert.Empty(read.PersonalDetails);
+    }
+
+    /// <summary>
+    /// REG-ACCT-001 AC3: one erasure leaves every field the table marks Key
+    /// unreadable, group by group, and the two preference fields that are not under
+    /// the key are retained exactly as chapter 04 says they are.
+    /// </summary>
+    [Fact]
+    public async Task REG_ACCT_001_AC3_EveryKeyFieldIsUnreadableAndTheRestIsAsChapterFourSaysAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+
+        Assert.True(LegalName.TryParse("Ahmed Hassan", out LegalName legal));
+        Assert.True(EmailAddress.TryParse("groups@example.com", out EmailAddress address));
+
+        await using (JanusDbContext writing = database.Context())
+        {
+            var profile = Profile.Empty(subject);
+            profile.SetLegalName(legal);
+
+            await new ProfileStore(writing, _deployment.Keys, _deployment.Randomness)
+                .RecordAsync(profile, TestContext.Current.CancellationToken);
+
+            IdentifierStore identifiers = Identifiers(writing);
+            IdentifierSet set = await identifiers.FindBySubjectAsync(
+                subject,
+                TestContext.Current.CancellationToken);
+
+            set.Add(
+                Identifier.Email(
+                    IdentifierId.New(TimeProvider.System),
+                    subject,
+                    address,
+                    "groups@example.com",
+                    Noon),
+                maximum: 5);
+
+            await identifiers.RecordAsync(set, TestContext.Current.CancellationToken);
+
+            var preferences = PreferenceSet.Empty(subject);
+            preferences.SetLanguage("ar-EG");
+            preferences.SetTimeZone("Africa/Cairo");
+
+            await new PreferenceStore(writing, _deployment.Keys, _deployment.Randomness)
+                .RecordAsync(preferences, TestContext.Current.CancellationToken);
+
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using JanusDbContext reading = database.Context();
+
+        await Assert.ThrowsAsync<CryptographicException>(async () =>
+            await new ProfileStore(reading, _deployment.Keys, _deployment.Randomness)
+                .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+
+        await Assert.ThrowsAsync<CryptographicException>(async () =>
+            await Identifiers(reading).FindBySubjectAsync(
+                subject,
+                TestContext.Current.CancellationToken));
+
+        PreferenceSet kept = await new PreferenceStore(reading, _deployment.Keys, _deployment.Randomness)
+            .FindBySubjectAsync(subject, TestContext.Current.CancellationToken);
+
+        Assert.Equal("ar-EG", kept.Language);
+        Assert.Equal("Africa/Cairo", kept.TimeZone);
+        Assert.Empty(kept.Values);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005b AC5: the photo is in the database beside everything else held
+    /// under the subject key, so one erasure reaches all of it at once and no store
+    /// is left readable after another has been cleared.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_005b_AC5_OneErasureReachesThePhotoAndEveryOtherStoreAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        byte[] image = new byte[256];
+        _deployment.Randomness.GetBytes(image);
+
+        await using (JanusDbContext writing = database.Context())
+        {
+            Assert.True(LegalName.TryParse("Ahmed Hassan", out LegalName legal));
+
+            var profile = Profile.Empty(subject);
+            profile.SetLegalName(legal);
+
+            await new ProfileStore(writing, _deployment.Keys, _deployment.Randomness)
+                .RecordAsync(profile, TestContext.Current.CancellationToken);
+
+            await new ProfilePhotoStore(writing, _deployment.Keys, _deployment.Randomness)
+                .RecordAsync(ProfilePhoto.Of(subject, image, Noon), TestContext.Current.CancellationToken);
+
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using JanusDbContext reading = database.Context();
+
+        await Assert.ThrowsAsync<CryptographicException>(async () =>
+            await new ProfilePhotoStore(reading, _deployment.Keys, _deployment.Randomness)
+                .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+
+        await Assert.ThrowsAsync<CryptographicException>(async () =>
+            await new ProfileStore(reading, _deployment.Keys, _deployment.Randomness)
+                .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
     private static ErasureStore Store(JanusDbContext context) => new(context);
+
+    private IdentifierStore Identifiers(JanusDbContext context) =>
+        new(context, _deployment.Keys, Deployment.FingerprintKey, _deployment.Randomness);
+
+    // The deployment's own records, which the library neither maps nor writes: an
+    // order names its buyer and outlives the buyer's erasure (PRIV-RIGHT-005).
+    private async ValueTask BusinessRecordsAsync()
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        await connection.ExecuteAsync(
+            """
+            CREATE SCHEMA IF NOT EXISTS host;
+            CREATE TABLE IF NOT EXISTS host.orders (
+                id uuid PRIMARY KEY,
+                buyer uuid NOT NULL,
+                district text NOT NULL,
+                total numeric(10, 2) NOT NULL);
+            """);
+    }
 
     /// <summary>
     /// AUTH-SESS-010 AC3: the subject's sessions end before anything of theirs is

@@ -1,6 +1,7 @@
 using System;
 using System.Security.Cryptography;
 using System.Text;
+using Janus.Core;
 using Xunit;
 
 namespace Janus.Storage.Tests;
@@ -30,6 +31,27 @@ public sealed class FingerprintTests
         byte[] other = Fingerprint.Compute(Address, second);
 
         Assert.NotEqual(one, other);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005c AC3: the canonical form is computed before the keyed function,
+    /// so two casings and two Unicode compositions of one address reach one
+    /// fingerprint and a lookup finds the account whichever was typed.
+    /// </summary>
+    [Fact]
+    public void PRIV_RIGHT_005c_AC3_TwoCasingsAndTwoCompositionsGiveOneFingerprint()
+    {
+        byte[] key = new byte[32];
+        RandomNumberGenerator.Fill(key);
+
+        byte[] entered = Fingerprinted("Ahmed@Example.COM", key);
+        byte[] cased = Fingerprinted("ahmed@example.com", key);
+        byte[] composed = Fingerprinted("Ahméd@example.com", key);
+        byte[] decomposed = Fingerprinted("Ahméd@example.com", key);
+
+        Assert.Equal(entered, cased);
+        Assert.Equal(composed, decomposed);
+        Assert.NotEqual(cased, composed);
     }
 
     /// <summary>
@@ -92,4 +114,7 @@ public sealed class FingerprintTests
             stored,
             Fingerprint.Compute(Encoding.UTF8.GetBytes("mona@example.com"), key)));
     }
+
+    private static byte[] Fingerprinted(string entered, byte[] key) =>
+        Fingerprint.Compute(Encoding.UTF8.GetBytes(CanonicalForm.Of(entered)), key);
 }

@@ -17,8 +17,17 @@ namespace Janus.Core;
 /// <param name="StepUpGates">
 /// The step-up gate each of the host's actions is bound to, where it binds one.
 /// </param>
+/// <param name="ActionPurposes">
+/// The purpose each of the host's actions serves, where it names one. Consent gates
+/// purposes and not records (PRIV-SENS-002a), so what a consent is required for is
+/// what the action is done for, and an action naming no purpose requires none.
+/// </param>
 /// <param name="LawfulBases">The closed list a purpose's basis is drawn from.</param>
 /// <param name="SensitiveCategories">The closed list a type's sensitivity is drawn from.</param>
+/// <param name="Recipients">
+/// Everyone the deployment's personal data reaches, which the records of processing
+/// report and nothing else reads (PRIV-ROPA-002).
+/// </param>
 /// <remarks>
 /// Implements AUTHZ-MODEL-001 and AUTHZ-MODEL-006. It is what
 /// <see cref="AuthorizationDeclarationBuilder"/> produces and what the model is built
@@ -30,5 +39,7 @@ public sealed record AuthorizationDeclaration(
     IReadOnlyList<Permission> Permissions,
     IReadOnlyList<string> ReadingActions,
     IReadOnlyDictionary<Permission, string> StepUpGates,
+    IReadOnlyDictionary<Permission, string> ActionPurposes,
     IReadOnlyList<LawfulBasisDeclaration> LawfulBases,
-    IReadOnlyList<string> SensitiveCategories);
+    IReadOnlyList<string> SensitiveCategories,
+    IReadOnlyList<RecipientDeclaration> Recipients);

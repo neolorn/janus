@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -496,6 +498,19 @@ public sealed class SendingServiceTests : IAsyncDisposable
 
         Assert.Empty(_sms.Taken);
     }
+
+    // What one member takes and gives: the types a send could be told a preference
+    // through.
+    private static IEnumerable<Type> Carried(MemberInfo member) =>
+        member switch
+        {
+            MethodBase method => method.GetParameters()
+                .Select(parameter => parameter.ParameterType)
+                .Append((method as MethodInfo)?.ReturnType ?? typeof(void)),
+            PropertyInfo property => [property.PropertyType],
+            FieldInfo field => [field.FieldType],
+            _ => [],
+        };
 
     private static EmailAddress Address(string entered) =>
         EmailAddress.TryParse(entered, out EmailAddress address)

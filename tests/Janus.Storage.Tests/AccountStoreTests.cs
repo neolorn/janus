@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Identity.Accounts;
@@ -164,6 +166,51 @@ public sealed class AccountStoreTests(DatabaseFixture database) : IClassFixture<
         Assert.Equal(
             "pk_accounts",
             Assert.IsType<PostgresException>(refusal.InnerException).ConstraintName);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-014: the read the deletion sweep runs on carries the accounts whose
+    /// window began by an instant, oldest first, and no account in another state.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_014_DeletingSinceAsync_CarriesTheWindowsThatBeganByAnInstantAsync()
+    {
+        var first = Account.Create(Subjects.New(), Noon);
+        var second = Account.Create(Subjects.New(), Noon);
+        var later = Account.Create(Subjects.New(), Noon);
+        var standing = Account.Create(Subjects.New(), Noon);
+
+        first.Takedown(Noon.AddHours(1));
+        second.RequestDeletion(DeletionOrigin.Self, Noon);
+        later.RequestDeletion(DeletionOrigin.Self, Noon.AddHours(3));
+
+        await using JanusDbContext writing = database.Context();
+
+        foreach (Account account in new[] { first, second, later, standing })
+        {
+            await AddAsync(writing, account);
+        }
+
+        await using JanusDbContext reading = database.Context();
+
+        IReadOnlyList<Account> elapsed = await new AccountStore(reading)
+            .DeletingSinceAsync(Noon.AddHours(2), TestContext.Current.CancellationToken);
+
+        IReadOnlyList<Account> mine =
+        [
+            .. elapsed.Where(account =>
+                account.Subject == first.Subject
+                || account.Subject == second.Subject
+                || account.Subject == later.Subject
+                || account.Subject == standing.Subject),
+        ];
+
+        Assert.Equal<IEnumerable<SubjectId>>(
+            [second.Subject, first.Subject],
+            [.. mine.Select(account => account.Subject)]);
+
+        Assert.Equal(DeletionOrigin.Takedown, mine[1].DeletingBy);
+        Assert.Equal(Noon.AddHours(1), mine[1].DeletingSince);
     }
 
     private static async Task AddAsync(JanusDbContext context, Account account)

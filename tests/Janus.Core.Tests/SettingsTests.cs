@@ -63,6 +63,34 @@ public sealed class SettingsTests
     }
 
     /// <summary>
+    /// PRIV-RET-001 AC1, AC2: each category the library keeps has a declared period,
+    /// and a deployment that names a shorter one than the floor is refused rather
+    /// than quietly held to the floor.
+    /// </summary>
+    [Fact]
+    public void PRIV_RET_001_AC2_ARetentionBelowTheCategorysFloorIsRejected()
+    {
+        Assert.Equal(TimeSpan.FromDays(7 * 366), Settings.RetentionAuditSecurity.Default);
+        Assert.Equal(TimeSpan.FromDays(90), Settings.RetentionAuditRoutine.Default);
+        Assert.Equal(TimeSpan.FromDays(3 * 366), Settings.RetentionConsent.Default);
+
+        Assert.Equal(
+            ErrorCodes.ConfigurationValueBelowFloor,
+            Settings.RetentionAuditSecurity.Accept(TimeSpan.FromDays(4 * 366))
+                .Match(_ => default, failure => failure.Code));
+
+        Assert.Equal(
+            ErrorCodes.ConfigurationValueBelowFloor,
+            Settings.RetentionAuditRoutine.Accept(TimeSpan.FromDays(29))
+                .Match(_ => default, failure => failure.Code));
+
+        Assert.Equal(
+            ErrorCodes.ConfigurationValueBelowFloor,
+            Settings.RetentionConsent.Accept(TimeSpan.FromDays(364))
+                .Match(_ => default, failure => failure.Code));
+    }
+
+    /// <summary>
     /// OPS-CFG-003 AC1: the failure carries the key and the bound, so the management
     /// application can say which value would be accepted.
     /// </summary>

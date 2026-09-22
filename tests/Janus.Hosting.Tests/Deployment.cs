@@ -36,9 +36,21 @@ using Janus.Hosting.Authentication;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Credentials;
 using Janus.Hosting.Oidc;
+using Janus.Hosting.Privacy;
 using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
 using Janus.Hosting.Tests.Bff;
+using Janus.Privacy;
+using Janus.Privacy.Consents;
+using Janus.Privacy.Documents;
+using Janus.Privacy.Exports;
+using Janus.Privacy.Records;
+using Janus.Privacy.Requests;
+using Janus.Privacy.Tests.Consents;
+using Janus.Privacy.Tests.Documents;
+using Janus.Privacy.Tests.Exports;
+using Janus.Privacy.Tests.Outbox;
+using Janus.Privacy.Tests.Requests;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -204,6 +216,66 @@ internal sealed class Deployment : IAsyncDisposable
     public OidcClientStoreInMemory Clients { get; } = new();
 
     /// <summary>
+    /// The legal documents the deployment published.
+    /// </summary>
+    public LegalDocumentStoreInMemory Documents { get; } = new();
+
+    /// <summary>
+    /// The consent and objection records the deployment holds.
+    /// </summary>
+    public ConsentStoreInMemory Consents { get; } = new();
+
+    /// <summary>
+    /// The gate, so a test can grant what an administrative path asks for.
+    /// </summary>
+    public AccessGateInMemory Gate { get; } = new();
+
+    /// <summary>
+    /// The organizations the privacy area reads a caller's memberships from.
+    /// </summary>
+    public Janus.Privacy.Tests.MembershipLookupInMemory PrivacyMemberships { get; } = new();
+
+    /// <summary>
+    /// The data subject request queue, so a test can read what was put on it.
+    /// </summary>
+    public PrivacyRequestStoreInMemory Requests { get; } = new();
+
+    /// <summary>
+    /// The account states the privacy area moves.
+    /// </summary>
+    public AccountStatesInMemory AccountStates { get; } = new();
+
+    /// <summary>
+    /// The outbox, so a test can read what was announced.
+    /// </summary>
+    public OutboxStoreInMemory Outbox { get; } = new();
+
+    /// <summary>
+    /// What the other areas hold of an export, so a test can arrange it.
+    /// </summary>
+    public ExportSourceInMemory ExportSource { get; } = new();
+
+    /// <summary>
+    /// The exports the accounts have taken, so a test can read what was counted.
+    /// </summary>
+    public ExportLedgerInMemory ExportLedger { get; } = new();
+
+    /// <summary>
+    /// The three fields the deployment supplies to the records of processing.
+    /// </summary>
+    public Janus.Privacy.Tests.Records.ComplianceStoreInMemory Compliance { get; } = new();
+
+    /// <summary>
+    /// The roles of the deployment, so a test can say what each allows.
+    /// </summary>
+    public Janus.Privacy.Tests.Records.RegisterRolesInMemory RegisterRoles { get; } = new();
+
+    /// <summary>
+    /// What the subject was told.
+    /// </summary>
+    public SubjectNoticesInMemory Notices { get; } = new();
+
+    /// <summary>
     /// The authorization codes outstanding.
     /// </summary>
     public AuthorizationCodeStoreInMemory Codes { get; } = new();
@@ -312,8 +384,9 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IPolicyRaiseStore, PolicyRaiseStoreInMemory>();
         _ = services.AddSingleton<IChallengeStore, ChallengeStoreInMemory>();
         _ = services.AddSingleton<IPendingSignInStore, PendingSignInStoreInMemory>();
-        _ = services.AddSingleton<IAccessGate, AccessGateInMemory>();
+        _ = services.AddSingleton<IAccessGate>(Gate);
         _ = services.AddSingleton<IAccountAudit, AccountAuditInMemory>();
+        _ = services.AddSingleton<ILifecycleLinkStore, LifecycleLinkStoreInMemory>();
         _ = services.AddSingleton<IRecoveryLinkStore>(Links);
         _ = services.AddSingleton<IRecoveryApprovalStore, RecoveryApprovalStoreInMemory>();
         _ = services.AddSingleton<ILossReportStore, LossReportStoreInMemory>();
@@ -351,6 +424,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<DeviceService>();
         _ = services.AddScoped<PolicyResolution>();
         _ = services.AddScoped<StepUpGuard>();
+        _ = services.AddScoped<IStepUpGate, StepUpGate>();
         _ = services.AddScoped<SessionService>();
         _ = services.AddScoped<ISessions>(provider => provider.GetRequiredService<SessionService>());
         _ = services.AddScoped<PreAuthenticationService>();
@@ -360,6 +434,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IdentifierService>();
         _ = services.AddScoped<IIdentifiers>(provider =>
             provider.GetRequiredService<IdentifierService>());
+        _ = services.AddScoped<AccountLifecycle>();
         _ = services.AddScoped<AccountService>();
         _ = services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
         _ = services.AddScoped<TotpService>();
@@ -373,6 +448,31 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<RecoveryService>();
         _ = services.AddScoped<IRecovery>(provider => provider.GetRequiredService<RecoveryService>());
         _ = services.AddScoped<ICredentials, CredentialService>();
+        _ = services.AddSingleton<ILegalDocumentStore>(Documents);
+        _ = services.AddSingleton<IPrivacyAudit, Janus.Privacy.Tests.PrivacyAuditInMemory>();
+        _ = services.AddSingleton<Janus.Privacy.Policies.IMembershipLookup>(PrivacyMemberships);
+        _ = services.AddScoped<IPrivacyAlerts, PrivacyAlerts>();
+        _ = services.AddScoped<Janus.Privacy.Policies.AdministrativeScope>();
+        _ = services.AddScoped<ILegalDocuments, LegalDocumentService>();
+        _ = services.AddSingleton<IConsentStore>(Consents);
+        _ = services.AddSingleton(Janus.Privacy.Tests.Declaration.Processing);
+        _ = services.AddScoped<Supersession>();
+        _ = services.AddScoped<IConsents, ConsentService>();
+        _ = services.AddSingleton<IPrivacyRequestStore>(Requests);
+        _ = services.AddSingleton<IAccountStates>(AccountStates);
+        _ = services.AddSingleton<Janus.Privacy.Outbox.IOutboxStore>(Outbox);
+        _ = services.AddSingleton<ISubjectNotices>(Notices);
+        _ = services.AddScoped<WorkingCalendar>();
+        _ = services.AddScoped<RestrictionGrant>();
+        _ = services.AddScoped<DeadlineSweep>();
+        _ = services.AddScoped<IPrivacyRequests, PrivacyRequestService>();
+        _ = services.AddSingleton<IExportSource>(ExportSource);
+        _ = services.AddSingleton<IExportLedger>(ExportLedger);
+        _ = services.AddScoped<IExports, ExportService>();
+        _ = services.AddSingleton(Janus.Privacy.Tests.Declaration.Reaching);
+        _ = services.AddSingleton<Janus.Privacy.Records.IComplianceStore>(Compliance);
+        _ = services.AddSingleton<Janus.Privacy.Records.IRegisterRoles>(RegisterRoles);
+        _ = services.AddScoped<IProcessingRecords, ProcessingRecordsService>();
         _ = services.AddScoped<SigningKeys>();
         _ = services.AddScoped<OidcService>();
         _ = services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
@@ -402,6 +502,7 @@ internal sealed class Deployment : IAsyncDisposable
             options.SerializerOptions.TypeInfoResolverChain.Add(RecoveryJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(CredentialsJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(WellKnownJson.Default);
+            options.SerializerOptions.TypeInfoResolverChain.Add(PrivacyJson.Default);
         });
     }
 

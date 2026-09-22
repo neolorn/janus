@@ -27,8 +27,18 @@ using Janus.Hosting.Bff;
 using Janus.Hosting.Credentials;
 using Janus.Hosting.Oidc;
 using Janus.Hosting.Passwords;
+using Janus.Hosting.Privacy;
 using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
+using Janus.Privacy;
+using Janus.Privacy.Consents;
+using Janus.Privacy.Documents;
+using Janus.Privacy.Erasures;
+using Janus.Privacy.Exports;
+using Janus.Privacy.Outbox;
+using Janus.Privacy.Policies;
+using Janus.Privacy.Records;
+using Janus.Privacy.Requests;
 using Janus.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -187,6 +197,7 @@ public static class JanusRegistration
         services.AddScoped<RecoveryCodeService>();
         services.AddScoped<DeviceService>();
         services.AddScoped<StepUpGuard>();
+        services.AddScoped<IStepUpGate, StepUpGate>();
 
         services.TryAddSingleton(PreferenceDeclarations.None);
         services.TryAddSingleton(ReservedUsernames.Default);
@@ -215,6 +226,7 @@ public static class JanusRegistration
         services.AddScoped<IRegistration>(provider => provider.GetRequiredService<RegistrationService>());
         services.AddScoped<IdentifierService>();
         services.AddScoped<IIdentifiers>(provider => provider.GetRequiredService<IdentifierService>());
+        services.AddScoped<AccountLifecycle>();
         services.AddScoped<AccountService>();
         services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
         services.AddScoped<SignInLinks>();
@@ -231,6 +243,34 @@ public static class JanusRegistration
         services.AddScoped<OidcService>();
         services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
 
+        // LIB-HOST-001, PRIV-RIGHT-005b: what the host declared is read back at
+        // startup against the handlers it registered, so the declaration is here as
+        // the host wrote it and not only as the model rebuilt it.
+        services.AddSingleton(declaration);
+        services.AddScoped<HandlerCoverage>();
+        services.AddScoped<ConfigurationCoverage>();
+
+        services.AddScoped<IPrivacyAlerts, PrivacyAlerts>();
+        services.AddScoped<ILegalDocuments, LegalDocumentService>();
+        services.AddScoped<AdministrativeScope>();
+        services.AddScoped<Supersession>();
+        services.AddScoped<IConsents, ConsentService>();
+        services.AddScoped<ISubjectNotices, SubjectNotices>();
+        services.AddScoped<WorkingCalendar>();
+        services.AddScoped<RestrictionGrant>();
+        services.AddScoped<DeadlineSweep>();
+        services.AddScoped<IPrivacyRequests, PrivacyRequestService>();
+        services.AddScoped<DeletionSweep>();
+        services.AddScoped<IExports, ExportService>();
+        services.AddScoped<IProcessingRecords, ProcessingRecordsService>();
+        services.AddScoped<OutboxPublisher>();
+
+        // AUTHZ-MODEL-001: what may be processed for what is part of the one
+        // declaration the host makes, so the privacy side reads it from there rather
+        // than asking the host a second time.
+        services.AddSingleton(provider =>
+            provider.GetRequiredService<AuthorizationModel>().Processing);
+
         services.AddScoped<Derivations>();
         services.AddScoped<IAccessGate, AccessGate>();
         services.AddScoped<IDerivationMaterialiser, DerivationMaterialiser>();
@@ -241,6 +281,8 @@ public static class JanusRegistration
         // database go at the head of the collection.
         services.Insert(0, ServiceDescriptor.Singleton<IHostedService, ModelValidationService>());
         services.Insert(1, ServiceDescriptor.Singleton<IHostedService, SendingValidationService>());
+        services.Insert(2, ServiceDescriptor.Singleton<IHostedService, HandlerValidationService>());
+        services.Insert(3, ServiceDescriptor.Singleton<IHostedService, ConfigurationValidationService>());
 
         return services;
     }

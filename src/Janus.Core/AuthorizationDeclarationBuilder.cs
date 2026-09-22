@@ -23,7 +23,10 @@ public sealed class AuthorizationDeclarationBuilder
     private readonly List<RelationshipDeclaration> _relationships = [];
     private readonly List<ResourceTypeDeclaration> _resourceTypes = [];
     private readonly List<string> _sensitiveCategories = [];
+
+    private readonly List<RecipientDeclaration> _recipients = [];
     private readonly Dictionary<Permission, string> _stepUpGates = [];
+    private readonly Dictionary<Permission, string> _actionPurposes = [];
 
     /// <summary>
     /// Declares one of the host's kinds of thing.
@@ -161,6 +164,35 @@ public sealed class AuthorizationDeclarationBuilder
     }
 
     /// <summary>
+    /// Binds one of the host's actions to the purpose it is done for. Where that
+    /// purpose rests on consent, the gate refuses the action until the subject has
+    /// consented to it, and the capability says so rather than the control failing
+    /// silently.
+    /// </summary>
+    /// <param name="permission">The permission, as <c>resource:action</c>.</param>
+    /// <param name="purpose">The purpose, as a resource type declares it.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">
+    /// The permission is not well-formed, the purpose is absent or blank, or the
+    /// permission already serves a purpose.
+    /// </exception>
+    public AuthorizationDeclarationBuilder ServesPurpose(string permission, string purpose)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(purpose);
+
+        var parsed = Core.Permission.Parse(permission);
+
+        if (!_actionPurposes.TryAdd(parsed, purpose))
+        {
+            throw new ArgumentException(
+                "The permission " + parsed + " is bound to a purpose twice.",
+                nameof(permission));
+        }
+
+        return this;
+    }
+
+    /// <summary>
     /// Declares a lawful basis a purpose may rest on.
     /// </summary>
     /// <param name="basis">The basis and the properties the library branches on.</param>
@@ -189,6 +221,24 @@ public sealed class AuthorizationDeclarationBuilder
     }
 
     /// <summary>
+    /// Declares someone the deployment's personal data reaches.
+    /// </summary>
+    /// <param name="recipient">
+    /// The recipient and the six columns the records of processing report for it.
+    /// <see cref="ProviderRegister.Default"/> ships the rows of chapter 05 section 8
+    /// to edit rather than write.
+    /// </param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException">The recipient is absent.</exception>
+    public AuthorizationDeclarationBuilder Recipient(RecipientDeclaration recipient)
+    {
+        ArgumentNullException.ThrowIfNull(recipient);
+        _recipients.Add(recipient);
+
+        return this;
+    }
+
+    /// <summary>
     /// Closes the declaration.
     /// </summary>
     /// <returns>What the host declared.</returns>
@@ -199,6 +249,8 @@ public sealed class AuthorizationDeclarationBuilder
             [.. _permissions],
             [.. _readingActions],
             new Dictionary<Permission, string>(_stepUpGates),
+            new Dictionary<Permission, string>(_actionPurposes),
             [.. _bases],
-            [.. _sensitiveCategories]);
+            [.. _sensitiveCategories],
+            [.. _recipients]);
 }

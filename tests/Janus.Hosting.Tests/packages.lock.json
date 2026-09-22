@@ -863,6 +863,13 @@
           "Janus.Core": "[1.0.0, )"
         }
       },
+      "janus.privacy.tests": {
+        "type": "Project",
+        "dependencies": {
+          "Janus.Privacy": "[1.0.0, )",
+          "xunit.v3": "[4.0.1, )"
+        }
+      },
       "janus.storage": {
         "type": "Project",
         "dependencies": {

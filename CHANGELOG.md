@@ -10,6 +10,149 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Startup now refuses a declaration whose encrypted field names no subject column, a
+  column the declared type does not hold, or one holding something that is not a
+  subject. Ciphertext an erasure could not reach stops the deployment instead of
+  reaching production.
+
+- Startup now refuses a deployment whose declared data categories have no retention
+  period, naming the `retention.<category>` key nobody set, and one that is open to
+  minors (`registration.adultaffirmation` off) without a written-consent lawful basis
+  to hold a child's data under.
+
+- The audit trail now answers "who was affected" after an erasure. Reading one
+  subject's records goes through the index that carries the subject, and a record
+  whose subject key has been destroyed comes back anonymised (what happened, when, to
+  whom by opaque identifier) instead of failing the whole read.
+
+- Records of processing are now generated rather than kept. `GET /admin/ropa?format=template`
+  answers with the regulator's template: a row a declared purpose carrying its data and
+  subject categories, its lawful basis, the non-sensitive, sensitive and children's
+  columns, the retention of each category longest first, the recipients, the disposal
+  measures, the roles holding a permission that serves it, and the technical security
+  measures, beside the hosting environment, location and cross-border basis the
+  deployment configured. A purpose added to the model is in the next register with no
+  separate edit, and nothing of the inventory is stored. The three cells no query can
+  answer (the data owner, the organisational security measures and the assessment
+  links) are stated through `PUT /admin/compliance/assessments` and flagged until they
+  are; so are a purpose missing an assessment its basis requires, a processor missing
+  an agreement reference, and a data category the deployment named no retention for.
+  Recipients are declared on the model builder, and `ProviderRegister.Default` ships
+  the rows of the provider register to edit rather than write.
+
+- An account can now take a copy of what is held about it. `GET /privacy/export`
+  answers in two arrangements of one assembly: `format=human` is grouped and labelled
+  for reading, `format=machine` is one flat object whose names are stable across
+  exports, and both carry the same data. The export covers the account's standing,
+  its profile, every identifier with its role and verification state, the backup
+  settings, the preferences in force, the live sessions with the locations resolved at
+  sign-in and at last use, and the consent and objection records. It is gated at the
+  account's own reachable assurance, limited to `privacy.export.ratelimit` a rolling
+  day (the refusal carries `Retry-After` and the instant the limit lifts), and it
+  raises `ExportRequested` so that each host can produce its own half.
+
+- A deletion grace window that runs out is now carried through: the sweep erases every
+  account whose window elapsed without a cancellation, in one transaction per account,
+  and puts the erasure on the outbox in the same transaction. The subject identifier
+  stays, the personal fields go with the subject's key, the audit trail and the
+  deployment's own records are untouched, and the username is held for
+  `retention.consent` before anyone can claim it.
+
+- An account now takes itself down and puts itself back up. `POST /account/deactivate`
+  suspends it with `suspendedBy = self`, ends every session it holds, and sends the
+  deactivation notice with the link `POST /account/reactivate` consumes; an account an
+  administrator suspended answers `identity.account.adminsuspended` instead, and only
+  an administrator stands it up. `POST /account/delete` starts the grace window
+  (`account.deletion.grace`), answers with when the erasure runs, ends every session,
+  and sends the deletion notice with the link `POST /account/delete/cancel` consumes
+  anywhere inside the window; afterwards it answers
+  `identity.deletion.windowelapsed`, and a deletion the deployment began as a takedown
+  answers `identity.takedown.active`. Both requests require step-up.
+
+- The outbox worker now publishes erasure, restriction and export to every handler a
+  host registers, keeps each confirmation on the delivery's own row, and closes the
+  delivery only when every required handler has confirmed. A handler that refuses, or
+  whose own store fails it, is offered the event again on an exponentially growing
+  delay with full jitter (`outbox.retry.initial`, `outbox.retry.factor`) until
+  `outbox.retry.maxattempts` is spent, at which point the delivery is marked failed
+  and the exhaustion is alerted; an operator who has done the work by hand closes it,
+  and the erasure's own row is closed with it. A handler already confirmed is never
+  offered the event twice, and a retry carries the key the first attempt carried.
+
+- A host now declares which of its resource types each subject-event handler does the
+  work for, and which purposes each consent and objection handler covers. A
+  deployment that declares a resource type sensitive, or a purpose on an objectable
+  basis, and registers nothing that names it does not start: the failure is
+  `model.startup.declarationmissing` with `details.handler` naming what is missing.
+
+- A data subject request now enters a queue with a statutory clock on it. A subject
+  submits a restriction or a rectification for themselves at `POST /privacy/requests`
+  and is answered with the request identifier, the receipt timestamp and the date the
+  decision is due by; an authorised human enters a request that arrived out of band at
+  `POST /admin/privacy/requests`, recording how it arrived, what confirmed the
+  requester is the subject, and the date it reached the company. The deadline is six
+  working days counted on the deployment's own week (`privacy.workingdays`), its
+  holidays as currently listed (`privacy.holidays`) and its zone
+  (`privacy.calendar.timezone`), never on a Monday to Friday assumption. Undecided
+  requests raise a Normal alert `privacy.request.warninglead` before the deadline and
+  a High alert on the deadline day, without anyone watching; a restriction still
+  undecided when the deadline passes is granted and the account is restricted, and a
+  request the system cannot grant by itself is recorded as deemed refused by lapse,
+  with the subject told honestly and the record kept. Fulfilling a restriction
+  restricts the account and tells the registered subscribers; fulfilling an
+  out-of-band erasure starts the deletion grace window.
+
+- A host can now bind one of its actions to the purpose it is done for, and where
+  that purpose rests on consent the gate refuses the action until the subject has
+  consented to it: missing, withdrawn, superseded or of the ordinary kind where the
+  written one is required, each answered by the code that names what is wanted. The
+  capability carries `consent` as something the action still requires, so a control
+  prompts rather than failing silently. Consent gates the purpose and not the record,
+  so an action on the same record done for a purpose resting on another basis is
+  untouched.
+- The terms step of registration now records one consent per control the person
+  ticked, naming the purpose, the version of the notice presented and the registration
+  mechanism. A control left unticked records nothing and holds nothing up.
+
+- A subject can now read and change their own consents and objections through a
+  privacy dashboard: `GET /privacy/consents`, `POST /privacy/consents/{purpose}/grant`
+  and `.../withdraw`, `GET /privacy/objections`, `POST /privacy/objections/{purpose}`
+  and `DELETE /privacy/objections/{purpose}`. Each record names the purpose, the
+  version of the privacy notice that was shown, where the decision was made and when.
+  Withdrawal takes the one request granting took and nothing stands in its way. A
+  purpose that rests on a basis other than consent takes no consent record, and one
+  whose basis carries no right to object refuses the objection by name. Publishing a
+  materially revised privacy notice ends every live consent given against an earlier
+  version, so the subject is asked again, and leaves the records standing as evidence.
+
+- The privacy notice and every other legal document a deployment publishes are now
+  served over `GET /privacy/notice` and `GET /privacy/documents/{document}`, public
+  and without a sign-in, each answer carrying the governing language, the text that
+  binds and every attached translation. A version is named in the query to read the
+  text that was shown at the time.
+- A deployment can now publish its legal documents through the library: the privacy
+  notice, the terms of service and anything else it holds. Each version carries one
+  governing language, defaulting to the one the deployment configured, and the text
+  that binds in it. Translations attach to a published version and correct it without
+  making a new one, and a read returns the governing text together with every
+  translation so a screen can show either without changing the interface language. A
+  version submitted without its governing text does not publish, and the condition is
+  raised for an operator to see.
+- The error catalogue now carries the privacy codes: a consent that is required,
+  superseded or has to be written; a purpose whose basis carries no right to object; a
+  document version submitted without its governing text; a duplicate request; a
+  received date in the future; and an erasure that has not exhausted its retries. Each
+  answers the status its endpoint states.
+- Which capture path a consent runs through now follows from the lawful basis and the
+  sensitivity of the type: a consent-based purpose over sensitive data, on a basis that
+  requires it, takes the written path with nothing further to configure. A deployment
+  may state the written path itself and never the ordinary one where the written one is
+  required, which startup refuses.
+- A declared purpose now carries the categories of data it requires and the categories
+  of person it is about, and startup refuses a purpose that names no data category, so
+  the declaration states what is collected rather than what happens to be held. A
+  resource type declared sensitive in a category the deployment did not declare is
+  refused at startup for the same reason.
 - A deployment can now register a callback that says what its gateway knows about a
   phone number. Before a sign-in link or a second-step code goes to a number, the
   callback is asked and the answer is written to the audit trail against the factor it

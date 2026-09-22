@@ -14,6 +14,7 @@
        the area that owns the port. -->
   <ItemGroup>
     <ProjectReference Include="..\Janus.Authentication.Tests\Janus.Authentication.Tests.csproj" />
+    <ProjectReference Include="..\Janus.Privacy.Tests\Janus.Privacy.Tests.csproj" />
   </ItemGroup>
 
   <ItemGroup>

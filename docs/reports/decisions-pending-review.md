@@ -2301,3 +2301,1081 @@ standard puts them.
 *Chapter text that should change.* `07` LIB-HOST-003 should say that the prefix is the
 path base the host mounts under, so a host does not reach for a route group and leave
 the provider behind.
+
+---
+
+## 77. A purpose declares the data and subject categories it requires
+
+**Phase 7 · 2026-09-20 · Tier 2 · PRIV-PRIN-001, PRIV-ROPA-001, AUTHZ-MODEL-003**
+
+*The question.* PRIV-PRIN-001 AC1 requires each purpose to name the categories of data
+and of subject it requires, and AC2 requires a field held by no declared purpose to fail
+validation. Chapter 03's declaration surface carries a purpose's name, basis and
+assessment, and nothing that names a category. Nothing in `10` lists a category type
+either, so the categories are either a new declared thing or a reading of something that
+already exists.
+
+*The readings.*
+
+1. Read the categories off the resource type: the type a purpose is declared on is the
+   data, and the subject is whoever the type belongs to. Nothing new is declared.
+2. Let a purpose declare its own lists of data and subject categories, which the RoPA
+   then prints and which validation reads.
+
+*Chosen: 2.* PRIV-ROPA-001 requires the record of processing to carry the categories per
+purpose, and a purpose is declared once and gathered from every type that names it, so
+reading 1 would give one purpose as many category sets as it has types and no way to
+print the one the register asks for. AC1 says the purpose names them, not the type.
+AC2 is satisfied by the refusal that already exists: a resource type declared with no
+purpose fails startup (AUTHZ-MODEL-003 AC1), and a field belongs to a type, so a field
+held by no declared purpose is a type held by no declared purpose.
+
+*Tests that pin what is built.*
+`ProcessingTests.PRIV_PRIN_001_AC1_EachPurposeNamesTheCategoriesItRequires`,
+`ProcessingTests.PRIV_PRIN_001_AC2_AFieldHeldByNoDeclaredPurposeFailsValidation`.
+
+*Chapter text that should change.* `03`'s purpose declaration should carry the two
+category lists, and `10` should list them with the rest of the declaration surface.
+PRIV-PRIN-001 AC2 should say that the refusal is the type-level one AUTHZ-MODEL-003
+already states.
+
+---
+
+## 78. The capture path is derived from the basis and the sensitivity
+
+**Phase 7 · 2026-09-20 · Tier 2 · PRIV-BASIS-003, PRIV-SENS-002, AUTHZ-MODEL-003 AC2**
+
+*The question.* PRIV-BASIS-003 forbids the ordinary consent path over sensitive data.
+Whether a purpose captures consent the ordinary way or the written way is therefore a
+consequence of two things the host already declares, the purpose's basis and the
+sensitivity of the type it is declared on, but a host could also state the path itself,
+and the two could then disagree.
+
+*The readings.*
+
+1. The host declares the path, and a declaration that states the ordinary path over
+   sensitive data fails startup.
+2. The library derives the path, and a declaration may only tighten it: a host may ask
+   for the written path where the ordinary one would do, never the reverse.
+
+*Chosen: 2.* AUTHZ-MODEL-003 AC2 requires that declaring a type sensitive changes what
+its consent-based purposes ask for with nothing else edited, which reading 1 does not
+give: it would leave the two statements to be kept in step by hand. Fail closed on the
+disagreement, so the derived path is a floor a host may raise and cannot lower. The
+startup refusal PRIV-BASIS-003 asks for still exists, for the declaration that tries to
+lower it.
+
+*Tests that pin what is built.*
+`ProcessingTests.PRIV_BASIS_003_AC1_TheOrdinaryPathOverSensitiveDataFailsValidation`,
+`ProcessingTests.AUTHZ_MODEL_003_AC2_DeclaringATypeSensitiveChangesWhatItsConsentAsksFor`.
+
+*Chapter text that should change.* PRIV-BASIS-003 should say that the path is derived
+and that a declaration may only tighten it, so a reader does not look for a path field
+in `10`.
+
+---
+
+## 79. What the deployment processes is read from Core
+
+**Phase 7 · 2026-09-20 · Tier 2 · CONV-LAYOUT-001, CONV-LAYOUT-002, LIB-API-001**
+
+*The question.* The declared purposes are read by the authorization model, which
+validates them, and by the privacy area, which records consent against them. Neither
+project may reference the other (CONV-LAYOUT-001), so the type that carries them lives
+in one of the two areas and is unreachable from the other, or in Core.
+
+*The readings.*
+
+1. Each area holds its own reading of the declaration, the authorization side for
+   validation and the privacy side for the consent kind.
+2. `DeclaredProcessing`, `DeclaredPurpose` and `ConsentKind` are Core types, read once
+   from the declaration and shared.
+
+*Chosen: 2.* Reading 1 is two implementations of one rule, and the rule is the derivation
+of 78: the two would drift and the drift would be a purpose that validates one way and
+records another. Core is where the contract types are (LIB-API-001), a purpose is part of
+what the host declares, and the privacy dashboard has to print the purposes to the
+subject, so they are public either way.
+
+*Tests that pin what is built.*
+`ProcessingTests.PRIV_BASIS_001_AC3_APurposeWithoutABasisIsRefusedWhereItIsDeclared`,
+`ConsentTests.PRIV_SENS_002a_AC4_APurposeOnAnotherBasisTakesNoConsentAsync`.
+
+*Chapter text that should change.* `10` section 5 should list `DeclaredProcessing`,
+`DeclaredPurpose` and `ConsentKind` among the public types, and `07` LIB-API-001 should
+name them.
+
+---
+
+## 80. The privacy area raises its alerts through its own port
+
+**Phase 7 · 2026-09-20 · Tier 2 · CONV-DESIGN-003, CONV-LAYOUT-001, OPS-ALERT-001**
+
+*The question.* PRIV-CONS-006 requires the missing-governing-text condition to be raised
+on OPS-ALERT-001. The type that builds an alert is internal to the authentication area,
+which the privacy area may not reference.
+
+*The readings.*
+
+1. Move the alert builder to Core so every area can raise one.
+2. The privacy area declares `IPrivacyAlerts`, its own port, and the hosting project
+   implements it over the builder that exists.
+
+*Chosen: 2.* CONV-DESIGN-003 says each area declares the ports it needs and the outer
+projects implement them, which is what every other cross-area need in this repository
+already does. Reading 1 would widen the public surface for an internal concern.
+
+*Tests that pin what is built.*
+`LegalDocumentTests.PRIV_CONS_006_AC3_AVersionWithoutGoverningTextIsRefusedAndRaisedAsync`.
+
+*Chapter text that should change.* None. `08` already settles this; the entry records
+that the port was added rather than the builder moved.
+
+---
+
+## 81. A document version is numbered by how many came before it
+
+**Phase 7 · 2026-09-20 · Tier 2 · PRIV-CONS-005, PRIV-CONS-006**
+
+*The question.* A consent record names the version of the notice that was displayed
+(PRIV-CONS-001 AC2) and a version is addressable afterwards (PRIV-CONS-006 AC2), so a
+version needs an identity. No chapter says what it looks like and `10` carries no
+default for it.
+
+*The readings.*
+
+1. The publisher names the version, and the library refuses a name already used.
+2. The library numbers it: the count of versions of that document plus one, rendered
+   decimal.
+
+*Chosen: 2.* Reading 1 puts a user-facing string in the host's hands and then has the
+library compare strings to decide which is current, which PRIV-CONS-006 AC1 needs to be
+unambiguous. The ordinal is total, is decided by the library, and answers which version
+is current without parsing. The wire carries it as a string, so a host that later wants
+its own naming does not break the shape.
+
+*Tests that pin what is built.*
+`LegalDocumentTests.PRIV_CONS_006_AC1_ChangingTheGoverningTextCreatesANewVersionAsync`,
+`LegalDocumentTests.PRIV_CONS_006_AC1_CorrectingATranslationCreatesNoVersionAsync`.
+
+*Chapter text that should change.* PRIV-CONS-005 should say that the library numbers
+versions and that the number is the count of publications of that document.
+
+---
+
+## 82. Supersession is keyed to the privacy notice
+
+**Phase 7 · 2026-09-20 · Tier 2 · PRIV-CONS-001 AC2, PRIV-CONS-007**
+
+*The question.* PRIV-CONS-007 says a material change supersedes every live consent on
+the purposes the document covers (`09` section 8a). Nothing declares which purposes a
+document covers, and no chapter gives a place to declare it.
+
+*The readings.*
+
+1. Add a declaration: a document names the purposes it covers, and a material revision
+   supersedes the consents on those.
+2. A consent record names the version of the **privacy notice**, in PRIV-CONS-001 AC2's
+   own words, so a material revision of the privacy notice supersedes every live consent
+   given against an earlier version of it, and a revision of any other document
+   supersedes none.
+
+*Chosen: 2.* PRIV-CONS-001 AC2 names the notice and nothing else, so the record already
+carries the one document that governs it and reading 1 would add a second, overlapping
+statement of the same thing. The smaller surface: no new declaration, no new public type.
+A deployment that wants a consent text to govern a purpose publishes it and revises the
+notice that points at it.
+
+*Tests that pin what is built.*
+`SupersessionTests.PRIV_CONS_007_AC1_AMaterialChangeIdentifiesWhoMustBeAskedAgainAsync`,
+`SupersessionTests.PRIV_CONS_007_AC2_AMaterialRevisionOfAnotherDocumentEndsNoConsentAsync`,
+`ConsentStoreTests.PRIV_CONS_007_AC1_OnlyLiveConsentsAgainstAnEarlierVersionAreFoundAsync`.
+
+*Chapter text that should change.* `09` section 8a should say that `material` supersedes
+the consents given against an earlier version of the privacy notice, and PRIV-CONS-007
+should drop the phrase naming the purposes the document covers.
+
+---
+
+## 83. A refusal `10` gives no code for is refused as denied
+
+**Phase 7 · 2026-09-20 · Tier 3 · REF-001, `10` section 1.4**
+
+*The question.* Three refusals in this phase have no code in `10` section 1.4: reading a
+document that was never published, granting or withdrawing consent for a purpose that is
+undeclared or rests on another basis, and granting consent when no privacy notice has
+been published. Each is a real refusal the library has to make.
+
+*The readings.*
+
+1. Add a code to the catalogue for each and implement it.
+2. Refuse with `privacy.denied`, the general refusal, and record that `10` is missing
+   three rows.
+
+*Chosen: 2, the strictest reading.* REF-001 makes `10` authoritative for the error
+catalogue, and adding a code without changing `10` would put a code on the wire that the
+specification does not carry, which a frontend cannot write words for (CONV-CONTENT-001).
+Refusing is what both readings agree on; only the name differs, so the general code
+grants least and keeps most. The owner adds the rows and the refusals take their names.
+
+*Tests that pin what is built.*
+`ConsentTests.PRIV_SENS_002a_AC4_APurposeOnAnotherBasisTakesNoConsentAsync`,
+`LegalDocumentEndpointTests.PRIV_CONS_005_AC1_AnUnpublishedDocumentIsRefusedAsync`,
+`ConsentEndpointTests.PRIV_CONS_008a_AC3_APurposeOnAnotherBasisTakesNoConsentAsync`.
+
+*Chapter text that should change.* `10` section 1.4 needs three rows: a document version
+that does not exist, a purpose that is not the subject's to consent to, and a consent
+asked for before any notice was published.
+
+---
+
+## 84. A consent record carries when it was superseded
+
+**Phase 7 · 2026-09-20 · Tier 2 · PRIV-CONS-007 AC4, `09` section 7**
+
+*The question.* `09` section 7 lists a consent record on the wire as `{ purpose,
+noticeVersion, mechanism, grantedAt, withdrawnAt }`. PRIV-CONS-007 AC4 requires a
+superseded consent to prompt rather than block, which the dashboard cannot do unless it
+can tell a superseded consent from a live one.
+
+*The readings.*
+
+1. Keep the listed shape and let the frontend compare the record's `noticeVersion`
+   against the current notice.
+2. Carry `supersededAt` beside `withdrawnAt`.
+
+*Chosen: 2.* Reading 1 makes every screen re-derive a decision the library already took
+and wrote down, and it is wrong whenever a revision was published and called immaterial:
+the versions differ and the consent stands. The field is the answer, not a hint.
+
+*Tests that pin what is built.*
+`SupersessionTests.PRIV_CONS_007_AC4_ASupersededConsentPromptsRatherThanWithdrawsAsync`,
+`ConsentEndpointTests.PRIV_CONS_011_AC1_EveryConsentHeldIsVisibleToItsSubjectAsync`.
+
+*Chapter text that should change.* `09` section 7 should list `supersededAt` in the
+consent record.
+
+---
+
+## 85. The consent event names which way the consent changed
+
+**Phase 7 · 2026-09-20 · Tier 2 · PRIV-CONS-008, `10` section 5**
+
+*The question.* `ConsentChanged` is raised on a grant, on a withdrawal and on a
+supersession. A subscriber that erases the data held solely for a purpose (PRIV-CONS-008
+AC4) must act on one of the three and not the others, and `10` section 5 lists no type
+that distinguishes them.
+
+*The readings.*
+
+1. Raise a separate event for each of the three.
+2. Carry a `ConsentChange` on the one event: granted, withdrawn, superseded.
+
+*Chosen: 2.* PRIV-CONS-008 names one event, `ConsentChanged`, as what handlers subscribe
+to, so three events would break the item's own text. One enum of three values is the
+smaller surface and the one a handler can switch on.
+
+*Tests that pin what is built.*
+`ConsentTests.PRIV_CONS_008_AC4_WithdrawalAnnouncesTheChangeForThePurposeAsync`,
+`SupersessionTests.PRIV_CONS_007_AC4_ASupersededConsentPromptsRatherThanWithdrawsAsync`.
+
+*Chapter text that should change.* `10` section 5 should list `ConsentChange` and the
+`ConsentChanged` payload that carries it.
+
+---
+
+## 86. Privacy records are audited under the security category
+
+**Phase 7 · 2026-09-20 · Tier 2 · CONV-LOG-002, `10` section 5**
+
+*The question.* Every consent, objection and publication is written to the audit trail.
+`AuditCategory` has no privacy value and `10` lists none.
+
+*The readings.*
+
+1. Add a `Privacy` category.
+2. Write them under `Security`, the category the existing gated administrative actions
+   use.
+
+*Chosen: 2.* Adding a value to a public enum `10` fixes is a change to the reference, and
+the actions are already distinguishable by their action codes
+(`privacy.consent.granted` and the rest), which is what a reader filters on. The smaller
+surface.
+
+*Tests that pin what is built.*
+`ConsentTests.PRIV_CONS_001_AC1_EveryChangeIsAuditedByCodeAsync`,
+`LegalDocumentTests.PRIV_CONS_007_AC1_TheAuditRecordCarriesTheAnswerOnMaterialityAsync`.
+
+*Chapter text that should change.* `10` should either add a `privacy` audit category or
+say that privacy actions are recorded under `security`.
+
+---
+
+## 87. The dashboard records the mechanism it is
+
+**Phase 7 · 2026-09-20 · Tier 2 · PRIV-CONS-001 AC1, PRIV-CONS-007, `10` section 5.21**
+
+*The question.* `09` section 7 gives the grant and objection endpoints no body, so the
+mechanism written on the record is the library's to choose. One of the four values,
+`reconsent`, is the prompt raised after a material revision, and the same endpoint serves
+it.
+
+*The readings.*
+
+1. Derive it: where the subject holds a superseded consent for that purpose, the grant
+   that follows is re-consent.
+2. Record `dashboard`, which `10` section 5.21 defines as the subject's own privacy
+   pages, and leave `reconsent` to the in-process contract, which takes the mechanism
+   from its caller.
+
+*Chosen: 2.* Reading 1 has the library infer which screen the person was on from state in
+its own store, and a host may raise its re-consent prompt anywhere or not at all. Which
+surface asked is the frontend's fact, and the record should carry what it is told, not a
+guess. A host that raises the prompt calls the contract and names `reconsent`.
+
+*Tests that pin what is built.*
+`ConsentEndpointTests.PRIV_CONS_011_AC1_EveryConsentHeldIsVisibleToItsSubjectAsync`,
+`ConsentTests.PRIV_CONS_001_AC1_TheRecordCarriesTheMechanismAsync`.
+
+*Chapter text that should change.* `09` section 7 should say that the dashboard endpoints
+record the `dashboard` mechanism and that `reconsent` is written by a host calling the
+contract.
+
+---
+
+## 88. An action is bound to the purpose it is done for
+
+**Phase 7 · 2026-09-20 · Tier 2 · PRIV-SENS-002, PRIV-SENS-002a, AUTHZ-GATE-005, D-160**
+
+*The question.* PRIV-SENS-002 AC1 refuses processing of a sensitive type for a
+consent-based purpose without recorded consent, and PRIV-SENS-002a requires the refusal
+to reach the purpose and not the record. The gate evaluates a permission, and nothing
+tells it which purpose a permission is exercised for.
+
+*The readings.*
+
+1. Add a purpose to the gate's own calls, so every caller states what it is doing.
+2. Refuse the action wherever the type carries any consent-based purpose the subject
+   has not consented to.
+3. The model builder binds an action to the purpose it serves, as D-160 already binds
+   an action to a step-up gate, and the gate reads the purpose from the permission.
+
+*Chosen: 3.* Reading 2 is the record gating D-066 replaced: a customer who never wanted
+recommendations would stop their own order. Reading 1 changes the gate's four public
+signatures for a fact that is fixed at declaration time and never varies per call, and
+phase 2 settled those signatures. Reading 3 is the pattern D-160 set for the `stepup`
+residual, word for word: the residual comes from what the model binds to the action and
+not from the permission string. A binding to a purpose no type declares fails startup,
+so the gate never asks about a consent nobody could give.
+
+*Tests that pin what is built.*
+`ConsentGateTests.PRIV_SENS_002_AC1_AConsentBasedPurposeWithoutAConsentIsRefusedAsync`,
+`ConsentGateTests.PRIV_SENS_002a_AC1_AnotherPurposeOnTheSameRecordIsUntouchedAsync`,
+`ConsentGateTests.AUTHZ_GATE_005_AC3_ACapabilityCarriesTheConsentItStillRequiresAsync`.
+
+*Chapter text that should change.* `03` should carry the binding beside the step-up one
+of AUTHZ-GATE-005, and `10` should list it with the rest of the declaration surface.
+
+---
+
+## 89. The consent the gate reads is the caller's own
+
+**Phase 7 · 2026-09-20 · Tier 3 · PRIV-SENS-002 AC1, AUTHZ-GATE-005, `10` section 5.20**
+
+*The question.* A consent belongs to a data subject. The gate evaluates a caller. Where
+staff act on a customer's record, the two differ, and PRIV-SENS-002 AC1 does not say
+whose consent is read.
+
+*The readings.*
+
+1. The record's data subject, resolved from the record the action is on.
+2. The caller, as every other residual of `10` section 5.20 is about the caller.
+
+*Chosen: 2, the strictest reading of what is settled.* `10` section 5.20 lists `consent`
+beside `stepup`, `reauthenticate`, `restricted` and `accountstate`, and each of those
+four is a fact about the caller's own session or account; reading the fifth differently
+would make one member of a closed set mean something else. Reading 1 also needs a data
+subject on a record, which nothing in `03` declares: the library knows a record's
+organization and never its subject. The narrower reading refuses the self-service case,
+which is the case PRIV-CONS-011's dashboard is about, and leaves the staff case to the
+host, which knows whose record it is. Background work asking as a system principal holds
+no account and therefore no consent, so the binding asks nothing of it; the grant it
+needs is refused on its own terms (AUTHZ-PRIN-003).
+
+*Tests that pin what is built.*
+`ConsentGateTests.PRIV_SENS_002_AC1_AWrittenConsentAdmitsTheActionAsync`,
+`ConsentGateTests.PRIV_SENS_002a_AC2_WithdrawingStopsThePurposeOnTheNextRequestAsync`.
+
+*Chapter text that should change.* PRIV-SENS-002 AC1 should say whose consent is read,
+and `03` should say what a host does where the caller is not the subject.
+
+---
+
+## 90. A consent control for a purpose taking no consent refuses the terms step
+
+**Phase 7 · 2026-09-20 · Tier 2 · REG-SESS-007 AC1, PRIV-CONS-001, PRIV-CONS-008a**
+
+*The question.* The terms step takes one boolean per consent control. REG-SESS-007 AC1
+says no consent control blocks registration. A control naming a purpose the deployment
+takes no consent for cannot produce a record, and the item does not say what happens.
+
+*The readings.*
+
+1. Record what can be recorded, ignore the rest, and complete the registration.
+2. Refuse the step, since a control that should not exist is a malformed request rather
+   than a consent decision.
+
+*Chosen: 2.* AC1 is about a control left **unticked**, which writes nothing and stops
+nothing, and that is what is built and tested. A tick the library cannot honour is
+different: reading 1 would tell the person they had consented and keep no record of it,
+which is the one outcome PRIV-CONS-001 exists to prevent. Fail closed. Nothing of the
+registration is written, because the step is the one transaction of REG-SESS-001.
+
+*Tests that pin what is built.*
+`RegistrationServiceTests.PRIV_CONS_003_AC1_NoConsentIsRecordedForAControlLeftUntickedAsync`,
+`RegistrationServiceTests.PRIV_CONS_001_AC1_AControlForAPurposeTakingNoConsentIsRefusedAsync`.
+
+*Chapter text that should change.* `09` section 2's row for `POST /register/terms`
+should carry the refusal, and `10` section 1.4 the code it answers with (entry 83).
+
+---
+
+## 91. The sweep that fires a deadline is built here and scheduled in phase 9
+
+**Phase 7 · 2026-09-20 · Tier 2 · PRIV-RIGHT-002 AC2, the plan's phase 7 and 9 rows**
+
+*The question.* PRIV-RIGHT-002 AC2 requires the two deadline alerts to fire "without
+human monitoring", which needs something to run on a timer. The plan puts background
+jobs in phase 9 and the rights queue in phase 7.
+
+*The readings.*
+
+1. Build a timer in phase 7 so the criterion is met end to end now.
+2. Build the pass the timer will call, with its own tests, and leave the schedule to
+   the one place the plan puts schedules.
+
+*Chosen: 2.* Entry 23 already settled that the outbox publisher's schedule belongs to
+phase 9; a second scheduling mechanism built here would be the second way of doing
+something that already has one. `DeadlineSweep.SweepAsync` decides everything the
+criterion describes and is tested against the clock; phase 9 calls it on
+`sweep.interval`.
+
+*Tests that pin what is built.*
+`DeadlineSweepTests.PRIV_RIGHT_002_AC2_TheNormalAlertFiresTwoWorkingDaysBeforeAsync`,
+`DeadlineSweepTests.PRIV_RIGHT_002_AC2_TheHighAlertFiresOnTheDeadlineDayAsync`,
+`DeadlineSweepTests.PRIV_RIGHT_002_AC3_ARestrictionUndecidedAtTheDeadlineIsGrantedAsync`.
+
+*Chapter text that should change.* The plan's phase 9 row should name the privacy
+deadline sweep beside the outbox publisher, or PRIV-RIGHT-002 should say which phase
+runs it.
+
+---
+
+## 92. The receipt and the lapse notice are two new message kinds
+
+**Phase 7 · 2026-09-20 · Tier 2 · PRIV-RIGHT-002, `10` section 5b, CONV-CONTENT-001**
+
+*The question.* PRIV-RIGHT-002 requires an automatic receipt the moment a request
+enters the queue, and an honest notice to a subject whose erasure request reached its
+deadline undecided. The library asks for a message by naming a `MessageKind`, and no
+member of that vocabulary stands for either message.
+
+*The readings.*
+
+1. Send one of the existing kinds, which would have the deployment catalogue answer
+   with words written for something else.
+2. Add `privacy-request-received` and `privacy-request-lapsed`, and record that `10`
+   needs the two rows.
+
+*Chosen: 2.* Reading 1 puts the wrong sentence in front of the person, which is the
+one thing CONV-CONTENT-001 exists to prevent; the chapter requires both messages, so
+neither can go unsent. The two names are the chapter's own words for what they are.
+
+*Tests that pin what is built.*
+`PrivacyRequestTests.PRIV_RIGHT_002_AC1_TheSubjectIsSentAReceiptOnEntryAsync`,
+`DeadlineSweepTests.PRIV_RIGHT_002_AC4_AnErasureUndecidedAtTheDeadlineIsDeemedRefusedAsync`,
+`VocabularyContractTests.WireNames_TheKeysTheCatalogueIsAskedBy_AreWritten`.
+
+*Chapter text that should change.* The message vocabulary needs the two kinds, and
+`18` should say which screens the deployment writes the two texts for.
+
+---
+
+## 93. A request the caller may not decide is refused as denied, whatever the reason
+
+**Phase 7 · 2026-09-20 · Tier 2 · PRIV-RIGHT-001, AUTHZ-CONCEAL-005, `10` section 1.4**
+
+*The question.* Three refusals of the decision endpoints have no code in `10` section
+1.4: a request identifier that names no row, a request already decided, and a caller
+without `privacyrequest:manage`.
+
+*The readings.*
+
+1. Tell the three apart on the wire, which needs two codes `10` does not carry.
+2. Answer all three with `authz.denied`.
+
+*Chosen: 2*, following entry 83. Telling a missing identifier from an existing one
+answers a question the caller has no permission to ask (AUTHZ-CONCEAL-005), and a code
+`10` does not carry is a code the frontend cannot write words for.
+
+*Tests that pin what is built.*
+`PrivacyRequestTests.PRIV_RIGHT_002_AC5_ARequestIsDecidedOnceAsync`,
+`PrivacyRequestTests.PRIV_RIGHT_001_AC2_EnteringWithoutThePermissionIsRefusedAsync`,
+`PrivacyRequestTests.PRIV_RIGHT_001_AC2_TheQueueIsReadByTheHumanWhoWorksItAsync`.
+
+*Chapter text that should change.* `10` section 1.4 needs a row for a request that
+cannot be decided, or `09` section 8a should say the three answer alike.
+
+---
+
+## 94. A rectification that lapses is deemed refused, as an erasure is
+
+**Phase 7 · 2026-09-20 · Tier 3 · PRIV-RIGHT-002**
+
+*The question.* PRIV-RIGHT-002 says the lapse of the six working days is deemed a
+rejection, then names what happens for a restriction (granted by lapse) and for an
+out-of-band erasure (deemed refused, subject notified). It says nothing about a
+rectification, which is the third type `10` section 5.12c carries.
+
+*The readings.*
+
+1. Leave a lapsed rectification open, since the item does not name it.
+2. Record it as deemed refused by lapse and tell the subject, which is what the
+   statute's default and the erasure path both say.
+
+*Chosen: 2, the strictest reading.* Leaving it open would have the clock pass with no
+decision and no word to the subject, which is the outcome the whole item exists to
+prevent; the statute deems the lapse a rejection for every request, and only
+restriction is carved out of that because granting it is always safe. Nothing is
+granted, nothing is erased, and the record persists.
+
+*Tests that pin what is built.*
+`DeadlineSweepTests.PRIV_RIGHT_002_AC4_AnErasureUndecidedAtTheDeadlineIsDeemedRefusedAsync`,
+`DeadlineSweepTests.PRIV_RIGHT_002_AC4_TheLapseOfAnErasureErasesNothingAsync`.
+
+*Chapter text that should change.* PRIV-RIGHT-002 should name the rectification case
+beside the other two.
+
+---
+
+## 95. The request and the delivery carry typed identifiers
+
+**Phase 7 · 2026-09-20 · Tier 2 · CONV-DESIGN-004, LIB-API-001**
+
+*The question.* CONV-DESIGN-004 AC2 forbids a method outside the type that gives a
+value its rules from taking that value as the type it is stored in, and the contract
+test enforces it over every area. A request identifier and an outbox delivery
+identifier are both stored as a `Guid`.
+
+*The readings.*
+
+1. Pass the `Guid`, which the contract test refuses.
+2. Add `PrivacyRequestId` to the public contract, as `GrantId` and `SessionId` already
+   are, and `DeliveryId` internal to the privacy area.
+
+*Chosen: 2.* The convention is settled and the pattern already has thirteen instances;
+`PrivacyRequestId` is public because `IPrivacyRequests` takes it, and the wire carries
+its value rather than the type. The delivery never crosses the boundary, so its
+identifier stays internal.
+
+*Tests that pin what is built.*
+`LibraryStructureTests.CONV_DESIGN_004_AC2_NoMethodTakesAValueAsItsUnderlyingType`,
+`PrivacyRequestStoreTests.PRIV_RIGHT_002_AC1_ARequestReadsBackEveryFieldItWasWrittenWithAsync`.
+
+*Chapter text that should change.* LIB-API-001 should list `PrivacyRequestId` among
+the identifiers the contract carries.
+
+---
+
+## 96. A handler names what it covers, and the check reads the declaration against it
+
+**Phase 7 · 2026-09-20 · Tier 2 · PRIV-RIGHT-005b AC3, PRIV-RIGHT-001a AC3, LIB-HOST-001**
+
+*The question.* Startup fails where a resource type declared sensitive has no
+registered handler, and where a purpose on an objectable basis has none. No chapter
+says how the library learns which handler covers which type or which purpose.
+`ISubjectEventSubscriber` carried a name and whether a delivery waits for it;
+`ConsentChanged` and `ObjectionChanged` reach their handlers through the host's own
+`IEvents`, which the library never resolves.
+
+*The readings.*
+
+1. One required subject-event subscriber registered anywhere satisfies every
+   sensitive type, and one handler registered anywhere satisfies every objectable
+   purpose.
+2. A subject-event subscriber names the resource types it does the work for, a
+   purpose handler names its purposes, and a type or purpose that no registration
+   names stops the deployment.
+
+*Chosen: 2.* LIB-HOST-001 requires the handlers "per sensitive resource type" and
+D-068 that "a resource type declared sensitive must have a handler registered", so
+reading 1 leaves the words "a resource type" carrying nothing and admits deployments
+reading 2 refuses. The surface added is the least that lets the check mean what the
+chapters say: one member on the interface that already existed
+(`ISubjectEventSubscriber.Covers`) and one interface with one member
+(`IPurposeHandler.Purposes`). The purpose handler is a registration the library
+verifies at startup and never calls, because the event reaches it through the host's
+own `IEvents`.
+
+*Tests that pin what is built.*
+`HandlerCoverageTests.PRIV_RIGHT_005b_AC3_ASensitiveTypeWithNoRegisteredHandlerFailsStartup`,
+`HandlerCoverageTests.PRIV_RIGHT_001a_AC3_AnObjectablePurposeWithNoRegisteredHandlerFailsStartup`,
+`StartupValidationTests.PRIV_RIGHT_005b_AC3_ADeploymentWithNoHandlerForItsSensitiveTypeIsRefusedAsync`.
+
+*Chapter text that should change.* LIB-API-001 should list `IPurposeHandler` and the
+`Covers` member beside `ISubjectEventSubscriber`, and LIB-HOST-001's subject-event
+row should say that the handler names the types it covers.
+
+---
+
+## 97. A handler that faults is a handler that did not confirm
+
+**Phase 7 · 2026-09-20 · Tier 2 · IDN-LIFE-003a, CONV-ERR-002, CONV-ERR-003**
+
+*The question.* The subscriber contract says a handler that did not do its work says
+so rather than throwing. No chapter says what the publisher does with one that throws
+anyway.
+
+*The readings.*
+
+1. The fault leaves the pass, and the worker's next run offers the delivery again.
+2. The fault is caught at the boundary, the handler counts as one that did not
+   confirm, and the attempt, the backoff and the budget are recorded as for a refusal.
+
+*Chosen: 2.* Under reading 1 the attempt is never counted, so the delivery is offered
+again at every `outbox.poll.interval` with no backoff, never reaches `failed` and
+never raises the exhaustion the item requires; and one faulting handler holds up every
+other person's delivery in the same pass. The catch returns a failure result and
+nothing permitted or successful, so CONV-ERR-002 and CONV-ERR-003 hold and JAN0006
+passes on its own terms.
+
+*Tests that pin what is built.*
+`OutboxPublisherTests.PRIV_RIGHT_005b_AC2_ASubscriberThatFaultsIsRetriedRatherThanConfirmedAsync`.
+
+*Chapter text that should change.* IDN-LIFE-003a should say, beside the requirement
+that subscribers be idempotent, that a handler which faults is one that did not
+confirm.
+
+---
+
+## 98. The link-borne bodies carry `linkToken`, including reactivation
+
+**Phase 7 · 2026-09-20 · Tier 2 · chapter 09 sections 6 and 6a, IDN-LIFE-013**
+
+*The question.* Chapter 09's entry for `POST /account/reactivate` spells its body
+`{ "token": "..." }` and says in the same paragraph that it is "the same shape as
+deletion cancellation". The entry for `POST /account/identifiers/{id}/undo` also says
+it is "the same shape as deletion cancellation" and spells `{ "linkToken": "..." }`.
+Deletion cancellation's own entry spells no body. The two sentences cannot both hold.
+
+*The readings.*
+
+1. The reactivation body is `token`, as its own JSON block spells, and deletion
+   cancellation is `linkToken`, as the undo entry's cross-reference spells.
+2. Every link-borne body is `linkToken`, and the block at the reactivation entry is
+   the slip.
+
+*Chosen: 2.* The reactivation entry is inconsistent with itself, so it cannot settle
+its own shape; what remains is the rest of the chapter, where every body carrying a
+token out of a notice (`POST /register/verify/{id}`, `POST /register/abandon`,
+`POST /auth/link/abandon`, the identifier undo and the identifier abandon) is spelled
+`linkToken`, and `token` is spelled only where the token is an enrolment or recovery
+token the person was handed rather than a link.
+Reading 2 also keeps one request shape for the four link-borne account paths instead
+of two.
+
+*Tests that pin what is built.*
+`AccountLifecycleFlowTests.IDN_LIFE_013_AC1_TheNoticesLinkStandsTheAccountBackUpAsync`,
+`AccountLifecycleFlowTests.IDN_ACCT_007_AC4_TheLinkEndsTheWindowAsync`.
+
+*Chapter text that should change.* The `POST /account/reactivate` entry's JSON block
+should read `{ "linkToken": "..." }`.
+
+---
+
+## 99. The export asks for step-up through a Core port the authentication area implements
+
+**Phase 7 · 2026-09-22 · Tier 2 · CONV-LAYOUT-001, LIB-API-001, LIB-API-005, chapter 09 section 7**
+
+*The question.* Chapter 09 requires `GET /privacy/export` to be gated at the account's
+reachable assurance (AUTH-STEP-002a, D-141). CONV-LAYOUT-001 puts erasure and export in
+`Janus.Privacy`, which references `Janus.Core` and nothing else, and the guard that
+resolves a step-up against the principal's policy is `StepUpGuard` in
+`Janus.Authentication`. Privacy cannot reach it.
+
+*The readings.*
+
+1. A public `IStepUpGate` in `Janus.Core`, implemented in `Janus.Authentication` over
+   the existing guard, which is the seam `IAccessGate` already is for authorization.
+2. Move the export into `Janus.Authentication`, which can reach the guard directly.
+3. Gate the export in the Hosting endpoint, before the contract is called.
+
+*Chosen: 1.* Reading 3 is refused by LIB-API-005 AC1 and AC2: an endpoint is a mapping
+onto one service contract and decides nothing itself, and a gate in the endpoint is a
+rule no other caller of the contract obeys. Reading 2 moves a chapter 04 item into the
+chapter 02 area and would need a second way for that area to announce a subject event,
+since the outbox is Privacy's; CONV-LAYOUT-001 assigns export to Privacy by name.
+Reading 1 adds one interface to the surface LIB-API-001 already carries the twin of,
+and no area learns anything about another.
+
+*Tests that pin what is built.*
+`ExportServiceTests.PRIV_RIGHT_003_TheGateIsAskedBeforeAnythingIsReadAsync`,
+`ExportEndpointTests.PRIV_RIGHT_003_AC1_BothFormatsContainTheSameDataAsync`.
+
+*Chapter text that should change.* CONV-LAYOUT-002 should name `IStepUpGate` beside
+`IAccessGate` as a seam `Janus.Core` carries for the areas, and LIB-API-001's
+operations row should say that the gates an area asks of another area are part of the
+public contract.
+
+---
+
+## 100. The export rate limit counts over a rolling day, and the refusal names the instant it lifts
+
+**Phase 7 · 2026-09-22 · Tier 2 · chapter 10 section 4.1 (`privacy.export.ratelimit`), D-086, API-CONV-003**
+
+*The question.* `privacy.export.ratelimit` is "3 per day". A day is either the calendar
+day of `privacy.calendar.timezone`, which resets at midnight, or a window of
+twenty-four hours that rolls.
+
+*The readings.*
+
+1. The calendar day: the count resets at local midnight, so an account may take three
+   exports before midnight and three after, six inside one sitting.
+2. A rolling twenty-four hours: an export counts until it is twenty-four hours old,
+   so no six exports can ever fall inside one day.
+
+*Chosen: 2.* The key is a rate limit and D-086's reason for it is the borrowed session
+that needs one successful pull; a boundary an attacker can wait ten minutes for is not
+a limit against that. Reading 2 grants strictly less than reading 1 and never more.
+The window is exclusive at its old end, so the `retryAt` the refusal carries is exactly
+the instant the oldest counted export falls out and the next one is allowed: a client
+that retries at the instant it was given is served rather than refused again.
+
+*Tests that pin what is built.*
+`ExportServiceTests.PRIV_RIGHT_003_AnExportThatHasFallenOutOfTheWindowNoLongerCountsAsync`,
+`ExportServiceTests.PRIV_RIGHT_003_TheExportAfterTheLastOneAllowedIsRefusedAsync`,
+`ExportEndpointTests.PRIV_RIGHT_003_TheSpentRateLimitAnswersWithWhenItLiftsAsync`.
+
+*Chapter text that should change.* The `privacy.export.ratelimit` row should read "3
+per rolling 24 hours" and say that the refusal carries the instant the window lifts.
+
+---
+
+## 101. A request naming no format, or one the chapter does not name, is malformed
+
+**Phase 7 · 2026-09-22 · Tier 2 · chapter 09 section 7 (`GET /privacy/export`)**
+
+*The question.* The entry is spelled `GET /privacy/export?format=human|machine` and
+says nothing about a request that carries no `format`, an empty one, or a third value.
+
+*The readings.*
+
+1. One of the two is the default, and a value the chapter does not name is served as
+   that default.
+2. The parameter is required and its two values are the whole of it, so anything else
+   is a malformed request answered 400.
+
+*Chosen: 2.* Reading 1 requires choosing a default the chapter does not give, and the
+two arrangements are not interchangeable to a caller: a reader that asked for the
+portable names and was handed the readable grouping fails on the data rather than on
+the request. Reading 2 grants less, invents nothing, and matches how the chapter's
+other enumerated bodies are handled (the request types of `POST /privacy/requests`).
+The match is exact and case-sensitive, as every other enumerated value in chapter 09
+is.
+
+*Tests that pin what is built.*
+`ExportEndpointTests.PRIV_RIGHT_003_AFormatTheChapterDoesNotNameIsMalformedAsync`.
+
+*Chapter text that should change.* The `GET /privacy/export` entry should say that
+`format` is required, that its two values are exact, and that anything else is 400.
+
+---
+
+## 102. The export carries every group of REG-ACCT-001 the account may see, not only the three PRIV-RIGHT-003 names
+
+**Phase 7 · 2026-09-22 · Tier 2 · PRIV-RIGHT-003, REG-ACCT-001, PRIV-RIGHT-005**
+
+*The question.* PRIV-RIGHT-003 names three things the export "SHALL include": the
+host-declared preferences, the identifiers with their roles and verification state, and
+the location records of the live sessions. It does not say whether those three are the
+whole of it.
+
+*The readings.*
+
+1. The three are the export. Anything else the account holds is reached through
+   `GET /account` and is not part of the access right the library serves.
+2. The three are a floor the item states because they are the parts most easily
+   missed, and the export is the access right: every group of REG-ACCT-001 the person
+   may see, plus the standing chapter 04 holds for them.
+
+*Chosen: 2.* An access export that leaves out the profile and the consent records
+would not satisfy the right it exists to satisfy, and PRIV-RIGHT-005's own reasoning
+treats the declared profile values and the preferences alike as the person's data. The
+sections built are `account` (the opaque subject, the state, when it was registered),
+`profile`, `identifiers`, `identifier-backup`, `preferences` (the value in force for
+every declared key, the declared default where the account set none), `sessions` (both
+location records), `consents` and `objections`. Credentials are not among them: what
+signs in to an account is not data held about the person, and a list of a person's
+authenticators in a file they may forward is an exposure the right does not ask for.
+
+*Tests that pin what is built.*
+`ExportSourceTests.PRIV_RIGHT_003_AC3_TheExportCarriesThePreferencesIdentifiersAndSessionsAsync`,
+`ExportSourceTests.PRIV_RIGHT_003_AnAccountThatHasSettledNothingStillExportsAsync`,
+`ExportServiceTests.PRIV_RIGHT_003_TheAreasAndTheDecisionsReachTheExportTogetherAsync`.
+
+*Chapter text that should change.* PRIV-RIGHT-003 should list the sections the export
+carries and say that credentials are not among them.
+
+---
+
+## 103. The provider register of chapter 05 section 8 ships as a default the host takes, and a row that names no location follows the hosting
+
+**Phase 7 · 2026-09-22 · Tier 2 · PRIV-ROPA-002, PRIV-ROPA-003**
+
+*The question.* PRIV-ROPA-002 says the library "ships that section's rows as defaults
+the host edits". It does not say whether a deployment that declares no recipients gets
+those seven rows anyway, and the section's "Location field" column has three kinds of
+entry (Configured, Follows hosting, Outside Egypt, and a dash) with no value spelled
+for the third and fourth.
+
+*The readings.*
+
+1. The rows are applied: a deployment that declares nothing reports the seven
+   providers, because the chapter calls them "current processors".
+2. The rows are offered: `ProviderRegister.Default` is a list the host declares from,
+   and a deployment that declares no recipient reports none.
+
+*Chosen: 2.* A generic library cannot know that a given deployment uses a payment
+provider or an SMS gateway, and a register that names a processor the deployment does
+not have is a false statement to a regulator, which is worse than an empty column a
+flag already points at. The rows ship with no agreement reference, so every one a host
+takes is flagged until the host gives it one, which is the chapter's "each requires an
+agreement reference". A row's `location` is nullable and an unstated one is read as
+the hosting location, which is what "Follows hosting" says and what the dash leaves;
+`password screening` is the one row shipped fixed as outside, so PRIV-ROPA-003's
+transfer is reported with the configured basis whatever else a host edits.
+
+*Tests that pin what is built.*
+`ProcessingRecordsTests.PRIV_ROPA_002_AC1_EveryRecipientAppearsAndAProcessorWithoutAnAgreementIsFlaggedAsync`,
+`ProcessingRecordsTests.PRIV_ROPA_003_AC1_ThePasswordScreeningCallAppearsAsACrossBorderTransferAsync`,
+`ProcessingRecordsEndpointTests.PRIV_ROPA_001_AC1_TheGeneratedOutputMatchesTheTemplatesFieldSetAndOrderingAsync`.
+
+*Chapter text that should change.* PRIV-ROPA-002 should say that the shipped rows are
+declared by the host rather than applied, that an unstated location is the hosting
+location, and that `password screening` is fixed outside.
+
+---
+
+## 104. The children's column is true for every row exactly when the deployment admits minors
+
+**Phase 7 · 2026-09-22 · Tier 2 · PRIV-ROPA-001, PRIV-MINOR-001, PRIV-SENS-001**
+
+*The question.* The template has a children's column beside the non-sensitive and
+sensitive ones, sourced from PRIV-SENS-001. Children's data is one of the declared
+sensitivity categories, but no resource type can say of itself that its rows belong to
+a child: whether a child's data is present is a property of the deployment, not of a
+type.
+
+*The readings.*
+
+1. The column is true only for a purpose over a type declaring the children's
+   category, like any other sensitivity category.
+2. The column is true for every row exactly when the deployment admits minors, which
+   is `registration.adultaffirmation` being `off`.
+
+*Chosen: 2.* Reading 1 reports no children's processing at all in a deployment that
+takes minors and declares no type as children's data, which is the under-report a
+regulator would object to; the category is one a host declares over a type it knows
+holds a minor's records, and most do not. Where the affirmation is required the
+service is adults only and no row is in the column; where it is off any row may be, so
+every row is, which over-reports rather than under-reports. The column is derived, so
+a deployment that closes registration to minors sees it go false with no separate
+edit.
+
+*Tests that pin what is built.*
+`ProcessingRecordsTests.PRIV_ROPA_001_ADeploymentAdmittingMinorsIsInTheChildrensColumnAsync`,
+`ProcessingRecordsTests.PRIV_ROPA_001_SensitivityIsAColumnOfItsOwnAsync`.
+
+*Chapter text that should change.* PRIV-ROPA-001 should say the children's column is
+derived from the registration affirmation and not from a sensitivity category.
+
+---
+
+## 105. The three supplied fields are one replaceable row, and the register is generated only for `format=template`
+
+**Phase 7 · 2026-09-22 · Tier 2 · PRIV-ROPA-001, chapter 09 sections 8 and 8a**
+
+*The question.* `PUT /admin/compliance/assessments` carries "LIA, DPIA and TIA
+references, and the declared human-input fields of the records of processing". Neither
+chapter says whether a second statement merges with the first or replaces it, nor what
+`GET /admin/ropa` does with a request that names no `format`.
+
+*The readings.*
+
+1. A statement carries only what it changes, so an omitted field keeps its stored
+   value and the links are added to.
+2. A statement is the whole of the three fields, so an omitted field is cleared and
+   the links are the list as given.
+
+*Chosen: 2, with `format` required and exact.* A `PUT` replaces the resource it names,
+and a compliance record a person can only add to is one they cannot correct: an
+assessment link that is retired has to be removable through the same endpoint that
+added it. The row is held at a fixed identifier under a check constraint, so a
+deployment has one register and not a history of partial ones; what a statement
+replaced is in the audit trail, not in the table. `format` follows entry 101: the one
+value chapter 09 names is the whole of it, and anything else is 400 rather than a
+guess at what a submitter wanted.
+
+*Tests that pin what is built.*
+`ComplianceStoreTests.PRIV_ROPA_001_AC2_TheSuppliedFieldsAreReadBackAndASecondStatementReplacesThemAsync`,
+`ProcessingRecordsEndpointTests.PRIV_ROPA_001_AC2_TheThreeSuppliedFieldsAreStatedOverTheEndpointAsync`,
+`ProcessingRecordsEndpointTests.PRIV_ROPA_001_AShapeTheEndpointDoesNotGenerateIsMalformedAsync`.
+
+*Chapter text that should change.* The section 8a row should say the statement
+replaces the three fields whole, and the `GET /admin/ropa` entry should say `format`
+is required and exact.
+
+---
+
+## 106. The retention cell is one entry a data category, longest first, and a category with no key is flagged
+
+**Phase 7 · 2026-09-22 · Tier 2 · PRIV-ROPA-001, PRIV-RET-001**
+
+*The question.* The template's cell is "Retention period or criteria", sourced from
+chapter 04 section 8. A purpose is declared over several data categories, and
+`retention.<host-category>` is one key each, so one purpose has several periods and
+the chapter does not say how they reach one cell.
+
+*The readings.*
+
+1. One period a purpose: the longest of its categories, because that is how long the
+   purpose's data actually survives.
+2. One entry a category, so the cell reads `<category> <period>` for each category the
+   purpose is over.
+
+*Chosen: 2, ordered longest first.* A single period hides which category carries it,
+and a regulator reading the row cannot tell whether an identity record is kept as long
+as an order. The entries are ordered longest first so the governing period is the one
+read first, the period is written in the ISO 8601 duration form the key is stored in,
+and a declared category for which the deployment named no key is reported as
+`retention-missing` against that category rather than rendered as an empty or invented
+period.
+
+*Tests that pin what is built.*
+`ProcessingRecordsTests.PRIV_RET_001_AC3_TheRetentionOfEachCategoryIsOnTheRowAsync`.
+
+*Chapter text that should change.* PRIV-ROPA-001's retention row should say the cell
+is one entry a data category, longest first, in ISO 8601 duration form.
+
+---
+
+## 107. A record whose subject key is destroyed is read anonymised, not refused
+
+**Phase 7 · 2026-09-22 · Tier 3 · PRIV-BREACH-002, PRIV-RET-002, PRIV-RIGHT-005**
+
+*The question.* PRIV-BREACH-002 AC2 requires the trail to answer who was affected
+within the hour for a period that may cover erased accounts, and the read by subject is
+what answers it. PRIV-RET-002 AC4 requires an erased subject's attributes to be
+unreadable while the row stays. The read decrypts a record's personal details under the
+subject key, and after an erasure that key refuses every unwrap, so one read of a
+period covering an erased subject either fails entirely or returns something.
+
+*The readings.*
+
+1. The read fails where any record in the range belongs to an erased subject. Nothing
+   erased is ever decrypted, and the operator answers the breach question from another
+   source.
+2. The read returns the record with its personal details empty: what happened, when,
+   and to whom by opaque identifier, which are not encrypted and which erasure does not
+   touch.
+
+*Chosen: 2.* Reading 1 makes the trail unable to answer the one question it exists to
+answer, at exactly the moment PRIV-BREACH-002 puts an hour on it, and it does so for
+the whole range rather than for the erased subject alone. Reading 2 discloses nothing:
+the fields erasure destroyed stay destroyed and are returned empty, and the identifiers
+returned are the pseudonymous ones IDN-PRIN-003 keeps in the trail by design. The
+branch is on the erased marker the wrapped key carries (`0x00`, PRIV-RIGHT-005a), not
+on a caught decryption failure, so a key that is present but unreadable for any other
+reason still fails the read.
+
+*Tests that pin what is built.*
+`AuditStoreTests.PRIV_BREACH_002_AC2_TheReadAnswersAfterErasureWithTheRecordsAnonymisedAsync`,
+`AuditStoreTests.PRIV_RET_002_AC4_ErasureLeavesTheAttributeUnreadableAndTheRowIntactAsync`.
+
+*Chapter text that should change.* PRIV-BREACH-002 should say that a record of an
+erased subject is answered with its personal details empty, and PRIV-RET-002 AC4 should
+say that unreadable means returned empty rather than refused.
+
+---
+
+## 108. A declared data category with no retention key stops the deployment
+
+**Phase 7 · 2026-09-22 · Tier 2 · PRIV-RET-001, LIB-HOST-001, `10` section 4.7**
+
+*The question.* Chapter 10 section 4.7 says startup fails for a declared data category
+that has no `retention.<category>` key. LIB-HOST-001 AC3 says a deployment that sets
+only the required values starts, and the retention keys are a family the host names per
+category rather than one of the eight. Read together, a host that declares a category
+and names no period either starts with no period for it or does not start.
+
+*The readings.*
+
+1. LIB-HOST-001 AC3 governs: the deployment starts, and the missing period is a finding
+   on the records of processing rather than a refusal.
+2. Chapter 10 section 4.7 governs: the deployment does not start, because a category
+   with no period is personal data with no end.
+
+*Chosen: 2.* Section 4.7 is written about this exact case and LIB-HOST-001 AC3 is
+written about the eight keys that have no default; a category the host itself declared
+is not one of those, so nothing it says is contradicted by refusing. Failing closed is
+also the reading that grants least: data held with no stated period is the failure
+PRIV-RET-001 exists to prevent. The check runs at startup over the declared purposes,
+before a request is served, and names the `retention.<category>` key that is missing.
+The records of processing keep their `retention-missing` finding for the case where the
+register is generated against a configuration read at runtime.
+
+*Tests that pin what is built.*
+`ConfigurationCoverageTests.PRIV_RET_001_AC1_ADeclaredCategoryWithNoPeriodFailsStartupAsync`,
+`ConfigurationCoverageTests.PRIV_RET_001_AC1_EveryDeclaredCategoryWithAPeriodStartsAsync`.
+
+*Chapter text that should change.* LIB-HOST-001 AC3 should say "only the required
+values and a retention period for each data category it declares".
+
+---
+
+## 109. A subject column is one the declared type holds and that holds a subject
+
+**Phase 7 · 2026-09-22 · Tier 2 · PRIV-RIGHT-005a, AUTHZ-MODEL-003, AUTHZ-MODEL-004**
+
+*The question.* PRIV-RIGHT-005a AC2 requires startup to fail for a declared subject
+column that does not exist or does not reference a subject. The library never sees the
+host's schema, so "does not exist" cannot mean a column of a table it does not know;
+what it has is the host's own type, which the declaration names, and the member names
+the declaration carries.
+
+*The readings.*
+
+1. The check is the compiler's: type the builder's second argument so that only a
+   subject-typed member can be passed, and nothing is checked at startup.
+2. The check is the model builder's: the declared field and the declared subject column
+   must both be members the declared type holds, and the subject column's member must
+   be a `SubjectId`.
+
+*Chosen: 2.* Reading 1 changes the public surface and still leaves the case open,
+because the declaration types are public records a host may construct directly, which
+is the path that reaches the model without an expression. Reading 2 covers both paths
+and adds nothing public. "Does not exist" is read as a member the declared type does
+not hold, and "does not reference a subject" as a member whose type is not `SubjectId`
+or a nullable one; an encrypted field naming no subject column at all is refused with
+`model.startup.declarationmissing`, and the other two with a refusal that names the
+type, the field and the column. The reflection is the model builder's, which is where
+CONV-CODE-004 AC2 admits it.
+
+*Tests that pin what is built.*
+`AuthorizationModelTests.PRIV_RIGHT_005a_AC1_AnEncryptedFieldNamingNoSubjectColumnFailsStartup`,
+`AuthorizationModelTests.PRIV_RIGHT_005a_AC2_ASubjectColumnNamingNoSubjectFailsStartup`.
+
+*Chapter text that should change.* PRIV-RIGHT-005a AC2 should say the column is a
+member of the declared type and its type is the library's subject identifier, and
+chapter 10 section 1.5 should carry a row for the refusal if the owner wants it to
+carry its own code rather than be a malformed-model refusal.

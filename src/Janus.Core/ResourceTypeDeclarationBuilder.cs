@@ -78,23 +78,33 @@ public sealed class ResourceTypeDeclarationBuilder<TResource>
     }
 
     /// <summary>
-    /// Declares what this type is processed for and the lawful basis it rests on.
+    /// Declares what this type is processed for, the lawful basis it rests on, and
+    /// what it requires.
     /// </summary>
     /// <param name="name">The purpose.</param>
     /// <param name="basis">The key of the lawful basis it rests on.</param>
     /// <param name="assessment">
     /// The legitimate interest assessment, where the basis requires one.
     /// </param>
+    /// <param name="data">The categories of data the purpose requires.</param>
+    /// <param name="subjects">The categories of person it is about.</param>
+    /// <param name="consent">
+    /// The capture path a consent for it runs through, where the deployment states
+    /// one rather than leaving it to follow from the basis and the sensitivity.
+    /// </param>
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentException">The purpose or the basis is absent or blank.</exception>
     public ResourceTypeDeclarationBuilder<TResource> Purpose(
         string name,
         string basis,
-        string? assessment = null)
+        string? assessment = null,
+        IReadOnlyList<string>? data = null,
+        IReadOnlyList<string>? subjects = null,
+        ConsentKind? consent = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(basis);
-        _purposes.Add(new PurposeDeclaration(name, basis, assessment));
+        _purposes.Add(new PurposeDeclaration(name, basis, assessment, data ?? [], subjects ?? [], consent));
 
         return this;
     }

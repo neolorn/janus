@@ -104,4 +104,32 @@ public enum MessageKind
     /// </summary>
     [JsonStringEnumMemberName("recovery-link")]
     RecoveryLink = 14,
+
+    /// <summary>
+    /// The automatic receipt a data subject request gets the moment it enters the
+    /// queue, which is not a decision and starts nothing (PRIV-RIGHT-002).
+    /// </summary>
+    [JsonStringEnumMemberName("privacy-request-received")]
+    PrivacyRequestReceived = 15,
+
+    /// <summary>
+    /// The honest word to a subject whose out-of-band erasure request reached its
+    /// deadline undecided (PRIV-RIGHT-002).
+    /// </summary>
+    [JsonStringEnumMemberName("privacy-request-lapsed")]
+    PrivacyRequestLapsed = 16,
+
+    /// <summary>
+    /// The word to an account that has just deactivated itself, carrying the link
+    /// that stands it back up (IDN-LIFE-013).
+    /// </summary>
+    [JsonStringEnumMemberName("deactivation-notice")]
+    DeactivationNotice = 17,
+
+    /// <summary>
+    /// The word to an account whose deletion grace window has begun, carrying the
+    /// link that cancels it where the deletion is the account's own (IDN-LIFE-014).
+    /// </summary>
+    [JsonStringEnumMemberName("deletion-notice")]
+    DeletionNotice = 18,
 }

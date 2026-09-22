@@ -42,6 +42,21 @@ public sealed class ModelTests
             entity => Assert.Equal(JanusDbContext.Schema, entity.GetSchema()));
 
     /// <summary>
+    /// PRIV-RIGHT-005b AC4: an erasure, a restriction and an export reach the host's
+    /// own tables through its handlers and never through the library, which maps no
+    /// table outside its own schema and no type but its own.
+    /// </summary>
+    [Fact]
+    public void PRIV_RIGHT_005b_AC4_NoWriteOfTheLibraryReachesAHostTable() =>
+        Assert.All(
+            Model().GetEntityTypes(),
+            entity =>
+            {
+                Assert.Equal(JanusDbContext.Schema, entity.GetSchema());
+                Assert.Equal(typeof(JanusDbContext).Assembly, entity.ClrType.Assembly);
+            });
+
+    /// <summary>
     /// IDN-ORG-002 AC1: nothing in the schema says which kind of person a row is
     /// about. Staff are the members of the administrative organization, so a flag
     /// separating them from customers would be a second answer to a question the
@@ -139,6 +154,27 @@ public sealed class ModelTests
             "callbacks.id",
             "callbacks.rejected",
             "callbacks.source",
+
+            // Not an account field: the three cells of the records of processing no
+            // derivation can fill, held at one row because there is one register
+            // (PRIV-ROPA-001).
+            "compliance_records.assessment_links",
+            "compliance_records.data_owner",
+            "compliance_records.id",
+            "compliance_records.organisational_measures",
+            "compliance_records.updated_at",
+
+            // Not an account field: what the subject consented to, against which version
+            // of the notice and where they said it (PRIV-CONS-001). Nothing here is
+            // deleted: a withdrawal is a timestamp, because the record is the evidence.
+            "consents.granted_at",
+            "consents.kind",
+            "consents.mechanism",
+            "consents.notice_version",
+            "consents.purpose",
+            "consents.subject",
+            "consents.superseded_at",
+            "consents.withdrawn_at",
 
             // Credentials: the browser an account knows (AUTH-FACT-015, AUTH-FACT-016),
             // held by the fingerprint of its token and never by the token.
@@ -262,6 +298,27 @@ public sealed class ModelTests
             "key_ceremonies.subject",
             "key_ceremonies.upgrading",
 
+            // Not an account field: the legal documents the deployment publishes, each
+            // version binding in the one language it names (PRIV-CONS-005,
+            // PRIV-CONS-006).
+            "legal_document_translations.document",
+            "legal_document_translations.language",
+            "legal_document_translations.translated_text",
+            "legal_document_translations.version",
+            "legal_document_versions.document",
+            "legal_document_versions.governing_language",
+            "legal_document_versions.governing_text",
+            "legal_document_versions.published_at",
+            "legal_document_versions.version",
+
+            // Not an account field: the one link an account's own deactivation or
+            // deletion notice carried, held by its fingerprint (IDN-LIFE-013,
+            // IDN-LIFE-014).
+            "lifecycle_links.issued_at",
+            "lifecycle_links.kind",
+            "lifecycle_links.subject",
+            "lifecycle_links.token",
+
             // Not an account field: a credential its holder reported lost, the window
             // AUTH-RECOV-007 invalidates it at the end of, and what the notices across
             // that window have reached.
@@ -287,6 +344,15 @@ public sealed class ModelTests
             "nonexistence_notices.at",
             "nonexistence_notices.destination",
             "nonexistence_notices.id",
+
+            // Not an account field: the purposes on an objectable basis the subject has
+            // objected to (PRIV-RIGHT-001a).
+            "objections.mechanism",
+            "objections.notice_version",
+            "objections.purpose",
+            "objections.recorded_at",
+            "objections.subject",
+            "objections.withdrawn_at",
 
             // Not an account field: the clients the deployment registered with the
             // provider, the codes waiting to be exchanged and the refresh tokens of
@@ -328,6 +394,21 @@ public sealed class ModelTests
             "organizations.id",
             "organizations.name",
 
+            // Not an account field: one fact about a subject the host has its own half
+            // of, and each subscriber's confirmation of it (IDN-LIFE-003a).
+            "outbox.attempts",
+            "outbox.id",
+            "outbox.kind",
+            "outbox.next_attempt_at",
+            "outbox.raised_at",
+            "outbox.reason",
+            "outbox.restricted",
+            "outbox.status",
+            "outbox.subject",
+            "outbox_confirmations.confirmed_at",
+            "outbox_confirmations.delivery",
+            "outbox_confirmations.subscriber",
+
             // Credentials: the password hash of AUTH-PASS-007 and the floor flag
             // AUTH-PASS-001a says cannot be recomputed from it.
             "passwords.change_required",
@@ -354,6 +435,31 @@ public sealed class ModelTests
             "preauthentication_sessions.expires_at",
             "preauthentication_sessions.fingerprint",
             "preauthentication_sessions.registration",
+
+            // Not an account field: that an export was taken and when, which is what
+            // the rate limit of D-086 counts and nothing more.
+            "privacy_exports.assembled_at",
+            "privacy_exports.id",
+            "privacy_exports.subject",
+
+            // Not an account field: the data subject requests of PRIV-RIGHT-001 with
+            // the three instants the working-day clock gives each one (PRIV-RIGHT-002).
+            "privacy_requests.channel",
+            "privacy_requests.created_at",
+            "privacy_requests.decided_at",
+            "privacy_requests.decision_due",
+            "privacy_requests.decision_reason",
+            "privacy_requests.detail",
+            "privacy_requests.escalate_at",
+            "privacy_requests.escalated_at",
+            "privacy_requests.id",
+            "privacy_requests.identity_confirmation",
+            "privacy_requests.received_at",
+            "privacy_requests.status",
+            "privacy_requests.subject",
+            "privacy_requests.type",
+            "privacy_requests.warn_at",
+            "privacy_requests.warned_at",
 
             // Profile: the photo, in a table of its own (IDN-ATTR-003).
             "profile_photos.enc_image",

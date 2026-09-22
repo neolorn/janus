@@ -22,9 +22,12 @@ public sealed class PublicSurfaceTests
 
     // CONV-CODE-004 AC2 leaves reflection to the model builder. The converter of
     // CONV-ENUM-001 reads each vocabulary's own wire name once, at startup, so that a
-    // column's spelling and its check constraint cannot drift from the wire, and the
-    // declared member reads the column a host names in a lambda (AUTHZ-MODEL-002).
-    private static readonly string[] ModelBuilder = ["DeclaredMember.cs", "VocabularyConverter.cs"];
+    // column's spelling and its check constraint cannot drift from the wire, the
+    // declared member reads the column a host names in a lambda (AUTHZ-MODEL-002),
+    // and the builder itself reads what the host's own type holds under the column an
+    // encrypted field names as its subject (PRIV-RIGHT-005a).
+    private static readonly string[] ModelBuilder =
+        ["AuthorizationModel.cs", "DeclaredMember.cs", "VocabularyConverter.cs"];
 
     /// <summary>
     /// CONV-CODE-003 AC1: a contract member hands out a read-only view, never a

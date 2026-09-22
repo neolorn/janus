@@ -27,7 +27,12 @@ using Janus.Identity.Identifiers;
 using Janus.Identity.Organizations;
 using Janus.Identity.Preferences;
 using Janus.Identity.Profiles;
+using Janus.Privacy.Consents;
+using Janus.Privacy.Documents;
 using Janus.Privacy.Erasures;
+using Janus.Privacy.Exports;
+using Janus.Privacy.Records;
+using Janus.Privacy.Requests;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Accounts;
 using Janus.Storage.Authentication.Alerting;
@@ -54,7 +59,15 @@ using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Identity.Profiles;
+using Janus.Storage.Privacy;
+using Janus.Storage.Privacy.Consents;
+using Janus.Storage.Privacy.Documents;
 using Janus.Storage.Privacy.Erasures;
+using Janus.Storage.Privacy.Exports;
+using Janus.Storage.Privacy.Outbox;
+using Janus.Storage.Privacy.Policies;
+using Janus.Storage.Privacy.Records;
+using Janus.Storage.Privacy.Requests;
 using Janus.Storage.Privacy.SubjectKeys;
 using Janus.Storage.Settings;
 using Microsoft.EntityFrameworkCore;
@@ -113,6 +126,13 @@ internal static class StorageRegistration
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IErasureStore, ErasureStore>();
         services.AddScoped<ISubjectEraser, SubjectEraser>();
+        services.AddScoped<Janus.Privacy.Outbox.IOutboxStore, OutboxStore>();
+        services.AddScoped<IPrivacyRequestStore, PrivacyRequestStore>();
+        services.AddScoped<IAccountStates, AccountStates>();
+        services.AddScoped<IExportSource, ExportSource>();
+        services.AddScoped<IExportLedger, ExportLedger>();
+        services.AddScoped<IComplianceStore, ComplianceStore>();
+        services.AddScoped<IRegisterRoles, RegisterRoles>();
         services.AddScoped<IOrganizationStore, OrganizationStore>();
         services.AddScoped<IMembershipStore, MembershipStore>();
         services.AddScoped<IIdentifierStore>(provider => new IdentifierStore(
@@ -161,6 +181,7 @@ internal static class StorageRegistration
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IIdentifierDirectory, IdentifierDirectory>();
         services.AddScoped<IAccountDirectory, AccountDirectory>();
+        services.AddScoped<ILifecycleLinkStore, LifecycleLinkStore>();
         services.AddScoped<IAccountAudit, AccountAudit>();
         services.AddScoped<IPasswordStore, PasswordStore>();
         services.AddScoped<IRecoveryCodeStore, RecoveryCodeStore>();
@@ -193,6 +214,10 @@ internal static class StorageRegistration
         services.AddScoped<IRecoveryAudit, RecoveryAudit>();
         services.AddScoped<ISessionAudit, SessionAudit>();
         services.AddScoped<ICredentialAudit, CredentialAudit>();
+        services.AddScoped<ILegalDocumentStore, LegalDocumentStore>();
+        services.AddScoped<IConsentStore, ConsentStore>();
+        services.AddScoped<Janus.Privacy.IPrivacyAudit, PrivacyAudit>();
+        services.AddScoped<Janus.Privacy.Policies.IMembershipLookup, PrivacyMembershipLookup>();
 
         services.AddScoped<IRoleStore, RoleStore>();
         services.AddScoped<IGrantStore, GrantStore>();
@@ -202,6 +227,7 @@ internal static class StorageRegistration
         services.AddScoped<IAccessEvaluator, AccessEvaluator>();
         services.AddScoped<IIndexCatalogue, IndexCatalogue>();
         services.AddScoped<ISubjectRestrictions, SubjectRestrictions>();
+        services.AddScoped<IRecordedConsents, RecordedConsents>();
         services.AddScoped<IAccessAudit, AccessAudit>();
 
         services.AddScoped<ISendLedger>(provider => new SendLedger(

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text.Json;
 using Janus.Core;
 
@@ -18,6 +19,12 @@ namespace Janus.Authorization.Model;
 /// </remarks>
 internal sealed class AuthorizationModel
 {
+    // A declaration names a member of the host's own type, which the host writes and
+    // may keep to itself. The reflection reading it is the model builder's, which is
+    // the one place CONV-CODE-004 admits it.
+    private const BindingFlags Carried =
+        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+
     // The three actions that read by their name alone; every other action modifies
     // unless the host declared it reading (AUTHZ-GATE-006, D-160).
     private static readonly string[] Reading = ["read", "list", "export"];
@@ -27,8 +34,10 @@ internal sealed class AuthorizationModel
     private readonly HashSet<Permission> _permissions;
     private readonly HashSet<string> _readingActions;
     private readonly Dictionary<string, RelationshipDeclaration> _relationships;
+    private readonly DeclaredProcessing _processing;
     private readonly IReadOnlyList<string> _sensitiveCategories;
     private readonly IReadOnlyDictionary<Permission, string> _stepUpGates;
+    private readonly IReadOnlyDictionary<Permission, string> _actionPurposes;
     private readonly Dictionary<ResourceType, ResourceTypeDeclaration> _types;
 
     private AuthorizationModel(
@@ -38,8 +47,10 @@ internal sealed class AuthorizationModel
         HashSet<Permission> permissions,
         HashSet<string> readingActions,
         IReadOnlyDictionary<Permission, string> stepUpGates,
+        IReadOnlyDictionary<Permission, string> actionPurposes,
         Dictionary<string, LawfulBasisDeclaration> bases,
-        IReadOnlyList<string> sensitiveCategories)
+        IReadOnlyList<string> sensitiveCategories,
+        DeclaredProcessing processing)
     {
         _types = types;
         _entities = entities;
@@ -47,9 +58,16 @@ internal sealed class AuthorizationModel
         _permissions = permissions;
         _readingActions = readingActions;
         _stepUpGates = stepUpGates;
+        _actionPurposes = actionPurposes;
         _bases = bases;
         _sensitiveCategories = sensitiveCategories;
+        _processing = processing;
     }
+
+    /// <summary>
+    /// What the deployment processes, one entry per purpose.
+    /// </summary>
+    public DeclaredProcessing Processing => _processing;
 
     /// <summary>
     /// Every resource type the host declared.
@@ -75,6 +93,7 @@ internal sealed class AuthorizationModel
 
         Dictionary<string, LawfulBasisDeclaration> bases = Bases(declaration);
         Dictionary<ResourceType, ResourceTypeDeclaration> types = Types(declaration);
+        var categories = new HashSet<string>(declaration.SensitiveCategories, StringComparer.Ordinal);
         var entities = new Dictionary<Type, ResourceTypeDeclaration>();
         var relationships = new Dictionary<string, RelationshipDeclaration>(StringComparer.Ordinal);
 
@@ -97,13 +116,15 @@ internal sealed class AuthorizationModel
 
         foreach (ResourceTypeDeclaration type in types.Values)
         {
-            Check(type, types, relationships, bases);
+            Check(type, types, relationships, bases, categories);
 
             if (!entities.TryAdd(type.Entity, type))
             {
                 throw Malformed("the type " + type.Entity.Name + " is declared as two resource types");
             }
         }
+
+        var processing = DeclaredProcessing.Of(declaration);
 
         return new AuthorizationModel(
             types,
@@ -112,8 +133,10 @@ internal sealed class AuthorizationModel
             Permissions(declaration),
             new HashSet<string>([.. Reading, .. declaration.ReadingActions], StringComparer.Ordinal),
             declaration.StepUpGates,
+            Purposes(declaration, processing),
             bases,
-            declaration.SensitiveCategories);
+            declaration.SensitiveCategories,
+            processing);
     }
 
     /// <summary>
@@ -147,6 +170,19 @@ internal sealed class AuthorizationModel
     /// </remarks>
     public string? GateOf(Permission permission) =>
         _stepUpGates.TryGetValue(permission, out string? gate) ? gate : null;
+
+    /// <summary>
+    /// The purpose the action is done for, or nothing where it names none.
+    /// </summary>
+    /// <param name="permission">The permission being asked for.</param>
+    /// <returns>The purpose, or nothing.</returns>
+    /// <remarks>
+    /// Implements PRIV-SENS-002 and PRIV-SENS-002a. Consent gates purposes and not
+    /// records, so an action on a record carrying several purposes is refused only
+    /// for the one it is done for.
+    /// </remarks>
+    public string? PurposeOf(Permission permission) =>
+        _actionPurposes.TryGetValue(permission, out string? purpose) ? purpose : null;
 
     /// <summary>
     /// The declaration of a resource type, or nothing where the model declares none.
@@ -272,7 +308,12 @@ internal sealed class AuthorizationModel
             [.. type.SensitiveCategories.Order(StringComparer.Ordinal)],
             [.. type.Purposes
                 .OrderBy(purpose => purpose.Name, StringComparer.Ordinal)
-                .Select(purpose => new SerializedModel.Purpose(purpose.Name, purpose.Basis, purpose.Assessment))],
+                .Select(purpose => new SerializedModel.Purpose(
+                    purpose.Name,
+                    purpose.Basis,
+                    purpose.Assessment,
+                    [.. purpose.DataCategories.Order(StringComparer.Ordinal)],
+                    [.. purpose.SubjectCategories.Order(StringComparer.Ordinal)]))],
             [.. type.Derivations
                 .OrderBy(derivation => derivation.Relationship, StringComparer.Ordinal)
                 .Select(derivation => new SerializedModel.Derivation(
@@ -313,6 +354,28 @@ internal sealed class AuthorizationModel
         return types;
     }
 
+    // AUTHZ-MODEL-004: an action bound to a purpose no type declares would leave
+    // the gate asking about a consent nobody can give, so the binding is checked at
+    // startup and not at the first request that would have been refused.
+    private static IReadOnlyDictionary<Permission, string> Purposes(
+        AuthorizationDeclaration declaration,
+        DeclaredProcessing processing)
+    {
+        foreach ((Permission permission, string purpose) in declaration.ActionPurposes)
+        {
+            if (processing.Find(purpose) is null)
+            {
+                throw Refused(
+                    ErrorCodes.StartupUndeclaredTypeReference,
+                    "permission",
+                    permission.ToString(),
+                    "it is bound to the purpose " + purpose + ", which no resource type declares");
+            }
+        }
+
+        return declaration.ActionPurposes;
+    }
+
     private static Dictionary<string, LawfulBasisDeclaration> Bases(
         AuthorizationDeclaration declaration)
     {
@@ -351,12 +414,65 @@ internal sealed class AuthorizationModel
         ResourceTypeDeclaration type,
         Dictionary<ResourceType, ResourceTypeDeclaration> types,
         Dictionary<string, RelationshipDeclaration> relationships,
-        Dictionary<string, LawfulBasisDeclaration> bases)
+        Dictionary<string, LawfulBasisDeclaration> bases,
+        IReadOnlyCollection<string> categories)
     {
         CheckContainment(type, types);
         CheckOrganizationPath(type, types);
+        CheckSensitivity(type, categories);
         CheckPurposes(type, bases);
         CheckDerivations(type, relationships);
+        CheckEncryptedFields(type);
+    }
+
+    // PRIV-RIGHT-005a: the subject column is how erasure reaches ciphertext sitting in
+    // a host's own table. One naming nothing, or naming something that is not a
+    // subject, leaves fields nothing can erase, so the deployment stops here.
+    private static void CheckEncryptedFields(ResourceTypeDeclaration type)
+    {
+        foreach (EncryptedFieldDeclaration field in type.EncryptedFields)
+        {
+            if (string.IsNullOrWhiteSpace(field.SubjectColumn))
+            {
+                throw Refused(
+                    ErrorCodes.StartupDeclarationMissing,
+                    "key",
+                    type.Name + "." + field.Field,
+                    "an encrypted field is declared with the column naming its subject");
+            }
+
+            Held(type, field.Field);
+            Type subject = Held(type, field.SubjectColumn);
+
+            if ((Nullable.GetUnderlyingType(subject) ?? subject) != typeof(SubjectId))
+            {
+                throw Malformed(
+                    "the type " + type.Name + " holds " + field.Field + " under "
+                    + field.SubjectColumn + ", which names no subject");
+            }
+        }
+    }
+
+    private static Type Held(ResourceTypeDeclaration type, string member) =>
+        type.Entity.GetProperty(member, Carried)?.PropertyType
+            ?? type.Entity.GetField(member, Carried)?.FieldType
+            ?? throw Malformed(
+                "the type " + type.Name + " declares " + member + ", which "
+                + type.Entity.Name + " does not hold");
+
+    private static void CheckSensitivity(
+        ResourceTypeDeclaration type,
+        IReadOnlyCollection<string> categories)
+    {
+        foreach (string category in type.SensitiveCategories)
+        {
+            if (!categories.Contains(category))
+            {
+                throw Malformed(
+                    "the type " + type.Name + " is declared sensitive in " + category
+                    + ", which the model does not declare as a sensitivity category");
+            }
+        }
     }
 
     private static void CheckContainment(
@@ -439,6 +555,15 @@ internal sealed class AuthorizationModel
                     "purpose",
                     purpose.Name,
                     "its basis requires an assessment and it names none");
+            }
+
+            if (purpose.DataCategories.Count == 0)
+            {
+                throw Refused(
+                    ErrorCodes.StartupDeclarationMissing,
+                    "key",
+                    purpose.Name,
+                    "a purpose is declared with the categories of data it requires");
             }
         }
     }
