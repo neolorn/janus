@@ -37,6 +37,7 @@ using Janus.Privacy.Erasures;
 using Janus.Privacy.Exports;
 using Janus.Privacy.Outbox;
 using Janus.Privacy.Policies;
+using Janus.Privacy.Records;
 using Janus.Privacy.Requests;
 using Janus.Storage;
 using Microsoft.Extensions.DependencyInjection;
@@ -260,6 +261,7 @@ public static class JanusRegistration
         services.AddScoped<IPrivacyRequests, PrivacyRequestService>();
         services.AddScoped<DeletionSweep>();
         services.AddScoped<IExports, ExportService>();
+        services.AddScoped<IProcessingRecords, ProcessingRecordsService>();
         services.AddScoped<OutboxPublisher>();
 
         // AUTHZ-MODEL-001: what may be processed for what is part of the one

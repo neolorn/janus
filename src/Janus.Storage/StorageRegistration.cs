@@ -31,6 +31,7 @@ using Janus.Privacy.Consents;
 using Janus.Privacy.Documents;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.Exports;
+using Janus.Privacy.Records;
 using Janus.Privacy.Requests;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Accounts;
@@ -65,6 +66,7 @@ using Janus.Storage.Privacy.Erasures;
 using Janus.Storage.Privacy.Exports;
 using Janus.Storage.Privacy.Outbox;
 using Janus.Storage.Privacy.Policies;
+using Janus.Storage.Privacy.Records;
 using Janus.Storage.Privacy.Requests;
 using Janus.Storage.Privacy.SubjectKeys;
 using Janus.Storage.Settings;
@@ -129,6 +131,8 @@ internal static class StorageRegistration
         services.AddScoped<IAccountStates, AccountStates>();
         services.AddScoped<IExportSource, ExportSource>();
         services.AddScoped<IExportLedger, ExportLedger>();
+        services.AddScoped<IComplianceStore, ComplianceStore>();
+        services.AddScoped<IRegisterRoles, RegisterRoles>();
         services.AddScoped<IOrganizationStore, OrganizationStore>();
         services.AddScoped<IMembershipStore, MembershipStore>();
         services.AddScoped<IIdentifierStore>(provider => new IdentifierStore(

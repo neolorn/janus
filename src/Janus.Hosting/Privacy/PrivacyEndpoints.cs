@@ -56,6 +56,9 @@ internal static class PrivacyEndpoints
         _ = group.MapPost("/requests", SubmitAsync);
         _ = group.MapGet("/export", ExportAsync);
 
+        _ = endpoints.MapGet("/admin/ropa", RegisterAsync);
+        _ = endpoints.MapPut("/admin/compliance/assessments", AssessmentsAsync);
+
         RouteGroupBuilder queue = endpoints.MapGroup("/admin/privacy/requests");
 
         _ = queue.MapGet("/", QueueAsync);
@@ -255,6 +258,59 @@ internal static class PrivacyEndpoints
             contentType: null,
             StatusCodes.Status200OK);
     }
+
+    // PRIV-ROPA-001: the register is a query, so it is generated on the request and
+    // never read from anything anyone maintains. The one format is the template's.
+    private static async Task<IResult> RegisterAsync(
+        IProcessingRecords records,
+        RequestSession browser,
+        string? format,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+
+        if (format is not "template")
+        {
+            return Malformed;
+        }
+
+        return Asking(browser) is not AccessContext holder
+            ? Nobody()
+            : Answers.Of(
+                await records.GenerateAsync(holder, cancellationToken).ConfigureAwait(false),
+                Generated);
+    }
+
+    private static async Task<IResult> AssessmentsAsync(
+        AssessmentsRequest request,
+        IProcessingRecords records,
+        RequestSession browser,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(records);
+
+        return Asking(browser) is not AccessContext holder
+            ? Nobody()
+            : Answers.Of(
+                await records
+                    .DeclareAsync(
+                        holder,
+                        new ComplianceRecord(
+                            request.DataOwner,
+                            request.OrganisationalSecurityMeasures,
+                            request.AssessmentLinks ?? []),
+                        cancellationToken)
+                    .ConfigureAwait(false),
+                Nothing);
+    }
+
+    private static JsonHttpResult<ProcessingRegisterView> Generated(ProcessingRegister register) =>
+        TypedResults.Json(
+            ProcessingRegisterView.Of(register),
+            PrivacyJson.Default.ProcessingRegisterView,
+            contentType: null,
+            StatusCodes.Status200OK);
 
     private static async Task<IResult> QueueAsync(
         IPrivacyRequests requests,

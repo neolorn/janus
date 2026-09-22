@@ -3125,3 +3125,144 @@ authenticators in a file they may forward is an exposure the right does not ask 
 
 *Chapter text that should change.* PRIV-RIGHT-003 should list the sections the export
 carries and say that credentials are not among them.
+
+---
+
+## 103. The provider register of chapter 05 section 8 ships as a default the host takes, and a row that names no location follows the hosting
+
+**Phase 7 · 2026-09-22 · Tier 2 · PRIV-ROPA-002, PRIV-ROPA-003**
+
+*The question.* PRIV-ROPA-002 says the library "ships that section's rows as defaults
+the host edits". It does not say whether a deployment that declares no recipients gets
+those seven rows anyway, and the section's "Location field" column has three kinds of
+entry (Configured, Follows hosting, Outside Egypt, and a dash) with no value spelled
+for the third and fourth.
+
+*The readings.*
+
+1. The rows are applied: a deployment that declares nothing reports the seven
+   providers, because the chapter calls them "current processors".
+2. The rows are offered: `ProviderRegister.Default` is a list the host declares from,
+   and a deployment that declares no recipient reports none.
+
+*Chosen: 2.* A generic library cannot know that a given deployment uses a payment
+provider or an SMS gateway, and a register that names a processor the deployment does
+not have is a false statement to a regulator, which is worse than an empty column a
+flag already points at. The rows ship with no agreement reference, so every one a host
+takes is flagged until the host gives it one, which is the chapter's "each requires an
+agreement reference". A row's `location` is nullable and an unstated one is read as
+the hosting location, which is what "Follows hosting" says and what the dash leaves;
+`password screening` is the one row shipped fixed as outside, so PRIV-ROPA-003's
+transfer is reported with the configured basis whatever else a host edits.
+
+*Tests that pin what is built.*
+`ProcessingRecordsTests.PRIV_ROPA_002_AC1_EveryRecipientAppearsAndAProcessorWithoutAnAgreementIsFlaggedAsync`,
+`ProcessingRecordsTests.PRIV_ROPA_003_AC1_ThePasswordScreeningCallAppearsAsACrossBorderTransferAsync`,
+`ProcessingRecordsEndpointTests.PRIV_ROPA_001_AC1_TheGeneratedOutputMatchesTheTemplatesFieldSetAndOrderingAsync`.
+
+*Chapter text that should change.* PRIV-ROPA-002 should say that the shipped rows are
+declared by the host rather than applied, that an unstated location is the hosting
+location, and that `password screening` is fixed outside.
+
+---
+
+## 104. The children's column is true for every row exactly when the deployment admits minors
+
+**Phase 7 · 2026-09-22 · Tier 2 · PRIV-ROPA-001, PRIV-MINOR-001, PRIV-SENS-001**
+
+*The question.* The template has a children's column beside the non-sensitive and
+sensitive ones, sourced from PRIV-SENS-001. Children's data is one of the declared
+sensitivity categories, but no resource type can say of itself that its rows belong to
+a child: whether a child's data is present is a property of the deployment, not of a
+type.
+
+*The readings.*
+
+1. The column is true only for a purpose over a type declaring the children's
+   category, like any other sensitivity category.
+2. The column is true for every row exactly when the deployment admits minors, which
+   is `registration.adultaffirmation` being `off`.
+
+*Chosen: 2.* Reading 1 reports no children's processing at all in a deployment that
+takes minors and declares no type as children's data, which is the under-report a
+regulator would object to; the category is one a host declares over a type it knows
+holds a minor's records, and most do not. Where the affirmation is required the
+service is adults only and no row is in the column; where it is off any row may be, so
+every row is, which over-reports rather than under-reports. The column is derived, so
+a deployment that closes registration to minors sees it go false with no separate
+edit.
+
+*Tests that pin what is built.*
+`ProcessingRecordsTests.PRIV_ROPA_001_ADeploymentAdmittingMinorsIsInTheChildrensColumnAsync`,
+`ProcessingRecordsTests.PRIV_ROPA_001_SensitivityIsAColumnOfItsOwnAsync`.
+
+*Chapter text that should change.* PRIV-ROPA-001 should say the children's column is
+derived from the registration affirmation and not from a sensitivity category.
+
+---
+
+## 105. The three supplied fields are one replaceable row, and the register is generated only for `format=template`
+
+**Phase 7 · 2026-09-22 · Tier 2 · PRIV-ROPA-001, chapter 09 sections 8 and 8a**
+
+*The question.* `PUT /admin/compliance/assessments` carries "LIA, DPIA and TIA
+references, and the declared human-input fields of the records of processing". Neither
+chapter says whether a second statement merges with the first or replaces it, nor what
+`GET /admin/ropa` does with a request that names no `format`.
+
+*The readings.*
+
+1. A statement carries only what it changes, so an omitted field keeps its stored
+   value and the links are added to.
+2. A statement is the whole of the three fields, so an omitted field is cleared and
+   the links are the list as given.
+
+*Chosen: 2, with `format` required and exact.* A `PUT` replaces the resource it names,
+and a compliance record a person can only add to is one they cannot correct: an
+assessment link that is retired has to be removable through the same endpoint that
+added it. The row is held at a fixed identifier under a check constraint, so a
+deployment has one register and not a history of partial ones; what a statement
+replaced is in the audit trail, not in the table. `format` follows entry 101: the one
+value chapter 09 names is the whole of it, and anything else is 400 rather than a
+guess at what a submitter wanted.
+
+*Tests that pin what is built.*
+`ComplianceStoreTests.PRIV_ROPA_001_AC2_TheSuppliedFieldsAreReadBackAndASecondStatementReplacesThemAsync`,
+`ProcessingRecordsEndpointTests.PRIV_ROPA_001_AC2_TheThreeSuppliedFieldsAreStatedOverTheEndpointAsync`,
+`ProcessingRecordsEndpointTests.PRIV_ROPA_001_AShapeTheEndpointDoesNotGenerateIsMalformedAsync`.
+
+*Chapter text that should change.* The section 8a row should say the statement
+replaces the three fields whole, and the `GET /admin/ropa` entry should say `format`
+is required and exact.
+
+---
+
+## 106. The retention cell is one entry a data category, longest first, and a category with no key is flagged
+
+**Phase 7 · 2026-09-22 · Tier 2 · PRIV-ROPA-001, PRIV-RET-001**
+
+*The question.* The template's cell is "Retention period or criteria", sourced from
+chapter 04 section 8. A purpose is declared over several data categories, and
+`retention.<host-category>` is one key each, so one purpose has several periods and
+the chapter does not say how they reach one cell.
+
+*The readings.*
+
+1. One period a purpose: the longest of its categories, because that is how long the
+   purpose's data actually survives.
+2. One entry a category, so the cell reads `<category> <period>` for each category the
+   purpose is over.
+
+*Chosen: 2, ordered longest first.* A single period hides which category carries it,
+and a regulator reading the row cannot tell whether an identity record is kept as long
+as an order. The entries are ordered longest first so the governing period is the one
+read first, the period is written in the ISO 8601 duration form the key is stored in,
+and a declared category for which the deployment named no key is reported as
+`retention-missing` against that category rather than rendered as an empty or invented
+period.
+
+*Tests that pin what is built.*
+`ProcessingRecordsTests.PRIV_ROPA_001_TheRetentionOfEachCategoryIsOnTheRowAsync`.
+
+*Chapter text that should change.* PRIV-ROPA-001's retention row should say the cell
+is one entry a data category, longest first, in ISO 8601 duration form.

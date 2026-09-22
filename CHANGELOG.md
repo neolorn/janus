@@ -10,6 +10,21 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Records of processing are now generated rather than kept. `GET /admin/ropa?format=template`
+  answers with the regulator's template: a row a declared purpose carrying its data and
+  subject categories, its lawful basis, the non-sensitive, sensitive and children's
+  columns, the retention of each category longest first, the recipients, the disposal
+  measures, the roles holding a permission that serves it, and the technical security
+  measures, beside the hosting environment, location and cross-border basis the
+  deployment configured. A purpose added to the model is in the next register with no
+  separate edit, and nothing of the inventory is stored. The three cells no query can
+  answer (the data owner, the organisational security measures and the assessment
+  links) are stated through `PUT /admin/compliance/assessments` and flagged until they
+  are; so are a purpose missing an assessment its basis requires, a processor missing
+  an agreement reference, and a data category the deployment named no retention for.
+  Recipients are declared on the model builder, and `ProviderRegister.Default` ships
+  the rows of the provider register to edit rather than write.
+
 - An account can now take a copy of what is held about it. `GET /privacy/export`
   answers in two arrangements of one assembly: `format=human` is grouped and labelled
   for reading, `format=machine` is one flat object whose names are stable across

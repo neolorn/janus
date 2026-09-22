@@ -44,6 +44,7 @@ using Janus.Privacy;
 using Janus.Privacy.Consents;
 using Janus.Privacy.Documents;
 using Janus.Privacy.Exports;
+using Janus.Privacy.Records;
 using Janus.Privacy.Requests;
 using Janus.Privacy.Tests.Consents;
 using Janus.Privacy.Tests.Documents;
@@ -260,6 +261,16 @@ internal sealed class Deployment : IAsyncDisposable
     public ExportLedgerInMemory ExportLedger { get; } = new();
 
     /// <summary>
+    /// The three fields the deployment supplies to the records of processing.
+    /// </summary>
+    public Janus.Privacy.Tests.Records.ComplianceStoreInMemory Compliance { get; } = new();
+
+    /// <summary>
+    /// The roles of the deployment, so a test can say what each allows.
+    /// </summary>
+    public Janus.Privacy.Tests.Records.RegisterRolesInMemory RegisterRoles { get; } = new();
+
+    /// <summary>
     /// What the subject was told.
     /// </summary>
     public SubjectNoticesInMemory Notices { get; } = new();
@@ -458,6 +469,10 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IExportSource>(ExportSource);
         _ = services.AddSingleton<IExportLedger>(ExportLedger);
         _ = services.AddScoped<IExports, ExportService>();
+        _ = services.AddSingleton(Janus.Privacy.Tests.Declaration.Reaching);
+        _ = services.AddSingleton<Janus.Privacy.Records.IComplianceStore>(Compliance);
+        _ = services.AddSingleton<Janus.Privacy.Records.IRegisterRoles>(RegisterRoles);
+        _ = services.AddScoped<IProcessingRecords, ProcessingRecordsService>();
         _ = services.AddScoped<SigningKeys>();
         _ = services.AddScoped<OidcService>();
         _ = services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());

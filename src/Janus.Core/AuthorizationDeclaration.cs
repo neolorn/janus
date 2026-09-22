@@ -24,6 +24,10 @@ namespace Janus.Core;
 /// </param>
 /// <param name="LawfulBases">The closed list a purpose's basis is drawn from.</param>
 /// <param name="SensitiveCategories">The closed list a type's sensitivity is drawn from.</param>
+/// <param name="Recipients">
+/// Everyone the deployment's personal data reaches, which the records of processing
+/// report and nothing else reads (PRIV-ROPA-002).
+/// </param>
 /// <remarks>
 /// Implements AUTHZ-MODEL-001 and AUTHZ-MODEL-006. It is what
 /// <see cref="AuthorizationDeclarationBuilder"/> produces and what the model is built
@@ -37,4 +41,5 @@ public sealed record AuthorizationDeclaration(
     IReadOnlyDictionary<Permission, string> StepUpGates,
     IReadOnlyDictionary<Permission, string> ActionPurposes,
     IReadOnlyList<LawfulBasisDeclaration> LawfulBases,
-    IReadOnlyList<string> SensitiveCategories);
+    IReadOnlyList<string> SensitiveCategories,
+    IReadOnlyList<RecipientDeclaration> Recipients);

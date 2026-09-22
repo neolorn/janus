@@ -23,6 +23,8 @@ public sealed class AuthorizationDeclarationBuilder
     private readonly List<RelationshipDeclaration> _relationships = [];
     private readonly List<ResourceTypeDeclaration> _resourceTypes = [];
     private readonly List<string> _sensitiveCategories = [];
+
+    private readonly List<RecipientDeclaration> _recipients = [];
     private readonly Dictionary<Permission, string> _stepUpGates = [];
     private readonly Dictionary<Permission, string> _actionPurposes = [];
 
@@ -219,6 +221,24 @@ public sealed class AuthorizationDeclarationBuilder
     }
 
     /// <summary>
+    /// Declares someone the deployment's personal data reaches.
+    /// </summary>
+    /// <param name="recipient">
+    /// The recipient and the six columns the records of processing report for it.
+    /// <see cref="ProviderRegister.Default"/> ships the rows of chapter 05 section 8
+    /// to edit rather than write.
+    /// </param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException">The recipient is absent.</exception>
+    public AuthorizationDeclarationBuilder Recipient(RecipientDeclaration recipient)
+    {
+        ArgumentNullException.ThrowIfNull(recipient);
+        _recipients.Add(recipient);
+
+        return this;
+    }
+
+    /// <summary>
     /// Closes the declaration.
     /// </summary>
     /// <returns>What the host declared.</returns>
@@ -231,5 +251,6 @@ public sealed class AuthorizationDeclarationBuilder
             new Dictionary<Permission, string>(_stepUpGates),
             new Dictionary<Permission, string>(_actionPurposes),
             [.. _bases],
-            [.. _sensitiveCategories]);
+            [.. _sensitiveCategories],
+            [.. _recipients]);
 }

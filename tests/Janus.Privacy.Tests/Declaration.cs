@@ -33,9 +33,21 @@ internal static class Declaration
     }
 
     /// <summary>
+    /// The declaration itself, which the records of processing read the recipients
+    /// and the resource types from.
+    /// </summary>
+    public static AuthorizationDeclaration Authorization { get; } = Declared().Build();
+
+    /// <summary>
+    /// The declaration a deployment has when it takes the shipped recipient rows as
+    /// they come (PRIV-ROPA-002).
+    /// </summary>
+    public static AuthorizationDeclaration Reaching { get; } = Reached();
+
+    /// <summary>
     /// What the deployment processes and on what basis.
     /// </summary>
-    public static DeclaredProcessing Processing { get; } = DeclaredProcessing.Of(Declared().Build());
+    public static DeclaredProcessing Processing { get; } = DeclaredProcessing.Of(Authorization);
 
     /// <summary>
     /// The declaration as it stands, valid.
@@ -62,4 +74,16 @@ internal static class Declaration
             .Resource<Mailing>("mailing", mailing => mailing
                 .BelongsToOrganization()
                 .Purpose("marketing", "agreement", data: ["identity"], subjects: ["customers"]));
+
+    private static AuthorizationDeclaration Reached()
+    {
+        AuthorizationDeclarationBuilder builder = Declared();
+
+        foreach (RecipientDeclaration row in ProviderRegister.Default)
+        {
+            _ = builder.Recipient(row);
+        }
+
+        return builder.Build();
+    }
 }
