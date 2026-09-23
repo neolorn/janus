@@ -45,6 +45,7 @@ public static class IdentityEndpoints
         _ = endpoints.MapSessionRevocation();
         _ = endpoints.MapExplanations();
         _ = endpoints.MapAuditTrail();
+        _ = endpoints.MapPublication();
 
         return endpoints;
     }

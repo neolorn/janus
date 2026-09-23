@@ -52,6 +52,8 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "POST /admin/accounts/{subject:guid}/takedown/",
         "POST /admin/accounts/{subject:guid}/takedown/reverse",
         "POST /admin/accounts/{subject:guid}/sessions/revoke",
+        "POST /admin/documents/{document}/versions",
+        "POST /admin/notices",
         "POST /admin/privacy/requests/",
         "POST /admin/privacy/requests/{request:guid}/fulfil",
         "POST /admin/privacy/requests/{request:guid}/refuse",
@@ -70,6 +72,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "PUT /account/identifiers/backup",
         "PUT /account/secondstep/preferred",
         "PUT /admin/compliance/assessments",
+        "PUT /admin/documents/{document}/versions/{version}/translations/{language}",
     ];
 
     private readonly Deployment _deployment = new();

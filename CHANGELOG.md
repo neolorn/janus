@@ -215,6 +215,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /admin/notices` and `POST /admin/documents/{document}/versions` publish a
+  version under `notice:publish`, with its governing text, its governing language and
+  any translations, and a required `material`; `PUT
+  /admin/documents/{document}/versions/{version}/translations/{language}` attaches or
+  corrects a translation without a new version.
+
 - `GET /admin/audit?subject=...` and `IAuditTrail` read every audit record of one
   subject, most recent first, under `audit:read`: each entry carries its codes,
   identities, organization and plain details, never a value held under the subject's
