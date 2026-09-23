@@ -31,10 +31,9 @@ namespace Janus.Authentication.Recovery;
 /// <param name="authenticators">Where the account's credentials are read.</param>
 /// <param name="passwords">What screens and sets a password.</param>
 /// <param name="policies">What policy governs the account.</param>
-/// <param name="memberships">Where the approver's own organizations are read.</param>
 /// <param name="sessions">What ends the sessions a changed credential invalidates.</param>
 /// <param name="stepUp">What the approver's session has to have proved.</param>
-/// <param name="gate">What decides whether the approver may approve at all.</param>
+/// <param name="scope">Whether the approver may approve at all.</param>
 /// <param name="sending">Where a message goes out.</param>
 /// <param name="nonExistence">What answers an address no account holds.</param>
 /// <param name="throttle">The progressive delay.</param>
@@ -60,10 +59,9 @@ internal sealed class RecoveryService(
     IAuthenticatorStore authenticators,
     PasswordService passwords,
     PolicyResolution policies,
-    IMembershipLookup memberships,
     SessionService sessions,
     StepUpGuard stepUp,
-    IAccessGate gate,
+    AdministrativeScope scope,
     INotificationHandler sending,
     NonExistenceNotice nonExistence,
     ThrottleService throttle,
@@ -242,7 +240,9 @@ internal sealed class RecoveryService(
             return Result.Failure<ApprovedRecovery>(Error.From(ErrorCodes.RecoverySelfApproval));
         }
 
-        if (await RefusedAsync(context, approver, cancellationToken).ConfigureAwait(false)
+        if (await scope
+                .RefusedAsync(context, Permissions.RecoveryApprove, cancellationToken)
+                .ConfigureAwait(false)
             is Error denied)
         {
             return Result.Failure<ApprovedRecovery>(denied);
@@ -408,33 +408,6 @@ internal sealed class RecoveryService(
     // AUTHZ-SCOPE-001: the permission is held in an organization, and an approver
     // approves for any account with the permission one of their own organizations
     // grants them. The account being recovered need belong to none.
-    private async ValueTask<Error?> RefusedAsync(
-        AccessContext context,
-        SubjectId approver,
-        CancellationToken cancellationToken)
-    {
-        IReadOnlyList<OrganizationId> organizations = await memberships
-            .OfAsync(approver, cancellationToken)
-            .ConfigureAwait(false);
-
-        var refused = Error.From(ErrorCodes.Denied);
-
-        foreach (OrganizationId organization in organizations)
-        {
-            refused = (await gate
-                    .RequireAsync(context, Permissions.RecoveryApprove, organization, cancellationToken)
-                    .ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error);
-
-            if (refused is null)
-            {
-                return null;
-            }
-        }
-
-        return refused;
-    }
-
     private async ValueTask<RecoveryLink?> FindAsync(string token, CancellationToken cancellationToken) =>
         token is { Length: > 0 }
             ? await links

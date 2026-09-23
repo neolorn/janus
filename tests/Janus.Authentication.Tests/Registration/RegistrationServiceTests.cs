@@ -71,6 +71,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly AccessGateInMemory _gate = new();
+    private readonly AdministrativeOrganizationInMemory _administrative = new();
     private readonly LocationResolverInMemory _locations = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly NotificationHandlerInMemory _notifications = new();
@@ -114,7 +115,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
                 _audit,
                 new PolicyResolution(_memberships, _configuration, _raises),
                 _configuration,
-                _gate,
+                new AdministrativeScope(_gate, _administrative),
                 _locations,
                 _work,
                 _clock,

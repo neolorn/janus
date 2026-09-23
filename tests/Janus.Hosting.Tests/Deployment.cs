@@ -303,9 +303,14 @@ internal sealed class Deployment : IAsyncDisposable
     public AccessGateInMemory Gate { get; } = new();
 
     /// <summary>
-    /// The organizations the privacy area reads a caller's memberships from.
+    /// The administrative organization as the authentication area reads it.
     /// </summary>
-    public Janus.Privacy.Tests.MembershipLookupInMemory PrivacyMemberships { get; } = new();
+    private AdministrativeOrganizationInMemory Administrative { get; } = new();
+
+    /// <summary>
+    /// The administrative organization as the privacy area reads it.
+    /// </summary>
+    private Janus.Privacy.Tests.AdministrativeOrganizationInMemory PrivacyAdministrative { get; } = new();
 
     /// <summary>
     /// The data subject request queue, so a test can read what was put on it.
@@ -397,6 +402,17 @@ internal sealed class Deployment : IAsyncDisposable
     /// The events the operations published.
     /// </summary>
     public EventsInMemory Events { get; } = new();
+
+    /// <summary>
+    /// Names the organization that administers the deployment, as bootstrap does, so a
+    /// permission granted there is one an administrative operation honours.
+    /// </summary>
+    /// <param name="organization">The organization.</param>
+    public void Administers(OrganizationId organization)
+    {
+        Administrative.Organization = organization;
+        PrivacyAdministrative.Organization = organization;
+    }
 
     /// <summary>
     /// Runs one request through routing, the pipeline and the endpoint, in a scope
@@ -530,6 +546,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<RecoveryCodeService>();
         _ = services.AddScoped<DeviceService>();
         _ = services.AddScoped<PolicyResolution>();
+        _ = services.AddSingleton<IAdministrativeOrganization>(Administrative);
+        _ = services.AddScoped<AdministrativeScope>();
         _ = services.AddScoped<StepUpGuard>();
         _ = services.AddScoped<IStepUpGate, StepUpGate>();
         _ = services.AddScoped<ILocationResolver, LocationResolverInMemory>();
@@ -567,7 +585,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<ICredentials, CredentialService>();
         _ = services.AddSingleton<ILegalDocumentStore>(Documents);
         _ = services.AddSingleton<IPrivacyAudit, Janus.Privacy.Tests.PrivacyAuditInMemory>();
-        _ = services.AddSingleton<Janus.Privacy.Policies.IMembershipLookup>(PrivacyMemberships);
+        _ = services.AddSingleton<Janus.Privacy.Policies.IAdministrativeOrganization>(PrivacyAdministrative);
         _ = services.AddScoped<IPrivacyAlerts, PrivacyAlerts>();
         _ = services.AddScoped<Janus.Privacy.Policies.AdministrativeScope>();
         _ = services.AddScoped<ILegalDocuments, LegalDocumentService>();

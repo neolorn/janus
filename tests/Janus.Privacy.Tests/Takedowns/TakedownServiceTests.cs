@@ -36,7 +36,7 @@ public sealed class TakedownServiceTests : IAsyncDisposable
         new(Guid.Parse("44444444-4444-4444-8444-444444444444"));
 
     private readonly AccessGateInMemory _gate = new();
-    private readonly MembershipLookupInMemory _memberships = new();
+    private readonly AdministrativeOrganizationInMemory _administrative = new();
     private readonly StepUpGateInMemory _stepUp = new();
     private readonly AccountStatesInMemory _accounts = new();
     private readonly OutboxStoreInMemory _outbox = new();
@@ -56,13 +56,13 @@ public sealed class TakedownServiceTests : IAsyncDisposable
     {
         _accounts.Hold(Ahmed, AccountState.Active);
         _accounts.Hold(Mona, AccountState.Active);
-        _memberships.Add(Mona, Company);
+        _administrative.Organization = Company;
         _gate.Grant(Mona, Company, Permissions.TakedownExecute);
     }
 
     private TakedownService Takedowns =>
         new(
-            new AdministrativeScope(_gate, _memberships),
+            new AdministrativeScope(_gate, _administrative),
             _stepUp,
             _accounts,
             _outbox,

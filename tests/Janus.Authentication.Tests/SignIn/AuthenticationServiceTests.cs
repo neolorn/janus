@@ -60,6 +60,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly AccessGateInMemory _gate = new();
+    private readonly AdministrativeOrganizationInMemory _administrative = new();
     private readonly LocationResolverInMemory _locations = new();
     private readonly ThrottleLedgerInMemory _throttle = new();
     private readonly NoticeLedgerInMemory _notices = new();
@@ -154,7 +155,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             _audit,
             Policies,
             _configuration,
-            _gate,
+            new AdministrativeScope(_gate, _administrative),
             _locations,
             _work,
             _clock,

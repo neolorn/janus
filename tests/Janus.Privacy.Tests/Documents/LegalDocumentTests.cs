@@ -30,7 +30,7 @@ public sealed class LegalDocumentTests : IAsyncDisposable
         new(Guid.Parse("33333333-3333-4333-8333-333333333333"));
 
     private readonly AccessGateInMemory _gate = new();
-    private readonly MembershipLookupInMemory _memberships = new();
+    private readonly AdministrativeOrganizationInMemory _administrative = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly LegalDocumentStoreInMemory _store = new();
     private readonly PrivacyAuditInMemory _audit = new();
@@ -46,14 +46,14 @@ public sealed class LegalDocumentTests : IAsyncDisposable
     /// </summary>
     public LegalDocumentTests()
     {
-        _memberships.Add(Officer, Deployment);
+        _administrative.Organization = Deployment;
         _configuration.Set(Settings.LegalGoverningLanguage, "ar");
     }
 
     private LegalDocumentService Documents =>
         new LegalDocumentService(
             _store,
-            new AdministrativeScope(_gate, _memberships),
+            new AdministrativeScope(_gate, _administrative),
             new Supersession(_consents, Declaration.Processing, _events),
             _configuration,
             _audit,

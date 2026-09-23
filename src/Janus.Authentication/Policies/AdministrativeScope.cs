@@ -2,7 +2,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 
-namespace Janus.Privacy.Policies;
+namespace Janus.Authentication.Policies;
 
 /// <summary>
 /// Whether the caller may perform an operation of the deployment rather than of one

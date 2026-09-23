@@ -49,7 +49,7 @@ public sealed class SupersessionTests : IAsyncDisposable
     private readonly PrivacyAuditInMemory _audit = new();
     private readonly PrivacyAlertsInMemory _alerts = new();
     private readonly AccessGateInMemory _gate = new();
-    private readonly MembershipLookupInMemory _memberships = new();
+    private readonly AdministrativeOrganizationInMemory _administrative = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
@@ -60,7 +60,7 @@ public sealed class SupersessionTests : IAsyncDisposable
     public SupersessionTests()
     {
         _documents.Hold(new DocumentVersion(ConsentService.Notice, "1", "ar", "النص", [], Noon));
-        _memberships.Add(Officer, Deployment);
+        _administrative.Organization = Deployment;
         _gate.Grant(Officer, Deployment, Permissions.NoticePublish);
         _configuration.Set(Settings.LegalGoverningLanguage, "ar");
     }
@@ -71,7 +71,7 @@ public sealed class SupersessionTests : IAsyncDisposable
     private LegalDocumentService Documents =>
         new(
             _documents,
-            new AdministrativeScope(_gate, _memberships),
+            new AdministrativeScope(_gate, _administrative),
             new Supersession(_consents, Declaration.Processing, _events),
             _configuration,
             _audit,

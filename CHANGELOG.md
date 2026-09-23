@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- An administrative operation on the deployment or on an account (session revocation,
+  recovery approval, the privacy request queue, records of processing, compliance text
+  and the takedown) is permitted only where the caller holds its permission in the
+  administrative organization. A grant in any other organization no longer reaches it,
+  and before bootstrap has marked an organization administrative every such operation
+  is refused. `ISessions.RevokeAccountAsync` and `ISessions.RevokeEveryAsync` no longer
+  take an organization.
+
 - The names the library puts on the wire no longer carry the product's name. The
   cookies are `__Host-identity-session`, `__Host-identity-preauth`,
   `__Host-identity-csrf`, `__Host-identity-browser` and `__Host-identity-device`; a

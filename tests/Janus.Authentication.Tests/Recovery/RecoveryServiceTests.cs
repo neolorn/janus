@@ -66,6 +66,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly AccessGateInMemory _gate = new();
+    private readonly AdministrativeOrganizationInMemory _administrative = new() { Organization = Support };
     private readonly LocationResolverInMemory _locations = new();
     private readonly ThrottleLedgerInMemory _throttle = new();
     private readonly NoticeLedgerInMemory _notices = new();
@@ -611,10 +612,9 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             _authenticators,
             Passwords,
             Policies,
-            _memberships,
             Sessions,
             new StepUpGuard(_live, _authenticators, _passwords, Policies, _clock),
-            _gate,
+            new AdministrativeScope(_gate, _administrative),
             _notifications,
             new NonExistenceNotice(_configuration, _notifications, _notices, _work, _events, _clock),
             Throttle,
@@ -648,7 +648,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             _audit,
             Policies,
             _configuration,
-            _gate,
+            new AdministrativeScope(_gate, _administrative),
             _locations,
             _work,
             _clock,

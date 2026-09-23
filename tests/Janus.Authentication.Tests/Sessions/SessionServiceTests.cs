@@ -33,6 +33,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly AccessGateInMemory _gate = new();
+    private readonly AdministrativeOrganizationInMemory _administrative = new();
     private readonly LocationResolverInMemory _locations = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
@@ -44,7 +45,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
             _audit,
             new PolicyResolution(_memberships, _configuration, _raises),
             _configuration,
-            _gate,
+            new AdministrativeScope(_gate, _administrative),
             _locations,
             _work,
             _clock,
@@ -645,12 +646,12 @@ public sealed class SessionServiceTests : IAsyncDisposable
         IssuedSession theirs = await BegunAsync(leaving, [Factor.Password]);
         IssuedSession others = await BegunAsync(staying, [Factor.Password]);
 
+        _administrative.Organization = organization;
         _gate.Grant(administrator, organization, Permissions.SessionRevokeAccount);
 
         Result revoked = await Service.RevokeAccountAsync(
             AccessContext.Of(administrator),
             leaving,
-            organization,
             TestContext.Current.CancellationToken);
 
         Assert.Null(Refusal(revoked));
@@ -668,10 +669,11 @@ public sealed class SessionServiceTests : IAsyncDisposable
         SubjectId leaving = Subject();
         IssuedSession theirs = await BegunAsync(leaving, [Factor.Password]);
 
+        _administrative.Organization = OrganizationId.New(_clock);
+
         Result revoked = await Service.RevokeAccountAsync(
             AccessContext.Of(Subject()),
             leaving,
-            OrganizationId.New(_clock),
             TestContext.Current.CancellationToken);
 
         Assert.Equal(ErrorCodes.Denied, Refusal(revoked));
@@ -689,11 +691,11 @@ public sealed class SessionServiceTests : IAsyncDisposable
         IssuedSession first = await BegunAsync(Subject(), [Factor.Password]);
         IssuedSession second = await BegunAsync(Subject(), [Factor.Password]);
 
+        _administrative.Organization = organization;
         _gate.Grant(administrator, organization, Permissions.SessionRevoke);
 
         Result revoked = await Service.RevokeEveryAsync(
             AccessContext.Of(administrator),
-            organization,
             TestContext.Current.CancellationToken);
 
         Assert.Null(Refusal(revoked));

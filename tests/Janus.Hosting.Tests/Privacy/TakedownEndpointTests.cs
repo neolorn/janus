@@ -162,7 +162,7 @@ public sealed class TakedownEndpointTests : IAsyncDisposable
         Browser browser = await Flow.SignedInAsync(_deployment);
         SubjectId subject = _deployment.Directory.Created[^1].Subject;
 
-        _deployment.PrivacyMemberships.Add(subject, Company);
+        _deployment.Administers(Company);
         _deployment.Gate.Grant(subject, Company, Permissions.TakedownExecute);
 
         return browser;

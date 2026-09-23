@@ -6393,6 +6393,57 @@ spelling of `10` section 5.12d.
 *Chapter text that should change.* 09 section 8a could mark `reason` required on both
 endpoints.
 
+---
+
+## 175. An operation of the deployment asks for its permission in the administrative organization
+
+**Phase 8 · 2026-09-23 · Tier 3 · AUTHZ-SCOPE-001, IDN-ORG-001, LIB-API-005, 09 section 8**
+
+*The question.* AUTHZ-SCOPE-001 says "Every permission evaluation SHALL be scoped to the
+organization owning the resource, resolved from the resource and never from the
+session." 09 section 8 says "All endpoints under `/admin` require the corresponding
+permission." Many administrative operations act on the deployment or on an account
+rather than on a record an organization owns: session revocation, configuration, the
+restriction set, account suspension, the takedown, the privacy request queue, erasures,
+the audit trail, compliance text and records, recovery approval. A customer holds no
+membership (AUTH-PRIN-002: "A principal holding **no membership** (an individual user)
+follows the **system policy**"), so the account acted on names no organization either.
+IDN-ORG-001 says "Organization #1 is the **administrative organization**; its members
+are what would elsewhere be called staff." No chapter says in which organization the
+gate is asked for such an operation. Phases 6 and 7 asked it in every organization the
+caller belongs to and accepted the first that granted; no report recorded that choice.
+
+*The readings.*
+
+1. In every organization the caller belongs to, the first grant deciding (what phases 6
+   and 7 built for recovery approval and the privacy area).
+2. In the administrative organization only.
+3. In an organization the target account belongs to, or in the administrative
+   organization for an account holding none.
+
+*Chosen: 2, the strictest reading.* Reading 1 lets a role granted inside any
+organization, for that organization's own members, act on every account in the pool and
+on the deployment's settings. Reading 3 still lets a manager of one organization act on
+the deployment wherever no target account exists. Reading 2 grants least: the deployment
+is administered by the organization the chapters name for that purpose, and before
+bootstrap has marked one, every such operation is refused. Operations on an
+organization's own records (grants, groups, memberships, invitations, policy, domains)
+are asked in that organization, as AUTHZ-SCOPE-001 says, and are not affected.
+
+*What changed with it.* The privacy area's scope and recovery approval now ask the
+administrative organization, and `ISessions.RevokeAccountAsync` and
+`ISessions.RevokeEveryAsync` no longer take an organization. Each area reads the
+administrative organization through a port of its own, as each reads memberships.
+
+*Tests that pin it.*
+`Janus.Authentication.Tests.Policies.AdministrativeScopeTests` (all three),
+`Janus.Privacy.Tests.Policies.AdministrativeScopeTests` (all three),
+`AdministrativeOrganizationTests.IDN_ORG_001_TheMarkedOrganizationIsTheAdministrativeOneAsync`,
+`SessionServiceTests.AUTH_SESS_011_AC2_RevokingOneAccountWithoutThePermissionIsRefusedAsync`.
+
+*Chapter text that should change.* AUTHZ-SCOPE-001 could say that an operation on the
+deployment, or on an account, is scoped to the administrative organization.
+
 
 # Rows for chapter 10
 

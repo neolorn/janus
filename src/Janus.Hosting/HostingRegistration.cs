@@ -204,6 +204,7 @@ public static class HostingRegistration
         // AUTH-SESS-001, AUTH-PASS-004, AUTH-FACT-005: the authentication services,
         // each of which reads the settings table for what it enforces.
         services.AddScoped<PolicyResolution>();
+        services.AddScoped<Janus.Authentication.Policies.AdministrativeScope>();
         services.AddSingleton<Argon2idHasher>();
         services.AddScoped<IScreeningLog, ScreeningLog>();
         services.AddSingleton<IWordList>(_ => new WordList(Corpus));
@@ -307,7 +308,7 @@ public static class HostingRegistration
 
         services.AddScoped<IPrivacyAlerts, PrivacyAlerts>();
         services.AddScoped<ILegalDocuments, LegalDocumentService>();
-        services.AddScoped<AdministrativeScope>();
+        services.AddScoped<Janus.Privacy.Policies.AdministrativeScope>();
         services.AddScoped<Supersession>();
         services.AddScoped<IConsents, ConsentService>();
         services.AddScoped<ISubjectNotices, SubjectNotices>();
