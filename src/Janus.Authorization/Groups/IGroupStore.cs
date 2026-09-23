@@ -34,6 +34,23 @@ internal interface IGroupStore
     ValueTask CreateAsync(Group group, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Every group of one organization, by name.
+    /// </summary>
+    /// <param name="organization">Whose groups.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The groups.</returns>
+    ValueTask<IReadOnlyList<Group>> InAsync(OrganizationId organization, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Removes a group that holds no member and belongs to no group, so the closure
+    /// holds nothing of it.
+    /// </summary>
+    /// <param name="id">Which group.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of removing it.</returns>
+    ValueTask RemoveAsync(GroupId id, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Adds a member, and carries the change through the closure in the same
     /// transaction.
     /// </summary>

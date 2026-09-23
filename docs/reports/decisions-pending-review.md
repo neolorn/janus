@@ -6980,6 +6980,144 @@ the others in 10 section 1.3.
 `authz.role.inuse`: "A grant or a derivation names the role, so it cannot be removed;
 409", and 09 section 8 could list it under `DELETE /admin/roles`.
 
+---
+
+## 190. What the group routes carry, and where `group:manage` is asked
+
+**Phase 8 · 2026-09-23 · Tier 2 · 09 section 8a, AUTHZ-GROUP-001, AUTHZ-SCOPE-001, 10 section 2.1, API-CONV-002**
+
+*The question.* 09 section 8a gives `GET|POST|DELETE /admin/groups` and
+`POST|DELETE /admin/groups/{id}/members` with no body, no answer and no path naming the
+group to remove. 10 section 2.1 gives `group:manage` as governing "Creating groups,
+nesting them, and changing their members". A group belongs to one organization, and no
+chapter says where the permission is asked or which organization a listing reads.
+
+*The readings and the choices.*
+
+1. `group:manage` is asked in the organization the group belongs to, read from its row
+   and never from the caller, as `grant:manage` is asked in the grant's (entry 184).
+   Chosen. Asking it in the administrative organization was the other reading; it
+   would put every organization's groups behind one permission a branch administrator
+   does not hold.
+2. `GET /admin/groups?organization={id}` answers 200 with
+   `[ { id, name, members: [ { subjectType, subjectId } ] } ]`, the members being those
+   the group holds directly. Chosen: no other route reads a group's members, and the
+   transitive set is the gate's, not the management application's.
+3. `POST /admin/groups` carries `{ organization, name, reason }` and answers 201
+   `{ id }`. `DELETE /admin/groups/{id}` names the group in the path, as
+   `DELETE /admin/grants/{id}` does, and carries `{ "reason": "..." }` in its body
+   (entry 183). Chosen.
+4. `POST` and `DELETE /admin/groups/{id}/members` both carry
+   `{ subjectType, subjectId, reason }`, the member shape a grant's holder has, and
+   answer 204. Adding a member already held, or taking out one that is not, answers 204
+   and writes and records nothing. Chosen: the one address 09 gives serves both, and the
+   state asked for holds.
+5. A member group of another organization, a group the deployment does not hold, a
+   name or reason blank or past 1024 characters, and an absent or unreadable
+   `organization`, `subjectType` or `subjectId` answer 400 `api.request.malformed`
+   naming the field (`subjectId`, `id`, `name`, `reason`, `organization`,
+   `subjectType`). A member account is not looked up, as a grant's holder is not.
+   Chosen.
+
+*Tests that pin it.*
+`GroupEndpointTests.AUTHZ_GROUP_001_AGroupIsCreatedAndReadWithItsMembersAsync`,
+`GroupEndpointTests.AUTHZ_SCOPE_001_GroupManageIsAskedInTheGroupsOrganizationAsync`,
+`GroupEndpointTests.AUTHZ_GROUP_001_AChangeThatChangesNothingRecordsNothingAsync`,
+`GroupEndpointTests.AUTHZ_GROUP_001_WhatAChangeNamesMustBeReadableAsync`,
+`GroupEndpointTests.AUTHZ_GROUP_001_AGroupThatWouldContainItselfIsRefusedAsync`,
+`GroupClosureStoreTests.AUTHZ_GROUP_001_AnOrganizationsGroupsAreReadByNameAsync`.
+
+*Chapter text that should change.* 09 section 8a could give the query of `GET`, the
+bodies of `POST` and of both member routes, the path and body of `DELETE`, the 201 and
+204 answers and the 400s, and say that `group:manage` is asked in the group's
+organization.
+
+---
+
+## 191. A change of members is stepped up, reasoned, audited, and guarded as a grant of what the group holds
+
+**Phase 8 · 2026-09-23 · Tier 3 · AUTHZ-GROUP-001, OPS-CFG-007, AUTH-STEP-001, 10 section 5a, IDN-AUD-001**
+
+*The question.* 10 section 5a lists no step-up action for the group routes, and no
+chapter says whether a change to a group carries a reason or is audited. A member
+holds what the group holds and what every group holding it holds, so adding an account
+to a group confers every grant the group reaches, and taking it out removes them.
+OPS-CFG-007 says granting or revoking system administration requires it.
+
+*The readings.*
+
+1. The group routes ask `group:manage` and nothing more: no step-up, no reason, no
+   record, whatever the group holds.
+2. As 1, with every change audited.
+3. Every write (create, remove, add a member, take one out) carries a reason of 1 to
+   1024 characters (400 `api.request.malformed` naming `reason` otherwise) and is
+   audited as `authz.group.created`, `authz.group.removed`,
+   `authz.group.memberadded` or `authz.group.memberremoved` with the group, its name,
+   the member where one changed, the reason, the actor and the group's organization. A
+   change of members is the `grant:manage` step-up action, judged last as for a grant;
+   where the group, or any group holding it, holds a live grant (allow or deny) of a
+   role carrying `system:administer`, or of a role that cannot be read, the change
+   also needs `system:administer` in the administrative organization. Creating a group
+   and removing one nothing names (entry 192) confer and remove nothing, and are not
+   stepped up.
+
+*Chosen: 3, the strictest reading.* A change of members is a grant in all but name,
+as a change to a role is (entry 188), so it keeps what a grant keeps. Reading 1 lets a
+group manager make anyone a system administrator by adding them to the group that
+holds it, which is the "one step removed" OPS-CFG-007 exists to prevent. The step-up
+reuses the `grant:manage` gate name 10 section 5a already defines rather than
+inventing one.
+
+*Tests that pin it.*
+`GroupEndpointTests.OPS_CFG_007_AC1_ChangingAnAdministeringGroupNeedsSystemAdministrationAsync`,
+`GroupEndpointTests.AUTH_STEP_001_AChangeOfMembersIsAStepUpActionAsync`,
+`GroupEndpointTests.AUTHZ_GROUP_001_AGroupIsCreatedAndReadWithItsMembersAsync`,
+`GroupAuditTests.AUTHZ_GROUP_001_AMemberAddedIsRecordedWithTheGroupAndTheMemberAsync`,
+`GroupAuditTests.AUTHZ_GROUP_001_AGroupCreatedIsRecordedWithoutAMemberAsync`.
+
+*Chapter text that should change.* 10 section 5a could list
+`POST|DELETE /admin/groups/{id}/members` under `grant:manage`; AUTHZ-GROUP-001 could
+require the reason and the audit record of every change to a group; OPS-CFG-007 could
+name a change of members of a group that reaches system administration; 10 section 5
+could list the four audit actions.
+
+---
+
+## 192. A group anything names is not removed, and the refusal has a code of its own
+
+**Phase 8 · 2026-09-23 · Tier 2 · AUTHZ-GROUP-001, AUTHZ-GRANT-003 AC3, 10 section 1.3**
+
+*The question.* 09 section 8a mounts `DELETE /admin/groups` and says nothing of a
+group in use. A grant given to a group names it and keeps it after revocation, since
+AUTHZ-GRANT-003 AC3 asks that "who granted this and when" stay answerable by query. A
+group's members lose what it holds when it goes, and a group it belongs to loses a
+member, with no change of members recording either. 10 section 1.3 has no code for a
+group that cannot be removed.
+
+*The readings.*
+
+1. Removing a group takes its members out, takes it out of every group holding it and
+   revokes its live grants, each recorded.
+2. Removing a group that anything names is refused as a malformed request.
+3. Removing a group that holds a member, belongs to a group, or was given any grant
+   (live, expired or revoked) is refused with a new code `authz.group.inuse`, 409;
+   the members are taken out through the member route first, which is stepped up and
+   recorded (entry 191).
+
+*Chosen: 3*, as entry 189 chose for a role. Reading 1 does in one write, without its
+step-up, what entry 191 guards change by change, and loses the grant history
+AUTHZ-GRANT-003 keeps. Reading 2 tells the caller the request was unreadable when it
+was read and refused.
+
+*Tests that pin it.*
+`GroupEndpointTests.AUTHZ_GROUP_001_OnlyAGroupNothingNamesIsRemovedAsync`,
+`GrantStoreTests.AUTHZ_GROUP_001_AGroupAnyGrantWasGivenToIsNamedAsync`,
+`GroupClosureStoreTests.AUTHZ_GROUP_001_ARemovedGroupIsGoneAsync`.
+
+*Chapter text that should change.* 10 section 1.3 could add `authz.group.inuse`: "The
+group holds a member, belongs to a group, or was given a grant, so it cannot be
+removed; 409", and 09 section 8a could list it under `DELETE /admin/groups`.
+
 
 # Rows for chapter 10
 

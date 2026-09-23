@@ -123,6 +123,34 @@ internal sealed class GroupStore(StoreContext context, DataConnections connectio
     }
 
     /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<Group>> InAsync(
+        OrganizationId organization,
+        CancellationToken cancellationToken)
+    {
+        List<GroupRecord> records = await context.Groups
+            .Where(row => row.Organization == organization)
+            .OrderBy(row => row.Name)
+            .ThenBy(row => row.Id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. records.Select(row => Group.Existing(row.Id, row.Organization, row.Name))];
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask RemoveAsync(GroupId id, CancellationToken cancellationToken)
+    {
+        GroupRecord? record = await context.Groups
+            .FirstOrDefaultAsync(row => row.Id == id, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (record is not null)
+        {
+            context.Groups.Remove(record);
+        }
+    }
+
+    /// <inheritdoc/>
     public async ValueTask AddMemberAsync(
         GroupId group,
         GrantSubject member,

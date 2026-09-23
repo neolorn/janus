@@ -367,6 +367,38 @@ public sealed class GrantStoreTests(DatabaseFixture database)
         Assert.False(await Store(reading).NamesAsync(RoleName.Parse("nobody-holds-this"), TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// AUTHZ-GROUP-001 and AUTHZ-GRANT-003 AC3: a group any grant was given to is named,
+    /// the grant revoked or not, and one no grant was given to is not.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GROUP_001_AGroupAnyGrantWasGivenToIsNamedAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId administrator = await _deployment.AccountAsync(Noon);
+        var given = GrantSubject.Of(GroupId.New(TimeProvider.System));
+        var ungiven = GrantSubject.Of(GroupId.New(TimeProvider.System));
+        GrantId id = await WriteAsync(given, organization, on: null);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await using var transaction = new UnitOfWork(writing);
+            await transaction.BeginAsync(TestContext.Current.CancellationToken);
+
+            Grant grant = (await Store(writing).FindAsync(id, TestContext.Current.CancellationToken))!;
+
+            _ = grant.Revoke(administrator, Noon.AddDays(1), "Taken back.");
+            await Store(writing).RecordAsync(grant, TestContext.Current.CancellationToken);
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        Assert.True(await Store(reading).NamesAsync(given, TestContext.Current.CancellationToken));
+        Assert.False(await Store(reading).NamesAsync(ungiven, TestContext.Current.CancellationToken));
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 

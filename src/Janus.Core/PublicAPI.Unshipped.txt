@@ -614,6 +614,17 @@ Janus.Core.DeclaredPurpose.SubjectCategories.get -> System.Collections.Generic.I
 Janus.Core.DeclaredPurpose.SubjectCategories.init -> void
 Janus.Core.DeclaredPurpose.Types.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.ResourceType>!
 Janus.Core.DeclaredPurpose.Types.init -> void
+Janus.Core.DefinedGroup
+Janus.Core.DefinedGroup.<Clone>$() -> Janus.Core.DefinedGroup!
+Janus.Core.DefinedGroup.Deconstruct(out Janus.Core.GroupId Id, out string! Name, out System.Collections.Generic.IReadOnlyList<Janus.Core.GrantSubject>! Members) -> void
+Janus.Core.DefinedGroup.DefinedGroup(Janus.Core.GroupId Id, string! Name, System.Collections.Generic.IReadOnlyList<Janus.Core.GrantSubject>! Members) -> void
+Janus.Core.DefinedGroup.Equals(Janus.Core.DefinedGroup? other) -> bool
+Janus.Core.DefinedGroup.Id.get -> Janus.Core.GroupId
+Janus.Core.DefinedGroup.Id.init -> void
+Janus.Core.DefinedGroup.Members.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.GrantSubject>!
+Janus.Core.DefinedGroup.Members.init -> void
+Janus.Core.DefinedGroup.Name.get -> string!
+Janus.Core.DefinedGroup.Name.init -> void
 Janus.Core.DefinedRole
 Janus.Core.DefinedRole.<Clone>$() -> Janus.Core.DefinedRole!
 Janus.Core.DefinedRole.Deconstruct(out Janus.Core.RoleName Name, out System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions) -> void
@@ -1082,6 +1093,12 @@ Janus.Core.IExports.AssembleAsync(Janus.Core.AccessContext! context, Janus.Core.
 Janus.Core.IGrants
 Janus.Core.IGrants.GrantAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.GrantRequest! request, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.GrantId>>
 Janus.Core.IGrants.RevokeAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.GrantId grant, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IGroups
+Janus.Core.IGroups.AddMemberAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.GroupId group, Janus.Core.GrantSubject member, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IGroups.CreateAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, string! name, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.GroupId>>
+Janus.Core.IGroups.InAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.DefinedGroup!>!>>
+Janus.Core.IGroups.RemoveAsync(Janus.Core.AccessContext! context, Janus.Core.GroupId group, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IGroups.RemoveMemberAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.GroupId group, Janus.Core.GrantSubject member, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IIdentifiers
 Janus.Core.IIdentifiers.AbandonAsync(string! linkToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IIdentifiers.AddAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.IdentifierKind kind, string! value, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -2523,6 +2540,9 @@ override Janus.Core.CredentialSuspended.ToString() -> string!
 override Janus.Core.DeclaredPurpose.Equals(object? obj) -> bool
 override Janus.Core.DeclaredPurpose.GetHashCode() -> int
 override Janus.Core.DeclaredPurpose.ToString() -> string!
+override Janus.Core.DefinedGroup.Equals(object? obj) -> bool
+override Janus.Core.DefinedGroup.GetHashCode() -> int
+override Janus.Core.DefinedGroup.ToString() -> string!
 override Janus.Core.DefinedRole.Equals(object? obj) -> bool
 override Janus.Core.DefinedRole.GetHashCode() -> int
 override Janus.Core.DefinedRole.ToString() -> string!
@@ -2954,6 +2974,10 @@ static Janus.Core.AuditActions.DocumentPublished.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.DocumentTranslated.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ErasureExecuted.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ExportAssembled.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.GroupCreated.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.GroupMemberAdded.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.GroupMemberRemoved.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.GroupRemoved.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ObjectionRecorded.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ObjectionWithdrawn.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.OrganizationErased.get -> Janus.Core.AuditAction
@@ -3189,6 +3213,8 @@ static Janus.Core.CredentialSuspended.operator ==(Janus.Core.CredentialSuspended
 static Janus.Core.DeclaredProcessing.Of(Janus.Core.AuthorizationDeclaration! declaration) -> Janus.Core.DeclaredProcessing!
 static Janus.Core.DeclaredPurpose.operator !=(Janus.Core.DeclaredPurpose? left, Janus.Core.DeclaredPurpose? right) -> bool
 static Janus.Core.DeclaredPurpose.operator ==(Janus.Core.DeclaredPurpose? left, Janus.Core.DeclaredPurpose? right) -> bool
+static Janus.Core.DefinedGroup.operator !=(Janus.Core.DefinedGroup? left, Janus.Core.DefinedGroup? right) -> bool
+static Janus.Core.DefinedGroup.operator ==(Janus.Core.DefinedGroup? left, Janus.Core.DefinedGroup? right) -> bool
 static Janus.Core.DefinedRole.operator !=(Janus.Core.DefinedRole? left, Janus.Core.DefinedRole? right) -> bool
 static Janus.Core.DefinedRole.operator ==(Janus.Core.DefinedRole? left, Janus.Core.DefinedRole? right) -> bool
 static Janus.Core.DerivationDeclaration.operator !=(Janus.Core.DerivationDeclaration? left, Janus.Core.DerivationDeclaration? right) -> bool
@@ -3278,6 +3304,7 @@ static Janus.Core.ErrorCodes.GrantExpired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GrantNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GrantReasonRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GroupCycle.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.GroupInUse.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierLastOfKind.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierLocked.get -> Janus.Core.ErrorCode

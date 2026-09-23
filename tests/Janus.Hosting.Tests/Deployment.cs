@@ -447,6 +447,11 @@ internal sealed class Deployment : IAsyncDisposable
     public Janus.Authorization.Tests.Roles.RoleAuditInMemory RoleChanges { get; } = new();
 
     /// <summary>
+    /// The changes to groups the deployment wrote down.
+    /// </summary>
+    public Janus.Authorization.Tests.Groups.GroupAuditInMemory GroupChanges { get; } = new();
+
+    /// <summary>
     /// The records the host registered.
     /// </summary>
     public Janus.Authorization.Tests.Resources.ResourcesInMemory Resources { get; } = new();
@@ -684,9 +689,11 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton(Janus.Authorization.Model.AuthorizationModel.Of(
             Janus.Authorization.Tests.HostDomain.Declared().Build()));
         _ = services.AddSingleton<Janus.Authorization.Roles.IRoleAudit>(RoleChanges);
+        _ = services.AddSingleton<Janus.Authorization.Groups.IGroupAudit>(GroupChanges);
         _ = services.AddScoped<Janus.Authorization.Gate.AdministrativeScope>();
         _ = services.AddScoped<IGrants, Janus.Authorization.Grants.GrantService>();
         _ = services.AddScoped<IRoles, Janus.Authorization.Roles.RoleService>();
+        _ = services.AddScoped<IGroups, Janus.Authorization.Groups.GroupService>();
         _ = services.AddScoped<SigningKeys>();
         _ = services.AddScoped<OidcService>();
         _ = services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());

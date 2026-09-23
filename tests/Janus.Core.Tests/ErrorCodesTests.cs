@@ -62,6 +62,7 @@ public sealed class ErrorCodesTests
         "authz.grant.notfound",
         "authz.grant.reasonrequired",
         "authz.group.cycle",
+        "authz.group.inuse",
         "authz.policy.unregistered",
         "authz.restricted",
         "authz.role.inuse",

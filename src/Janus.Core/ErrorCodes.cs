@@ -725,6 +725,13 @@ public static class ErrorCodes
     public static ErrorCode GroupCycle { get; } = ErrorCode.Parse("authz.group.cycle");
 
     /// <summary>
+    /// The group holds a member, belongs to a group, or was given a grant, so removing
+    /// it would take away what they record. Take its members out instead.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GROUP-001 and AUTHZ-GRANT-003 AC3.</remarks>
+    public static ErrorCode GroupInUse { get; } = ErrorCode.Parse("authz.group.inuse");
+
+    /// <summary>
     /// The entity has no registered policy, which is a fault rather than a denial.
     /// Register a policy for the entity in the model.
     /// </summary>

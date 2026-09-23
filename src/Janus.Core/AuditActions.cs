@@ -154,6 +154,30 @@ public static class AuditActions
     public static AuditAction ExportAssembled { get; } = AuditAction.Parse("privacy.export.assembled");
 
     /// <summary>
+    /// A group was created.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GROUP-001.</remarks>
+    public static AuditAction GroupCreated { get; } = AuditAction.Parse("authz.group.created");
+
+    /// <summary>
+    /// An account or a group was added to a group, and holds what it holds.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GROUP-001 and OPS-CFG-007.</remarks>
+    public static AuditAction GroupMemberAdded { get; } = AuditAction.Parse("authz.group.memberadded");
+
+    /// <summary>
+    /// An account or a group was taken out of a group, and no longer holds what it holds.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GROUP-001 and OPS-CFG-007.</remarks>
+    public static AuditAction GroupMemberRemoved { get; } = AuditAction.Parse("authz.group.memberremoved");
+
+    /// <summary>
+    /// A group nothing named was removed.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GROUP-001.</remarks>
+    public static AuditAction GroupRemoved { get; } = AuditAction.Parse("authz.group.removed");
+
+    /// <summary>
     /// An objection to a purpose was recorded.
     /// </summary>
     /// <remarks>Implements PRIV-BASIS-003, chapter 10 section 5.</remarks>

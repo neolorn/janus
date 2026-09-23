@@ -64,6 +64,15 @@ internal interface IGrantStore
     ValueTask<bool> NamesAsync(RoleName role, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Whether any grant was given to an account or a group, live, expired or revoked,
+    /// which is what keeps a group in place: a grant's history names it.
+    /// </summary>
+    /// <param name="holder">The account or group.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Whether one was.</returns>
+    ValueTask<bool> NamesAsync(GrantSubject holder, CancellationToken cancellationToken);
+
+    /// <summary>
     /// The live grants a principal holds, its own and those of every group it belongs
     /// to, within one organization.
     /// </summary>

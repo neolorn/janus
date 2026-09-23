@@ -225,6 +225,16 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `GET /admin/groups?organization={id}` reads an organization's groups with their
+  direct members, `POST /admin/groups` creates one, `DELETE /admin/groups/{id}`
+  removes one that holds no member, belongs to no group and was never given a grant
+  (409 `authz.group.inuse` otherwise), and `POST|DELETE /admin/groups/{id}/members`
+  adds or takes out an account or a group of the same organization (409
+  `authz.group.cycle` where the group would contain itself). All ask `group:manage`
+  in the group's organization and a reason, and are recorded in the audit trail; a
+  change of members also needs step-up, and `system:administer` where the group
+  reaches a role carrying it. `IGroups` is the same set of operations in process.
+
 - `GET /admin/roles` reads every role with its permissions, `POST /admin/roles`
   creates a role or gives an existing one the permissions stated, and
   `DELETE /admin/roles/{name}` removes one no grant or derivation names (409

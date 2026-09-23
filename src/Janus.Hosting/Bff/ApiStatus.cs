@@ -82,6 +82,7 @@ internal static class ApiStatus
         [ErrorCodes.GrantDuplicate] = StatusCodes.Status409Conflict,
         [ErrorCodes.GrantExpired] = StatusCodes.Status409Conflict,
         [ErrorCodes.GroupCycle] = StatusCodes.Status409Conflict,
+        [ErrorCodes.GroupInUse] = StatusCodes.Status409Conflict,
         [ErrorCodes.RoleInUse] = StatusCodes.Status409Conflict,
         [ErrorCodes.LossReportPending] = StatusCodes.Status409Conflict,
         [ErrorCodes.LossReportNotPermitted] = StatusCodes.Status409Conflict,
