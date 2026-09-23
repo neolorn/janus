@@ -1206,6 +1206,19 @@ Janus.Core.MailMessage.Reference.get -> string!
 Janus.Core.MailMessage.Reference.init -> void
 Janus.Core.MailMessage.Subject.get -> string!
 Janus.Core.MailMessage.Subject.init -> void
+Janus.Core.MembershipChange
+Janus.Core.MembershipChange.Began = 0 -> Janus.Core.MembershipChange
+Janus.Core.MembershipChange.Ended = 1 -> Janus.Core.MembershipChange
+Janus.Core.MembershipChanged
+Janus.Core.MembershipChanged.Change.get -> Janus.Core.MembershipChange
+Janus.Core.MembershipChanged.Change.init -> void
+Janus.Core.MembershipChanged.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.MembershipId Membership, out Janus.Core.OrganizationId Organization, out Janus.Core.MembershipChange Change) -> void
+Janus.Core.MembershipChanged.Equals(Janus.Core.MembershipChanged? other) -> bool
+Janus.Core.MembershipChanged.Membership.get -> Janus.Core.MembershipId
+Janus.Core.MembershipChanged.Membership.init -> void
+Janus.Core.MembershipChanged.MembershipChanged(System.DateTimeOffset RaisedAt, string! IdempotencyKey, Janus.Core.MembershipId Membership, Janus.Core.OrganizationId Organization, Janus.Core.MembershipChange Change) -> void
+Janus.Core.MembershipChanged.Organization.get -> Janus.Core.OrganizationId
+Janus.Core.MembershipChanged.Organization.init -> void
 Janus.Core.MembershipId
 Janus.Core.MembershipId.Deconstruct(out System.Guid Value) -> void
 Janus.Core.MembershipId.Equals(Janus.Core.MembershipId other) -> bool
@@ -2491,6 +2504,10 @@ override Janus.Core.LossReported.ToString() -> string!
 override Janus.Core.MailMessage.Equals(object? obj) -> bool
 override Janus.Core.MailMessage.GetHashCode() -> int
 override Janus.Core.MailMessage.ToString() -> string!
+override Janus.Core.MembershipChanged.<Clone>$() -> Janus.Core.MembershipChanged!
+override Janus.Core.MembershipChanged.Equals(object? obj) -> bool
+override Janus.Core.MembershipChanged.GetHashCode() -> int
+override Janus.Core.MembershipChanged.ToString() -> string!
 override Janus.Core.MembershipId.GetHashCode() -> int
 override Janus.Core.MembershipId.ToString() -> string!
 override Janus.Core.MessageTemplate.Equals(object? obj) -> bool
@@ -2708,6 +2725,7 @@ override sealed Janus.Core.ExportRequested.Equals(Janus.Core.SubjectEvent? other
 override sealed Janus.Core.IdentifierAdded.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.IdentifierPrimaryChanged.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.IdentifierRemoved.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.MembershipChanged.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.NotificationRequested.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.ObjectionChanged.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.OrganizationErased.Equals(Janus.Core.DomainEvent? other) -> bool
@@ -3211,6 +3229,8 @@ static Janus.Core.LossReported.operator !=(Janus.Core.LossReported? left, Janus.
 static Janus.Core.LossReported.operator ==(Janus.Core.LossReported? left, Janus.Core.LossReported? right) -> bool
 static Janus.Core.MailMessage.operator !=(Janus.Core.MailMessage? left, Janus.Core.MailMessage? right) -> bool
 static Janus.Core.MailMessage.operator ==(Janus.Core.MailMessage? left, Janus.Core.MailMessage? right) -> bool
+static Janus.Core.MembershipChanged.operator !=(Janus.Core.MembershipChanged? left, Janus.Core.MembershipChanged? right) -> bool
+static Janus.Core.MembershipChanged.operator ==(Janus.Core.MembershipChanged? left, Janus.Core.MembershipChanged? right) -> bool
 static Janus.Core.MembershipId.New(System.TimeProvider! time) -> Janus.Core.MembershipId
 static Janus.Core.MembershipId.operator !=(Janus.Core.MembershipId left, Janus.Core.MembershipId right) -> bool
 static Janus.Core.MembershipId.operator ==(Janus.Core.MembershipId left, Janus.Core.MembershipId right) -> bool

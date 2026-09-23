@@ -203,6 +203,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `MembershipChanged` announces a membership beginning or ending, naming the
+  membership, its organization and whose it is. The erasure at the end of an
+  organization's deletion window raises one for every membership it ends, alongside
+  `OrganizationErased`.
+
 - The two default declarations the library was always meant to ship now exist:
   `LawfulBases.Default`, the six lawful bases with the four properties the library
   branches on, and `SensitiveCategories.Default`, the eight sensitive-data categories.

@@ -37,12 +37,12 @@ internal interface IOrganizationStates
     /// <param name="at">The instant the erasure executes.</param>
     /// <param name="window">What <c>organization.deletion.grace</c> allows.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>How many memberships ended.</returns>
+    /// <returns>The memberships that ended.</returns>
     /// <exception cref="InvalidOperationException">
     /// No such organization, no window is running, the window has not elapsed, or the
     /// erasure has already executed.
     /// </exception>
-    ValueTask<int> EraseAsync(
+    ValueTask<IReadOnlyList<EndedMembership>> EraseAsync(
         OrganizationId organization,
         DateTimeOffset at,
         TimeSpan window,

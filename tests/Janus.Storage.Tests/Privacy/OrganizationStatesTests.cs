@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Identity.Organizations;
+using Janus.Privacy.Erasures;
 using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Privacy.Erasures;
 using Microsoft.EntityFrameworkCore;
@@ -79,7 +80,7 @@ public sealed class OrganizationStatesTests(DatabaseFixture database)
 
     /// <summary>
     /// IDN-ORG-003: the erasure ends every current membership of the organization and
-    /// answers with how many it ended, leaving an already ended one where it stands.
+    /// answers with the ones it ended, leaving an already ended one where it stands.
     /// </summary>
     [Fact]
     public async Task IDN_ORG_003_TheErasureEndsEveryCurrentMembershipAsync()
@@ -93,7 +94,11 @@ public sealed class OrganizationStatesTests(DatabaseFixture database)
         await PlaceAsync(second, organization, until: null);
         await PlaceAsync(gone, organization, Noon.AddDays(1));
 
-        Assert.Equal(2, await EraseAsync(organization, Noon + Window));
+        IReadOnlyList<EndedMembership> ended = await EraseAsync(organization, Noon + Window);
+
+        Assert.Equal(2, ended.Count);
+        Assert.Contains(ended, membership => membership.Subject == first);
+        Assert.Contains(ended, membership => membership.Subject == second);
 
         await using StoreContext reading = database.Context();
         IReadOnlyList<Membership> held = await new MembershipStore(reading)
@@ -129,13 +134,15 @@ public sealed class OrganizationStatesTests(DatabaseFixture database)
     private static OrganizationStates States(StoreContext context) =>
         new(context, new OrganizationStore(context), new MembershipStore(context));
 
-    private async ValueTask<int> EraseAsync(OrganizationId organization, DateTimeOffset at)
+    private async ValueTask<IReadOnlyList<EndedMembership>> EraseAsync(
+        OrganizationId organization,
+        DateTimeOffset at)
     {
         await using StoreContext writing = database.Context();
         await using var work = new UnitOfWork(writing);
         await work.BeginAsync(TestContext.Current.CancellationToken);
 
-        int ended = await States(writing).EraseAsync(
+        IReadOnlyList<EndedMembership> ended = await States(writing).EraseAsync(
             organization,
             at,
             Window,

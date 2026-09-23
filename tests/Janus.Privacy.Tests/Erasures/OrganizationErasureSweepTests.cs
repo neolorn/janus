@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -100,6 +101,36 @@ public sealed class OrganizationErasureSweepTests : IAsyncDisposable
         // The erasure is one transaction of its own, so a deployment that falls over
         // mid-pass has erased whole organizations and begun none.
         Assert.Equal(1, _work.Committed);
+    }
+
+    /// <summary>
+    /// IDN-MEM-001: every membership the erasure ended is announced as ended, each
+    /// under its own key and naming whose it was, once the erasure has committed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_MEM_001_EveryMembershipTheErasureEndedIsAnnouncedAsync()
+    {
+        _organizations.Deletes(Acme, Noon, members: 2);
+
+        _clock.Advance(Settings.OrganizationDeletionGrace.Default);
+
+        _ = await ErasedAsync();
+
+        MembershipChanged[] announced = [.. _events.Of<MembershipChanged>()];
+
+        Assert.Equal(2, announced.Length);
+        Assert.All(announced, changed =>
+        {
+            Assert.Equal(MembershipChange.Ended, changed.Change);
+            Assert.Equal(Acme, changed.Organization);
+            Assert.Equal(_clock.GetUtcNow(), changed.RaisedAt);
+            Assert.Null(changed.Actor);
+        });
+        Assert.Equal(
+            _organizations.MembersOf(Acme).Select(ended => (ended.Membership, (SubjectId?)ended.Subject)),
+            announced.Select(changed => (changed.Membership, changed.Subject)));
+        Assert.Equal(2, announced.Select(changed => changed.IdempotencyKey).Distinct().Count());
     }
 
     /// <summary>
