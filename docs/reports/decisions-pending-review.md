@@ -8855,6 +8855,48 @@ carries both.
 `identity.invitation.notfound` for the 404, and say which invitation is read.
 Chapter 10 section 1.1 could add the row for `identity.invitation.notfound`.
 
+---
+
+## 243. How the account keeps the personal email through the membership
+
+**Phase 8 · 2026-09-24 · Tier 3 · REG-MAIL-001, REG-MAIL-003, REG-IDENT-002, REG-IDENT-005, REG-IDENT-006**
+
+*The question.* REG-MAIL-001: "The personal email SHALL stay on the account as a
+verified, non-primary email for the whole membership and SHALL be in the
+security-notice set (REG-IDENT-002) whatever the backup setting". REG-MAIL-003: the
+personal email "SHALL become the primary email **automatically, in the same
+operation**" when the membership ends. The invitation forgets what it bound at the
+acknowledgement, so nothing records which email that is, and nothing says what the
+person is told on trying to remove it, make it primary or replace it.
+
+*The readings.*
+
+1. Derive it when needed: the verified email that is not the corporate address.
+2. Record it on the membership row.
+3. A flag on the identifier row, `is_personal`, set at the acknowledgement and held to
+   a verified email that is not the primary by a check constraint. While it is set the
+   security-notice set holds the email whatever the backup setting, and removing it,
+   making it primary or replacing it is refused with `identity.identifier.locked`. The
+   account view shows it `locked`.
+
+*Chosen: 3, the strictest reading.* Reading 1 has no answer where the account holds
+two other emails. Reading 2 makes the identifier rules read the memberships. The
+flag keeps every rule over identifiers in the set. The person cannot remove the one
+address a compromised corporate mailbox cannot silence, cannot make it primary while
+the corporate address is, and cannot replace it with an address the invitation never
+proved; `identity.identifier.locked` already says nothing about it is theirs to
+change.
+
+*Tests that pin it.*
+`IdentifierSetTests.REG_MAIL_001_AC5_ThePersonalEmailStaysVerifiedNonPrimaryAndNotified`,
+`IdentifierSetTests.REG_MAIL_001_OnlyAVerifiedEmailOtherThanThePrimaryIsKept`,
+`IdentifierServiceTests.REG_MAIL_001_AC5_ThePersonalEmailStaysAsTheMembershipKeepsItAsync`,
+`IdentifierStoreTests.REG_MAIL_001_ThePersonalEmailAMembershipKeepsReadsBackKeptAsync`.
+
+*Chapter text that should change.* REG-MAIL-001 could say that removing, promoting or
+replacing the personal email during the membership is refused with
+`identity.identifier.locked`, and chapter 10's row for that code could name it.
+
 
 # Rows for chapter 10
 
@@ -8880,7 +8922,7 @@ The subsection each row belongs in is named with it.
 | `privacy.request.decided` | 1.4 | 409 | A decision is made on a privacy request that is already decided; the standing decision is not replaced (PRIV-RIGHT-002 AC5). |
 | `model.startup.redirectclient` | 1.5 | 500 | Startup: a registered client's return address is not an absolute address with a host, or `redirect.defaultclient` names no registered browser application. `details.client` names the client the bad address was read from; `details.key` names the setting where the configured default will not resolve (API-REDIR-001). |
 | `identity.identifier.invalid` | 1.1 | 422 | The value is not a well-formed identifier of its kind. (REG-IDENT-001, entry 40) |
-| `identity.identifier.locked` | 1.1 | 409 | The identifier is locked: an invitation bound it, or a provider operates the mailbox, so nothing about it is the person's to change. (REG-IDENT-010, entry 40) |
+| `identity.identifier.locked` | 1.1 | 409 | The identifier is locked: an invitation bound it, a provider operates the mailbox, or it is the personal email a membership keeps and is removed, made primary or replaced during that membership, so nothing about it is the person's to change. (REG-IDENT-010, REG-MAIL-001, entries 40 and 243) |
 | `identity.identifier.maximum` | 1.1 | 409 | The account or the registration already holds as many identifiers of the kind as it may; where the maximum is one, the change is a replace. (REG-IDENT-002, REG-IDENT-007) |
 | `identity.registration.incomplete` | 1.1 | 422 | The step a registration request is for is not the step the registration has reached: its predecessor is incomplete, or it is complete already. (REG-SESS-002, REG-SESS-004) |
 | `identity.profile.invalid` | 1.1 | 422 | A profile field is not one the library admits: a display name over its byte bound, or a legal name over its length. (REG-PROF-001, entry 40) |

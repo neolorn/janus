@@ -574,6 +574,8 @@ internal sealed class AccountService(
 
         var summaries = new List<IdentifierSummary>(ofKind.Count);
 
+        // The personal email a membership keeps is as fixed to the person as a locked
+        // one, so it is shown so (REG-MAIL-001).
         foreach (HeldIdentifier identifier in ofKind)
         {
             summaries.Add(new IdentifierSummary(
@@ -581,7 +583,7 @@ internal sealed class AccountService(
                 identifier.Entered,
                 identifier.IsVerified,
                 identifier.IsPrimary,
-                identifier.IsLocked));
+                identifier.IsLocked || identifier.IsPersonal));
         }
 
         return summaries;

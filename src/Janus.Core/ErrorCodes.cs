@@ -308,10 +308,11 @@ public static class ErrorCodes
     public static ErrorCode DomainUnverified { get; } = ErrorCode.Parse("identity.domain.unverified");
 
     /// <summary>
-    /// The identifier is locked: an invitation bound it, or a provider operates the
-    /// mailbox. Nothing about it is the person's to change.
+    /// The identifier is locked: an invitation bound it, a provider operates the
+    /// mailbox, or it is the personal email a membership keeps. Nothing about it is the
+    /// person's to change.
     /// </summary>
-    /// <remarks>Implements REG-IDENT-010, chapter 10 section 1.1.</remarks>
+    /// <remarks>Implements REG-IDENT-010, REG-MAIL-001, chapter 10 section 1.1.</remarks>
     public static ErrorCode IdentifierLocked { get; } = ErrorCode.Parse("identity.identifier.locked");
 
     /// <summary>

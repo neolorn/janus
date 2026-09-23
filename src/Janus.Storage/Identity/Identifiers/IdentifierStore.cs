@@ -61,7 +61,8 @@ internal sealed class IdentifierStore(
                         row.AddedAt,
                         row.VerifiedAt,
                         row.IsPrimary,
-                        row.IsLocked));
+                        row.IsLocked,
+                        row.IsPersonal));
                 }
             }
             finally
@@ -365,12 +366,14 @@ internal sealed class IdentifierStore(
             VerifiedAt = identifier.VerifiedAt,
             IsPrimary = identifier.IsPrimary,
             IsLocked = identifier.IsLocked,
+            IsPersonal = identifier.IsPersonal,
         };
 
     private void Carry(Identifier identifier, IdentifierRecord row, ReadOnlySpan<byte> dataKey)
     {
         row.VerifiedAt = identifier.VerifiedAt;
         row.IsPrimary = identifier.IsPrimary;
+        row.IsPersonal = identifier.IsPersonal;
 
         // Re-encrypting an unchanged value would draw a new initialisation vector and
         // write a column the account did not change, so the stored forms are read back

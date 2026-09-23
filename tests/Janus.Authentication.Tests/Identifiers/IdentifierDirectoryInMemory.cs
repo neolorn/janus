@@ -44,12 +44,14 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
     /// <param name="kind">Which kind.</param>
     /// <param name="canonical">Its canonical form.</param>
     /// <param name="isLocked">Whether it is locked against change.</param>
+    /// <param name="isPersonal">Whether it is the personal email a membership keeps.</param>
     /// <returns>What it answers to.</returns>
     public IdentifierId Verified(
         SubjectId subject,
         IdentifierKind kind,
         string canonical,
-        bool isLocked = false)
+        bool isLocked = false,
+        bool isPersonal = false)
     {
         var id = new IdentifierId(Guid.NewGuid());
 
@@ -61,6 +63,7 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
             IsVerified: true,
             IsPrimary: false,
             isLocked,
+            isPersonal,
             DateTimeOffset.UnixEpoch));
 
         Settle(subject, id);
@@ -167,6 +170,7 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
             IsVerified: false,
             IsPrimary: false,
             IsLocked: false,
+            IsPersonal: false,
             VerifiedAt: null));
 
         return ValueTask.CompletedTask;
@@ -191,6 +195,7 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
             IsVerified: true,
             IsPrimary: false,
             IsLocked: false,
+            IsPersonal: false,
             at));
 
         Settle(subject, id);
@@ -378,6 +383,7 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
                 IsVerified: true,
                 IsPrimary: false,
                 IsLocked: false,
+                IsPersonal: false,
                 _proved[id]));
 
             Settle(given.Subject, id);
@@ -400,6 +406,11 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
         if (!identifier.IsVerified || identifier.Kind is IdentifierKind.Username)
         {
             return false;
+        }
+
+        if (identifier.IsPersonal)
+        {
+            return true;
         }
 
         HeldBackup setting = Backup(subject, identifier.Kind);

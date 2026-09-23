@@ -10,7 +10,9 @@ namespace Janus.Identity.Identifiers;
 /// Implements REG-IDENT-001, REG-IDENT-002, REG-IDENT-010, IDN-ACCT-004 and
 /// IDN-ACCT-006. Two forms are kept: the one the person entered, which is what is shown
 /// back to them, and the canonical one, which is what is fingerprinted, looked up and
-/// compared. An identifier counts for nothing until it is verified.
+/// compared. An identifier counts for nothing until it is verified. The personal email
+/// an invitation named beside a corporate address is kept through the membership that
+/// invitation attached (REG-MAIL-001).
 /// </remarks>
 internal sealed class Identifier
 {
@@ -79,6 +81,14 @@ internal sealed class Identifier
     /// the provider itself operates both leave nothing for the person to change.
     /// </summary>
     public bool IsLocked { get; }
+
+    /// <summary>
+    /// Whether it is the personal email an invitation into an organization whose mail
+    /// is integrated named beside the corporate address. While the membership lasts it
+    /// stays verified and non-primary, and every security notice reaches it whatever
+    /// the backup setting (REG-MAIL-001).
+    /// </summary>
+    public bool IsPersonal { get; private set; }
 
     /// <summary>
     /// Whether it counts. An unverified identifier signs nobody in and receives no
@@ -175,6 +185,7 @@ internal sealed class Identifier
     /// <param name="verifiedAt">When it was verified, where it has been.</param>
     /// <param name="isPrimary">Whether it is the primary of its kind.</param>
     /// <param name="isLocked">Whether it is locked against change.</param>
+    /// <param name="isPersonal">Whether it is the personal email a membership keeps.</param>
     /// <returns>The identifier.</returns>
     /// <exception cref="ArgumentNullException">Either form is absent.</exception>
     public static Identifier Existing(
@@ -186,7 +197,8 @@ internal sealed class Identifier
         DateTimeOffset addedAt,
         DateTimeOffset? verifiedAt,
         bool isPrimary,
-        bool isLocked)
+        bool isLocked,
+        bool isPersonal)
     {
         ArgumentNullException.ThrowIfNull(entered);
         ArgumentNullException.ThrowIfNull(canonical);
@@ -195,6 +207,7 @@ internal sealed class Identifier
         {
             VerifiedAt = verifiedAt,
             IsPrimary = isPrimary,
+            IsPersonal = isPersonal,
         };
     }
 
@@ -247,13 +260,15 @@ internal sealed class Identifier
     /// <param name="canonical">The new value in its canonical form.</param>
     /// <param name="at">When the new value was proved.</param>
     /// <exception cref="ArgumentNullException">Either form is absent.</exception>
-    /// <exception cref="InvalidOperationException">The identifier is locked.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The identifier is locked, or it is the personal email a membership keeps.
+    /// </exception>
     public void Replace(string entered, string canonical, DateTimeOffset at)
     {
         ArgumentNullException.ThrowIfNull(entered);
         ArgumentNullException.ThrowIfNull(canonical);
 
-        if (IsLocked)
+        if (IsLocked || IsPersonal)
         {
             throw new InvalidOperationException("A locked identifier is not changed.");
         }
@@ -267,7 +282,9 @@ internal sealed class Identifier
     /// Makes it the primary of its kind. Only the set it belongs to calls this, because
     /// only the set can see the one it displaces.
     /// </summary>
-    /// <exception cref="InvalidOperationException">It is not verified.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// It is not verified, or it is the personal email a membership keeps.
+    /// </exception>
     internal void MakePrimary()
     {
         if (!IsVerified)
@@ -275,7 +292,29 @@ internal sealed class Identifier
             throw new InvalidOperationException("An unverified identifier is not made primary.");
         }
 
+        if (IsPersonal)
+        {
+            throw new InvalidOperationException("The personal email a membership keeps is not made primary.");
+        }
+
         IsPrimary = true;
+    }
+
+    /// <summary>
+    /// Keeps it as the personal email of a membership. Only the set it belongs to calls
+    /// this, because only the set can see that another holds the primary role.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// It is not a verified email, or it is the primary.
+    /// </exception>
+    internal void KeepAsPersonal()
+    {
+        if (Kind is not IdentifierKind.Email || !IsVerified || IsPrimary)
+        {
+            throw new InvalidOperationException("Only a verified email that is not the primary is kept.");
+        }
+
+        IsPersonal = true;
     }
 
     /// <summary>

@@ -290,6 +290,12 @@ against the public contract of LIB-API-001.
   with none attached answers 404 `identity.invitation.notfound`.
   `IInvitations.AttachedAsync` is the same operation in process.
 
+- An account can hold a personal email that a membership keeps: while it is kept it
+  stays verified and non-primary, every security notice reaches it whatever the backup
+  setting, and removing, promoting or replacing it answers 409
+  `identity.identifier.locked`; the account view shows it `locked`. Apply the
+  migration, which adds `is_personal` to the identifiers table.
+
 - Staff mailboxes are provisioned through `IMailServer`, which a deployment registers
   where its staff mail is hosted and which no package ships. A mailbox is owed
   `disabled` from its reservation, `enabled` while its holder is an active member of

@@ -284,6 +284,7 @@ public sealed class ModelTests
             "identifiers.fingerprint",
             "identifiers.identifier_id",
             "identifiers.is_locked",
+            "identifiers.is_personal",
             "identifiers.is_primary",
             "identifiers.kind",
             "identifiers.subject",

@@ -376,6 +376,12 @@ internal sealed class IdentifierService(
             return Result.Failure(Error.From(ErrorCodes.IdentifierInvalid));
         }
 
+        // REG-MAIL-001: the personal email stays non-primary for the whole membership.
+        if (promoted.IsPersonal)
+        {
+            return Result.Failure(Error.From(ErrorCodes.IdentifierLocked));
+        }
+
         DateTimeOffset now = time.GetUtcNow();
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
@@ -487,6 +493,12 @@ internal sealed class IdentifierService(
         if (held.Find(identifier) is not HeldIdentifier going)
         {
             return Result.Failure(Error.From(ErrorCodes.IdentifierInvalid));
+        }
+
+        // REG-MAIL-001: the personal email stays on the account for the whole membership.
+        if (going.IsPersonal)
+        {
+            return Result.Failure(Error.From(ErrorCodes.IdentifierLocked));
         }
 
         if (going.IsPrimary)
@@ -701,7 +713,7 @@ internal sealed class IdentifierService(
             return Result.Failure(Error.From(ErrorCodes.IdentifierInvalid));
         }
 
-        if (changing.IsLocked)
+        if (changing.IsLocked || changing.IsPersonal)
         {
             return Result.Failure(Error.From(ErrorCodes.IdentifierLocked));
         }

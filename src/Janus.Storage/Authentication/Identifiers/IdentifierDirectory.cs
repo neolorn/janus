@@ -345,6 +345,7 @@ internal sealed class IdentifierDirectory(
             identifier.IsVerified,
             identifier.IsPrimary,
             identifier.IsLocked,
+            identifier.IsPersonal,
             identifier.VerifiedAt);
 
     private static Identifier Required(IdentifierSet set, IdentifierId id) =>

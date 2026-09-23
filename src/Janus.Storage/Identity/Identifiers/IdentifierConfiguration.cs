@@ -55,6 +55,12 @@ internal sealed class IdentifierConfiguration : IEntityTypeConfiguration<Identif
             table.HasCheckConstraint(
                 "ck_identifiers_primary",
                 "NOT is_primary OR verified_at IS NOT NULL");
+
+            // REG-MAIL-001: the personal email a membership keeps is a verified email
+            // that is not the primary.
+            table.HasCheckConstraint(
+                "ck_identifiers_personal",
+                "NOT is_personal OR (kind = 'email' AND verified_at IS NOT NULL AND NOT is_primary)");
         });
 
         builder.HasKey(identifier => identifier.Id).HasName("pk_identifiers");
@@ -82,6 +88,7 @@ internal sealed class IdentifierConfiguration : IEntityTypeConfiguration<Identif
         builder.Property(identifier => identifier.VerifiedAt).HasColumnName("verified_at");
         builder.Property(identifier => identifier.IsPrimary).HasColumnName("is_primary");
         builder.Property(identifier => identifier.IsLocked).HasColumnName("is_locked");
+        builder.Property(identifier => identifier.IsPersonal).HasColumnName("is_personal");
 
         // IDN-PRIN-003: no account row is ever removed, so none is removed from under
         // the identifiers that reference it either.

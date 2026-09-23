@@ -326,6 +326,39 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     /// <summary>
+    /// REG-MAIL-001: the personal email a membership keeps reaches its row and reads
+    /// back kept, and the security-notice set reaches it at the primary-only setting.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_001_ThePersonalEmailAMembershipKeepsReadsBackKeptAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        IdentifierId personal = await WriteAsync(subject, _entered);
+        IdentifierId corporate = await WriteAsync(subject, Fresh("Corporate"));
+
+        await RecordAsync(subject, set =>
+        {
+            set.Verify(personal, Noon);
+            set.Verify(corporate, Noon);
+            set.MakePrimary(corporate);
+            set.KeepPersonal(personal);
+            set.Backup(IdentifierKind.Email).UsePrimaryOnly();
+        });
+
+        await using StoreContext reading = database.Context();
+        IdentifierSet read = await Store(reading).FindBySubjectAsync(
+            subject,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(read.Find(personal)!.IsPersonal);
+        Assert.False(read.Find(corporate)!.IsPersonal);
+        Assert.Equal(
+            [personal, corporate],
+            read.SecurityNoticeSet(IdentifierKind.Email).Select(identifier => identifier.Id));
+        Assert.True((await StoredAsync(personal)).IsPersonal);
+    }
+
+    /// <summary>
     /// A value the account changed replaces both stored forms and the fingerprint, so
     /// the old value belongs to nobody and the new one belongs to the account.
     /// </summary>
