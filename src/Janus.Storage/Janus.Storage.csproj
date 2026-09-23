@@ -18,6 +18,13 @@
     <PackageReference Include="Dapper" />
   </ItemGroup>
 
+  <!-- CONV-DESIGN-008: the provider's store interfaces are hand-written here over the
+       one context, so this project carries the server package the interfaces come in
+       and no store package of the server's own. -->
+  <ItemGroup>
+    <PackageReference Include="OpenIddict.Server" />
+  </ItemGroup>
+
   <!-- CONV-CODE-008 AC2: referenced as an analyser, never as a library. -->
   <ItemGroup>
     <ProjectReference Include="..\Janus.Analyzers\Janus.Analyzers.csproj"
@@ -28,6 +35,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Janus.Storage.Tests" />
     <InternalsVisibleTo Include="Janus.Hosting" />
+    <InternalsVisibleTo Include="Janus.Hosting.Tests" />
     <InternalsVisibleTo Include="Janus.Cli" />
   </ItemGroup>
 

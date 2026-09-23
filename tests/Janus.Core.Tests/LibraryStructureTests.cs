@@ -515,6 +515,14 @@ public sealed class LibraryStructureTests
             permitted.AddRange(["Janus.Hosting", "Janus.Cli"]);
         }
 
+        // Janus.Storage holds the rows the protocol server keeps its own records in,
+        // so the project that stands the server up reads them and its test project
+        // stands the same server up over fakes of them (AUTH-OIDC-001, D-162).
+        if (string.Equals(project, "Janus.Storage", StringComparison.Ordinal))
+        {
+            permitted.Add("Janus.Hosting.Tests");
+        }
+
         return [.. permitted.Order(StringComparer.Ordinal)];
     }
 }
