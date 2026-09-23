@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using Janus.Core.Configuration;
 using Xunit;
 
@@ -134,6 +135,36 @@ public sealed class SettingWrittenFormTests
             Settings.PolicyDefault.Default.Gates,
             bound => Assert.Equal(bound.Value, read.Gates[bound.Key]));
         Assert.Equal(Settings.PolicyDefault.Default.RequiredAssurance, read.RequiredAssurance);
+    }
+
+    /// <summary>
+    /// Chapter 10 section 4.1a: a gate is written with its <c>level</c>,
+    /// <c>phishingResistant</c> and <c>maxAge</c>, in the system policy and in an
+    /// organization's override alike.
+    /// </summary>
+    [Fact]
+    public void Written_AGate_NamesItsFieldsAsThePolicyObjectDoes()
+    {
+        PolicyOverride stated = PolicyOverride.None with
+        {
+            Gates = new Dictionary<StepUpAction, Gate>
+            {
+                [StepUpAction.FactorRemove] = new(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5)),
+            },
+        };
+
+        using var system = JsonDocument.Parse(Settings.PolicyDefault.Write(Settings.PolicyDefault.Default));
+        using var organization = JsonDocument.Parse(Settings.OrganizationPolicy.Write(stated));
+
+        JsonElement gate = organization.RootElement.GetProperty("gates").GetProperty("factor:remove");
+
+        Assert.Equal(
+            ["level", "phishingResistant", "maxAge"],
+            gate.EnumerateObject().Select(field => field.Name));
+        Assert.Equal("PT5M", gate.GetProperty("maxAge").GetString());
+        Assert.All(
+            system.RootElement.GetProperty("gates").EnumerateObject(),
+            bound => Assert.True(bound.Value.TryGetProperty("maxAge", out _)));
     }
 
     /// <summary>

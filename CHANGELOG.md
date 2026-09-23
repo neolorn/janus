@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- A policy's gate is written with `level`, `phishingResistant` and `maxAge`, as
+  chapter 10 names them, where the age was `maximumAge`. This is the form
+  `GET|PUT /admin/config/policy.default` carries and the settings table stores.
+
 - A grant of an organization whose deletion has been requested confers nothing from
   the next request, in checks, filters and capability arrays alike, and confers again
   once the request is cancelled. `identity.effective_grants` leaves such grants out.

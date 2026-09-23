@@ -75,10 +75,10 @@ public sealed class PolicySetting : Setting<Policy>
         {
             if (entry.Value is null
                 || entry.Value.Level is null
-                || entry.Value.MaximumAge is null
+                || entry.Value.MaxAge is null
                 || !SettingText.TryRead(entry.Key, out StepUpAction action)
                 || !SettingText.TryRead(entry.Value.Level, out GateLevel level)
-                || !Duration.TryParse(entry.Value.MaximumAge, out TimeSpan age))
+                || !Duration.TryParse(entry.Value.MaxAge, out TimeSpan age))
             {
                 return Result.Failure<Policy>(Malformed());
             }
@@ -109,5 +109,5 @@ public sealed class PolicySetting : Setting<Policy>
         bool SelfServiceRecovery,
         string[]? EmailDomains);
 
-    private sealed record WrittenGate(string? Level, bool PhishingResistant, string? MaximumAge);
+    private sealed record WrittenGate(string? Level, bool PhishingResistant, string? MaxAge);
 }
