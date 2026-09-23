@@ -2,6 +2,7 @@ using System;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Configuration;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Sessions;
@@ -19,7 +20,8 @@ namespace Janus.Authentication.Organizations;
 /// <param name="directory">Where organizations are written and their members read.</param>
 /// <param name="sessions">What a deletion request ends for every member.</param>
 /// <param name="audit">Where every change is written down.</param>
-/// <param name="configuration">Where the grace window is read and a new organization's policy key written.</param>
+/// <param name="configuration">Where the grace window is read.</param>
+/// <param name="administration">Where a new organization's policy key is written and recorded.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -35,6 +37,7 @@ internal sealed class OrganizationService(
     ISessionStore sessions,
     IOrganizationAudit audit,
     IConfigurationStore configuration,
+    ConfigurationAdministration administration,
     IUnitOfWork work,
     TimeProvider time) : IOrganizations
 {
@@ -77,8 +80,15 @@ internal sealed class OrganizationService(
 
         // IDN-ORG-002 and chapter 10 section 4: the organization's policy key is created
         // with it, holding no override, so it starts under the system policy.
-        if ((await configuration
-                .WriteAsync(Settings.OrganizationPolicy, organization.ToString(), PolicyOverride.None, cancellationToken)
+        if ((await administration
+                .ChangeMemberAsync(
+                    Settings.OrganizationPolicy,
+                    organization.ToString(),
+                    PolicyOverride.None,
+                    loosening: false,
+                    stated,
+                    acting,
+                    cancellationToken)
                 .ConfigureAwait(false))
             .Match<Error?>(_ => null, error => error) is Error unwritten)
         {

@@ -119,6 +119,68 @@ internal sealed class ConfigurationAdministration(
     }
 
     /// <summary>
+    /// Puts a value in force for one member of a key that exists once per organization
+    /// or once per declared category, and writes the change down.
+    /// </summary>
+    /// <typeparam name="TValue">The type of the member's value.</typeparam>
+    /// <param name="family">The family, from <see cref="Settings"/>.</param>
+    /// <param name="parameter">The organization identifier or the declared category.</param>
+    /// <param name="value">What the member becomes.</param>
+    /// <param name="loosening">Whether the member's own route judged the change a loosening.</param>
+    /// <param name="reason">Why.</param>
+    /// <param name="actor">Who made the change.</param>
+    /// <param name="cancellationToken">Abandons the change.</param>
+    /// <returns>What was in force before, or why the store refused the value.</returns>
+    /// <remarks>
+    /// What a change to a member costs is its family's own rule (a policy may not fall
+    /// below the system's, AUTH-STEP-002a), so the member's route judges it before
+    /// calling this; what every change shares, the write and the record, is here.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">The family is absent.</exception>
+    public async ValueTask<Result<TValue>> ChangeMemberAsync<TValue>(
+        SettingFamily<TValue> family,
+        string parameter,
+        TValue value,
+        bool loosening,
+        string? reason,
+        SubjectId actor,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(family);
+
+        Error? failure = null;
+
+        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+
+        TValue before = (await configuration
+                .WriteAsync(family, parameter, value, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(one => one, error => Held<TValue>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<TValue>(failure);
+        }
+
+        await audit
+            .ChangedAsync(
+                new ConfigurationChange(
+                    family.For(parameter),
+                    family.Write(before),
+                    family.Write(value),
+                    loosening,
+                    reason,
+                    actor,
+                    time.GetUtcNow()),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        return Result.Success(before);
+    }
+
+    /// <summary>
     /// Whether a change would be allowed, without making it: what its direction costs
     /// is decided here and the change is not written.
     /// </summary>

@@ -48,7 +48,8 @@ public sealed class OrganizationEndpointTests : IAsyncDisposable
 
     /// <summary>
     /// IDN-ORG-002: an organization is created under a name with its policy key holding
-    /// no override, answered with its identifier, and written down with who and why.
+    /// no override, answered with its identifier, and written down with who and why;
+    /// the policy key is written down as every runtime write is (OPS-CFG-005).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -69,6 +70,14 @@ public sealed class OrganizationEndpointTests : IAsyncDisposable
 
         Assert.Equal("Northern branch", _deployment.Organizations.NameOf(organization));
         Assert.Equal(PolicyOverride.None, await PolicyAsync(organization));
+
+        Janus.Authentication.Configuration.ConfigurationChange policy = Assert.Single(_deployment.Changes.Written);
+
+        Assert.Equal(Settings.OrganizationPolicy.For(organization.ToString()), policy.Key);
+        Assert.Equal(policy.Before, policy.After);
+        Assert.False(policy.Loosening);
+        Assert.Equal("Opening a branch.", policy.Reason);
+        Assert.Equal(actor, policy.Actor);
         Assert.Equal(AuditActions.OrganizationCreated, change.Action);
         Assert.Equal(organization, change.Organization);
         Assert.Equal("Opening a branch.", change.Reason);

@@ -284,6 +284,67 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
         Assert.Empty(_changes.Written);
     }
 
+    /// <summary>
+    /// OPS-CFG-005 and OPS-CFG-008: a member of a family is put in force and written
+    /// down with the key, what it was, what it became, the direction its route judged,
+    /// the reason and the actor.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_CFG_005_AChangedMemberOfAFamilyIsWrittenDownAsync()
+    {
+        var organization = OrganizationId.New(_clock);
+        var actor = SubjectId.New(_randomness);
+        PolicyOverride withdrawn = PolicyOverride.None with { SelfServiceRecovery = false };
+
+        Result<PolicyOverride> before = await Administration.ChangeMemberAsync(
+            Settings.OrganizationPolicy,
+            organization.ToString(),
+            withdrawn,
+            loosening: false,
+            "no recovery by mail",
+            actor,
+            TestContext.Current.CancellationToken);
+
+        ConfigurationChange written = Assert.Single(_changes.Written);
+
+        Assert.Equal(PolicyOverride.None, before.Match<PolicyOverride?>(value => value, _ => null));
+        Assert.Equal(Settings.OrganizationPolicy.For(organization.ToString()), written.Key);
+        Assert.Equal(Settings.OrganizationPolicy.Write(PolicyOverride.None), written.Before);
+        Assert.Equal(Settings.OrganizationPolicy.Write(withdrawn), written.After);
+        Assert.False(written.Loosening);
+        Assert.Equal("no recovery by mail", written.Reason);
+        Assert.Equal(actor, written.Actor);
+        Assert.False(
+            (await _configuration.ReadAsync(
+                Settings.OrganizationPolicy,
+                organization.ToString(),
+                TestContext.Current.CancellationToken)).Match(value => value.SelfServiceRecovery, _ => null));
+    }
+
+    /// <summary>
+    /// OPS-CFG-004: a member of a family the application cannot change is refused
+    /// whatever its route judged, and nothing is written down.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_CFG_004_AMemberOfAProtectedFamilyIsRefusedAsync()
+    {
+        Result<bool> refused = await Administration.ChangeMemberAsync(
+            Settings.OrganizationStepUpEnforcement,
+            OrganizationId.New(_clock).ToString(),
+            false,
+            loosening: true,
+            "an outage",
+            SubjectId.New(_randomness),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ErrorCodes.ConfigurationKeyProtected,
+            refused.Match(_ => throw new Xunit.Sdk.XunitException("The change was not refused."), error => error.Code));
+        Assert.Empty(_changes.Written);
+    }
+
     private static async Task<IReadOnlyList<ConfigurationKey>> KeysAsync(
         ValueTask<IReadOnlyList<ConfigurationChange>> reading)
     {

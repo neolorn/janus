@@ -7140,9 +7140,10 @@ organization is". The configuration store had no write for one member of such a 
    through a new `IConfigurationStore.WriteAsync` for one member of a family, or left
    unwritten since an unwritten member already reads as `{}`. Chosen: written. The
    chapter says the key is created with the organization, and a row the deployment
-   holds is what `ReadWrittenAsync` answers for. The write puts in force the value
-   already read, so it carries no `ops.configuration.changed` record; the organization's
-   own record (entry 197) is what answers for it.
+   holds is what `ReadWrittenAsync` answers for. It is written through the one
+   configuration operation every runtime write goes through (OPS-CFG-005), so it is
+   recorded as `ops.configuration.changed` with `{}` before and after, not a loosening,
+   carrying the creation's reason.
 3. `/delete` and `/delete/cancel` carry `{ "reason": "..." }` and answer 204. A request
    for an organization already being deleted, and a cancellation for one that is not,
    answer 204 and write and record nothing. Chosen: the state asked for holds, as for a
@@ -7159,11 +7160,13 @@ organization is". The configuration store had no write for one member of such a 
 `OrganizationDirectoryTests.IDN_ORG_002_AnOrganizationCreatedIsFoundAsync`,
 `ConfigurationStoreTests.OPS_CFG_008_AC1_AWrittenMemberOfAFamilyIsInForceForTheNextReadAsync`,
 `ConfigurationStoreTests.WriteAsync_AMemberOfAProtectedFamily_IsRefusedAndWritesNothingAsync`,
-`ConfigurationStoreTests.WriteAsync_AMemberValueTheFamilyDoesNotAdmit_IsRefusedAsync`.
+`ConfigurationStoreTests.WriteAsync_AMemberValueTheFamilyDoesNotAdmit_IsRefusedAsync`,
+`ConfigurationAdministrationTests.OPS_CFG_005_AChangedMemberOfAFamilyIsWrittenDownAsync`,
+`ConfigurationAdministrationTests.OPS_CFG_004_AMemberOfAProtectedFamilyIsRefusedAsync`.
 
 *Chapter text that should change.* 09 section 8a could give the bodies of the three
 routes, the 201 and 204 answers, the 400s and the answer to a repeat, and say the policy
-row is `{}` and written without a configuration record.
+row is `{}` and recorded as a configuration change.
 
 ---
 

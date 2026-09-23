@@ -434,7 +434,11 @@ public sealed class LibraryStructureTests
     private static bool Written(string text) =>
         Regex.Matches(text, @"IConfigurationStore\s+(\w+)", RegexOptions.None, TimeSpan.FromSeconds(5))
             .Select(match => match.Groups[1].Value)
-            .Any(held => text.Contains(held + ".WriteAsync(", StringComparison.Ordinal));
+            .Any(held => Regex.IsMatch(
+                text,
+                @"\b" + Regex.Escape(held) + @"\s*\.WriteAsync\(",
+                RegexOptions.None,
+                TimeSpan.FromSeconds(5)));
 
     private static IEnumerable<string> Sources() =>
         Roots
