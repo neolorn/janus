@@ -66,10 +66,12 @@ internal static class RegistrationEndpoints
     }
 
     // REG-SESS-002: a person already signed in is refused and sent to their account,
-    // and no registration session is created for them.
+    // and no registration session is created for them. An invitation link they press
+    // attaches to that account, whose membership step reads it (REG-INV-002).
     private static async Task<IResult> BeginAsync(
         BeginRegistrationRequest request,
         IRegistration registration,
+        IInvitations invitations,
         RequestSession browser,
         PreAuthenticationService contacts,
         HttpContext context,
@@ -77,12 +79,20 @@ internal static class RegistrationEndpoints
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(registration);
+        ArgumentNullException.ThrowIfNull(invitations);
         ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(contacts);
         ArgumentNullException.ThrowIfNull(context);
 
-        if (browser.Context is not null)
+        if (browser.Context is AccessContext signedIn)
         {
+            if (request.InvitationToken is string token
+                && (await invitations.OpenAsync(signedIn, token, cancellationToken).ConfigureAwait(false))
+                    .Match(() => (Error?)null, error => error) is Error unopened)
+            {
+                return Answers.Refused(unopened);
+            }
+
             // The account document is the account application's to fetch behind its own
             // gate; a registration route does not hand it out (REG-SESS-002).
             return Answers.Refused(ErrorCodes.RegistrationSignedIn);

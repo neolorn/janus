@@ -8776,6 +8776,43 @@ sign-in address (entry 224).
 registration step reads and leave `requiredAssurance` and `credentialRedundancy` to the
 acknowledgement.
 
+---
+
+## 241. Where a signed-in person's press on the link attaches the invitation
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-INV-002, IDN-LIFE-009a, REG-SESS-002**
+
+*The question.* REG-INV-002 AC1: "Opening an invitation while signed in, or signing in
+from the invitation landing page, reaches the membership step without a registration
+session." 09 section 3: the token opens "for a person who already holds an account, a
+sign-in followed by the membership step (REG-INV-002)". 09 section 2: a `POST
+/register` that "arrives with a live session creates no registration session and is
+answered with the account landing (REG-SESS-002)". No endpoint is named that attaches
+the invitation to an account.
+
+*The readings.*
+
+1. A new endpoint under `/account` that takes the token.
+2. Every sign-in endpoint takes the token.
+3. `POST /register` with `invitationToken` from a signed-in browser attaches the
+   invitation to that account and is answered as any signed-in request to it is,
+   `registration.signedin`, which sends the frontend to the account; the landing page
+   presses it again after a sign-in. `IInvitations.OpenAsync` is the operation in
+   process.
+
+*Chosen: 3.* It is the one route 09 gives the token, it adds no endpoint, and both
+cases of AC1 reach it. The press spends the link as a registration's does (entry
+238), and every token that opens nothing is answered alike. Nothing is checked of the
+account's identifiers here: the mismatch is the acknowledgement's (09 section 8a).
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_002_AC1_ALinkPressedWhileSignedInAttachesToThatAccountAsync`,
+`RegistrationFlowTests.REG_INV_002_AC1_ALinkPressedWhileSignedInAttachesToTheAccountAsync`.
+
+*Chapter text that should change.* 09 section 2 could say that a signed-in `POST
+/register` carrying `invitationToken` attaches the invitation to the account before it
+answers.
+
 
 # Rows for chapter 10
 

@@ -276,6 +276,12 @@ against the public contract of LIB-API-001.
   `identity.invitation.identifiermismatch`, so its holder signs in instead.
   `IRegistration.BeginAsync` takes the token as a new argument.
 
+- A person already signed in who presses an invitation link has the invitation
+  attached to their account: `POST /register` with `invitationToken` from a signed-in
+  browser attaches it and answers `registration.signedin` as before, and a token that
+  opens nothing answers 422 `identity.invitation.expired`. `IInvitations.OpenAsync` is
+  the same operation in process.
+
 - Staff mailboxes are provisioned through `IMailServer`, which a deployment registers
   where its staff mail is hosted and which no package ships. A mailbox is owed
   `disabled` from its reservation, `enabled` while its holder is an active member of

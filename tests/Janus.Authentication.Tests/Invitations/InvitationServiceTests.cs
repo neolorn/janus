@@ -531,6 +531,34 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Assert.True(_invitations.Held[0].Stands);
     }
 
+    /// <summary>
+    /// REG-INV-002 AC1 and IDN-LIFE-009a AC2: a link pressed while signed in attaches
+    /// its invitation to that account, once; a token that opens nothing, a spent one
+    /// and an expired one are refused alike.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_002_AC1_ALinkPressedWhileSignedInAttachesToThatAccountAsync()
+    {
+        string token = Accepted(await IssueAsync(Customer, Request(phone: Number))).Token!;
+        string lapsed = Accepted(await IssueAsync(Customer, Request(phone: "+441632960012"))).Token!;
+        var holder = SubjectId.New(_randomness);
+
+        Accepted(await OpenAsync(holder, token));
+
+        Invitation attached = _invitations.Held[0];
+
+        Assert.Equal(holder, attached.Invitee);
+        Assert.Null(attached.Session);
+        Assert.Equal(Noon, attached.AttachedAt);
+
+        Assert.Equal(ErrorCodes.InvitationExpired, Failure(await OpenAsync(SubjectId.New(_randomness), token)).Code);
+        Assert.Equal(ErrorCodes.InvitationExpired, Failure(await OpenAsync(holder, "no-such-token")).Code);
+
+        _clock.Advance(Settings.LinkInvitationLifetime.Default);
+
+        Assert.Equal(ErrorCodes.InvitationExpired, Failure(await OpenAsync(holder, lapsed)).Code);
+    }
+
     private InvitationService Service => Serving(_server);
 
     private InvitationService ServiceWithout => Serving(server: null);
@@ -585,6 +613,9 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             _clock,
             _randomness);
     }
+
+    private ValueTask<Result> OpenAsync(SubjectId holder, string token) =>
+        Service.OpenAsync(AccessContext.Of(holder), token, TestContext.Current.CancellationToken);
 
     private ValueTask<Result<IssuedInvitation>> IssueAsync(OrganizationId organization, InvitationRequest request) =>
         Service.IssueAsync(

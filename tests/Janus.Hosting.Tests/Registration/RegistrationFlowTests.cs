@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication;
+using Janus.Authentication.Invitations;
 using Janus.Authentication.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -217,6 +220,54 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
         Answer account = await browser.SendAsync("GET", "/account");
 
         Assert.NotEqual(account.Body, refused.Body);
+    }
+
+    /// <summary>
+    /// REG-INV-002 AC1: a signed-in browser that presses an invitation link is sent to
+    /// its account with the invitation attached there, and no registration is staged;
+    /// a token that opens nothing is answered with its code.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_INV_002_AC1_ALinkPressedWhileSignedInAttachesToTheAccountAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId holder = _deployment.Directory.Created[^1].Subject;
+        using var randomness = RandomNumberGenerator.Create();
+        var token = OpaqueToken.Draw(randomness);
+
+        _deployment.Invitations.Held.Add(Invitation.Issued(
+            InvitationId.New(TimeProvider.System),
+            OrganizationId.New(TimeProvider.System),
+            SubjectId.New(randomness),
+            new InvitedIdentifiers(Email: null, Phone: null, CorporateEmail: null),
+            roles: [],
+            documents: [],
+            mailbox: null,
+            token.Fingerprint(),
+            _deployment.Clock.GetUtcNow(),
+            TimeSpan.FromDays(7)));
+
+        int staged = _deployment.Registrations.All.Count;
+
+        Answer landed = await browser.SendAsync(
+            "POST",
+            "/register",
+            ("clientId", "web"),
+            ("invitationToken", token.Value));
+
+        Assert.Equal(ErrorCodes.RegistrationSignedIn.ToString(), landed.Text("code"));
+        Assert.Equal(holder, _deployment.Invitations.Held.Single().Invitee);
+        Assert.Equal(staged, _deployment.Registrations.All.Count);
+
+        Answer spent = await browser.SendAsync(
+            "POST",
+            "/register",
+            ("clientId", "web"),
+            ("invitationToken", token.Value));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, spent.Status);
+        Assert.Equal(ErrorCodes.InvitationExpired.ToString(), spent.Text("code"));
     }
 
     /// <summary>
