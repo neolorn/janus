@@ -6101,6 +6101,58 @@ protection purpose in passing; what each decided stands.
 client a host configures, and `05` INT-PWD-003 or `10` `password.blocklist.sources` the
 `identity-corpus` directory, since a deployment has to put files there.
 
+---
+
+## 167. The scan reads the source, and allows the name only as the head of a dotted name
+
+**Corrections 2 · 2026-09-23 · Tier 2 · CONV-NAME-001 AC2, D-163**
+
+*The question.* CONV-NAME-001 AC2 reads "A source scan finds the product name only in
+namespaces, project and package identifiers and `AddJanus` (D-163)." It does not say
+which files are the source, or how a scan tells a namespace or an identifier from any
+other use of the word.
+
+*The readings for what is scanned.*
+
+1. Every file in the repository.
+2. Every file the build, the tests and the pipeline read: `src`, `tests`, `tools`,
+   `.github`, `.config` and the files at the root, leaving out the documents (`docs/`,
+   the Markdown files at the root and `NOTICE`) and the Unicode data vendored as
+   published.
+
+*Chosen: 2.* The criterion names a source scan. The documents name the package as a
+package: the changelog is written for its reader, `NOTICE` heads its attribution with
+the package's name, and `docs/` is the owner's. The Unicode files are Unicode's.
+
+*The readings for what is allowed.*
+
+1. A parse per file type that finds namespace declarations, `using` directives, project
+   references and package identifiers, and allows the name inside those alone.
+2. A textual rule: the name as the first segment of a dotted name (a namespace, a
+   `using`, a namespace-qualified type name, or a project, assembly, package or solution
+   identifier such as `Janus.Core` or `Janus.slnx`), `AddJanus` as a whole word, and the
+   lower-case package identifiers NuGet writes in `packages.lock.json`.
+
+*Chosen: 2.* Every form the criterion allows is the head of a dotted name or the entry
+point, and none of the forms D-163 forbids is: a type or member name, a schema-qualified
+relation (lower case, outside the lock files), a role, a cookie, a header, a constant, a
+comment or a test's data all fail. A parse would pass a comment or a string that spells
+the name alone; the textual rule does not. The scan reads the name from the root
+namespace, so the test does not spell it.
+
+*What the scan found after the three renames, and what they became.* The administrative
+organization in two tests' data, now `Administration`; the pipeline's job identifier
+`janus-analyzers`, now `analyzer-rules` (the check's name, which branch protection
+requires, is unchanged); and the double-migration gate's worktree folder, now
+`release-<tag>`.
+
+*Tests that pin it.*
+`ProductNameTests.CONV_NAME_001_AC2_TheProductNameAppearsOnlyInNamespacesIdentifiersAndTheEntryPoint`.
+
+*Chapter text that should change.* `08` CONV-NAME-001 AC2 could say which files the scan
+reads, and that the solution file and the lock files' lower-case identifiers count as
+project and package identifiers.
+
 
 # Rows for chapter 10
 

@@ -168,7 +168,7 @@ jobs:
       - run: dotnet tool restore
       - run: ./.github/gates/double-migration.sh
 
-  janus-analyzers:
+  analyzer-rules:
     name: Janus.Analyzers rules JAN0001 to JAN0006
     runs-on: ubuntu-latest
     steps:

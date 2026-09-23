@@ -34,7 +34,7 @@ echo "Run two: from the previous release's schema."
 create migrated_from_previous
 
 if [ -n "$previous" ]; then
-  release=${RUNNER_TEMP:-/tmp}/janus-${previous}
+  release=${RUNNER_TEMP:-/tmp}/release-${previous}
   git worktree add --detach "$release" "$previous"
   apply "${release}/${storage}" migrated_from_previous
   git worktree remove --force "$release"

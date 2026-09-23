@@ -250,10 +250,10 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
     [Fact]
     public async Task IDN_ORG_004_AC2_OnlyOneOrganizationCarriesTheMarkAsync()
     {
-        await CreateAdministrativeAsync(Fresh("Janus"));
+        await CreateAdministrativeAsync(Fresh("Administration"));
 
         await Assert.ThrowsAsync<DbUpdateException>(async () =>
-            await CreateAdministrativeAsync(Fresh("Janus Again")));
+            await CreateAdministrativeAsync(Fresh("Administration Again")));
     }
 
     /// <summary>

@@ -159,7 +159,7 @@ public sealed class OrganizationTests
     [Fact]
     public void IDN_ORG_004_AC1_ADeletionRequestOnTheAdministrativeOrganizationIsRefused()
     {
-        var organization = Organization.CreateAdministrative(Acme, "Janus", Noon);
+        var organization = Organization.CreateAdministrative(Acme, "Administration", Noon);
 
         Result outcome = organization.RequestDeletion(Noon);
 
@@ -178,9 +178,9 @@ public sealed class OrganizationTests
     public void IDN_ORG_004_AC2_TheMarkIsSetWhereBootstrapSetsItAndNowhereElse()
     {
         Assert.False(Organization.Create(Acme, "Acme", Noon).IsAdministrative);
-        Assert.True(Organization.CreateAdministrative(Acme, "Janus", Noon).IsAdministrative);
+        Assert.True(Organization.CreateAdministrative(Acme, "Administration", Noon).IsAdministrative);
         Assert.True(Organization
-            .Existing(Acme, "Janus", Noon, isAdministrative: true, null, null)
+            .Existing(Acme, "Administration", Noon, isAdministrative: true, null, null)
             .IsAdministrative);
     }
 
