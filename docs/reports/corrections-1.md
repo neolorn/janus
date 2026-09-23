@@ -78,43 +78,55 @@ the entry states which.
 | Tier 2 (ledger 162) | OPS-MIG-005, OPS-MIG-001 | The `Double migration run` job of CONV-GATE-001, which applies the migrations twice over an empty database and compares the model against the schema |
 | D-162 item 66 (ledger 163) | BFF-SESS-006, BFF-OWN-001, LIB-HOST-001, OPS-SEC-001, API-REDIR-001 | `SignOnTests.BFF_SESS_006_AC1_ALiveRecordEstablishesASessionWithNoInteractionAsync`, `SignOnTests.BFF_SESS_006_AC2_TheExchangeIsServerToServerAndHandsTheBrowserNoTokenAsync`, `SignOnTests.BFF_SESS_006_AC3_AMismatchedStateIsRejectedAndLoggedAsync`, `SignOnTests.BFF_SESS_006_AC3_AReturnedCodeIsNotAcceptedTwiceAsync`, `SignOnTests.BFF_SESS_006_AC4_NothingButThePerApplicationSessionIsHeldAfterwardsAsync`, `SignOnTests.BFF_SESS_006_AC5_RevokingTheRecordEndsThePerApplicationSessionAsync`, `SignOnTests.BFF_SESS_006_ABrowserWithNoRecordIsSentToSignInAsync`, `SignOnTests.BFF_SESS_006_TheDestinationIsTheRegisteredOneAndNeverAskedForAsync`, `SignOnTests.BFF_SESS_006_AReturnAddressOffThisApplicationIsNotFollowedAsync`, `PreAuthenticationStoreTests.BFF_SESS_006_TheProofKeyIsAtRestUnderTheKeyEncryptionKeyAsync`, `PreAuthenticationStoreTests.BFF_SESS_006_AC3_ForgettingTheAttemptClearsEveryColumnOfItAsync`, `StartupValidationTests.BFF_SESS_006_ADeploymentThatDeclaredNoSignOnClientIsRefusedAsync` |
 
-### The whole-history search (section A)
+### The trace and the whole-history search (section A)
 
-The instruction file that ledger entry 1 committed under `docs/guide/` is gone from the
-repository and from every commit of its history. The history filter rewrote `main`;
-force-push protection was lifted for that one push and restored immediately after, and
-nothing else on `main` was rewritten. The exclusion in `.git/info/exclude` now carries
-the two file names and the directory name the working guide's section 5 lists, and the
-same three patterns prefixed `**/`, so a file of any of those names is excluded at any
-depth.
+The instruction file that ledger entry 1 committed under `docs/guide/` was removed from
+the repository and from every commit of its history by a history filter, with the
+force-push protection on `main` lifted for that one push and restored after it. The
+exclusion in `.git/info/exclude` carries the two file names and the directory name the
+working guide's section 5 lists, and the same three patterns prefixed `**/`, so a file of
+any of those names is excluded at any depth.
 
-The search then ran over all 484 commits of every reference:
+The first whole-history search was not empty, and it was incomplete: its content pattern
+left out the instruction-file names, so it missed `docs/reports/phase-02.md` and the two
+lines of D-162 section A that name the removed file. The owner corrected the decision log
+twice (committed on this branch and then emptied by the rewrite below) and granted a
+second rewrite for this purpose only.
+
+*The second rewrite.* At every revision of every reference, 485 commits, the blobs of
+`docs/decision-log.md`, `docs/guide/implementation-plan.md`, `docs/reports/phase-00.md`
+and `docs/reports/phase-02.md` that named an instruction file, a tool, a model or a vendor
+take the corrected line the owner's own later revision of the same document gives it.
+Where the correction rewrapped one sentence over adjacent lines, those lines go with it.
+`docs/reports/phase-02.md` had no later correction, the paragraph having been deleted, and
+takes the neutral wording the owner chose. Every rewritten commit was paired with its
+original by author, dates and message and compared: only those four documents differ, and
+only on lines of a sentence that named something. The two commits applying the owner's
+corrections to the log changed nothing once every revision carried the corrected text,
+and were dropped. The tree at the tip of this branch was byte-identical before and after
+the rewrite.
+
+*The repository.* The protected-branch rule refused the forced push to `main` even with
+force pushes allowed, and the read-only pull-request references of the old repository
+keep its old commits reachable whatever is pushed. The repository was therefore
+replaced: `neolorn/janus` was renamed `neolorn/janus-old`, a new public `neolorn/janus`
+was created with the settings the phase 0 report records (public during development, as
+that report now says), the rewritten `main` was pushed first and then
+`phase-02-authorization` and `phase-03-sessions`, and the protection on `main` was
+recreated: the same 22 required checks, strict, applied to administrators, force pushes
+and deletions refused. `origin` names the new repository. `neolorn/janus-old` is kept
+for the owner to delete.
+
+*The search, on a fresh mirror clone of the new repository* (3 branches, 366 commits):
 
 | What was searched | How | Result |
 |---|---|---|
 | Every commit message | `git log --all --format='%H%n%B'` against the instruction-file names, the tool, model and vendor names, and the attribution trailers | No hit |
-| Every path at every revision | `git ls-tree -r --name-only` over every commit, 1607 distinct paths | No hit |
-| Every file's contents at every revision | `git grep` over every commit | Three files, all documents, below |
+| Every path at every revision | `git ls-tree -r --name-only` over every commit, 1456 distinct paths | No hit |
+| Every file's contents at every revision | `git grep` over every commit with the same pattern | One line, at 305 revisions: `264A;GEMINI;So;...` in `tools/Janus.UnicodeTables/ucd/UnicodeData.txt`, the Unicode Character Database's name for U+264A, the accepted false positive |
 
-The content search is not empty, and none of what it finds is ours to remove:
-
-- `docs/decision-log.md`, at all 484 commits and at the current revision, three lines:
-  5591, a sentence of D-101's rationale that names who pointed something out, and 7186
-  and 7384, the `Research:` footers of D-141 and D-145, which cite research files under a
-  directory of that name. It is the owner's file and the working guide's section 9
-  forbids us to modify it.
-- `docs/guide/implementation-plan.md`, at 427 commits: one sentence saying that nothing
-  under that directory is part of the specification. The owner's own D-162 update removed
-  it, so the current revision is clean.
-- `docs/reports/phase-00.md`, at 24 commits of phase 0: the excluded-files list spelled
-  the two file names and the directory name in the two places it described the exclusion.
-  It was corrected within phase 0 at `ecee835`, so the current revision is clean. Those
-  24 commits are on `main` already, and rewriting them is outside the one operation the
-  owner permitted.
-
-At the current revision the only occurrences anywhere in the repository are the three
-lines of `docs/decision-log.md`. No commit message, no path, no source file, no test, no
-report and no changelog entry names an instruction file, a tool, a model or a vendor.
+No commit message, no path and no file at any revision of the repository names an
+instruction file, a tool, a model or a vendor.
 
 ## 2. Points of D-162 not implemented
 
