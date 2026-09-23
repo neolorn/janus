@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Identity.Organizations;
 using Janus.Storage.Authentication.Policies;
+using Janus.Storage.Authorization.Gate;
 using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Privacy.Policies;
 using Xunit;
@@ -37,6 +38,8 @@ public sealed class AdministrativeOrganizationTests(DatabaseFixture database)
                 .FindAsync(TestContext.Current.CancellationToken));
             Assert.Null(await new PrivacyAdministrativeOrganization(before)
                 .FindAsync(TestContext.Current.CancellationToken));
+            Assert.Null(await new GateAdministrativeOrganization(before)
+                .FindAsync(TestContext.Current.CancellationToken));
         }
 
         var administration = new OrganizationId(Guid.CreateVersion7());
@@ -54,6 +57,9 @@ public sealed class AdministrativeOrganizationTests(DatabaseFixture database)
         Assert.Equal(
             administration,
             await new PrivacyAdministrativeOrganization(after).FindAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(
+            administration,
+            await new GateAdministrativeOrganization(after).FindAsync(TestContext.Current.CancellationToken));
     }
 
     private async Task CreateAsync(Organization organization)

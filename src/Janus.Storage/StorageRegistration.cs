@@ -195,7 +195,7 @@ internal static class StorageRegistration
         services.AddScoped<IRecoveryCodeStore, RecoveryCodeStore>();
         services.AddScoped<IDeviceStore, DeviceStore>();
         services.AddScoped<IMembershipLookup, MembershipLookup>();
-        services.AddScoped<IAdministrativeOrganization, AdministrativeOrganization>();
+        services.AddScoped<Janus.Authentication.Policies.IAdministrativeOrganization, AdministrativeOrganization>();
         services.AddScoped<IPreAuthenticationStore, PreAuthenticationStore>();
         services.AddScoped<IChallengeStore, ChallengeStore>();
         services.AddScoped<IVerificationCodeStore, VerificationCodeStore>();
@@ -241,6 +241,7 @@ internal static class StorageRegistration
         services.AddScoped<ISubjectRestrictions, SubjectRestrictions>();
         services.AddScoped<IRecordedConsents, RecordedConsents>();
         services.AddScoped<IAccessAudit, AccessAudit>();
+        services.AddScoped<Janus.Authorization.Gate.IAdministrativeOrganization, GateAdministrativeOrganization>();
 
         services.AddScoped<ISendOutbox>(provider => new SendDeliveryStore(
             provider.GetRequiredService<StoreContext>(),

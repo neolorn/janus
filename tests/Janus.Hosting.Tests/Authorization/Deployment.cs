@@ -198,6 +198,43 @@ internal sealed class Deployment(HostFixture fixture)
     }
 
     /// <summary>
+    /// Writes the organization that administers the deployment, or reads the one an
+    /// earlier case of the fixture wrote, since the database holds one at most.
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The administrative organization.</returns>
+    public async Task<OrganizationId> AdministrativeAsync(CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await fixture.OpenAsync();
+
+        Guid? marked = await connection.ExecuteScalarAsync<Guid?>(new CommandDefinition(
+            "SELECT id FROM identity.organizations WHERE administrative;",
+            cancellationToken: cancellationToken));
+
+        if (marked is Guid existing)
+        {
+            return new OrganizationId(existing);
+        }
+
+        var administration = Guid.NewGuid();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO identity.organizations (id, name, created_at, administrative)
+            VALUES (@organization, @name, @at, TRUE);
+            """,
+            new
+            {
+                organization = administration,
+                name = "Administration " + administration.ToString("n", CultureInfo.InvariantCulture),
+                at = Noon,
+            },
+            cancellationToken: cancellationToken));
+
+        return new OrganizationId(administration);
+    }
+
+    /// <summary>
     /// Writes an account.
     /// </summary>
     /// <param name="cancellationToken">Abandons the operation.</param>

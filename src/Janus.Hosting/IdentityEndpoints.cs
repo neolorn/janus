@@ -1,6 +1,7 @@
 using System;
 using Janus.Hosting.Accounts;
 using Janus.Hosting.Authentication;
+using Janus.Hosting.Authorization;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Credentials;
 using Janus.Hosting.Privacy;
@@ -42,6 +43,7 @@ public static class IdentityEndpoints
         _ = endpoints.MapPrivacy();
         _ = endpoints.MapTakedowns();
         _ = endpoints.MapSessionRevocation();
+        _ = endpoints.MapExplanations();
 
         return endpoints;
     }

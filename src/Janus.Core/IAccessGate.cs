@@ -186,21 +186,36 @@ public interface IAccessGate
 
     /// <summary>
     /// The refusal a correlation identifier stands for, for a support role holding
-    /// <c>audit:read</c>.
+    /// <c>audit:read</c> in the administrative organization.
     /// </summary>
     /// <param name="context">Who is asking.</param>
-    /// <param name="organization">The organization the support role is held in.</param>
     /// <param name="correlation">The identifier the refusal was answered with.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// The explanation the refusal was recorded with, or <c>authz.denied</c> where the
-    /// caller does not hold <c>audit:read</c> or the identifier stands for no refusal of
-    /// theirs to resolve. It names the permission and the principal and nothing about
-    /// the record (AUTHZ-CONCEAL-004).
+    /// caller does not hold <c>audit:read</c> there or the identifier stands for no
+    /// refusal. It names the permission and the principal and nothing about the record
+    /// (AUTHZ-CONCEAL-004).
     /// </returns>
     ValueTask<Result<AccessExplanation>> ResolveAsync(
         AccessContext context,
-        OrganizationId organization,
+        AuditRecordId correlation,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The refusal a correlation identifier stands for, for the principal it refused,
+    /// on a type whose refusal discloses that the operation is forbidden.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="correlation">The identifier the refusal was answered with.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The explanation the refusal was recorded with, or <c>authz.denied</c> where the
+    /// identifier stands for no refusal of this principal or for one on a type whose
+    /// refusal answers as a record that does not exist (AUTHZ-GATE-004).
+    /// </returns>
+    ValueTask<Result<AccessExplanation>> ResolveOwnAsync(
+        AccessContext context,
         AuditRecordId correlation,
         CancellationToken cancellationToken);
 

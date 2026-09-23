@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- `IAccessGate.ResolveAsync` no longer takes an organization: a refusal's correlation
+  identifier resolves for a caller holding `audit:read` in the administrative
+  organization, whichever organization the refusal was recorded in.
+
 - An administrative operation on the deployment or on an account (session revocation,
   recovery approval, the privacy request queue, records of processing, compliance text
   and the takedown) is permitted only where the caller holds its permission in the
@@ -210,6 +214,11 @@ against the public contract of LIB-API-001.
   staged for it either way; the frontend navigates to the account application.
 
 ### Added
+
+- `GET /admin/explanations/{correlationId}` resolves a refusal's correlation identifier
+  to the permission and the principal for `audit:read`, and
+  `GET /account/explanations/{correlationId}` resolves one for the principal it refused
+  where the refused type is not concealed (`IAccessGate.ResolveOwnAsync`).
 
 - `POST /admin/accounts/{subject}/sessions/revoke` ends every session of one account
   under `session:revoke-account`, and `POST /admin/sessions/revoke-all` ends every

@@ -6444,6 +6444,57 @@ administrative organization through a port of its own, as each reads memberships
 *Chapter text that should change.* AUTHZ-SCOPE-001 could say that an operation on the
 deployment, or on an account, is scoped to the administrative organization.
 
+---
+
+## 176. A correlation identifier resolves for `audit:read` in the administrative organization, and for its own principal only on a disclosing type
+
+**Phase 8 · 2026-09-23 · Tier 3 · AUTHZ-GATE-004, AUTHZ-CONCEAL-004, AUTHZ-SCOPE-001, 09 section 8a**
+
+*The question.* 09 section 8a mounts `GET /admin/explanations/{correlationId}` under
+`audit:read` and says "Self-service explanation for **non-concealed** types is
+`GET /account/explanations/{correlationId}`, requiring only the subject's own session."
+Neither route names an organization. AUTHZ-GATE-004 says "Those resolve only for a
+support role, from the correlation identifier." The contract built in phase 2 took the
+organization the support role is held in and resolved only a refusal recorded in that
+organization or in none. `10` section 2.1 gives `audit:read` as "Reading the audit
+trail, querying it by subject, and resolving a concealed denial's correlation
+identifier", and entry 175 already places the audit trail with the deployment. No
+chapter says whose refusal the self-service route resolves.
+
+*The readings.*
+
+1. The support resolution asks `audit:read` in the administrative organization and
+   resolves any recorded refusal.
+2. It asks `audit:read` in the organization the refusal was recorded in, and in the
+   administrative organization for one recorded in none.
+3. As 1, resolving only refusals recorded in the administrative organization or in
+   none.
+
+For the self-service route: (a) the caller is the acting principal of the refusal;
+(b) the caller is both its acting and its effective principal.
+
+*Chosen: 1 and (b).* Every refusal is written to the audit trail under the refused
+subject, so `audit:read` in the administrative organization already reads it through
+`GET /admin/audit?subject=`; reading 1 grants nothing entry 175 has not. Reading 2 adds
+a reader in every customer organization. Reading 3 leaves a refusal recorded in a
+customer organization resolvable by nobody, which fails AUTHZ-CONCEAL-004 AC1 for it.
+On the self-service route, (b) grants least: a refusal taken while acting for another
+account resolves for neither party alone. A type the model declares concealing, or no
+longer declares at all, answers `authz.denied` with no correlation; a refusal tied to no
+record (AUTHZ-CONCEAL-005) discloses. `IAccessGate.ResolveAsync` no longer takes an
+organization, and `IAccessGate.ResolveOwnAsync` is added.
+
+*Tests that pin it.*
+`ExplanationTests.AUTHZ_GATE_004_AC4_ACorrelationIdentifierResolvesOnlyForASupportRoleAsync`,
+`ExplanationTests.AUTHZ_GATE_004_AC4_AReadRoleOutsideTheAdministrativeOrganizationResolvesNothingAsync`,
+`ExplanationTests.AUTHZ_GATE_004_AC3_AnIdentifierResolvesForItsOwnerOnlyWhereTheTypeDisclosesAsync`,
+`ExplanationTests.AUTHZ_GATE_004_AC3_AnotherPrincipalsIdentifierDoesNotResolveForTheCallerAsync`,
+`ExplanationEndpointTests` (all three).
+
+*Chapter text that should change.* 09 section 8a could say that the support resolution
+is held in the administrative organization, and that the self-service route resolves a
+refusal of the caller acting as themselves.
+
 
 # Rows for chapter 10
 

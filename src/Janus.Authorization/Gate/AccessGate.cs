@@ -24,6 +24,7 @@ namespace Janus.Authorization.Gate;
 /// <param name="gates">What an action's step-up gate still asks of the session.</param>
 /// <param name="derived">Which of the host's relationships confer what is being asked.</param>
 /// <param name="consents">What the caller has consented to, for the purpose the action serves.</param>
+/// <param name="administrative">Which organization a support role resolves a refusal in.</param>
 /// <param name="time">The clock liveness is read against.</param>
 /// <remarks>
 /// Implements AUTHZ-SEAM-001, AUTHZ-PRIN-001, AUTHZ-PRIN-003, AUTHZ-GATE-002,
@@ -42,6 +43,7 @@ internal sealed class AccessGate(
     StepUpGates gates,
     Derivations derived,
     IRecordedConsents consents,
+    IAdministrativeOrganization administrative,
     TimeProvider time) : IAccessGate
 {
     private static readonly ResourceType OrganizationWide = ResourceType.Parse("organization");
@@ -240,10 +242,18 @@ internal sealed class AccessGate(
     /// <inheritdoc/>
     public async ValueTask<Result<AccessExplanation>> ResolveAsync(
         AccessContext context,
-        OrganizationId organization,
         AuditRecordId correlation,
         CancellationToken cancellationToken)
     {
+        // AUTHZ-SCOPE-001: the trail is the deployment's, so the support role that
+        // reads it is held in the administrative organization, and before bootstrap
+        // has marked one nothing resolves.
+        if (await administrative.FindAsync(cancellationToken).ConfigureAwait(false)
+            is not OrganizationId organization)
+        {
+            return Result.Failure<AccessExplanation>(Error.From(ErrorCodes.Denied));
+        }
+
         Result held = await RequireAsync(context, Permissions.AuditRead, organization, cancellationToken)
             .ConfigureAwait(false);
 
@@ -255,20 +265,45 @@ internal sealed class AccessGate(
         DeniedAccess? recorded = await audit.FindAsync(correlation, cancellationToken)
             .ConfigureAwait(false);
 
-        // A refusal recorded against no organization is one about a record the library
-        // holds no row for, which no organization owns; the identifier, which only its
-        // holder has, is the whole of what reaches it.
-        if (recorded is null || recorded.Organization is OrganizationId owner && owner != organization)
-        {
-            return Result.Failure<AccessExplanation>(Error.From(ErrorCodes.Denied));
-        }
-
-        return Result.Success(new AccessExplanation(
-            AccessOutcome.Denied,
-            recorded.Permission,
-            new ExplainedPrincipal(recorded.Acting, recorded.Effective),
-            Grant: null));
+        return recorded is null
+            ? Result.Failure<AccessExplanation>(Error.From(ErrorCodes.Denied))
+            : Result.Success(Resolved(recorded));
     }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result<AccessExplanation>> ResolveOwnAsync(
+        AccessContext context,
+        AuditRecordId correlation,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        DeniedAccess? recorded = context.Acting is null
+            ? null
+            : await audit.FindAsync(correlation, cancellationToken).ConfigureAwait(false);
+
+        // AUTHZ-GATE-004 AC3: the refusal is of a type whose refusal already said the
+        // operation is forbidden, and the caller's own under both identities; on a
+        // concealing type, or one the model no longer declares, it answers as a
+        // refusal would.
+        return recorded is not null
+            && Discloses(recorded.Type)
+            && Resolved(recorded) is { } explained
+            && explained.Principal == new ExplainedPrincipal(context.Acting, context.Effective)
+                ? Result.Success(explained)
+                : Result.Failure<AccessExplanation>(Error.From(ErrorCodes.Denied));
+    }
+
+    private static AccessExplanation Resolved(DeniedAccess recorded) => new(
+        AccessOutcome.Denied,
+        recorded.Permission,
+        new ExplainedPrincipal(recorded.Acting, recorded.Effective),
+        Grant: null);
+
+    // AUTHZ-CONCEAL-005: a refusal tied to no record conceals nothing.
+    private bool Discloses(ResourceType type) =>
+        type == OrganizationWide
+        || model.Find(type) is { Concealment: ConcealmentBehaviour.Disclose };
 
     /// <inheritdoc/>
     public async ValueTask<Result<Expression<Func<TResource, bool>>>> FilterAsync<TResource>(

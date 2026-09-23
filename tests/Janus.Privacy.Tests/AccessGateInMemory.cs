@@ -109,7 +109,13 @@ internal sealed class AccessGateInMemory : IAccessGate
     /// <inheritdoc/>
     public ValueTask<Result<AccessExplanation>> ResolveAsync(
         AccessContext context,
-        OrganizationId organization,
+        AuditRecordId correlation,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(Result.Failure<AccessExplanation>(Error.From(ErrorCodes.Denied)));
+
+    /// <inheritdoc/>
+    public ValueTask<Result<AccessExplanation>> ResolveOwnAsync(
+        AccessContext context,
         AuditRecordId correlation,
         CancellationToken cancellationToken) =>
         ValueTask.FromResult(Result.Failure<AccessExplanation>(Error.From(ErrorCodes.Denied)));

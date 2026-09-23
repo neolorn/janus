@@ -11,11 +11,24 @@ namespace Janus.Authentication.Tests;
 /// <summary>
 /// The gate as an authentication test needs it: it grants what a test grants within
 /// an organization and nothing on a record, so every path that is not the one under
-/// test is refused rather than quietly allowed.
+/// test is refused rather than quietly allowed. A refusal within an organization is
+/// kept under an identifier of its own, as the gate records it, so that resolving one
+/// can be asked of it.
 /// </summary>
 internal sealed class AccessGateInMemory : IAccessGate
 {
     private readonly HashSet<(SubjectId Subject, OrganizationId Organization, Permission Permission)> _granted = [];
+    private readonly List<(AuditRecordId Correlation, AccessExplanation Explanation)> _refusals = [];
+
+    /// <summary>
+    /// Gets or sets the organization a support role resolves a refusal in.
+    /// </summary>
+    public OrganizationId? Administrative { get; set; }
+
+    /// <summary>
+    /// Gets the identifiers of the refusals within an organization, oldest first.
+    /// </summary>
+    public IReadOnlyList<AuditRecordId> Refusals => [.. _refusals.Select(refusal => refusal.Correlation)];
 
     /// <summary>
     /// Grants a principal a permission within an organization.
@@ -35,11 +48,20 @@ internal sealed class AccessGateInMemory : IAccessGate
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        return ValueTask.FromResult(
-            context.Effective is SubjectId subject
-            && _granted.Contains((subject, organization, permission))
-                ? Result.Success()
-                : Refused());
+        if (context.Effective is SubjectId subject && _granted.Contains((subject, organization, permission)))
+        {
+            return ValueTask.FromResult(Result.Success());
+        }
+
+        _refusals.Add((
+            AuditRecordId.New(TimeProvider.System),
+            new AccessExplanation(
+                AccessOutcome.Denied,
+                permission,
+                new ExplainedPrincipal(context.Acting, context.Effective),
+                Grant: null)));
+
+        return ValueTask.FromResult(Refused());
     }
 
     /// <inheritdoc/>
@@ -109,10 +131,33 @@ internal sealed class AccessGateInMemory : IAccessGate
     /// <inheritdoc/>
     public ValueTask<Result<AccessExplanation>> ResolveAsync(
         AccessContext context,
-        OrganizationId organization,
         AuditRecordId correlation,
-        CancellationToken cancellationToken) =>
-        ValueTask.FromResult(Result.Failure<AccessExplanation>(Error.From(ErrorCodes.Denied)));
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return ValueTask.FromResult(
+            Administrative is OrganizationId organization
+            && context.Effective is SubjectId subject
+            && _granted.Contains((subject, organization, Permissions.AuditRead))
+                ? Recorded(correlation, _ => true)
+                : Result.Failure<AccessExplanation>(Error.From(ErrorCodes.Denied)));
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<Result<AccessExplanation>> ResolveOwnAsync(
+        AccessContext context,
+        AuditRecordId correlation,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        // Every refusal kept here is within an organization, which conceals nothing.
+        return ValueTask.FromResult(Recorded(
+            correlation,
+            explanation => context.Acting is not null
+                && explanation.Principal == new ExplainedPrincipal(context.Acting, context.Effective)));
+    }
 
     /// <inheritdoc/>
     public ValueTask<Result<IReadOnlyList<Capability>>> CapabilitiesAsync(
@@ -144,4 +189,10 @@ internal sealed class AccessGateInMemory : IAccessGate
         CapabilitiesAsync(context, type, resources, permissions, cancellationToken);
 
     private static Result Refused() => Result.Failure(Error.From(ErrorCodes.Denied));
+
+    private Result<AccessExplanation> Recorded(AuditRecordId correlation, Func<AccessExplanation, bool> resolves) =>
+        _refusals.Find(refusal => refusal.Correlation == correlation) is { Explanation: { } explanation }
+        && resolves(explanation)
+            ? Result.Success(explanation)
+            : Result.Failure<AccessExplanation>(Error.From(ErrorCodes.Denied));
 }
