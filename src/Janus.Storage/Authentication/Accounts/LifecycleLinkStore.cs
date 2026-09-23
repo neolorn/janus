@@ -17,7 +17,7 @@ namespace Janus.Storage.Authentication.Accounts;
 /// whatever the account had outstanding, so an older notice is never a second way
 /// back.
 /// </remarks>
-internal sealed class LifecycleLinkStore(JanusDbContext context) : ILifecycleLinkStore
+internal sealed class LifecycleLinkStore(StoreContext context) : ILifecycleLinkStore
 {
     /// <inheritdoc/>
     public async ValueTask<LifecycleLink?> FindAsync(

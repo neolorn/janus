@@ -1,14 +1,14 @@
 #nullable enable
-Janus.Hosting.Bff.JanusApplication
-Janus.Hosting.Bff.JanusApplication.Management = 0 -> Janus.Hosting.Bff.JanusApplication
-Janus.Hosting.Bff.JanusApplication.Public = 1 -> Janus.Hosting.Bff.JanusApplication
-Janus.Hosting.Bff.JanusPipeline
-Janus.Hosting.JanusAuthorizationModel
-Janus.Hosting.JanusEndpoints
-Janus.Hosting.JanusRegistration
-static Janus.Hosting.Bff.JanusPipeline.UseJanusBrowserProfile(this Microsoft.AspNetCore.Builder.IApplicationBuilder! application) -> Microsoft.AspNetCore.Builder.IApplicationBuilder!
-static Janus.Hosting.Bff.JanusPipeline.UseJanusMachineProfile(this Microsoft.AspNetCore.Builder.IApplicationBuilder! application) -> Microsoft.AspNetCore.Builder.IApplicationBuilder!
-static Janus.Hosting.JanusAuthorizationModel.MapJanusAuthorization(this Microsoft.EntityFrameworkCore.ModelBuilder! builder) -> Microsoft.EntityFrameworkCore.ModelBuilder!
-static Janus.Hosting.JanusEndpoints.MapJanus(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Routing.IEndpointRouteBuilder!
-static Janus.Hosting.JanusEndpoints.MapJanusWellKnown(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Routing.IEndpointRouteBuilder!
-static Janus.Hosting.JanusRegistration.AddJanus(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! connectionString, Janus.Core.KeyEncryptionKeys! keyEncryptionKeys, System.ReadOnlyMemory<byte> fingerprintKey, System.ReadOnlyMemory<byte> signOnSecret, Janus.Core.AuthorizationDeclaration! declaration, Janus.Hosting.Bff.JanusApplication application) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Janus.Hosting.AuthorizationTables
+Janus.Hosting.Bff.ApplicationKind
+Janus.Hosting.Bff.ApplicationKind.Management = 0 -> Janus.Hosting.Bff.ApplicationKind
+Janus.Hosting.Bff.ApplicationKind.Public = 1 -> Janus.Hosting.Bff.ApplicationKind
+Janus.Hosting.Bff.PipelineProfiles
+Janus.Hosting.HostingRegistration
+Janus.Hosting.IdentityEndpoints
+static Janus.Hosting.AuthorizationTables.MapAuthorizationTables(this Microsoft.EntityFrameworkCore.ModelBuilder! builder) -> Microsoft.EntityFrameworkCore.ModelBuilder!
+static Janus.Hosting.Bff.PipelineProfiles.UseBrowserProfile(this Microsoft.AspNetCore.Builder.IApplicationBuilder! application) -> Microsoft.AspNetCore.Builder.IApplicationBuilder!
+static Janus.Hosting.Bff.PipelineProfiles.UseMachineProfile(this Microsoft.AspNetCore.Builder.IApplicationBuilder! application) -> Microsoft.AspNetCore.Builder.IApplicationBuilder!
+static Janus.Hosting.HostingRegistration.AddJanus(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! connectionString, Janus.Core.KeyEncryptionKeys! keyEncryptionKeys, System.ReadOnlyMemory<byte> fingerprintKey, System.ReadOnlyMemory<byte> signOnSecret, Janus.Core.AuthorizationDeclaration! declaration, Janus.Hosting.Bff.ApplicationKind application) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Janus.Hosting.IdentityEndpoints.MapIdentityEndpoints(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Routing.IEndpointRouteBuilder!
+static Janus.Hosting.IdentityEndpoints.MapIdentityWellKnown(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Routing.IEndpointRouteBuilder!

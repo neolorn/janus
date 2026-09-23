@@ -38,11 +38,11 @@ public sealed class SerializedModelTests
         foreach (string listed in
             new[]
             {
-                "FUNCTION janus.audit_drop_expired_partitions("
+                "FUNCTION identity.audit_drop_expired_partitions("
                     + "security_retention interval, routine_retention interval)",
-                "FUNCTION janus.audit_ensure_partitions()",
-                "SCHEMA janus",
-                "TABLE janus.subject_keys",
+                "FUNCTION identity.audit_ensure_partitions()",
+                "SCHEMA identity",
+                "TABLE identity.subject_keys",
             })
         {
             Assert.Contains(listed, written, StringComparison.Ordinal);

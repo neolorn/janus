@@ -21,7 +21,7 @@ internal static class RegistrationChannel
     /// <summary>
     /// What a listener listens on.
     /// </summary>
-    public const string Name = "janus_registration";
+    public const string Name = "identity_registration";
 
     private const string Announce = "SELECT pg_notify(@channel, @session);";
 

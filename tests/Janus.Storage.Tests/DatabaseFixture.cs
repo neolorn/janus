@@ -19,7 +19,7 @@ namespace Janus.Storage.Tests;
 /// </remarks>
 public sealed class DatabaseFixture : IAsyncLifetime
 {
-    private const string Database = "janus";
+    private const string Database = "identity";
 
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:17-alpine").Build();
 
@@ -32,11 +32,11 @@ public sealed class DatabaseFixture : IAsyncLifetime
     /// Opens a context over the library's database.
     /// </summary>
     /// <returns>The context.</returns>
-    internal JanusDbContext Context() =>
-        new(new DbContextOptionsBuilder<JanusDbContext>()
+    internal StoreContext Context() =>
+        new(new DbContextOptionsBuilder<StoreContext>()
             .UseNpgsql(ConnectionString, npgsql => npgsql.MigrationsHistoryTable(
-                JanusDbContext.MigrationsHistoryTable,
-                JanusDbContext.Schema))
+                StoreContext.MigrationsHistoryTable,
+                StoreContext.Schema))
             .Options);
 
     /// <summary>
@@ -45,7 +45,7 @@ public sealed class DatabaseFixture : IAsyncLifetime
     /// <returns>The work of applying them.</returns>
     public async ValueTask MigrateAsync()
     {
-        await using JanusDbContext context = Context();
+        await using StoreContext context = Context();
         await context.Database.MigrateAsync(TestContext.Current.CancellationToken);
     }
 

@@ -12,21 +12,21 @@ internal sealed partial class AddSignOnAttempts : Migration
     {
         migrationBuilder.AddColumn<int>(
             name: "signon_key_version",
-            schema: "janus",
+            schema: "identity",
             table: "preauthentication_sessions",
             type: "integer",
             nullable: true);
 
         migrationBuilder.AddColumn<string>(
             name: "signon_return",
-            schema: "janus",
+            schema: "identity",
             table: "preauthentication_sessions",
             type: "text",
             nullable: true);
 
         migrationBuilder.AddColumn<byte[]>(
             name: "signon_state",
-            schema: "janus",
+            schema: "identity",
             table: "preauthentication_sessions",
             type: "bytea",
             maxLength: 32,
@@ -34,14 +34,14 @@ internal sealed partial class AddSignOnAttempts : Migration
 
         migrationBuilder.AddColumn<byte[]>(
             name: "signon_verifier",
-            schema: "janus",
+            schema: "identity",
             table: "preauthentication_sessions",
             type: "bytea",
             nullable: true);
 
         migrationBuilder.AddCheckConstraint(
             name: "ck_preauthentication_sessions_signon",
-            schema: "janus",
+            schema: "identity",
             table: "preauthentication_sessions",
             sql: "num_nulls(signon_state, signon_verifier, signon_key_version, signon_return) IN (0, 4)");
     }
@@ -51,27 +51,27 @@ internal sealed partial class AddSignOnAttempts : Migration
     {
         migrationBuilder.DropCheckConstraint(
             name: "ck_preauthentication_sessions_signon",
-            schema: "janus",
+            schema: "identity",
             table: "preauthentication_sessions");
 
         migrationBuilder.DropColumn(
             name: "signon_key_version",
-            schema: "janus",
+            schema: "identity",
             table: "preauthentication_sessions");
 
         migrationBuilder.DropColumn(
             name: "signon_return",
-            schema: "janus",
+            schema: "identity",
             table: "preauthentication_sessions");
 
         migrationBuilder.DropColumn(
             name: "signon_state",
-            schema: "janus",
+            schema: "identity",
             table: "preauthentication_sessions");
 
         migrationBuilder.DropColumn(
             name: "signon_verifier",
-            schema: "janus",
+            schema: "identity",
             table: "preauthentication_sessions");
     }
 }

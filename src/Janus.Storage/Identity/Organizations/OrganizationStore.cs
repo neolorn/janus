@@ -14,7 +14,7 @@ namespace Janus.Storage.Identity.Organizations;
 /// Implements IDN-ORG-001, IDN-ORG-003, IDN-ORG-004 and CONV-DESIGN-003. The translation between the
 /// organization and its row lives here and nowhere else.
 /// </remarks>
-internal sealed class OrganizationStore(JanusDbContext context) : IOrganizationStore
+internal sealed class OrganizationStore(StoreContext context) : IOrganizationStore
 {
     /// <inheritdoc/>
     public async ValueTask<Organization?> FindAsync(

@@ -60,7 +60,7 @@ namespace Janus.Hosting;
 /// does not hold together stops the deployment rather than the first request that reads
 /// it (AUTHZ-MODEL-004).
 /// </remarks>
-public static class JanusRegistration
+public static class HostingRegistration
 {
     /// <summary>
     /// Registers the library over the host's database and declared domain.
@@ -101,7 +101,7 @@ public static class JanusRegistration
         ReadOnlyMemory<byte> fingerprintKey,
         ReadOnlyMemory<byte> signOnSecret,
         AuthorizationDeclaration declaration,
-        JanusApplication application)
+        ApplicationKind application)
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -114,7 +114,7 @@ public static class JanusRegistration
         // CONV-DESIGN-007: time is injected, and a host that has its own clock keeps it.
         services.TryAddSingleton(TimeProvider.System);
 
-        services.AddJanusStorage(connectionString, keyEncryptionKeys, fingerprintKey);
+        services.AddStorageArea(connectionString, keyEncryptionKeys, fingerprintKey);
         services.AddSingleton(AuthorizationModel.Of(declaration));
 
         // AUTHZ-GROUP-002: one set per operation, which is what makes ten checks in one

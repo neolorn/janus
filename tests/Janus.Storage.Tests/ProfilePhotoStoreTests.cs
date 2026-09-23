@@ -38,7 +38,7 @@ public sealed class ProfilePhotoStoreTests(DatabaseFixture database) : IClassFix
         SubjectId subject = await _deployment.AccountAsync(Noon);
         byte[] image = Image();
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await Store(writing).RecordAsync(
                 ProfilePhoto.Of(subject, image, Noon),
@@ -46,7 +46,7 @@ public sealed class ProfilePhotoStoreTests(DatabaseFixture database) : IClassFix
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         ProfilePhoto read = Assert.IsType<ProfilePhoto>(
             await Store(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
 
@@ -64,7 +64,7 @@ public sealed class ProfilePhotoStoreTests(DatabaseFixture database) : IClassFix
         SubjectId subject = await _deployment.AccountAsync(Noon);
         byte[] image = Image();
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await Store(writing).RecordAsync(
                 ProfilePhoto.Of(subject, image, Noon),
@@ -72,7 +72,7 @@ public sealed class ProfilePhotoStoreTests(DatabaseFixture database) : IClassFix
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         ProfilePhotoRecord stored = await reading.ProfilePhotos
             .SingleAsync(held => held.Subject == subject, TestContext.Current.CancellationToken);
 
@@ -89,7 +89,7 @@ public sealed class ProfilePhotoStoreTests(DatabaseFixture database) : IClassFix
     {
         SubjectId subject = await _deployment.AccountAsync(Noon);
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await Store(writing).RecordAsync(
                 ProfilePhoto.Of(subject, Image(), Noon),
@@ -99,7 +99,7 @@ public sealed class ProfilePhotoStoreTests(DatabaseFixture database) : IClassFix
 
         await _deployment.EraseAsync(subject);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
             await Store(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
@@ -115,7 +115,7 @@ public sealed class ProfilePhotoStoreTests(DatabaseFixture database) : IClassFix
     {
         SubjectId subject = await _deployment.AccountAsync(Noon);
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await Store(writing).RecordAsync(
                 ProfilePhoto.Of(subject, Image(), Noon),
@@ -123,13 +123,13 @@ public sealed class ProfilePhotoStoreTests(DatabaseFixture database) : IClassFix
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using (JanusDbContext removing = database.Context())
+        await using (StoreContext removing = database.Context())
         {
             await Store(removing).RemoveAsync(subject, TestContext.Current.CancellationToken);
             await removing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.Null(await Store(reading).FindBySubjectAsync(
             subject,
@@ -145,7 +145,7 @@ public sealed class ProfilePhotoStoreTests(DatabaseFixture database) : IClassFix
     [Fact]
     public async Task RecordAsync_ASubjectWithNoKey_ThrowsAsync()
     {
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
 
         var photo = ProfilePhoto.Of(Subjects.New(), Image(), Noon);
 
@@ -164,6 +164,6 @@ public sealed class ProfilePhotoStoreTests(DatabaseFixture database) : IClassFix
         return bytes;
     }
 
-    private ProfilePhotoStore Store(JanusDbContext context) =>
+    private ProfilePhotoStore Store(StoreContext context) =>
         new(context, _deployment.Keys, _deployment.Randomness);
 }

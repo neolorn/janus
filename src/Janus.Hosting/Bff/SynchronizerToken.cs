@@ -28,7 +28,7 @@ internal sealed class SynchronizerToken(
     /// <summary>
     /// The header the token is presented in.
     /// </summary>
-    public const string Header = "X-Janus-Csrf";
+    public const string Header = "X-Identity-Csrf";
 
     /// <summary>
     /// Runs the layer.

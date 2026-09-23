@@ -19,7 +19,7 @@ namespace Janus.Hosting;
 /// path below is relative to that. What protects these endpoints is that the host
 /// mounted the browser profile before them (BFF-ORDER-001).
 /// </remarks>
-public static class JanusEndpoints
+public static class IdentityEndpoints
 {
     /// <summary>
     /// Mounts the registration, authentication, account, credential, recovery and
@@ -28,7 +28,7 @@ public static class JanusEndpoints
     /// <param name="endpoints">Where they are to be mounted.</param>
     /// <returns>The builder, for chaining.</returns>
     /// <exception cref="ArgumentNullException">The route builder is absent.</exception>
-    public static IEndpointRouteBuilder MapJanus(this IEndpointRouteBuilder endpoints)
+    public static IEndpointRouteBuilder MapIdentityEndpoints(this IEndpointRouteBuilder endpoints)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
@@ -50,7 +50,7 @@ public static class JanusEndpoints
     /// <param name="endpoints">The application's root.</param>
     /// <returns>The builder, for chaining.</returns>
     /// <exception cref="ArgumentNullException">The route builder is absent.</exception>
-    public static IEndpointRouteBuilder MapJanusWellKnown(this IEndpointRouteBuilder endpoints)
+    public static IEndpointRouteBuilder MapIdentityWellKnown(this IEndpointRouteBuilder endpoints)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 

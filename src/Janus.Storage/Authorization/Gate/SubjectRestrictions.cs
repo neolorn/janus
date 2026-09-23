@@ -16,7 +16,7 @@ namespace Janus.Storage.Authorization.Gate;
 /// Implements AUTHZ-GATE-006 and CONV-DESIGN-003. It reads the one column the gate
 /// evaluates and nothing else of the account.
 /// </remarks>
-internal sealed class SubjectRestrictions(JanusDbContext context) : ISubjectRestrictions
+internal sealed class SubjectRestrictions(StoreContext context) : ISubjectRestrictions
 {
     /// <inheritdoc/>
     public async ValueTask<bool> IsRestrictedAsync(

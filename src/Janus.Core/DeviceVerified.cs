@@ -15,4 +15,4 @@ namespace Janus.Core;
 public sealed record DeviceVerified(
     DateTimeOffset RaisedAt,
     string IdempotencyKey,
-    DeviceId Browser) : JanusEvent(RaisedAt, IdempotencyKey);
+    DeviceId Browser) : DomainEvent(RaisedAt, IdempotencyKey);

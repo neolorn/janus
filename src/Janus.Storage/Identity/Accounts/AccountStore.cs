@@ -18,7 +18,7 @@ namespace Janus.Storage.Identity.Accounts;
 /// its row lives here and nowhere else; the account holds no column and the row holds no
 /// transition.
 /// </remarks>
-internal sealed class AccountStore(JanusDbContext context) : IAccountStore
+internal sealed class AccountStore(StoreContext context) : IAccountStore
 {
     /// <inheritdoc/>
     public async ValueTask<Account?> FindBySubjectAsync(

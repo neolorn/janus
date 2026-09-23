@@ -13,7 +13,7 @@ internal sealed partial class AddPreAuthenticationSessions : Migration
     {
         migrationBuilder.CreateTable(
             name: "preauthentication_sessions",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 fingerprint = table.Column<byte[]>(type: "bytea", maxLength: 32, nullable: false),
@@ -30,7 +30,7 @@ internal sealed partial class AddPreAuthenticationSessions : Migration
                 table.ForeignKey(
                     name: "fk_preauthentication_sessions_registration",
                     column: x => x.registration,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "registration_sessions",
                     principalColumn: "id",
                     onDelete: ReferentialAction.SetNull);
@@ -38,13 +38,13 @@ internal sealed partial class AddPreAuthenticationSessions : Migration
 
         migrationBuilder.CreateIndex(
             name: "ix_preauthentication_sessions_expires_at",
-            schema: "janus",
+            schema: "identity",
             table: "preauthentication_sessions",
             column: "expires_at");
 
         migrationBuilder.CreateIndex(
             name: "ux_preauthentication_sessions_registration",
-            schema: "janus",
+            schema: "identity",
             table: "preauthentication_sessions",
             column: "registration",
             unique: true,
@@ -56,6 +56,6 @@ internal sealed partial class AddPreAuthenticationSessions : Migration
     {
         migrationBuilder.DropTable(
             name: "preauthentication_sessions",
-            schema: "janus");
+            schema: "identity");
     }
 }

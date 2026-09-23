@@ -21,7 +21,7 @@ namespace Janus.Hosting.Tests.Sending;
 [Trait("kind", "unit")]
 public sealed class DefaultMessageTemplatesTests
 {
-    private const string Connection = "Host=nowhere;Database=janus";
+    private const string Connection = "Host=nowhere;Database=identity";
 
     private static readonly DefaultMessageTemplates Shipped = new();
 
@@ -181,7 +181,7 @@ public sealed class DefaultMessageTemplatesTests
                 new byte[32],
                 new byte[16],
                 HostFixture.Declaration(),
-                JanusApplication.Public)
+                ApplicationKind.Public)
             .BuildServiceProvider()
             .GetRequiredService<IMessageTemplates>();
 

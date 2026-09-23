@@ -14,7 +14,7 @@ namespace Janus.Hosting.Bff;
 /// call. The machine profile is mounted before the browser one and covers the routes
 /// the library names, so neither profile is something an endpoint opts into.
 /// </remarks>
-public static class JanusPipeline
+public static class PipelineProfiles
 {
     /// <summary>
     /// Mounts the browser profile. Host middleware goes before this call or after the
@@ -23,7 +23,7 @@ public static class JanusPipeline
     /// <param name="application">The host's pipeline.</param>
     /// <returns>The pipeline, for chaining.</returns>
     /// <exception cref="ArgumentNullException">The pipeline is absent.</exception>
-    public static IApplicationBuilder UseJanusBrowserProfile(this IApplicationBuilder application)
+    public static IApplicationBuilder UseBrowserProfile(this IApplicationBuilder application)
     {
         ArgumentNullException.ThrowIfNull(application);
 
@@ -65,7 +65,7 @@ public static class JanusPipeline
     /// <param name="application">The host's pipeline.</param>
     /// <returns>The pipeline, for chaining.</returns>
     /// <exception cref="ArgumentNullException">The pipeline is absent.</exception>
-    public static IApplicationBuilder UseJanusMachineProfile(this IApplicationBuilder application)
+    public static IApplicationBuilder UseMachineProfile(this IApplicationBuilder application)
     {
         ArgumentNullException.ThrowIfNull(application);
 

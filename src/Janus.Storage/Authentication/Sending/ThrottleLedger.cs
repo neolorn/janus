@@ -12,7 +12,7 @@ namespace Janus.Storage.Authentication.Sending;
 /// <param name="context">The context the operation runs on.</param>
 /// <param name="fingerprintKey">What the scope keys are hashed under.</param>
 /// <remarks>Implements AUTH-ABUSE-001 and CONV-DESIGN-003.</remarks>
-internal sealed class ThrottleLedger(JanusDbContext context, ReadOnlyMemory<byte> fingerprintKey)
+internal sealed class ThrottleLedger(StoreContext context, ReadOnlyMemory<byte> fingerprintKey)
     : IThrottleLedger
 {
     /// <inheritdoc/>

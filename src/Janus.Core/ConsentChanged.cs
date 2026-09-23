@@ -18,4 +18,4 @@ public sealed record ConsentChanged(
     DateTimeOffset RaisedAt,
     string IdempotencyKey,
     string Purpose,
-    ConsentChange Change) : JanusEvent(RaisedAt, IdempotencyKey);
+    ConsentChange Change) : DomainEvent(RaisedAt, IdempotencyKey);

@@ -52,7 +52,7 @@ public sealed class RoleStoreTests(DatabaseFixture database)
 
         long before = await VersionAsync(account);
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await using var transaction = new UnitOfWork(writing);
             await transaction.BeginAsync(TestContext.Current.CancellationToken);
@@ -82,7 +82,7 @@ public sealed class RoleStoreTests(DatabaseFixture database)
         RoleName one = await CreateAsync([Permissions.GrantRead]);
         RoleName other = await CreateAsync([Permissions.AuditRead, Permissions.GrantManage]);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         IReadOnlyList<Role> roles = await new RoleStore(reading)
             .AllAsync(TestContext.Current.CancellationToken);
@@ -101,7 +101,7 @@ public sealed class RoleStoreTests(DatabaseFixture database)
     {
         RoleName name = await CreateAsync([Permissions.GrantRead, Permissions.AuditRead]);
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await using var transaction = new UnitOfWork(writing);
             await transaction.BeginAsync(TestContext.Current.CancellationToken);
@@ -110,7 +110,7 @@ public sealed class RoleStoreTests(DatabaseFixture database)
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.Null(await new RoleStore(reading).FindAsync(name, TestContext.Current.CancellationToken));
         Assert.Empty(reading.RolePermissions.Where(row => row.Role == name));
@@ -123,7 +123,7 @@ public sealed class RoleStoreTests(DatabaseFixture database)
     {
         var name = RoleName.Parse("role" + Guid.NewGuid().ToString("n")[..8]);
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         await using var transaction = new UnitOfWork(writing);
         await transaction.BeginAsync(TestContext.Current.CancellationToken);
 
@@ -138,14 +138,14 @@ public sealed class RoleStoreTests(DatabaseFixture database)
 
     private async Task<Role> ReadAsync(RoleName name)
     {
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         return (await new RoleStore(reading).FindAsync(name, TestContext.Current.CancellationToken))!;
     }
 
     private async Task<long> VersionAsync(SubjectId subject)
     {
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         return await new GrantStore(reading, new DataConnections(reading))
             .VersionAsync(subject, TestContext.Current.CancellationToken);

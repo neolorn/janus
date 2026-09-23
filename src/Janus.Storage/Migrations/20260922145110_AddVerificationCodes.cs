@@ -13,22 +13,22 @@ internal sealed partial class AddVerificationCodes : Migration
     {
         migrationBuilder.DropCheckConstraint(
             name: "ck_signin_challenges_device_attempts",
-            schema: "janus",
+            schema: "identity",
             table: "signin_challenges");
 
         migrationBuilder.DropColumn(
             name: "device_attempts",
-            schema: "janus",
+            schema: "identity",
             table: "signin_challenges");
 
         migrationBuilder.DropColumn(
             name: "device_code",
-            schema: "janus",
+            schema: "identity",
             table: "signin_challenges");
 
         migrationBuilder.CreateTable(
             name: "verification_codes",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 holder = table.Column<byte[]>(type: "bytea", nullable: false),
@@ -46,7 +46,7 @@ internal sealed partial class AddVerificationCodes : Migration
 
         migrationBuilder.CreateIndex(
             name: "ix_verification_codes_expires_at",
-            schema: "janus",
+            schema: "identity",
             table: "verification_codes",
             column: "expires_at");
     }
@@ -56,11 +56,11 @@ internal sealed partial class AddVerificationCodes : Migration
     {
         migrationBuilder.DropTable(
             name: "verification_codes",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.AddColumn<int>(
             name: "device_attempts",
-            schema: "janus",
+            schema: "identity",
             table: "signin_challenges",
             type: "integer",
             nullable: false,
@@ -68,14 +68,14 @@ internal sealed partial class AddVerificationCodes : Migration
 
         migrationBuilder.AddColumn<byte[]>(
             name: "device_code",
-            schema: "janus",
+            schema: "identity",
             table: "signin_challenges",
             type: "bytea",
             nullable: true);
 
         migrationBuilder.AddCheckConstraint(
             name: "ck_signin_challenges_device_attempts",
-            schema: "janus",
+            schema: "identity",
             table: "signin_challenges",
             sql: "device_attempts >= 0 AND (device_code IS NOT NULL OR device_attempts = 0)");
     }

@@ -22,5 +22,5 @@ public interface IEvents
     /// <param name="cancellationToken">Abandons the delivery.</param>
     /// <returns>Nothing, or the failure where the event was not taken.</returns>
     ValueTask<Result> PublishAsync<TEvent>(TEvent raised, CancellationToken cancellationToken)
-        where TEvent : JanusEvent;
+        where TEvent : DomainEvent;
 }

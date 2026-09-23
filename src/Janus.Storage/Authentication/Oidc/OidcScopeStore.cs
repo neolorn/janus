@@ -22,7 +22,7 @@ namespace Janus.Storage.Authentication.Oidc;
 /// this interface is refused. The wording columns are read and handed on untouched: no
 /// sentence in them is the library's.
 /// </remarks>
-internal sealed class OidcScopeStore(JanusDbContext context)
+internal sealed class OidcScopeStore(StoreContext context)
     : IOpenIddictScopeStore<OidcScopeRecord>
 {
     /// <inheritdoc/>

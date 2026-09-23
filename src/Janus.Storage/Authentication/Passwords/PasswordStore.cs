@@ -11,7 +11,7 @@ namespace Janus.Storage.Authentication.Passwords;
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
 /// <remarks>Implements AUTH-PASS-007 and CONV-DESIGN-003.</remarks>
-internal sealed class PasswordStore(JanusDbContext context) : IPasswordStore
+internal sealed class PasswordStore(StoreContext context) : IPasswordStore
 {
     /// <inheritdoc/>
     public async ValueTask<Password?> FindAsync(SubjectId subject, CancellationToken cancellationToken)

@@ -10,4 +10,4 @@ namespace Janus.Core;
 /// <remarks>Implements IDN-LIFE-013 and chapter 10 section 5b.</remarks>
 public sealed record AccountReactivated(
     DateTimeOffset RaisedAt,
-    string IdempotencyKey) : JanusEvent(RaisedAt, IdempotencyKey);
+    string IdempotencyKey) : DomainEvent(RaisedAt, IdempotencyKey);

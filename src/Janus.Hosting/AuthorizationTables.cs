@@ -13,22 +13,22 @@ namespace Janus.Hosting;
 /// tables and every migration over them; the host only reads them, which is why they
 /// are mapped as views and take part in no migration of the host's.
 /// </remarks>
-public static class JanusAuthorizationModel
+public static class AuthorizationTables
 {
     /// <summary>
     /// Maps <see cref="AncestryEntry"/> and <see cref="EffectiveGrant"/> onto
-    /// <c>janus.ancestry</c> and <c>janus.effective_grants</c>.
+    /// <c>identity.ancestry</c> and <c>identity.effective_grants</c>.
     /// </summary>
     /// <param name="builder">The host's model.</param>
     /// <returns>The same model, for chaining.</returns>
     /// <exception cref="ArgumentNullException">The model is absent.</exception>
-    public static ModelBuilder MapJanusAuthorization(this ModelBuilder builder)
+    public static ModelBuilder MapAuthorizationTables(this ModelBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
 
         builder.Entity<AncestryEntry>(entry =>
         {
-            entry.ToView("ancestry", "janus");
+            entry.ToView("ancestry", "identity");
             entry.HasKey(
                 row => new { row.ResourceType, row.ResourceId, row.AncestorType, row.AncestorId });
             entry.Property(row => row.ResourceType).HasColumnName("resource_type");
@@ -41,7 +41,7 @@ public static class JanusAuthorizationModel
 
         builder.Entity<EffectiveGrant>(grant =>
         {
-            grant.ToView("effective_grants", "janus");
+            grant.ToView("effective_grants", "identity");
             grant.HasKey(row => new { row.GrantId, row.Permission });
             grant.Property(row => row.GrantId).HasColumnName("grant_id");
             grant.Property(row => row.SubjectType).HasColumnName("subject_type");

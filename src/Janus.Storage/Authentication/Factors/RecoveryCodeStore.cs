@@ -19,7 +19,7 @@ namespace Janus.Storage.Authentication.Factors;
 /// Implements AUTH-FACT-008, AUTH-FACT-009 and CONV-DESIGN-003. Replacing a set
 /// removes the codes of the one before it, so no code of a previous set validates.
 /// </remarks>
-internal sealed class RecoveryCodeStore(JanusDbContext context) : IRecoveryCodeStore
+internal sealed class RecoveryCodeStore(StoreContext context) : IRecoveryCodeStore
 {
     /// <inheritdoc/>
     public async ValueTask<RecoveryCodeSet?> FindAsync(

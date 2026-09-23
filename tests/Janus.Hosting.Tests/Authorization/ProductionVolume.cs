@@ -107,8 +107,8 @@ internal sealed class ProductionVolume(HostFixture fixture)
         // Without statistics the planner has nothing to choose an index by, and a plan
         // read before them says nothing about the deployment.
         await connection.ExecuteAsync(new CommandDefinition(
-            "ANALYZE janus.grants, janus.ancestry, janus.resources, janus.group_closure, "
-            + "janus.group_members, janus.role_permissions, janus.accounts, janus.groups, "
+            "ANALYZE identity.grants, identity.ancestry, identity.resources, identity.group_closure, "
+            + "identity.group_members, identity.role_permissions, identity.accounts, identity.groups, "
             + "host.documents, host.reviewers;",
             commandTimeout: 600,
             cancellationToken: cancellationToken));
@@ -138,10 +138,10 @@ internal sealed class ProductionVolume(HostFixture fixture)
     {
         await connection.ExecuteAsync(new CommandDefinition(
             """
-            INSERT INTO janus.organizations (id, name, created_at)
+            INSERT INTO identity.organizations (id, name, created_at)
             VALUES (@organization, @name, @at);
-            INSERT INTO janus.roles (name) VALUES ('reader'), ('reviewer');
-            INSERT INTO janus.role_permissions (role, permission)
+            INSERT INTO identity.roles (name) VALUES ('reader'), ('reviewer');
+            INSERT INTO identity.role_permissions (role, permission)
             VALUES ('reader', @read), ('reader', @edit), ('reviewer', @read);
             """,
             new
@@ -161,7 +161,7 @@ internal sealed class ProductionVolume(HostFixture fixture)
     {
         await using NpgsqlBinaryImporter accounts = await ImporterAsync(
             connection,
-            "COPY janus.accounts (subject, created_at, state) FROM STDIN (FORMAT BINARY)",
+            "COPY identity.accounts (subject, created_at, state) FROM STDIN (FORMAT BINARY)",
             cancellationToken);
 
         for (int at = 0; at < Principals; at++)
@@ -181,7 +181,7 @@ internal sealed class ProductionVolume(HostFixture fixture)
     {
         await using (NpgsqlBinaryImporter groups = await ImporterAsync(
             connection,
-            "COPY janus.groups (id, organization, name) FROM STDIN (FORMAT BINARY)",
+            "COPY identity.groups (id, organization, name) FROM STDIN (FORMAT BINARY)",
             cancellationToken))
         {
             for (int at = 0; at < Groups; at++)
@@ -201,7 +201,7 @@ internal sealed class ProductionVolume(HostFixture fixture)
         // shape the closure is read by (AUTHZ-GROUP-002).
         await using (NpgsqlBinaryImporter members = await ImporterAsync(
             connection,
-            "COPY janus.group_members (group_id, member_type, member_id) FROM STDIN (FORMAT BINARY)",
+            "COPY identity.group_members (group_id, member_type, member_id) FROM STDIN (FORMAT BINARY)",
             cancellationToken))
         {
             for (int at = 0; at < Principals; at++)
@@ -217,7 +217,7 @@ internal sealed class ProductionVolume(HostFixture fixture)
 
         await using NpgsqlBinaryImporter closure = await ImporterAsync(
             connection,
-            "COPY janus.group_closure (group_id, member_type, member_id, depth) FROM STDIN (FORMAT BINARY)",
+            "COPY identity.group_closure (group_id, member_type, member_id, depth) FROM STDIN (FORMAT BINARY)",
             cancellationToken);
 
         for (int at = 0; at < Principals; at++)
@@ -236,7 +236,7 @@ internal sealed class ProductionVolume(HostFixture fixture)
     {
         await using (NpgsqlBinaryImporter resources = await ImporterAsync(
             connection,
-            "COPY janus.resources (resource_type, resource_id, organization, contained_in_type, "
+            "COPY identity.resources (resource_type, resource_id, organization, contained_in_type, "
             + "contained_in_id) FROM STDIN (FORMAT BINARY)",
             cancellationToken))
         {
@@ -274,7 +274,7 @@ internal sealed class ProductionVolume(HostFixture fixture)
 
         await using (NpgsqlBinaryImporter ancestry = await ImporterAsync(
             connection,
-            "COPY janus.ancestry (resource_type, resource_id, ancestor_type, ancestor_id, depth, "
+            "COPY identity.ancestry (resource_type, resource_id, ancestor_type, ancestor_id, depth, "
             + "organization) FROM STDIN (FORMAT BINARY)",
             cancellationToken))
         {
@@ -342,7 +342,7 @@ internal sealed class ProductionVolume(HostFixture fixture)
     {
         await using NpgsqlBinaryImporter grants = await ImporterAsync(
             connection,
-            "COPY janus.grants (id, subject_type, subject_id, role, organization, resource_type, "
+            "COPY identity.grants (id, subject_type, subject_id, role, organization, resource_type, "
             + "resource_id, deny, kind, expires_at, granted_by, granted_at, reason, revoked_by, "
             + "revoked_at, revocation_reason) FROM STDIN (FORMAT BINARY)",
             cancellationToken);

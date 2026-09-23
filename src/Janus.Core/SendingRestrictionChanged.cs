@@ -17,4 +17,4 @@ public sealed record SendingRestrictionChanged(
     DateTimeOffset RaisedAt,
     string IdempotencyKey,
     string Restriction,
-    bool Loosening) : JanusEvent(RaisedAt, IdempotencyKey);
+    bool Loosening) : DomainEvent(RaisedAt, IdempotencyKey);

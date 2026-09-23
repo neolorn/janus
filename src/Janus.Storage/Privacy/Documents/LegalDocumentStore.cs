@@ -19,7 +19,7 @@ namespace Janus.Storage.Privacy.Documents;
 /// the translations with the governing text, because a screen that shows one has to
 /// be able to show the other without asking again.
 /// </remarks>
-internal sealed class LegalDocumentStore(JanusDbContext context) : ILegalDocumentStore
+internal sealed class LegalDocumentStore(StoreContext context) : ILegalDocumentStore
 {
     /// <inheritdoc/>
     public async ValueTask<DocumentVersion?> FindAsync(

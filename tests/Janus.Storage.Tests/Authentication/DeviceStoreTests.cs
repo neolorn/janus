@@ -37,7 +37,7 @@ public sealed class DeviceStoreTests(DatabaseFixture database)
 
         await WrittenAsync(device, token);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         DeviceRecord stored = await reading.Devices
             .SingleAsync(held => held.Id == device.Id, TestContext.Current.CancellationToken);
 
@@ -66,7 +66,7 @@ public sealed class DeviceStoreTests(DatabaseFixture database)
 
         await WrittenAsync(device, OpaqueToken.Draw(_deployment.Randomness));
 
-        await using (JanusDbContext changing = database.Context())
+        await using (StoreContext changing = database.Context())
         {
             Device held = Assert.IsType<Device>(
                 await Store(changing).FindAsync(device.Id, TestContext.Current.CancellationToken));
@@ -79,7 +79,7 @@ public sealed class DeviceStoreTests(DatabaseFixture database)
             await changing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         Device read = Assert.IsType<Device>(
             await Store(reading).FindAsync(device.Id, TestContext.Current.CancellationToken));
 
@@ -104,7 +104,7 @@ public sealed class DeviceStoreTests(DatabaseFixture database)
         await WrittenAsync(lapsed, OpaqueToken.Draw(_deployment.Randomness));
         await WrittenAsync(revoked, OpaqueToken.Draw(_deployment.Randomness));
 
-        await using (JanusDbContext revoking = database.Context())
+        await using (StoreContext revoking = database.Context())
         {
             Device held = Assert.IsType<Device>(
                 await Store(revoking).FindAsync(revoked.Id, TestContext.Current.CancellationToken));
@@ -115,7 +115,7 @@ public sealed class DeviceStoreTests(DatabaseFixture database)
             await revoking.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         IReadOnlyList<Device> listed = await Store(reading).StandingOfAsync(
             subject,
             Noon + TimeSpan.FromDays(7),
@@ -131,7 +131,7 @@ public sealed class DeviceStoreTests(DatabaseFixture database)
     [Fact]
     public async Task FindByFingerprintAsync_ATokenNoRowCarries_ReadsNothingAsync()
     {
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.Null(await Store(reading).FindByFingerprintAsync(
             OpaqueToken.Draw(_deployment.Randomness).Fingerprint(),
@@ -164,11 +164,11 @@ public sealed class DeviceStoreTests(DatabaseFixture database)
             Noon,
             lifetime ?? TimeSpan.FromDays(30));
 
-    private static DeviceStore Store(JanusDbContext context) => new(context);
+    private static DeviceStore Store(StoreContext context) => new(context);
 
     private async Task WrittenAsync(Device device, OpaqueToken token)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         await Store(writing).AddAsync(
             device,

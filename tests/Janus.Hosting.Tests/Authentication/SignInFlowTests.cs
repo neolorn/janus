@@ -17,8 +17,8 @@ namespace Janus.Hosting.Tests.Authentication;
 [Trait("kind", "unit")]
 public sealed class SignInFlowTests : IAsyncDisposable
 {
-    private const string Session = "__Host-janus-session";
-    private const string Browsers = "__Host-janus-browser";
+    private const string Session = "__Host-identity-session";
+    private const string Browsers = "__Host-identity-browser";
     private const string Language = "en";
 
     private readonly Deployment _deployment = new();

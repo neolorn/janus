@@ -21,7 +21,7 @@ namespace Janus.Storage.Authentication.Oidc;
 /// at rest under the key-encryption key and nowhere else.
 /// </remarks>
 internal sealed class SigningKeyStore(
-    JanusDbContext context,
+    StoreContext context,
     KeyEncryptionKeys keyEncryptionKeys) : ISigningKeyStore
 {
     /// <inheritdoc/>

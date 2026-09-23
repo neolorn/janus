@@ -58,7 +58,7 @@ public sealed class AncestryStoreTests(DatabaseFixture database)
         OrganizationId organization = await _deployment.OrganizationAsync(Noon);
         ResourceReference workspace = Reference("workspace");
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await using var transaction = new UnitOfWork(writing);
             await transaction.BeginAsync(TestContext.Current.CancellationToken);
@@ -68,7 +68,7 @@ public sealed class AncestryStoreTests(DatabaseFixture database)
                 TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.Null(await Store(reading).FindAsync(workspace, TestContext.Current.CancellationToken));
         Assert.Empty(await Store(reading).AncestryAsync(workspace, TestContext.Current.CancellationToken));
@@ -172,7 +172,7 @@ public sealed class AncestryStoreTests(DatabaseFixture database)
             }
         }
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await using var transaction = new UnitOfWork(writing);
             await transaction.BeginAsync(TestContext.Current.CancellationToken);
@@ -181,7 +181,7 @@ public sealed class AncestryStoreTests(DatabaseFixture database)
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.Equal(10_000, await reading.Resources
             .CountAsync(row => row.Organization == organization, TestContext.Current.CancellationToken));
@@ -212,7 +212,7 @@ public sealed class AncestryStoreTests(DatabaseFixture database)
         await MoveAsync(document, workspace);
         await MoveAsync(folder, containedIn: null);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         List<AncestryRecord> rows = await reading.Ancestry
             .Where(row => row.Organization == organization)
@@ -227,7 +227,7 @@ public sealed class AncestryStoreTests(DatabaseFixture database)
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
-    private static ResourceStore Store(JanusDbContext context) =>
+    private static ResourceStore Store(StoreContext context) =>
         new(context, new DataConnections(context));
 
     private static ResourceReference Reference(string type) =>
@@ -238,7 +238,7 @@ public sealed class AncestryStoreTests(DatabaseFixture database)
         OrganizationId organization,
         ResourceReference? containedIn)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         await using var transaction = new UnitOfWork(writing);
         await transaction.BeginAsync(TestContext.Current.CancellationToken);
 
@@ -251,7 +251,7 @@ public sealed class AncestryStoreTests(DatabaseFixture database)
 
     private async Task MoveAsync(ResourceReference reference, ResourceReference? containedIn)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         await using var transaction = new UnitOfWork(writing);
         await transaction.BeginAsync(TestContext.Current.CancellationToken);
 
@@ -261,7 +261,7 @@ public sealed class AncestryStoreTests(DatabaseFixture database)
 
     private async Task<IReadOnlyList<ResourceReference>> AncestryAsync(ResourceReference reference)
     {
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         return await Store(reading).AncestryAsync(reference, TestContext.Current.CancellationToken);
     }

@@ -12,7 +12,7 @@ internal sealed partial class AddAdministrativeOrganization : Migration
     {
         migrationBuilder.AddColumn<bool>(
             name: "administrative",
-            schema: "janus",
+            schema: "identity",
             table: "organizations",
             type: "boolean",
             nullable: false,
@@ -20,7 +20,7 @@ internal sealed partial class AddAdministrativeOrganization : Migration
 
         migrationBuilder.CreateIndex(
             name: "ux_organizations_administrative",
-            schema: "janus",
+            schema: "identity",
             table: "organizations",
             column: "administrative",
             unique: true,
@@ -32,12 +32,12 @@ internal sealed partial class AddAdministrativeOrganization : Migration
     {
         migrationBuilder.DropIndex(
             name: "ux_organizations_administrative",
-            schema: "janus",
+            schema: "identity",
             table: "organizations");
 
         migrationBuilder.DropColumn(
             name: "administrative",
-            schema: "janus",
+            schema: "identity",
             table: "organizations");
     }
 }

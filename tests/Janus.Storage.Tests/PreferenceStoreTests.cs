@@ -38,7 +38,7 @@ public sealed class PreferenceStoreTests(DatabaseFixture database) : IClassFixtu
     {
         SubjectId subject = await _deployment.AccountAsync(Noon);
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             var preferences = PreferenceSet.Empty(subject);
             preferences.SetLanguage("ar-EG");
@@ -50,7 +50,7 @@ public sealed class PreferenceStoreTests(DatabaseFixture database) : IClassFixtu
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         PreferenceSet read = await Store(reading).FindBySubjectAsync(
             subject,
             TestContext.Current.CancellationToken);
@@ -70,7 +70,7 @@ public sealed class PreferenceStoreTests(DatabaseFixture database) : IClassFixtu
     {
         SubjectId subject = await _deployment.AccountAsync(Noon);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         PreferenceSet read = await Store(reading).FindBySubjectAsync(
             subject,
             TestContext.Current.CancellationToken);
@@ -90,7 +90,7 @@ public sealed class PreferenceStoreTests(DatabaseFixture database) : IClassFixtu
     {
         SubjectId subject = await _deployment.AccountAsync(Noon);
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             var preferences = PreferenceSet.Empty(subject);
             preferences.Set(Declared, "theme", "light", asAdministrator: false, Maximum);
@@ -99,7 +99,7 @@ public sealed class PreferenceStoreTests(DatabaseFixture database) : IClassFixtu
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using (JanusDbContext clearing = database.Context())
+        await using (StoreContext clearing = database.Context())
         {
             PreferenceStore store = Store(clearing);
             PreferenceSet preferences = await store.FindBySubjectAsync(
@@ -111,7 +111,7 @@ public sealed class PreferenceStoreTests(DatabaseFixture database) : IClassFixtu
             await clearing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.Empty((await Store(reading).FindBySubjectAsync(
             subject,
@@ -127,7 +127,7 @@ public sealed class PreferenceStoreTests(DatabaseFixture database) : IClassFixtu
     {
         SubjectId subject = await _deployment.AccountAsync(Noon);
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             var preferences = PreferenceSet.Empty(subject);
             preferences.Set(Declared, "theme", "light", asAdministrator: false, Maximum);
@@ -136,7 +136,7 @@ public sealed class PreferenceStoreTests(DatabaseFixture database) : IClassFixtu
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         PreferenceRecord stored = await reading.AccountPreferences
             .SingleAsync(held => held.Subject == subject, TestContext.Current.CancellationToken);
 
@@ -154,7 +154,7 @@ public sealed class PreferenceStoreTests(DatabaseFixture database) : IClassFixtu
     {
         SubjectId subject = await _deployment.AccountAsync(Noon);
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             var preferences = PreferenceSet.Empty(subject);
             preferences.SetLanguage("ar-EG");
@@ -166,7 +166,7 @@ public sealed class PreferenceStoreTests(DatabaseFixture database) : IClassFixtu
 
         await _deployment.EraseAsync(subject);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
             await Store(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
@@ -181,7 +181,7 @@ public sealed class PreferenceStoreTests(DatabaseFixture database) : IClassFixtu
     {
         SubjectId subject = await _deployment.AccountAsync(Noon);
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             var preferences = PreferenceSet.Empty(subject);
             preferences.SetLanguage("ar-EG");
@@ -193,7 +193,7 @@ public sealed class PreferenceStoreTests(DatabaseFixture database) : IClassFixtu
 
         await _deployment.EraseAsync(subject);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         PreferenceSet read = await Store(reading).FindBySubjectAsync(
             subject,
             TestContext.Current.CancellationToken);
@@ -209,7 +209,7 @@ public sealed class PreferenceStoreTests(DatabaseFixture database) : IClassFixtu
     [Fact]
     public async Task RecordAsync_ASubjectWithNoKey_ThrowsAsync()
     {
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
 
         var preferences = PreferenceSet.Empty(new SubjectId(Guid.NewGuid()));
         preferences.Set(Declared, "theme", "light", asAdministrator: false, Maximum);
@@ -233,6 +233,6 @@ public sealed class PreferenceStoreTests(DatabaseFixture database) : IClassFixtu
         new PreferenceDeclaration("text-size", PreferenceKind.Integer, "16"),
     ]);
 
-    private PreferenceStore Store(JanusDbContext context) =>
+    private PreferenceStore Store(StoreContext context) =>
         new(context, _deployment.Keys, _deployment.Randomness);
 }

@@ -17,7 +17,7 @@ internal sealed partial class AddLegalDocuments : Migration
     {
         migrationBuilder.CreateTable(
             name: "legal_document_versions",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 document = table.Column<string>(type: "text", nullable: false),
@@ -35,7 +35,7 @@ internal sealed partial class AddLegalDocuments : Migration
 
         migrationBuilder.CreateTable(
             name: "legal_document_translations",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 document = table.Column<string>(type: "text", nullable: false),
@@ -50,7 +50,7 @@ internal sealed partial class AddLegalDocuments : Migration
                 table.ForeignKey(
                     name: "fk_legal_document_translations_version",
                     columns: x => new { x.document, x.version },
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "legal_document_versions",
                     principalColumns: VersionKey,
                     onDelete: ReferentialAction.Cascade);
@@ -58,7 +58,7 @@ internal sealed partial class AddLegalDocuments : Migration
 
         migrationBuilder.CreateIndex(
             name: "ix_legal_document_versions_current",
-            schema: "janus",
+            schema: "identity",
             table: "legal_document_versions",
             columns: CurrentIndex);
     }
@@ -68,10 +68,10 @@ internal sealed partial class AddLegalDocuments : Migration
     {
         migrationBuilder.DropTable(
             name: "legal_document_translations",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "legal_document_versions",
-            schema: "janus");
+            schema: "identity");
     }
 }

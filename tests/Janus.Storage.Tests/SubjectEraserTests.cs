@@ -43,7 +43,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
     private readonly Deployment _deployment = new(database);
 
-    private SubjectEraser Eraser(JanusDbContext context) => new(
+    private SubjectEraser Eraser(StoreContext context) => new(
         context,
         new SessionStore(context, _deployment.Keys, _deployment.Randomness),
         new ConfigurationStore(context));
@@ -60,7 +60,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await EraseAsync(subject, ErasureReason.ErasureRequest);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         AccountRecord account = await reading.Accounts
             .SingleAsync(row => row.Subject == subject, TestContext.Current.CancellationToken);
         Erasure erasure = Assert.IsType<Erasure>(
@@ -82,7 +82,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     {
         SubjectId subject = await DeletingAccountAsync();
 
-        await using (JanusDbContext erasing = database.Context())
+        await using (StoreContext erasing = database.Context())
         await using (var work = new UnitOfWork(erasing))
         {
             await work.BeginAsync(TestContext.Current.CancellationToken);
@@ -94,7 +94,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             await erasing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         AccountRecord account = await reading.Accounts
             .SingleAsync(row => row.Subject == subject, TestContext.Current.CancellationToken);
 
@@ -118,7 +118,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     {
         SubjectId subject = await DeletingAccountAsync();
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             Assert.True(LegalName.TryParse("Ahmed Hassan", out LegalName legal));
 
@@ -133,7 +133,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await EraseAsync(subject, ErasureReason.ErasureRequest);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
             await new ProfileStore(reading, _deployment.Keys, _deployment.Randomness)
@@ -152,7 +152,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         byte[] image = new byte[256];
         _deployment.Randomness.GetBytes(image);
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await new ProfilePhotoStore(writing, _deployment.Keys, _deployment.Randomness)
                 .RecordAsync(ProfilePhoto.Of(subject, image, Noon), TestContext.Current.CancellationToken);
@@ -161,7 +161,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await EraseAsync(subject, ErasureReason.ErasureRequest);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.True(await reading.ProfilePhotos
             .AnyAsync(photo => photo.Subject == subject, TestContext.Current.CancellationToken));
@@ -183,7 +183,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         byte[] image = new byte[256];
         _deployment.Randomness.GetBytes(image);
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await new ProfilePhotoStore(writing, _deployment.Keys, _deployment.Randomness)
                 .RecordAsync(ProfilePhoto.Of(subject, image, Noon), TestContext.Current.CancellationToken);
@@ -194,7 +194,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await EraseAsync(subject, ErasureReason.ErasureRequest);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.Equal(before, await StoredImageAsync(subject));
         await Assert.ThrowsAsync<CryptographicException>(async () =>
@@ -219,13 +219,13 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         Assert.Equal(
             1,
             await connection.ExecuteScalarAsync<int>(
-                "SELECT count(*) FROM janus.accounts WHERE subject = @subject",
+                "SELECT count(*) FROM identity.accounts WHERE subject = @subject",
                 new { subject = subject.Value }));
 
         Assert.Equal(
             1,
             await connection.ExecuteScalarAsync<int>(
-                "SELECT count(*) FROM janus.subject_keys WHERE subject = @subject",
+                "SELECT count(*) FROM identity.subject_keys WHERE subject = @subject",
                 new { subject = subject.Value }));
     }
 
@@ -240,7 +240,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await EraseAsync(subject, ErasureReason.ErasureRequest);
 
-        await using JanusDbContext erasing = database.Context();
+        await using StoreContext erasing = database.Context();
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await Eraser(erasing).EraseAsync(
@@ -266,7 +266,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await EraseAsync(failed, ErasureReason.MinorTakedown);
         await EraseAsync(complete, ErasureReason.OrganizationErasure);
 
-        await using (JanusDbContext progressing = database.Context())
+        await using (StoreContext progressing = database.Context())
         {
             ErasureStore store = Store(progressing);
 
@@ -284,7 +284,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             await progressing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         IReadOnlyList<Erasure> outstanding = await Store(reading).FindIncompleteAsync(
             TestContext.Current.CancellationToken);
 
@@ -314,7 +314,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         PostgresException refusal = await Assert.ThrowsAsync<PostgresException>(async () =>
             await connection.ExecuteAsync(
-                "UPDATE janus.erasures SET status = 'half-done' WHERE subject = @subject",
+                "UPDATE identity.erasures SET status = 'half-done' WHERE subject = @subject",
                 new { subject = subject.Value }));
 
         Assert.Equal("ck_erasures_status", refusal.ConstraintName);
@@ -331,7 +331,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         IEnumerable<string> columns = await connection.QueryAsync<string>(
             "SELECT column_name FROM information_schema.columns "
-                + "WHERE table_schema = 'janus' AND table_name = 'accounts'");
+                + "WHERE table_schema = 'identity' AND table_name = 'accounts'");
 
         Assert.All(columns, column =>
         {
@@ -353,7 +353,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         byte[] image = new byte[256];
         _deployment.Randomness.GetBytes(image);
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             Assert.True(LegalName.TryParse("Ahmed Hassan", out LegalName legal));
 
@@ -372,7 +372,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await EraseAsync(subject, ErasureReason.ErasureRequest);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
             await new ProfileStore(reading, _deployment.Keys, _deployment.Randomness)
@@ -481,7 +481,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         var deactivated = AuditAction.Parse("identity.account.deactivated");
         DateTimeOffset occurred = Noon.AddHours(-2);
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await new AuditStore(writing, _deployment.Keys, _deployment.Randomness).AppendAsync(
                 AuditRecord.Of(
@@ -503,7 +503,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         Assert.Equal(
             deactivated.ToString(),
             await connection.ExecuteScalarAsync<string>(
-                "SELECT action FROM janus.audit_records WHERE effective_subject = @subject",
+                "SELECT action FROM identity.audit_records WHERE effective_subject = @subject",
                 new { subject = subject.Value }));
     }
 
@@ -522,7 +522,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         PostgresException refusal = await Assert.ThrowsAsync<PostgresException>(async () =>
             await connection.ExecuteAsync(
-                "INSERT INTO janus.accounts (subject, state, created_at) "
+                "INSERT INTO identity.accounts (subject, state, created_at) "
                     + "VALUES (@subject, 'active', @at)",
                 new { subject = subject.Value, at = Noon }));
 
@@ -541,7 +541,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         Assert.True(Username.TryParse(chosen, out Username username));
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             IdentifierStore store = Identifiers(writing);
             IdentifierSet set = await store.FindBySubjectAsync(
@@ -560,7 +560,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         TimeSpan held = Janus.Core.Configuration.Settings.RetentionConsent.Default;
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         IdentifierStore identifiers = Identifiers(reading);
 
         Assert.True(await identifiers.IsHeldAsync(
@@ -586,7 +586,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         var organization = new OrganizationId(Guid.CreateVersion7());
         var suspended = AuditAction.Parse("identity.account.suspended");
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await new AuditStore(writing, _deployment.Keys, _deployment.Randomness).AppendAsync(
                 AuditRecord.Of(
@@ -612,10 +612,10 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         Assert.Equal(
             1,
             await connection.ExecuteScalarAsync<int>(
-                "SELECT count(*) FROM janus.audit_records WHERE organization = @organization",
+                "SELECT count(*) FROM identity.audit_records WHERE organization = @organization",
                 new { organization = organization.Value }));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         AuditRecord read = Assert.Single(
             await new AuditStore(reading, _deployment.Keys, _deployment.Randomness)
@@ -639,7 +639,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         Assert.True(LegalName.TryParse("Ahmed Hassan", out LegalName legal));
         Assert.True(EmailAddress.TryParse("groups@example.com", out EmailAddress address));
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             var profile = Profile.Empty(subject);
             profile.SetLegalName(legal);
@@ -675,7 +675,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await EraseAsync(subject, ErasureReason.ErasureRequest);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
             await new ProfileStore(reading, _deployment.Keys, _deployment.Randomness)
@@ -706,7 +706,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         byte[] image = new byte[256];
         _deployment.Randomness.GetBytes(image);
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             Assert.True(LegalName.TryParse("Ahmed Hassan", out LegalName legal));
 
@@ -724,7 +724,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await EraseAsync(subject, ErasureReason.ErasureRequest);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
             await new ProfilePhotoStore(reading, _deployment.Keys, _deployment.Randomness)
@@ -751,14 +751,14 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         byte[] image = new byte[256];
         _deployment.Randomness.GetBytes(image);
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await new ProfilePhotoStore(writing, _deployment.Keys, _deployment.Randomness)
                 .RecordAsync(ProfilePhoto.Of(subject, image, Noon), TestContext.Current.CancellationToken);
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using (JanusDbContext shown = database.Context())
+        await using (StoreContext shown = database.Context())
         {
             Assert.Equal(
                 image,
@@ -767,7 +767,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await EraseAsync(subject, ErasureReason.ErasureRequest);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.True(await reading.ProfilePhotos
             .AnyAsync(photo => photo.Subject == subject, TestContext.Current.CancellationToken));
@@ -776,7 +776,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             (await Directory(reading).PhotoAsync(subject, TestContext.Current.CancellationToken)).IsEmpty);
     }
 
-    private AccountDirectory Directory(JanusDbContext context) => new(
+    private AccountDirectory Directory(StoreContext context) => new(
         new AccountStore(context),
         new ProfileStore(context, _deployment.Keys, _deployment.Randomness),
         new ProfilePhotoStore(context, _deployment.Keys, _deployment.Randomness),
@@ -784,9 +784,9 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         new PreferenceStore(context, _deployment.Keys, _deployment.Randomness),
         PreferenceDeclarations.None);
 
-    private static ErasureStore Store(JanusDbContext context) => new(context);
+    private static ErasureStore Store(StoreContext context) => new(context);
 
-    private IdentifierStore Identifiers(JanusDbContext context) =>
+    private IdentifierStore Identifiers(StoreContext context) =>
         new(context, _deployment.Keys, Deployment.FingerprintKey, _deployment.Randomness);
 
     // The deployment's own records, which the library neither maps nor writes: an
@@ -815,7 +815,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     {
         SubjectId subject = await DeletingAccountAsync();
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await new SessionStore(writing, _deployment.Keys, _deployment.Randomness).AddAsync(
                 Session.Begin(
@@ -833,7 +833,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using (JanusDbContext erasing = database.Context())
+        await using (StoreContext erasing = database.Context())
         await using (var work = new UnitOfWork(erasing))
         {
             await work.BeginAsync(TestContext.Current.CancellationToken);
@@ -846,7 +846,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             await work.CommitAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         SessionRecord ended = await reading.Sessions
             .SingleAsync(session => session.Subject == subject, TestContext.Current.CancellationToken);
 
@@ -857,7 +857,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     {
         SubjectId subject = await _deployment.AccountAsync(Noon);
 
-        await using JanusDbContext deleting = database.Context();
+        await using StoreContext deleting = database.Context();
         AccountRecord record = await deleting.Accounts
             .SingleAsync(row => row.Subject == subject, TestContext.Current.CancellationToken);
         record.State = AccountState.Deleting;
@@ -870,7 +870,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
     private async ValueTask<byte[]> StoredImageAsync(SubjectId subject)
     {
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         ProfilePhotoRecord record = await reading.ProfilePhotos
             .SingleAsync(photo => photo.Subject == subject, TestContext.Current.CancellationToken);
@@ -880,7 +880,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
     private async ValueTask EraseAsync(SubjectId subject, ErasureReason reason)
     {
-        await using JanusDbContext erasing = database.Context();
+        await using StoreContext erasing = database.Context();
         await using var work = new UnitOfWork(erasing);
 
         await work.BeginAsync(TestContext.Current.CancellationToken);
@@ -905,7 +905,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         var suspended = AuditAction.Parse("identity.account.suspended");
         DateTimeOffset occurred = Noon.AddHours(-3);
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await new AuditStore(writing, _deployment.Keys, _deployment.Randomness).AppendAsync(
                 AuditRecord.Of(
@@ -925,11 +925,11 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await using NpgsqlConnection connection = await database.OpenAsync();
 
         string? action = await connection.ExecuteScalarAsync<string>(
-            "SELECT action FROM janus.audit_records WHERE effective_subject = @subject",
+            "SELECT action FROM identity.audit_records WHERE effective_subject = @subject",
             new { subject = subject.Value });
 
         DateTime at = await connection.ExecuteScalarAsync<DateTime>(
-            "SELECT occurred_at FROM janus.audit_records WHERE effective_subject = @subject",
+            "SELECT occurred_at FROM identity.audit_records WHERE effective_subject = @subject",
             new { subject = subject.Value });
 
         Assert.Equal(suspended.ToString(), action);
@@ -955,7 +955,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         PostgresException refusal = await Assert.ThrowsAsync<PostgresException>(async () =>
             await connection.ExecuteAsync(
-                "INSERT INTO janus.accounts (subject, state, created_at) "
+                "INSERT INTO identity.accounts (subject, state, created_at) "
                     + "VALUES (@subject, 'active', @at)",
                 new { subject = subject.Value, at = Noon }));
 

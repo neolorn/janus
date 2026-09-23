@@ -36,7 +36,7 @@ internal sealed class OrganizationConfiguration : IEntityTypeConfiguration<Organ
 
         builder.Property(organization => organization.Name)
             .HasColumnName("name")
-            .UseCollation(JanusDbContext.CaseInsensitiveCollation);
+            .UseCollation(StoreContext.CaseInsensitiveCollation);
 
         builder.Property(organization => organization.CreatedAt).HasColumnName("created_at");
 

@@ -18,4 +18,4 @@ public sealed record IdentifierAdded(
     DateTimeOffset RaisedAt,
     string IdempotencyKey,
     IdentifierId Identifier,
-    IdentifierKind Kind) : JanusEvent(RaisedAt, IdempotencyKey);
+    IdentifierKind Kind) : DomainEvent(RaisedAt, IdempotencyKey);

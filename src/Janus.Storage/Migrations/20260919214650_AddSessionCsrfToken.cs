@@ -17,7 +17,7 @@ internal sealed partial class AddSessionCsrfToken : Migration
         // fingerprint matches nothing presented; the next rotation binds one.
         migrationBuilder.AddColumn<byte[]>(
             name: "csrf_fingerprint",
-            schema: "janus",
+            schema: "identity",
             table: "sessions",
             type: "bytea",
             maxLength: 32,
@@ -32,7 +32,7 @@ internal sealed partial class AddSessionCsrfToken : Migration
 
         migrationBuilder.DropColumn(
             name: "csrf_fingerprint",
-            schema: "janus",
+            schema: "identity",
             table: "sessions");
     }
 }

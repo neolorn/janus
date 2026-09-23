@@ -11,7 +11,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 namespace Janus.Storage.Migrations;
 
-[DbContext(typeof(JanusDbContext))]
+[DbContext(typeof(StoreContext))]
 [Migration("20260919144430_AddAuditRecordCorrelation")]
 partial class AddAuditRecordCorrelation
 {
@@ -20,8 +20,8 @@ partial class AddAuditRecordCorrelation
     {
 #pragma warning disable 612, 618
         modelBuilder
-            .HasDefaultSchema("janus")
-            .HasAnnotation("Npgsql:CollationDefinition:public.janus_ci", "und-u-ks-level2,und-u-ks-level2,icu,False")
+            .HasDefaultSchema("identity")
+            .HasAnnotation("Npgsql:CollationDefinition:public.identity_ci", "und-u-ks-level2,und-u-ks-level2,icu,False")
             .HasAnnotation("ProductVersion", "10.0.4")
             .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
@@ -111,7 +111,7 @@ partial class AddAuditRecordCorrelation
                     .HasDatabaseName("ix_grants_live_holder")
                     .HasFilter("revoked_at IS NULL");
 
-                b.ToTable("grants", "janus", t =>
+                b.ToTable("grants", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_grants_kind", "kind IN ('derived', 'materialised', 'stored')");
 
@@ -138,7 +138,7 @@ partial class AddAuditRecordCorrelation
                 b.HasKey("Subject")
                     .HasName("pk_grant_versions");
 
-                b.ToTable("grant_versions", "janus", t =>
+                b.ToTable("grant_versions", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_grant_versions_version", "version >= 0");
                     });
@@ -168,7 +168,7 @@ partial class AddAuditRecordCorrelation
                 b.HasIndex("MemberType", "MemberId")
                     .HasDatabaseName("ix_group_closure_member");
 
-                b.ToTable("group_closure", "janus", t =>
+                b.ToTable("group_closure", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_group_closure_depth", "depth >= 1");
 
@@ -196,7 +196,7 @@ partial class AddAuditRecordCorrelation
                 b.HasIndex("MemberType", "MemberId")
                     .HasDatabaseName("ix_group_members_member");
 
-                b.ToTable("group_members", "janus", t =>
+                b.ToTable("group_members", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_group_members_member_type", "member_type IN ('group', 'user')");
                     });
@@ -223,7 +223,7 @@ partial class AddAuditRecordCorrelation
                 b.HasIndex("Organization")
                     .HasDatabaseName("ix_groups_organization");
 
-                b.ToTable("groups", "janus");
+                b.ToTable("groups", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authorization.Resources.AncestryRecord", b =>
@@ -258,7 +258,7 @@ partial class AddAuditRecordCorrelation
                 b.HasIndex("AncestorType", "AncestorId")
                     .HasDatabaseName("ix_ancestry_ancestor");
 
-                b.ToTable("ancestry", "janus", t =>
+                b.ToTable("ancestry", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_ancestry_depth", "depth >= 0");
                     });
@@ -295,7 +295,7 @@ partial class AddAuditRecordCorrelation
                 b.HasIndex("ContainedInType", "ContainedInId")
                     .HasDatabaseName("ix_resources_contained_in");
 
-                b.ToTable("resources", "janus", t =>
+                b.ToTable("resources", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_resources_contained_in", "(contained_in_type IS NULL) = (contained_in_id IS NULL)");
                     });
@@ -314,7 +314,7 @@ partial class AddAuditRecordCorrelation
                 b.HasKey("Role", "Permission")
                     .HasName("pk_role_permissions");
 
-                b.ToTable("role_permissions", "janus");
+                b.ToTable("role_permissions", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authorization.Roles.RoleRecord", b =>
@@ -326,7 +326,7 @@ partial class AddAuditRecordCorrelation
                 b.HasKey("Name")
                     .HasName("pk_roles");
 
-                b.ToTable("roles", "janus");
+                b.ToTable("roles", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Identity.Accounts.AccountRecord", b =>
@@ -363,7 +363,7 @@ partial class AddAuditRecordCorrelation
                     .HasDatabaseName("ix_accounts_deleting_since")
                     .HasFilter("deleting_since IS NOT NULL");
 
-                b.ToTable("accounts", "janus", t =>
+                b.ToTable("accounts", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_accounts_deleting", "(deleting_by IS NULL) = (deleting_since IS NULL)");
 
@@ -421,7 +421,7 @@ partial class AddAuditRecordCorrelation
                 b.HasIndex("EffectiveSubject", "OccurredAt")
                     .HasDatabaseName("ix_audit_records_effective_subject");
 
-                b.ToTable("audit_records", "janus", t =>
+                b.ToTable("audit_records", "identity", t =>
                     {
                         t.ExcludeFromMigrations();
                     });
@@ -451,7 +451,7 @@ partial class AddAuditRecordCorrelation
                 b.HasIndex("Named")
                     .HasDatabaseName("ix_identifier_backup_settings_named");
 
-                b.ToTable("identifier_backup_settings", "janus", t =>
+                b.ToTable("identifier_backup_settings", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_identifier_backup_settings_kind", "kind IN ('email', 'phone', 'username')");
 
@@ -523,7 +523,7 @@ partial class AddAuditRecordCorrelation
                 b.HasIndex("Subject", "Kind")
                     .HasDatabaseName("ix_identifiers_subject");
 
-                b.ToTable("identifiers", "janus", t =>
+                b.ToTable("identifiers", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_identifiers_fingerprint", "octet_length(fingerprint) = 32");
 
@@ -564,7 +564,7 @@ partial class AddAuditRecordCorrelation
                 b.HasIndex("Subject")
                     .HasDatabaseName("ix_memberships_subject");
 
-                b.ToTable("memberships", "janus", t =>
+                b.ToTable("memberships", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_memberships_ended", "ended_at IS NULL OR ended_at >= created_at");
                     });
@@ -598,7 +598,7 @@ partial class AddAuditRecordCorrelation
                     .IsRequired()
                     .HasColumnType("text")
                     .HasColumnName("name")
-                    .UseCollation("janus_ci");
+                    .UseCollation("identity_ci");
 
                 b.HasKey("Id")
                     .HasName("pk_organizations");
@@ -612,7 +612,7 @@ partial class AddAuditRecordCorrelation
                     .HasDatabaseName("ux_organizations_administrative")
                     .HasFilter("administrative");
 
-                b.ToTable("organizations", "janus", t =>
+                b.ToTable("organizations", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_organizations_erased", "erased_at IS NULL OR deletion_requested_at IS NOT NULL");
                     });
@@ -639,7 +639,7 @@ partial class AddAuditRecordCorrelation
                 b.HasKey("Subject")
                     .HasName("pk_account_preferences");
 
-                b.ToTable("account_preferences", "janus");
+                b.ToTable("account_preferences", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Identity.Profiles.ProfilePhotoRecord", b =>
@@ -660,7 +660,7 @@ partial class AddAuditRecordCorrelation
                 b.HasKey("Subject")
                     .HasName("pk_profile_photos");
 
-                b.ToTable("profile_photos", "janus");
+                b.ToTable("profile_photos", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Identity.Profiles.ProfileRecord", b =>
@@ -684,7 +684,7 @@ partial class AddAuditRecordCorrelation
                 b.HasKey("Subject")
                     .HasName("pk_profiles");
 
-                b.ToTable("profiles", "janus");
+                b.ToTable("profiles", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Privacy.Erasures.ErasureRecord", b =>
@@ -718,7 +718,7 @@ partial class AddAuditRecordCorrelation
                     .HasDatabaseName("ix_erasures_outstanding")
                     .HasFilter("status <> 'complete'");
 
-                b.ToTable("erasures", "janus", t =>
+                b.ToTable("erasures", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_erasures_attempts", "attempts >= 0");
 
@@ -753,7 +753,7 @@ partial class AddAuditRecordCorrelation
                 b.HasIndex("KeyVersion")
                     .HasDatabaseName("ix_subject_keys_key_version");
 
-                b.ToTable("subject_keys", "janus", t =>
+                b.ToTable("subject_keys", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_subject_keys_format", "(format_marker = 1 AND octet_length(wrapped_key) = 40) OR (format_marker = 0 AND wrapped_key = decode(repeat('00', 32), 'hex'))");
 
@@ -775,7 +775,7 @@ partial class AddAuditRecordCorrelation
                 b.HasKey("Key")
                     .HasName("pk_settings");
 
-                b.ToTable("settings", "janus");
+                b.ToTable("settings", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authorization.Grants.GrantRecord", b =>

@@ -10,6 +10,31 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- The names the library puts on the wire no longer carry the product's name. The
+  cookies are `__Host-identity-session`, `__Host-identity-preauth`,
+  `__Host-identity-csrf`, `__Host-identity-browser` and `__Host-identity-device`; a
+  frontend sends `X-Identity-Request` on every call and the synchronizer token in
+  `X-Identity-Csrf`. The client a host configures for the sign-on back channel is
+  `identity-signon`, and the directory beside the application that holds the word
+  lists is `identity-corpus`. A session, code or refresh token issued under the
+  earlier names does not survive the change.
+
+- The library's database objects no longer carry the product's name. The schema is
+  `identity`, the case-insensitive collation `identity_ci`, the roles
+  `identity_migrate`, `identity_app` and `identity_maintenance`, and the migrations
+  history table `__migrations_history`. The migrations were rewritten rather than
+  extended, so a database created by an earlier build of them is dropped and created
+  again, not upgraded.
+
+- The public types a host names are called for what they are, and only the namespaces,
+  the package identifiers and `AddJanus` carry the product's name. `AddJanus` is on
+  `HostingRegistration`; the endpoints mount with `MapIdentityEndpoints` and
+  `MapIdentityWellKnown` on `IdentityEndpoints`; the two profiles mount with
+  `UseBrowserProfile` and `UseMachineProfile` on `PipelineProfiles`; the two
+  authorization tables map with `MapAuthorizationTables` on `AuthorizationTables`; the
+  application a pipeline is mounted in is an `ApplicationKind`; and every event the
+  library emits derives from `DomainEvent`.
+
 - An application now establishes its own session from the one the authentication
   application holds without a line of host code: `GET /auth/signon` forwards the
   browser to the provider with proof key and a state bound to its pre-authentication
@@ -627,7 +652,7 @@ against the public contract of LIB-API-001.
   its own LINQ query and a parameterised PostgreSQL fragment a hand-written query
   composes into its `WHERE` clause, so a list screen cannot come to show what a check
   would refuse. Neither rendering enumerates permitted records.
-- `MapJanusAuthorization` in `Janus.Hosting`: a host maps the ancestry closure and the
+- `MapAuthorizationTables` in `Janus.Hosting`: a host maps the ancestry closure and the
   effective grants into its own context, so a filtered listing is one query against its
   own tables and the library reads nothing of the host's.
 - `AddJanus` in `Janus.Hosting`: the one method a host calls to register the library.
@@ -874,9 +899,9 @@ against the public contract of LIB-API-001.
   exactly one organization. Requesting its deletion is refused with
   `identity.organization.protected`; every other organization takes the window as
   before.
-- The three database roles the deployment attaches credentials to. `janus_migrate`
-  owns the schema and is the only role that alters it, `janus_app` reads and writes
-  rows, and `janus_maintenance` executes the two audit partition functions and reads
+- The three database roles the deployment attaches credentials to. `identity_migrate`
+  owns the schema and is the only role that alters it, `identity_app` reads and writes
+  rows, and `identity_maintenance` executes the two audit partition functions and reads
   and updates the wrapped keys. The migration creates the two runtime roles where they
   are absent and writes every grant, so an audit row cannot be updated or deleted by
   the application at all, and no credential that alters schema reaches the running

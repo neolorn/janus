@@ -16,14 +16,14 @@ internal sealed partial class AddRecovery : Migration
     {
         migrationBuilder.AddColumn<Guid>(
             name: "enrolment",
-            schema: "janus",
+            schema: "identity",
             table: "preauthentication_sessions",
             type: "uuid",
             nullable: true);
 
         migrationBuilder.AddColumn<bool>(
             name: "change_required",
-            schema: "janus",
+            schema: "identity",
             table: "passwords",
             type: "boolean",
             nullable: false,
@@ -31,7 +31,7 @@ internal sealed partial class AddRecovery : Migration
 
         migrationBuilder.CreateTable(
             name: "loss_reports",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 credential = table.Column<Guid>(type: "uuid", nullable: false),
@@ -50,14 +50,14 @@ internal sealed partial class AddRecovery : Migration
                 table.ForeignKey(
                     name: "fk_loss_reports_credential",
                     column: x => x.credential,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "authenticators",
                     principalColumn: "id",
                     onDelete: ReferentialAction.Cascade);
                 table.ForeignKey(
                     name: "fk_loss_reports_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
@@ -65,7 +65,7 @@ internal sealed partial class AddRecovery : Migration
 
         migrationBuilder.CreateTable(
             name: "recovery_approvals",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 subject = table.Column<Guid>(type: "uuid", nullable: false),
@@ -80,14 +80,14 @@ internal sealed partial class AddRecovery : Migration
                 table.ForeignKey(
                     name: "fk_recovery_approvals_approver",
                     column: x => x.approver,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
                 table.ForeignKey(
                     name: "fk_recovery_approvals_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
@@ -95,7 +95,7 @@ internal sealed partial class AddRecovery : Migration
 
         migrationBuilder.CreateTable(
             name: "recovery_links",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 token = table.Column<byte[]>(type: "bytea", maxLength: 32, nullable: false),
@@ -118,14 +118,14 @@ internal sealed partial class AddRecovery : Migration
                 table.ForeignKey(
                     name: "fk_recovery_links_approver",
                     column: x => x.approver,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
                 table.ForeignKey(
                     name: "fk_recovery_links_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
@@ -133,7 +133,7 @@ internal sealed partial class AddRecovery : Migration
 
         migrationBuilder.CreateIndex(
             name: "ux_preauthentication_sessions_enrolment",
-            schema: "janus",
+            schema: "identity",
             table: "preauthentication_sessions",
             column: "enrolment",
             unique: true,
@@ -141,43 +141,43 @@ internal sealed partial class AddRecovery : Migration
 
         migrationBuilder.CreateIndex(
             name: "ix_loss_reports_invalidates_at",
-            schema: "janus",
+            schema: "identity",
             table: "loss_reports",
             column: "invalidates_at");
 
         migrationBuilder.CreateIndex(
             name: "ix_loss_reports_notified_at",
-            schema: "janus",
+            schema: "identity",
             table: "loss_reports",
             column: "notified_at");
 
         migrationBuilder.CreateIndex(
             name: "ix_loss_reports_subject",
-            schema: "janus",
+            schema: "identity",
             table: "loss_reports",
             column: "subject");
 
         migrationBuilder.CreateIndex(
             name: "ix_recovery_approvals_approver",
-            schema: "janus",
+            schema: "identity",
             table: "recovery_approvals",
             columns: ApproverAndInstant);
 
         migrationBuilder.CreateIndex(
             name: "ix_recovery_links_approver",
-            schema: "janus",
+            schema: "identity",
             table: "recovery_links",
             column: "approver");
 
         migrationBuilder.CreateIndex(
             name: "ix_recovery_links_expires_at",
-            schema: "janus",
+            schema: "identity",
             table: "recovery_links",
             column: "expires_at");
 
         migrationBuilder.CreateIndex(
             name: "ux_recovery_links_session",
-            schema: "janus",
+            schema: "identity",
             table: "recovery_links",
             column: "session",
             unique: true,
@@ -185,7 +185,7 @@ internal sealed partial class AddRecovery : Migration
 
         migrationBuilder.CreateIndex(
             name: "ux_recovery_links_subject_purpose",
-            schema: "janus",
+            schema: "identity",
             table: "recovery_links",
             columns: SubjectAndPurpose,
             unique: true,
@@ -197,29 +197,29 @@ internal sealed partial class AddRecovery : Migration
     {
         migrationBuilder.DropTable(
             name: "loss_reports",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "recovery_approvals",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "recovery_links",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropIndex(
             name: "ux_preauthentication_sessions_enrolment",
-            schema: "janus",
+            schema: "identity",
             table: "preauthentication_sessions");
 
         migrationBuilder.DropColumn(
             name: "enrolment",
-            schema: "janus",
+            schema: "identity",
             table: "preauthentication_sessions");
 
         migrationBuilder.DropColumn(
             name: "change_required",
-            schema: "janus",
+            schema: "identity",
             table: "passwords");
     }
 }

@@ -75,10 +75,10 @@ public sealed class VolumeFixture : IAsyncLifetime
     private static string Listing(SqlFilter fragment) => string.Create(
         CultureInfo.InvariantCulture,
         $"""
-        SELECT janus_authz_row.id
-        FROM host.documents AS janus_authz_row
+        SELECT identity_authz_row.id
+        FROM host.documents AS identity_authz_row
         WHERE {fragment.Text}
-        ORDER BY janus_authz_row.id
+        ORDER BY identity_authz_row.id
         LIMIT {Size};
         """);
 
@@ -136,7 +136,7 @@ public sealed class VolumeFixture : IAsyncLifetime
                 HostPermissions.Read,
                 Document,
                 volume.Organization,
-                "janus_authz_row",
+                "identity_authz_row",
                 "id",
                 cancellationToken);
 

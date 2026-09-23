@@ -16,7 +16,7 @@ internal sealed partial class AddIdentifiers : Migration
     {
         migrationBuilder.CreateTable(
             name: "identifiers",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 identifier_id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -40,7 +40,7 @@ internal sealed partial class AddIdentifiers : Migration
                 table.ForeignKey(
                     name: "fk_identifiers_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
@@ -48,7 +48,7 @@ internal sealed partial class AddIdentifiers : Migration
 
         migrationBuilder.CreateTable(
             name: "identifier_backup_settings",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 subject = table.Column<Guid>(type: "uuid", nullable: false),
@@ -65,14 +65,14 @@ internal sealed partial class AddIdentifiers : Migration
                 table.ForeignKey(
                     name: "fk_identifier_backup_settings_named",
                     column: x => x.named,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "identifiers",
                     principalColumn: "identifier_id",
                     onDelete: ReferentialAction.Restrict);
                 table.ForeignKey(
                     name: "fk_identifier_backup_settings_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
@@ -80,19 +80,19 @@ internal sealed partial class AddIdentifiers : Migration
 
         migrationBuilder.CreateIndex(
             name: "ix_identifier_backup_settings_named",
-            schema: "janus",
+            schema: "identity",
             table: "identifier_backup_settings",
             column: "named");
 
         migrationBuilder.CreateIndex(
             name: "ix_identifiers_subject",
-            schema: "janus",
+            schema: "identity",
             table: "identifiers",
             columns: SubjectAndKind);
 
         migrationBuilder.CreateIndex(
             name: "ux_identifiers_fingerprint",
-            schema: "janus",
+            schema: "identity",
             table: "identifiers",
             columns: KindAndFingerprint,
             unique: true,
@@ -104,10 +104,10 @@ internal sealed partial class AddIdentifiers : Migration
     {
         migrationBuilder.DropTable(
             name: "identifier_backup_settings",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "identifiers",
-            schema: "janus");
+            schema: "identity");
     }
 }

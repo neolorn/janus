@@ -20,4 +20,4 @@ public sealed record ObjectionChanged(
     DateTimeOffset RaisedAt,
     string IdempotencyKey,
     string Purpose,
-    bool Objecting) : JanusEvent(RaisedAt, IdempotencyKey);
+    bool Objecting) : DomainEvent(RaisedAt, IdempotencyKey);

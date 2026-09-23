@@ -20,7 +20,7 @@ namespace Janus.Storage.Settings;
 /// without a restart; a key the deployment never wrote has no row and reads as the
 /// default the catalogue gives it.
 /// </remarks>
-internal sealed class ConfigurationStore(JanusDbContext context) : IConfigurationStore
+internal sealed class ConfigurationStore(StoreContext context) : IConfigurationStore
 {
     /// <inheritdoc/>
     public async ValueTask<Result<TValue>> ReadAsync<TValue>(

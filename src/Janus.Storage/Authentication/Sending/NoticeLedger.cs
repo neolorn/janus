@@ -14,7 +14,7 @@ namespace Janus.Storage.Authentication.Sending;
 /// <param name="context">The context the operation runs on.</param>
 /// <param name="fingerprintKey">What the addresses are hashed under.</param>
 /// <remarks>Implements AUTH-ABUSE-003 and CONV-DESIGN-003.</remarks>
-internal sealed class NoticeLedger(JanusDbContext context, ReadOnlyMemory<byte> fingerprintKey)
+internal sealed class NoticeLedger(StoreContext context, ReadOnlyMemory<byte> fingerprintKey)
     : INoticeLedger
 {
     private static readonly TimeSpan Hour = TimeSpan.FromHours(1);

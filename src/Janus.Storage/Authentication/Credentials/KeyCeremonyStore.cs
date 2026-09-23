@@ -13,7 +13,7 @@ namespace Janus.Storage.Authentication.Credentials;
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
 /// <remarks>Implements AUTH-FACT-014 and CONV-DESIGN-003.</remarks>
-internal sealed class KeyCeremonyStore(JanusDbContext context) : IKeyCeremonyStore
+internal sealed class KeyCeremonyStore(StoreContext context) : IKeyCeremonyStore
 {
     /// <inheritdoc/>
     public async ValueTask<KeyCeremony?> FindAsync(

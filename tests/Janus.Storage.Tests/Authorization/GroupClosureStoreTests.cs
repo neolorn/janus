@@ -151,7 +151,7 @@ public sealed class GroupClosureStoreTests(DatabaseFixture database)
 
         long before = await VersionAsync(account);
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await using var transaction = new UnitOfWork(writing);
             await transaction.BeginAsync(TestContext.Current.CancellationToken);
@@ -181,7 +181,7 @@ public sealed class GroupClosureStoreTests(DatabaseFixture database)
         await AddAsync(department, GrantSubject.Of(team));
         await AddAsync(team, GrantSubject.Of(squad));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.True(await Store(reading).ReachesAsync(
             department,
@@ -197,14 +197,14 @@ public sealed class GroupClosureStoreTests(DatabaseFixture database)
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
-    private static GroupStore Store(JanusDbContext context) =>
+    private static GroupStore Store(StoreContext context) =>
         new(context, new DataConnections(context));
 
     private async Task<GroupId> GroupAsync(OrganizationId organization, string name)
     {
         var id = GroupId.New(TimeProvider.System);
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         await using var transaction = new UnitOfWork(writing);
         await transaction.BeginAsync(TestContext.Current.CancellationToken);
 
@@ -219,7 +219,7 @@ public sealed class GroupClosureStoreTests(DatabaseFixture database)
 
     private async Task AddAsync(GroupId group, GrantSubject member)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         await using var transaction = new UnitOfWork(writing);
         await transaction.BeginAsync(TestContext.Current.CancellationToken);
 
@@ -229,7 +229,7 @@ public sealed class GroupClosureStoreTests(DatabaseFixture database)
 
     private async Task RemoveAsync(GroupId group, GrantSubject member)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         await using var transaction = new UnitOfWork(writing);
         await transaction.BeginAsync(TestContext.Current.CancellationToken);
 
@@ -239,7 +239,7 @@ public sealed class GroupClosureStoreTests(DatabaseFixture database)
 
     private async Task<IReadOnlyList<GroupId>> GroupsOfAsync(GrantSubject subject)
     {
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         IReadOnlyList<GroupId> groups = await Store(reading)
             .GroupsOfAsync(subject, TestContext.Current.CancellationToken);
@@ -249,7 +249,7 @@ public sealed class GroupClosureStoreTests(DatabaseFixture database)
 
     private async Task<long> VersionAsync(SubjectId subject)
     {
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         return await new GrantStore(reading, new DataConnections(reading))
             .VersionAsync(subject, TestContext.Current.CancellationToken);

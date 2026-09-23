@@ -20,7 +20,7 @@ namespace Janus.Storage.Authentication.Sending;
 /// Implements AUTH-ABUSE-004, INT-SMS-005 and CONV-DESIGN-003. The plain key value
 /// crosses into this class and no further.
 /// </remarks>
-internal sealed class SendLedger(JanusDbContext context, ReadOnlyMemory<byte> fingerprintKey)
+internal sealed class SendLedger(StoreContext context, ReadOnlyMemory<byte> fingerprintKey)
     : ISendLedger
 {
     private const string Separator = "\u0000";

@@ -40,7 +40,7 @@ public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassF
             written,
             TestContext.Current.CancellationToken));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         QueuedRequest held = Assert.IsType<QueuedRequest>(
             await new PrivacyRequestStore(reading)
@@ -84,7 +84,7 @@ public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassF
             await store.RecordAsync(held, TestContext.Current.CancellationToken);
         });
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         QueuedRequest after = Assert.IsType<QueuedRequest>(
             await new PrivacyRequestStore(reading)
@@ -118,7 +118,7 @@ public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassF
         await WritingAsync(async store =>
             await store.RecordAsync(decided, TestContext.Current.CancellationToken));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         IReadOnlyList<QueuedRequest> reached = await new PrivacyRequestStore(reading)
             .ReachedAsync(Clock.EscalateAt, TestContext.Current.CancellationToken);
@@ -142,7 +142,7 @@ public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassF
             written,
             TestContext.Current.CancellationToken));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         var store = new PrivacyRequestStore(reading);
 
         Assert.True(await store.OpenAsync(
@@ -171,7 +171,7 @@ public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassF
     {
         SubjectId subject = Subjects.New();
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         await new AccountStore(writing)
             .AddAsync(Account.Create(subject, Noon), TestContext.Current.CancellationToken);
@@ -182,7 +182,7 @@ public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassF
 
     private async Task WritingAsync(Func<PrivacyRequestStore, Task> write)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         await write(new PrivacyRequestStore(writing));
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);

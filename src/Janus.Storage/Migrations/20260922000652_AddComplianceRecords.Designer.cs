@@ -11,7 +11,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 namespace Janus.Storage.Migrations;
 
-[DbContext(typeof(JanusDbContext))]
+[DbContext(typeof(StoreContext))]
 [Migration("20260922000652_AddComplianceRecords")]
 partial class AddComplianceRecords
 {
@@ -20,8 +20,8 @@ partial class AddComplianceRecords
     {
 #pragma warning disable 612, 618
         modelBuilder
-            .HasDefaultSchema("janus")
-            .HasAnnotation("Npgsql:CollationDefinition:public.janus_ci", "und-u-ks-level2,und-u-ks-level2,icu,False")
+            .HasDefaultSchema("identity")
+            .HasAnnotation("Npgsql:CollationDefinition:public.identity_ci", "und-u-ks-level2,und-u-ks-level2,icu,False")
             .HasAnnotation("ProductVersion", "10.0.4")
             .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
@@ -54,7 +54,7 @@ partial class AddComplianceRecords
                     .IsUnique()
                     .HasDatabaseName("ux_lifecycle_links_subject");
 
-                b.ToTable("lifecycle_links", "janus", t =>
+                b.ToTable("lifecycle_links", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_lifecycle_links_kind", "kind IN ('deletion-cancellation', 'reactivation')");
 
@@ -76,7 +76,7 @@ partial class AddComplianceRecords
                 b.HasKey("Key")
                     .HasName("pk_alerts");
 
-                b.ToTable("alerts", "janus");
+                b.ToTable("alerts", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Credentials.KeyCeremonyRecord", b =>
@@ -116,7 +116,7 @@ partial class AddComplianceRecords
                 b.HasIndex("Upgrading")
                     .HasDatabaseName("ix_key_ceremonies_upgrading");
 
-                b.ToTable("key_ceremonies", "janus", t =>
+                b.ToTable("key_ceremonies", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_key_ceremonies_expiry", "expires_at > issued_at");
 
@@ -223,7 +223,7 @@ partial class AddComplianceRecords
                     .IsUnique()
                     .HasDatabaseName("ux_authenticators_label");
 
-                b.ToTable("authenticators", "janus", t =>
+                b.ToTable("authenticators", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_authenticators_factor", "factor IN ('apple', 'breakGlass', 'emailCode', 'emailLink', 'google', 'passkey', 'password', 'phoneCode', 'phoneLink', 'recoveryCodes', 'securityKey', 'totp')");
 
@@ -292,7 +292,7 @@ partial class AddComplianceRecords
                     .IsUnique()
                     .HasDatabaseName("ux_devices_token_fingerprint");
 
-                b.ToTable("devices", "janus", t =>
+                b.ToTable("devices", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_devices_kind", "kind IN ('remembered', 'trusted')");
                     });
@@ -320,7 +320,7 @@ partial class AddComplianceRecords
                 b.HasKey("Subject", "Ordinal")
                     .HasName("pk_recovery_codes");
 
-                b.ToTable("recovery_codes", "janus");
+                b.ToTable("recovery_codes", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Factors.RecoveryCodeSetRecord", b =>
@@ -348,7 +348,7 @@ partial class AddComplianceRecords
                 b.HasKey("Subject")
                     .HasName("pk_recovery_code_sets");
 
-                b.ToTable("recovery_code_sets", "janus");
+                b.ToTable("recovery_code_sets", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Identifiers.PendingVerificationRecord", b =>
@@ -415,7 +415,7 @@ partial class AddComplianceRecords
                 b.HasIndex("Subject")
                     .HasDatabaseName("ix_identifier_verifications_subject");
 
-                b.ToTable("identifier_verifications", "janus", t =>
+                b.ToTable("identifier_verifications", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_identifier_verifications_link", "link IS NULL OR octet_length(link) = 32");
 
@@ -495,7 +495,7 @@ partial class AddComplianceRecords
                 b.HasIndex("Subject")
                     .HasDatabaseName("ix_oidc_codes_subject");
 
-                b.ToTable("oidc_codes", "janus", t =>
+                b.ToTable("oidc_codes", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_oidc_codes_expiry", "expires_at > issued_at");
 
@@ -537,7 +537,7 @@ partial class AddComplianceRecords
                 b.HasKey("ClientId")
                     .HasName("pk_oidc_clients");
 
-                b.ToTable("oidc_clients", "janus", t =>
+                b.ToTable("oidc_clients", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_oidc_clients_kind", "kind IN ('browser-application', 'protocol')");
                     });
@@ -601,7 +601,7 @@ partial class AddComplianceRecords
                 b.HasIndex("Subject")
                     .HasDatabaseName("ix_oidc_refresh_tokens_subject");
 
-                b.ToTable("oidc_refresh_tokens", "janus", t =>
+                b.ToTable("oidc_refresh_tokens", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_oidc_refresh_tokens_expiry", "expires_at > issued_at");
                     });
@@ -653,7 +653,7 @@ partial class AddComplianceRecords
                 b.HasIndex("RetiresAt")
                     .HasDatabaseName("ix_signing_keys_retires_at");
 
-                b.ToTable("signing_keys", "janus", t =>
+                b.ToTable("signing_keys", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_signing_keys_retirement", "(superseded_at IS NULL AND retires_at IS NULL) OR (superseded_at IS NOT NULL AND retires_at > superseded_at)");
 
@@ -687,7 +687,7 @@ partial class AddComplianceRecords
                 b.HasKey("Subject")
                     .HasName("pk_passwords");
 
-                b.ToTable("passwords", "janus");
+                b.ToTable("passwords", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Policies.PolicyRaiseRecord", b =>
@@ -728,7 +728,7 @@ partial class AddComplianceRecords
                     .HasDatabaseName("ux_policy_raises_organization_field")
                     .HasFilter("organization IS NOT NULL");
 
-                b.ToTable("policy_raises", "janus", t =>
+                b.ToTable("policy_raises", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_policy_raises_field", "field IN ('credentialRedundancy', 'requiredAssurance')");
                     });
@@ -781,7 +781,7 @@ partial class AddComplianceRecords
                 b.HasIndex("Subject")
                     .HasDatabaseName("ix_loss_reports_subject");
 
-                b.ToTable("loss_reports", "janus", t =>
+                b.ToTable("loss_reports", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_loss_reports_window", "invalidates_at > reported_at");
                     });
@@ -816,7 +816,7 @@ partial class AddComplianceRecords
                 b.HasIndex("Approver", "At")
                     .HasDatabaseName("ix_recovery_approvals_approver");
 
-                b.ToTable("recovery_approvals", "janus");
+                b.ToTable("recovery_approvals", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Recovery.RecoveryLinkRecord", b =>
@@ -878,7 +878,7 @@ partial class AddComplianceRecords
                     .HasDatabaseName("ux_recovery_links_subject_purpose")
                     .HasFilter("spent_at IS NULL");
 
-                b.ToTable("recovery_links", "janus", t =>
+                b.ToTable("recovery_links", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_recovery_links_expiry", "expires_at > issued_at");
 
@@ -907,7 +907,7 @@ partial class AddComplianceRecords
                 b.HasIndex("Session")
                     .HasDatabaseName("ix_registration_links_session");
 
-                b.ToTable("registration_links", "janus");
+                b.ToTable("registration_links", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Registration.RegistrationSessionRecord", b =>
@@ -944,7 +944,7 @@ partial class AddComplianceRecords
                 b.HasIndex("ExpiresAt")
                     .HasDatabaseName("ix_registration_sessions_expires_at");
 
-                b.ToTable("registration_sessions", "janus");
+                b.ToTable("registration_sessions", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.BalanceReadingRecord", b =>
@@ -961,7 +961,7 @@ partial class AddComplianceRecords
                 b.HasKey("ReadAt")
                     .HasName("pk_sms_balance_readings");
 
-                b.ToTable("sms_balance_readings", "janus");
+                b.ToTable("sms_balance_readings", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.CallbackRecord", b =>
@@ -991,7 +991,7 @@ partial class AddComplianceRecords
                 b.HasIndex("Source", "At")
                     .HasDatabaseName("ix_callbacks_source_at");
 
-                b.ToTable("callbacks", "janus");
+                b.ToTable("callbacks", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.NoticeRecord", b =>
@@ -1017,7 +1017,7 @@ partial class AddComplianceRecords
                 b.HasIndex("Destination", "At")
                     .HasDatabaseName("ix_nonexistence_notices_destination_at");
 
-                b.ToTable("nonexistence_notices", "janus");
+                b.ToTable("nonexistence_notices", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.RegistrationSourceRecord", b =>
@@ -1043,7 +1043,7 @@ partial class AddComplianceRecords
                 b.HasIndex("Source", "At")
                     .HasDatabaseName("ix_registration_sources_source_at");
 
-                b.ToTable("registration_sources", "janus");
+                b.ToTable("registration_sources", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.SendCounterRecord", b =>
@@ -1068,7 +1068,7 @@ partial class AddComplianceRecords
                 b.HasIndex("SettlesAt")
                     .HasDatabaseName("ix_send_counters_settles_at");
 
-                b.ToTable("send_counters", "janus");
+                b.ToTable("send_counters", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.SendGrantRecord", b =>
@@ -1085,7 +1085,7 @@ partial class AddComplianceRecords
                 b.HasKey("Key")
                     .HasName("pk_send_grants");
 
-                b.ToTable("send_grants", "janus", t =>
+                b.ToTable("send_grants", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_send_grants_credit", "credit > 0");
                     });
@@ -1117,7 +1117,7 @@ partial class AddComplianceRecords
                 b.HasIndex("SettlesAt")
                     .HasDatabaseName("ix_sends_settles_at");
 
-                b.ToTable("sends", "janus");
+                b.ToTable("sends", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.ThrottleRecord", b =>
@@ -1142,7 +1142,7 @@ partial class AddComplianceRecords
                 b.HasKey("Scope", "Key")
                     .HasName("pk_throttle_counters");
 
-                b.ToTable("throttle_counters", "janus", t =>
+                b.ToTable("throttle_counters", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_throttle_counters_scope", "scope IN ('account', 'identifier', 'source')");
                     });
@@ -1193,7 +1193,7 @@ partial class AddComplianceRecords
                     .HasDatabaseName("ux_preauthentication_sessions_registration")
                     .HasFilter("registration IS NOT NULL");
 
-                b.ToTable("preauthentication_sessions", "janus", t =>
+                b.ToTable("preauthentication_sessions", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_preauthentication_sessions_expires_at", "expires_at > created_at");
 
@@ -1320,7 +1320,7 @@ partial class AddComplianceRecords
                 b.HasIndex("Subject", "EndedAt")
                     .HasDatabaseName("ix_sessions_subject");
 
-                b.ToTable("sessions", "janus", t =>
+                b.ToTable("sessions", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_sessions_attained", "attained IN ('aal1', 'aal2', 'aal3', 'delegated')");
 
@@ -1376,7 +1376,7 @@ partial class AddComplianceRecords
                 b.HasIndex("Subject")
                     .HasDatabaseName("ix_signin_challenges_subject");
 
-                b.ToTable("signin_challenges", "janus", t =>
+                b.ToTable("signin_challenges", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_signin_challenges_device_attempts", "device_attempts >= 0 AND (device_code IS NOT NULL OR device_attempts = 0)");
 
@@ -1432,7 +1432,7 @@ partial class AddComplianceRecords
                     .IsUnique()
                     .HasDatabaseName("ux_signin_links_subject_factor");
 
-                b.ToTable("signin_links", "janus", t =>
+                b.ToTable("signin_links", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_signin_links_browser", "browser IS NULL OR octet_length(browser) = 32");
 
@@ -1528,7 +1528,7 @@ partial class AddComplianceRecords
                     .HasDatabaseName("ix_grants_live_holder")
                     .HasFilter("revoked_at IS NULL");
 
-                b.ToTable("grants", "janus", t =>
+                b.ToTable("grants", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_grants_kind", "kind IN ('derived', 'materialised', 'stored')");
 
@@ -1555,7 +1555,7 @@ partial class AddComplianceRecords
                 b.HasKey("Subject")
                     .HasName("pk_grant_versions");
 
-                b.ToTable("grant_versions", "janus", t =>
+                b.ToTable("grant_versions", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_grant_versions_version", "version >= 0");
                     });
@@ -1585,7 +1585,7 @@ partial class AddComplianceRecords
                 b.HasIndex("MemberType", "MemberId")
                     .HasDatabaseName("ix_group_closure_member");
 
-                b.ToTable("group_closure", "janus", t =>
+                b.ToTable("group_closure", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_group_closure_depth", "depth >= 1");
 
@@ -1613,7 +1613,7 @@ partial class AddComplianceRecords
                 b.HasIndex("MemberType", "MemberId")
                     .HasDatabaseName("ix_group_members_member");
 
-                b.ToTable("group_members", "janus", t =>
+                b.ToTable("group_members", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_group_members_member_type", "member_type IN ('group', 'user')");
                     });
@@ -1640,7 +1640,7 @@ partial class AddComplianceRecords
                 b.HasIndex("Organization")
                     .HasDatabaseName("ix_groups_organization");
 
-                b.ToTable("groups", "janus");
+                b.ToTable("groups", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authorization.Resources.AncestryRecord", b =>
@@ -1675,7 +1675,7 @@ partial class AddComplianceRecords
                 b.HasIndex("AncestorType", "AncestorId")
                     .HasDatabaseName("ix_ancestry_ancestor");
 
-                b.ToTable("ancestry", "janus", t =>
+                b.ToTable("ancestry", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_ancestry_depth", "depth >= 0");
                     });
@@ -1712,7 +1712,7 @@ partial class AddComplianceRecords
                 b.HasIndex("ContainedInType", "ContainedInId")
                     .HasDatabaseName("ix_resources_contained_in");
 
-                b.ToTable("resources", "janus", t =>
+                b.ToTable("resources", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_resources_contained_in", "(contained_in_type IS NULL) = (contained_in_id IS NULL)");
                     });
@@ -1731,7 +1731,7 @@ partial class AddComplianceRecords
                 b.HasKey("Role", "Permission")
                     .HasName("pk_role_permissions");
 
-                b.ToTable("role_permissions", "janus");
+                b.ToTable("role_permissions", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authorization.Roles.RoleRecord", b =>
@@ -1743,7 +1743,7 @@ partial class AddComplianceRecords
                 b.HasKey("Name")
                     .HasName("pk_roles");
 
-                b.ToTable("roles", "janus");
+                b.ToTable("roles", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Identity.Accounts.AccountRecord", b =>
@@ -1802,7 +1802,7 @@ partial class AddComplianceRecords
                     .HasDatabaseName("ix_accounts_deleting_since")
                     .HasFilter("deleting_since IS NOT NULL");
 
-                b.ToTable("accounts", "janus", t =>
+                b.ToTable("accounts", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_accounts_age_answer", "adult_affirmed IS NULL OR age_group IS NULL");
 
@@ -1868,7 +1868,7 @@ partial class AddComplianceRecords
                 b.HasIndex("EffectiveSubject", "OccurredAt")
                     .HasDatabaseName("ix_audit_records_effective_subject");
 
-                b.ToTable("audit_records", "janus", t =>
+                b.ToTable("audit_records", "identity", t =>
                     {
                         t.ExcludeFromMigrations();
                     });
@@ -1898,7 +1898,7 @@ partial class AddComplianceRecords
                 b.HasIndex("Named")
                     .HasDatabaseName("ix_identifier_backup_settings_named");
 
-                b.ToTable("identifier_backup_settings", "janus", t =>
+                b.ToTable("identifier_backup_settings", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_identifier_backup_settings_kind", "kind IN ('email', 'phone', 'username')");
 
@@ -1970,7 +1970,7 @@ partial class AddComplianceRecords
                 b.HasIndex("Subject", "Kind")
                     .HasDatabaseName("ix_identifiers_subject");
 
-                b.ToTable("identifiers", "janus", t =>
+                b.ToTable("identifiers", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_identifiers_fingerprint", "octet_length(fingerprint) = 32");
 
@@ -2052,7 +2052,7 @@ partial class AddComplianceRecords
                     .IsUnique()
                     .HasDatabaseName("ux_identifier_removals_fingerprint");
 
-                b.ToTable("identifier_removals", "janus", t =>
+                b.ToTable("identifier_removals", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_identifier_removals_fingerprint", "octet_length(fingerprint) = 32");
 
@@ -2082,7 +2082,7 @@ partial class AddComplianceRecords
                 b.HasIndex("ReleasesAt")
                     .HasDatabaseName("ix_username_holds_releases_at");
 
-                b.ToTable("username_holds", "janus", t =>
+                b.ToTable("username_holds", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_username_holds_fingerprint", "octet_length(fingerprint) = 32");
                     });
@@ -2119,7 +2119,7 @@ partial class AddComplianceRecords
                 b.HasIndex("Subject")
                     .HasDatabaseName("ix_memberships_subject");
 
-                b.ToTable("memberships", "janus", t =>
+                b.ToTable("memberships", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_memberships_ended", "ended_at IS NULL OR ended_at >= created_at");
                     });
@@ -2153,7 +2153,7 @@ partial class AddComplianceRecords
                     .IsRequired()
                     .HasColumnType("text")
                     .HasColumnName("name")
-                    .UseCollation("janus_ci");
+                    .UseCollation("identity_ci");
 
                 b.HasKey("Id")
                     .HasName("pk_organizations");
@@ -2167,7 +2167,7 @@ partial class AddComplianceRecords
                     .HasDatabaseName("ux_organizations_administrative")
                     .HasFilter("administrative");
 
-                b.ToTable("organizations", "janus", t =>
+                b.ToTable("organizations", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_organizations_erased", "erased_at IS NULL OR deletion_requested_at IS NOT NULL");
                     });
@@ -2194,7 +2194,7 @@ partial class AddComplianceRecords
                 b.HasKey("Subject")
                     .HasName("pk_account_preferences");
 
-                b.ToTable("account_preferences", "janus");
+                b.ToTable("account_preferences", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Identity.Profiles.ProfilePhotoRecord", b =>
@@ -2215,7 +2215,7 @@ partial class AddComplianceRecords
                 b.HasKey("Subject")
                     .HasName("pk_profile_photos");
 
-                b.ToTable("profile_photos", "janus");
+                b.ToTable("profile_photos", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Identity.Profiles.ProfileRecord", b =>
@@ -2239,7 +2239,7 @@ partial class AddComplianceRecords
                 b.HasKey("Subject")
                     .HasName("pk_profiles");
 
-                b.ToTable("profiles", "janus");
+                b.ToTable("profiles", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Privacy.Consents.ConsentRecordRow", b =>
@@ -2286,7 +2286,7 @@ partial class AddComplianceRecords
                     .HasDatabaseName("ix_consents_live")
                     .HasFilter("withdrawn_at IS NULL AND superseded_at IS NULL");
 
-                b.ToTable("consents", "janus", t =>
+                b.ToTable("consents", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_consents_kind", "kind IN ('ordinary', 'written')");
 
@@ -2327,7 +2327,7 @@ partial class AddComplianceRecords
                 b.HasKey("Subject", "Purpose")
                     .HasName("pk_objections");
 
-                b.ToTable("objections", "janus", t =>
+                b.ToTable("objections", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_objections_mechanism", "mechanism IN ('administrator', 'dashboard', 'reconsent', 'registration')");
 
@@ -2357,7 +2357,7 @@ partial class AddComplianceRecords
                 b.HasKey("Name", "Version", "Language")
                     .HasName("pk_legal_document_translations");
 
-                b.ToTable("legal_document_translations", "janus", t =>
+                b.ToTable("legal_document_translations", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_legal_document_translations_language", "length(trim(language)) > 0");
                     });
@@ -2393,7 +2393,7 @@ partial class AddComplianceRecords
                 b.HasIndex("Name", "PublishedAt")
                     .HasDatabaseName("ix_legal_document_versions_current");
 
-                b.ToTable("legal_document_versions", "janus", t =>
+                b.ToTable("legal_document_versions", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_legal_document_versions_governing_language", "length(trim(governing_language)) > 0");
 
@@ -2432,7 +2432,7 @@ partial class AddComplianceRecords
                     .HasDatabaseName("ix_erasures_outstanding")
                     .HasFilter("status <> 'complete'");
 
-                b.ToTable("erasures", "janus", t =>
+                b.ToTable("erasures", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_erasures_attempts", "attempts >= 0");
 
@@ -2463,7 +2463,7 @@ partial class AddComplianceRecords
                 b.HasIndex("Subject", "AssembledAt")
                     .HasDatabaseName("ix_privacy_exports_subject");
 
-                b.ToTable("privacy_exports", "janus");
+                b.ToTable("privacy_exports", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Privacy.Outbox.DeliveryConfirmationRecord", b =>
@@ -2483,7 +2483,7 @@ partial class AddComplianceRecords
                 b.HasKey("Delivery", "Subscriber")
                     .HasName("pk_outbox_confirmations");
 
-                b.ToTable("outbox_confirmations", "janus", t =>
+                b.ToTable("outbox_confirmations", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_outbox_confirmations_subscriber", "length(trim(subscriber)) > 0");
                     });
@@ -2540,7 +2540,7 @@ partial class AddComplianceRecords
                 b.HasIndex("Subject")
                     .HasDatabaseName("ix_outbox_subject");
 
-                b.ToTable("outbox", "janus", t =>
+                b.ToTable("outbox", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_outbox_attempts", "attempts >= 0");
 
@@ -2578,7 +2578,7 @@ partial class AddComplianceRecords
                 b.HasKey("Id")
                     .HasName("pk_compliance_records");
 
-                b.ToTable("compliance_records", "janus", t =>
+                b.ToTable("compliance_records", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_compliance_records_only", "id = 1");
                     });
@@ -2663,7 +2663,7 @@ partial class AddComplianceRecords
                     .HasDatabaseName("ix_privacy_requests_open")
                     .HasFilter("status = 'open'");
 
-                b.ToTable("privacy_requests", "janus", t =>
+                b.ToTable("privacy_requests", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_privacy_requests_status", "status IN ('deemed-refused-by-lapse', 'fulfilled', 'granted-by-lapse', 'open', 'refused')");
 
@@ -2696,7 +2696,7 @@ partial class AddComplianceRecords
                 b.HasIndex("KeyVersion")
                     .HasDatabaseName("ix_subject_keys_key_version");
 
-                b.ToTable("subject_keys", "janus", t =>
+                b.ToTable("subject_keys", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_subject_keys_format", "(format_marker = 1 AND octet_length(wrapped_key) = 40) OR (format_marker = 0 AND wrapped_key = decode(repeat('00', 32), 'hex'))");
 
@@ -2718,7 +2718,7 @@ partial class AddComplianceRecords
                 b.HasKey("Key")
                     .HasName("pk_settings");
 
-                b.ToTable("settings", "janus");
+                b.ToTable("settings", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Accounts.LifecycleLinkRecord", b =>

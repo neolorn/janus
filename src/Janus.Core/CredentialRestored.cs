@@ -15,4 +15,4 @@ public sealed record CredentialRestored(
     DateTimeOffset RaisedAt,
     string IdempotencyKey,
     AuthenticatorId Credential,
-    Factor Kind) : JanusEvent(RaisedAt, IdempotencyKey);
+    Factor Kind) : DomainEvent(RaisedAt, IdempotencyKey);

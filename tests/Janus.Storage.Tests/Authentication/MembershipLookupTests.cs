@@ -37,7 +37,7 @@ public sealed class MembershipLookupTests(DatabaseFixture database)
         await PlaceAsync(subject, current, until: null);
         await PlaceAsync(subject, past, Noon.AddDays(400));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.Equal(
             [current],
@@ -56,7 +56,7 @@ public sealed class MembershipLookupTests(DatabaseFixture database)
     {
         SubjectId subject = await _deployment.AccountAsync(Noon);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.Empty(await new MembershipLookup(reading).OfAsync(
             subject,
@@ -73,7 +73,7 @@ public sealed class MembershipLookupTests(DatabaseFixture database)
     {
         var id = new OrganizationId(Guid.CreateVersion7());
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         await new OrganizationStore(writing).CreateAsync(
             Organization.Create(id, Fresh(name), Noon),
             TestContext.Current.CancellationToken);
@@ -102,7 +102,7 @@ public sealed class MembershipLookupTests(DatabaseFixture database)
             membership.End(ended);
         }
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         await new MembershipStore(writing).CreateAsync(
             membership,
             TestContext.Current.CancellationToken);

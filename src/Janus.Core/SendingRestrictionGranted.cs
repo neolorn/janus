@@ -20,4 +20,4 @@ public sealed record SendingRestrictionGranted(
     string IdempotencyKey,
     string Restriction,
     int Credit,
-    string Reason) : JanusEvent(RaisedAt, IdempotencyKey);
+    string Reason) : DomainEvent(RaisedAt, IdempotencyKey);

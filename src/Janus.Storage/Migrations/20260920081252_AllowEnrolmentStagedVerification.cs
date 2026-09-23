@@ -13,7 +13,7 @@ internal sealed partial class AllowEnrolmentStagedVerification : Migration
     {
         migrationBuilder.AlterColumn<Guid>(
             name: "browser",
-            schema: "janus",
+            schema: "identity",
             table: "identifier_verifications",
             type: "uuid",
             nullable: true,
@@ -26,7 +26,7 @@ internal sealed partial class AllowEnrolmentStagedVerification : Migration
     {
         migrationBuilder.AlterColumn<Guid>(
             name: "browser",
-            schema: "janus",
+            schema: "identity",
             table: "identifier_verifications",
             type: "uuid",
             nullable: false,

@@ -14,7 +14,7 @@ namespace Janus.Storage.Authentication.Sending;
 /// </summary>
 /// <param name="context">The context the operation runs on.</param>
 /// <remarks>Implements INT-SMS-004 and CONV-DESIGN-003.</remarks>
-internal sealed class SmsBalanceLedger(JanusDbContext context) : ISmsBalanceLedger
+internal sealed class SmsBalanceLedger(StoreContext context) : ISmsBalanceLedger
 {
     /// <inheritdoc/>
     public async ValueTask RecordAsync(

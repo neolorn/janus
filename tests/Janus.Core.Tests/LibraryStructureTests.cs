@@ -301,7 +301,7 @@ public sealed class LibraryStructureTests
             .Where(file => !Path.GetFileNameWithoutExtension(file).StartsWith(
                 "ProfilePhoto",
                 StringComparison.Ordinal))
-            .Where(file => !Path.GetFileName(file).Equals("JanusDbContext.cs", StringComparison.Ordinal))
+            .Where(file => !Path.GetFileName(file).Equals("StoreContext.cs", StringComparison.Ordinal))
             .Where(file => File.ReadAllText(file).Contains(".ProfilePhotos", StringComparison.Ordinal));
 
         Assert.Empty(reaching);

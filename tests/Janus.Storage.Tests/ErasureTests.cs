@@ -32,7 +32,7 @@ public sealed class ErasureTests(DatabaseFixture database) : IClassFixture<Datab
     private const int DataKeyLength = 32;
 
     private const string CountIdentifiers =
-        "SELECT count(*) FROM janus.identifiers WHERE subject = @subject";
+        "SELECT count(*) FROM identity.identifiers WHERE subject = @subject";
 
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
 
@@ -52,7 +52,7 @@ public sealed class ErasureTests(DatabaseFixture database) : IClassFixture<Datab
 
         await WriteAsync(subject, keys, "ahmed@example.com", "+201001234567");
 
-        await using (JanusDbContext erasing = database.Context())
+        await using (StoreContext erasing = database.Context())
         await using (var work = new UnitOfWork(erasing))
         {
             await work.BeginAsync(TestContext.Current.CancellationToken);
@@ -80,7 +80,7 @@ public sealed class ErasureTests(DatabaseFixture database) : IClassFixture<Datab
             2,
             await connection.ExecuteScalarAsync<int>(CountIdentifiers, new { subject = subject.Value }));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         SubjectKeyRecord erased = await reading.SubjectKeys
             .SingleAsync(row => row.Subject == subject, TestContext.Current.CancellationToken);
 
@@ -167,7 +167,7 @@ public sealed class ErasureTests(DatabaseFixture database) : IClassFixture<Datab
                     + "FROM information_schema.columns c "
                     + "JOIN information_schema.tables t "
                     + "ON t.table_schema = c.table_schema AND t.table_name = c.table_name "
-                    + "WHERE c.table_schema = 'janus' AND t.table_type = 'BASE TABLE' "
+                    + "WHERE c.table_schema = 'identity' AND t.table_type = 'BASE TABLE' "
                     + "AND c.data_type IN ('text', 'character varying', 'bytea', 'jsonb')")];
 
         var holding = new List<string>();
@@ -179,7 +179,7 @@ public sealed class ErasureTests(DatabaseFixture database) : IClassFixture<Datab
                 : "\"" + column + "\"::text";
 
             long found = await connection.ExecuteScalarAsync<long>(
-                "SELECT count(*) FROM janus.\"" + table + "\" WHERE " + read + " LIKE ANY(@sought)",
+                "SELECT count(*) FROM identity.\"" + table + "\" WHERE " + read + " LIKE ANY(@sought)",
                 new { sought = new[] { "%" + email + "%", "%" + phone + "%" } });
 
             if (found > 0)
@@ -208,7 +208,7 @@ public sealed class ErasureTests(DatabaseFixture database) : IClassFixture<Datab
         await using NpgsqlConnection connection = await database.OpenAsync();
 
         Guid found = await connection.ExecuteScalarAsync<Guid>(
-            "SELECT subject FROM janus.identifiers "
+            "SELECT subject FROM identity.identifiers "
                 + "WHERE fingerprint = @fingerprint AND kind = 'email' AND is_primary",
             new
             {
@@ -279,7 +279,7 @@ public sealed class ErasureTests(DatabaseFixture database) : IClassFixture<Datab
 
         try
         {
-            await using JanusDbContext context = database.Context();
+            await using StoreContext context = database.Context();
             await using var work = new UnitOfWork(context);
 
             await work.BeginAsync(TestContext.Current.CancellationToken);
@@ -312,7 +312,7 @@ public sealed class ErasureTests(DatabaseFixture database) : IClassFixture<Datab
 
     private async Task NeutraliseAsync(SubjectId subject)
     {
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
 
         List<IdentifierRecord> rows = await context.Identifiers
             .Where(row => row.Subject == subject)

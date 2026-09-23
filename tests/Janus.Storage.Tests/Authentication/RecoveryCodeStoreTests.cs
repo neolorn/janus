@@ -46,7 +46,7 @@ public sealed class RecoveryCodeStoreTests(DatabaseFixture database)
             """
             SELECT column_name
             FROM information_schema.columns
-            WHERE table_schema = 'janus' AND table_name = 'recovery_codes'
+            WHERE table_schema = 'identity' AND table_name = 'recovery_codes'
             """);
 
         Assert.Equal(["hash", "ordinal", "subject", "used_at"], columns.Order());
@@ -67,7 +67,7 @@ public sealed class RecoveryCodeStoreTests(DatabaseFixture database)
         await using NpgsqlConnection connection = await database.OpenAsync();
 
         IEnumerable<string> stored = await connection.QueryAsync<string>(
-            "SELECT hash FROM janus.recovery_codes WHERE subject = @subject",
+            "SELECT hash FROM identity.recovery_codes WHERE subject = @subject",
             new { subject = subject.Value });
 
         foreach (string hash in stored)
@@ -93,7 +93,7 @@ public sealed class RecoveryCodeStoreTests(DatabaseFixture database)
         await WrittenAsync(RecoveryCodeSet.Of(subject, Hashes(first), Noon));
         await WrittenAsync(RecoveryCodeSet.Of(subject, Hashes(second), Noon + TimeSpan.FromDays(1)));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         RecoveryCodeSet read = Assert.IsType<RecoveryCodeSet>(await new RecoveryCodeStore(reading)
             .FindAsync(subject, TestContext.Current.CancellationToken));
 
@@ -115,7 +115,7 @@ public sealed class RecoveryCodeStoreTests(DatabaseFixture database)
 
         await WrittenAsync(RecoveryCodeSet.Of(subject, Hashes(drawn), Noon));
 
-        await using (JanusDbContext spending = database.Context())
+        await using (StoreContext spending = database.Context())
         {
             RecoveryCodeSet held = Assert.IsType<RecoveryCodeSet>(await new RecoveryCodeStore(spending)
                 .FindAsync(subject, TestContext.Current.CancellationToken));
@@ -126,7 +126,7 @@ public sealed class RecoveryCodeStoreTests(DatabaseFixture database)
             await spending.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         RecoveryCodeSet read = Assert.IsType<RecoveryCodeSet>(await new RecoveryCodeStore(reading)
             .FindAsync(subject, TestContext.Current.CancellationToken));
 
@@ -146,7 +146,7 @@ public sealed class RecoveryCodeStoreTests(DatabaseFixture database)
 
         await WrittenAsync(RecoveryCodeSet.Of(subject, Hashes(Drawn(2)), Noon));
 
-        await using (JanusDbContext marking = database.Context())
+        await using (StoreContext marking = database.Context())
         {
             RecoveryCodeSet held = Assert.IsType<RecoveryCodeSet>(await new RecoveryCodeStore(marking)
                 .FindAsync(subject, TestContext.Current.CancellationToken));
@@ -158,7 +158,7 @@ public sealed class RecoveryCodeStoreTests(DatabaseFixture database)
             await marking.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         RecoveryCodeSet read = Assert.IsType<RecoveryCodeSet>(await new RecoveryCodeStore(reading)
             .FindAsync(subject, TestContext.Current.CancellationToken));
 
@@ -176,7 +176,7 @@ public sealed class RecoveryCodeStoreTests(DatabaseFixture database)
     {
         SubjectId subject = await _deployment.AccountAsync(Noon);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.Null(await new RecoveryCodeStore(reading)
             .FindAsync(subject, TestContext.Current.CancellationToken));
@@ -207,7 +207,7 @@ public sealed class RecoveryCodeStoreTests(DatabaseFixture database)
 
     private async Task WrittenAsync(RecoveryCodeSet set)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         await new RecoveryCodeStore(writing).ReplaceAsync(set, TestContext.Current.CancellationToken);
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);

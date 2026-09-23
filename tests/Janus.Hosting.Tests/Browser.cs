@@ -19,7 +19,7 @@ namespace Janus.Hosting.Tests;
 /// <param name="deployment">What it talks to.</param>
 internal sealed class Browser(Deployment deployment)
 {
-    private const string Origin = "https://janus.example.test";
+    private const string Origin = "https://identity.example.test";
 
     private readonly Dictionary<string, string> _cookies = new(StringComparer.Ordinal);
 
@@ -57,7 +57,7 @@ internal sealed class Browser(Deployment deployment)
 
         context.Request.Method = method;
         context.Request.Scheme = "https";
-        context.Request.Host = new HostString("janus.example.test");
+        context.Request.Host = new HostString("identity.example.test");
         context.Request.Path = Path(path, out QueryString query);
         context.Request.QueryString = query;
         context.Request.Headers["Sec-Fetch-Site"] = "same-origin";
@@ -115,7 +115,7 @@ internal sealed class Browser(Deployment deployment)
 
         context.Request.Method = "GET";
         context.Request.Scheme = "https";
-        context.Request.Host = new HostString("janus.example.test");
+        context.Request.Host = new HostString("identity.example.test");
         context.Request.Path = Path(path, out QueryString query);
         context.Request.QueryString = query;
         context.Request.Headers["Sec-Fetch-Site"] = "same-origin";

@@ -35,10 +35,10 @@ public sealed class AccountStoreTests(DatabaseFixture database) : IClassFixture<
     {
         SubjectId subject = Subjects.New();
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         await AddAsync(writing, Account.Create(subject, Noon));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         Account read = Assert.IsType<Account>(
             await new AccountStore(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
 
@@ -56,7 +56,7 @@ public sealed class AccountStoreTests(DatabaseFixture database) : IClassFixture<
     [Fact]
     public async Task FindBySubjectAsync_ASubjectWithNoRow_ReadsNothingAsync()
     {
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
 
         Assert.Null(await new AccountStore(context)
             .FindBySubjectAsync(Subjects.New(), TestContext.Current.CancellationToken));
@@ -71,7 +71,7 @@ public sealed class AccountStoreTests(DatabaseFixture database) : IClassFixture<
     {
         SubjectId subject = Subjects.New();
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         var account = Account.Create(subject, Noon);
         await AddAsync(writing, account);
 
@@ -80,7 +80,7 @@ public sealed class AccountStoreTests(DatabaseFixture database) : IClassFixture<
         await store.RecordTransitionAsync(account, TestContext.Current.CancellationToken);
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         Account read = Assert.IsType<Account>(
             await new AccountStore(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
 
@@ -99,7 +99,7 @@ public sealed class AccountStoreTests(DatabaseFixture database) : IClassFixture<
     {
         SubjectId subject = Subjects.New();
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         var account = Account.Create(subject, Noon);
         await AddAsync(writing, account);
 
@@ -112,7 +112,7 @@ public sealed class AccountStoreTests(DatabaseFixture database) : IClassFixture<
         await store.RecordTransitionAsync(account, TestContext.Current.CancellationToken);
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         Account read = Assert.IsType<Account>(
             await new AccountStore(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
 
@@ -128,7 +128,7 @@ public sealed class AccountStoreTests(DatabaseFixture database) : IClassFixture<
     [Fact]
     public async Task RecordTransitionAsync_AnAccountWithNoRow_ThrowsAsync()
     {
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
 
         var account = Account.Create(Subjects.New(), Noon);
         account.Restrict();
@@ -147,7 +147,7 @@ public sealed class AccountStoreTests(DatabaseFixture database) : IClassFixture<
     {
         SubjectId subject = Subjects.New();
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         var account = Account.Create(subject, Noon);
         await AddAsync(writing, account);
 
@@ -158,7 +158,7 @@ public sealed class AccountStoreTests(DatabaseFixture database) : IClassFixture<
         await store.RecordTransitionAsync(account, TestContext.Current.CancellationToken);
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        await using JanusDbContext again = database.Context();
+        await using StoreContext again = database.Context();
 
         DbUpdateException refusal = await Assert.ThrowsAsync<DbUpdateException>(async () =>
             await AddAsync(again, Account.Create(subject, Noon.AddDays(1))));
@@ -184,14 +184,14 @@ public sealed class AccountStoreTests(DatabaseFixture database) : IClassFixture<
         second.RequestDeletion(DeletionOrigin.Self, Noon);
         later.RequestDeletion(DeletionOrigin.Self, Noon.AddHours(3));
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         foreach (Account account in new[] { first, second, later, standing })
         {
             await AddAsync(writing, account);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         IReadOnlyList<Account> elapsed = await new AccountStore(reading)
             .DeletingSinceAsync(Noon.AddHours(2), TestContext.Current.CancellationToken);
@@ -213,7 +213,7 @@ public sealed class AccountStoreTests(DatabaseFixture database) : IClassFixture<
         Assert.Equal(Noon.AddHours(1), mine[1].DeletingSince);
     }
 
-    private static async Task AddAsync(JanusDbContext context, Account account)
+    private static async Task AddAsync(StoreContext context, Account account)
     {
         await new AccountStore(context).AddAsync(account, TestContext.Current.CancellationToken);
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);

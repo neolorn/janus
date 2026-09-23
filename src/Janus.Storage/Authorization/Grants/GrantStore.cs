@@ -21,7 +21,7 @@ namespace Janus.Storage.Authorization.Grants;
 /// A read returns the rows a principal holds and never a resolved outcome; expiry and
 /// revocation are carried on the row and read where the question is asked.
 /// </remarks>
-internal sealed class GrantStore(JanusDbContext context, DataConnections connections) : IGrantStore
+internal sealed class GrantStore(StoreContext context, DataConnections connections) : IGrantStore
 {
     // AUTHZ-CACHE-001: the counter of every account the grant reaches goes up in the
     // same transaction as the grant itself. A group's grant reaches every account the
@@ -29,18 +29,18 @@ internal sealed class GrantStore(JanusDbContext context, DataConnections connect
     // write per member.
     private const string RaiseForAccount =
         """
-        INSERT INTO janus.grant_versions (subject, version)
+        INSERT INTO identity.grant_versions (subject, version)
         VALUES (@subject, 1)
-        ON CONFLICT (subject) DO UPDATE SET version = janus.grant_versions.version + 1;
+        ON CONFLICT (subject) DO UPDATE SET version = identity.grant_versions.version + 1;
         """;
 
     private const string RaiseForGroup =
         """
-        INSERT INTO janus.grant_versions (subject, version)
+        INSERT INTO identity.grant_versions (subject, version)
         SELECT closure.member_id, 1
-        FROM janus.group_closure AS closure
+        FROM identity.group_closure AS closure
         WHERE closure.group_id = @group AND closure.member_type = 'user'
-        ON CONFLICT (subject) DO UPDATE SET version = janus.grant_versions.version + 1;
+        ON CONFLICT (subject) DO UPDATE SET version = identity.grant_versions.version + 1;
         """;
 
     /// <inheritdoc/>

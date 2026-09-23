@@ -56,9 +56,9 @@ internal sealed class Deployment(HostFixture fixture)
 
         await connection.ExecuteAsync(new CommandDefinition(
             """
-            INSERT INTO janus.organizations (id, name, created_at)
+            INSERT INTO identity.organizations (id, name, created_at)
             VALUES (@organization, @name, @at);
-            INSERT INTO janus.roles (name) VALUES (@role);
+            INSERT INTO identity.roles (name) VALUES (@role);
             """,
             new
             {
@@ -74,7 +74,7 @@ internal sealed class Deployment(HostFixture fixture)
         foreach (Permission permission in permissions)
         {
             await connection.ExecuteAsync(new CommandDefinition(
-                "INSERT INTO janus.role_permissions (role, permission) VALUES (@role, @permission);",
+                "INSERT INTO identity.role_permissions (role, permission) VALUES (@role, @permission);",
                 new { role = role.ToString(), permission = permission.ToString() },
                 cancellationToken: cancellationToken));
         }
@@ -99,14 +99,14 @@ internal sealed class Deployment(HostFixture fixture)
         await using NpgsqlConnection connection = await fixture.OpenAsync();
 
         await connection.ExecuteAsync(new CommandDefinition(
-            "INSERT INTO janus.roles (name) VALUES (@role);",
+            "INSERT INTO identity.roles (name) VALUES (@role);",
             new { role = role.ToString() },
             cancellationToken: cancellationToken));
 
         foreach (Permission permission in permissions)
         {
             await connection.ExecuteAsync(new CommandDefinition(
-                "INSERT INTO janus.role_permissions (role, permission) VALUES (@role, @permission);",
+                "INSERT INTO identity.role_permissions (role, permission) VALUES (@role, @permission);",
                 new { role = role.ToString(), permission = permission.ToString() },
                 cancellationToken: cancellationToken));
         }
@@ -132,7 +132,7 @@ internal sealed class Deployment(HostFixture fixture)
         await using NpgsqlConnection connection = await fixture.OpenAsync();
 
         await connection.ExecuteAsync(new CommandDefinition(
-            "INSERT INTO janus.roles (name) VALUES (@role) ON CONFLICT DO NOTHING;",
+            "INSERT INTO identity.roles (name) VALUES (@role) ON CONFLICT DO NOTHING;",
             new { role = name.ToString() },
             cancellationToken: cancellationToken));
 
@@ -140,7 +140,7 @@ internal sealed class Deployment(HostFixture fixture)
         {
             await connection.ExecuteAsync(new CommandDefinition(
                 """
-                INSERT INTO janus.role_permissions (role, permission)
+                INSERT INTO identity.role_permissions (role, permission)
                 VALUES (@role, @permission)
                 ON CONFLICT DO NOTHING;
                 """,
@@ -215,7 +215,7 @@ internal sealed class Deployment(HostFixture fixture)
 
         await connection.ExecuteAsync(new CommandDefinition(
             """
-            INSERT INTO janus.accounts (subject, created_at, state)
+            INSERT INTO identity.accounts (subject, created_at, state)
             VALUES (@subject, @at, 'active');
             """,
             new { subject = subject.Value, at = Noon },
@@ -235,7 +235,7 @@ internal sealed class Deployment(HostFixture fixture)
         await using NpgsqlConnection connection = await fixture.OpenAsync();
 
         await connection.ExecuteAsync(new CommandDefinition(
-            "UPDATE janus.accounts SET state = 'restricted' WHERE subject = @subject;",
+            "UPDATE identity.accounts SET state = 'restricted' WHERE subject = @subject;",
             new { subject = subject.Value },
             cancellationToken: cancellationToken));
     }
@@ -251,7 +251,7 @@ internal sealed class Deployment(HostFixture fixture)
         await using NpgsqlConnection connection = await fixture.OpenAsync();
 
         await connection.ExecuteAsync(new CommandDefinition(
-            "UPDATE janus.accounts SET state = 'active' WHERE subject = @subject;",
+            "UPDATE identity.accounts SET state = 'active' WHERE subject = @subject;",
             new { subject = subject.Value },
             cancellationToken: cancellationToken));
     }
@@ -268,7 +268,7 @@ internal sealed class Deployment(HostFixture fixture)
         await using NpgsqlConnection connection = await fixture.OpenAsync();
 
         await connection.ExecuteAsync(new CommandDefinition(
-            "INSERT INTO janus.groups (id, organization, name) VALUES (@id, @organization, @name);",
+            "INSERT INTO identity.groups (id, organization, name) VALUES (@id, @organization, @name);",
             new
             {
                 id = group.Value,
@@ -296,25 +296,25 @@ internal sealed class Deployment(HostFixture fixture)
 
         await connection.ExecuteAsync(new CommandDefinition(
             """
-            INSERT INTO janus.group_members (group_id, member_type, member_id)
+            INSERT INTO identity.group_members (group_id, member_type, member_id)
             VALUES (@group, @type, @member);
 
-            DELETE FROM janus.group_closure
+            DELETE FROM identity.group_closure
             WHERE group_id IN (
-                SELECT id FROM janus.groups WHERE organization = @organization);
+                SELECT id FROM identity.groups WHERE organization = @organization);
 
             WITH RECURSIVE reach AS (
                 SELECT edge.group_id AS root, edge.member_type, edge.member_id, 1 AS depth
-                FROM janus.group_members AS edge
-                JOIN janus.groups AS held
+                FROM identity.group_members AS edge
+                JOIN identity.groups AS held
                   ON held.id = edge.group_id AND held.organization = @organization
                 UNION ALL
                 SELECT reach.root, edge.member_type, edge.member_id, reach.depth + 1
                 FROM reach
-                JOIN janus.group_members AS edge ON edge.group_id = reach.member_id
+                JOIN identity.group_members AS edge ON edge.group_id = reach.member_id
                 WHERE reach.member_type = 'group' AND reach.depth < 64
             )
-            INSERT INTO janus.group_closure (group_id, member_type, member_id, depth)
+            INSERT INTO identity.group_closure (group_id, member_type, member_id, depth)
             SELECT root, member_type, member_id, MIN(depth)
             FROM reach
             GROUP BY root, member_type, member_id;
@@ -347,17 +347,17 @@ internal sealed class Deployment(HostFixture fixture)
 
         await connection.ExecuteAsync(new CommandDefinition(
             """
-            INSERT INTO janus.resources
+            INSERT INTO identity.resources
                 (resource_type, resource_id, organization, subject,
                  contained_in_type, contained_in_id)
             VALUES (@type, @id, @organization, @subject, @containerType, @containerId);
-            INSERT INTO janus.ancestry
+            INSERT INTO identity.ancestry
                 (resource_type, resource_id, ancestor_type, ancestor_id, depth, organization)
             SELECT @type, @id, @type, @id, 0, @organization
             UNION ALL
             SELECT @type, @id, above.ancestor_type, above.ancestor_id, above.depth + 1,
                    @organization
-            FROM janus.ancestry AS above
+            FROM identity.ancestry AS above
             WHERE above.resource_type = @containerType AND above.resource_id = @containerId;
             """,
             new
@@ -396,18 +396,18 @@ internal sealed class Deployment(HostFixture fixture)
 
         await connection.ExecuteAsync(new CommandDefinition(
             """
-            UPDATE janus.resources
+            UPDATE identity.resources
             SET contained_in_type = @containerType, contained_in_id = @containerId
             WHERE resource_type = @type AND resource_id = @id;
 
-            DELETE FROM janus.ancestry
+            DELETE FROM identity.ancestry
             WHERE resource_type = @type AND resource_id = @id AND depth > 0;
 
-            INSERT INTO janus.ancestry
+            INSERT INTO identity.ancestry
                 (resource_type, resource_id, ancestor_type, ancestor_id, depth, organization)
             SELECT @type, @id, above.ancestor_type, above.ancestor_id, above.depth + 1,
                    @organization
-            FROM janus.ancestry AS above
+            FROM identity.ancestry AS above
             WHERE above.resource_type = @containerType AND above.resource_id = @containerId;
             """,
             new
@@ -433,7 +433,7 @@ internal sealed class Deployment(HostFixture fixture)
 
         await connection.ExecuteAsync(new CommandDefinition(
             """
-            UPDATE janus.grants
+            UPDATE identity.grants
             SET revoked_at = @at, revoked_by = @by, revocation_reason = @reason
             WHERE id = @id;
             """,
@@ -465,8 +465,8 @@ internal sealed class Deployment(HostFixture fixture)
 
         await connection.ExecuteAsync(new CommandDefinition(
             allows
-                ? "INSERT INTO janus.role_permissions (role, permission) VALUES (@role, @permission);"
-                : "DELETE FROM janus.role_permissions WHERE role = @role AND permission = @permission;",
+                ? "INSERT INTO identity.role_permissions (role, permission) VALUES (@role, @permission);"
+                : "DELETE FROM identity.role_permissions WHERE role = @role AND permission = @permission;",
             new { role = role.ToString(), permission = permission.ToString() },
             cancellationToken: cancellationToken));
     }
@@ -497,7 +497,7 @@ internal sealed class Deployment(HostFixture fixture)
 
         await connection.ExecuteAsync(new CommandDefinition(
             """
-            INSERT INTO janus.grants
+            INSERT INTO identity.grants
                 (id, subject_type, subject_id, role, organization, resource_type,
                  resource_id, deny, kind, expires_at, granted_by, granted_at, reason)
             VALUES (@id, @subjectType, @subject, @role, @organization, @resourceType,

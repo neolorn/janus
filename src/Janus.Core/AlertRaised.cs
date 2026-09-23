@@ -21,4 +21,4 @@ public sealed record AlertRaised(
     string IdempotencyKey,
     AlertCondition Condition,
     AlertSeverity Severity,
-    IReadOnlyDictionary<string, JsonElement> Details) : JanusEvent(RaisedAt, IdempotencyKey);
+    IReadOnlyDictionary<string, JsonElement> Details) : DomainEvent(RaisedAt, IdempotencyKey);

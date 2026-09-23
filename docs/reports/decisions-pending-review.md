@@ -392,6 +392,8 @@ cross-origin without a preflight the browser will not grant.
 should name `X-Janus-Csrf` beside `X-Janus-Request`, and say that the first carries the
 token and the second is checked for presence only.
 
+**Superseded by D-163** as to the header names. Applied in entry 166.
+
 ---
 
 ## 11. A password above the maximum is refused as a value above a ceiling
@@ -4713,6 +4715,8 @@ against the name the frontend writes.
 *Chapter text that should change.* D-153's sentence naming one header, as D-162 says.
 `10` should carry both header names.
 
+**Superseded by D-163** as to the header names. Applied in entry 166.
+
 ---
 
 ## 140. The two endpoints the library calls are keys of its own
@@ -5955,6 +5959,199 @@ pre-authentication row wrapped under the key-encryption key.
 *Chapter text that should change.* `17` BFF-SESS-006 should name the two routes and say
 that both halves are the library's; `07` LIB-HOST-001 should carry the client identifier
 row and the provider address beside the sign-in address; `10` section 4 needs no key.
+
+---
+
+## 164. The public types are named for what they are
+
+**Corrections 2 · 2026-09-23 · Tier 2 · CONV-NAME-001, CONV-LAYOUT-002, CONV-DESIGN-007, D-163**
+
+*The question.* D-163 renames every type and member that carries the product name "for
+what the thing is", and names four successors: `StoreContext`, `DomainEvent`,
+`MapAuthorizationTables` and `AddIdentityArea` with its siblings. Nine more names in the
+code carried it, seven of them on the public surface of `Janus.Hosting`, and no chapter
+names their successors.
+
+*The readings.*
+
+1. Name each for what it is, with the prefix `identity` only where the name would
+   otherwise not say whose it is beside a host's own names on the same builder.
+2. Put `identity` on every one, so each successor is the old name with the word
+   swapped.
+
+*Chosen: 1.* D-163 asks for the name of the thing and keeps the prefix for artefacts
+that need keeping apart from a host's; its own examples carry none (`StoreContext`,
+`MapAuthorizationTables`). The successors:
+
+| Was | Is | Why |
+| --- | --- | --- |
+| `JanusRegistration` | `HostingRegistration` | The registration class of `Janus.Hosting`, beside `StorageRegistration` in `Janus.Storage`. `AddJanus` stays on it. |
+| `JanusEndpoints.MapJanus` | `IdentityEndpoints.MapIdentityEndpoints` | Mounts the library's endpoints among the host's own on the host's route builder, where a bare `MapEndpoints` would not say whose. |
+| `JanusEndpoints.MapJanusWellKnown` | `IdentityEndpoints.MapIdentityWellKnown` | The same reason, for the two documents of REG-PM-001 at the site root. |
+| `JanusPipeline` | `PipelineProfiles` | Holds the two profiles of BFF-OWN-001 and BFF-MACH-001. |
+| `UseJanusBrowserProfile`, `UseJanusMachineProfile` | `UseBrowserProfile`, `UseMachineProfile` | The chapters' own names for what each mounts. |
+| `JanusAuthorizationModel` | `AuthorizationTables` | Holds `MapAuthorizationTables` (D-163). |
+| `JanusApplication` | `ApplicationKind` | Which of the deployment's applications the pipeline is mounted in (BFF-CSRF-005). |
+| `JanusEvent` | `DomainEvent` | D-163. |
+| `JanusDbContext` | `StoreContext` | D-163. |
+| `AddJanusStorage` | `AddStorageArea` | The storage project's sibling of `AddIdentityArea` (CONV-DESIGN-007). |
+
+*Tests that pin it.* The declared public API of `Janus.Core` and `Janus.Hosting`, which
+fails the build on any other name (CONV-SETUP-003);
+`BrowserProfileTests.BFF_OWN_001_AC1_MountingTakesNoSecurityRelevantConfiguration`;
+`TruthTableTests.AUTHZ_GATE_002_AC2_EveryCaseIsEqualAcrossBothRenderingsAsync`, whose
+host maps the tables with `MapAuthorizationTables`.
+
+*Chapter text that should change.* `07` LIB-API-005 or `17` BFF-OWN-001 could name
+`MapIdentityEndpoints`, `MapIdentityWellKnown`, `UseBrowserProfile` and
+`UseMachineProfile` as the mounting calls, so the chapters name what a host writes.
+
+---
+
+## 165. The database names no chapter fixes take the prefix only where they meet a host's
+
+**Corrections 2 · 2026-09-23 · Tier 2 · CONV-NAME-001, OPS-DB-002, OPS-MIG-007, AUTHZ-GATE-002, D-163**
+
+*The question.* D-163 fixes the schema, the collation and the three roles. Four more
+database names carried the product name and no chapter names them: the migrations
+history table, the channel a registration wizard's stream listens on, the identifiers
+the permission rule writes into the SQL it renders, and the names of the databases the
+tests, the design-time factory and the double-migration gate create.
+
+*The readings.*
+
+1. `identity` on each, as on the schema.
+2. `identity` only where the name shares a namespace with a host's, and the plain name of
+   the thing elsewhere.
+
+*Chosen: 2.* The prefix exists to keep the library's artefacts apart from a host's
+(CONV-NAME-001), so it goes where they meet and nowhere else.
+
+| Was | Is | Why |
+| --- | --- | --- |
+| `__janus_migrations_history` | `__migrations_history` | The table is in the `identity` schema, which already keeps it apart from the host's history (OPS-DB-002). |
+| `janus_registration` | `identity_registration` | A notification channel is named per database, beside any channel the host listens on. |
+| `janus_authz_*` | `identity_authz_*` | The fragment is composed into the host's own query, beside the host's aliases and parameters (AUTHZ-GATE-002). |
+| `janus` (test and design-time database) | `identity` | The library's database. |
+| `janus_from_empty`, `janus_from_previous` | `migrated_from_empty`, `migrated_from_previous` | Throwaway databases on the gate's own server, named for the run each holds (OPS-MIG-007). |
+
+Entries 55, 134, 135 and 136 name the schema, the collation or the maintenance role in
+passing; what each decided stands, and each name reads as renamed.
+
+*Tests that pin it.*
+`SchemaTests.OPS_DB_002_AC1_TheLibraryKeepsItsOwnMigrationHistoryAsync`,
+`SchemaTests.OPS_DB_002_AC1_TheCollationLivesInTheLibrarysSchemaAsync`,
+`DatabaseRoleTests.OPS_MIG_003a_AC1_TheMaintenanceRoleAltersNoSchemaAsync`,
+`RegistrationSignalsTests.REG_SESS_003_AWaitHearsTheCommittedAnnouncementAndNoOtherAsync`,
+`PermissionRuleTests.LIB_HOST_002_AC1_NoRenderingReadsATableTheHostOwns`,
+`PermissionRuleTests.LIB_HOST_002_AC1_OnlyWhatTheHostRunsNamesTheRelationItDeclared`,
+and the double-migration gate.
+
+*Chapter text that should change.* `06` OPS-DB-002 could name the history table beside
+the schema, since a deployment's database administrator sees it.
+
+---
+
+## 166. The names on the wire no chapter fixes take the prefix, as the ones D-163 fixes do
+
+**Corrections 2 · 2026-09-23 · Tier 2 · CONV-NAME-001, BFF-CSRF-001, BFF-CSRF-003, BFF-SESS-006, AUTH-OIDC-003, AUTH-PASS-004, D-163**
+
+*What D-163 decided, and what was built.* The five cookies are `__Host-identity-*` and
+the two headers `X-Identity-Request` and `X-Identity-Csrf`; the code carries them so,
+and the tests that hold each name against what the frontend writes were changed with
+them. The domain record `_identity-verify` and its value are not in the code yet: the
+domain lock (REG-DOM-001) is built in phase 8 and takes the names from `09` as they
+now stand.
+
+*The question.* Four more names outside the process carried the product name and no
+chapter names them: the two private claims the protocol server's principal carries the
+issued code and refresh token in, the named client of the sign-on back channel, the
+directory beside the application that holds the word lists, and the purpose the key
+protecting codes and refresh tokens is derived under.
+
+*The readings.*
+
+1. `identity` on each, as on the cookies and headers.
+2. The plain name of the thing, since none is a cookie, a header or the DNS record.
+
+*Chosen: 1.* Each of the four sits beside a host's own names in a space the host shares:
+the claims beside the host's and the protocol's claims, the named client in the host's
+client factory, the directory among the host's files, and the purpose in the host's key
+ring. That is the case CONV-NAME-001 gives the prefix for.
+
+| Was | Is |
+| --- | --- |
+| `janus_code`, `janus_refresh` | `identity_code`, `identity_refresh` |
+| `janus-signon` | `identity-signon` |
+| `janus-corpus` | `identity-corpus` |
+| `janus:oidc:token-protection:v1` | `identity:oidc:token-protection:v1` |
+
+Entries 10 and 139 chose and applied the two header names; both are marked. Entries
+143, 152, 157 and 159 name the registration channel, the event base type or the
+protection purpose in passing; what each decided stands.
+
+*Tests that pin it.*
+`BrowserProfileTests.BFF_CSRF_003_AC1_TheTwoHeadersAreNamedAsTheFrontendWritesThem`,
+`PrivacyContractTests.PRIV_CONS_006a_AC3_TheLibrarySetsOnlyTheFiveNecessaryCookies`,
+`BrowserCookieTests.BFF_SESS_002_AC1_EveryIssueCarriesTheFourAttributes`,
+`SignOnTests.BFF_SESS_006_AC2_TheExchangeIsServerToServerAndHandsTheBrowserNoTokenAsync`,
+`OidcFlowTests.AUTH_OIDC_003_AC1_ARefreshTokenRotatesAndTheOldOneIsSpentAsync`.
+
+*Chapter text that should change.* `07` LIB-HOST-001 could name `identity-signon` as the
+client a host configures, and `05` INT-PWD-003 or `10` `password.blocklist.sources` the
+`identity-corpus` directory, since a deployment has to put files there.
+
+---
+
+## 167. The scan reads the source, and allows the name only as the head of a dotted name
+
+**Corrections 2 · 2026-09-23 · Tier 2 · CONV-NAME-001 AC2, D-163**
+
+*The question.* CONV-NAME-001 AC2 reads "A source scan finds the product name only in
+namespaces, project and package identifiers and `AddJanus` (D-163)." It does not say
+which files are the source, or how a scan tells a namespace or an identifier from any
+other use of the word.
+
+*The readings for what is scanned.*
+
+1. Every file in the repository.
+2. Every file the build, the tests and the pipeline read: `src`, `tests`, `tools`,
+   `.github`, `.config` and the files at the root, leaving out the documents (`docs/`,
+   the Markdown files at the root and `NOTICE`) and the Unicode data vendored as
+   published.
+
+*Chosen: 2.* The criterion names a source scan. The documents name the package as a
+package: the changelog is written for its reader, `NOTICE` heads its attribution with
+the package's name, and `docs/` is the owner's. The Unicode files are Unicode's.
+
+*The readings for what is allowed.*
+
+1. A parse per file type that finds namespace declarations, `using` directives, project
+   references and package identifiers, and allows the name inside those alone.
+2. A textual rule: the name as the first segment of a dotted name (a namespace, a
+   `using`, a namespace-qualified type name, or a project, assembly, package or solution
+   identifier such as `Janus.Core` or `Janus.slnx`), `AddJanus` as a whole word, and the
+   lower-case package identifiers NuGet writes in `packages.lock.json`.
+
+*Chosen: 2.* Every form the criterion allows is the head of a dotted name or the entry
+point, and none of the forms D-163 forbids is: a type or member name, a schema-qualified
+relation (lower case, outside the lock files), a role, a cookie, a header, a constant, a
+comment or a test's data all fail. A parse would pass a comment or a string that spells
+the name alone; the textual rule does not. The scan reads the name from the root
+namespace, so the test does not spell it.
+
+*What the scan found after the three renames, and what they became.* The administrative
+organization in two tests' data, now `Administration`; the pipeline's job identifier
+`janus-analyzers`, now `analyzer-rules` (the check's name, which branch protection
+requires, is unchanged); and the double-migration gate's worktree folder, now
+`release-<tag>`.
+
+*Tests that pin it.*
+`ProductNameTests.CONV_NAME_001_AC2_TheProductNameAppearsOnlyInNamespacesIdentifiersAndTheEntryPoint`.
+
+*Chapter text that should change.* `08` CONV-NAME-001 AC2 could say which files the scan
+reads, and that the solution file and the lock files' lower-case identifiers count as
+project and package identifiers.
 
 
 # Rows for chapter 10

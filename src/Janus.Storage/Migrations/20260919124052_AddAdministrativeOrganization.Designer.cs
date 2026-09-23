@@ -11,7 +11,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 namespace Janus.Storage.Migrations;
 
-[DbContext(typeof(JanusDbContext))]
+[DbContext(typeof(StoreContext))]
 [Migration("20260919124052_AddAdministrativeOrganization")]
 partial class AddAdministrativeOrganization
 {
@@ -20,8 +20,8 @@ partial class AddAdministrativeOrganization
     {
 #pragma warning disable 612, 618
         modelBuilder
-            .HasDefaultSchema("janus")
-            .HasAnnotation("Npgsql:CollationDefinition:public.janus_ci", "und-u-ks-level2,und-u-ks-level2,icu,False")
+            .HasDefaultSchema("identity")
+            .HasAnnotation("Npgsql:CollationDefinition:public.identity_ci", "und-u-ks-level2,und-u-ks-level2,icu,False")
             .HasAnnotation("ProductVersion", "10.0.4")
             .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
@@ -61,7 +61,7 @@ partial class AddAdministrativeOrganization
                     .HasDatabaseName("ix_accounts_deleting_since")
                     .HasFilter("deleting_since IS NOT NULL");
 
-                b.ToTable("accounts", "janus", t =>
+                b.ToTable("accounts", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_accounts_deleting", "(deleting_by IS NULL) = (deleting_since IS NULL)");
 
@@ -119,7 +119,7 @@ partial class AddAdministrativeOrganization
                 b.HasIndex("EffectiveSubject", "OccurredAt")
                     .HasDatabaseName("ix_audit_records_effective_subject");
 
-                b.ToTable("audit_records", "janus", t =>
+                b.ToTable("audit_records", "identity", t =>
                     {
                         t.ExcludeFromMigrations();
                     });
@@ -149,7 +149,7 @@ partial class AddAdministrativeOrganization
                 b.HasIndex("Named")
                     .HasDatabaseName("ix_identifier_backup_settings_named");
 
-                b.ToTable("identifier_backup_settings", "janus", t =>
+                b.ToTable("identifier_backup_settings", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_identifier_backup_settings_kind", "kind IN ('email', 'phone', 'username')");
 
@@ -221,7 +221,7 @@ partial class AddAdministrativeOrganization
                 b.HasIndex("Subject", "Kind")
                     .HasDatabaseName("ix_identifiers_subject");
 
-                b.ToTable("identifiers", "janus", t =>
+                b.ToTable("identifiers", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_identifiers_fingerprint", "octet_length(fingerprint) = 32");
 
@@ -262,7 +262,7 @@ partial class AddAdministrativeOrganization
                 b.HasIndex("Subject")
                     .HasDatabaseName("ix_memberships_subject");
 
-                b.ToTable("memberships", "janus", t =>
+                b.ToTable("memberships", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_memberships_ended", "ended_at IS NULL OR ended_at >= created_at");
                     });
@@ -296,7 +296,7 @@ partial class AddAdministrativeOrganization
                     .IsRequired()
                     .HasColumnType("text")
                     .HasColumnName("name")
-                    .UseCollation("janus_ci");
+                    .UseCollation("identity_ci");
 
                 b.HasKey("Id")
                     .HasName("pk_organizations");
@@ -310,7 +310,7 @@ partial class AddAdministrativeOrganization
                     .HasDatabaseName("ux_organizations_administrative")
                     .HasFilter("administrative");
 
-                b.ToTable("organizations", "janus", t =>
+                b.ToTable("organizations", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_organizations_erased", "erased_at IS NULL OR deletion_requested_at IS NOT NULL");
                     });
@@ -337,7 +337,7 @@ partial class AddAdministrativeOrganization
                 b.HasKey("Subject")
                     .HasName("pk_account_preferences");
 
-                b.ToTable("account_preferences", "janus");
+                b.ToTable("account_preferences", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Identity.Profiles.ProfilePhotoRecord", b =>
@@ -358,7 +358,7 @@ partial class AddAdministrativeOrganization
                 b.HasKey("Subject")
                     .HasName("pk_profile_photos");
 
-                b.ToTable("profile_photos", "janus");
+                b.ToTable("profile_photos", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Identity.Profiles.ProfileRecord", b =>
@@ -382,7 +382,7 @@ partial class AddAdministrativeOrganization
                 b.HasKey("Subject")
                     .HasName("pk_profiles");
 
-                b.ToTable("profiles", "janus");
+                b.ToTable("profiles", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Privacy.Erasures.ErasureRecord", b =>
@@ -416,7 +416,7 @@ partial class AddAdministrativeOrganization
                     .HasDatabaseName("ix_erasures_outstanding")
                     .HasFilter("status <> 'complete'");
 
-                b.ToTable("erasures", "janus", t =>
+                b.ToTable("erasures", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_erasures_attempts", "attempts >= 0");
 
@@ -451,7 +451,7 @@ partial class AddAdministrativeOrganization
                 b.HasIndex("KeyVersion")
                     .HasDatabaseName("ix_subject_keys_key_version");
 
-                b.ToTable("subject_keys", "janus", t =>
+                b.ToTable("subject_keys", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_subject_keys_format", "(format_marker = 1 AND octet_length(wrapped_key) = 40) OR (format_marker = 0 AND wrapped_key = decode(repeat('00', 32), 'hex'))");
 
@@ -473,7 +473,7 @@ partial class AddAdministrativeOrganization
                 b.HasKey("Key")
                     .HasName("pk_settings");
 
-                b.ToTable("settings", "janus");
+                b.ToTable("settings", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Identity.Identifiers.BackupSettingRecord", b =>

@@ -27,7 +27,7 @@ public sealed class SchemaValidationTests(DatabaseFixture database) : IClassFixt
     [Fact]
     public async Task OPS_MIG_002_AC1_TheMigratedDatabaseMatchesTheModelAsync()
     {
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
 
         Result read = await new SchemaValidation(context)
             .ValidateAsync(TestContext.Current.CancellationToken);
@@ -42,7 +42,7 @@ public sealed class SchemaValidationTests(DatabaseFixture database) : IClassFixt
     [Fact]
     public async Task OPS_MIG_002_AC1_ADatabaseBehindTheModelIsRefusedByNameAsync()
     {
-        await using JanusDbContext context = await BehindAsync();
+        await using StoreContext context = await BehindAsync();
 
         Result read = await new SchemaValidation(context)
             .ValidateAsync(TestContext.Current.CancellationToken);
@@ -62,7 +62,7 @@ public sealed class SchemaValidationTests(DatabaseFixture database) : IClassFixt
     [Fact]
     public async Task OPS_MIG_001_AC1_TheCheckLeavesTheDatabaseUnmigratedAsync()
     {
-        await using JanusDbContext context = await BehindAsync();
+        await using StoreContext context = await BehindAsync();
 
         _ = await new SchemaValidation(context)
             .ValidateAsync(TestContext.Current.CancellationToken);
@@ -72,14 +72,14 @@ public sealed class SchemaValidationTests(DatabaseFixture database) : IClassFixt
 
         IEnumerable<string> schemas = await connection.QueryAsync<string>(
             "SELECT nspname FROM pg_namespace WHERE nspname = @schema",
-            new { schema = JanusDbContext.Schema });
+            new { schema = StoreContext.Schema });
 
         Assert.Empty(schemas);
     }
 
     // A second database on the same server, created as the deployment's own is and
     // never migrated: the state OPS-MIG-002 is about.
-    private async ValueTask<JanusDbContext> BehindAsync()
+    private async ValueTask<StoreContext> BehindAsync()
     {
         await using (NpgsqlConnection server = await database.OpenAsync())
         {
@@ -95,15 +95,15 @@ public sealed class SchemaValidationTests(DatabaseFixture database) : IClassFixt
             }
         }
 
-        return new JanusDbContext(new DbContextOptionsBuilder<JanusDbContext>()
+        return new StoreContext(new DbContextOptionsBuilder<StoreContext>()
             .UseNpgsql(
                 new NpgsqlConnectionStringBuilder(database.ConnectionString)
                 {
                     Database = Behind,
                 }.ConnectionString,
                 npgsql => npgsql.MigrationsHistoryTable(
-                    JanusDbContext.MigrationsHistoryTable,
-                    JanusDbContext.Schema))
+                    StoreContext.MigrationsHistoryTable,
+                    StoreContext.Schema))
             .Options);
     }
 }

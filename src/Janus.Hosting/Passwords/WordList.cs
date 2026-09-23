@@ -24,7 +24,7 @@ internal sealed class WordList(string directory) : IWordList
     /// <summary>
     /// The directory beside the application that a deployment holds its list in.
     /// </summary>
-    public const string Directory = "janus-corpus";
+    public const string Directory = "identity-corpus";
 
     /// <summary>The file the listed words are read from.</summary>
     public const string WordsFile = "words.txt";

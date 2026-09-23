@@ -16,7 +16,7 @@ namespace Janus.Storage.Privacy.Records;
 /// <param name="context">The context the operation's reads and writes run on.</param>
 /// <param name="time">The clock the row is stamped with.</param>
 /// <remarks>Implements PRIV-ROPA-001 and CONV-DESIGN-003.</remarks>
-internal sealed class ComplianceStore(JanusDbContext context, TimeProvider time) : IComplianceStore
+internal sealed class ComplianceStore(StoreContext context, TimeProvider time) : IComplianceStore
 {
     private static readonly ComplianceRecord Nothing = new(null, null, []);
 

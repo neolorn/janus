@@ -176,7 +176,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             subject,
             organization: null));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         IReadOnlyList<AuditRecord> read = await Store(reading).FindBySubjectAsync(
             subject,
             TestContext.Current.CancellationToken);
@@ -207,7 +207,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
 
         await using NpgsqlConnection connection = await database.OpenAsync();
         (string details, byte[] sealed_) = await connection.QuerySingleAsync<(string, byte[])>(
-            "SELECT details, enc_details FROM janus.audit_records WHERE effective_subject = @subject",
+            "SELECT details, enc_details FROM identity.audit_records WHERE effective_subject = @subject",
             new { subject = subject.Value });
 
         Assert.DoesNotContain("ahmed@example.com", details, StringComparison.Ordinal);
@@ -238,7 +238,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
 
         await _deployment.EraseAsync(subject);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         AuditRecord anonymised = Assert.Single(await Store(reading).FindBySubjectAsync(
             subject,
@@ -249,7 +249,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
 
         await using NpgsqlConnection connection = await database.OpenAsync();
         (string action, DateTime at) = await connection.QuerySingleAsync<(string, DateTime)>(
-            "SELECT action, occurred_at FROM janus.audit_records WHERE effective_subject = @subject",
+            "SELECT action, occurred_at FROM identity.audit_records WHERE effective_subject = @subject",
             new { subject = subject.Value });
 
         Assert.Equal("identity.identifier.added", action);
@@ -280,23 +280,23 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
         // A trail worth reading by subject has other subjects in it; with a handful of
         // rows every plan is a scan and the question the item asks cannot be put.
         _ = await connection.ExecuteAsync(
-            "INSERT INTO janus.audit_records "
+            "INSERT INTO identity.audit_records "
                 + "(id, category, occurred_at, action, acting_subject, effective_subject, details) "
                 + "SELECT gen_random_uuid(), 'security', now(), 'identity.account.read', "
                 + "gen_random_uuid(), gen_random_uuid(), '{}'::jsonb "
                 + "FROM generate_series(1, 20000)");
 
-        _ = await connection.ExecuteAsync("ANALYZE janus.audit_records");
+        _ = await connection.ExecuteAsync("ANALYZE identity.audit_records");
 
         IEnumerable<string> plan = await connection.QueryAsync<string>(
-            "EXPLAIN SELECT id, action, occurred_at FROM janus.audit_records "
+            "EXPLAIN SELECT id, action, occurred_at FROM identity.audit_records "
                 + "WHERE effective_subject = @subject ORDER BY occurred_at DESC",
             new { subject = subject.Value });
 
         string leaf = (await connection.QuerySingleAsync<string>(
-            "SELECT tableoid::regclass::text FROM janus.audit_records "
+            "SELECT tableoid::regclass::text FROM identity.audit_records "
                 + "WHERE effective_subject = @subject",
-            new { subject = subject.Value }))["janus.".Length..];
+            new { subject = subject.Value }))["identity.".Length..];
 
         // The empty months cost nothing to walk; what the item asks is that the
         // partition holding the subject's rows is read through the index.
@@ -342,7 +342,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
 
         await _deployment.EraseAsync(subject);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         IReadOnlyList<AuditRecord> records = await Store(reading).FindBySubjectAsync(
             subject,
@@ -376,11 +376,11 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
 
         await using NpgsqlConnection connection = await database.OpenAsync();
         string leaf = await connection.QuerySingleAsync<string>(
-            "SELECT tableoid::regclass::text FROM janus.audit_records "
+            "SELECT tableoid::regclass::text FROM identity.audit_records "
                 + "WHERE effective_subject = @subject",
             new { subject = subject.Value });
 
-        Assert.StartsWith("janus.audit_records_routine_", leaf, StringComparison.Ordinal);
+        Assert.StartsWith("identity.audit_records_routine_", leaf, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -394,7 +394,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
         await using NpgsqlConnection connection = await database.OpenAsync();
 
         int created = await connection.ExecuteScalarAsync<int>(
-            "SELECT janus.audit_ensure_partitions()");
+            "SELECT identity.audit_ensure_partitions()");
 
         int months = await connection.ExecuteScalarAsync<int>(
             "SELECT count(*) FROM pg_class "
@@ -454,7 +454,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
         NpgsqlConnection connection,
         Guid[] subjects) =>
         [.. await connection.QueryAsync<(string, long)>(
-            "SELECT category, count(*) FROM janus.audit_records "
+            "SELECT category, count(*) FROM identity.audit_records "
                 + "WHERE effective_subject = ANY(@subjects) GROUP BY category ORDER BY category",
             new { subjects })];
 
@@ -466,7 +466,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
 
         return await connection.ExecuteAsync(
             """
-            INSERT INTO janus.audit_records
+            INSERT INTO identity.audit_records
                 (id, category, occurred_at, action, details)
             VALUES (@id, 'security', @at, @action, '{}'::jsonb);
             """,
@@ -489,19 +489,19 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
         return document;
     }
 
-    private AuditStore Store(JanusDbContext context) =>
+    private AuditStore Store(StoreContext context) =>
         new(context, _deployment.Keys, _deployment.Randomness);
 
     private async ValueTask AppendAsync(AuditRecord record)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         await Store(writing).AppendAsync(record, TestContext.Current.CancellationToken);
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
     private async ValueTask<AuditRecord> OneAsync(SubjectId subject)
     {
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         return Assert.Single(await Store(reading).FindBySubjectAsync(
             subject,

@@ -13,12 +13,12 @@ internal sealed partial class DropSendCounterSettlement : Migration
     {
         migrationBuilder.DropIndex(
             name: "ix_send_counters_settles_at",
-            schema: "janus",
+            schema: "identity",
             table: "send_counters");
 
         migrationBuilder.DropColumn(
             name: "settles_at",
-            schema: "janus",
+            schema: "identity",
             table: "send_counters");
 
         // AUTH-ABUSE-004 AC6: the sweep before a read deletes every record whose newest
@@ -29,18 +29,18 @@ internal sealed partial class DropSendCounterSettlement : Migration
         migrationBuilder.Sql(
             """
             CREATE INDEX ix_send_counters_last_sent_at
-                ON janus.send_counters ((sent_at[(cardinality(sent_at) - 1) + 1]));
+                ON identity.send_counters ((sent_at[(cardinality(sent_at) - 1) + 1]));
             """);
     }
 
     /// <inheritdoc />
     protected override void Down(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.Sql("DROP INDEX janus.ix_send_counters_last_sent_at;");
+        migrationBuilder.Sql("DROP INDEX identity.ix_send_counters_last_sent_at;");
 
         migrationBuilder.AddColumn<DateTimeOffset>(
             name: "settles_at",
-            schema: "janus",
+            schema: "identity",
             table: "send_counters",
             type: "timestamp with time zone",
             nullable: false,
@@ -48,7 +48,7 @@ internal sealed partial class DropSendCounterSettlement : Migration
 
         migrationBuilder.CreateIndex(
             name: "ix_send_counters_settles_at",
-            schema: "janus",
+            schema: "identity",
             table: "send_counters",
             column: "settles_at");
     }

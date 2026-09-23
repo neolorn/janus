@@ -26,7 +26,7 @@ namespace Janus.Storage.Authentication.Sessions;
 /// address nor the city, and erasure leaves both unreadable.
 /// </remarks>
 internal sealed class SessionStore(
-    JanusDbContext context,
+    StoreContext context,
     KeyEncryptionKeys keyEncryptionKeys,
     RandomNumberGenerator randomness) : ISessionStore
 {

@@ -21,7 +21,7 @@ public sealed class SignOnTests
 {
     private const string Client = "this-application";
 
-    private const string Return = "https://janus.example.test/auth/signon/return";
+    private const string Return = "https://identity.example.test/auth/signon/return";
 
     private const string Secret = "a-secret-the-deployment-set";
 
@@ -216,7 +216,7 @@ public sealed class SignOnTests
 
         Answer screen = await new Browser(deployment).SendAsync("GET", Local(Where(again)));
 
-        Assert.Equal("https://janus.example.test/signin", Where(screen));
+        Assert.Equal("https://identity.example.test/signin", Where(screen));
     }
 
     /// <summary>
@@ -269,8 +269,8 @@ public sealed class SignOnTests
     // The deployment is one origin here, so what a browser would follow across two
     // applications is followed as a path of the one it is talking to.
     private static string Local(string where) =>
-        where.StartsWith("https://janus.example.test", StringComparison.Ordinal)
-            ? where["https://janus.example.test".Length..]
+        where.StartsWith("https://identity.example.test", StringComparison.Ordinal)
+            ? where["https://identity.example.test".Length..]
             : where;
 
     private static string Parameter(string where, string name)

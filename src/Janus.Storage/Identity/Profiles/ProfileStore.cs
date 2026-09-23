@@ -23,7 +23,7 @@ namespace Janus.Storage.Identity.Profiles;
 /// (PRIV-RIGHT-005a AC12).
 /// </remarks>
 internal sealed class ProfileStore(
-    JanusDbContext context,
+    StoreContext context,
     KeyEncryptionKeys keyEncryptionKeys,
     RandomNumberGenerator randomness) : IProfileStore
 {

@@ -47,7 +47,7 @@ public sealed class ProfileStoreTests(DatabaseFixture database) : IClassFixture<
             profile.RecordDateOfBirth(Born);
         });
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         Profile read = await Store(reading).FindBySubjectAsync(
             subject,
             TestContext.Current.CancellationToken);
@@ -67,7 +67,7 @@ public sealed class ProfileStoreTests(DatabaseFixture database) : IClassFixture<
     {
         SubjectId subject = await _deployment.AccountAsync(Noon);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         Profile read = await Store(reading).FindBySubjectAsync(
             subject,
             TestContext.Current.CancellationToken);
@@ -98,7 +98,7 @@ public sealed class ProfileStoreTests(DatabaseFixture database) : IClassFixture<
             profile.ForgetDateOfBirth();
         });
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         Profile read = await Store(reading).FindBySubjectAsync(
             subject,
             TestContext.Current.CancellationToken);
@@ -152,7 +152,7 @@ public sealed class ProfileStoreTests(DatabaseFixture database) : IClassFixture<
         await RecordAsync(subject, profile => profile.SetDisplayName(Named(Shown)));
         await _deployment.EraseAsync(subject);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
             await Store(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
@@ -191,7 +191,7 @@ public sealed class ProfileStoreTests(DatabaseFixture database) : IClassFixture<
     [Fact]
     public async Task RecordAsync_ASubjectWithNoKey_ThrowsAsync()
     {
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
 
         var profile = Profile.Empty(Subjects.New());
         profile.SetDisplayName(Named(Shown));
@@ -217,12 +217,12 @@ public sealed class ProfileStoreTests(DatabaseFixture database) : IClassFixture<
         return name;
     }
 
-    private ProfileStore Store(JanusDbContext context) =>
+    private ProfileStore Store(StoreContext context) =>
         new(context, _deployment.Keys, _deployment.Randomness);
 
     private async Task RecordAsync(SubjectId subject, Action<Profile> change)
     {
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
         ProfileStore store = Store(context);
 
         Profile profile = await store.FindBySubjectAsync(subject, TestContext.Current.CancellationToken);
@@ -234,7 +234,7 @@ public sealed class ProfileStoreTests(DatabaseFixture database) : IClassFixture<
 
     private async Task<ProfileRecord> StoredAsync(SubjectId subject)
     {
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
 
         return await context.Profiles
             .SingleAsync(held => held.Subject == subject, TestContext.Current.CancellationToken);

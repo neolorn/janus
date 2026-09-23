@@ -38,7 +38,7 @@ public sealed class PreAuthenticationStoreTests(DatabaseFixture database)
 
         await CarriedAsync(secret, new SignOnAttempt(state.Fingerprint(), verifier, "/account"));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         PreAuthentication held = Assert.IsType<PreAuthentication>(
             await Store(reading).FindAsync(secret.Fingerprint(), TestContext.Current.CancellationToken));
@@ -51,7 +51,7 @@ public sealed class PreAuthenticationStoreTests(DatabaseFixture database)
         await using NpgsqlConnection connection = await database.OpenAsync();
 
         byte[] stored = await connection.QuerySingleAsync<byte[]>(
-            "SELECT signon_verifier FROM janus.preauthentication_sessions "
+            "SELECT signon_verifier FROM identity.preauthentication_sessions "
                 + "WHERE fingerprint = @Fingerprint;",
             new { Fingerprint = secret.Fingerprint() });
 
@@ -72,7 +72,7 @@ public sealed class PreAuthenticationStoreTests(DatabaseFixture database)
             secret,
             new SignOnAttempt(state.Fingerprint(), "a-verifier-long-enough-to-be-one", "/"));
 
-        await using (JanusDbContext forgetting = database.Context())
+        await using (StoreContext forgetting = database.Context())
         {
             PreAuthentication held = Assert.IsType<PreAuthentication>(
                 await Store(forgetting)
@@ -84,7 +84,7 @@ public sealed class PreAuthenticationStoreTests(DatabaseFixture database)
             await forgetting.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.Null(
             Assert.IsType<PreAuthentication>(
@@ -96,11 +96,11 @@ public sealed class PreAuthenticationStoreTests(DatabaseFixture database)
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
-    private PreAuthenticationStore Store(JanusDbContext context) => new(context, _deployment.Keys);
+    private PreAuthenticationStore Store(StoreContext context) => new(context, _deployment.Keys);
 
     private async Task CarriedAsync(OpaqueToken secret, SignOnAttempt attempt)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         var contact = PreAuthentication.Issue(
             secret,

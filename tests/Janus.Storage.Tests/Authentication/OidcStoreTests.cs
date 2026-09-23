@@ -50,12 +50,12 @@ public sealed class OidcStoreTests(DatabaseFixture database)
         await using NpgsqlConnection connection = await database.OpenAsync();
 
         byte[] stored = await connection.QuerySingleAsync<byte[]>(
-            "SELECT secret FROM janus.oidc_clients WHERE client_id = @clientId",
+            "SELECT secret FROM identity.oidc_clients WHERE client_id = @clientId",
             new { clientId = ClientId });
 
         Assert.Equal(OpaqueToken.Of(Secret).Fingerprint(), stored);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         var applications = new OidcApplicationStore(reading);
         OidcClientRecord? held = await applications.FindByClientIdAsync(
@@ -80,7 +80,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
     {
         await RegisteredAsync(ClientId, OidcClientKind.Protocol);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         var applications = new OidcApplicationStore(reading);
         OidcClientRecord held = (await applications.FindByClientIdAsync(
@@ -107,7 +107,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
         await RegisteredAsync(ClientId, OidcClientKind.Protocol);
         await RegisteredAsync(Browser, OidcClientKind.BrowserApplication);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         var applications = new OidcApplicationStore(reading);
 
@@ -132,7 +132,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
         byte[] privateKey = created.ExportPkcs8PrivateKey();
         var key = SigningKey.Create("the-key", "ES256", created.ExportSubjectPublicKeyInfo(), Noon);
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await Keys(writing).AddAsync(key, privateKey, TestContext.Current.CancellationToken);
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -141,13 +141,13 @@ public sealed class OidcStoreTests(DatabaseFixture database)
         await using NpgsqlConnection connection = await database.OpenAsync();
 
         (byte[] Stored, int Version) held = await connection.QuerySingleAsync<(byte[], int)>(
-            "SELECT private_key, key_version FROM janus.signing_keys WHERE key_id = @keyId",
+            "SELECT private_key, key_version FROM identity.signing_keys WHERE key_id = @keyId",
             new { keyId = key.KeyId });
 
         Assert.NotEqual(privateKey, held.Stored);
         Assert.Equal(_deployment.Keys.CurrentVersion, held.Version);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.Equal(
             privateKey,
@@ -182,7 +182,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
             Noon + TimeSpan.FromDays(7),
             OpenIddictConstants.Statuses.Redeemed);
 
-        await using (JanusDbContext sweeping = database.Context())
+        await using (StoreContext sweeping = database.Context())
         {
             Assert.True(
                 await new OidcTokenStore(sweeping).PruneAsync(
@@ -190,7 +190,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
                     TestContext.Current.CancellationToken) >= 2);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         var tokens = new OidcTokenStore(reading);
 
@@ -217,7 +217,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
         Guid second = await TokenAsync(subject, reused, Noon, Noon + TimeSpan.FromDays(7));
         Guid apart = await TokenAsync(subject, other, Noon, Noon + TimeSpan.FromDays(7));
 
-        await using (JanusDbContext revoking = database.Context())
+        await using (StoreContext revoking = database.Context())
         {
             Assert.Equal(
                 2,
@@ -226,7 +226,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
                     TestContext.Current.CancellationToken));
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         var tokens = new OidcTokenStore(reading);
 
@@ -249,8 +249,8 @@ public sealed class OidcStoreTests(DatabaseFixture database)
         Guid grant = await GrantedAsync(subject);
         Guid issued = await TokenAsync(subject, grant, Noon, Noon + TimeSpan.FromDays(7));
 
-        await using JanusDbContext first = database.Context();
-        await using JanusDbContext second = database.Context();
+        await using StoreContext first = database.Context();
+        await using StoreContext second = database.Context();
 
         var one = new OidcTokenStore(first);
         var two = new OidcTokenStore(second);
@@ -289,11 +289,11 @@ public sealed class OidcStoreTests(DatabaseFixture database)
     private static async Task<OidcTokenRecord?> FoundAsync(OidcTokenStore tokens, Guid id) =>
         await tokens.FindByIdAsync(id.ToString(), TestContext.Current.CancellationToken);
 
-    private SigningKeyStore Keys(JanusDbContext context) => new(context, _deployment.Keys);
+    private SigningKeyStore Keys(StoreContext context) => new(context, _deployment.Keys);
 
     private async Task<Guid> GrantedAsync(SubjectId subject)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         var authorizations = new OidcAuthorizationStore(writing);
         OidcAuthorizationRecord grant = await authorizations.InstantiateAsync(
@@ -329,7 +329,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
         DateTimeOffset expiresAt,
         string status = OpenIddictConstants.Statuses.Valid)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         var tokens = new OidcTokenStore(writing);
         OidcTokenRecord token = await tokens.InstantiateAsync(TestContext.Current.CancellationToken);
@@ -361,7 +361,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
             Destination,
             ["openid", "email", "offline_access"]);
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         await new OidcClientStore(writing).RecordAsync(
             client,
@@ -383,7 +383,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
             TimeSpan.FromDays(30),
             satisfiesEveryGate: true);
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         await new SessionStore(writing, _deployment.Keys, _deployment.Randomness).AddAsync(
             record,

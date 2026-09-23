@@ -24,4 +24,4 @@ public sealed record CredentialSuspended(
     string IdempotencyKey,
     AuthenticatorId Credential,
     Factor Kind,
-    DateTimeOffset InvalidatesAt) : JanusEvent(RaisedAt, IdempotencyKey);
+    DateTimeOffset InvalidatesAt) : DomainEvent(RaisedAt, IdempotencyKey);

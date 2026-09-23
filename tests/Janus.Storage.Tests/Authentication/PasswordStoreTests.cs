@@ -45,7 +45,7 @@ public sealed class PasswordStoreTests(DatabaseFixture database)
             """
             SELECT column_name
             FROM information_schema.columns
-            WHERE table_schema = 'janus' AND table_name = 'passwords'
+            WHERE table_schema = 'identity' AND table_name = 'passwords'
             """);
 
         Assert.Equal(
@@ -65,7 +65,7 @@ public sealed class PasswordStoreTests(DatabaseFixture database)
 
         await WrittenAsync(Password.Set(subject, hash, meetsSingleFactorFloor: true, Noon));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         Password read = Assert.IsType<Password>(
             await new PasswordStore(reading).FindAsync(subject, TestContext.Current.CancellationToken));
 
@@ -89,7 +89,7 @@ public sealed class PasswordStoreTests(DatabaseFixture database)
             meetsSingleFactorFloor: true,
             Noon));
 
-        await using (JanusDbContext changing = database.Context())
+        await using (StoreContext changing = database.Context())
         {
             Password held = Assert.IsType<Password>(await new PasswordStore(changing)
                 .FindAsync(subject, TestContext.Current.CancellationToken));
@@ -100,7 +100,7 @@ public sealed class PasswordStoreTests(DatabaseFixture database)
             await changing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         Password read = Assert.IsType<Password>(
             await new PasswordStore(reading).FindAsync(subject, TestContext.Current.CancellationToken));
 
@@ -123,7 +123,7 @@ public sealed class PasswordStoreTests(DatabaseFixture database)
             meetsSingleFactorFloor: true,
             Noon));
 
-        await using (JanusDbContext rehashing = database.Context())
+        await using (StoreContext rehashing = database.Context())
         {
             Password held = Assert.IsType<Password>(await new PasswordStore(rehashing)
                 .FindAsync(subject, TestContext.Current.CancellationToken));
@@ -134,7 +134,7 @@ public sealed class PasswordStoreTests(DatabaseFixture database)
             await rehashing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         Password read = Assert.IsType<Password>(
             await new PasswordStore(reading).FindAsync(subject, TestContext.Current.CancellationToken));
 
@@ -164,7 +164,7 @@ public sealed class PasswordStoreTests(DatabaseFixture database)
         await using NpgsqlConnection connection = await database.OpenAsync();
 
         string stored = await connection.ExecuteScalarAsync<string>(
-            "SELECT hash FROM janus.passwords WHERE subject = @subject",
+            "SELECT hash FROM identity.passwords WHERE subject = @subject",
             new { subject = subject.Value })
             ?? throw new Xunit.Sdk.XunitException("The password was written.");
 
@@ -181,7 +181,7 @@ public sealed class PasswordStoreTests(DatabaseFixture database)
     {
         SubjectId subject = await _deployment.AccountAsync(Noon);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.Null(await new PasswordStore(reading)
             .FindAsync(subject, TestContext.Current.CancellationToken));
@@ -202,7 +202,7 @@ public sealed class PasswordStoreTests(DatabaseFixture database)
 
     private async Task WrittenAsync(Password password)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         await new PasswordStore(writing).SetAsync(password, TestContext.Current.CancellationToken);
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);

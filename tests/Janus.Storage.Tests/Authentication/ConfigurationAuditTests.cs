@@ -104,12 +104,12 @@ public sealed class ConfigurationAuditTests(DatabaseFixture database)
         SubjectId actor) =>
         new(key, before, after, Loosening: true, "a support window", actor, DateTimeOffset.UtcNow);
 
-    private ConfigurationAudit Audit(JanusDbContext context) =>
+    private ConfigurationAudit Audit(StoreContext context) =>
         new(context, new AuditStore(context, _deployment.Keys, _deployment.Randomness), TimeProvider.System);
 
     private async Task RecordedAsync(ConfigurationChange change)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         await Audit(writing).ChangedAsync(change, TestContext.Current.CancellationToken);
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -117,14 +117,14 @@ public sealed class ConfigurationAuditTests(DatabaseFixture database)
 
     private async Task<IReadOnlyList<ConfigurationChange>> OfSettingAsync(ConfigurationKey key)
     {
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         return await Audit(reading).OfSettingAsync(key, TestContext.Current.CancellationToken);
     }
 
     private async Task<IReadOnlyList<ConfigurationChange>> OfActorAsync(SubjectId actor)
     {
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         return await Audit(reading).OfActorAsync(actor, TestContext.Current.CancellationToken);
     }

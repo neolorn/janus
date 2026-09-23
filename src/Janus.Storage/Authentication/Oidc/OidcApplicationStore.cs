@@ -24,7 +24,7 @@ namespace Janus.Storage.Authentication.Oidc;
 /// than silently kept in memory. What the protocol asks about a client, the row
 /// answers: one exact destination, the proof key, and the grants its kind admits.
 /// </remarks>
-internal sealed class OidcApplicationStore(JanusDbContext context)
+internal sealed class OidcApplicationStore(StoreContext context)
     : IOpenIddictApplicationStore<OidcClientRecord>
 {
     /// <inheritdoc/>

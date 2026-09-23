@@ -49,7 +49,7 @@ public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<Databa
         await using NpgsqlConnection connection = await database.OpenAsync();
 
         bool same = await connection.ExecuteScalarAsync<bool>(
-            "SELECT 'Ahmed' = 'ahmed' COLLATE janus.janus_ci");
+            "SELECT 'Ahmed' = 'ahmed' COLLATE identity.identity_ci");
 
         Assert.True(same);
     }
@@ -81,9 +81,9 @@ public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<Databa
 
         IEnumerable<string> tables = await connection.QueryAsync<string>(
             "SELECT tablename FROM pg_tables WHERE schemaname = @schema ORDER BY tablename",
-            new { schema = JanusDbContext.Schema });
+            new { schema = StoreContext.Schema });
 
-        Assert.Contains(JanusDbContext.MigrationsHistoryTable, tables);
+        Assert.Contains(StoreContext.MigrationsHistoryTable, tables);
         Assert.Contains("accounts", tables);
         Assert.Contains("subject_keys", tables);
         Assert.Contains("settings", tables);
@@ -105,9 +105,9 @@ public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<Databa
             JOIN pg_namespace AS held ON held.oid = defined.collnamespace
             WHERE defined.collname = @name
             """,
-            new { name = JanusDbContext.CaseInsensitiveCollation });
+            new { name = StoreContext.CaseInsensitiveCollation });
 
-        Assert.Equal([JanusDbContext.Schema], schemas);
+        Assert.Equal([StoreContext.Schema], schemas);
     }
 
     /// <summary>
@@ -117,7 +117,7 @@ public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<Databa
     [Fact]
     public async Task OPS_MIG_007_AC1_TheMigrationsApplyASecondTimeAsync()
     {
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
         int declared = context.Database.GetMigrations().Count();
 
         await using NpgsqlConnection connection = await database.OpenAsync();
@@ -131,7 +131,7 @@ public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<Databa
 
     private static async Task<int> AppliedAsync(NpgsqlConnection connection) =>
         await connection.ExecuteScalarAsync<int>(
-            "SELECT count(*) FROM janus.\"" + JanusDbContext.MigrationsHistoryTable + "\"");
+            "SELECT count(*) FROM identity.\"" + StoreContext.MigrationsHistoryTable + "\"");
 
     /// <summary>
     /// CONV-ENUM-001 AC1: a value the code does not branch on is refused by the
@@ -144,7 +144,7 @@ public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<Databa
 
         PostgresException refusal = await Assert.ThrowsAsync<PostgresException>(async () =>
             await connection.ExecuteAsync(
-                "INSERT INTO janus.accounts (subject, created_at, state) VALUES (@subject, now(), 'pending')",
+                "INSERT INTO identity.accounts (subject, created_at, state) VALUES (@subject, now(), 'pending')",
                 new { subject = Guid.NewGuid() }));
 
         Assert.Equal("ck_accounts_state", refusal.ConstraintName);
@@ -162,7 +162,7 @@ public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<Databa
         int enums = await connection.ExecuteScalarAsync<int>(
             "SELECT count(*) FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace "
                 + "WHERE t.typtype = 'e' AND n.nspname = @schema",
-            new { schema = JanusDbContext.Schema });
+            new { schema = StoreContext.Schema });
 
         Assert.Equal(0, enums);
     }
@@ -178,7 +178,7 @@ public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<Databa
 
         PostgresException refusal = await Assert.ThrowsAsync<PostgresException>(async () =>
             await connection.ExecuteAsync(
-                "INSERT INTO janus.subject_keys (subject, format_marker, key_version, wrapped_key) "
+                "INSERT INTO identity.subject_keys (subject, format_marker, key_version, wrapped_key) "
                     + "VALUES (@subject, 1, 1, @key)",
                 new { subject = Guid.NewGuid(), key = new byte[32] }));
 

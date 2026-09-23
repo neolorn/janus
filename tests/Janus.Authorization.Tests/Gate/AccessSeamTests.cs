@@ -56,7 +56,7 @@ public sealed class AccessSeamTests
             string text = File.ReadAllText(file);
 
             Assert.DoesNotContain(nameof(PermissionRule), text, StringComparison.Ordinal);
-            Assert.DoesNotContain("janus.effective_grants", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("identity.effective_grants", text, StringComparison.Ordinal);
         }
     }
 
@@ -165,7 +165,7 @@ public sealed class AccessSeamTests
         Assert.Equal(
             [
                 Path.Combine("Janus.Authorization", "Gate", "AccessGate.cs"),
-                Path.Combine("Janus.Hosting", "JanusRegistration.cs"),
+                Path.Combine("Janus.Hosting", "HostingRegistration.cs"),
             ],
             naming);
     }

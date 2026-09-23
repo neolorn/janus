@@ -38,7 +38,7 @@ public sealed class SendOutboxTests(DatabaseFixture database)
 
         await WrittenAsync(undertaken);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         SendDelivery held = await Outbox(reading)
             .FindAsync(undertaken.Id, TestContext.Current.CancellationToken)
@@ -69,7 +69,7 @@ public sealed class SendOutboxTests(DatabaseFixture database)
 
         await WrittenAsync(undertaken);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         SendDeliveryRecord stored = await reading.SendOutbox
             .SingleAsync(held => held.Id == undertaken.Id, TestContext.Current.CancellationToken);
@@ -91,13 +91,13 @@ public sealed class SendOutboxTests(DatabaseFixture database)
 
         await WrittenAsync(undertaken);
 
-        await using (JanusDbContext removing = database.Context())
+        await using (StoreContext removing = database.Context())
         {
             await Outbox(removing).RemoveAsync(undertaken.Id, TestContext.Current.CancellationToken);
             await removing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.Null(await Outbox(reading).FindAsync(undertaken.Id, TestContext.Current.CancellationToken));
     }
@@ -128,12 +128,12 @@ public sealed class SendOutboxTests(DatabaseFixture database)
 
     private async Task WrittenAsync(SendDelivery delivery)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         await Outbox(writing).AddAsync(delivery, TestContext.Current.CancellationToken);
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
-    private SendDeliveryStore Outbox(JanusDbContext context) =>
+    private SendDeliveryStore Outbox(StoreContext context) =>
         new(context, _deployment.Keys, _deployment.Randomness);
 }

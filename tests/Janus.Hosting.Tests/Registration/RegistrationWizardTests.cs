@@ -320,7 +320,7 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status201Created, completed.Status);
         Assert.Empty(completed.Body);
         Assert.Null(completed.Location);
-        Assert.True(browser.Cookies.ContainsKey("__Host-janus-session"));
+        Assert.True(browser.Cookies.ContainsKey("__Host-identity-session"));
     }
 
     /// <summary>
@@ -397,7 +397,7 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
     {
         var named = new List<string>();
 
-        foreach (Type request in typeof(JanusEndpoints).Assembly.GetTypes())
+        foreach (Type request in typeof(IdentityEndpoints).Assembly.GetTypes())
         {
             if (request.Namespace is not "Janus.Hosting.Registration"
                 || !request.Name.EndsWith("Request", StringComparison.Ordinal))

@@ -24,24 +24,24 @@ internal sealed class PermissionRule
     /// <summary>
     /// The parameter the candidate statement names the record by.
     /// </summary>
-    public const string RecordParameter = "janus_authz_record";
+    public const string RecordParameter = "identity_authz_record";
 
     /// <summary>
     /// The parameter a page of records is carried in.
     /// </summary>
-    public const string PageParameter = "janus_authz_page_ids";
+    public const string PageParameter = "identity_authz_page_ids";
 
     /// <summary>
     /// The alias a page of records is read under.
     /// </summary>
-    public const string PageAlias = "janus_authz_page";
+    public const string PageAlias = "identity_authz_page";
 
     /// <summary>
     /// The column of that alias holding a record's identifier.
     /// </summary>
     public const string PageColumn = "id";
 
-    private const string Prefix = "janus_authz_";
+    private const string Prefix = "identity_authz_";
 
     private readonly IReadOnlyList<RelationshipDeclaration> _derivations;
     private readonly string[] _permissions;
@@ -302,12 +302,12 @@ internal sealed class PermissionRule
             $"""
             ((EXISTS (
                 SELECT 1
-                FROM janus.effective_grants AS {Prefix}allow
+                FROM identity.effective_grants AS {Prefix}allow
                 WHERE {Prefix}allow.deny = false
                   AND {Matches(Prefix + "allow", row)}
             ){Derived(row)}) AND NOT EXISTS (
                 SELECT 1
-                FROM janus.effective_grants AS {Prefix}deny
+                FROM identity.effective_grants AS {Prefix}deny
                 WHERE {Prefix}deny.deny = true
                   AND {Matches(Prefix + "deny", row)}
             ))
@@ -333,8 +333,8 @@ internal sealed class PermissionRule
                    {Prefix}grant.deny AS "{nameof(CandidateGrant.Deny)}",
                    {Prefix}above.ancestor_type AS "{nameof(CandidateGrant.AncestorType)}",
                    {Prefix}above.ancestor_id AS "{nameof(CandidateGrant.AncestorId)}"
-            FROM janus.effective_grants AS {Prefix}grant
-            LEFT JOIN janus.ancestry AS {Prefix}above
+            FROM identity.effective_grants AS {Prefix}grant
+            LEFT JOIN identity.ancestry AS {Prefix}above
               ON {Prefix}above.resource_type = @{Prefix}type
              AND {Prefix}above.resource_id = @{RecordParameter}
              AND {Prefix}above.ancestor_type = {Prefix}grant.resource_type
@@ -364,7 +364,7 @@ internal sealed class PermissionRule
                    {Prefix}grant.deny AS "{nameof(CandidateGrant.Deny)}",
                    CAST(NULL AS text) AS "{nameof(CandidateGrant.AncestorType)}",
                    CAST(NULL AS text) AS "{nameof(CandidateGrant.AncestorId)}"
-            FROM janus.effective_grants AS {Prefix}grant
+            FROM identity.effective_grants AS {Prefix}grant
             WHERE {MatchesOrganization(Prefix + "grant")}
             ORDER BY {Prefix}grant.deny DESC, {Prefix}grant.grant_id ASC;
             """),
@@ -383,7 +383,7 @@ internal sealed class PermissionRule
                    {Prefix}grant.permission AS "{nameof(PageCapability.Permission)}",
                    bool_or({Prefix}grant.deny) AS "{nameof(PageCapability.Denied)}"
             FROM unnest(CAST(@{PageParameter} AS text[])) AS {PageAlias}({PageColumn})
-            JOIN janus.effective_grants AS {Prefix}grant
+            JOIN identity.effective_grants AS {Prefix}grant
               ON {Matches(Prefix + "grant", PageAlias + "." + PageColumn)}
             GROUP BY {PageAlias}.{PageColumn}, {Prefix}grant.permission;
             """),
@@ -505,7 +505,7 @@ internal sealed class PermissionRule
                     WHERE {held}.{Identifier(relationship.HolderColumn, nameof(relationship.HolderColumn))} = ANY(@{Prefix}accounts)
                       AND EXISTS (
                           SELECT 1
-                          FROM janus.ancestry AS {held}_above
+                          FROM identity.ancestry AS {held}_above
                           WHERE {held}_above.resource_type = @{Prefix}type
                             AND {held}_above.resource_id = {row}
                             AND {held}_above.ancestor_type = @{held}_on
@@ -554,7 +554,7 @@ internal sealed class PermissionRule
         {Live(grant)}
                   AND ({grant}.resource_type IS NULL OR EXISTS (
                       SELECT 1
-                      FROM janus.ancestry AS {grant}_above
+                      FROM identity.ancestry AS {grant}_above
                       WHERE {grant}_above.resource_type = @{Prefix}type
                         AND {grant}_above.resource_id = {row}
                         AND {grant}_above.ancestor_type = {grant}.resource_type

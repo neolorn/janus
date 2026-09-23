@@ -12,7 +12,7 @@ namespace Janus.Storage.Authentication.Factors;
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
 /// <remarks>Implements AUTH-FACT-004 AC2 and CONV-DESIGN-003.</remarks>
-internal sealed class VerificationCodeStore(JanusDbContext context) : IVerificationCodeStore
+internal sealed class VerificationCodeStore(StoreContext context) : IVerificationCodeStore
 {
     /// <inheritdoc/>
     public async ValueTask<VerificationCode?> FindAsync(

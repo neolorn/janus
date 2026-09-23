@@ -80,7 +80,7 @@ public sealed class GrantStoreTests(DatabaseFixture database)
             "The derivation this row was precomputed from.")
             .Match(grant => grant, error => throw new InvalidOperationException(error.Code.ToString()));
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await using var transaction = new UnitOfWork(writing);
             await transaction.BeginAsync(TestContext.Current.CancellationToken);
@@ -88,7 +88,7 @@ public sealed class GrantStoreTests(DatabaseFixture database)
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Grant? held = await Store(reading)
             .FindAsync(materialised.Id, TestContext.Current.CancellationToken);
@@ -206,7 +206,7 @@ public sealed class GrantStoreTests(DatabaseFixture database)
         Assert.Equal(Noon, written.GrantedAt);
         Assert.Equal("The reason the grant was written.", written.Reason);
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await using var transaction = new UnitOfWork(writing);
             await transaction.BeginAsync(TestContext.Current.CancellationToken);
@@ -242,7 +242,7 @@ public sealed class GrantStoreTests(DatabaseFixture database)
 
         long before = await VersionAsync(account);
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await using var transaction = new UnitOfWork(writing);
             await transaction.BeginAsync(TestContext.Current.CancellationToken);
@@ -274,7 +274,7 @@ public sealed class GrantStoreTests(DatabaseFixture database)
 
         long before = await VersionAsync(account);
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await using var transaction = new UnitOfWork(writing);
             await transaction.BeginAsync(TestContext.Current.CancellationToken);
@@ -323,7 +323,7 @@ public sealed class GrantStoreTests(DatabaseFixture database)
 
         await WriteAsync(GrantSubject.Of(account), organization, record);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.True(await Store(reading).ExistsAsync(
             Written(GrantSubject.Of(account), organization, record, null, account),
@@ -339,7 +339,7 @@ public sealed class GrantStoreTests(DatabaseFixture database)
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
-    private static GrantStore Store(JanusDbContext context) =>
+    private static GrantStore Store(StoreContext context) =>
         new(context, new DataConnections(context));
 
     private static ResourceReference Reference(string type) =>
@@ -349,7 +349,7 @@ public sealed class GrantStoreTests(DatabaseFixture database)
     {
         var name = RoleName.Parse("editor");
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         if (await writing.Roles.AnyAsync(row => row.Name == name, TestContext.Current.CancellationToken))
         {
@@ -403,7 +403,7 @@ public sealed class GrantStoreTests(DatabaseFixture database)
             expiresAt,
             grantedBy ?? await _deployment.AccountAsync(Noon));
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         await using var transaction = new UnitOfWork(writing);
         await transaction.BeginAsync(TestContext.Current.CancellationToken);
 
@@ -419,7 +419,7 @@ public sealed class GrantStoreTests(DatabaseFixture database)
     {
         ResourceReference reference = Reference(containedIn is null ? "workspace" : "document");
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         await using var transaction = new UnitOfWork(writing);
         await transaction.BeginAsync(TestContext.Current.CancellationToken);
 
@@ -436,7 +436,7 @@ public sealed class GrantStoreTests(DatabaseFixture database)
     {
         var id = GroupId.New(TimeProvider.System);
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         await using var transaction = new UnitOfWork(writing);
         await transaction.BeginAsync(TestContext.Current.CancellationToken);
 
@@ -451,7 +451,7 @@ public sealed class GrantStoreTests(DatabaseFixture database)
 
     private async Task AddAsync(GroupId group, GrantSubject member)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         await using var transaction = new UnitOfWork(writing);
         await transaction.BeginAsync(TestContext.Current.CancellationToken);
 
@@ -463,14 +463,14 @@ public sealed class GrantStoreTests(DatabaseFixture database)
 
     private async Task<long> VersionAsync(SubjectId subject)
     {
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         return await Store(reading).VersionAsync(subject, TestContext.Current.CancellationToken);
     }
 
     private async Task<Grant> ReadAsync(GrantId id)
     {
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         return (await Store(reading).FindAsync(id, TestContext.Current.CancellationToken))!;
     }
@@ -480,7 +480,7 @@ public sealed class GrantStoreTests(DatabaseFixture database)
         OrganizationId organization,
         DateTimeOffset? at = null)
     {
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         return await Store(reading).HeldByAsync(
             holders,
@@ -493,7 +493,7 @@ public sealed class GrantStoreTests(DatabaseFixture database)
         ResourceReference reference,
         OrganizationId organization)
     {
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         return await Store(reading).OnAsync(
             reference,

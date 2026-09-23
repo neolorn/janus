@@ -10,7 +10,7 @@ namespace Janus.Hosting.Bff;
 /// reach from a link in a message cannot be, because the link arrives as a top-level
 /// navigation that has to carry the session.
 /// </remarks>
-public enum JanusApplication
+public enum ApplicationKind
 {
     /// <summary>
     /// The management application. Its cookies carry <c>SameSite=Strict</c>.

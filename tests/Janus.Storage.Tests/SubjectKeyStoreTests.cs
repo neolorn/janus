@@ -46,7 +46,7 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
         await WriteAsync(subject, dataKey, keys);
         CryptographicOperations.ZeroMemory(dataKey);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         SubjectKey read = await ReadAsync(reading, subject);
 
         Assert.Equal(subject, read.Subject);
@@ -61,7 +61,7 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
     [Fact]
     public async Task FindBySubjectAsync_ASubjectWithNoRow_ReadsNothingAsync()
     {
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
 
         Assert.Null(await Store(context)
             .FindBySubjectAsync(Subjects.New(), TestContext.Current.CancellationToken));
@@ -87,7 +87,7 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
         await WriteAsync(subject, dataKey, keys);
         CryptographicOperations.ZeroMemory(dataKey);
 
-        await using (JanusDbContext erasing = database.Context())
+        await using (StoreContext erasing = database.Context())
         {
             SubjectKey key = await ReadAsync(erasing, subject);
             key.Erase();
@@ -97,7 +97,7 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
             await erasing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         SubjectKey erased = await ReadAsync(reading, subject);
 
         Assert.True(erased.IsErased);
@@ -126,7 +126,7 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
         await WriteAsync(subject, dataKey, first);
         CryptographicOperations.ZeroMemory(dataKey);
 
-        await using (JanusDbContext rotating = database.Context())
+        await using (StoreContext rotating = database.Context())
         {
             SubjectKey key = await ReadAsync(rotating, subject);
             byte[] unwrapped = Unwrapped(key, first);
@@ -145,7 +145,7 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
             await rotating.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         SubjectKey rotated = await ReadAsync(reading, subject);
 
         Assert.Equal(second.CurrentVersion, rotated.KeyVersion);
@@ -160,7 +160,7 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
     [Fact]
     public async Task RecordWrappingAsync_ASubjectWithNoRow_ThrowsAsync()
     {
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
 
         var key = SubjectKey.Wrapped(
             Subjects.New(),
@@ -207,13 +207,13 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
         }
     }
 
-    private static async Task<SubjectKey> ReadAsync(JanusDbContext context, SubjectId subject) =>
+    private static async Task<SubjectKey> ReadAsync(StoreContext context, SubjectId subject) =>
         Assert.IsType<SubjectKey>(await Store(context)
             .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
 
     private async Task WriteAsync(SubjectId subject, byte[] dataKey, KeyEncryptionKeys keys)
     {
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
 
         await Store(context).AddAsync(
             SubjectKey.Wrapped(
@@ -228,6 +228,6 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
     // The store draws and wraps a key of its own; the tests here write the wrapping
     // they mean to test, so the versions and the randomness it would draw with are
     // whatever a store needs to be constructed.
-    private static SubjectKeyStore Store(JanusDbContext context) =>
+    private static SubjectKeyStore Store(StoreContext context) =>
         new(context, OneVersion(1), Randomness);
 }

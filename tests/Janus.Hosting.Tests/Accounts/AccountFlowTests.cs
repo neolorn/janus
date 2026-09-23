@@ -99,7 +99,7 @@ public sealed class AccountFlowTests : IAsyncDisposable
                 new byte[] { 1, 2, 3 },
                 new byte[] { 4, 5, 6 },
                 Algorithm: -7,
-                "janus.example.test",
+                "identity.example.test",
                 Counter: 0,
                 BackupEligible: true,
                 BackupState: true),

@@ -24,7 +24,7 @@ public sealed class SendCounterSweepTests
     [Fact]
     public void AUTH_ABUSE_004_AC6_TheSweepReadsTheExpressionTheIndexIsOver()
     {
-        using JanusDbContext context = new DesignTimeContextFactory().CreateDbContext([]);
+        using StoreContext context = new DesignTimeContextFactory().CreateDbContext([]);
 
         string swept = context.SendCounters
             .Where(counter => counter.SentAt[counter.SentAt.Length - 1] < DateTimeOffset.UnixEpoch)

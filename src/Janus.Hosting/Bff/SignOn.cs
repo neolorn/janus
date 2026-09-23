@@ -65,7 +65,7 @@ internal sealed class SignOn(
     /// The client the back-channel request is made with, which a host configures the
     /// way it configures every other client of the framework's factory.
     /// </summary>
-    public const string Channel = "janus-signon";
+    public const string Channel = "identity-signon";
 
     /// <summary>
     /// Where a browser is sent to establish this application's session.

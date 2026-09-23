@@ -15,7 +15,7 @@ internal sealed partial class AddIdentifierRemovals : Migration
     {
         migrationBuilder.CreateTable(
             name: "identifier_removals",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 identifier_id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -40,7 +40,7 @@ internal sealed partial class AddIdentifierRemovals : Migration
                 table.ForeignKey(
                     name: "fk_identifier_removals_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
@@ -48,7 +48,7 @@ internal sealed partial class AddIdentifierRemovals : Migration
 
         migrationBuilder.CreateTable(
             name: "username_holds",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 fingerprint = table.Column<byte[]>(type: "bytea", nullable: false),
@@ -63,33 +63,33 @@ internal sealed partial class AddIdentifierRemovals : Migration
 
         migrationBuilder.CreateIndex(
             name: "ix_identifier_removals_expires_at",
-            schema: "janus",
+            schema: "identity",
             table: "identifier_removals",
             column: "expires_at");
 
         migrationBuilder.CreateIndex(
             name: "ix_identifier_removals_subject",
-            schema: "janus",
+            schema: "identity",
             table: "identifier_removals",
             column: "subject");
 
         migrationBuilder.CreateIndex(
             name: "ux_identifier_removals_fingerprint",
-            schema: "janus",
+            schema: "identity",
             table: "identifier_removals",
             columns: KindAndFingerprint,
             unique: true);
 
         migrationBuilder.CreateIndex(
             name: "ux_identifier_removals_undo",
-            schema: "janus",
+            schema: "identity",
             table: "identifier_removals",
             column: "undo_fingerprint",
             unique: true);
 
         migrationBuilder.CreateIndex(
             name: "ix_username_holds_releases_at",
-            schema: "janus",
+            schema: "identity",
             table: "username_holds",
             column: "releases_at");
     }
@@ -99,10 +99,10 @@ internal sealed partial class AddIdentifierRemovals : Migration
     {
         migrationBuilder.DropTable(
             name: "identifier_removals",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "username_holds",
-            schema: "janus");
+            schema: "identity");
     }
 }

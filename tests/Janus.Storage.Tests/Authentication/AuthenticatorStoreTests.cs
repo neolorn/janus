@@ -42,7 +42,7 @@ public sealed class AuthenticatorStoreTests(DatabaseFixture database)
             secret,
             Noon));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         AuthenticatorRecord stored = await reading.Authenticators
             .SingleAsync(held => held.Subject == subject, TestContext.Current.CancellationToken);
 
@@ -64,7 +64,7 @@ public sealed class AuthenticatorStoreTests(DatabaseFixture database)
 
         await WrittenAsync(Authenticator.EnrollingTotp(id, subject, Label("this phone"), secret, Noon));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         Authenticator read = Assert.IsType<Authenticator>(
             await Store(reading).FindAsync(id, TestContext.Current.CancellationToken));
 
@@ -92,7 +92,7 @@ public sealed class AuthenticatorStoreTests(DatabaseFixture database)
             new WebAuthnMaterial(credentialId, PublicKey, -7, "example.com", 4, true, false),
             Noon));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         Authenticator read = Assert.IsType<Authenticator>(
             await Store(reading).ByCredentialAsync(credentialId, TestContext.Current.CancellationToken));
 
@@ -141,7 +141,7 @@ public sealed class AuthenticatorStoreTests(DatabaseFixture database)
 
         await WrittenAsync(Authenticator.EnrollingTotp(id, subject, Label("this phone"), Secret(), Noon));
 
-        await using (JanusDbContext changing = database.Context())
+        await using (StoreContext changing = database.Context())
         {
             Authenticator held = Assert.IsType<Authenticator>(
                 await Store(changing).FindAsync(id, TestContext.Current.CancellationToken));
@@ -154,7 +154,7 @@ public sealed class AuthenticatorStoreTests(DatabaseFixture database)
             await changing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         Authenticator read = Assert.IsType<Authenticator>(
             await Store(reading).FindAsync(id, TestContext.Current.CancellationToken));
 
@@ -188,7 +188,7 @@ public sealed class AuthenticatorStoreTests(DatabaseFixture database)
             new WebAuthnMaterial(Secret(), PublicKey, -7, "example.com", null, false, false),
             Noon + TimeSpan.FromMinutes(1)));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         IReadOnlyList<Authenticator> held = await Store(reading)
             .OfAsync(subject, TestContext.Current.CancellationToken);
 
@@ -221,12 +221,12 @@ public sealed class AuthenticatorStoreTests(DatabaseFixture database)
 
     private async Task WrittenAsync(Authenticator credential)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         await Store(writing).AddAsync(credential, TestContext.Current.CancellationToken);
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
-    private AuthenticatorStore Store(JanusDbContext context) =>
+    private AuthenticatorStore Store(StoreContext context) =>
         new(context, _deployment.Keys, _deployment.Randomness);
 }

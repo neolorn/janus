@@ -27,7 +27,7 @@ namespace Janus.Storage.Authentication.Registration;
 /// removing the row removes both the staged data and the only key that reads it.
 /// </remarks>
 internal sealed class RegistrationSessionStore(
-    JanusDbContext context,
+    StoreContext context,
     DataConnections connections,
     KeyEncryptionKeys keyEncryptionKeys,
     RandomNumberGenerator randomness) : IRegistrationSessionStore

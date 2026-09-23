@@ -114,8 +114,8 @@ public sealed class BrowserProfileTests : IDisposable
     [Fact]
     public void BFF_CSRF_003_AC1_TheTwoHeadersAreNamedAsTheFrontendWritesThem()
     {
-        Assert.Equal("X-Janus-Csrf", SynchronizerToken.Header);
-        Assert.Equal("X-Janus-Request", BrowserCookies.RequestHeader);
+        Assert.Equal("X-Identity-Csrf", SynchronizerToken.Header);
+        Assert.Equal("X-Identity-Request", BrowserCookies.RequestHeader);
     }
 
     /// <summary>
@@ -351,7 +351,7 @@ public sealed class BrowserProfileTests : IDisposable
     [Fact]
     public void BFF_OWN_001_AC1_MountingTakesNoSecurityRelevantConfiguration()
     {
-        MethodInfo[] mounting = typeof(JanusPipeline).GetMethods(
+        MethodInfo[] mounting = typeof(PipelineProfiles).GetMethods(
             BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
 
         Assert.NotEmpty(mounting);
@@ -487,7 +487,7 @@ public sealed class BrowserProfileTests : IDisposable
             ["SessionRequired.cs", "SessionRequirement.cs"],
             Reading("GetEndpoint", "Metadata"));
 
-        Assert.Equal(["JanusPipeline.cs"], Reading("Request.Path"));
+        Assert.Equal(["PipelineProfiles.cs"], Reading("Request.Path"));
     }
 
     /// <summary>
@@ -498,7 +498,7 @@ public sealed class BrowserProfileTests : IDisposable
     [Fact]
     public void BFF_MACH_001_AC1_NoBrowserEndpointCanBeMovedOntoTheMachineProfile()
     {
-        Assert.Empty(Reading("MachineRoutes.Governs").Except(["JanusPipeline.cs"]));
+        Assert.Empty(Reading("MachineRoutes.Governs").Except(["PipelineProfiles.cs"]));
         Assert.Equal(["MachineRoutes.cs"], Reading("PathString[] Governed"));
 
         MethodInfo governs = typeof(MachineRoutes).GetMethod(
@@ -799,7 +799,7 @@ public sealed class BrowserProfileTests : IDisposable
         services.AddSingleton<IUnitOfWork, UnitOfWorkInMemory>();
         services.AddSingleton<TimeProvider>(_clock);
         services.AddSingleton(_randomness);
-        services.AddSingleton(new BrowserSessionCookies(JanusApplication.Public));
+        services.AddSingleton(new BrowserSessionCookies(ApplicationKind.Public));
         services.AddSingleton<ILocationResolver, LocationResolverInMemory>();
         services.AddScoped<PolicyResolution>();
         services.AddScoped<SessionService>();
@@ -818,7 +818,7 @@ public sealed class BrowserProfileTests : IDisposable
         ServiceProvider provider = services.BuildServiceProvider();
         var building = new ApplicationBuilder(provider);
 
-        _ = building.UseJanusBrowserProfile();
+        _ = building.UseBrowserProfile();
         _ = building.Use(_ => Endpoint);
 
         RequestDelegate built = building.Build();

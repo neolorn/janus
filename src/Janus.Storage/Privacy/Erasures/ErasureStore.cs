@@ -17,7 +17,7 @@ namespace Janus.Storage.Privacy.Erasures;
 /// Implements IDN-LIFE-003b and CONV-DESIGN-003. The row is created by the erasure
 /// itself, so this store reads it and carries the host-side progress onto it.
 /// </remarks>
-internal sealed class ErasureStore(JanusDbContext context) : IErasureStore
+internal sealed class ErasureStore(StoreContext context) : IErasureStore
 {
     /// <inheritdoc/>
     public async ValueTask<Erasure?> FindBySubjectAsync(

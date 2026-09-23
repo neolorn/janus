@@ -74,7 +74,7 @@ public sealed class ComplianceStoreTests(DatabaseFixture database)
     {
         RoleName name = await CreatedAsync([Permissions.AuditRead, Permissions.GrantManage]);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         IReadOnlyDictionary<string, IReadOnlyList<Permission>> allowed =
             await new RegisterRoles(new RoleStore(reading))
@@ -89,7 +89,7 @@ public sealed class ComplianceStoreTests(DatabaseFixture database)
     {
         var name = RoleName.Parse("role" + Guid.NewGuid().ToString("n")[..8]);
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         await using var transaction = new UnitOfWork(writing);
         await transaction.BeginAsync(TestContext.Current.CancellationToken);
 
@@ -104,7 +104,7 @@ public sealed class ComplianceStoreTests(DatabaseFixture database)
 
     private async Task RecordedAsync(ComplianceRecord record)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         await new ComplianceStore(writing, new FixedTime(Noon))
             .RecordAsync(record, TestContext.Current.CancellationToken);
@@ -114,7 +114,7 @@ public sealed class ComplianceStoreTests(DatabaseFixture database)
 
     private async Task<ComplianceRecord> HeldAsync()
     {
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         return await new ComplianceStore(reading, new FixedTime(Noon))
             .ReadAsync(TestContext.Current.CancellationToken);

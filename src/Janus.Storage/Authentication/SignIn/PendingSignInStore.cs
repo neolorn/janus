@@ -25,7 +25,7 @@ namespace Janus.Storage.Authentication.SignIn;
 /// so it is held under the account's own key and an erasure leaves it unreadable.
 /// </remarks>
 internal sealed class PendingSignInStore(
-    JanusDbContext context,
+    StoreContext context,
     KeyEncryptionKeys keyEncryptionKeys,
     RandomNumberGenerator randomness) : IPendingSignInStore
 {

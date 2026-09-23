@@ -24,7 +24,7 @@ namespace Janus.Storage.Authentication.Factors;
 /// usable secret.
 /// </remarks>
 internal sealed class AuthenticatorStore(
-    JanusDbContext context,
+    StoreContext context,
     KeyEncryptionKeys keyEncryptionKeys,
     RandomNumberGenerator randomness) : IAuthenticatorStore
 {

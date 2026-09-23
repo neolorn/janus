@@ -16,37 +16,37 @@ internal static class BrowserCookies
     /// <summary>
     /// The session cookie, which the browser cannot read (D-153).
     /// </summary>
-    public const string Session = "__Host-janus-session";
+    public const string Session = "__Host-identity-session";
 
     /// <summary>
     /// The cookie a browser carries before it holds a session, which is what a
     /// synchronizer token binds to until one exists (D-153, BFF-CSRF-005a).
     /// </summary>
-    public const string PreAuthentication = "__Host-janus-preauth";
+    public const string PreAuthentication = "__Host-identity-preauth";
 
     /// <summary>
     /// The synchronizer token cookie, which the first-party frontend reads on load so
     /// that obtaining the token costs no round trip (D-153).
     /// </summary>
-    public const string Csrf = "__Host-janus-csrf";
+    public const string Csrf = "__Host-identity-csrf";
 
     /// <summary>
     /// What a browser the account has been seen from carries, so that its next
     /// sign-in is not held for a code (D-153, AUTH-FACT-016).
     /// </summary>
-    public const string Browser = "__Host-janus-browser";
+    public const string Browser = "__Host-identity-browser";
 
     /// <summary>
     /// What a browser the account trusts carries, which stands in for the second step
     /// of a sign-in from it and for nothing else (D-153, AUTH-FACT-015).
     /// </summary>
-    public const string Device = "__Host-janus-device";
+    public const string Device = "__Host-identity-device";
 
     /// <summary>
     /// The header a state-changing request carries, whose presence is checked and
     /// whose value is ignored (D-153).
     /// </summary>
-    public const string RequestHeader = "X-Janus-Request";
+    public const string RequestHeader = "X-Identity-Request";
 
     /// <summary>
     /// The attributes every cookie the library sets carries.
@@ -57,7 +57,7 @@ internal static class BrowserCookies
     /// token does.
     /// </param>
     /// <returns>The attributes.</returns>
-    public static CookieOptions Options(JanusApplication application, bool readableByScript) => new()
+    public static CookieOptions Options(ApplicationKind application, bool readableByScript) => new()
     {
         HttpOnly = !readableByScript,
 
@@ -66,7 +66,7 @@ internal static class BrowserCookies
         Secure = true,
         Path = "/",
 
-        SameSite = application is JanusApplication.Management
+        SameSite = application is ApplicationKind.Management
             ? SameSiteMode.Strict
             : SameSiteMode.Lax,
 
@@ -82,7 +82,7 @@ internal static class BrowserCookies
     /// <param name="application">Which application the pipeline is mounted in.</param>
     /// <param name="until">When the browser is to forget it.</param>
     /// <returns>The attributes.</returns>
-    public static CookieOptions Lasting(JanusApplication application, DateTimeOffset until)
+    public static CookieOptions Lasting(ApplicationKind application, DateTimeOffset until)
     {
         CookieOptions options = Options(application, readableByScript: false);
 

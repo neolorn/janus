@@ -16,7 +16,7 @@ internal sealed partial class AllowARefusalNamingNobody : Migration
         // this is too.
         migrationBuilder.Sql(
             """
-            ALTER TABLE janus.audit_records
+            ALTER TABLE identity.audit_records
                 ALTER COLUMN acting_subject DROP NOT NULL,
                 ALTER COLUMN effective_subject DROP NOT NULL;
             """);
@@ -25,7 +25,7 @@ internal sealed partial class AllowARefusalNamingNobody : Migration
         // refuses to be without rather than the code remembering to write them.
         migrationBuilder.Sql(
             """
-            ALTER TABLE janus.audit_records
+            ALTER TABLE identity.audit_records
                 ADD CONSTRAINT ck_audit_records_identities CHECK (
                     action = 'authz.access.denied'
                     OR (acting_subject IS NOT NULL AND effective_subject IS NOT NULL));
@@ -37,14 +37,14 @@ internal sealed partial class AllowARefusalNamingNobody : Migration
     {
         migrationBuilder.Sql(
             """
-            ALTER TABLE janus.audit_records DROP CONSTRAINT ck_audit_records_identities;
+            ALTER TABLE identity.audit_records DROP CONSTRAINT ck_audit_records_identities;
             """);
 
         // Nothing removes an audit row (PRIV-RET-002 AC1), so a rollback over a trail
         // that already holds a refusal naming nobody fails here rather than deleting it.
         migrationBuilder.Sql(
             """
-            ALTER TABLE janus.audit_records
+            ALTER TABLE identity.audit_records
                 ALTER COLUMN acting_subject SET NOT NULL,
                 ALTER COLUMN effective_subject SET NOT NULL;
             """);

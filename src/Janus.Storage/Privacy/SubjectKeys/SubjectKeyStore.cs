@@ -15,7 +15,7 @@ namespace Janus.Storage.Privacy.SubjectKeys;
 /// <param name="randomness">The randomness a data key is drawn from.</param>
 /// <remarks>Implements PRIV-RIGHT-005a, OPS-SEC-003 and CONV-DESIGN-003.</remarks>
 internal sealed class SubjectKeyStore(
-    JanusDbContext context,
+    StoreContext context,
     KeyEncryptionKeys keyEncryptionKeys,
     RandomNumberGenerator randomness) : ISubjectKeyStore
 {

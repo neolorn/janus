@@ -23,7 +23,7 @@ namespace Janus.Storage.Authentication.Oidc;
 /// row carries a token a write must hold to succeed, so two presentations of one token
 /// cannot both redeem it.
 /// </remarks>
-internal sealed class OidcTokenStore(JanusDbContext context)
+internal sealed class OidcTokenStore(StoreContext context)
     : IOpenIddictTokenStore<OidcTokenRecord>
 {
     /// <inheritdoc/>
