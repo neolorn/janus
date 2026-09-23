@@ -9,6 +9,7 @@ using Janus.Core.Configuration;
 using Janus.Identity.Accounts;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Authentication.Mailboxes;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Privacy.SubjectKeys;
@@ -179,6 +180,18 @@ internal sealed class SubjectEraser(
         foreach (IdentifierRecord identifier in identifiers)
         {
             identifier.Fingerprint = Fingerprint.Neutralised();
+        }
+
+        // PRIV-RIGHT-005c: the address of a mailbox the subject holds or last held is
+        // theirs as well, and its fingerprint goes with the rest.
+        List<MailboxRecord> mailboxes = await context.Mailboxes
+            .Where(mailbox => mailbox.Holder == subject)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (MailboxRecord mailbox in mailboxes)
+        {
+            mailbox.Fingerprint = Fingerprint.Neutralised();
         }
     }
 }

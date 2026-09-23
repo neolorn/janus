@@ -4,6 +4,7 @@ using Janus.Storage.Authentication.Alerting;
 using Janus.Storage.Authentication.Credentials;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Identifiers;
+using Janus.Storage.Authentication.Mailboxes;
 using Janus.Storage.Authentication.Oidc;
 using Janus.Storage.Authentication.Organizations;
 using Janus.Storage.Authentication.Passwords;
@@ -370,6 +371,11 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     public DbSet<LockedDomainRecord> OrganizationDomains => Set<LockedDomainRecord>();
 
     /// <summary>
+    /// The mailboxes the library provisions, each with its outstanding push.
+    /// </summary>
+    public DbSet<MailboxRecord> Mailboxes => Set<MailboxRecord>();
+
+    /// <summary>
     /// The recovery links that have gone out.
     /// </summary>
     public DbSet<RecoveryLinkRecord> RecoveryLinks => Set<RecoveryLinkRecord>();
@@ -475,6 +481,7 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new PendingSignInConfiguration());
         modelBuilder.ApplyConfiguration(new PolicyRaiseConfiguration());
         modelBuilder.ApplyConfiguration(new LockedDomainConfiguration());
+        modelBuilder.ApplyConfiguration(new MailboxConfiguration());
         modelBuilder.ApplyConfiguration(new RecoveryLinkConfiguration());
         modelBuilder.ApplyConfiguration(new RecoveryApprovalConfiguration());
         modelBuilder.ApplyConfiguration(new LossReportConfiguration());

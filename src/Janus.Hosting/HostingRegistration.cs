@@ -10,6 +10,7 @@ using Janus.Authentication.Configuration;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
+using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Oidc;
 using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
@@ -356,6 +357,22 @@ public static class HostingRegistration
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<IEvents>(),
             provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>()));
+
+        // INT-MAIL-006, INT-MAIL-008: the mail server is optional, and a deployment
+        // that registers none provisions nothing and reconciles nothing.
+        services.AddScoped(provider => new MailboxPublisher(
+            provider.GetRequiredService<IMailboxStore>(),
+            provider.GetService<IMailServer>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IEvents>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped(provider => new MailboxReconciliation(
+            provider.GetRequiredService<IMailboxStore>(),
+            provider.GetService<IMailServer>(),
+            provider.GetRequiredService<IEvents>(),
             provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<IGroups, GroupService>();
         services.AddScoped<IDerivationMaterialiser, DerivationMaterialiser>();

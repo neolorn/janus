@@ -6,6 +6,7 @@ using Janus.Authentication.Configuration;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
+using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Oidc;
 using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
@@ -43,6 +44,7 @@ using Janus.Storage.Authentication.Configuration;
 using Janus.Storage.Authentication.Credentials;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Identifiers;
+using Janus.Storage.Authentication.Mailboxes;
 using Janus.Storage.Authentication.Oidc;
 using Janus.Storage.Authentication.Organizations;
 using Janus.Storage.Authentication.Passwords;
@@ -244,6 +246,11 @@ internal static class StorageRegistration
         services.AddScoped<IOrganizationDirectory, OrganizationDirectory>();
         services.AddScoped<IOrganizationAudit, OrganizationAudit>();
         services.AddScoped<IDomainStore, DomainStore>();
+        services.AddScoped<IMailboxStore>(provider => new MailboxStore(
+            provider.GetRequiredService<StoreContext>(),
+            keyEncryptionKeys,
+            fingerprintKey,
+            provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IResourceStore, ResourceStore>();
 
         services.AddScoped<IAccessEvaluator, AccessEvaluator>();

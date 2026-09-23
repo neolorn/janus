@@ -7859,6 +7859,291 @@ it; the audit actions follow the organization's own (entry 197).
 *Chapter text that should change.* 09 section 8a could give the shapes; chapter 10
 needs the three audit rows (below).
 
+---
+
+## 215. The mail server is a port the host registers, and no adapter ships in Milestone 1
+
+**Phase 8 · 2026-09-24 · Tier 3 · INT-MAIL-001, INT-MAIL-008, INT-MAIL-009, LIB-EXT-001**
+
+*The question.* The plan's phase 8 names "mail server integration (JMAP provisioning,
+disabled at invitation, enabled at membership, lifecycle push, reconciliation, app
+passwords through the first-party client)". INT-MAIL-001 AC3: "Every provisioning and
+app-password operation is a JMAP request; no other management interface of the mail
+server is called." INT-MAIL-008: "No library dependency SHALL be on a specific mail
+server", AC1 "No provider name appears in a core namespace". The plan, section 3:
+"What Milestone 1 does **not** touch: a real mail server, ... Each is met at its
+abstraction (LIB-EXT-001) with a fake that honours the contract". 08 names no project
+for a mail-server adapter.
+
+*The readings.*
+
+1. Write a JMAP adapter in phase 8, in a project of its own, tested against a fake
+   HTTP endpoint.
+2. Define the abstraction only: `IMailServer` in `Janus.Core` with
+   `ProvisionAsync(MailboxPush, CancellationToken)` answering `ValueTask<Result>` and
+   `MailboxesAsync(CancellationToken)` answering
+   `ValueTask<Result<IReadOnlyList<HostedMailbox>>>`; `MailboxPush(Guid Key, string
+   Address, MailboxState State)`; `MailboxState` `disabled` · `enabled` · `removed`;
+   `HostedMailbox(string Address, bool Enabled)`. The host registers it; the library
+   ships none. Integration tests run against a fake that honours the contract.
+
+*Chosen: 2, the strictest reading.* A project 08 does not name is a structure choice
+no run may make, and the plan puts the real server out of Milestone 1. An absent
+registration is not a refusal at startup: nothing is pushed and nothing is compared,
+mailbox rows are still written, and the first pass after a registration pushes every
+state owed (INT-MAIL-009 AC1: hosting is a registration of its own, independent of
+outbound delivery). INT-MAIL-001 AC3 is verified by the adapter in Milestone 2 step 5,
+not by a test in this phase. The app-password members join the port with REG-MAIL-002.
+
+*Tests that pin it.*
+`MailboxPublisherTests.INT_MAIL_009_AC1_MailboxHostingIsARegistrationOfItsOwnAsync`.
+
+*Chapter text that should change.* 08 could name the adapter's project and 07
+LIB-HOST-001 the declaration (row below); the plan's phase 8 line could say
+"provisioning through the mail-server abstraction".
+
+---
+
+## 216. Which organization's mail is integrated
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-MAIL-001, INT-MAIL-006, INT-MAIL-009**
+
+*The question.* REG-MAIL-001: "Where the organization's mail server is integrated (`05`
+INT-MAIL)" and "Where the organization runs its own mail, the corporate address SHALL
+be verified by the person like any other." INT-MAIL-006: "**Human
+administrative-organization members** SHALL have a mailbox pre-created in the mail
+server". Nothing says how the library knows an organization is integrated.
+
+*The readings.*
+
+1. A per-organization setting declares integration.
+2. Integrated means the administrative organization, in a deployment that registered
+   `IMailServer` (entry 215); every other organization runs its own mail.
+
+*Chosen: 2.* INT-MAIL-006 and the INT-MAIL-009 table scope mailbox hosting to the
+administrative organization, and a per-organization key would be a setting chapter 10
+does not hold. A holder stands, and the mailbox is owed `enabled`, only while the
+account is `active` and a membership of the administrative organization is current;
+a membership of any other organization does not count.
+
+*Tests that pin it.*
+`MailboxStoreTests.INT_MAIL_006_AMembershipElsewhereDoesNotStandAsync`,
+`MailboxStoreTests.INT_MAIL_006a_AHolderStandsOnlyWhileActiveAndAMemberAsync`.
+
+*Chapter text that should change.* REG-MAIL-001 could say "where the invitation is into
+the administrative organization and the deployment registers a mail server".
+
+---
+
+## 217. The mailbox row is its own outbox, and the state owed is read, not published
+
+**Phase 8 · 2026-09-24 · Tier 2 · INT-MAIL-006, INT-MAIL-006a, INT-MAIL-007, 10 section 5b**
+
+*The question.* INT-MAIL-006: "the provisioning request is written to the retried
+outbox (D-022, INT-MAIL-008), so the mailbox is created the moment the mail server is
+reachable." INT-MAIL-006a AC1: "the disable request is published on the first outbox
+publisher run (`outbox.poll.interval`) after the suspension commits." 10 section 5b
+names "Mail provisioning" as a consumer of `AccountSuspended`, `AccountReactivated`,
+`MembershipChanged` and the `Identifier*` events. The event outbox is phase 9's
+(entry 121).
+
+*The readings.*
+
+1. Every operation that suspends, reactivates, deactivates, deletes, takes down or ends
+   a membership writes a provisioning record into the outbox in its own transaction.
+2. Each `mailboxes` row carries the state the server last confirmed and the one push
+   outstanding with its key; the state owed is read on every pass from the account's
+   state and its memberships in the same query, and the publisher pushes the
+   difference.
+
+*Chosen: 2.* With 1, a path that forgot the record would leave a former employee
+reading mail, which is the failure INT-MAIL-006a names; with 2 nothing can forget, and
+the first pass after any change commits pushes it, which is AC1. The schedule is the
+outbox's own: `outbox.retry.initial`, `outbox.retry.factor`,
+`outbox.retry.maxattempts`, full jitter. `MailboxPublisher.PublishAsync` and
+`MailboxReconciliation.ReconcileAsync` are registered here and scheduled by phase 9's
+worker, at `outbox.poll.interval` and daily.
+
+*Tests that pin it.*
+`MailboxPublisherTests.INT_MAIL_006a_AC1_ASuspendedHolderIsDisabledOnTheFirstPassAsync`,
+`MailboxPublisherTests.INT_MAIL_006_AC1c_AReservedMailboxIsCreatedDisabledAsync`,
+`MailboxPublisherTests.INT_MAIL_006a_TheLastStateOwedIsTheOneTheServerEndsInAsync`,
+`MailboxPublisherTests.PublishAsync_ASettledMailbox_IsLeftAloneAsync`,
+`MailboxStoreTests.INT_MAIL_007_AnOutstandingPushKeepsItsKeyAsync`.
+
+*Chapter text that should change.* 10 section 5b could mark mail provisioning as
+reading the state those events announce rather than consuming them.
+
+---
+
+## 218. A push is written down before it leaves, and a lost answer is never assumed
+
+**Phase 8 · 2026-09-24 · Tier 3 · INT-MAIL-007 AC1, INT-MAIL-006a**
+
+*The question.* INT-MAIL-007: "Lifecycle events SHALL carry a **stable idempotency
+key**", AC1 "Replaying an event produces no duplicate." A push the server applies
+while its answer is lost, or while the process stops, leaves the server's state
+unknown. Nothing says what the library then assumes.
+
+*The readings.*
+
+1. Keep the push in memory until the server answers; where the state owed returns to
+   the one last confirmed, drop the outstanding push.
+2. Write the push and its key down, and commit, before it leaves; keep the key until
+   the server confirms; where the state owed returns to the one last confirmed while a
+   push is outstanding, push that state again under a key of its own.
+
+*Chosen: 2, the strictest reading.* Under 1, an enable the server applied and whose
+answer was lost is dropped when the holder is suspended before the retry: the library
+believes the mailbox disabled and the suspended person goes on reading mail. Under 2 a
+retry is always under the same key, and the server ends in the last state owed.
+
+*Tests that pin it.*
+`MailboxPublisherTests.INT_MAIL_007_AC1_APushIsWrittenDownBeforeItLeavesAsync`,
+`MailboxPublisherTests.INT_MAIL_007_AC1_APushMadeAgainProducesNothingTwiceAsync`,
+`MailboxPublisherTests.INT_MAIL_007_AC1_AReturnWhileAPushIsOutstandingIsPushedAgainAsync`.
+
+*Chapter text that should change.* INT-MAIL-007 could state that a push is recorded
+before it is made.
+
+---
+
+## 219. A push that spends its budget stays failed and is not retried
+
+**Phase 8 · 2026-09-24 · Tier 3 · INT-MAIL-007 AC3, OPS-OBS-002, OPS-ALERT-001**
+
+*The question.* INT-MAIL-007 AC3: "Propagation failures are visible in monitoring."
+OPS-ALERT-001 lists "Degradation: blocklist fallback, failed provider push,
+undelivered notification, reconciliation drift" as Normal. `outbox.retry.maxattempts`
+is "attempts before `failed`". Nothing says what follows a spent budget for a push.
+
+*The readings.*
+
+1. Start a fresh budget on the next pass.
+2. Mark the push failed, raise `degradation` in the same transaction as the mark, and
+   make no further attempt until the state owed changes, which begins a push of its
+   own; reconciliation goes on reporting the difference.
+
+*Chosen: 2, the strictest reading.* INT-MAIL-007: "Silent auto-correction conceals a
+broken pipeline." A retried push that finally lands would clear the difference nobody
+looked at. The alert's scope is `mailbox.push:<mailbox id>` and its details are
+`{ mailbox, state, attempts }`: the mailbox is named by its identifier and never by its
+address, because the address is personal data and an alert travels to channels that
+are not the account's. A server that throws is a server that did not confirm.
+
+*Tests that pin it.*
+`MailboxPublisherTests.INT_MAIL_007_AC3_APushThatSpendsItsBudgetIsVisibleAsync`.
+
+*Chapter text that should change.* INT-MAIL-007 could name the end of the budget; 10
+section 5.23 could give `degradation`'s details for a push.
+
+---
+
+## 220. What reconciliation compares and what it reports
+
+**Phase 8 · 2026-09-24 · Tier 3 · INT-MAIL-006 AC1b, AC1c, INT-MAIL-006a AC3, INT-MAIL-007 AC2, OPS-OBS-002**
+
+*The question.* INT-MAIL-007: "Reconciliation SHALL run daily, comparing both sides
+and **flagging drift without auto-correcting**." INT-MAIL-006a AC3: "Reconciliation
+compares enabled state and flags drift." INT-MAIL-006 AC1c: "reconciliation treats a
+reserved mailbox for an open or expired invitation as expected, not as drift."
+Nothing says whether a mailbox with a push outstanding is compared, what an address
+the library does not know is, or what a failed listing is.
+
+*The readings.*
+
+1. Skip mailboxes with a push outstanding, ignore addresses the library does not know,
+   and stay silent when the server cannot be listed.
+2. Compare every mailbox the library reads with what the server lists: `enabled` must
+   be listed enabled, `disabled` listed disabled (a reservation included), `removed`
+   absent; count every address the server lists and the library does not read; raise
+   `degradation` with scope `mailbox.reconciliation` and details
+   `{ mailboxes: [ids], unknown: count }`; raise it with `{ listed: false }` where the
+   listing fails; change nothing on either side.
+
+*Chosen: 2, the strictest reading.* A push outstanding for a day is itself the
+failure the comparison exists to show, and an address nobody provisioned is the one a
+former employee might still be reading. Addresses are compared ordinally in their
+canonical form and never written into the alert.
+
+*Tests that pin it.*
+`MailboxReconciliationTests.INT_MAIL_007_AC2_ADriftIsReportedAndNothingIsChangedAsync`,
+`MailboxReconciliationTests.INT_MAIL_006a_AC3_AnEnabledMailboxOwedDisabledIsDriftAsync`,
+`MailboxReconciliationTests.INT_MAIL_006_AC1c_AReservedMailboxIsNoDriftAsync`,
+`MailboxReconciliationTests.INT_MAIL_006_AC1b_OnlyWhatEitherSideHoldsIsComparedAsync`,
+`MailboxReconciliationTests.INT_MAIL_007_AReleasedMailboxIsExpectedGoneAsync`,
+`MailboxReconciliationTests.INT_MAIL_007_AC3_AComparisonThatCouldNotBeMadeIsVisibleAsync`.
+
+*Chapter text that should change.* INT-MAIL-007 could list what is compared and what
+the report carries.
+
+---
+
+## 221. One mailbox per address, for good
+
+**Phase 8 · 2026-09-24 · Tier 3 · INT-MAIL-006, REG-MAIL-001, REG-MAIL-003**
+
+*The question.* REG-MAIL-001: "An expired invitation SHALL leave the mailbox reserved
+and disabled until the administrator re-invites or deletes it." REG-MAIL-003: "A
+retired corporate address SHALL be available to a later invitation." Nothing says
+what deleting a reservation does to a mailbox someone once held, or whether a later
+invitation gets a new mailbox or the old one.
+
+*The readings.*
+
+1. Each invitation provisions a mailbox of its own, and revoking one removes it.
+2. An address is one row and one mailbox on the server for good. A reservation nobody
+   ever held is removed when its invitation is revoked; a mailbox anyone has held is
+   never removed by the library, and a retired one is reserved again, disabled, for a
+   later invitation of the same address. A mailbox held now cannot be reserved.
+
+*Chosen: 2, the strictest reading.* Removing a mailbox someone held destroys company
+mail no chapter lets the library destroy, and a second mailbox for the same address is
+one the server cannot hold. The unique index on the address's fingerprint holds it
+whatever a service does.
+
+*Tests that pin it.*
+`MailboxStoreTests.INT_MAIL_006_AnAddressIsOneMailboxAsync`,
+`MailboxReconciliationTests.INT_MAIL_007_AReleasedMailboxIsExpectedGoneAsync`; the
+revoke and re-invite tests land with the invitation endpoints.
+
+*Chapter text that should change.* REG-MAIL-003 could say the retired mailbox is
+reserved again rather than recreated.
+
+---
+
+## 222. The mailbox address is its holder's personal field
+
+**Phase 8 · 2026-09-24 · Tier 3 · PRIV-RIGHT-005a, PRIV-RIGHT-005c, INT-MAIL-007, REG-MAIL-003**
+
+*The question.* The corporate address is an identifier of the account (REG-MAIL-003)
+and the mailbox must be found by it. PRIV-RIGHT-005c: "Searchable identifiers SHALL
+be stored as a **keyed fingerprint** ... alongside their encrypted form. Erasure SHALL
+**neutralise** the fingerprint", "with the canonicalisation version (the pinned
+Unicode version) stored alongside". Nothing says whose field the mailbox's address is.
+
+*The readings.*
+
+1. Store the address in plaintext: it is the organization's, not the person's.
+2. Store it as `enc_canonical` under the holder's data key, or under a key of the
+   row's own while nobody holds it, with `fingerprint` and `canonicalisation_version`
+   beside it; erasure neutralises the fingerprint of every mailbox the subject holds or
+   last held and leaves the row where it is.
+
+*Chosen: 2, the strictest reading.* The address names the person, and a plaintext copy
+would survive their erasure. Consequences: a row whose holder was erased is not read
+again, so a push outstanding at erasure is abandoned and the server's mailbox is then
+reported by reconciliation as an address the library does not know (entry 220); the
+neutralised fingerprint leaves the address free for a later invitation, which reserves
+it as a row of its own (REG-MAIL-003).
+
+*Tests that pin it.*
+`SubjectEraserTests.PRIV_RIGHT_005c_TheAddressOfAMailboxGoesWithItsHolderAsync`,
+`ModelTests` (the `mailboxes` columns).
+
+*Chapter text that should change.* PRIV-RIGHT-005a's list of personal fields could name
+the mailbox address.
+
 
 # Rows for chapter 10
 
@@ -7904,6 +8189,7 @@ The subsection each row belongs in is named with it.
 | `AuthenticationAddresses` (`signIn`, `provider`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `authenticationAddresses.signIn` or `authenticationAddresses.provider`. The first is where an authorization request that is not silent and holds no session is forwarded (AUTH-SESS-012 AC3). The second is the address the library is mounted at on the authentication application, which is where another application finds `/oidc/authorize` and `/oidc/token` (BFF-SESS-006). |
 | `SignOnClient` (`clientId`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `signOnClient.clientId`. The identifier is what this application calls itself at the provider when it establishes its own session, and the registry holds the one destination a code returns to under it. The secret it presents is not a declaration: it comes from the secrets manager through `ISecretSource.ReadSignOnSecretAsync` and is passed to `AddJanus`, which refuses to start without it with `model.startup.keyunavailable` and `details.key` naming `signOnSecret` (BFF-SESS-006, OPS-SEC-001). |
 | `IDnsResolver` (`TextRecordsAsync`) | optional | No startup refusal. Every verification of a locked domain answers `identity.domain.unverified` and every scheduled check fails and raises `domain-reverification-failed`, so no domain is ever proved. A deployment that locks no domain needs none (REG-DOM-001, entry 212). |
+| `IMailServer` (`ProvisionAsync`, `MailboxesAsync`) | optional | No startup refusal. No mailbox is pushed and none is compared; the rows are still written, and the first pass after a registration pushes every state owed. A push carries a key that stays the same until the server confirms it, the address in its canonical form and the state `disabled`, `enabled` or `removed`; the server applies a key once. The listing answers every mailbox the server hosts with whether it is enabled. A deployment whose staff mail is hosted elsewhere needs none (INT-MAIL-006, INT-MAIL-008, INT-MAIL-009, entry 215). |
 | `ImageCodec` (`Reencode`) | optional, and required while any organization shows photos | Startup fails with `model.startup.declarationmissing` and `details.key` naming `imageCodec` where a `photo.enabled.<organization>` key is on and no codec is registered. The callback is `Func<ReadOnlyMemory<byte>, int, CancellationToken, ValueTask<ReadOnlyMemory<byte>?>>`: the uploaded bytes and the longest side in pixels the stored image is held to, answering the re-encoded JPEG with every metadata segment removed, or nothing where the bytes are not an image the deployment accepts. Nothing it answers chooses a code: a refusal is `identity.photo.invalid` (IDN-ATTR-002, IDN-ATTR-004). |
 
 ## Shipped default declarations

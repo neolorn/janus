@@ -331,6 +331,26 @@ public sealed class ModelTests
             "loss_reports.reported_at",
             "loss_reports.subject",
 
+            // Not an account field: a staff mailbox the library provisions, its address
+            // under its holder's key and found by its fingerprint, and the push it owes
+            // the mail server (INT-MAIL-006, INT-MAIL-007).
+            "mailboxes.attempts",
+            "mailboxes.canonicalisation_version",
+            "mailboxes.enc_canonical",
+            "mailboxes.failed_at",
+            "mailboxes.fingerprint",
+            "mailboxes.holder",
+            "mailboxes.id",
+            "mailboxes.key_version",
+            "mailboxes.next_attempt_at",
+            "mailboxes.pending",
+            "mailboxes.pending_key",
+            "mailboxes.pushed",
+            "mailboxes.released_at",
+            "mailboxes.reserved_at",
+            "mailboxes.retired_at",
+            "mailboxes.wrapped_key",
+
             // Standing: the membership record of IDN-MEM-001, with its own beginning
             // and end.
             "memberships.created_at",

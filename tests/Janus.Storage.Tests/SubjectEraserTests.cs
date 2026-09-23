@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Dapper;
 using Janus.Authentication;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Identity.Accounts;
@@ -16,6 +17,7 @@ using Janus.Identity.Profiles;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Accounts;
+using Janus.Storage.Authentication.Mailboxes;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Audit;
@@ -735,6 +737,41 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
                 .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// PRIV-RIGHT-005c and REG-MAIL-003: the address of a mailbox the subject held is
+    /// theirs, so its fingerprint is neutralised with the rest and the row stays where
+    /// it is, is no longer read, and leaves the address free for a later invitation.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_005c_TheAddressOfAMailboxGoesWithItsHolderAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        var mailbox = Mailbox.Reserved("erased@example.test", Noon);
+
+        mailbox.Hold(subject);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await Mailboxes(writing).AddAsync(mailbox, TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using StoreContext reading = database.Context();
+
+        MailboxRecord row = await reading.Mailboxes
+            .SingleAsync(held => held.Id == mailbox.Id.Value, TestContext.Current.CancellationToken);
+
+        Assert.True(Fingerprint.IsNeutralised(row.Fingerprint));
+        Assert.Empty(await Mailboxes(reading).AllAsync(TestContext.Current.CancellationToken));
+
+        await Mailboxes(reading).AddAsync(
+            Mailbox.Reserved("erased@example.test", Noon),
+            TestContext.Current.CancellationToken);
+        await reading.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
@@ -787,6 +824,9 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     private static ErasureStore Store(StoreContext context) => new(context);
 
     private IdentifierStore Identifiers(StoreContext context) =>
+        new(context, _deployment.Keys, Deployment.FingerprintKey, _deployment.Randomness);
+
+    private MailboxStore Mailboxes(StoreContext context) =>
         new(context, _deployment.Keys, Deployment.FingerprintKey, _deployment.Randomness);
 
     // The deployment's own records, which the library neither maps nor writes: an

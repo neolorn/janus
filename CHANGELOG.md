@@ -233,6 +233,16 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Staff mailboxes are provisioned through `IMailServer`, which a deployment registers
+  where its staff mail is hosted and which no package ships. A mailbox is owed
+  `disabled` from its reservation, `enabled` while its holder is an active member of
+  the administrative organization, and `disabled` otherwise; `MailboxPublisher` pushes
+  whatever differs under a key that stays the same until the server confirms it,
+  retries on the outbox schedule, and raises `degradation` naming the mailbox when the
+  budget is spent. `MailboxReconciliation` compares the server's listing with what is
+  owed and raises `degradation` on any difference without changing either side. The
+  address is held encrypted under its holder's key and is erased with them.
+
 - An organization can lock its members to email domains it has proved by DNS:
   `POST /admin/organizations/{id}/domains` lists a domain and answers the TXT record to
   publish, `POST .../domains/{domain}/verify` looks for it (422
