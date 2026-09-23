@@ -1,7 +1,6 @@
 # Corrections 1: D-162
 
-Status: complete, no open question. Every job of CONV-GATE-001 that runs on this
-machine is green; the pipeline runs are outstanding, see section 5.
+Status: complete, full gate green, no open question.
 
 D-162 audited the 109 decisions taken in the owner's absence, the 88 Tier 1 resolutions
 and the code against the chapters. This branch carries out every instruction it gives:
@@ -224,25 +223,16 @@ tests.
 
 `dotnet test` still reports that no tests ran on the development machine, as phase 0
 records, so the suites were run locally by executing the test binaries. The pipeline
-runs `dotnet test` unchanged. The local counts at the end of this branch, unit and
-contract: `Janus.Analyzers.Tests` 15, `Janus.Authentication.Tests` 557,
-`Janus.Authorization.Tests` 114, `Janus.Core.Tests` 434, `Janus.Hosting.Tests` 262,
-`Janus.Identity.Tests` 67, `Janus.Privacy.Tests` 148 and `Janus.Storage.Tests` 28, none
-failing. Integration, against a PostgreSQL 17 container: `Janus.Storage.Tests` 252 and
-`Janus.Hosting.Tests` 126, none failing. Of those totals, 70 are contract tests, 65 of
-them in `Janus.Core.Tests`.
-
-Every other job of the CONV-GATE-001 table that can run off the platform was run on
-this machine and is green: `Locked restore`, `Public surface files up to date`,
-`Format`, the three analyser jobs, `Unicode tables regenerate without a diff`,
-`Policy coverage test`, `Truth-table suite` (49), `Double migration run` (both
-applications of the migrations applied against an empty database, the model matching
-the schema afterwards), `Dependency allow-list`, `InternalsVisibleTo allow-list`,
-`Forbidden markers and commented-out code`, `Acceptance-criterion test names`,
-`Commit message format`, `Changelog line present` and `Destructive-operation detection
-report` (report only, as the job is). `Secret scanning` and `Dependency vulnerability
-alerting` are platform features and run nowhere else; they are among the identifiers
-recorded below.
+runs `dotnet test` unchanged and is the gate of record. A local run read the
+`Janus.Storage.Tests` count off a truncated summary and missed one failure:
+`ModelTests.REG_ACCT_001_AC2_NoFieldExistsOutsideTheGroupsTheTableNames`, whose frozen
+column list predated the protocol server's tables and the sign-on columns. The
+pipeline's first runs on this branch (`35874382333`, `35874455142`) failed on it alone,
+and `6cacdab` brings the list to the model. From fresh builds, the local counts at the
+end of this branch, unit and contract: `Janus.Analyzers.Tests` 15,
+`Janus.Authentication.Tests` 557, `Janus.Authorization.Tests` 114, `Janus.Core.Tests`
+434, `Janus.Hosting.Tests` 262, `Janus.Identity.Tests` 67, `Janus.Privacy.Tests` 148 and
+`Janus.Storage.Tests` 29, none failing.
 
 The commit messages of this branch were rewritten once, before the branch was offered
 for merge, because `Commit message format` failed on body lines over the 72 characters
@@ -250,8 +240,13 @@ CONV-VCS-003 allows. The rewrite changed messages only: the tree of every commit
 byte-identical to what it was, which was verified by comparing the rewritten branch
 against a backup of it commit by commit.
 
-Full gate: the pipeline has not run on this branch. Pushing `corrections-1` to `origin`
-was refused on this machine, so the run identifiers for the push and the pull-request
-events are not yet available. They are recorded in this section, in the commit that
-follows them, as phase 7's report records its own, and nothing but this section and the
-status line changes in that commit.
+Full gate: GitHub Actions runs `35875272526` (push) and `35875278573` (pull request) on
+branch `corrections-1`, pull request #1 of the new repository, green on every job. The
+pipeline's counts: `Unit tests` 1545, `Contract tests` 65, `Integration tests` 378 and
+`Truth-table suite` 49, none failing. `Integration tests`, `Double migration run`,
+`Destructive-operation detection report`, `Truth-table suite` and `Dependency
+vulnerability alerting` run on the pull-request event and `Secret scanning` on the push
+event, as CONV-GATE-002 states, so the two runs together are one pass of the table of
+CONV-GATE-001.
+
+The commit after the two runs above changes this section and the status line alone.
