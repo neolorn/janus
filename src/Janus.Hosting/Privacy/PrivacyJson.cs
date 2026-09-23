@@ -11,6 +11,13 @@ namespace Janus.Hosting.Privacy;
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     UseStringEnumConverter = true)]
+[JsonSerializable(typeof(PrivacyDecisionBody))]
+[JsonSerializable(typeof(PrivacyEntryBody))]
+[JsonSerializable(typeof(PrivacyRequestBody))]
+[JsonSerializable(typeof(PublicationBody))]
+[JsonSerializable(typeof(TakedownBody))]
+[JsonSerializable(typeof(TakedownReversalBody))]
+[JsonSerializable(typeof(AssessmentsRequest))]
 [JsonSerializable(typeof(DocumentVersionView))]
 [JsonSerializable(typeof(IReadOnlyList<ConsentView>))]
 [JsonSerializable(typeof(IReadOnlyList<ObjectionView>))]

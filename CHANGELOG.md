@@ -1197,6 +1197,10 @@ against the public contract of LIB-API-001.
 
 ### Fixed
 
+- Every request body is read through the library's generated serialization contexts
+  and through nothing else. The reflection resolver the framework starts with answered
+  before any context was asked, so every body was read by reflection, and the privacy
+  and compliance bodies were declared in no context at all.
 - A request that names an identifier kind (`email`, `phone`) is read. Adding an
   identifier to a registration or to an account, and setting a backup identifier, were
   answered as malformed requests whatever was sent.

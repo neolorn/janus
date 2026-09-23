@@ -662,22 +662,7 @@ internal sealed class Deployment : IAsyncDisposable
 
         _ = services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
 
-        _ = services.ConfigureHttpJsonOptions(options =>
-        {
-            // The contexts spell an enum as the contract spells it, and a request is
-            // read through these options rather than through a context, so the same
-            // converter stands here (API-CONV-002).
-            options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<IdentifierKind>());
-            options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<Factor>());
-            options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<TakedownTrigger>());
-            options.SerializerOptions.TypeInfoResolverChain.Add(RegistrationJson.Default);
-            options.SerializerOptions.TypeInfoResolverChain.Add(AuthenticationJson.Default);
-            options.SerializerOptions.TypeInfoResolverChain.Add(AccountJson.Default);
-            options.SerializerOptions.TypeInfoResolverChain.Add(RecoveryJson.Default);
-            options.SerializerOptions.TypeInfoResolverChain.Add(CredentialsJson.Default);
-            options.SerializerOptions.TypeInfoResolverChain.Add(WellKnownJson.Default);
-            options.SerializerOptions.TypeInfoResolverChain.Add(PrivacyJson.Default);
-        });
+        _ = services.ConfigureHttpJsonOptions(HostingRegistration.ReadThroughContexts);
     }
 
     /// <inheritdoc/>

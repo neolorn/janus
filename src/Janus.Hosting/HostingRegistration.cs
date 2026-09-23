@@ -47,6 +47,7 @@ using Janus.Privacy.Requests;
 using Janus.Privacy.Takedowns;
 using Janus.Storage;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -252,24 +253,7 @@ public static class HostingRegistration
             provider.GetService<ImageCodec>(),
             provider.GetRequiredService<IConfigurationStore>()));
 
-        // CONV-DESIGN-006: every request and response of the library's endpoints is
-        // read and written by the generated contexts, never by reflection.
-        services.ConfigureHttpJsonOptions(options =>
-        {
-            // The contexts spell an enum as the contract spells it, and a request is
-            // read through these options rather than through a context, so the same
-            // converter stands here (API-CONV-002).
-            options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<IdentifierKind>());
-            options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<Factor>());
-            options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<TakedownTrigger>());
-            options.SerializerOptions.TypeInfoResolverChain.Add(RegistrationJson.Default);
-            options.SerializerOptions.TypeInfoResolverChain.Add(AuthenticationJson.Default);
-            options.SerializerOptions.TypeInfoResolverChain.Add(AccountJson.Default);
-            options.SerializerOptions.TypeInfoResolverChain.Add(RecoveryJson.Default);
-            options.SerializerOptions.TypeInfoResolverChain.Add(CredentialsJson.Default);
-            options.SerializerOptions.TypeInfoResolverChain.Add(WellKnownJson.Default);
-            options.SerializerOptions.TypeInfoResolverChain.Add(ConfigurationJson.Default);
-        });
+        services.ConfigureHttpJsonOptions(ReadThroughContexts);
         services.AddScoped<RegistrationService>();
         services.AddScoped<IRegistration>(provider => provider.GetRequiredService<RegistrationService>());
         services.AddScoped<IdentifierService>();
@@ -355,6 +339,39 @@ public static class HostingRegistration
         services.Insert(7, ServiceDescriptor.Singleton<IHostedService, SigningKeyValidationService>());
 
         return services;
+    }
+
+    /// <summary>
+    /// Reads every request body through the generated contexts and through nothing
+    /// else.
+    /// </summary>
+    /// <param name="options">The options minimal APIs read a request with.</param>
+    /// <remarks>
+    /// Implements CONV-DESIGN-006 and CONV-CODE-004. The chain the framework starts
+    /// with holds the reflection resolver, and a context added after it is never asked,
+    /// so the chain is replaced rather than added to: a body no context declares fails
+    /// where it is first read instead of being reflected over.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">The options are absent.</exception>
+    internal static void ReadThroughContexts(JsonOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        // The contexts spell an enum as the contract spells it, and a request is read
+        // through these options rather than through a context's own, so the same
+        // converter stands here (API-CONV-002).
+        options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<IdentifierKind>());
+        options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<Factor>());
+        options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<TakedownTrigger>());
+        options.SerializerOptions.TypeInfoResolverChain.Clear();
+        options.SerializerOptions.TypeInfoResolverChain.Add(RegistrationJson.Default);
+        options.SerializerOptions.TypeInfoResolverChain.Add(AuthenticationJson.Default);
+        options.SerializerOptions.TypeInfoResolverChain.Add(AccountJson.Default);
+        options.SerializerOptions.TypeInfoResolverChain.Add(RecoveryJson.Default);
+        options.SerializerOptions.TypeInfoResolverChain.Add(CredentialsJson.Default);
+        options.SerializerOptions.TypeInfoResolverChain.Add(WellKnownJson.Default);
+        options.SerializerOptions.TypeInfoResolverChain.Add(PrivacyJson.Default);
+        options.SerializerOptions.TypeInfoResolverChain.Add(ConfigurationJson.Default);
     }
 
     // The word list is a file a deployment holds beside the application, where it
