@@ -211,6 +211,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /admin/accounts/{subject}/sessions/revoke` ends every session of one account
+  under `session:revoke-account`, and `POST /admin/sessions/revoke-all` ends every
+  session in the deployment under `session:revoke`, the caller's own included. Both
+  answer 204.
+
 - The minor takedown, as `ITakedowns` and `POST /admin/accounts/{subject}/takedown`:
   under `takedown:execute` and step-up, one transaction suspends the account into its
   `takedown.grace` window, ends every session of it, records the trigger and the

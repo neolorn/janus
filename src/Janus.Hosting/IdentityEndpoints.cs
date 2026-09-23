@@ -6,6 +6,7 @@ using Janus.Hosting.Credentials;
 using Janus.Hosting.Privacy;
 using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
+using Janus.Hosting.Sessions;
 using Microsoft.AspNetCore.Routing;
 
 namespace Janus.Hosting;
@@ -40,6 +41,7 @@ public static class IdentityEndpoints
         _ = endpoints.MapRecovery();
         _ = endpoints.MapPrivacy();
         _ = endpoints.MapTakedowns();
+        _ = endpoints.MapSessionRevocation();
 
         return endpoints;
     }
