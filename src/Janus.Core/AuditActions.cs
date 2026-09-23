@@ -140,6 +140,29 @@ public static class AuditActions
         AuditAction.Parse("identity.organization.deletioncancelled");
 
     /// <summary>
+    /// A domain was added to an organization's lock, unverified and admitting nothing.
+    /// </summary>
+    /// <remarks>Implements REG-DOM-001 and IDN-AUD-001.</remarks>
+    public static AuditAction OrganizationDomainAdded { get; } =
+        AuditAction.Parse("identity.organization.domainadded");
+
+    /// <summary>
+    /// A domain of an organization's lock was verified by its TXT record, and admits
+    /// addresses in it from then on.
+    /// </summary>
+    /// <remarks>Implements REG-DOM-001 and IDN-AUD-001.</remarks>
+    public static AuditAction OrganizationDomainVerified { get; } =
+        AuditAction.Parse("identity.organization.domainverified");
+
+    /// <summary>
+    /// A domain was removed from an organization's lock, which stopped new sign-ins
+    /// with addresses in it.
+    /// </summary>
+    /// <remarks>Implements REG-DOM-001 and IDN-AUD-001.</remarks>
+    public static AuditAction OrganizationDomainRemoved { get; } =
+        AuditAction.Parse("identity.organization.domainremoved");
+
+    /// <summary>
     /// A takedown was triggered, naming what raised it and the reason written for it.
     /// </summary>
     /// <remarks>Implements IDN-LIFE-003, chapter 10 section 5.</remarks>

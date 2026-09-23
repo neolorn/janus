@@ -29,6 +29,18 @@ internal interface IIdentifierDirectory
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Finds the account an identifier belongs to and the identifier itself.
+    /// </summary>
+    /// <param name="kind">Which kind the value is.</param>
+    /// <param name="canonical">The value in its canonical form.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The account and the identifier, or nothing where no account holds it.</returns>
+    ValueTask<(SubjectId Subject, IdentifierId Identifier)?> HolderAsync(
+        IdentifierKind kind,
+        string canonical,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Whether a value is held out of reach by a removal whose undo has not run out.
     /// </summary>
     /// <param name="kind">Which kind the value is.</param>

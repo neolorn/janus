@@ -469,6 +469,16 @@ internal sealed class Deployment : IAsyncDisposable
     public Janus.Authentication.Tests.Organizations.OrganizationAuditInMemory OrganizationChanges { get; } = new();
 
     /// <summary>
+    /// The domains organizations lock their members to.
+    /// </summary>
+    public Janus.Authentication.Tests.Organizations.DomainStoreInMemory Domains { get; } = new();
+
+    /// <summary>
+    /// The TXT records the deployment's resolver answers.
+    /// </summary>
+    public Janus.Authentication.Tests.Organizations.DnsResolverInMemory Dns { get; } = new();
+
+    /// <summary>
     /// The records the host registered.
     /// </summary>
     public Janus.Authorization.Tests.Resources.ResourcesInMemory Resources { get; } = new();
@@ -715,6 +725,11 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<Janus.Authentication.Organizations.IOrganizationDirectory>(Organizations);
         _ = services.AddSingleton<Janus.Authentication.Organizations.IOrganizationAudit>(OrganizationChanges);
         _ = services.AddScoped<IOrganizations, Janus.Authentication.Organizations.OrganizationService>();
+        _ = services.AddSingleton<Janus.Authentication.Organizations.IDomainStore>(Domains);
+        _ = services.AddSingleton<IDnsResolver>(Dns);
+        _ = services.AddScoped<Janus.Authentication.Organizations.DomainLock>();
+        _ = services.AddScoped<Janus.Authentication.Organizations.DomainReverification>();
+        _ = services.AddScoped<IOrganizationDomains, Janus.Authentication.Organizations.OrganizationDomainService>();
         _ = services.AddScoped<SigningKeys>();
         _ = services.AddScoped<OidcService>();
         _ = services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());

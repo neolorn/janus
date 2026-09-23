@@ -99,6 +99,8 @@ internal static class ApiStatus
         [ErrorCodes.AffirmationRequired] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ChangeWindowElapsed] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.IdentifierInvalid] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.IdentifierDomainNotAllowed] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.DomainUnverified] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.IdentifierMixedScript] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ProfileInvalid] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ProfileNotAccepted] = StatusCodes.Status422UnprocessableEntity,

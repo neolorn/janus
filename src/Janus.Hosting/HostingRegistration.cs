@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Janus.Authentication.Accounts;
@@ -331,6 +332,31 @@ public static class HostingRegistration
         services.AddScoped<IGrants, GrantService>();
         services.AddScoped<IRoles, RoleService>();
         services.AddScoped<IOrganizations, OrganizationService>();
+
+        // REG-DOM-001, LIB-EXT-001: the resolver is the deployment's and may be absent,
+        // so what reads a record takes it as it was registered and proves nothing
+        // without it.
+        services.AddScoped<DomainLock>();
+        services.AddScoped<IOrganizationDomains>(provider => new OrganizationDomainService(
+            provider.GetRequiredService<Janus.Authentication.Policies.AdministrativeScope>(),
+            provider.GetRequiredService<StepUpGuard>(),
+            provider.GetRequiredService<IOrganizationDirectory>(),
+            provider.GetRequiredService<IDomainStore>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<ConfigurationAdministration>(),
+            provider.GetService<IDnsResolver>(),
+            provider.GetRequiredService<IOrganizationAudit>(),
+            provider.GetRequiredService<IEvents>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped(provider => new DomainReverification(
+            provider.GetRequiredService<IDomainStore>(),
+            provider.GetService<IDnsResolver>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IEvents>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<IGroups, GroupService>();
         services.AddScoped<IDerivationMaterialiser, DerivationMaterialiser>();
         services.AddScoped<ModelValidation>();

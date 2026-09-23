@@ -233,6 +233,24 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- An organization can lock its members to email domains it has proved by DNS:
+  `POST /admin/organizations/{id}/domains` lists a domain and answers the TXT record to
+  publish, `POST .../domains/{domain}/verify` looks for it (422
+  `identity.domain.unverified` where it is not found), `DELETE .../domains/{domain}`
+  removes the domain and raises `domain-removed`, and `GET` lists each domain with its
+  last check. From the first domain listed, a member who signs in with an address
+  outside the verified list, or with an address in a removed domain, is refused with
+  422 `identity.identifier.domainnotallowed` once a factor has succeeded, and a sign-in
+  link or code is not sent to such an address. Each change asks `domain:manage` in the
+  administrative organization, step-up and a reason; listing and verifying also ask
+  `system:administer`. `DomainReverification` re-checks every verified domain each
+  `domain.reverify.interval`, and a failed check raises `domain-reverification-failed`
+  and revokes nothing. The deployment registers an `IDnsResolver`; without one no
+  domain is ever verified. `policy.default` refuses a non-empty `emailDomains`. A
+  deployment applies one further migration, which adds the domain table and the
+  address a sign-in or a sign-in link was opened with. `IOrganizationDomains` is the
+  same set of operations in process.
+
 - `GET /admin/organizations/{id}/policy` answers the policy an organization's members
   resolve to, each field and each gate as `{ value, overridden }`, and
   `PUT /admin/organizations/{id}/policy` replaces what the organization overrides.

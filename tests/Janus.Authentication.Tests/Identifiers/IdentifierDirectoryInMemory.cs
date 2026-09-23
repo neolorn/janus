@@ -69,6 +69,26 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
     }
 
     /// <inheritdoc/>
+    public ValueTask<(SubjectId Subject, IdentifierId Identifier)?> HolderAsync(
+        IdentifierKind kind,
+        string canonical,
+        CancellationToken cancellationToken)
+    {
+        foreach (KeyValuePair<SubjectId, List<HeldIdentifier>> account in _held)
+        {
+            if (account.Value.FirstOrDefault(identifier =>
+                    identifier.Kind == kind
+                    && string.Equals(identifier.Canonical, canonical, StringComparison.Ordinal))
+                is HeldIdentifier held)
+            {
+                return ValueTask.FromResult<(SubjectId, IdentifierId)?>((account.Key, held.Id));
+            }
+        }
+
+        return ValueTask.FromResult<(SubjectId, IdentifierId)?>(null);
+    }
+
+    /// <inheritdoc/>
     public ValueTask<SubjectId?> OwnerAsync(
         IdentifierKind kind,
         string canonical,

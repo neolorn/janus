@@ -1085,6 +1085,8 @@ Janus.Core.ICredentials.SetPasswordAsync(Janus.Core.CredentialAuthority! authori
 Janus.Core.ICredentials.UpgradeKeyAsync(Janus.Core.CredentialAuthority! authority, Janus.Core.AuthenticatorId credential, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.CredentialCeremony!>>
 Janus.Core.IDerivationMaterialiser
 Janus.Core.IDerivationMaterialiser.RefreshAsync<TResource>(Janus.Core.AccessContext! context, string! derivation, Janus.Core.ResourceId resource, Janus.Core.FilterSources<TResource>! sources, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.DerivationRefresh!>>
+Janus.Core.IDnsResolver
+Janus.Core.IDnsResolver.TextRecordsAsync(string! name, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<string!>!>>
 Janus.Core.IEventConsumer<TEvent>
 Janus.Core.IEventConsumer<TEvent>.HandleAsync(TEvent! raised, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IEvents
@@ -1125,6 +1127,11 @@ Janus.Core.INotificationHandler.SendAsync(Janus.Core.SendRequest! request, Syste
 Janus.Core.IOidc
 Janus.Core.IOidc.ClaimsAsync(Janus.Core.SubjectId subject, string! scope, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.OidcClaims!>>
 Janus.Core.IOidc.KeysAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.PublishedSigningKey!>!>>
+Janus.Core.IOrganizationDomains
+Janus.Core.IOrganizationDomains.AddDomainAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, string! domain, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.OrganizationDomain!>>
+Janus.Core.IOrganizationDomains.DomainsAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.OrganizationDomain!>!>>
+Janus.Core.IOrganizationDomains.RemoveDomainAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, string! domain, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IOrganizationDomains.VerifyDomainAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, string! domain, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.OrganizationDomain!>>
 Janus.Core.IOrganizations
 Janus.Core.IOrganizations.CancelDeletionAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IOrganizations.CreateAsync(Janus.Core.AccessContext! context, string! name, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.OrganizationId>>
@@ -1442,6 +1449,25 @@ Janus.Core.OidcClient.Scopes.init -> void
 Janus.Core.OidcClientKind
 Janus.Core.OidcClientKind.BrowserApplication = 0 -> Janus.Core.OidcClientKind
 Janus.Core.OidcClientKind.Protocol = 1 -> Janus.Core.OidcClientKind
+Janus.Core.OrganizationDomain
+Janus.Core.OrganizationDomain.<Clone>$() -> Janus.Core.OrganizationDomain!
+Janus.Core.OrganizationDomain.AddedAt.get -> System.DateTimeOffset
+Janus.Core.OrganizationDomain.AddedAt.init -> void
+Janus.Core.OrganizationDomain.CheckedAt.get -> System.DateTimeOffset?
+Janus.Core.OrganizationDomain.CheckedAt.init -> void
+Janus.Core.OrganizationDomain.Deconstruct(out string! Domain, out string! RecordName, out string! RecordValue, out System.DateTimeOffset AddedAt, out System.DateTimeOffset? VerifiedAt, out System.DateTimeOffset? CheckedAt, out bool? LastCheckPassed) -> void
+Janus.Core.OrganizationDomain.Domain.get -> string!
+Janus.Core.OrganizationDomain.Domain.init -> void
+Janus.Core.OrganizationDomain.Equals(Janus.Core.OrganizationDomain? other) -> bool
+Janus.Core.OrganizationDomain.LastCheckPassed.get -> bool?
+Janus.Core.OrganizationDomain.LastCheckPassed.init -> void
+Janus.Core.OrganizationDomain.OrganizationDomain(string! Domain, string! RecordName, string! RecordValue, System.DateTimeOffset AddedAt, System.DateTimeOffset? VerifiedAt, System.DateTimeOffset? CheckedAt, bool? LastCheckPassed) -> void
+Janus.Core.OrganizationDomain.RecordName.get -> string!
+Janus.Core.OrganizationDomain.RecordName.init -> void
+Janus.Core.OrganizationDomain.RecordValue.get -> string!
+Janus.Core.OrganizationDomain.RecordValue.init -> void
+Janus.Core.OrganizationDomain.VerifiedAt.get -> System.DateTimeOffset?
+Janus.Core.OrganizationDomain.VerifiedAt.init -> void
 Janus.Core.OrganizationErased
 Janus.Core.OrganizationErased.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.OrganizationId Organization, out int MembershipsEnded) -> void
 Janus.Core.OrganizationErased.Equals(Janus.Core.OrganizationErased? other) -> bool
@@ -2721,6 +2747,9 @@ override Janus.Core.OidcClaims.ToString() -> string!
 override Janus.Core.OidcClient.Equals(object? obj) -> bool
 override Janus.Core.OidcClient.GetHashCode() -> int
 override Janus.Core.OidcClient.ToString() -> string!
+override Janus.Core.OrganizationDomain.Equals(object? obj) -> bool
+override Janus.Core.OrganizationDomain.GetHashCode() -> int
+override Janus.Core.OrganizationDomain.ToString() -> string!
 override Janus.Core.OrganizationErased.<Clone>$() -> Janus.Core.OrganizationErased!
 override Janus.Core.OrganizationErased.Equals(object? obj) -> bool
 override Janus.Core.OrganizationErased.GetHashCode() -> int
@@ -3003,6 +3032,9 @@ static Janus.Core.AuditActions.ObjectionWithdrawn.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.OrganizationCreated.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.OrganizationDeletionCancelled.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.OrganizationDeletionRequested.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.OrganizationDomainAdded.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.OrganizationDomainRemoved.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.OrganizationDomainVerified.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.OrganizationErased.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.PhoneSignalConsidered.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.PreferencesChanged.get -> Janus.Core.AuditAction
@@ -3316,6 +3348,7 @@ static Janus.Core.ErrorCodes.Denied.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.DerivationSourcesMissing.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.DeviceVerificationRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.DocumentNotFound.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.DomainUnverified.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.EndpointInsecure.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.EnrolmentTokenInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ErasureNotFailed.get -> Janus.Core.ErrorCode
@@ -3328,6 +3361,7 @@ static Janus.Core.ErrorCodes.GrantNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GrantReasonRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GroupCycle.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GroupInUse.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.IdentifierDomainNotAllowed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierLastOfKind.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierLocked.get -> Janus.Core.ErrorCode
@@ -3485,6 +3519,8 @@ static Janus.Core.OidcClaims.operator !=(Janus.Core.OidcClaims? left, Janus.Core
 static Janus.Core.OidcClaims.operator ==(Janus.Core.OidcClaims? left, Janus.Core.OidcClaims? right) -> bool
 static Janus.Core.OidcClient.operator !=(Janus.Core.OidcClient? left, Janus.Core.OidcClient? right) -> bool
 static Janus.Core.OidcClient.operator ==(Janus.Core.OidcClient? left, Janus.Core.OidcClient? right) -> bool
+static Janus.Core.OrganizationDomain.operator !=(Janus.Core.OrganizationDomain? left, Janus.Core.OrganizationDomain? right) -> bool
+static Janus.Core.OrganizationDomain.operator ==(Janus.Core.OrganizationDomain? left, Janus.Core.OrganizationDomain? right) -> bool
 static Janus.Core.OrganizationErased.operator !=(Janus.Core.OrganizationErased? left, Janus.Core.OrganizationErased? right) -> bool
 static Janus.Core.OrganizationErased.operator ==(Janus.Core.OrganizationErased? left, Janus.Core.OrganizationErased? right) -> bool
 static Janus.Core.OrganizationId.New(System.TimeProvider! time) -> Janus.Core.OrganizationId

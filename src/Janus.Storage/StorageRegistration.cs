@@ -243,6 +243,7 @@ internal static class StorageRegistration
         services.AddScoped<IGroupAudit, GroupAudit>();
         services.AddScoped<IOrganizationDirectory, OrganizationDirectory>();
         services.AddScoped<IOrganizationAudit, OrganizationAudit>();
+        services.AddScoped<IDomainStore, DomainStore>();
         services.AddScoped<IResourceStore, ResourceStore>();
 
         services.AddScoped<IAccessEvaluator, AccessEvaluator>();

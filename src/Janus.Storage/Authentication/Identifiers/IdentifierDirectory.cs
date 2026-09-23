@@ -32,6 +32,13 @@ internal sealed class IdentifierDirectory(
         identifiers.FindOwnerAsync(kind, canonical, cancellationToken);
 
     /// <inheritdoc/>
+    public ValueTask<(SubjectId Subject, IdentifierId Identifier)?> HolderAsync(
+        IdentifierKind kind,
+        string canonical,
+        CancellationToken cancellationToken) =>
+        identifiers.FindHolderAsync(kind, canonical, cancellationToken);
+
+    /// <inheritdoc/>
     public ValueTask<bool> IsReservedAsync(
         IdentifierKind kind,
         string canonical,

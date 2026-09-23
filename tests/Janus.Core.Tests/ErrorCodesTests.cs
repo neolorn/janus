@@ -78,6 +78,8 @@ public sealed class ErrorCodesTests
         "identity.change.pending",
         "identity.change.windowelapsed",
         "identity.deletion.windowelapsed",
+        "identity.domain.unverified",
+        "identity.identifier.domainnotallowed",
         "identity.identifier.invalid",
         "identity.identifier.lastofkind",
         "identity.identifier.locked",

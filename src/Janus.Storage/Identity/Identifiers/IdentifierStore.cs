@@ -95,6 +95,24 @@ internal sealed class IdentifierStore(
     }
 
     /// <inheritdoc/>
+    public async ValueTask<(SubjectId Subject, IdentifierId Identifier)?> FindHolderAsync(
+        IdentifierKind kind,
+        string canonical,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(canonical);
+
+        byte[] fingerprint = Fingerprinted(canonical);
+
+        IdentifierRecord? row = await context.Identifiers
+            .Where(held => held.Kind == kind && held.Fingerprint == fingerprint)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return row is null || Fingerprint.IsNeutralised(row.Fingerprint) ? null : (row.Subject, row.Id);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask RecordAsync(IdentifierSet set, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(set);

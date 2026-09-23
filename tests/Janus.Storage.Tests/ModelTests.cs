@@ -395,6 +395,18 @@ public sealed class ModelTests
             "oidc_tokens.subject",
             "oidc_tokens.type",
 
+            // Not an account field: a domain an organization locks its members to, with
+            // the token its TXT record carries and where its verification stands
+            // (REG-DOM-001, IDN-ORG-006).
+            "organization_domains.added_at",
+            "organization_domains.checked_at",
+            "organization_domains.domain",
+            "organization_domains.last_check_passed",
+            "organization_domains.organization",
+            "organization_domains.removed_at",
+            "organization_domains.token",
+            "organization_domains.verified_at",
+
             // The organization of IDN-ORG-001, with the mark IDN-ORG-004 reads and
             // the deletion window of IDN-ORG-003.
             "organizations.administrative",
@@ -617,8 +629,11 @@ public sealed class ModelTests
             "settings.value",
 
             // Not an account field: a sign-in in flight, keyed by what the caller's handle
-            // hashes to and carrying what it has presented so far (AUTH-FACT-001).
+            // hashes to and carrying what it has presented so far (AUTH-FACT-001), and
+            // the email it was opened with, which a domain lock is judged on
+            // (REG-DOM-001).
             "signin_challenges.created_at",
+            "signin_challenges.email",
             "signin_challenges.expires_at",
             "signin_challenges.handle",
             "signin_challenges.presented",
@@ -627,8 +642,9 @@ public sealed class ModelTests
 
             // Not an account field: a link or a code the library sent for a sign-in,
             // one per account per catalogue entry, spent on presentation
-            // (AUTH-FACT-016, REG-SESS-003).
+            // (AUTH-FACT-016, REG-SESS-003), with the email it went to (REG-DOM-001).
             "signin_links.browser",
+            "signin_links.email",
             "signin_links.enc_code",
             "signin_links.expires_at",
             "signin_links.factor",

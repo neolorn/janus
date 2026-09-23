@@ -7535,6 +7535,330 @@ closed.
 *Chapter text that should change.* 09 section 8a could list the refusals of
 `PUT /admin/organizations/{id}/policy`.
 
+---
+
+## 205. The domain lock is governed from the administrative organization, and verifying is a loosening
+
+**Phase 8 · 2026-09-23 · Tier 3 · REG-DOM-001, IDN-ORG-006, OPS-CFG-002, 09 section 8a, 10 sections 2.1 and 5a**
+
+*The question.* 10 section 2.1: `domain:manage` is "Adding, verifying and removing an
+organization's locked email domains (REG-DOM-001, IDN-ORG-006, D-146). Adding is a
+loosening under OPS-CFG-002". 10 section 5a makes `domain:manage` the step-up gate for
+"Add, verify or remove a locked domain". Neither says in which organization the
+permission is asked, whether verifying (which is what makes a listed domain admit
+addresses) is a loosening, or whether removing the last domain, which turns the lock
+off, is one.
+
+*The readings.*
+
+1. `domain:manage` in the organization named by the path; only adding is a loosening.
+2. `domain:manage` in the administrative organization, as `organization:manage` is for
+   the rest of the policy (entry 201); adding and verifying are loosenings and also
+   need `system:administer`; removing a domain is a loosening only where it leaves the
+   list empty. Every change is the `domain:manage` step-up action and carries a reason.
+
+*Chosen: 2, the strictest reading.* The list is a field of the organization's policy,
+which is governed from the administrative organization. Verifying is the step that
+widens what the lock admits, so it is at least as loose as adding. Emptying the list
+turns the lock off for every member, which is the widest loosening the field has.
+
+*Tests that pin it.*
+`OrganizationDomainEndpointTests.OPS_CFG_002_ListingADomainIsASteppedUpLooseningAsync`,
+`OrganizationDomainEndpointTests.REG_DOM_001_TheLockIsGovernedFromTheAdministrativeOrganizationAsync`,
+`OrganizationDomainEndpointTests.IDN_ORG_006_AC3_TheLockIsAPolicyValueChangedWithoutADeployAsync`.
+
+*Chapter text that should change.* 10 section 2.1 could say `domain:manage` is asked in
+the administrative organization and that verifying, and removing the last domain, are
+loosenings.
+
+---
+
+## 206. A lock whose listed domains are all unverified admits no address
+
+**Phase 8 · 2026-09-23 · Tier 3 · REG-DOM-001 AC1, IDN-ORG-006, 10 section 4.1a**
+
+*The question.* REG-DOM-001 AC1: "A domain listed but not yet verified does not admit
+any address." 10 section 4.1a: `emailDomains` is "`off`, or the list of domains
+**verified by DNS** whose addresses members may sign in with". Neither says whether the
+lock is on while the list holds only unverified domains, in which case it admits
+nobody, or off until a domain is verified.
+
+*The readings.*
+
+1. The lock is on only once a listed domain is verified.
+2. The lock is on as soon as the list holds a domain; while none is verified it admits
+   no address.
+
+*Chosen: 2, the strictest reading.* Reading 1 lets a member sign in with any address
+between the add and the verification, which is the window the lock exists to close.
+The administrator adds, publishes the record and verifies; members outside the
+organization's mail are refused from the add on.
+
+*Tests that pin it.*
+`OrganizationDomainEndpointTests.REG_DOM_001_AC1_AListedDomainAdmitsNothingUntilVerifiedAsync`.
+
+*Chapter text that should change.* REG-DOM-001 could say the lock is on from the first
+domain listed, verified or not.
+
+---
+
+## 207. A removed domain goes on refusing its addresses until it is listed anew
+
+**Phase 8 · 2026-09-23 · Tier 3 · REG-DOM-001 AC4, 09 section 8a**
+
+*The question.* 09 section 8a: "removal stops new sign-ins with addresses in the domain
+and raises an alert (OPS-ALERT-001)". REG-DOM-001 AC4: "After a domain is removed,
+sign-in with an address in it is refused and an alert is raised." Where the removal
+leaves the list empty, the lock is off (10 section 4.1a), and nothing else would refuse
+the domain's addresses.
+
+*The readings.*
+
+1. A removal takes the domain out of the list and nothing more; removing the last
+   domain admits every address again.
+2. The removed domain's row is kept with the moment of removal, and an address in it
+   is refused for every member of the organization until the domain is listed anew,
+   whether or not the list still holds other domains.
+
+*Chosen: 2, the strictest reading.* It is the only reading under which AC4 holds for
+the last domain. The kept row is also what holds D-153's "never reused": the token it
+was drawn with stays drawn, and a domain listed again draws a new one.
+
+*Tests that pin it.*
+`OrganizationDomainEndpointTests.REG_DOM_001_AC4_ARemovedDomainRefusesSignInAndAlertsAsync`,
+`OrganizationDomainEndpointTests.REG_DOM_001_AnUnprovedDomainIsNotVerifiedAsync`,
+`DomainStoreTests.REG_DOM_001_ARemovedDomainIsKeptBesideItsSuccessorAsync`.
+
+*Chapter text that should change.* REG-DOM-001 could say a removed domain refuses its
+addresses until it is listed again.
+
+---
+
+## 208. What the lock judges, when, and how a refusal is told
+
+**Phase 8 · 2026-09-23 · Tier 3 · REG-DOM-001, IDN-ORG-006 AC2, AUTH-ABUSE-003, AUTH-FACT-003, REG-MAIL-001 AC5**
+
+*The question.* REG-DOM-001: "While the lock is on, every member's sign-in email and
+any open email chosen at invitation acceptance SHALL be in the list
+(`identity.identifier.domainnotallowed`)." The chapters do not say which address is a
+member's "sign-in email", whose memberships count, at which step of a sign-in the
+lock is told, or what a sign-in link asked for a refused address does. AUTH-ABUSE-003
+requires that nothing before a factor succeeds tells an address apart.
+
+*The readings.*
+
+1. Judge the account's primary email at every sign-in, whatever identifier opened it,
+   and refuse at `/auth/begin`.
+2. Judge the email a sign-in was opened with, and the email a link or code went to,
+   once a factor has succeeded; refuse with `identity.identifier.domainnotallowed`
+   (422). A link or code asked for a refused address is answered as any other ask and
+   sends nothing, as a factor the policy has not enabled is (AUTH-FACT-003 AC5). A
+   link or code that went out before the lock changed is judged again when it is
+   used. The lock reaches an account through its current memberships only, and each
+   organization's lock is judged on its own. A sign-in opened with a username, a
+   phone number or a discoverable passkey is not judged, since no email opened it.
+
+*Chosen: 2.* Refusing at `/auth/begin` tells anyone who types an address whether an
+account holds it and is under a lock, which AUTH-ABUSE-003 forbids. The challenge and
+the pending link each keep the identifier of the address, never the address.
+
+*Tests that pin it.*
+`OrganizationDomainEndpointTests.REG_DOM_001_TheLockIsToldOnlyAfterAFactorSucceedsAsync`,
+`OrganizationDomainEndpointTests.REG_DOM_001_AC4_ALinkNoLongerSignsInToARemovedDomainAsync`,
+`OrganizationDomainEndpointTests.IDN_ORG_006_AC2_AnAddressOutsideTheVerifiedListIsRefusedAsync`,
+`OrganizationDomainEndpointTests.IDN_ORG_006_AC1_WithTheLockOffNoAddressIsRefusedAsync`.
+
+*Chapter text that should change.* REG-DOM-001 could define "sign-in email" as the
+address a sign-in is opened with or a link is sent to, and say the refusal follows a
+successful factor.
+
+---
+
+## 209. Verifying a domain, and the new code `identity.domain.unverified`
+
+**Phase 8 · 2026-09-23 · Tier 2 · REG-DOM-001, D-153, 09 section 8a, 10 section 1.1**
+
+*The question.* 09 section 8a: the domain is verified "by the DNS TXT record the add
+response names". Nothing says what a verification that does not find the record
+answers, what a lookup that fails answers, or what a repeated add, a verify of a
+domain not listed, or a removal of one not listed answers. 10 section 1.1 holds no
+code for a failed verification.
+
+*The readings.*
+
+1. A failed verification answers `config.value.notallowed`.
+2. A new code `identity.domain.unverified` (422). The record proves the domain where
+   one TXT value at `_identity-verify.<domain>` equals
+   `identity-domain-verification=<token>` exactly; a lookup that could not be made
+   proves nothing and is answered the same way; a failed verification writes nothing.
+   Listing a domain already listed, and verifying one already verified, answer the
+   domain as it stands and change nothing; verifying a domain the organization does
+   not list is 400 `api.request.malformed` naming `domain`; removing one it does not
+   list is 204 and changes nothing.
+
+*Chosen: 2.* No value was written, so `config.value.notallowed` would mislead; the
+failure is about the domain's proof.
+
+*Tests that pin it.*
+`OrganizationDomainEndpointTests.REG_DOM_001_AnUnprovedDomainIsNotVerifiedAsync`,
+`OrganizationDomainEndpointTests.REG_DOM_001_WhatAChangeNamesMustBeReadableAsync`,
+`ErrorCodesTests.CONV_NAME_003_AC2_ChangingACodeFailsTheContractTest`.
+
+*Chapter text that should change.* 10 section 1.1 needs the row for
+`identity.domain.unverified` (below, under the rows for chapter 10).
+
+---
+
+## 210. A failed scheduled check keeps the domain verified; only verified domains are re-checked
+
+**Phase 8 · 2026-09-23 · Tier 2 · REG-DOM-001 AC3, 09 section 8a, 10 section 4**
+
+*The question.* REG-DOM-001: "A failed re-verification SHALL raise an alert
+(OPS-ALERT-001) and SHALL revoke nothing by itself." 10 section 4:
+`domain.reverify.interval` "the sweep re-verifies every locked domain's TXT record at
+this interval". Neither says whether a domain whose check failed goes on admitting
+addresses, or whether a domain never verified is re-checked by the sweep.
+
+*The readings.*
+
+1. A failed check unverifies the domain, so its addresses are refused until an
+   administrator verifies it again.
+2. A failed check is recorded (`lastCheckPassed` false, shown by `GET`) and alerts
+   with `domain-reverification-failed`; the domain stays verified and admitting. The
+   sweep re-checks every listed, verified domain last checked an interval ago or
+   more; an unverified domain waits for the administrator's verify.
+
+*Chosen: 2.* Unverifying a domain refuses every member's sign-in with it, which is a
+revocation in all but name, and AC3 says a failure "leaves every membership and
+session intact". A resolver outage would otherwise lock a whole organization out.
+
+*Tests that pin it.*
+`OrganizationDomainEndpointTests.REG_DOM_001_AC3_AFailedReverificationAlertsAndRevokesNothingAsync`,
+`OrganizationDomainEndpointTests.REG_DOM_001_AScheduledCheckRunsOncePerIntervalAsync`,
+`DomainStoreTests.REG_DOM_001_AC3_OnlyAVerifiedListedDomainIsDueAsync`.
+
+*Chapter text that should change.* REG-DOM-001 could say a domain whose scheduled check
+failed stays verified.
+
+---
+
+## 211. A domain's canonical form
+
+**Phase 8 · 2026-09-23 · Tier 2 · REG-DOM-001, IDN-ACCT-004, D-153**
+
+*The question.* The chapters do not say how a domain is entered, compared or stored,
+nor how an address's domain is compared with a listed one.
+
+*The readings.*
+
+1. Compare the text as entered, ignoring case.
+2. The canonical form of IDN-ACCT-004 (NFKC case fold), then its IDNA ASCII form under
+   the STD3 rules; at least two labels, no trailing dot, and at most 236 octets so
+   that `_identity-verify.<domain>` fits DNS's 253. An address's domain is read the
+   same way. An address whose domain does not read is admitted only where no lock
+   applies.
+
+*Chosen: 2.* The Unicode and the ASCII forms of one domain are one domain; comparing
+entered text would let `Bücher.example` and `xn--bcher-kva.example` be listed as two
+and verified under different tokens.
+
+*Tests that pin it.*
+`OrganizationDomainEndpointTests.REG_DOM_001_WhatAChangeNamesMustBeReadableAsync`.
+
+*Chapter text that should change.* REG-DOM-001 could name the domain's form.
+
+---
+
+## 212. The resolver is the host's; none is shipped
+
+**Phase 8 · 2026-09-23 · Tier 2 · LIB-EXT-001, REG-DOM-001, implementation plan section 3**
+
+*The question.* The plan: "What Milestone 1 does **not** touch: a real mail server,
+SMS gateway, secrets manager, DNS, ... Each is met at its abstraction (LIB-EXT-001)
+with a fake that honours the contract". LIB-EXT-001's table has no DNS row, so nothing
+says whether the library ships a resolver or what happens without one.
+
+*The readings.*
+
+1. Ship a default resolver.
+2. `IDnsResolver` is an extension point the host registers, optional as the phone
+   signal provider is; without one, every verification answers
+   `identity.domain.unverified` and every scheduled check fails and alerts. A
+   deployment that never locks a domain needs none.
+
+*Chosen: 2.* The plan keeps DNS out of Milestone 1, and CONV-DESIGN-008 names no DNS
+package. Failing closed without a resolver can never admit an unproved domain.
+
+*Tests that pin it.*
+`OrganizationDomainEndpointTests.REG_DOM_001_AnUnprovedDomainIsNotVerifiedAsync` (a
+resolver that cannot be reached).
+
+*Chapter text that should change.* LIB-EXT-001's table could carry a row: DNS TXT
+lookup, none shipped. Milestone 2 supplies the resolver.
+
+---
+
+## 213. The system policy locks no domain
+
+**Phase 8 · 2026-09-23 · Tier 3 · 10 section 4.1a, REG-DOM-001, OPS-CFG-002**
+
+*The question.* 10 section 4.1a: `emailDomains` is "Written only through
+`/admin/organizations/{id}/domains`, never through `PUT .../policy`". It says nothing
+of `PUT /admin/config/policy.default`, which writes the same object for the system
+policy. A domain verified nowhere could be listed there and inherited by every
+organization.
+
+*The readings.*
+
+1. Accept the list on the system policy.
+2. Refuse a system policy whose `emailDomains` is not empty with 422
+   `config.value.notallowed`, `details.field` `emailDomains`, as entry 202 names a
+   field.
+
+*Chosen: 2, the strictest reading.* A domain is verified for one organization (one
+token per organization and domain, D-153); a system list could be verified nowhere,
+so it would either admit unproved domains or lock every member of every organization
+out.
+
+*Tests that pin it.*
+`OrganizationDomainEndpointTests.IDN_ORG_006_AC3_TheLockIsAPolicyValueChangedWithoutADeployAsync`.
+
+*Chapter text that should change.* 10 section 4.1a could say the system policy's
+`emailDomains` is always `off`.
+
+---
+
+## 214. The domain endpoints' shapes and what each change writes down
+
+**Phase 8 · 2026-09-23 · Tier 2 · 09 section 8a, API-CONV-002, IDN-AUD-001, OPS-CFG-005**
+
+*The question.* 09 section 8a: "`GET` returns each domain with its verification state
+and last check". No shape is given for it, for the add response that "names" the
+record, for the verify response, or for the bodies; no audit action is named.
+
+*The readings.*
+
+1. Answer the domain names only.
+2. `GET` answers an array of `{ domain, recordName, recordValue, addedAt, verifiedAt,
+   checkedAt, lastCheckPassed }`, the domain in its ASCII form; `POST .../domains`
+   takes `{ domain, reason }` and answers 201 with one such object; `POST
+   .../{domain}/verify` takes `{ reason }` and answers 200 with it; `DELETE
+   .../{domain}` takes `{ reason }` in the body and answers 204. Each change writes
+   `identity.organization.domainadded`, `.domainverified` or `.domainremoved` with
+   details `{ domain, reason }`, and each change to the list is also written down as a
+   runtime configuration change of `policy.<organization>`.
+
+*Chosen: 2.* The record is what the administrator publishes, so the response carries
+it; the audit actions follow the organization's own (entry 197).
+
+*Tests that pin it.*
+`OrganizationDomainEndpointTests.REG_DOM_001_EveryChangeIsWrittenDownAsync`,
+`OrganizationDomainEndpointTests.REG_DOM_001_AC1_AListedDomainAdmitsNothingUntilVerifiedAsync`,
+`AuditActionsTests.IDN_AUD_001_TheSetOfActionsIsClosed`.
+
+*Chapter text that should change.* 09 section 8a could give the shapes; chapter 10
+needs the three audit rows (below).
+
 
 # Rows for chapter 10
 
@@ -7570,6 +7894,7 @@ The subsection each row belongs in is named with it.
 | `auth.credential.notupgradable` | 1.2 | 409 | The credential named for an upgrade to a passkey is not a second-factor security key. (AUTH-FACT-002b) |
 | `authz.role.inuse` | 1.3 | 409 | A grant or a derivation names the role, so it cannot be removed; its permissions can be changed instead. (AUTHZ-GRANT-004, AUTHZ-GRANT-003 AC3, entry 189) |
 | `authz.group.inuse` | 1.3 | 409 | The group holds a member, belongs to a group, or was given a grant, so it cannot be removed. (AUTHZ-GROUP-001, AUTHZ-GRANT-003 AC3, entry 192) |
+| `identity.domain.unverified` | 1.1 | 422 | A listed domain is verified and no TXT value at `_identity-verify.<domain>` is `identity-domain-verification=<token>`, or the lookup could not be made; nothing is written. (REG-DOM-001, entry 209) |
 
 ## LIB-HOST-001, host declarations
 
@@ -7578,6 +7903,7 @@ The subsection each row belongs in is named with it.
 | `PasskeyAddresses` (`changePassword`, `enrol`, `manage`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `passkeyAddresses` or the field of it that is empty. The addresses are the frontend pages `/.well-known/change-password` and `/.well-known/passkey-endpoints` point at (REG-PM-001). |
 | `AuthenticationAddresses` (`signIn`, `provider`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `authenticationAddresses.signIn` or `authenticationAddresses.provider`. The first is where an authorization request that is not silent and holds no session is forwarded (AUTH-SESS-012 AC3). The second is the address the library is mounted at on the authentication application, which is where another application finds `/oidc/authorize` and `/oidc/token` (BFF-SESS-006). |
 | `SignOnClient` (`clientId`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `signOnClient.clientId`. The identifier is what this application calls itself at the provider when it establishes its own session, and the registry holds the one destination a code returns to under it. The secret it presents is not a declaration: it comes from the secrets manager through `ISecretSource.ReadSignOnSecretAsync` and is passed to `AddJanus`, which refuses to start without it with `model.startup.keyunavailable` and `details.key` naming `signOnSecret` (BFF-SESS-006, OPS-SEC-001). |
+| `IDnsResolver` (`TextRecordsAsync`) | optional | No startup refusal. Every verification of a locked domain answers `identity.domain.unverified` and every scheduled check fails and raises `domain-reverification-failed`, so no domain is ever proved. A deployment that locks no domain needs none (REG-DOM-001, entry 212). |
 | `ImageCodec` (`Reencode`) | optional, and required while any organization shows photos | Startup fails with `model.startup.declarationmissing` and `details.key` naming `imageCodec` where a `photo.enabled.<organization>` key is on and no codec is registered. The callback is `Func<ReadOnlyMemory<byte>, int, CancellationToken, ValueTask<ReadOnlyMemory<byte>?>>`: the uploaded bytes and the longest side in pixels the stored image is held to, answering the re-encoded JPEG with every metadata segment removed, or nothing where the bytes are not an image the deployment accepts. Nothing it answers chooses a code: a refusal is `identity.photo.invalid` (IDN-ATTR-002, IDN-ATTR-004). |
 
 ## Shipped default declarations
@@ -7696,6 +8022,9 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `identity.organization.created` | security | `AuditActions.OrganizationCreated` | An organization was created, with its policy key holding no override. Details carry `reason`; the row is filed under the organization. (IDN-ORG-002, entry 197) |
 | `identity.organization.deletioncancelled` | security | `AuditActions.OrganizationDeletionCancelled` | An organization's deletion request was cancelled inside its window, which gives back every grant it holds. Details carry `reason`. (IDN-ORG-003, entry 197) |
 | `identity.organization.deletionrequested` | security | `AuditActions.OrganizationDeletionRequested` | An organization's deletion was requested: it is suspended and every member session ended. Details carry `reason`. (IDN-ORG-003, entry 197) |
+| `identity.organization.domainadded` | security | `AuditActions.OrganizationDomainAdded` | A domain was listed in an organization's lock, unverified. Details carry `domain` and `reason`; the row is filed under the organization. (REG-DOM-001, IDN-ORG-006, entry 214) |
+| `identity.organization.domainremoved` | security | `AuditActions.OrganizationDomainRemoved` | A domain was removed from an organization's lock; its addresses stay refused until it is listed anew. Details carry `domain` and `reason`. (REG-DOM-001, entries 207 and 214) |
+| `identity.organization.domainverified` | security | `AuditActions.OrganizationDomainVerified` | A listed domain was verified by its TXT record and now admits its addresses. Details carry `domain` and `reason`. (REG-DOM-001, entry 214) |
 | `identity.organization.erased` | routine | `AuditActions.OrganizationErased` | An organization's deletion grace window elapsed and the erasure executed. Details carry `organization`, `deletingSince` and `membershipsEnded`; the row names no subject and no actor. (IDN-ORG-003) |
 | `identity.preferences.changed` | routine | `AuditActions.PreferencesChanged` | The account's preference values were changed, recorded by key and never by value. (REG-PREF-001) |
 | `identity.profile.changed` | routine | `AuditActions.ProfileChanged` | A profile attribute of the account was changed. (IDN-ATTR-001) |

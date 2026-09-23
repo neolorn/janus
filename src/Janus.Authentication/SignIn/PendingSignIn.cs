@@ -11,9 +11,10 @@ namespace Janus.Authentication.SignIn;
 /// asked for it.
 /// </summary>
 /// <remarks>
-/// Implements AUTH-FACT-003 and REG-SESS-003. A link completes only in the browser
-/// that requested it and only on a press; the code is what the person types where the
-/// sign-in began when they opened it somewhere else.
+/// Implements AUTH-FACT-003, REG-SESS-003 and REG-DOM-001. A link completes only in
+/// the browser that requested it and only on a press; the code is what the person types
+/// where the sign-in began when they opened it somewhere else. The address it went to is
+/// kept, so that a domain lock that changed while it was out is judged when it is used.
 /// </remarks>
 internal sealed class PendingSignIn
 {
@@ -21,6 +22,7 @@ internal sealed class PendingSignIn
         byte[] fingerprint,
         SubjectId subject,
         Factor factor,
+        IdentifierId? email,
         byte[] code,
         byte[]? browser,
         DateTimeOffset issuedAt,
@@ -29,6 +31,7 @@ internal sealed class PendingSignIn
         Fingerprint = fingerprint;
         Subject = subject;
         Factor = factor;
+        Email = email;
         Code = code;
         Browser = browser;
         IssuedAt = issuedAt;
@@ -43,6 +46,9 @@ internal sealed class PendingSignIn
 
     /// <summary>Which factor it stands for.</summary>
     public Factor Factor { get; }
+
+    /// <summary>The email address it went to, where it went to one.</summary>
+    public IdentifierId? Email { get; }
 
     /// <summary>The code the same message carried, held as it is compared.</summary>
     public byte[] Code { get; }
@@ -67,6 +73,7 @@ internal sealed class PendingSignIn
     /// <param name="token">The secret the message carries.</param>
     /// <param name="subject">Whose sign-in.</param>
     /// <param name="factor">Which factor it stands for.</param>
+    /// <param name="email">The email address it goes to, where it goes to one.</param>
     /// <param name="code">The code the same message carries.</param>
     /// <param name="browser">What the requesting browser carried, or nothing.</param>
     /// <param name="at">Now.</param>
@@ -76,11 +83,12 @@ internal sealed class PendingSignIn
         OpaqueToken token,
         SubjectId subject,
         Factor factor,
+        IdentifierId? email,
         string code,
         byte[]? browser,
         DateTimeOffset at,
         TimeSpan lifetime) =>
-        new(token.Fingerprint(), subject, factor, Held(code), browser, at, at + lifetime);
+        new(token.Fingerprint(), subject, factor, email, Held(code), browser, at, at + lifetime);
 
     /// <summary>
     /// The pending sign-in as the store holds it.
@@ -88,6 +96,7 @@ internal sealed class PendingSignIn
     /// <param name="fingerprint">What the token hashes to.</param>
     /// <param name="subject">Whose sign-in.</param>
     /// <param name="factor">Which factor it stands for.</param>
+    /// <param name="email">The email address it went to, where it went to one.</param>
     /// <param name="code">The code it carries.</param>
     /// <param name="browser">What the requesting browser carried, or nothing.</param>
     /// <param name="issuedAt">When it went out.</param>
@@ -99,6 +108,7 @@ internal sealed class PendingSignIn
         byte[] fingerprint,
         SubjectId subject,
         Factor factor,
+        IdentifierId? email,
         byte[] code,
         byte[]? browser,
         DateTimeOffset issuedAt,
@@ -108,7 +118,7 @@ internal sealed class PendingSignIn
         ArgumentNullException.ThrowIfNull(fingerprint);
         ArgumentNullException.ThrowIfNull(code);
 
-        return new PendingSignIn(fingerprint, subject, factor, code, browser, issuedAt, expiresAt)
+        return new PendingSignIn(fingerprint, subject, factor, email, code, browser, issuedAt, expiresAt)
         {
             WrongAttempts = wrongAttempts,
         };

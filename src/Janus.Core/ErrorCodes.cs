@@ -293,6 +293,21 @@ public static class ErrorCodes
     public static ErrorCode IdentifierInvalid { get; } = ErrorCode.Parse("identity.identifier.invalid");
 
     /// <summary>
+    /// The address's domain is outside the verified domains an organization the
+    /// account belongs to locks its members to. Use an address in one of them.
+    /// </summary>
+    /// <remarks>Implements REG-DOM-001, IDN-ORG-006, chapter 10 section 1.1.</remarks>
+    public static ErrorCode IdentifierDomainNotAllowed { get; } =
+        ErrorCode.Parse("identity.identifier.domainnotallowed");
+
+    /// <summary>
+    /// No TXT record at the domain's verification name carries its token, or none could
+    /// be read. Publish the record the domain was listed with and try again.
+    /// </summary>
+    /// <remarks>Implements REG-DOM-001, chapter 09 section 8a.</remarks>
+    public static ErrorCode DomainUnverified { get; } = ErrorCode.Parse("identity.domain.unverified");
+
+    /// <summary>
     /// The identifier is locked: an invitation bound it, or a provider operates the
     /// mailbox. Nothing about it is the person's to change.
     /// </summary>
