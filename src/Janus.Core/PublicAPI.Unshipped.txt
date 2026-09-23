@@ -420,6 +420,7 @@ Janus.Core.Configuration.IConfigurationStore.ReadAsync<TValue>(Janus.Core.Config
 Janus.Core.Configuration.IConfigurationStore.ReadAsync<TValue>(Janus.Core.Configuration.SettingFamily<TValue>! family, string! parameter, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<TValue>>
 Janus.Core.Configuration.IConfigurationStore.ReadWrittenAsync<TValue>(Janus.Core.Configuration.SettingFamily<TValue>! family, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyDictionary<string!, TValue>!>>
 Janus.Core.Configuration.IConfigurationStore.WriteAsync<TValue>(Janus.Core.Configuration.Setting<TValue>! setting, TValue value, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<TValue>>
+Janus.Core.Configuration.IConfigurationStore.WriteAsync<TValue>(Janus.Core.Configuration.SettingFamily<TValue>! family, string! parameter, TValue value, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<TValue>>
 Janus.Core.Configuration.IntegerListSetting
 Janus.Core.Configuration.IntegerListSetting.Unremovable.get -> System.Collections.Generic.IReadOnlySet<int>!
 Janus.Core.Configuration.IntegerSetting

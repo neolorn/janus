@@ -60,6 +60,30 @@ public interface IConfigurationStore
     ValueTask<Result<TValue>> ReadAsync<TValue>(SettingFamily<TValue> family, string parameter, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Writes the value in force for one member of a key that exists once per
+    /// organization or once per host-declared category.
+    /// </summary>
+    /// <typeparam name="TValue">The type of the member's value.</typeparam>
+    /// <param name="family">The family, from <see cref="Settings"/>.</param>
+    /// <param name="parameter">The organization identifier or the declared category.</param>
+    /// <param name="value">The value to put in force.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns>
+    /// What was in force for that member before the write, or the failure where the
+    /// family is one the application cannot change (OPS-CFG-004) or the value does not
+    /// read back as one the family admits.
+    /// </returns>
+    /// <remarks>
+    /// Implements OPS-CFG-008 and OPS-CFG-004. As for a key that exists once, the
+    /// caller gates, audits and alerts; the store only puts the value in force.
+    /// </remarks>
+    ValueTask<Result<TValue>> WriteAsync<TValue>(
+        SettingFamily<TValue> family,
+        string parameter,
+        TValue value,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Reads every member of such a key the deployment has written a value for.
     /// </summary>
     /// <typeparam name="TValue">The type of a member's value.</typeparam>

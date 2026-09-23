@@ -21,8 +21,9 @@ namespace Janus.Authentication.Configuration;
 /// <remarks>
 /// Implements OPS-CFG-002, OPS-CFG-005, OPS-CFG-008 and the <c>system:administer</c>
 /// row of chapter 10 section 2.1. Nothing else calls
-/// <see cref="IConfigurationStore.WriteAsync{TValue}"/>: a change that went round this
-/// would be a change nobody was told of and nobody had to answer for.
+/// <see cref="IConfigurationStore.WriteAsync{TValue}(Setting{TValue}, TValue, CancellationToken)"/>:
+/// a change that went round this would be a change nobody was told of and nobody had
+/// to answer for.
 /// </remarks>
 internal sealed class ConfigurationAdministration(
     IConfigurationStore configuration,

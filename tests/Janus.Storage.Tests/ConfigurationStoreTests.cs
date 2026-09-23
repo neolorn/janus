@@ -153,6 +153,76 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
     }
 
     /// <summary>
+    /// OPS-CFG-008 AC1: a member of a family written through the store is in force for
+    /// the next read on a context that knew nothing of the write, and the write answers
+    /// what was in force before it.
+    /// </summary>
+    [Fact]
+    public async Task OPS_CFG_008_AC1_AWrittenMemberOfAFamilyIsInForceForTheNextReadAsync()
+    {
+        var organization = OrganizationId.New(TimeProvider.System);
+        PolicyOverride changed = PolicyOverride.None with { SelfServiceRecovery = false };
+
+        await using (StoreContext writing = database.Context())
+        {
+            Result<PolicyOverride> before = await new ConfigurationStore(writing).WriteAsync(
+                Catalogue.OrganizationPolicy,
+                organization.ToString(),
+                changed,
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(PolicyOverride.None, Value(before));
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        Result<PolicyOverride> read = await new ConfigurationStore(reading).ReadAsync(
+            Catalogue.OrganizationPolicy,
+            organization.ToString(),
+            TestContext.Current.CancellationToken);
+
+        Assert.False(Value(read)?.SelfServiceRecovery);
+    }
+
+    /// <summary>
+    /// A family the application cannot change is refused for every member, whatever
+    /// the caller asks, and no row is written for it (OPS-CFG-004).
+    /// </summary>
+    [Fact]
+    public async Task WriteAsync_AMemberOfAProtectedFamily_IsRefusedAndWritesNothingAsync()
+    {
+        await using StoreContext writing = database.Context();
+
+        Result<bool> written = await new ConfigurationStore(writing).WriteAsync(
+            Catalogue.OrganizationStepUpEnforcement,
+            OrganizationId.New(TimeProvider.System).ToString(),
+            false,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.ConfigurationKeyProtected, Code(written));
+        Assert.Empty(writing.ChangeTracker.Entries<SettingRecord>());
+    }
+
+    /// <summary>
+    /// A member's value that would not read back as one the family admits is refused
+    /// rather than stored, so no row the next read faults on is ever written.
+    /// </summary>
+    [Fact]
+    public async Task WriteAsync_AMemberValueTheFamilyDoesNotAdmit_IsRefusedAsync()
+    {
+        await using StoreContext writing = database.Context();
+
+        Result<TimeSpan> written = await new ConfigurationStore(writing).WriteAsync(
+            Catalogue.HostCategoryRetention,
+            "invoices",
+            TimeSpan.FromDays(-1),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, Code(written));
+        Assert.Empty(writing.ChangeTracker.Entries<SettingRecord>());
+    }
+
+    /// <summary>
     /// `10` section 4: the row carries the key's written form, so a row that does not
     /// parse is a fault and never a default quietly standing in for it.
     /// </summary>

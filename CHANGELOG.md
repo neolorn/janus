@@ -229,6 +229,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `IConfigurationStore.WriteAsync` for one member of a key that exists once per
+  organization or once per declared category: it puts the value in force for the next
+  read, answers what was in force before, and refuses a protected family or a value the
+  family does not admit.
+
 - `GET /admin/groups?organization={id}` reads an organization's groups with their
   direct members, `POST /admin/groups` creates one, `DELETE /admin/groups/{id}`
   removes one that holds no member, belongs to no group and was never given a grant
