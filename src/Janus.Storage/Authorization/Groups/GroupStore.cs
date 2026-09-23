@@ -24,7 +24,7 @@ namespace Janus.Storage.Authorization.Groups;
 /// changed edge as an argument rather than reading it back, so they do not depend on
 /// when the operation's own writes reach the database.
 /// </remarks>
-internal sealed class GroupStore(JanusDbContext context, DataConnections connections) : IGroupStore
+internal sealed class GroupStore(StoreContext context, DataConnections connections) : IGroupStore
 {
     // The edges as they stand once the change is in: every stored membership but the
     // one being removed, and the one being added.

@@ -317,7 +317,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
         SubjectId subject = await _deployment.AccountAsync(Noon);
         Session session = await SignedInAsync(subject);
 
-        await using (JanusDbContext ending = database.Context())
+        await using (StoreContext ending = database.Context())
         {
             await Sessions(ending).EndSpineAsync(
                 session.Id,
@@ -352,7 +352,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
 
         await _deployment.EraseAsync(subject);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
             await Preferences(reading).FindBySubjectAsync(
@@ -394,7 +394,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
 
     private async Task<IReadOnlyList<ExportSection>> AssembledAsync(SubjectId subject)
     {
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         var source = new ExportSource(
             new AccountStore(reading),
@@ -429,7 +429,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
 
         var id = IdentifierId.New(TimeProvider.System);
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         IdentifierStore store = Identifiers(writing);
 
         IdentifierSet set = await store.FindBySubjectAsync(
@@ -457,7 +457,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
 
     private async Task SettledAsync(SubjectId subject)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         var preferences = PreferenceSet.Empty(subject);
         preferences.SetLanguage("ar-EG");
@@ -471,7 +471,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
     // The columns the one transaction of the terms step writes on the account row.
     private async Task RegisteredAsync(SubjectId subject)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         AccountRecord record = await writing.Accounts
             .SingleAsync(held => held.Subject == subject, TestContext.Current.CancellationToken);
@@ -491,7 +491,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
             Shipped,
             parallelism: 1);
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         await new PasswordStore(writing).SetAsync(
             Password.Set(subject, hash, meetsSingleFactorFloor: true, Noon),
@@ -518,7 +518,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
 
         credential.Confirm(Noon);
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         await new AuthenticatorStore(writing, _deployment.Keys, _deployment.Randomness)
             .AddAsync(credential, TestContext.Current.CancellationToken);
@@ -539,7 +539,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
                 parallelism: 1)),
         ];
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         await new RecoveryCodeStore(writing).ReplaceAsync(
             RecoveryCodeSet.Of(subject, hashes, Noon),
@@ -558,7 +558,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
             Noon,
             TimeSpan.FromDays(30));
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         await new DeviceStore(writing).AddAsync(
             device,
@@ -588,7 +588,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
             membership.End(ended);
         }
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         await new MembershipStore(writing).CreateAsync(
             membership,
@@ -602,7 +602,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
         var role = RoleName.Parse("editor");
         var id = GrantId.New(TimeProvider.System);
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         if (!await writing.Roles.AnyAsync(row => row.Name == role, TestContext.Current.CancellationToken))
         {
@@ -649,7 +649,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
             TimeSpan.FromDays(30),
             satisfiesEveryGate: false);
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         await Sessions(writing).AddAsync(
             session,
@@ -662,12 +662,12 @@ public sealed class ExportSourceTests(DatabaseFixture database)
         return session;
     }
 
-    private IdentifierStore Identifiers(JanusDbContext context) =>
+    private IdentifierStore Identifiers(StoreContext context) =>
         new(context, _deployment.Keys, Deployment.FingerprintKey, _deployment.Randomness);
 
-    private PreferenceStore Preferences(JanusDbContext context) =>
+    private PreferenceStore Preferences(StoreContext context) =>
         new(context, _deployment.Keys, _deployment.Randomness);
 
-    private SessionStore Sessions(JanusDbContext context) =>
+    private SessionStore Sessions(StoreContext context) =>
         new(context, _deployment.Keys, _deployment.Randomness);
 }

@@ -15,7 +15,7 @@ namespace Janus.Storage.Authentication.Sending;
 /// <param name="fingerprintKey">What the sources are hashed under.</param>
 /// <remarks>Implements AUTH-ABUSE-008 and CONV-DESIGN-003.</remarks>
 internal sealed class RegistrationSourceLedger(
-    JanusDbContext context,
+    StoreContext context,
     ReadOnlyMemory<byte> fingerprintKey) : IRegistrationSources
 {
     private static readonly TimeSpan Kept = TimeSpan.FromHours(1);

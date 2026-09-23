@@ -5956,6 +5956,52 @@ pre-authentication row wrapped under the key-encryption key.
 that both halves are the library's; `07` LIB-HOST-001 should carry the client identifier
 row and the provider address beside the sign-in address; `10` section 4 needs no key.
 
+---
+
+## 164. The public types are named for what they are
+
+**Corrections 2 · 2026-09-23 · Tier 2 · CONV-NAME-001, CONV-LAYOUT-002, CONV-DESIGN-007, D-163**
+
+*The question.* D-163 renames every type and member that carries the product name "for
+what the thing is", and names four successors: `StoreContext`, `DomainEvent`,
+`MapAuthorizationTables` and `AddIdentityArea` with its siblings. Nine more names in the
+code carried it, seven of them on the public surface of `Janus.Hosting`, and no chapter
+names their successors.
+
+*The readings.*
+
+1. Name each for what it is, with the prefix `identity` only where the name would
+   otherwise not say whose it is beside a host's own names on the same builder.
+2. Put `identity` on every one, so each successor is the old name with the word
+   swapped.
+
+*Chosen: 1.* D-163 asks for the name of the thing and keeps the prefix for artefacts
+that need keeping apart from a host's; its own examples carry none (`StoreContext`,
+`MapAuthorizationTables`). The successors:
+
+| Was | Is | Why |
+| --- | --- | --- |
+| `JanusRegistration` | `HostingRegistration` | The registration class of `Janus.Hosting`, beside `StorageRegistration` in `Janus.Storage`. `AddJanus` stays on it. |
+| `JanusEndpoints.MapJanus` | `IdentityEndpoints.MapIdentityEndpoints` | Mounts the library's endpoints among the host's own on the host's route builder, where a bare `MapEndpoints` would not say whose. |
+| `JanusEndpoints.MapJanusWellKnown` | `IdentityEndpoints.MapIdentityWellKnown` | The same reason, for the two documents of REG-PM-001 at the site root. |
+| `JanusPipeline` | `PipelineProfiles` | Holds the two profiles of BFF-OWN-001 and BFF-MACH-001. |
+| `UseJanusBrowserProfile`, `UseJanusMachineProfile` | `UseBrowserProfile`, `UseMachineProfile` | The chapters' own names for what each mounts. |
+| `JanusAuthorizationModel` | `AuthorizationTables` | Holds `MapAuthorizationTables` (D-163). |
+| `JanusApplication` | `ApplicationKind` | Which of the deployment's applications the pipeline is mounted in (BFF-CSRF-005). |
+| `JanusEvent` | `DomainEvent` | D-163. |
+| `JanusDbContext` | `StoreContext` | D-163. |
+| `AddJanusStorage` | `AddStorageArea` | The storage project's sibling of `AddIdentityArea` (CONV-DESIGN-007). |
+
+*Tests that pin it.* The declared public API of `Janus.Core` and `Janus.Hosting`, which
+fails the build on any other name (CONV-SETUP-003);
+`BrowserProfileTests.BFF_OWN_001_AC1_MountingTakesNoSecurityRelevantConfiguration`;
+`TruthTableTests.AUTHZ_GATE_002_AC2_EveryCaseIsEqualAcrossBothRenderingsAsync`, whose
+host maps the tables with `MapAuthorizationTables`.
+
+*Chapter text that should change.* `07` LIB-API-005 or `17` BFF-OWN-001 could name
+`MapIdentityEndpoints`, `MapIdentityWellKnown`, `UseBrowserProfile` and
+`UseMachineProfile` as the mounting calls, so the chapters name what a host writes.
+
 
 # Rows for chapter 10
 

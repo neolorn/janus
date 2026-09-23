@@ -685,6 +685,20 @@ Janus.Core.DocumentVersion.Translations.get -> System.Collections.Generic.IReadO
 Janus.Core.DocumentVersion.Translations.init -> void
 Janus.Core.DocumentVersion.Version.get -> string!
 Janus.Core.DocumentVersion.Version.init -> void
+Janus.Core.DomainEvent
+Janus.Core.DomainEvent.Actor.get -> Janus.Core.SubjectId?
+Janus.Core.DomainEvent.Actor.init -> void
+Janus.Core.DomainEvent.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey) -> void
+Janus.Core.DomainEvent.DomainEvent(Janus.Core.DomainEvent! original) -> void
+Janus.Core.DomainEvent.DomainEvent(System.DateTimeOffset RaisedAt, string! IdempotencyKey) -> void
+Janus.Core.DomainEvent.Effective.get -> Janus.Core.SubjectId?
+Janus.Core.DomainEvent.Effective.init -> void
+Janus.Core.DomainEvent.IdempotencyKey.get -> string!
+Janus.Core.DomainEvent.IdempotencyKey.init -> void
+Janus.Core.DomainEvent.RaisedAt.get -> System.DateTimeOffset
+Janus.Core.DomainEvent.RaisedAt.init -> void
+Janus.Core.DomainEvent.Subject.get -> Janus.Core.SubjectId?
+Janus.Core.DomainEvent.Subject.init -> void
 Janus.Core.EffectiveGrant
 Janus.Core.EffectiveGrant.<Clone>$() -> Janus.Core.EffectiveGrant!
 Janus.Core.EffectiveGrant.Deconstruct(out System.Guid GrantId, out string! SubjectType, out System.Guid SubjectId, out string! Role, out string! Permission, out string? ResourceType, out string? ResourceId, out bool Deny, out string! Kind, out System.Guid Organization, out System.DateTimeOffset? ExpiresAt, out System.DateTimeOffset? RevokedAt) -> void
@@ -1129,20 +1143,6 @@ Janus.Core.ImageCodec.Equals(Janus.Core.ImageCodec? other) -> bool
 Janus.Core.ImageCodec.ImageCodec(System.Func<System.ReadOnlyMemory<byte>, int, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<System.ReadOnlyMemory<byte>?>>! Reencode) -> void
 Janus.Core.ImageCodec.Reencode.get -> System.Func<System.ReadOnlyMemory<byte>, int, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<System.ReadOnlyMemory<byte>?>>!
 Janus.Core.ImageCodec.Reencode.init -> void
-Janus.Core.JanusEvent
-Janus.Core.JanusEvent.Actor.get -> Janus.Core.SubjectId?
-Janus.Core.JanusEvent.Actor.init -> void
-Janus.Core.JanusEvent.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey) -> void
-Janus.Core.JanusEvent.Effective.get -> Janus.Core.SubjectId?
-Janus.Core.JanusEvent.Effective.init -> void
-Janus.Core.JanusEvent.IdempotencyKey.get -> string!
-Janus.Core.JanusEvent.IdempotencyKey.init -> void
-Janus.Core.JanusEvent.JanusEvent(Janus.Core.JanusEvent! original) -> void
-Janus.Core.JanusEvent.JanusEvent(System.DateTimeOffset RaisedAt, string! IdempotencyKey) -> void
-Janus.Core.JanusEvent.RaisedAt.get -> System.DateTimeOffset
-Janus.Core.JanusEvent.RaisedAt.init -> void
-Janus.Core.JanusEvent.Subject.get -> Janus.Core.SubjectId?
-Janus.Core.JanusEvent.Subject.init -> void
 Janus.Core.KeyEncryptionKeys
 Janus.Core.KeyEncryptionKeys.<Clone>$() -> Janus.Core.KeyEncryptionKeys!
 Janus.Core.KeyEncryptionKeys.Current.get -> System.ReadOnlyMemory<byte>
@@ -2221,7 +2221,7 @@ Janus.Core.WebAuthnChallenge.RelyingPartyId.get -> string!
 Janus.Core.WebAuthnChallenge.RelyingPartyId.init -> void
 Janus.Core.WebAuthnChallenge.WebAuthnChallenge(string! RelyingPartyId, string! Challenge) -> void
 abstract Janus.Core.Configuration.Setting<TValue>.Accept(TValue value) -> Janus.Core.Result<TValue>
-abstract Janus.Core.JanusEvent.<Clone>$() -> Janus.Core.JanusEvent!
+abstract Janus.Core.DomainEvent.<Clone>$() -> Janus.Core.DomainEvent!
 const Janus.Core.CredentialLabel.MaximumLength = 64 -> int
 const Janus.Core.CredentialLabel.MinimumLength = 1 -> int
 const Janus.Core.DeviceDescription.MaximumLength = 64 -> int
@@ -2394,6 +2394,9 @@ override Janus.Core.DocumentTranslation.ToString() -> string!
 override Janus.Core.DocumentVersion.Equals(object? obj) -> bool
 override Janus.Core.DocumentVersion.GetHashCode() -> int
 override Janus.Core.DocumentVersion.ToString() -> string!
+override Janus.Core.DomainEvent.Equals(object? obj) -> bool
+override Janus.Core.DomainEvent.GetHashCode() -> int
+override Janus.Core.DomainEvent.ToString() -> string!
 override Janus.Core.EffectiveGrant.Equals(object? obj) -> bool
 override Janus.Core.EffectiveGrant.GetHashCode() -> int
 override Janus.Core.EffectiveGrant.ToString() -> string!
@@ -2471,9 +2474,6 @@ override Janus.Core.IdentifierSummary.ToString() -> string!
 override Janus.Core.ImageCodec.Equals(object? obj) -> bool
 override Janus.Core.ImageCodec.GetHashCode() -> int
 override Janus.Core.ImageCodec.ToString() -> string!
-override Janus.Core.JanusEvent.Equals(object? obj) -> bool
-override Janus.Core.JanusEvent.GetHashCode() -> int
-override Janus.Core.JanusEvent.ToString() -> string!
 override Janus.Core.KeyEncryptionKeys.Equals(object? obj) -> bool
 override Janus.Core.KeyEncryptionKeys.GetHashCode() -> int
 override Janus.Core.KeyEncryptionKeys.ToString() -> string!
@@ -2691,30 +2691,30 @@ override Janus.Core.WebAuthnChallenge.Equals(object? obj) -> bool
 override Janus.Core.WebAuthnChallenge.GetHashCode() -> int
 override Janus.Core.WebAuthnChallenge.ToString() -> string!
 override abstract Janus.Core.SubjectEvent.<Clone>$() -> Janus.Core.SubjectEvent!
-override sealed Janus.Core.AccountDeletionCancelled.Equals(Janus.Core.JanusEvent? other) -> bool
-override sealed Janus.Core.AccountDeletionRequested.Equals(Janus.Core.JanusEvent? other) -> bool
-override sealed Janus.Core.AccountReactivated.Equals(Janus.Core.JanusEvent? other) -> bool
-override sealed Janus.Core.AccountRegistered.Equals(Janus.Core.JanusEvent? other) -> bool
-override sealed Janus.Core.AccountSuspended.Equals(Janus.Core.JanusEvent? other) -> bool
-override sealed Janus.Core.AlertRaised.Equals(Janus.Core.JanusEvent? other) -> bool
-override sealed Janus.Core.ConsentChanged.Equals(Janus.Core.JanusEvent? other) -> bool
-override sealed Janus.Core.CredentialEnrolled.Equals(Janus.Core.JanusEvent? other) -> bool
-override sealed Janus.Core.CredentialInvalidated.Equals(Janus.Core.JanusEvent? other) -> bool
-override sealed Janus.Core.CredentialRestored.Equals(Janus.Core.JanusEvent? other) -> bool
-override sealed Janus.Core.CredentialSuspended.Equals(Janus.Core.JanusEvent? other) -> bool
-override sealed Janus.Core.DeviceVerified.Equals(Janus.Core.JanusEvent? other) -> bool
+override sealed Janus.Core.AccountDeletionCancelled.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.AccountDeletionRequested.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.AccountReactivated.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.AccountRegistered.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.AccountSuspended.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.AlertRaised.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.ConsentChanged.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.CredentialEnrolled.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.CredentialInvalidated.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.CredentialRestored.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.CredentialSuspended.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.DeviceVerified.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.ErasureRequested.Equals(Janus.Core.SubjectEvent? other) -> bool
 override sealed Janus.Core.ExportRequested.Equals(Janus.Core.SubjectEvent? other) -> bool
-override sealed Janus.Core.IdentifierAdded.Equals(Janus.Core.JanusEvent? other) -> bool
-override sealed Janus.Core.IdentifierPrimaryChanged.Equals(Janus.Core.JanusEvent? other) -> bool
-override sealed Janus.Core.IdentifierRemoved.Equals(Janus.Core.JanusEvent? other) -> bool
-override sealed Janus.Core.NotificationRequested.Equals(Janus.Core.JanusEvent? other) -> bool
-override sealed Janus.Core.ObjectionChanged.Equals(Janus.Core.JanusEvent? other) -> bool
-override sealed Janus.Core.OrganizationErased.Equals(Janus.Core.JanusEvent? other) -> bool
+override sealed Janus.Core.IdentifierAdded.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.IdentifierPrimaryChanged.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.IdentifierRemoved.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.NotificationRequested.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.ObjectionChanged.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.OrganizationErased.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.RestrictionChanged.Equals(Janus.Core.SubjectEvent? other) -> bool
-override sealed Janus.Core.SendingRestrictionChanged.Equals(Janus.Core.JanusEvent? other) -> bool
-override sealed Janus.Core.SendingRestrictionGranted.Equals(Janus.Core.JanusEvent? other) -> bool
-override sealed Janus.Core.SubjectEvent.Equals(Janus.Core.JanusEvent? other) -> bool
+override sealed Janus.Core.SendingRestrictionChanged.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.SendingRestrictionGranted.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.SubjectEvent.Equals(Janus.Core.DomainEvent? other) -> bool
 static Janus.Core.AccessContext.Of(Janus.Core.SubjectId acting, Janus.Core.SubjectId effective) -> Janus.Core.AccessContext!
 static Janus.Core.AccessContext.Of(Janus.Core.SubjectId subject) -> Janus.Core.AccessContext!
 static Janus.Core.AccessContext.Of(Janus.Core.SystemPrincipal! principal) -> Janus.Core.AccessContext!
@@ -3013,6 +3013,8 @@ static Janus.Core.DocumentTranslation.operator !=(Janus.Core.DocumentTranslation
 static Janus.Core.DocumentTranslation.operator ==(Janus.Core.DocumentTranslation? left, Janus.Core.DocumentTranslation? right) -> bool
 static Janus.Core.DocumentVersion.operator !=(Janus.Core.DocumentVersion? left, Janus.Core.DocumentVersion? right) -> bool
 static Janus.Core.DocumentVersion.operator ==(Janus.Core.DocumentVersion? left, Janus.Core.DocumentVersion? right) -> bool
+static Janus.Core.DomainEvent.operator !=(Janus.Core.DomainEvent? left, Janus.Core.DomainEvent? right) -> bool
+static Janus.Core.DomainEvent.operator ==(Janus.Core.DomainEvent? left, Janus.Core.DomainEvent? right) -> bool
 static Janus.Core.EffectiveGrant.operator !=(Janus.Core.EffectiveGrant? left, Janus.Core.EffectiveGrant? right) -> bool
 static Janus.Core.EffectiveGrant.operator ==(Janus.Core.EffectiveGrant? left, Janus.Core.EffectiveGrant? right) -> bool
 static Janus.Core.EmailAddress.TryParse(string! entered, out Janus.Core.EmailAddress address) -> bool
@@ -3195,8 +3197,6 @@ static Janus.Core.IdentifierSummary.operator !=(Janus.Core.IdentifierSummary? le
 static Janus.Core.IdentifierSummary.operator ==(Janus.Core.IdentifierSummary? left, Janus.Core.IdentifierSummary? right) -> bool
 static Janus.Core.ImageCodec.operator !=(Janus.Core.ImageCodec? left, Janus.Core.ImageCodec? right) -> bool
 static Janus.Core.ImageCodec.operator ==(Janus.Core.ImageCodec? left, Janus.Core.ImageCodec? right) -> bool
-static Janus.Core.JanusEvent.operator !=(Janus.Core.JanusEvent? left, Janus.Core.JanusEvent? right) -> bool
-static Janus.Core.JanusEvent.operator ==(Janus.Core.JanusEvent? left, Janus.Core.JanusEvent? right) -> bool
 static Janus.Core.KeyEncryptionKeys.operator !=(Janus.Core.KeyEncryptionKeys? left, Janus.Core.KeyEncryptionKeys? right) -> bool
 static Janus.Core.KeyEncryptionKeys.operator ==(Janus.Core.KeyEncryptionKeys? left, Janus.Core.KeyEncryptionKeys? right) -> bool
 static Janus.Core.LawfulBases.Default.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.LawfulBasisDeclaration!>!
@@ -3415,9 +3415,9 @@ static Janus.Core.Username.operator ==(Janus.Core.Username left, Janus.Core.User
 static Janus.Core.WebAuthnChallenge.operator !=(Janus.Core.WebAuthnChallenge? left, Janus.Core.WebAuthnChallenge? right) -> bool
 static Janus.Core.WebAuthnChallenge.operator ==(Janus.Core.WebAuthnChallenge? left, Janus.Core.WebAuthnChallenge? right) -> bool
 virtual Janus.Core.Configuration.Setting<TValue>.Loosens(TValue before, TValue after) -> bool
-virtual Janus.Core.JanusEvent.EqualityContract.get -> System.Type!
-virtual Janus.Core.JanusEvent.Equals(Janus.Core.JanusEvent? other) -> bool
-virtual Janus.Core.JanusEvent.PrintMembers(System.Text.StringBuilder! builder) -> bool
+virtual Janus.Core.DomainEvent.EqualityContract.get -> System.Type!
+virtual Janus.Core.DomainEvent.Equals(Janus.Core.DomainEvent? other) -> bool
+virtual Janus.Core.DomainEvent.PrintMembers(System.Text.StringBuilder! builder) -> bool
 virtual Janus.Core.SubjectEvent.Equals(Janus.Core.SubjectEvent? other) -> bool
 ~override Janus.Core.AuditAction.Equals(object obj) -> bool
 ~override Janus.Core.AuditRecordId.Equals(object obj) -> bool

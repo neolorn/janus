@@ -16,4 +16,4 @@ namespace Janus.Core;
 /// handler has confirmed.
 /// </remarks>
 public abstract record SubjectEvent(DateTimeOffset RaisedAt, string IdempotencyKey)
-    : JanusEvent(RaisedAt, IdempotencyKey);
+    : DomainEvent(RaisedAt, IdempotencyKey);

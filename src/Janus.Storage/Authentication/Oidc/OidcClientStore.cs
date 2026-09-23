@@ -14,7 +14,7 @@ namespace Janus.Storage.Authentication.Oidc;
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
 /// <remarks>Implements AUTH-OIDC-001 and CONV-DESIGN-003.</remarks>
-internal sealed class OidcClientStore(JanusDbContext context) : IOidcClientStore
+internal sealed class OidcClientStore(StoreContext context) : IOidcClientStore
 {
     /// <inheritdoc/>
     public async ValueTask<OidcClient?> FindAsync(

@@ -19,7 +19,7 @@ namespace Janus.Storage.Privacy.Consents;
 /// deletes: a withdrawal writes a timestamp onto the row that is there, because the
 /// record is the evidence the law asks for.
 /// </remarks>
-internal sealed class ConsentStore(JanusDbContext context) : IConsentStore
+internal sealed class ConsentStore(StoreContext context) : IConsentStore
 {
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<ConsentRecord>> ConsentsAsync(

@@ -57,7 +57,7 @@ internal static class BrowserCookies
     /// token does.
     /// </param>
     /// <returns>The attributes.</returns>
-    public static CookieOptions Options(JanusApplication application, bool readableByScript) => new()
+    public static CookieOptions Options(ApplicationKind application, bool readableByScript) => new()
     {
         HttpOnly = !readableByScript,
 
@@ -66,7 +66,7 @@ internal static class BrowserCookies
         Secure = true,
         Path = "/",
 
-        SameSite = application is JanusApplication.Management
+        SameSite = application is ApplicationKind.Management
             ? SameSiteMode.Strict
             : SameSiteMode.Lax,
 
@@ -82,7 +82,7 @@ internal static class BrowserCookies
     /// <param name="application">Which application the pipeline is mounted in.</param>
     /// <param name="until">When the browser is to forget it.</param>
     /// <returns>The attributes.</returns>
-    public static CookieOptions Lasting(JanusApplication application, DateTimeOffset until)
+    public static CookieOptions Lasting(ApplicationKind application, DateTimeOffset until)
     {
         CookieOptions options = Options(application, readableByScript: false);
 

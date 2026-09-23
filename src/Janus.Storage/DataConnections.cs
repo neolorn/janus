@@ -15,7 +15,7 @@ namespace Janus.Storage;
 /// </summary>
 /// <param name="context">The context whose connection and transaction are handed out.</param>
 /// <remarks>Implements OPS-DATA-002.</remarks>
-internal sealed class DataConnections(JanusDbContext context)
+internal sealed class DataConnections(StoreContext context)
 {
     /// <summary>
     /// Hands out the context's connection, open, with the operation's transaction

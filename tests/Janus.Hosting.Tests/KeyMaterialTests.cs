@@ -58,6 +58,6 @@ public sealed class KeyMaterialTests
                 fingerprintKey,
                 Encoding.UTF8.GetBytes("the secret this application presents"),
                 HostFixture.Declaration(),
-                JanusApplication.Public))
+                ApplicationKind.Public))
             .Failure?.Code;
 }

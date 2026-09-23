@@ -22,7 +22,7 @@ namespace Janus.Storage.Authentication.Sending;
 /// the message and the only key that reads it.
 /// </remarks>
 internal sealed class SendDeliveryStore(
-    JanusDbContext context,
+    StoreContext context,
     KeyEncryptionKeys keyEncryptionKeys,
     RandomNumberGenerator randomness) : ISendOutbox
 {

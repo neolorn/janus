@@ -74,7 +74,7 @@ internal sealed class Deployment(DatabaseFixture database) : IDisposable
 
         try
         {
-            await using JanusDbContext context = database.Context();
+            await using StoreContext context = database.Context();
 
             context.Accounts.Add(new AccountRecord
             {
@@ -110,7 +110,7 @@ internal sealed class Deployment(DatabaseFixture database) : IDisposable
     {
         var organization = new OrganizationId(Guid.NewGuid());
 
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
 
         context.Organizations.Add(new OrganizationRecord
         {
@@ -131,7 +131,7 @@ internal sealed class Deployment(DatabaseFixture database) : IDisposable
     /// <returns>The work of destroying it.</returns>
     public async Task EraseAsync(SubjectId subject)
     {
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
 
         SubjectKeyRecord key = await context.SubjectKeys
             .SingleAsync(held => held.Subject == subject, TestContext.Current.CancellationToken);

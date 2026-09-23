@@ -75,7 +75,7 @@ public sealed class UnitOfWorkTests(DatabaseFixture database) : IClassFixture<Da
 
     private async Task OperationAsync(SubjectId subject, bool failing)
     {
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
         await using var work = new UnitOfWork(context);
 
         await work.BeginAsync(TestContext.Current.CancellationToken);

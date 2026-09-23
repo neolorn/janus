@@ -17,7 +17,7 @@ namespace Janus.Storage.Privacy.Policies;
 /// carries no permission: the person is no longer under the organization's rules, and
 /// the record of it stays for IDN-MEM-002 to read.
 /// </remarks>
-internal sealed class PrivacyMembershipLookup(JanusDbContext context) : IMembershipLookup
+internal sealed class PrivacyMembershipLookup(StoreContext context) : IMembershipLookup
 {
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<OrganizationId>> OfAsync(

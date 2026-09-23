@@ -23,7 +23,7 @@ namespace Janus.Storage.Authentication.Recovery;
 /// same link, so it is held under the account's own key.
 /// </remarks>
 internal sealed class LossReportStore(
-    JanusDbContext context,
+    StoreContext context,
     KeyEncryptionKeys keyEncryptionKeys,
     RandomNumberGenerator randomness) : ILossReportStore
 {

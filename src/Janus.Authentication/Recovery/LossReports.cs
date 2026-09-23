@@ -521,7 +521,7 @@ internal sealed class LossReports(
     private async ValueTask<Error?> AnnouncedAsync<TEvent>(
         TEvent raised,
         CancellationToken cancellationToken)
-        where TEvent : JanusEvent =>
+        where TEvent : DomainEvent =>
         (await events.PublishAsync(raised, cancellationToken).ConfigureAwait(false))
             .Match(() => (Error?)null, error => error);
 

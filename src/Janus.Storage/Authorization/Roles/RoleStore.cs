@@ -18,7 +18,7 @@ namespace Janus.Storage.Authorization.Roles;
 /// rows added and removed under its name; no counter is raised, because what a role
 /// allows is read wherever a grant naming it is evaluated.
 /// </remarks>
-internal sealed class RoleStore(JanusDbContext context) : IRoleStore
+internal sealed class RoleStore(StoreContext context) : IRoleStore
 {
     /// <inheritdoc/>
     public async ValueTask<Role?> FindAsync(RoleName name, CancellationToken cancellationToken)

@@ -23,7 +23,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
     [Fact]
     public async Task OPS_CFG_008_AC1_AChangedSettingIsInForceForTheNextReadAsync()
     {
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             Result<TimeSpan> before = await new ConfigurationStore(writing).WriteAsync(
                 Catalogue.AbuseNonexistentWindow,
@@ -34,7 +34,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         Result<TimeSpan> read = await new ConfigurationStore(reading).ReadAsync(
             Catalogue.AbuseNonexistentWindow,
             TestContext.Current.CancellationToken);
@@ -71,7 +71,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
     [Fact]
     public async Task ReadAsync_AKeyNeverWritten_ReadsAsItsDefaultAsync()
     {
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Result<int> read = await new ConfigurationStore(reading).ReadAsync(
             Catalogue.AlertingCallbackThreshold,
@@ -87,7 +87,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
     [Fact]
     public async Task WriteAsync_AProtectedKey_IsRefusedAndWritesNothingAsync()
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         Result<bool> written = await new ConfigurationStore(writing).WriteAsync(
             Catalogue.AbuseThrottleEnabled,
@@ -105,7 +105,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
     [Fact]
     public async Task WriteAsync_AValueAboveTheCeiling_IsRefusedAsync()
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         Result<TimeSpan> written = await new ConfigurationStore(writing).WriteAsync(
             Catalogue.SessionAal2Absolute,
@@ -125,7 +125,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
     {
         var organization = OrganizationId.New(TimeProvider.System);
 
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
         var store = new ConfigurationStore(context);
 
         Result<PolicyOverride> absent = await store.ReadAsync(
@@ -159,7 +159,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
     [Fact]
     public async Task ReadAsync_AStoredValueThatDoesNotParse_IsAFaultAsync()
     {
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
 
         var written = new SettingRecord
         {

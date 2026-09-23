@@ -28,7 +28,7 @@ public sealed class ModelTests
         IEnumerable<Type> mapped = Model().GetEntityTypes().Select(entity => entity.ClrType);
 
         Assert.NotEmpty(mapped);
-        Assert.All(mapped, type => Assert.Equal(typeof(JanusDbContext).Assembly, type.Assembly));
+        Assert.All(mapped, type => Assert.Equal(typeof(StoreContext).Assembly, type.Assembly));
     }
 
     /// <summary>
@@ -39,7 +39,7 @@ public sealed class ModelTests
     public void CONV_DESIGN_003_EveryMappedTableIsInTheLibrarysOwnSchema() =>
         Assert.All(
             Model().GetEntityTypes(),
-            entity => Assert.Equal(JanusDbContext.Schema, entity.GetSchema()));
+            entity => Assert.Equal(StoreContext.Schema, entity.GetSchema()));
 
     /// <summary>
     /// PRIV-RIGHT-005b AC4: an erasure, a restriction and an export reach the host's
@@ -52,8 +52,8 @@ public sealed class ModelTests
             Model().GetEntityTypes(),
             entity =>
             {
-                Assert.Equal(JanusDbContext.Schema, entity.GetSchema());
-                Assert.Equal(typeof(JanusDbContext).Assembly, entity.ClrType.Assembly);
+                Assert.Equal(StoreContext.Schema, entity.GetSchema());
+                Assert.Equal(typeof(StoreContext).Assembly, entity.ClrType.Assembly);
             });
 
     /// <summary>
@@ -741,7 +741,7 @@ public sealed class ModelTests
 
     private static IModel Model()
     {
-        using JanusDbContext context = new DesignTimeContextFactory().CreateDbContext([]);
+        using StoreContext context = new DesignTimeContextFactory().CreateDbContext([]);
 
         return context.Model;
     }

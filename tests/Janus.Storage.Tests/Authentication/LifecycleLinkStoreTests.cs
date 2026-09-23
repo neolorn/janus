@@ -77,7 +77,7 @@ public sealed class LifecycleLinkStoreTests(DatabaseFixture database)
             token,
             Noon));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         LifecycleLink found = Assert.IsType<LifecycleLink>(
             await new LifecycleLinkStore(reading).FindAsync(
@@ -108,7 +108,7 @@ public sealed class LifecycleLinkStoreTests(DatabaseFixture database)
             second,
             Noon.AddHours(1)));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         var store = new LifecycleLinkStore(reading);
 
         Assert.Null(await store.FindAsync(
@@ -132,7 +132,7 @@ public sealed class LifecycleLinkStoreTests(DatabaseFixture database)
 
         await WrittenAsync(LifecycleLink.Issued(subject, LifecycleLinkKind.Reactivation, token, Noon));
 
-        await using (JanusDbContext removing = database.Context())
+        await using (StoreContext removing = database.Context())
         {
             await new LifecycleLinkStore(removing).RemoveAsync(
                 subject,
@@ -141,7 +141,7 @@ public sealed class LifecycleLinkStoreTests(DatabaseFixture database)
             await removing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.Null(await new LifecycleLinkStore(reading).FindAsync(
             token.Fingerprint(),
@@ -157,7 +157,7 @@ public sealed class LifecycleLinkStoreTests(DatabaseFixture database)
 
     private async Task WrittenAsync(LifecycleLink link)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         await new LifecycleLinkStore(writing).ReplaceAsync(link, TestContext.Current.CancellationToken);
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);

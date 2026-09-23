@@ -23,7 +23,7 @@ namespace Janus.Storage.Identity.Preferences;
 /// one of them on its own and the cap of <c>preferences.maxsize</c> is over the set.
 /// </remarks>
 internal sealed class PreferenceStore(
-    JanusDbContext context,
+    StoreContext context,
     KeyEncryptionKeys keyEncryptionKeys,
     RandomNumberGenerator randomness) : IPreferenceStore
 {

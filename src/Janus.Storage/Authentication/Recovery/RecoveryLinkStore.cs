@@ -18,7 +18,7 @@ namespace Janus.Storage.Authentication.Recovery;
 /// older message being a second way in. Nothing here holds a personal attribute: the
 /// row is a fingerprint, two identifiers and a pair of instants.
 /// </remarks>
-internal sealed class RecoveryLinkStore(JanusDbContext context) : IRecoveryLinkStore
+internal sealed class RecoveryLinkStore(StoreContext context) : IRecoveryLinkStore
 {
     /// <inheritdoc/>
     public async ValueTask<RecoveryLink?> FindAsync(

@@ -102,7 +102,7 @@ internal static class StorageRegistration
     /// place and held outside the database (PRIV-RIGHT-005c).
     /// </param>
     /// <returns>The collection, for chaining.</returns>
-    public static IServiceCollection AddJanusStorage(
+    public static IServiceCollection AddStorageArea(
         this IServiceCollection services,
         string connectionString,
         KeyEncryptionKeys keyEncryptionKeys,
@@ -110,10 +110,10 @@ internal static class StorageRegistration
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddDbContext<JanusDbContext>(options =>
+        services.AddDbContext<StoreContext>(options =>
             options.UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable(
-                JanusDbContext.MigrationsHistoryTable,
-                JanusDbContext.Schema)));
+                StoreContext.MigrationsHistoryTable,
+                StoreContext.Schema)));
 
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddSingleton<IRegistrationSignals>(provider => new RegistrationSignals(
@@ -127,7 +127,7 @@ internal static class StorageRegistration
 
         services.AddScoped<IAccountStore, AccountStore>();
         services.AddScoped<ISubjectKeyStore>(provider => new SubjectKeyStore(
-            provider.GetRequiredService<JanusDbContext>(),
+            provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IErasureStore, ErasureStore>();
@@ -143,48 +143,48 @@ internal static class StorageRegistration
         services.AddScoped<IMembershipStore, MembershipStore>();
         services.AddScoped<Janus.Privacy.Erasures.IOrganizationStates, OrganizationStates>();
         services.AddScoped<IIdentifierStore>(provider => new IdentifierStore(
-            provider.GetRequiredService<JanusDbContext>(),
+            provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
             fingerprintKey,
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IProfileStore>(provider => new ProfileStore(
-            provider.GetRequiredService<JanusDbContext>(),
+            provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IProfilePhotoStore>(provider => new ProfilePhotoStore(
-            provider.GetRequiredService<JanusDbContext>(),
+            provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IPreferenceStore>(provider => new PreferenceStore(
-            provider.GetRequiredService<JanusDbContext>(),
+            provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IAuditStore>(provider => new AuditStore(
-            provider.GetRequiredService<JanusDbContext>(),
+            provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
 
         services.AddScoped<ISessionStore>(provider => new SessionStore(
-            provider.GetRequiredService<JanusDbContext>(),
+            provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IAuthenticatorStore>(provider => new AuthenticatorStore(
-            provider.GetRequiredService<JanusDbContext>(),
+            provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IRegistrationSessionStore>(provider => new RegistrationSessionStore(
-            provider.GetRequiredService<JanusDbContext>(),
+            provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<DataConnections>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IRegistrationDirectory>(provider => new RegistrationDirectory(
-            provider.GetRequiredService<JanusDbContext>(),
+            provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<IAccountStore>(),
             provider.GetRequiredService<IIdentifierStore>(),
             provider.GetRequiredService<IProfileStore>(),
             provider.GetRequiredService<ISubjectKeyStore>()));
         services.AddScoped<IPendingVerificationStore>(provider => new PendingVerificationStore(
-            provider.GetRequiredService<JanusDbContext>(),
+            provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IIdentifierDirectory, IdentifierDirectory>();
@@ -200,17 +200,17 @@ internal static class StorageRegistration
         services.AddScoped<IVerificationCodeStore, VerificationCodeStore>();
         services.AddScoped<IKeyCeremonyStore, KeyCeremonyStore>();
         services.AddScoped<IPendingSignInStore>(provider => new PendingSignInStore(
-            provider.GetRequiredService<JanusDbContext>(),
+            provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IPolicyRaiseStore, PolicyRaiseStore>();
         services.AddScoped<IRecoveryLinkStore, RecoveryLinkStore>();
         services.AddScoped<IRecoveryApprovalStore>(provider => new RecoveryApprovalStore(
-            provider.GetRequiredService<JanusDbContext>(),
+            provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<ILossReportStore>(provider => new LossReportStore(
-            provider.GetRequiredService<JanusDbContext>(),
+            provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IOidcClientStore, OidcClientStore>();
@@ -219,7 +219,7 @@ internal static class StorageRegistration
         services.AddScoped<IOpenIddictScopeStore<OidcScopeRecord>, OidcScopeStore>();
         services.AddScoped<IOpenIddictTokenStore<OidcTokenRecord>, OidcTokenStore>();
         services.AddScoped<ISigningKeyStore>(provider => new SigningKeyStore(
-            provider.GetRequiredService<JanusDbContext>(),
+            provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys));
         services.AddScoped<IOidcAudit, OidcAudit>();
         services.AddScoped<IRecoveryAudit, RecoveryAudit>();
@@ -242,23 +242,23 @@ internal static class StorageRegistration
         services.AddScoped<IAccessAudit, AccessAudit>();
 
         services.AddScoped<ISendOutbox>(provider => new SendDeliveryStore(
-            provider.GetRequiredService<JanusDbContext>(),
+            provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<ISendLedger>(provider => new SendLedger(
-            provider.GetRequiredService<JanusDbContext>(),
+            provider.GetRequiredService<StoreContext>(),
             fingerprintKey));
         services.AddScoped<IThrottleLedger>(provider => new ThrottleLedger(
-            provider.GetRequiredService<JanusDbContext>(),
+            provider.GetRequiredService<StoreContext>(),
             fingerprintKey));
         services.AddScoped<INoticeLedger>(provider => new NoticeLedger(
-            provider.GetRequiredService<JanusDbContext>(),
+            provider.GetRequiredService<StoreContext>(),
             fingerprintKey));
         services.AddScoped<ICallbackLedger>(provider => new CallbackLedger(
-            provider.GetRequiredService<JanusDbContext>(),
+            provider.GetRequiredService<StoreContext>(),
             fingerprintKey));
         services.AddScoped<IRegistrationSources>(provider => new RegistrationSourceLedger(
-            provider.GetRequiredService<JanusDbContext>(),
+            provider.GetRequiredService<StoreContext>(),
             fingerprintKey));
         services.AddScoped<ISmsBalanceLedger, SmsBalanceLedger>();
         services.AddScoped<IAlertLedger, AlertLedger>();

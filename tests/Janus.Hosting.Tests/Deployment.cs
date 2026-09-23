@@ -111,7 +111,7 @@ internal sealed class Deployment : IAsyncDisposable
     /// <param name="signIn">Where the host's own sign-in screen is.</param>
     /// <param name="client">Which client of the provider this application is.</param>
     public Deployment(
-        JanusApplication application = JanusApplication.Public,
+        ApplicationKind application = ApplicationKind.Public,
         PasskeyAddresses? addresses = null,
         string prefix = "",
         PreferenceDeclarations? preferences = null,
@@ -160,7 +160,7 @@ internal sealed class Deployment : IAsyncDisposable
         }
 
         _ = ((IApplicationBuilder)_application).UseRouting();
-        _ = _application.MapJanusWellKnown();
+        _ = _application.MapIdentityWellKnown();
         _ = ((IApplicationBuilder)_application).UseEndpoints(_ => { });
 
         _pipeline = ((IApplicationBuilder)_application).Build();
@@ -421,16 +421,16 @@ internal sealed class Deployment : IAsyncDisposable
     private static void Mounted(IApplicationBuilder mount)
     {
         _ = mount.UseRouting();
-        _ = mount.UseJanusMachineProfile();
-        _ = mount.UseJanusBrowserProfile();
-        _ = mount.UseEndpoints(endpoints => endpoints.MapJanus());
+        _ = mount.UseMachineProfile();
+        _ = mount.UseBrowserProfile();
+        _ = mount.UseEndpoints(endpoints => endpoints.MapIdentityEndpoints());
     }
 
     // Everything AddJanus registers, over the area's own fakes instead of the
     // database: the ports, the services built on them and the browser boundary.
     private void Register(
         IServiceCollection services,
-        JanusApplication application,
+        ApplicationKind application,
         PasskeyAddresses addresses,
         AuthenticationAddresses signIn,
         SignOnClient client)

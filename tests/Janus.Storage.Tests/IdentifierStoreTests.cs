@@ -52,7 +52,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
         SubjectId subject = await _deployment.AccountAsync(Noon);
         IdentifierId id = await WriteAsync(subject, _entered);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         IdentifierSet set = await Store(reading).FindBySubjectAsync(
             subject,
             TestContext.Current.CancellationToken);
@@ -120,7 +120,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
 
         Assert.True(EmailAddress.TryParse(_entered.ToUpperInvariant(), out EmailAddress again));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.Equal(
             subject,
@@ -140,7 +140,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
         SubjectId subject = await _deployment.AccountAsync(Noon);
         await WriteAsync(subject, _entered);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         var elsewhere = new IdentifierStore(
             reading,
             _deployment.Keys,
@@ -176,7 +176,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
         IdentifierId second = await WriteAsync(subject, given);
         DateTimeOffset lapses = Noon.AddHours(72);
 
-        await using (JanusDbContext giving = database.Context())
+        await using (StoreContext giving = database.Context())
         {
             IdentifierStore store = Store(giving);
             IdentifierSet set = await store.FindBySubjectAsync(
@@ -196,7 +196,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
             await giving.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         IdentifierStore held = Store(reading);
 
         Assert.Null(await held.FindOwnerAsync(
@@ -231,7 +231,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
 
         var counting = new CountingVersions(_deployment.Versions);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         var store = new IdentifierStore(
             reading,
             new KeyEncryptionKeys(1, counting),
@@ -256,7 +256,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
         await WriteAsync(subject, _entered);
         await _deployment.EraseAsync(subject);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
             await Store(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
@@ -272,7 +272,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
         SubjectId subject = await _deployment.AccountAsync(Noon);
         IdentifierId id = await WriteAsync(subject, _entered);
 
-        await using (JanusDbContext erasing = database.Context())
+        await using (StoreContext erasing = database.Context())
         {
             IdentifierRecord row = await erasing.Identifiers
                 .SingleAsync(held => held.Id == id, TestContext.Current.CancellationToken);
@@ -281,7 +281,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
             await erasing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.Null(await Store(reading).FindOwnerAsync(
             IdentifierKind.Email,
@@ -301,7 +301,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
         SubjectId subject = await _deployment.AccountAsync(Noon);
         IdentifierId id = await WriteAsync(subject, _entered);
 
-        await using (JanusDbContext verifying = database.Context())
+        await using (StoreContext verifying = database.Context())
         {
             IdentifierStore store = Store(verifying);
             IdentifierSet set = await store.FindBySubjectAsync(
@@ -314,7 +314,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
             await verifying.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         IdentifierSet read = await Store(reading).FindBySubjectAsync(
             subject,
             TestContext.Current.CancellationToken);
@@ -337,7 +337,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
 
         string moved = Fresh("Hana");
 
-        await using (JanusDbContext changing = database.Context())
+        await using (StoreContext changing = database.Context())
         {
             IdentifierStore store = Store(changing);
             IdentifierSet set = await store.FindBySubjectAsync(
@@ -351,7 +351,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
             await changing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         IdentifierStore finding = Store(reading);
 
         Identifier read = Assert.Single(
@@ -386,7 +386,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
 
         IdentifierRecord before = await StoredAsync(id);
 
-        await using (JanusDbContext verifying = database.Context())
+        await using (StoreContext verifying = database.Context())
         {
             IdentifierStore store = Store(verifying);
             IdentifierSet set = await store.FindBySubjectAsync(
@@ -420,7 +420,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
 
         await RecordAsync(subject, set => set.Backup(IdentifierKind.Email).UseNamed(second));
 
-        await using (JanusDbContext reading = database.Context())
+        await using (StoreContext reading = database.Context())
         {
             IdentifierSet set = await Store(reading).FindBySubjectAsync(
                 subject,
@@ -434,7 +434,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
 
         await RecordAsync(subject, set => set.Backup(IdentifierKind.Email).UsePrimaryOnly());
 
-        await using (JanusDbContext reading = database.Context())
+        await using (StoreContext reading = database.Context())
         {
             IdentifierSet set = await Store(reading).FindBySubjectAsync(
                 subject,
@@ -445,7 +445,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
 
         await RecordAsync(subject, set => set.Backup(IdentifierKind.Email).UseEveryVerified());
 
-        await using (JanusDbContext reading = database.Context())
+        await using (StoreContext reading = database.Context())
         {
             Assert.False(await reading.BackupSettings
                 .AnyAsync(settled => settled.Subject == subject, TestContext.Current.CancellationToken));
@@ -468,7 +468,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     {
         SubjectId subject = Subjects.New();
 
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
 
         Assert.True(EmailAddress.TryParse(_entered, out EmailAddress address));
 
@@ -484,7 +484,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
-    private IdentifierStore Store(JanusDbContext context) =>
+    private IdentifierStore Store(StoreContext context) =>
         new(context, _deployment.Keys, Deployment.FingerprintKey, _deployment.Randomness);
 
     private static string Fresh(string person) =>
@@ -503,7 +503,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
 
         var id = IdentifierId.New(TimeProvider.System);
 
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
         IdentifierStore store = Store(context);
 
         IdentifierSet set = await store.FindBySubjectAsync(subject, TestContext.Current.CancellationToken);
@@ -517,7 +517,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
 
     private async Task RecordAsync(SubjectId subject, Action<IdentifierSet> change)
     {
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
         IdentifierStore store = Store(context);
 
         IdentifierSet set = await store.FindBySubjectAsync(subject, TestContext.Current.CancellationToken);
@@ -529,7 +529,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
 
     private async Task EraseAsync(SubjectId subject)
     {
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
 
         SubjectKeyRecord key = await context.SubjectKeys
             .SingleAsync(held => held.Subject == subject, TestContext.Current.CancellationToken);
@@ -542,7 +542,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
 
     private async Task<IdentifierRecord> StoredAsync(IdentifierId id)
     {
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
 
         return await context.Identifiers
             .SingleAsync(held => held.Id == id, TestContext.Current.CancellationToken);

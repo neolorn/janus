@@ -17,7 +17,7 @@ namespace Janus.Storage.Identity.Profiles;
 /// <param name="randomness">The randomness the initialisation vector is drawn from.</param>
 /// <remarks>Implements IDN-ATTR-003, PRIV-RIGHT-005a and CONV-DESIGN-003.</remarks>
 internal sealed class ProfilePhotoStore(
-    JanusDbContext context,
+    StoreContext context,
     KeyEncryptionKeys keyEncryptionKeys,
     RandomNumberGenerator randomness) : IProfilePhotoStore
 {

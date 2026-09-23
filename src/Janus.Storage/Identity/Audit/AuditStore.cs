@@ -25,7 +25,7 @@ namespace Janus.Storage.Identity.Audit;
 /// changes or removes a row: the only write is an append.
 /// </remarks>
 internal sealed class AuditStore(
-    JanusDbContext context,
+    StoreContext context,
     KeyEncryptionKeys keyEncryptionKeys,
     RandomNumberGenerator randomness) : IAuditStore
 {

@@ -25,7 +25,7 @@ namespace Janus.Storage.Privacy.Erasures;
 /// goes on resolving.
 /// </remarks>
 internal sealed class OrganizationStates(
-    JanusDbContext context,
+    StoreContext context,
     IOrganizationStore organizations,
     IMembershipStore memberships) : IOrganizationStates
 {

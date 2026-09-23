@@ -10,6 +10,15 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- The public types a host names are called for what they are, and only the namespaces,
+  the package identifiers and `AddJanus` carry the product's name. `AddJanus` is on
+  `HostingRegistration`; the endpoints mount with `MapIdentityEndpoints` and
+  `MapIdentityWellKnown` on `IdentityEndpoints`; the two profiles mount with
+  `UseBrowserProfile` and `UseMachineProfile` on `PipelineProfiles`; the two
+  authorization tables map with `MapAuthorizationTables` on `AuthorizationTables`; the
+  application a pipeline is mounted in is an `ApplicationKind`; and every event the
+  library emits derives from `DomainEvent`.
+
 - An application now establishes its own session from the one the authentication
   application holds without a line of host code: `GET /auth/signon` forwards the
   browser to the provider with proof key and a state bound to its pre-authentication
@@ -627,7 +636,7 @@ against the public contract of LIB-API-001.
   its own LINQ query and a parameterised PostgreSQL fragment a hand-written query
   composes into its `WHERE` clause, so a list screen cannot come to show what a check
   would refuse. Neither rendering enumerates permitted records.
-- `MapJanusAuthorization` in `Janus.Hosting`: a host maps the ancestry closure and the
+- `MapAuthorizationTables` in `Janus.Hosting`: a host maps the ancestry closure and the
   effective grants into its own context, so a filtered listing is one query against its
   own tables and the library reads nothing of the host's.
 - `AddJanus` in `Janus.Hosting`: the one method a host calls to register the library.

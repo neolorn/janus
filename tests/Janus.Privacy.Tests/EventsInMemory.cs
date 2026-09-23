@@ -15,7 +15,7 @@ internal sealed class EventsInMemory : IEvents
     /// <summary>
     /// Every event published, in order.
     /// </summary>
-    public List<JanusEvent> Published { get; } = [];
+    public List<DomainEvent> Published { get; } = [];
 
     /// <summary>
     /// The published events of one kind, in order.
@@ -23,7 +23,7 @@ internal sealed class EventsInMemory : IEvents
     /// <typeparam name="TEvent">The kind.</typeparam>
     /// <returns>Those events.</returns>
     public IReadOnlyList<TEvent> Of<TEvent>()
-        where TEvent : JanusEvent =>
+        where TEvent : DomainEvent =>
         [.. Published.OfType<TEvent>()];
 
     /// <summary>
@@ -34,7 +34,7 @@ internal sealed class EventsInMemory : IEvents
 
     /// <inheritdoc/>
     public ValueTask<Result> PublishAsync<TEvent>(TEvent raised, CancellationToken cancellationToken)
-        where TEvent : JanusEvent
+        where TEvent : DomainEvent
     {
         if (Refusal is Error refused)
         {

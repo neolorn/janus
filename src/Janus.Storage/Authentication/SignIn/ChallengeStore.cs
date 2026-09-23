@@ -17,7 +17,7 @@ namespace Janus.Storage.Authentication.SignIn;
 /// far are held under the spellings of chapter 10, so the column and the wire cannot
 /// drift apart (CONV-ENUM-001).
 /// </remarks>
-internal sealed class ChallengeStore(JanusDbContext context) : IChallengeStore
+internal sealed class ChallengeStore(StoreContext context) : IChallengeStore
 {
     /// <inheritdoc/>
     public async ValueTask<Challenge?> FindAsync(

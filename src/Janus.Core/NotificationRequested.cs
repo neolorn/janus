@@ -17,4 +17,4 @@ public sealed record NotificationRequested(
     DateTimeOffset RaisedAt,
     string IdempotencyKey,
     MessageKind Message,
-    SendKind Kind) : JanusEvent(RaisedAt, IdempotencyKey);
+    SendKind Kind) : DomainEvent(RaisedAt, IdempotencyKey);

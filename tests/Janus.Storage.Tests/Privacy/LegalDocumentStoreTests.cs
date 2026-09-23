@@ -31,7 +31,7 @@ public sealed class LegalDocumentStoreTests(DatabaseFixture database)
             new DocumentVersion(notice, "1", "ar", "النص", [], Noon),
             TestContext.Current.CancellationToken));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         DocumentVersion held = await new LegalDocumentStore(reading)
             .FindAsync(notice, "1", TestContext.Current.CancellationToken)
@@ -66,7 +66,7 @@ public sealed class LegalDocumentStoreTests(DatabaseFixture database)
             new DocumentTranslation("en", "The corrected text"),
             TestContext.Current.CancellationToken));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         var store = new LegalDocumentStore(reading);
 
         Assert.Equal(1, await store.CountAsync(notice, TestContext.Current.CancellationToken));
@@ -101,7 +101,7 @@ public sealed class LegalDocumentStoreTests(DatabaseFixture database)
                 Noon.AddDays(30)),
             TestContext.Current.CancellationToken));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         var store = new LegalDocumentStore(reading);
 
         DocumentVersion current = await store.CurrentAsync(notice, TestContext.Current.CancellationToken)
@@ -125,7 +125,7 @@ public sealed class LegalDocumentStoreTests(DatabaseFixture database)
     {
         string notice = Fresh();
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await new LegalDocumentStore(writing).TranslateAsync(
@@ -140,7 +140,7 @@ public sealed class LegalDocumentStoreTests(DatabaseFixture database)
 
     private async Task WritingAsync(Func<LegalDocumentStore, Task> write)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         await write(new LegalDocumentStore(writing));
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);

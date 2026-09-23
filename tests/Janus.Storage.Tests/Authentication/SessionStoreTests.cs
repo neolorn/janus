@@ -41,7 +41,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
 
         await WrittenAsync(record, application, token);
 
-        await using (JanusDbContext ending = database.Context())
+        await using (StoreContext ending = database.Context())
         {
             await Store(ending).EndSpineAsync(
                 record.Id,
@@ -49,7 +49,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
                 TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.Empty(await Store(reading).LiveOfAsync(
             subject,
@@ -77,7 +77,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
 
         await WrittenAsync(record);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         Session read = Assert.IsType<Session>(
             await Store(reading).FindAsync(record.Id, TestContext.Current.CancellationToken));
 
@@ -109,7 +109,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
         await WrittenAsync(Record(subject));
         await _deployment.EraseAsync(subject);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
             await Store(reading).LiveOfAsync(
@@ -132,7 +132,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
         await WrittenAsync(record);
         await _deployment.EraseAsync(subject);
 
-        await using (JanusDbContext reading = database.Context())
+        await using (StoreContext reading = database.Context())
         {
             SessionRecord stored = await reading.Sessions
                 .SingleAsync(session => session.Id == record.Id, TestContext.Current.CancellationToken);
@@ -143,14 +143,14 @@ public sealed class SessionStoreTests(DatabaseFixture database)
                 await Store(reading).FindAsync(record.Id, TestContext.Current.CancellationToken));
         }
 
-        await using (JanusDbContext sweeping = database.Context())
+        await using (StoreContext sweeping = database.Context())
         {
             _ = await Store(sweeping).SweepAsync(
                 Noon + TimeSpan.FromDays(2),
                 TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext after = database.Context();
+        await using StoreContext after = database.Context();
 
         Assert.False(await after.Sessions.AnyAsync(
             session => session.Id == record.Id,
@@ -169,7 +169,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
 
         await WrittenAsync(record);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         SessionRecord stored = await reading.Sessions
             .SingleAsync(session => session.Id == record.Id, TestContext.Current.CancellationToken);
 
@@ -197,7 +197,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
         Session record = Record(subject);
         var secret = OpaqueToken.Draw(_deployment.Randomness);
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await Store(writing).AddAsync(
                 record,
@@ -207,7 +207,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         SessionRecord stored = await reading.Sessions
             .SingleAsync(session => session.Id == record.Id, TestContext.Current.CancellationToken);
 
@@ -236,7 +236,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
         byte[] first = OpaqueToken.Draw(_deployment.Randomness).Fingerprint();
         byte[] second = OpaqueToken.Draw(_deployment.Randomness).Fingerprint();
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await Store(writing).AddAsync(
                 record,
@@ -246,7 +246,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using (JanusDbContext rotating = database.Context())
+        await using (StoreContext rotating = database.Context())
         {
             await Store(rotating).ReplaceSecretAsync(
                 record.Id,
@@ -256,7 +256,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
             await rotating.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.Null(await Store(reading).FindByFingerprintAsync(
             first,
@@ -279,7 +279,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
         var first = OpaqueToken.Draw(_deployment.Randomness);
         var second = OpaqueToken.Draw(_deployment.Randomness);
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await Store(writing).AddAsync(
                 record,
@@ -289,7 +289,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using (JanusDbContext bound = database.Context())
+        await using (StoreContext bound = database.Context())
         {
             SessionRecord stored = await bound.Sessions
                 .SingleAsync(session => session.Id == record.Id, TestContext.Current.CancellationToken);
@@ -300,7 +300,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
                 stored.CsrfFingerprint.AsSpan().IndexOf(Encoding.UTF8.GetBytes(first.Value)));
         }
 
-        await using (JanusDbContext rotating = database.Context())
+        await using (StoreContext rotating = database.Context())
         {
             await Store(rotating).ReplaceSecretAsync(
                 record.Id,
@@ -310,7 +310,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
             await rotating.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.Equal(
             second.Fingerprint(),
@@ -331,7 +331,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
 
         await WrittenAsync(standing, idle, absolute);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         IReadOnlyList<Session> live = await Store(reading).LiveOfAsync(
             subject,
             Noon + TimeSpan.FromHours(1),
@@ -352,7 +352,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
 
         await WrittenAsync(record);
 
-        await using (JanusDbContext changing = database.Context())
+        await using (StoreContext changing = database.Context())
         {
             Session held = Assert.IsType<Session>(
                 await Store(changing).FindAsync(record.Id, TestContext.Current.CancellationToken));
@@ -369,7 +369,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
             await changing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         Session read = Assert.IsType<Session>(
             await Store(reading).FindAsync(record.Id, TestContext.Current.CancellationToken));
 
@@ -394,7 +394,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
         await WrittenAsync(Record(subject));
         await WrittenAsync(Record(other));
 
-        await using (JanusDbContext ending = database.Context())
+        await using (StoreContext ending = database.Context())
         {
             await Store(ending).EndAccountAsync(
                 subject,
@@ -402,7 +402,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
                 TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.Empty(await Store(reading).LiveOfAsync(
             subject,
@@ -425,7 +425,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
         Session expired = Record(subject, absolute: TimeSpan.FromDays(1));
         Session live = Record(subject, absolute: TimeSpan.FromDays(30));
 
-        await using (JanusDbContext clearing = database.Context())
+        await using (StoreContext clearing = database.Context())
         {
             // The rows the other tests of this class left are taken first, so what the
             // sweep below counts is this test's own expired session and nothing else.
@@ -436,7 +436,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
 
         await WrittenAsync(expired, live);
 
-        await using JanusDbContext sweeping = database.Context();
+        await using StoreContext sweeping = database.Context();
 
         Assert.Equal(
             1,
@@ -444,7 +444,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
                 Noon + TimeSpan.FromDays(2),
                 TestContext.Current.CancellationToken));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.Null(await Store(reading).FindAsync(expired.Id, TestContext.Current.CancellationToken));
         Assert.NotNull(await Store(reading).FindAsync(live.Id, TestContext.Current.CancellationToken));
@@ -487,7 +487,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
 
     private async Task WrittenAsync(params Session[] sessions)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         foreach (Session session in sessions)
         {
@@ -501,6 +501,6 @@ public sealed class SessionStoreTests(DatabaseFixture database)
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
-    private SessionStore Store(JanusDbContext context) =>
+    private SessionStore Store(StoreContext context) =>
         new(context, _deployment.Keys, _deployment.Randomness);
 }

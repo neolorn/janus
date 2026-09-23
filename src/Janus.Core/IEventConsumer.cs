@@ -14,7 +14,7 @@ namespace Janus.Core;
 /// change.
 /// </remarks>
 public interface IEventConsumer<in TEvent>
-    where TEvent : JanusEvent
+    where TEvent : DomainEvent
 {
     /// <summary>
     /// Acts on one event.

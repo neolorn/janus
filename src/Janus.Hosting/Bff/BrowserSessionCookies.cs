@@ -18,7 +18,7 @@ namespace Janus.Hosting.Bff;
 /// pair again is what rotation looks like at the boundary, and the previous pair
 /// stops working because the record stopped answering to it.
 /// </remarks>
-internal sealed class BrowserSessionCookies(JanusApplication application)
+internal sealed class BrowserSessionCookies(ApplicationKind application)
 {
     /// <summary>
     /// Writes the pair a newly issued session answers to, replacing whatever the

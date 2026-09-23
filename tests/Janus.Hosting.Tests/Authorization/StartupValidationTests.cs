@@ -404,7 +404,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
             new byte[32],
             Encoding.UTF8.GetBytes("the secret this application presents"),
             HostFixture.Declaration(),
-            JanusApplication.Public);
+            ApplicationKind.Public);
     }
 
     // IDN-ATTR-002: an organization shows photos by its key, which is a settings row

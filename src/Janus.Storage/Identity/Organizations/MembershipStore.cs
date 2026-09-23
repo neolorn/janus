@@ -18,7 +18,7 @@ namespace Janus.Storage.Identity.Organizations;
 /// memberships that ended beside the ones that have not, because a membership is a
 /// record of something that happened (IDN-PRIN-003).
 /// </remarks>
-internal sealed class MembershipStore(JanusDbContext context) : IMembershipStore
+internal sealed class MembershipStore(StoreContext context) : IMembershipStore
 {
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<Membership>> FindBySubjectAsync(

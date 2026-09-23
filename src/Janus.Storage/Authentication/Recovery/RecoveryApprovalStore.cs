@@ -25,7 +25,7 @@ namespace Janus.Storage.Authentication.Recovery;
 /// already spent still counts against the day it was given.
 /// </remarks>
 internal sealed class RecoveryApprovalStore(
-    JanusDbContext context,
+    StoreContext context,
     KeyEncryptionKeys keyEncryptionKeys,
     RandomNumberGenerator randomness) : IRecoveryApprovalStore
 {

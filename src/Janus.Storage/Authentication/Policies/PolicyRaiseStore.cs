@@ -20,7 +20,7 @@ namespace Janus.Storage.Authentication.Policies;
 /// scope had raised for that field, so one field of one scope stands for one
 /// requirement and one deadline.
 /// </remarks>
-internal sealed class PolicyRaiseStore(JanusDbContext context, TimeProvider time)
+internal sealed class PolicyRaiseStore(StoreContext context, TimeProvider time)
     : IPolicyRaiseStore
 {
     /// <inheritdoc/>

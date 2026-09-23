@@ -16,7 +16,7 @@ namespace Janus.Core;
 /// <remarks>
 /// Implements AUTHZ-INHERIT-002 and LIB-API-001. The closure is public contract and
 /// cannot be restructured without a major version: a host maps it into its own context
-/// with <c>MapJanusAuthorization</c> and queries it from hand-written SQL. The columns
+/// with <c>MapAuthorizationTables</c> and queries it from hand-written SQL. The columns
 /// are plain values rather than the library's own types, because what maps this row is
 /// the host's provider and not the library's (D-159).
 /// </remarks>

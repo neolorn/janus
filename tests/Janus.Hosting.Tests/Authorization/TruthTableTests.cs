@@ -580,7 +580,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             new byte[32],
             new byte[16],
             HostFixture.Declaration(materialised: true),
-            JanusApplication.Public);
+            ApplicationKind.Public);
 
         return services.BuildServiceProvider();
     }

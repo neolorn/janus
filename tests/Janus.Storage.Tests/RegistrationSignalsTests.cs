@@ -84,7 +84,7 @@ public sealed class RegistrationSignalsTests(DatabaseFixture database) : IClassF
 
     private async Task RaiseAsync(RegistrationSessionId session, bool commit)
     {
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
 
         var connections = new DataConnections(context);
 

@@ -11,4 +11,4 @@ namespace Janus.Core;
 /// <remarks>Implements IDN-LIFE-014, IDN-ACCT-007 and chapter 10 section 5b.</remarks>
 public sealed record AccountDeletionCancelled(
     DateTimeOffset RaisedAt,
-    string IdempotencyKey) : JanusEvent(RaisedAt, IdempotencyKey);
+    string IdempotencyKey) : DomainEvent(RaisedAt, IdempotencyKey);

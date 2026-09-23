@@ -28,7 +28,7 @@ namespace Janus.Storage.Identity.Identifiers;
 /// AC12).
 /// </remarks>
 internal sealed class IdentifierStore(
-    JanusDbContext context,
+    StoreContext context,
     KeyEncryptionKeys keyEncryptionKeys,
     ReadOnlyMemory<byte> fingerprintKey,
     RandomNumberGenerator randomness) : IIdentifierStore

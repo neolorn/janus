@@ -18,4 +18,4 @@ public sealed record AccountDeletionRequested(
     DateTimeOffset RaisedAt,
     string IdempotencyKey,
     DeletionOrigin By,
-    DateTimeOffset ErasesAt) : JanusEvent(RaisedAt, IdempotencyKey);
+    DateTimeOffset ErasesAt) : DomainEvent(RaisedAt, IdempotencyKey);

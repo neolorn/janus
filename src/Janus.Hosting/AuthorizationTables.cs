@@ -13,7 +13,7 @@ namespace Janus.Hosting;
 /// tables and every migration over them; the host only reads them, which is why they
 /// are mapped as views and take part in no migration of the host's.
 /// </remarks>
-public static class JanusAuthorizationModel
+public static class AuthorizationTables
 {
     /// <summary>
     /// Maps <see cref="AncestryEntry"/> and <see cref="EffectiveGrant"/> onto
@@ -22,7 +22,7 @@ public static class JanusAuthorizationModel
     /// <param name="builder">The host's model.</param>
     /// <returns>The same model, for chaining.</returns>
     /// <exception cref="ArgumentNullException">The model is absent.</exception>
-    public static ModelBuilder MapJanusAuthorization(this ModelBuilder builder)
+    public static ModelBuilder MapAuthorizationTables(this ModelBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
 

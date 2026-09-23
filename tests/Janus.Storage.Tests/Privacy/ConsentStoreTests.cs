@@ -45,7 +45,7 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
                 SupersededAt: null),
             TestContext.Current.CancellationToken));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         ConsentRecord held = Assert.Single(
             await new ConsentStore(reading)
@@ -78,7 +78,7 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
             Granted(Recommendations, "1") with { WithdrawnAt = Noon.AddDays(1) },
             TestContext.Current.CancellationToken));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         ConsentRecord held = Assert.Single(
             await new ConsentStore(reading)
@@ -113,7 +113,7 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
             Granted(Recommendations, "1") with { WithdrawnAt = Noon.AddHours(1) },
             TestContext.Current.CancellationToken));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         IReadOnlyList<HeldConsent> held = await new ConsentStore(reading)
             .LiveAgainstAnotherAsync([Recommendations], "2", TestContext.Current.CancellationToken);
@@ -148,7 +148,7 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
             objection with { WithdrawnAt = Noon.AddDays(2) },
             TestContext.Current.CancellationToken));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         ObjectionRecord held = Assert.Single(
             await new ConsentStore(reading)
@@ -174,7 +174,7 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
     {
         SubjectId subject = Subjects.New();
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         await new AccountStore(writing)
             .AddAsync(Account.Create(subject, Noon), TestContext.Current.CancellationToken);
@@ -185,7 +185,7 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
 
     private async Task WritingAsync(Func<ConsentStore, Task> write)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         await write(new ConsentStore(writing));
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);

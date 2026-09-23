@@ -19,7 +19,7 @@ namespace Janus.Storage;
 /// is the expand half of a rollout, which OPS-MIG-005 requires this build to run
 /// against, so it is no fault at all.
 /// </remarks>
-internal sealed class SchemaValidation(JanusDbContext context)
+internal sealed class SchemaValidation(StoreContext context)
 {
     /// <summary>
     /// Reads what the database still owes the model.

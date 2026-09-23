@@ -14,7 +14,7 @@ namespace Janus.Storage.Authentication.Sending;
 /// <param name="context">The context the operation runs on.</param>
 /// <param name="fingerprintKey">What the sources are hashed under.</param>
 /// <remarks>Implements INT-GEN-003, BFF-MACH-003 and CONV-DESIGN-003.</remarks>
-internal sealed class CallbackLedger(JanusDbContext context, ReadOnlyMemory<byte> fingerprintKey)
+internal sealed class CallbackLedger(StoreContext context, ReadOnlyMemory<byte> fingerprintKey)
     : ICallbackLedger
 {
     private static readonly TimeSpan Kept = TimeSpan.FromHours(1);

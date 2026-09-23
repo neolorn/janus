@@ -153,7 +153,7 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
 
         await RecordedAsync(reference, [new SendCount(destination, Day)], Noon);
 
-        await using (JanusDbContext releasing = database.Context())
+        await using (StoreContext releasing = database.Context())
         {
             Assert.True(await Ledger(releasing).ReleaseAsync(reference, TestContext.Current.CancellationToken));
             await releasing.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -161,7 +161,7 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
 
         Assert.Null(await FindAsync(destination));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.False(await Ledger(reading).ReleaseAsync(reference, TestContext.Current.CancellationToken));
     }
@@ -175,7 +175,7 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
     {
         RestrictionKey destination = Destination("+201001234564");
 
-        await using (JanusDbContext granting = database.Context())
+        await using (StoreContext granting = database.Context())
         {
             await Ledger(granting).GrantAsync(destination, 2, TestContext.Current.CancellationToken);
             await granting.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -194,7 +194,7 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
 
     private static byte[] Reference(byte one) => [.. Enumerable.Repeat(one, Fingerprint.Length)];
 
-    private static SendLedger Ledger(JanusDbContext context) => new(context, Deployment.FingerprintKey);
+    private static SendLedger Ledger(StoreContext context) => new(context, Deployment.FingerprintKey);
 
     private async Task RecordedAsync(
         byte[] reference,
@@ -202,7 +202,7 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
         DateTimeOffset at,
         IReadOnlyCollection<RestrictionKey>? spent = null)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         await Ledger(writing).RecordAsync(
             reference,
@@ -221,7 +221,7 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
         RestrictionKey key,
         DateTimeOffset stale)
     {
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         return await Ledger(reading).CountersAsync([key], stale, TestContext.Current.CancellationToken);
     }
@@ -232,7 +232,7 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
             Encoding.UTF8.GetBytes(key.Restriction + "\u0000" + key.Value),
             Deployment.FingerprintKey);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         return await reading.SendCounters
             .SingleOrDefaultAsync(counter => counter.Key == hashed, TestContext.Current.CancellationToken);

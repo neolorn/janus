@@ -14,7 +14,7 @@ namespace Janus.Storage.Privacy.Requests;
 /// </summary>
 /// <param name="context">The context the operation's reads and writes run on.</param>
 /// <remarks>Implements PRIV-RIGHT-001, PRIV-RIGHT-002 and CONV-DESIGN-003.</remarks>
-internal sealed class PrivacyRequestStore(JanusDbContext context) : IPrivacyRequestStore
+internal sealed class PrivacyRequestStore(StoreContext context) : IPrivacyRequestStore
 {
     /// <inheritdoc/>
     public async ValueTask AddAsync(QueuedRequest request, CancellationToken cancellationToken)

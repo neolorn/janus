@@ -181,7 +181,7 @@ public sealed class DefaultMessageTemplatesTests
                 new byte[32],
                 new byte[16],
                 HostFixture.Declaration(),
-                JanusApplication.Public)
+                ApplicationKind.Public)
             .BuildServiceProvider()
             .GetRequiredService<IMessageTemplates>();
 

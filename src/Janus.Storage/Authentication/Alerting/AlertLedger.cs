@@ -10,7 +10,7 @@ namespace Janus.Storage.Authentication.Alerting;
 /// </summary>
 /// <param name="context">The context the operation runs on.</param>
 /// <remarks>Implements OPS-ALERT-002 and CONV-DESIGN-003.</remarks>
-internal sealed class AlertLedger(JanusDbContext context) : IAlertLedger
+internal sealed class AlertLedger(StoreContext context) : IAlertLedger
 {
     /// <inheritdoc/>
     public async ValueTask<bool> FirstAsync(

@@ -21,7 +21,7 @@ namespace Janus.Storage.Authorization.Grants;
 /// A read returns the rows a principal holds and never a resolved outcome; expiry and
 /// revocation are carried on the row and read where the question is asked.
 /// </remarks>
-internal sealed class GrantStore(JanusDbContext context, DataConnections connections) : IGrantStore
+internal sealed class GrantStore(StoreContext context, DataConnections connections) : IGrantStore
 {
     // AUTHZ-CACHE-001: the counter of every account the grant reaches goes up in the
     // same transaction as the grant itself. A group's grant reaches every account the

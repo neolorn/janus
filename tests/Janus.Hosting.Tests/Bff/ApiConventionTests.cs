@@ -220,7 +220,7 @@ public sealed class ApiConventionTests
     {
         var named = new List<string>();
 
-        foreach (Type request in typeof(JanusEndpoints).Assembly.GetTypes())
+        foreach (Type request in typeof(IdentityEndpoints).Assembly.GetTypes())
         {
             if (!request.Name.EndsWith("Request", StringComparison.Ordinal))
             {
@@ -419,7 +419,7 @@ public sealed class ApiConventionTests
         || named.Contains("account", StringComparison.OrdinalIgnoreCase);
 
     private static IEnumerable<Type> Requests() =>
-        typeof(JanusEndpoints).Assembly
+        typeof(IdentityEndpoints).Assembly
             .GetTypes()
             .Where(request => request.Name.EndsWith("Request", StringComparison.Ordinal));
 }

@@ -15,7 +15,7 @@ namespace Janus.Core;
 /// Implements LIB-API-001, chapter 10 section 5b, INT-MAIL-007 and IDN-LIFE-003a. No
 /// event names a consumer or a consumer's domain.
 /// </remarks>
-public abstract record JanusEvent(DateTimeOffset RaisedAt, string IdempotencyKey)
+public abstract record DomainEvent(DateTimeOffset RaisedAt, string IdempotencyKey)
 {
     /// <summary>
     /// Whose account the event is about, where it is about one.

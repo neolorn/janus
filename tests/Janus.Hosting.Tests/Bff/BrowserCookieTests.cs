@@ -32,7 +32,7 @@ public sealed class BrowserCookieTests : IDisposable
     [Fact]
     public void BFF_SESS_002_AC1_EveryIssueCarriesTheFourAttributes()
     {
-        string written = Written(JanusApplication.Public, SessionCookie);
+        string written = Written(ApplicationKind.Public, SessionCookie);
 
         Assert.StartsWith("__Host-", written, StringComparison.Ordinal);
         Assert.Contains("secure", written, StringComparison.OrdinalIgnoreCase);
@@ -50,7 +50,7 @@ public sealed class BrowserCookieTests : IDisposable
     public void BFF_SESS_001_AC1_NothingButTheTwoOpaqueValuesReachesTheBrowser()
     {
         IssuedSession issued = Issued();
-        DefaultHttpContext context = Answering(issued, JanusApplication.Public);
+        DefaultHttpContext context = Answering(issued, ApplicationKind.Public);
 
         string[] written = [.. context.Response.Headers.SetCookie.Select(header => header!)];
 
@@ -73,7 +73,7 @@ public sealed class BrowserCookieTests : IDisposable
         IssuedSession issued = Issued();
         string written = string.Join(
             " ",
-            Answering(issued, JanusApplication.Public).Response.Headers.SetCookie.Select(header => header!));
+            Answering(issued, ApplicationKind.Public).Response.Headers.SetCookie.Select(header => header!));
         string decoded = string.Join(
             " ",
             new[] { issued.Secret, issued.CsrfToken }.Select(carried =>
@@ -112,7 +112,7 @@ public sealed class BrowserCookieTests : IDisposable
     /// </summary>
     [Fact]
     public void BFF_SESS_003_AC1_NoCookieIsScopedToAParentDomain() => Assert.All(
-        [.. Both(JanusApplication.Public), .. Both(JanusApplication.Management)],
+        [.. Both(ApplicationKind.Public), .. Both(ApplicationKind.Management)],
         written => Assert.DoesNotContain("domain=", written, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
@@ -123,7 +123,7 @@ public sealed class BrowserCookieTests : IDisposable
     {
         var context = new DefaultHttpContext();
 
-        new BrowserSessionCookies(JanusApplication.Public).Clear(context.Response);
+        new BrowserSessionCookies(ApplicationKind.Public).Clear(context.Response);
 
         string[] written = [.. context.Response.Headers.SetCookie.Select(header => header!)];
 
@@ -139,7 +139,7 @@ public sealed class BrowserCookieTests : IDisposable
     /// </summary>
     [Fact]
     public void BFF_CSRF_005_AC1_TheManagementApplicationsCookieIsStrict() => Assert.All(
-        Both(JanusApplication.Management),
+        Both(ApplicationKind.Management),
         written => Assert.Contains("samesite=strict", written, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
@@ -149,7 +149,7 @@ public sealed class BrowserCookieTests : IDisposable
     /// </summary>
     [Fact]
     public void BFF_CSRF_005_AC2_APublicApplicationCarriesItsSessionOnAnInboundLink() => Assert.All(
-        Both(JanusApplication.Public),
+        Both(ApplicationKind.Public),
         written => Assert.Contains("samesite=lax", written, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
@@ -157,7 +157,7 @@ public sealed class BrowserCookieTests : IDisposable
     /// </summary>
     [Fact]
     public void BFF_CSRF_005_AC3_NoCookieIsIssuedWithSameSiteNone() => Assert.All(
-        [.. Both(JanusApplication.Public), .. Both(JanusApplication.Management)],
+        [.. Both(ApplicationKind.Public), .. Both(ApplicationKind.Management)],
         written => Assert.DoesNotContain("samesite=none", written, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
@@ -169,12 +169,12 @@ public sealed class BrowserCookieTests : IDisposable
     {
         Assert.DoesNotContain(
             "httponly",
-            Written(JanusApplication.Public, CsrfCookie),
+            Written(ApplicationKind.Public, CsrfCookie),
             StringComparison.OrdinalIgnoreCase);
 
         Assert.Contains(
             "httponly",
-            Written(JanusApplication.Public, SessionCookie),
+            Written(ApplicationKind.Public, SessionCookie),
             StringComparison.OrdinalIgnoreCase);
     }
 
@@ -189,7 +189,7 @@ public sealed class BrowserCookieTests : IDisposable
     {
         Assert.Contains(
             "httponly",
-            Written(JanusApplication.Public, SessionCookie),
+            Written(ApplicationKind.Public, SessionCookie),
             StringComparison.OrdinalIgnoreCase);
 
         Assert.Empty(Repository
@@ -207,7 +207,7 @@ public sealed class BrowserCookieTests : IDisposable
     [Fact]
     public void AUTH_SESS_003_AC2_TheCookieCarriesAllFourAttributes()
     {
-        string written = Written(JanusApplication.Management, SessionCookie);
+        string written = Written(ApplicationKind.Management, SessionCookie);
 
         Assert.StartsWith("__Host-", written, StringComparison.Ordinal);
         Assert.Contains("secure", written, StringComparison.OrdinalIgnoreCase);
@@ -246,7 +246,7 @@ public sealed class BrowserCookieTests : IDisposable
         OpaqueToken.Draw(_randomness),
         OpaqueToken.Draw(_randomness));
 
-    private static DefaultHttpContext Answering(IssuedSession issued, JanusApplication application)
+    private static DefaultHttpContext Answering(IssuedSession issued, ApplicationKind application)
     {
         var context = new DefaultHttpContext();
 
@@ -255,10 +255,10 @@ public sealed class BrowserCookieTests : IDisposable
         return context;
     }
 
-    private string[] Both(JanusApplication application) =>
+    private string[] Both(ApplicationKind application) =>
         [.. Answering(Issued(), application).Response.Headers.SetCookie.Select(header => header!)];
 
-    private string Written(JanusApplication application, string name) => Assert.Single(
+    private string Written(ApplicationKind application, string name) => Assert.Single(
         Both(application),
         header => header.StartsWith(name + "=", StringComparison.Ordinal));
 }

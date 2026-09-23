@@ -15,4 +15,4 @@ namespace Janus.Core;
 /// </remarks>
 public sealed record AccountRegistered(
     DateTimeOffset RaisedAt,
-    string IdempotencyKey) : JanusEvent(RaisedAt, IdempotencyKey);
+    string IdempotencyKey) : DomainEvent(RaisedAt, IdempotencyKey);

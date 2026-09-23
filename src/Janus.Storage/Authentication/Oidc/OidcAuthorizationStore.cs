@@ -21,7 +21,7 @@ namespace Janus.Storage.Authentication.Oidc;
 /// reuse revokes, so the row carries a token a write must hold to succeed: two uses of
 /// one grant cannot both change it, and the second is refused rather than lost.
 /// </remarks>
-internal sealed class OidcAuthorizationStore(JanusDbContext context)
+internal sealed class OidcAuthorizationStore(StoreContext context)
     : IOpenIddictAuthorizationStore<OidcAuthorizationRecord>
 {
     /// <inheritdoc/>

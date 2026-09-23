@@ -27,7 +27,7 @@ namespace Janus.Storage.Authentication.Registration;
 /// whole of it commits or none of it does.
 /// </remarks>
 internal sealed class RegistrationDirectory(
-    JanusDbContext context,
+    StoreContext context,
     IAccountStore accounts,
     IIdentifierStore identifiers,
     IProfileStore profiles,

@@ -113,7 +113,7 @@ public sealed class HostFixture : IAsyncLifetime
             Encoding.UTF8.GetBytes("the fingerprint key of this deployment"),
             Encoding.UTF8.GetBytes("the secret this application presents"),
             Declaration(),
-            JanusApplication.Public);
+            ApplicationKind.Public);
 
         // PRIV-RIGHT-005b: the deployment declares its documents sensitive, so it
         // registers what does the host-side work for them.

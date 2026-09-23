@@ -397,7 +397,7 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
     {
         var named = new List<string>();
 
-        foreach (Type request in typeof(JanusEndpoints).Assembly.GetTypes())
+        foreach (Type request in typeof(IdentityEndpoints).Assembly.GetTypes())
         {
             if (request.Namespace is not "Janus.Hosting.Registration"
                 || !request.Name.EndsWith("Request", StringComparison.Ordinal))

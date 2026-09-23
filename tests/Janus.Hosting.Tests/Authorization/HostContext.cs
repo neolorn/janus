@@ -66,6 +66,6 @@ internal sealed class HostContext(DbContextOptions<HostContext> options) : DbCon
                 .HasConversion(subject => subject.Value, value => new SubjectId(value));
         });
 
-        modelBuilder.MapJanusAuthorization();
+        modelBuilder.MapAuthorizationTables();
     }
 }

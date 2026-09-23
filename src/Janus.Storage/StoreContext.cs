@@ -44,7 +44,7 @@ namespace Janus.Storage;
 /// Implements OPS-DB-002 and CONV-DESIGN-003. What the context maps is a persistence
 /// record per table and never a domain entity; the ports translate between the two.
 /// </remarks>
-internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) : DbContext(options)
+internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbContext(options)
 {
     /// <summary>
     /// The schema the library owns. Nothing of the host's lives in it.

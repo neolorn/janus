@@ -37,7 +37,7 @@ public sealed class ExportLedgerTests(DatabaseFixture database)
         await CountedAsync(subject, Noon - TimeSpan.FromHours(3));
         await CountedAsync(subject, Noon - TimeSpan.FromHours(9));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         IReadOnlyList<DateTimeOffset> taken = await new ExportLedger(reading).SinceAsync(
             subject,
@@ -64,7 +64,7 @@ public sealed class ExportLedgerTests(DatabaseFixture database)
         await CountedAsync(noura, Noon);
         await CountedAsync(noura, Noon + TimeSpan.FromMinutes(1));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.Equal(
             [Noon],
@@ -76,7 +76,7 @@ public sealed class ExportLedgerTests(DatabaseFixture database)
 
     private async Task CountedAsync(SubjectId subject, DateTimeOffset at)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
 
         await new ExportLedger(writing).RecordAsync(subject, at, TestContext.Current.CancellationToken);
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);

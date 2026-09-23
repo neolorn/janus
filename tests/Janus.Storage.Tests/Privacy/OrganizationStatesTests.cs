@@ -40,7 +40,7 @@ public sealed class OrganizationStatesTests(DatabaseFixture database)
         OrganizationId standing = await CreateAsync();
         OrganizationId recent = await DeletingAsync(Noon + Window + TimeSpan.FromDays(1));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         IReadOnlyList<OrganizationId> reached =
         [
@@ -67,7 +67,7 @@ public sealed class OrganizationStatesTests(DatabaseFixture database)
 
         _ = await EraseAsync(organization, Noon + Window);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         Organization read = Assert.IsType<Organization>(
             await new OrganizationStore(reading).FindAsync(
                 organization,
@@ -95,7 +95,7 @@ public sealed class OrganizationStatesTests(DatabaseFixture database)
 
         Assert.Equal(2, await EraseAsync(organization, Noon + Window));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         IReadOnlyList<Membership> held = await new MembershipStore(reading)
             .FindByOrganizationAsync(organization, TestContext.Current.CancellationToken);
 
@@ -117,7 +117,7 @@ public sealed class OrganizationStatesTests(DatabaseFixture database)
         _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await EraseAsync(organization, Noon + Window - TimeSpan.FromDays(1)));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         Organization read = Assert.IsType<Organization>(
             await new OrganizationStore(reading).FindAsync(
                 organization,
@@ -126,12 +126,12 @@ public sealed class OrganizationStatesTests(DatabaseFixture database)
         Assert.Null(read.ErasedAt);
     }
 
-    private static OrganizationStates States(JanusDbContext context) =>
+    private static OrganizationStates States(StoreContext context) =>
         new(context, new OrganizationStore(context), new MembershipStore(context));
 
     private async ValueTask<int> EraseAsync(OrganizationId organization, DateTimeOffset at)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         await using var work = new UnitOfWork(writing);
         await work.BeginAsync(TestContext.Current.CancellationToken);
 
@@ -150,7 +150,7 @@ public sealed class OrganizationStatesTests(DatabaseFixture database)
     {
         var id = new OrganizationId(Guid.CreateVersion7());
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         await new OrganizationStore(writing).CreateAsync(
             Organization.Create(id, "Acme " + id.Value.ToString("N"), Noon),
             TestContext.Current.CancellationToken);
@@ -163,7 +163,7 @@ public sealed class OrganizationStatesTests(DatabaseFixture database)
     {
         OrganizationId id = await CreateAsync();
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         OrganizationStore store = new(writing);
         Organization organization = Assert.IsType<Organization>(
             await store.FindAsync(id, TestContext.Current.CancellationToken));
@@ -196,7 +196,7 @@ public sealed class OrganizationStatesTests(DatabaseFixture database)
             membership.End(ended);
         }
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         await new MembershipStore(writing).CreateAsync(
             membership,
             TestContext.Current.CancellationToken);

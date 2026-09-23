@@ -16,7 +16,7 @@ namespace Janus.Storage;
 /// so a hand-written query taken through the connection accessor sees the writes made
 /// before it in the same operation.
 /// </remarks>
-internal sealed class UnitOfWork(JanusDbContext context) : IUnitOfWork
+internal sealed class UnitOfWork(StoreContext context) : IUnitOfWork
 {
     private IDbContextTransaction? _transaction;
 

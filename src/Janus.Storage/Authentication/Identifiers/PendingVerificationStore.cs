@@ -26,7 +26,7 @@ namespace Janus.Storage.Authentication.Identifiers;
 /// key, so an erasure while a change is in flight leaves neither readable.
 /// </remarks>
 internal sealed class PendingVerificationStore(
-    JanusDbContext context,
+    StoreContext context,
     KeyEncryptionKeys keyEncryptionKeys,
     RandomNumberGenerator randomness) : IPendingVerificationStore
 {

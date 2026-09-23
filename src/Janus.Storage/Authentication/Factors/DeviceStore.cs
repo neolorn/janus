@@ -14,7 +14,7 @@ namespace Janus.Storage.Authentication.Factors;
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
 /// <remarks>Implements AUTH-FACT-015, AUTH-FACT-016 and CONV-DESIGN-003.</remarks>
-internal sealed class DeviceStore(JanusDbContext context) : IDeviceStore
+internal sealed class DeviceStore(StoreContext context) : IDeviceStore
 {
     /// <inheritdoc/>
     public async ValueTask<Device?> FindByFingerprintAsync(

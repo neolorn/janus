@@ -18,7 +18,7 @@ namespace Janus.Storage.Privacy.Outbox;
 /// transaction in progress and committed by the caller's unit of work, so a fact and
 /// its delivery reach the database together or not at all.
 /// </remarks>
-internal sealed class OutboxStore(JanusDbContext context, TimeProvider time) : IOutboxStore
+internal sealed class OutboxStore(StoreContext context, TimeProvider time) : IOutboxStore
 {
     /// <inheritdoc/>
     public async ValueTask AddAsync(Delivery delivery, CancellationToken cancellationToken)

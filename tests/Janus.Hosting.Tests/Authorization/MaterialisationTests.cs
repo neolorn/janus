@@ -211,7 +211,7 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
             new byte[32],
             new byte[16],
             HostFixture.Declaration(materialised: true),
-            JanusApplication.Public);
+            ApplicationKind.Public);
 
         return services.BuildServiceProvider();
     }

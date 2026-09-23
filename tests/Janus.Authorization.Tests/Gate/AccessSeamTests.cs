@@ -165,7 +165,7 @@ public sealed class AccessSeamTests
         Assert.Equal(
             [
                 Path.Combine("Janus.Authorization", "Gate", "AccessGate.cs"),
-                Path.Combine("Janus.Hosting", "JanusRegistration.cs"),
+                Path.Combine("Janus.Hosting", "HostingRegistration.cs"),
             ],
             naming);
     }

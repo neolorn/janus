@@ -10,8 +10,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 namespace Janus.Storage.Migrations;
 
-[DbContext(typeof(JanusDbContext))]
-partial class JanusDbContextModelSnapshot : ModelSnapshot
+[DbContext(typeof(StoreContext))]
+partial class StoreContextModelSnapshot : ModelSnapshot
 {
     protected override void BuildModel(ModelBuilder modelBuilder)
     {

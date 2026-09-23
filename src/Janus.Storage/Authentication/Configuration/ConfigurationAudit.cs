@@ -26,7 +26,7 @@ namespace Janus.Storage.Authentication.Configuration;
 /// readings the chapter asks for are the two indexes the table carries.
 /// </remarks>
 internal sealed class ConfigurationAudit(
-    JanusDbContext context,
+    StoreContext context,
     IAuditStore records,
     TimeProvider time) : IConfigurationAudit
 {

@@ -16,7 +16,7 @@ namespace Janus.Storage.Authorization.Gate;
 /// Implements PRIV-SENS-002 and CONV-DESIGN-003. It reads the one record the gate
 /// evaluates, by the key the table is held under, and nothing else.
 /// </remarks>
-internal sealed class RecordedConsents(JanusDbContext context) : IRecordedConsents
+internal sealed class RecordedConsents(StoreContext context) : IRecordedConsents
 {
     /// <inheritdoc/>
     public async ValueTask<ConsentRecord?> OfAsync(

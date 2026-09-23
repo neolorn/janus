@@ -33,7 +33,7 @@ namespace Janus.Storage.Privacy.Erasures;
 /// key is gone would read fields it can no longer decrypt.
 /// </remarks>
 internal sealed class SubjectEraser(
-    JanusDbContext context,
+    StoreContext context,
     ISessionStore sessions,
     IConfigurationStore configuration) : ISubjectEraser
 {

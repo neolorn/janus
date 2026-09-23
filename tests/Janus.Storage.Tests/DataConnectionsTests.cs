@@ -32,7 +32,7 @@ public sealed class DataConnectionsTests(DatabaseFixture database) : IClassFixtu
     public async Task OPS_DATA_002_AC1_AHandWrittenQuerySeesTheTransactionsOwnWritesAsync()
     {
         var key = ConfigurationKey.Parse("account.deletion.grace");
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
 
         await using (var work = new UnitOfWork(context))
         {
@@ -65,7 +65,7 @@ public sealed class DataConnectionsTests(DatabaseFixture database) : IClassFixtu
     [Fact]
     public async Task OPS_DATA_002_AC1_TheAccessorCarriesTheOperationsTransactionAsync()
     {
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
         var connections = new DataConnections(context);
 
         AmbientConnection outside = await connections.UseAsync(TestContext.Current.CancellationToken);
@@ -88,7 +88,7 @@ public sealed class DataConnectionsTests(DatabaseFixture database) : IClassFixtu
     [Fact]
     public async Task OPS_DATA_002_AC1_TheConnectionComesBackOpenAsync()
     {
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
 
         AmbientConnection ambient = await new DataConnections(context)
             .UseAsync(TestContext.Current.CancellationToken);

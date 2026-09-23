@@ -36,7 +36,7 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
     {
         OrganizationId id = await CreateAsync(Fresh("Acme Trading"));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         Organization read = Assert.IsType<Organization>(
             await Store(reading).FindAsync(id, TestContext.Current.CancellationToken));
 
@@ -52,7 +52,7 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
     [Fact]
     public async Task FindAsync_AnOrganizationWithNoRow_ReadsAsNothingAsync()
     {
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         Assert.Null(await Store(reading).FindAsync(
             new OrganizationId(Guid.NewGuid()),
@@ -68,7 +68,7 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
     {
         OrganizationId id = await CreateAsync(Fresh("Acme Trading"));
 
-        await using (JanusDbContext deleting = database.Context())
+        await using (StoreContext deleting = database.Context())
         {
             OrganizationStore store = Store(deleting);
             Organization organization = Assert.IsType<Organization>(
@@ -80,7 +80,7 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
             await deleting.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         Organization read = Assert.IsType<Organization>(
             await Store(reading).FindAsync(id, TestContext.Current.CancellationToken));
 
@@ -97,7 +97,7 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
     {
         OrganizationId id = await CreateAsync(Fresh("Acme Trading"));
 
-        await using (JanusDbContext requesting = database.Context())
+        await using (StoreContext requesting = database.Context())
         {
             OrganizationStore store = Store(requesting);
             Organization organization = Assert.IsType<Organization>(
@@ -108,7 +108,7 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
             await requesting.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using (JanusDbContext cancelling = database.Context())
+        await using (StoreContext cancelling = database.Context())
         {
             OrganizationStore store = Store(cancelling);
             Organization organization = Assert.IsType<Organization>(
@@ -120,7 +120,7 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
             await cancelling.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         Organization read = Assert.IsType<Organization>(
             await Store(reading).FindAsync(id, TestContext.Current.CancellationToken));
 
@@ -138,7 +138,7 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
         OrganizationId id = await CreateAsync(name);
         string shouted = name.ToUpperInvariant();
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         OrganizationRecord found = await reading.Organizations
             .SingleAsync(
                 organization => organization.Name == shouted,
@@ -159,7 +159,7 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
         OrganizationId first = await CreateAsync(Fresh("Acme Trading"));
         OrganizationId second = await CreateAsync(Fresh("Beta Works"));
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             MembershipStore store = Memberships(writing);
             Membership beginning = Made(NewId(), subject, first);
@@ -171,7 +171,7 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         IReadOnlyList<Membership> held = await Memberships(reading).FindBySubjectAsync(
             subject,
             TestContext.Current.CancellationToken);
@@ -190,7 +190,7 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
         OrganizationId organization = await CreateAsync(Fresh("Acme Trading"));
         MembershipId id = NewId();
 
-        await using (JanusDbContext writing = database.Context())
+        await using (StoreContext writing = database.Context())
         {
             await Memberships(writing).CreateAsync(
                 Made(id, subject, organization),
@@ -200,7 +200,7 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
 
         DateTimeOffset ended = Noon.AddDays(400);
 
-        await using (JanusDbContext ending = database.Context())
+        await using (StoreContext ending = database.Context())
         {
             MembershipStore store = Memberships(ending);
             IReadOnlyList<Membership> held = await store.FindBySubjectAsync(
@@ -212,7 +212,7 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
             await ending.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         IReadOnlyList<Membership> read = await Memberships(reading).FindByOrganizationAsync(
             organization,
             TestContext.Current.CancellationToken);
@@ -232,7 +232,7 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
     [Fact]
     public async Task RecordAsync_AMembershipWithNoRow_ThrowsAsync()
     {
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
 
         Membership membership = Made(
             NewId(),
@@ -265,7 +265,7 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
     {
         OrganizationId ordinary = await CreateAsync(Fresh("Acme Trading"));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         Organization read = Assert.IsType<Organization>(
             await Store(reading).FindAsync(ordinary, TestContext.Current.CancellationToken));
 
@@ -291,15 +291,15 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
     // The tests of a class share one database, so each names its own organization.
     private static string Fresh(string name) => name + " " + Guid.NewGuid().ToString("N");
 
-    private static OrganizationStore Store(JanusDbContext context) => new(context);
+    private static OrganizationStore Store(StoreContext context) => new(context);
 
-    private static MembershipStore Memberships(JanusDbContext context) => new(context);
+    private static MembershipStore Memberships(StoreContext context) => new(context);
 
     private async ValueTask<OrganizationId> CreateAsync(string name)
     {
         var id = new OrganizationId(Guid.CreateVersion7());
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         await Store(writing).CreateAsync(
             Organization.Create(id, name, Noon),
             TestContext.Current.CancellationToken);
@@ -312,7 +312,7 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
     {
         var id = new OrganizationId(Guid.CreateVersion7());
 
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         await Store(writing).CreateAsync(
             Organization.CreateAdministrative(id, name, Noon),
             TestContext.Current.CancellationToken);

@@ -13,4 +13,4 @@ namespace Janus.Core;
 public sealed record AccountSuspended(
     DateTimeOffset RaisedAt,
     string IdempotencyKey,
-    SuspensionOrigin By) : JanusEvent(RaisedAt, IdempotencyKey);
+    SuspensionOrigin By) : DomainEvent(RaisedAt, IdempotencyKey);

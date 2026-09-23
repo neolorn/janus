@@ -11,7 +11,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 namespace Janus.Storage.Migrations;
 
-[DbContext(typeof(JanusDbContext))]
+[DbContext(typeof(StoreContext))]
 [Migration("20260922185235_AddResourceSubject")]
 partial class AddResourceSubject
 {

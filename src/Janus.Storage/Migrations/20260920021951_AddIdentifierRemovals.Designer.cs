@@ -11,7 +11,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 namespace Janus.Storage.Migrations;
 
-[DbContext(typeof(JanusDbContext))]
+[DbContext(typeof(StoreContext))]
 [Migration("20260920021951_AddIdentifierRemovals")]
 partial class AddIdentifierRemovals
 {

@@ -25,7 +25,7 @@ namespace Janus.Storage.Authentication.Sessions;
 /// unwrapped for the one caller that redeems a code with it.
 /// </remarks>
 internal sealed class PreAuthenticationStore(
-    JanusDbContext context,
+    StoreContext context,
     KeyEncryptionKeys keyEncryptionKeys) : IPreAuthenticationStore
 {
     /// <inheritdoc/>

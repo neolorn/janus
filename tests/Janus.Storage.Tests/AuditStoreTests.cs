@@ -176,7 +176,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             subject,
             organization: null));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         IReadOnlyList<AuditRecord> read = await Store(reading).FindBySubjectAsync(
             subject,
             TestContext.Current.CancellationToken);
@@ -238,7 +238,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
 
         await _deployment.EraseAsync(subject);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         AuditRecord anonymised = Assert.Single(await Store(reading).FindBySubjectAsync(
             subject,
@@ -342,7 +342,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
 
         await _deployment.EraseAsync(subject);
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         IReadOnlyList<AuditRecord> records = await Store(reading).FindBySubjectAsync(
             subject,
@@ -489,19 +489,19 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
         return document;
     }
 
-    private AuditStore Store(JanusDbContext context) =>
+    private AuditStore Store(StoreContext context) =>
         new(context, _deployment.Keys, _deployment.Randomness);
 
     private async ValueTask AppendAsync(AuditRecord record)
     {
-        await using JanusDbContext writing = database.Context();
+        await using StoreContext writing = database.Context();
         await Store(writing).AppendAsync(record, TestContext.Current.CancellationToken);
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
     private async ValueTask<AuditRecord> OneAsync(SubjectId subject)
     {
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
 
         return Assert.Single(await Store(reading).FindBySubjectAsync(
             subject,

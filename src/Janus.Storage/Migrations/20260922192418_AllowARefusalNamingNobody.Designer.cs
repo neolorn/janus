@@ -11,7 +11,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 namespace Janus.Storage.Migrations;
 
-[DbContext(typeof(JanusDbContext))]
+[DbContext(typeof(StoreContext))]
 [Migration("20260922192418_AllowARefusalNamingNobody")]
 partial class AllowARefusalNamingNobody
 {

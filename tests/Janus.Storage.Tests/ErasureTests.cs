@@ -52,7 +52,7 @@ public sealed class ErasureTests(DatabaseFixture database) : IClassFixture<Datab
 
         await WriteAsync(subject, keys, "ahmed@example.com", "+201001234567");
 
-        await using (JanusDbContext erasing = database.Context())
+        await using (StoreContext erasing = database.Context())
         await using (var work = new UnitOfWork(erasing))
         {
             await work.BeginAsync(TestContext.Current.CancellationToken);
@@ -80,7 +80,7 @@ public sealed class ErasureTests(DatabaseFixture database) : IClassFixture<Datab
             2,
             await connection.ExecuteScalarAsync<int>(CountIdentifiers, new { subject = subject.Value }));
 
-        await using JanusDbContext reading = database.Context();
+        await using StoreContext reading = database.Context();
         SubjectKeyRecord erased = await reading.SubjectKeys
             .SingleAsync(row => row.Subject == subject, TestContext.Current.CancellationToken);
 
@@ -279,7 +279,7 @@ public sealed class ErasureTests(DatabaseFixture database) : IClassFixture<Datab
 
         try
         {
-            await using JanusDbContext context = database.Context();
+            await using StoreContext context = database.Context();
             await using var work = new UnitOfWork(context);
 
             await work.BeginAsync(TestContext.Current.CancellationToken);
@@ -312,7 +312,7 @@ public sealed class ErasureTests(DatabaseFixture database) : IClassFixture<Datab
 
     private async Task NeutraliseAsync(SubjectId subject)
     {
-        await using JanusDbContext context = database.Context();
+        await using StoreContext context = database.Context();
 
         List<IdentifierRecord> rows = await context.Identifiers
             .Where(row => row.Subject == subject)

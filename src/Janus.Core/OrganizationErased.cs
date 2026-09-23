@@ -19,4 +19,4 @@ public sealed record OrganizationErased(
     DateTimeOffset RaisedAt,
     string IdempotencyKey,
     OrganizationId Organization,
-    int MembershipsEnded) : JanusEvent(RaisedAt, IdempotencyKey);
+    int MembershipsEnded) : DomainEvent(RaisedAt, IdempotencyKey);

@@ -23,7 +23,7 @@ namespace Janus.Storage.Authorization.Resources;
 /// change as arguments and read only the ancestry, so they do not depend on when the
 /// operation's own row writes reach the database.
 /// </remarks>
-internal sealed class ResourceStore(JanusDbContext context, DataConnections connections) : IResourceStore
+internal sealed class ResourceStore(StoreContext context, DataConnections connections) : IResourceStore
 {
     // AUTHZ-INHERIT-003 AC2: a create reads the container's ancestry and a move
     // rewrites a subtree's, so two of them running at once over one tree can leave a

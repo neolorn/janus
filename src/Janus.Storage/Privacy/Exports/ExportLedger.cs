@@ -18,7 +18,7 @@ namespace Janus.Storage.Privacy.Exports;
 /// transaction in progress, so an export that is counted is an export the caller
 /// committed.
 /// </remarks>
-internal sealed class ExportLedger(JanusDbContext context) : IExportLedger
+internal sealed class ExportLedger(StoreContext context) : IExportLedger
 {
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<DateTimeOffset>> SinceAsync(
