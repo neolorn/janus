@@ -10,6 +10,16 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- An application now establishes its own session from the one the authentication
+  application holds without a line of host code: `GET /auth/signon` forwards the
+  browser to the provider with proof key and a state bound to its pre-authentication
+  session, `GET /auth/signon/return` trades the code on the server's own connection
+  and drops what came back, and the browser goes on to where it was heading with a
+  session of this application's own. A host declares the client identifier this
+  application is registered under and hands the library the matching secret from its
+  secrets manager, both of which startup now requires; the address of the
+  authentication application is declared beside its sign-in screen.
+
 - The OpenID Connect provider is now the protocol library's throughout. It validates
   the clients, issues and rotates the codes and the tokens, proves the verifier and
   catches a reuse, and it keeps its own records in three tables of the library's. What

@@ -111,6 +111,7 @@ public sealed class HostFixture : IAsyncLifetime
             ConnectionString,
             new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = material }),
             Encoding.UTF8.GetBytes("the fingerprint key of this deployment"),
+            Encoding.UTF8.GetBytes("the secret this application presents"),
             Declaration(),
             JanusApplication.Public);
 

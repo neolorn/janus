@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
@@ -85,8 +86,13 @@ internal sealed class Deployment : IAsyncDisposable
 
     // LIB-HOST-001: where a browser holding no session is sent is a declaration no
     // deployment starts without, so every deployment here carries one (AUTH-SESS-012).
-    private static readonly AuthenticationAddresses Screen =
-        new("https://janus.example.test/signin");
+    private static readonly AuthenticationAddresses Screen = new(
+        "https://janus.example.test/signin",
+        "https://janus.example.test");
+
+    // LIB-HOST-001, BFF-SESS-006: which client of the provider this application is
+    // is a declaration no deployment starts without either.
+    private static readonly SignOnClient Registered = new("this-application");
 
     // LIB-HOST-001: the frontend's pages are a declaration no deployment starts
     // without, so every deployment here carries one (REG-PM-001).
@@ -103,12 +109,14 @@ internal sealed class Deployment : IAsyncDisposable
     /// <param name="prefix">The path the host mounts the library under.</param>
     /// <param name="preferences">The preference keys the host declared.</param>
     /// <param name="signIn">Where the host's own sign-in screen is.</param>
+    /// <param name="client">Which client of the provider this application is.</param>
     public Deployment(
         JanusApplication application = JanusApplication.Public,
         PasskeyAddresses? addresses = null,
         string prefix = "",
         PreferenceDeclarations? preferences = null,
-        AuthenticationAddresses? signIn = null)
+        AuthenticationAddresses? signIn = null,
+        SignOnClient? client = null)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
@@ -116,6 +124,7 @@ internal sealed class Deployment : IAsyncDisposable
 
         Signals = new RegistrationSignalsInMemory(Clock);
         Grants = new OidcAuthorizationStoreInMemory(Tokens);
+        Provider = new ProviderInMemory(this);
 
         Declared = preferences ?? PreferenceDeclarations.None;
         Accounts = new AccountDirectoryInMemory(Declared);
@@ -129,7 +138,8 @@ internal sealed class Deployment : IAsyncDisposable
             builder.Services,
             application,
             addresses ?? Pages,
-            signIn ?? Screen);
+            signIn ?? Screen,
+            client ?? Registered);
 
         _application = builder.Build();
 
@@ -170,6 +180,12 @@ internal sealed class Deployment : IAsyncDisposable
                 .GetResult();
         }
     }
+
+    /// <summary>
+    /// The provider this application's back channel reaches, which is this same
+    /// deployment (BFF-SESS-006 AC2).
+    /// </summary>
+    public ProviderInMemory Provider { get; }
 
     /// <summary>
     /// The clock the whole deployment reads.
@@ -362,6 +378,11 @@ internal sealed class Deployment : IAsyncDisposable
     public LogInMemory<RegisteredDestination> OidcLog { get; } = new();
 
     /// <summary>
+    /// What the sign-on recorded when it would not carry a return (BFF-SESS-006 AC3).
+    /// </summary>
+    public LogInMemory<SignOn> SignOnLog { get; } = new();
+
+    /// <summary>
     /// Every endpoint the library mounted.
     /// </summary>
     public IReadOnlyList<Endpoint> Endpoints =>
@@ -411,7 +432,8 @@ internal sealed class Deployment : IAsyncDisposable
         IServiceCollection services,
         JanusApplication application,
         PasskeyAddresses addresses,
-        AuthenticationAddresses signIn)
+        AuthenticationAddresses signIn,
+        SignOnClient client)
     {
         _ = services.AddSingleton<TimeProvider>(Clock);
         _ = services.AddSingleton(_randomness);
@@ -461,6 +483,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<ISigningKeyStore>(Keys);
         _ = services.AddSingleton<IOidcAudit>(OidcAudit);
         _ = services.AddSingleton<ILogger<RegisteredDestination>>(OidcLog);
+        _ = services.AddSingleton<ILogger<SignOn>>(SignOnLog);
 
         // The records the protocol server keeps are the library's rows, so a
         // deployment that runs over fakes holds them the way it holds every other
@@ -476,6 +499,16 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton(ReservedUsernames.Default);
         _ = services.AddSingleton(addresses);
         _ = services.AddSingleton(signIn);
+        _ = services.AddSingleton(client);
+
+        // BFF-SESS-006: the client half of the sign-on is the library's, and the
+        // connection it trades a code on reaches this same deployment's machine
+        // profile, which is what a second application's back channel reaches.
+        _ = services.AddSingleton(new SignOnSecret(
+            Encoding.UTF8.GetBytes("a-secret-the-deployment-set")));
+        _ = services.AddScoped<SignOn>();
+        _ = services.AddHttpClient(SignOn.Channel)
+            .ConfigurePrimaryHttpMessageHandler(() => Provider);
 
         _ = services.AddScoped<SmsBalance>();
         _ = services.AddScoped<SendingService>();

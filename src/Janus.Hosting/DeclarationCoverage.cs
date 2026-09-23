@@ -18,28 +18,37 @@ namespace Janus.Hosting;
 /// Where a browser holding no session is sent, or nothing where the deployment
 /// registered none.
 /// </param>
+/// <param name="signOn">
+/// Which client of the provider this application is, or nothing where the deployment
+/// registered none.
+/// </param>
 /// <param name="codec">
 /// What the deployment reads uploaded images with, or nothing where it registered
 /// none.
 /// </param>
 /// <param name="configuration">Where the organizations that show photos are read.</param>
 /// <remarks>
-/// Implements LIB-HOST-001, REG-PM-001, AUTH-SESS-012 and IDN-ATTR-002. The library
-/// knows no route of the frontend, so it has none to fall back on: a deployment that
-/// declares none of these is stopped here rather than answering a password manager as
-/// a site that offers neither page, or meeting an interactive authorization request
-/// with nowhere to send it. The codec is optional until a policy shows photos, and
-/// required from then on, because the library reads no image itself.
+/// Implements LIB-HOST-001, REG-PM-001, AUTH-SESS-012, BFF-SESS-006 and IDN-ATTR-002.
+/// The library knows no route of the frontend, so it has none to fall back on: a
+/// deployment that declares none of these is stopped here rather than answering a
+/// password manager as a site that offers neither page, meeting an interactive
+/// authorization request with nowhere to send it, or reaching the first person who
+/// arrives holding nothing without knowing what to call itself at the provider. The
+/// codec is optional until a policy shows photos, and required from then on, because
+/// the library reads no image itself.
 /// </remarks>
 internal sealed class DeclarationCoverage(
     PasskeyAddresses? addresses,
     AuthenticationAddresses? authentication,
+    SignOnClient? signOn,
     ImageCodec? codec,
     IConfigurationStore configuration)
 {
     private const string Passkeys = "passkeyAddresses";
 
     private const string Authentication = "authenticationAddresses";
+
+    private const string Client = "signOnClient.clientId";
 
     private const string Codec = "imageCodec";
 
@@ -73,6 +82,19 @@ internal sealed class DeclarationCoverage(
         if (authentication is null || authentication.SignIn.Length is 0)
         {
             return Missing(Authentication + ".signIn");
+        }
+
+        if (authentication.Provider.Length is 0)
+        {
+            return Missing(Authentication + ".provider");
+        }
+
+        // BFF-SESS-006: every application of a deployment is a client of the one
+        // provider, and which one this process is is not something the library can
+        // work out from anything else it holds.
+        if (signOn is null || signOn.ClientId.Length is 0)
+        {
+            return Missing(Client);
         }
 
         return await PhotographedAsync(cancellationToken).ConfigureAwait(false);

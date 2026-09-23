@@ -98,4 +98,64 @@ internal static partial class BrowserProfileLog
         Level = LogLevel.Warning,
         Message = "A {Method} on the machine profile carried a session cookie and was refused ({CorrelationId}).")]
     public static partial void CookieOnMachineProfile(ILogger log, string correlationId, string method);
+
+    /// <summary>
+    /// A return from the provider by a browser that started no sign-on, or whose
+    /// first contact has since lapsed.
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    [LoggerMessage(
+        EventId = 8,
+        Level = LogLevel.Warning,
+        Message = "A sign-on return carried no attempt this browser had started ({CorrelationId}).")]
+    public static partial void SignOnUnbound(ILogger log, string correlationId);
+
+    /// <summary>
+    /// A return whose state was absent or was not the one this browser was sent out
+    /// with (BFF-SESS-006 AC3).
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    [LoggerMessage(
+        EventId = 9,
+        Level = LogLevel.Warning,
+        Message = "A sign-on return presented a state this browser was not sent out with ({CorrelationId}).")]
+    public static partial void SignOnStateRejected(ILogger log, string correlationId);
+
+    /// <summary>
+    /// A return the provider refused, by the code it refused with.
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    /// <param name="code">What the provider refused with.</param>
+    [LoggerMessage(
+        EventId = 10,
+        Level = LogLevel.Warning,
+        Message = "A sign-on was refused by the provider with {Code} ({CorrelationId}).")]
+    public static partial void SignOnRefused(ILogger log, string correlationId, string code);
+
+    /// <summary>
+    /// An exchange the provider would not carry out, or whose identity token did not
+    /// hold up (BFF-SESS-006 AC3).
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    [LoggerMessage(
+        EventId = 11,
+        Level = LogLevel.Warning,
+        Message = "A sign-on code was not exchanged for an identity token that held up ({CorrelationId}).")]
+    public static partial void SignOnExchangeRejected(ILogger log, string correlationId);
+
+    /// <summary>
+    /// A sign-on by an application the provider's registry does not hold, which is a
+    /// registration the deployment has not made.
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    [LoggerMessage(
+        EventId = 12,
+        Level = LogLevel.Error,
+        Message = "This application is not registered at the provider it signs on to ({CorrelationId}).")]
+    public static partial void SignOnUnregistered(ILogger log, string correlationId);
 }

@@ -175,9 +175,11 @@ Janus.Core.AuditRecordId.Value.get -> System.Guid
 Janus.Core.AuditRecordId.Value.init -> void
 Janus.Core.AuthenticationAddresses
 Janus.Core.AuthenticationAddresses.<Clone>$() -> Janus.Core.AuthenticationAddresses!
-Janus.Core.AuthenticationAddresses.AuthenticationAddresses(string! SignIn) -> void
-Janus.Core.AuthenticationAddresses.Deconstruct(out string! SignIn) -> void
+Janus.Core.AuthenticationAddresses.AuthenticationAddresses(string! SignIn, string! Provider) -> void
+Janus.Core.AuthenticationAddresses.Deconstruct(out string! SignIn, out string! Provider) -> void
 Janus.Core.AuthenticationAddresses.Equals(Janus.Core.AuthenticationAddresses? other) -> bool
+Janus.Core.AuthenticationAddresses.Provider.get -> string!
+Janus.Core.AuthenticationAddresses.Provider.init -> void
 Janus.Core.AuthenticationAddresses.SignIn.get -> string!
 Janus.Core.AuthenticationAddresses.SignIn.init -> void
 Janus.Core.AuthenticatorAssertion
@@ -1048,6 +1050,7 @@ Janus.Core.ISecretSource
 Janus.Core.ISecretSource.ReadFingerprintKeyAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.ReadOnlyMemory<byte>>
 Janus.Core.ISecretSource.ReadKeyEncryptionKeysAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.KeyEncryptionKeys!>
 Janus.Core.ISecretSource.ReadMaintenanceCredentialAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.ReadOnlyMemory<byte>>
+Janus.Core.ISecretSource.ReadSignOnSecretAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.ReadOnlyMemory<byte>>
 Janus.Core.ISessions
 Janus.Core.ISessions.EndAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.ISessions.EndEverywhereAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -2080,6 +2083,13 @@ Janus.Core.SignInStatus
 Janus.Core.SignInStatus.Complete = 0 -> Janus.Core.SignInStatus
 Janus.Core.SignInStatus.DeviceVerificationRequired = 2 -> Janus.Core.SignInStatus
 Janus.Core.SignInStatus.FactorRequired = 1 -> Janus.Core.SignInStatus
+Janus.Core.SignOnClient
+Janus.Core.SignOnClient.<Clone>$() -> Janus.Core.SignOnClient!
+Janus.Core.SignOnClient.ClientId.get -> string!
+Janus.Core.SignOnClient.ClientId.init -> void
+Janus.Core.SignOnClient.Deconstruct(out string! ClientId) -> void
+Janus.Core.SignOnClient.Equals(Janus.Core.SignOnClient? other) -> bool
+Janus.Core.SignOnClient.SignOnClient(string! ClientId) -> void
 Janus.Core.SmsMessage
 Janus.Core.SmsMessage.<Clone>$() -> Janus.Core.SmsMessage!
 Janus.Core.SmsMessage.Deconstruct(out Janus.Core.PhoneNumber Destination, out string! Text, out string! Reference) -> void
@@ -2653,6 +2663,9 @@ override Janus.Core.SignInLanding.ToString() -> string!
 override Janus.Core.SignInProgress.Equals(object? obj) -> bool
 override Janus.Core.SignInProgress.GetHashCode() -> int
 override Janus.Core.SignInProgress.ToString() -> string!
+override Janus.Core.SignOnClient.Equals(object? obj) -> bool
+override Janus.Core.SignOnClient.GetHashCode() -> int
+override Janus.Core.SignOnClient.ToString() -> string!
 override Janus.Core.SmsMessage.Equals(object? obj) -> bool
 override Janus.Core.SmsMessage.GetHashCode() -> int
 override Janus.Core.SmsMessage.ToString() -> string!
@@ -3379,6 +3392,8 @@ static Janus.Core.SignInLanding.operator !=(Janus.Core.SignInLanding? left, Janu
 static Janus.Core.SignInLanding.operator ==(Janus.Core.SignInLanding? left, Janus.Core.SignInLanding? right) -> bool
 static Janus.Core.SignInProgress.operator !=(Janus.Core.SignInProgress? left, Janus.Core.SignInProgress? right) -> bool
 static Janus.Core.SignInProgress.operator ==(Janus.Core.SignInProgress? left, Janus.Core.SignInProgress? right) -> bool
+static Janus.Core.SignOnClient.operator !=(Janus.Core.SignOnClient? left, Janus.Core.SignOnClient? right) -> bool
+static Janus.Core.SignOnClient.operator ==(Janus.Core.SignOnClient? left, Janus.Core.SignOnClient? right) -> bool
 static Janus.Core.SmsMessage.operator !=(Janus.Core.SmsMessage? left, Janus.Core.SmsMessage? right) -> bool
 static Janus.Core.SmsMessage.operator ==(Janus.Core.SmsMessage? left, Janus.Core.SmsMessage? right) -> bool
 static Janus.Core.SqlFilter.operator !=(Janus.Core.SqlFilter? left, Janus.Core.SqlFilter? right) -> bool

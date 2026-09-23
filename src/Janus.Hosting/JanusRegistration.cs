@@ -78,6 +78,11 @@ public static class JanusRegistration
     /// The key the searchable fingerprints are computed under, read from the same place
     /// and held outside the database (PRIV-RIGHT-005c).
     /// </param>
+    /// <param name="signOnSecret">
+    /// What this application presents at the provider's token endpoint when it
+    /// establishes its own session, read from the same place and never from
+    /// configuration (BFF-SESS-006, OPS-SEC-001).
+    /// </param>
     /// <param name="declaration">What the host declared about its own domain.</param>
     /// <param name="application">
     /// Which of the deployment's applications this process serves, which decides the
@@ -94,6 +99,7 @@ public static class JanusRegistration
         string connectionString,
         KeyEncryptionKeys keyEncryptionKeys,
         ReadOnlyMemory<byte> fingerprintKey,
+        ReadOnlyMemory<byte> signOnSecret,
         AuthorizationDeclaration declaration,
         JanusApplication application)
     {
@@ -103,7 +109,7 @@ public static class JanusRegistration
         // the library holds no fallback for either, so a deployment that reached
         // neither stops here with the code that names why, not at the first request
         // that would have read a person's field.
-        Present(keyEncryptionKeys, fingerprintKey);
+        Present(keyEncryptionKeys, fingerprintKey, signOnSecret);
 
         // CONV-DESIGN-007: time is injected, and a host that has its own clock keeps it.
         services.TryAddSingleton(TimeProvider.System);
@@ -140,6 +146,13 @@ public static class JanusRegistration
         services.AddScoped<SynchronizerToken>();
         services.AddScoped<SessionRequirement>();
         services.AddScoped<MachineProfile>();
+
+        // BFF-SESS-006: the client half of the sign-on is the library's, so what it
+        // presents, where it presents it and the connection it presents it on are
+        // registered here and a host supplies none of them.
+        services.AddSingleton(new SignOnSecret(signOnSecret));
+        services.AddScoped<SignOn>();
+        _ = services.AddHttpClient(SignOn.Channel);
 
         // LIB-HOST-001: what the host declares about its own messaging is the host's.
         // A deployment that declares none of it starts, and the checks that would have
@@ -230,6 +243,7 @@ public static class JanusRegistration
         services.AddScoped(provider => new DeclarationCoverage(
             provider.GetService<PasskeyAddresses>(),
             provider.GetService<AuthenticationAddresses>(),
+            provider.GetService<SignOnClient>(),
             provider.GetService<ImageCodec>(),
             provider.GetRequiredService<IConfigurationStore>()));
 
@@ -341,7 +355,10 @@ public static class JanusRegistration
 
     // The fingerprint key computes an HMAC-SHA256, so anything shorter than that hash
     // is a key that weakens the code it is used by and is not a key the library runs on.
-    private static void Present(KeyEncryptionKeys keyEncryptionKeys, ReadOnlyMemory<byte> fingerprintKey)
+    private static void Present(
+        KeyEncryptionKeys keyEncryptionKeys,
+        ReadOnlyMemory<byte> fingerprintKey,
+        ReadOnlyMemory<byte> signOnSecret)
     {
         if (keyEncryptionKeys is null)
         {
@@ -355,6 +372,16 @@ public static class JanusRegistration
             throw new StartupException(
                 "The fingerprint key was not supplied, or is shorter than the hash it computes.",
                 Error.From(ErrorCodes.StartupKeyUnavailable, "key", JsonSerializer.SerializeToElement("fingerprintKey")));
+        }
+
+        // BFF-SESS-006: an application that cannot authenticate itself at the token
+        // endpoint cannot establish a session at all, so it stops here rather than at
+        // the first person who arrives holding nothing.
+        if (signOnSecret.Length is 0)
+        {
+            throw new StartupException(
+                "The sign-on client secret was not supplied; the library reads it from the secrets manager and holds no fallback.",
+                Error.From(ErrorCodes.StartupKeyUnavailable, "key", JsonSerializer.SerializeToElement("signOnSecret")));
         }
     }
 

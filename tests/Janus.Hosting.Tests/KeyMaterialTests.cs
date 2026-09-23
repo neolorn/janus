@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using Janus.Core;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Tests.Authorization;
@@ -55,6 +56,7 @@ public sealed class KeyMaterialTests
                 Connection,
                 keys!,
                 fingerprintKey,
+                Encoding.UTF8.GetBytes("the secret this application presents"),
                 HostFixture.Declaration(),
                 JanusApplication.Public))
             .Failure?.Code;

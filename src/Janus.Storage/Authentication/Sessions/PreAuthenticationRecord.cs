@@ -31,4 +31,28 @@ internal sealed class PreAuthenticationRecord
 
     /// <summary>The <c>enrolment</c> column, where the browser has one in flight.</summary>
     public EnrolmentSessionId? Enrolment { get; set; }
+
+    /// <summary>
+    /// The <c>signon_state</c> column: what the value handed to the browser
+    /// fingerprints to, where it has a sign-on in flight.
+    /// </summary>
+    public byte[]? SignOnState { get; set; }
+
+    /// <summary>
+    /// The <c>signon_verifier</c> column: the proof key the token request presents,
+    /// wrapped under the key-encryption key.
+    /// </summary>
+    public byte[]? SignOnVerifier { get; set; }
+
+    /// <summary>
+    /// The <c>signon_key_version</c> column: which version the proof key is wrapped
+    /// under.
+    /// </summary>
+    public int? SignOnKeyVersion { get; set; }
+
+    /// <summary>
+    /// The <c>signon_return</c> column: the path on this application the browser was
+    /// going to.
+    /// </summary>
+    public string? SignOnReturn { get; set; }
 }

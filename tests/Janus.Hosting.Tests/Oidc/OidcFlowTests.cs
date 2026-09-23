@@ -166,7 +166,9 @@ public sealed class OidcFlowTests
     public async Task AUTH_SESS_012_AC3_AnInteractiveRequestReachesTheSignInScreenAsync()
     {
         await using var deployment = new Deployment(
-            signIn: new AuthenticationAddresses("https://janus.example.test/signin"));
+            signIn: new AuthenticationAddresses(
+                "https://janus.example.test/signin",
+                "https://janus.example.test"));
 
         await RegisteredAsync(deployment);
 

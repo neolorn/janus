@@ -33,6 +33,10 @@ internal sealed class PreAuthenticationConfiguration
             table.HasCheckConstraint(
                 "ck_preauthentication_sessions_expires_at",
                 "expires_at > created_at");
+            table.HasCheckConstraint(
+                "ck_preauthentication_sessions_signon",
+                "num_nulls(signon_state, signon_verifier, signon_key_version, signon_return) "
+                    + "IN (0, 4)");
         });
 
         builder.HasKey(contact => contact.Fingerprint).HasName("pk_preauthentication_sessions");
@@ -55,6 +59,17 @@ internal sealed class PreAuthenticationConfiguration
         builder.Property(contact => contact.Enrolment)
             .HasColumnName("enrolment")
             .HasConversion(id => id!.Value.Value, value => new EnrolmentSessionId(value));
+
+        // BFF-SESS-006: the row holds what the state fingerprints to and the proof key
+        // wrapped, so a database dump yields neither a usable state nor a usable
+        // verifier, and the four move together or not at all.
+        builder.Property(contact => contact.SignOnState)
+            .HasColumnName("signon_state")
+            .HasMaxLength(Fingerprint.Length);
+
+        builder.Property(contact => contact.SignOnVerifier).HasColumnName("signon_verifier");
+        builder.Property(contact => contact.SignOnKeyVersion).HasColumnName("signon_key_version");
+        builder.Property(contact => contact.SignOnReturn).HasColumnName("signon_return");
 
         builder.HasIndex(contact => contact.ExpiresAt)
             .HasDatabaseName("ix_preauthentication_sessions_expires_at");

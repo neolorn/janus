@@ -1,6 +1,7 @@
 using System;
 using Janus.Hosting.Accounts;
 using Janus.Hosting.Authentication;
+using Janus.Hosting.Bff;
 using Janus.Hosting.Credentials;
 using Janus.Hosting.Privacy;
 using Janus.Hosting.Recovery;
@@ -33,6 +34,7 @@ public static class JanusEndpoints
 
         _ = endpoints.MapRegistration();
         _ = endpoints.MapAuthentication();
+        _ = endpoints.MapSignOn();
         _ = endpoints.MapAccount();
         _ = endpoints.MapCredentials();
         _ = endpoints.MapRecovery();

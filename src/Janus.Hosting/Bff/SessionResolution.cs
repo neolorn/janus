@@ -79,13 +79,14 @@ internal sealed class SessionResolution(
             return;
         }
 
+        var secret = OpaqueToken.Of(carried);
         PreAuthentication? contact = await contacts
-            .FindAsync(OpaqueToken.Of(carried), cancellationToken)
+            .FindAsync(secret, cancellationToken)
             .ConfigureAwait(false);
 
         if (contact is not null)
         {
-            resolved.Resolved(contact);
+            resolved.Resolved(contact, secret);
         }
     }
 }

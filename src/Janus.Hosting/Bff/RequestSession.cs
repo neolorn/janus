@@ -1,4 +1,5 @@
 using System;
+using Janus.Authentication;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 
@@ -25,6 +26,12 @@ internal sealed class RequestSession
     /// What the browser carried before it held a session, or nothing.
     /// </summary>
     public PreAuthentication? FirstContact { get; private set; }
+
+    /// <summary>
+    /// The token that first contact answers to, which the sign-on rotates out of once
+    /// the session exists (BFF-SESS-006).
+    /// </summary>
+    public OpaqueToken? FirstContactSecret { get; private set; }
 
     /// <summary>
     /// The session the request arrived on, where the stage that requires one let the
@@ -75,14 +82,17 @@ internal sealed class RequestSession
     }
 
     /// <summary>
-    /// Records what the browser carried before it held a session.
+    /// Records what the browser carried before it held a session, or what it has just
+    /// been given where it carried none.
     /// </summary>
     /// <param name="contact">The first contact.</param>
+    /// <param name="secret">The token it answers to.</param>
     /// <exception cref="ArgumentNullException">The first contact is absent.</exception>
-    public void Resolved(PreAuthentication contact)
+    public void Resolved(PreAuthentication contact, OpaqueToken secret)
     {
         ArgumentNullException.ThrowIfNull(contact);
 
         FirstContact = contact;
+        FirstContactSecret = secret;
     }
 }

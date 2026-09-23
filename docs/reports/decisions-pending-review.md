@@ -2059,6 +2059,8 @@ provider obtains a code without interaction.
 *Chapter text that should change.* `05` BFF-SESS-006 should say which side of the exchange
 the library ships.
 
+**Superseded by D-162.** Applied in entry 163.
+
 ---
 
 ## 67. The restricted channel is a catalogue property
@@ -5880,6 +5882,80 @@ the migrations twice over an empty database and compares the model against the s
 *Chapter text that should change.* None. OPS-MIG-005 is right; it simply has no previous
 version to bind here.
 
+---
+
+## 163. The client half of the sign-on is the library's, and a host declares which client it is
+
+**Corrections 1 · 2026-09-23 · D-162 item 66 · BFF-SESS-006, BFF-OWN-001, LIB-HOST-001,
+OPS-SEC-001, API-REDIR-001**
+
+D-162 reverses entry 66. Both halves of BFF-SESS-006 are the library's. An application
+establishes its own session from the record the authentication application holds by the
+authorization code flow with proof key, as a confidential client, and retains no token.
+
+*What the library now ships.* Two routes of the browser profile: `GET /auth/signon`,
+which forwards the browser to the provider with `prompt=none`, the destination the
+registry holds for this client, an S256 challenge and a state bound to the
+pre-authentication session; and `GET /auth/signon/return`, which judges the state,
+trades the code on this server's own connection with the client secret and the proof
+key, reads `sid` from the identity token, derives the per-application session from that
+record, writes the pair of cookies, ends the pre-authentication session and sends the
+browser where it was going. `login_required` answers the silent attempt only, and the
+second attempt asks for a sign-in, which the provider answers by forwarding to the
+declared screen. The attempt is forgotten on every return, so one code is judged once.
+
+*What a host declares.* `SignOnClient`, the identifier this application is registered
+under, a new LIB-HOST-001 row with no default. `AuthenticationAddresses` gains
+`Provider`, the address the library is mounted at on the authentication application,
+because the endpoints are the library's own routes under a mount only the deployment
+knows. Both fail startup with `model.startup.declarationmissing` naming the key.
+
+*What the secrets manager supplies.* `ISecretSource.ReadSignOnSecretAsync`, passed to
+`AddJanus` beside the key-encryption key and the fingerprint key; absent, startup fails
+with `model.startup.keyunavailable`. Nothing of it is written anywhere. The proof key,
+which is this server's own secret for the life of one flow, is held on the
+pre-authentication row wrapped under the key-encryption key.
+
+*Tests that pin what is built.*
+`SignOnTests.BFF_SESS_006_AC1_ALiveRecordEstablishesASessionWithNoInteractionAsync`,
+`SignOnTests.BFF_SESS_006_AC2_TheExchangeIsServerToServerAndHandsTheBrowserNoTokenAsync`,
+`SignOnTests.BFF_SESS_006_AC3_AMismatchedStateIsRejectedAndLoggedAsync`,
+`SignOnTests.BFF_SESS_006_AC3_AReturnedCodeIsNotAcceptedTwiceAsync`,
+`SignOnTests.BFF_SESS_006_AC4_NothingButThePerApplicationSessionIsHeldAfterwardsAsync`,
+`SignOnTests.BFF_SESS_006_AC5_RevokingTheRecordEndsThePerApplicationSessionAsync`,
+`SignOnTests.BFF_SESS_006_ABrowserWithNoRecordIsSentToSignInAsync`,
+`SignOnTests.BFF_SESS_006_TheDestinationIsTheRegisteredOneAndNeverAskedForAsync`,
+`SignOnTests.BFF_SESS_006_AReturnAddressOffThisApplicationIsNotFollowedAsync`,
+`PreAuthenticationStoreTests.BFF_SESS_006_TheProofKeyIsAtRestUnderTheKeyEncryptionKeyAsync`,
+`PreAuthenticationStoreTests.BFF_SESS_006_AC3_ForgettingTheAttemptClearsEveryColumnOfItAsync`,
+`StartupValidationTests.BFF_SESS_006_ADeploymentThatDeclaredNoSignOnClientIsRefusedAsync`.
+
+*Decided in the owner's absence, within this item.*
+
+1. *Where the provider is* (Tier 2). D-162 names one new declaration, the client
+   identifier, and section E names no key for the provider's address. The readings were
+   to derive the origin from the declared sign-in address, or to declare the address.
+   Declaring it was chosen: the sign-in address is a frontend page, the endpoints sit
+   under the library's mount, and a deployment that mounts the library under a prefix
+   has no address the library could derive. It is a component of the row D-162 item 61
+   created rather than a row of its own.
+2. *What the sign-on answers a refusal with* (Tier 3). No `10` code names a sign-on,
+   and section E adds none. A state that is absent, unbound or not the one this browser
+   was sent out with answers `auth.session.csrfinvalid`, because BFF-CSRF-005a makes the
+   pre-authentication session the binding target of both the synchronizer token and this
+   state; everything else answers `auth.session.expired`, which is what the request
+   failed to obtain. No code is invented.
+3. *Where the proof key lives* (Tier 3). It is a secret the server holds and the browser
+   never sees. Holding it in a cookie would put something other than an opaque identifier
+   in the browser (BFF-SESS-001), and deriving it from the state would be cleverness in
+   place of a rule. It is stored on the pre-authentication row wrapped under the
+   key-encryption key, as the signing key's private half is (AUTH-KEY-002), with the four
+   columns written together or not at all.
+
+*Chapter text that should change.* `17` BFF-SESS-006 should name the two routes and say
+that both halves are the library's; `07` LIB-HOST-001 should carry the client identifier
+row and the provider address beside the sign-in address; `10` section 4 needs no key.
+
 
 # Rows for chapter 10
 
@@ -5909,7 +5985,8 @@ The subsection each row belongs in is named with it.
 | Declaration | Required | Absent |
 | --- | --- | --- |
 | `PasskeyAddresses` (`changePassword`, `enrol`, `manage`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `passkeyAddresses` or the field of it that is empty. The addresses are the frontend pages `/.well-known/change-password` and `/.well-known/passkey-endpoints` point at (REG-PM-001). |
-| `AuthenticationAddresses` (`signIn`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `authenticationAddresses.signIn`. The address is where an authorization request that is not silent and holds no session is forwarded (AUTH-SESS-012 AC3). |
+| `AuthenticationAddresses` (`signIn`, `provider`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `authenticationAddresses.signIn` or `authenticationAddresses.provider`. The first is where an authorization request that is not silent and holds no session is forwarded (AUTH-SESS-012 AC3). The second is the address the library is mounted at on the authentication application, which is where another application finds `/oidc/authorize` and `/oidc/token` (BFF-SESS-006). |
+| `SignOnClient` (`clientId`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `signOnClient.clientId`. The identifier is what this application calls itself at the provider when it establishes its own session, and the registry holds the one destination a code returns to under it. The secret it presents is not a declaration: it comes from the secrets manager through `ISecretSource.ReadSignOnSecretAsync` and is passed to `AddJanus`, which refuses to start without it with `model.startup.keyunavailable` and `details.key` naming `signOnSecret` (BFF-SESS-006, OPS-SEC-001). |
 | `ImageCodec` (`Reencode`) | optional, and required while any organization shows photos | Startup fails with `model.startup.declarationmissing` and `details.key` naming `imageCodec` where a `photo.enabled.<organization>` key is on and no codec is registered. The callback is `Func<ReadOnlyMemory<byte>, int, CancellationToken, ValueTask<ReadOnlyMemory<byte>?>>`: the uploaded bytes and the longest side in pixels the stored image is held to, answering the re-encoded JPEG with every metadata segment removed, or nothing where the bytes are not an image the deployment accepts. Nothing it answers chooses a code: a refusal is `identity.photo.invalid` (IDN-ATTR-002, IDN-ATTR-004). |
 
 ## Shipped default declarations

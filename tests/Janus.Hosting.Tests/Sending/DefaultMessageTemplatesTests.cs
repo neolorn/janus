@@ -179,6 +179,7 @@ public sealed class DefaultMessageTemplatesTests
                 Connection,
                 new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
                 new byte[32],
+                new byte[16],
                 HostFixture.Declaration(),
                 JanusApplication.Public)
             .BuildServiceProvider()

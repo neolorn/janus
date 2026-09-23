@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -178,6 +179,26 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// BFF-SESS-006, LIB-HOST-001, D-162: which client of the provider an application
+    /// is has no default either, so a deployment that declared none is stopped as it
+    /// starts rather than at the first person who arrives holding no session.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task BFF_SESS_006_ADeploymentThatDeclaredNoSignOnClientIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using IHost deployment = Deployed(client: false);
+
+        StartupException refused = await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(cancellationToken));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        Assert.Equal("signOnClient.clientId", refused.Failure?.Details["key"].GetString());
+    }
+
+    /// <summary>
     /// IDN-ATTR-002, LIB-HOST-001: the library reads no image, so a deployment whose
     /// policy shows photos and which declared no codec is stopped as it starts rather
     /// than meeting the first upload with nothing to read it.
@@ -323,9 +344,11 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool handlers = true,
         bool addresses = true,
         bool signIn = true,
+        bool client = true,
         bool codec = false) =>
         new HostBuilder()
-            .ConfigureServices(services => Declared(services, catalogue, handlers, addresses, signIn, codec))
+            .ConfigureServices(services =>
+                Declared(services, catalogue, handlers, addresses, signIn, client, codec))
             .Build();
 
     // The library registered over this deployment, as the host's own code registers
@@ -336,6 +359,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool handlers = true,
         bool addresses = true,
         bool signIn = true,
+        bool client = true,
         bool codec = false,
         string? connection = null)
     {
@@ -364,13 +388,21 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
 
         if (signIn)
         {
-            services.AddSingleton(new AuthenticationAddresses("https://accounts.example.test/signin"));
+            services.AddSingleton(new AuthenticationAddresses(
+                "https://accounts.example.test/signin",
+                "https://accounts.example.test"));
+        }
+
+        if (client)
+        {
+            services.AddSingleton(new SignOnClient("this-application"));
         }
 
         return services.AddJanus(
             connection ?? host.ConnectionString,
             new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
             new byte[32],
+            Encoding.UTF8.GetBytes("the secret this application presents"),
             HostFixture.Declaration(),
             JanusApplication.Public);
     }
