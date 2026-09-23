@@ -18,6 +18,7 @@ namespace Janus.Authentication.Tests;
 internal sealed class AccessGateInMemory : IAccessGate
 {
     private readonly HashSet<(SubjectId Subject, OrganizationId Organization, Permission Permission)> _granted = [];
+    private readonly HashSet<(OrganizationId Organization, Permission Permission)> _everyone = [];
     private readonly List<(AuditRecordId Correlation, AccessExplanation Explanation)> _refusals = [];
 
     /// <summary>
@@ -39,6 +40,15 @@ internal sealed class AccessGateInMemory : IAccessGate
     public void Grant(SubjectId subject, OrganizationId organization, Permission permission) =>
         _granted.Add((subject, organization, permission));
 
+    /// <summary>
+    /// Grants every principal a permission within an organization, for a test that is
+    /// not about who holds it.
+    /// </summary>
+    /// <param name="organization">The organization.</param>
+    /// <param name="permission">The permission.</param>
+    public void GrantEveryone(OrganizationId organization, Permission permission) =>
+        _everyone.Add((organization, permission));
+
     /// <inheritdoc/>
     public ValueTask<Result> RequireAsync(
         AccessContext context,
@@ -48,7 +58,8 @@ internal sealed class AccessGateInMemory : IAccessGate
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (context.Effective is SubjectId subject && _granted.Contains((subject, organization, permission)))
+        if (context.Effective is SubjectId subject
+            && (_granted.Contains((subject, organization, permission)) || _everyone.Contains((organization, permission))))
         {
             return ValueTask.FromResult(Result.Success());
         }

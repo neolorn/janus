@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- A loosening of runtime configuration, the named restriction set and the alert
+  destinations included, is refused unless the caller also holds `system:administer`
+  in the administrative organization. A tightening asks nothing more.
+
 - `IAccessGate.ResolveAsync` no longer takes an organization: a refusal's correlation
   identifier resolves for a caller holding `audit:read` in the administrative
   organization, whichever organization the refusal was recorded in.

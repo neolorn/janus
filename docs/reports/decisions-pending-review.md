@@ -6530,6 +6530,45 @@ administrative organization as entry 175 places the audit trail.
 *Chapter text that should change.* 09 section 8a could say that the entries carry the
 record's codes and plain details and not the values held under the subject's key.
 
+---
+
+## 178. Every loosening of runtime configuration also needs `system:administer`
+
+**Phase 8 · 2026-09-23 · Tier 3 · OPS-CFG-002, 10 section 2.1, AUTH-ABUSE-004, OPS-ALERT-004a**
+
+*The question.* 10 section 2.1 gives `system:administer` as governing "**Loosening**
+configuration changes (OPS-CFG-002) and granting the seeded administrative role", and
+`config:manage` as "Changing configuration". The `restriction:edit` row says "Every
+edit is a step-up action; a loosening also needs a reason and alerts" and names no
+second permission. The alerting destination keys change through
+`PUT /admin/config/{key}` (10 section 5, `alerting:destinations`). No chapter says
+where the permission to loosen is asked, or whether the restriction set, which is
+runtime configuration (D-142), is one of the "configuration changes" it governs.
+
+*The readings.*
+
+1. `config:manage` alone; `system:administer` is never asked on a change.
+2. `system:administer` asked on a loosening through `PUT /admin/config/{key}` only.
+3. `system:administer` asked on every loosening of runtime configuration, the
+   restriction set and the alerting destinations included, where the direction is
+   classified.
+
+*Chosen: 3, the strictest reading.* The one operation every runtime write goes through
+(`ConfigurationAdministration`) asks it in the administrative organization as soon as
+it has read the value in force and found the change to be a loosening, before the
+step-up and the reason. It is asked in the same transaction as the read that decides
+the direction, so a concurrent change cannot turn a tightening into an unpermitted
+loosening. A tightening asks nothing more than the route's own permission. Reading 1
+lets a holder of `config:manage` loosen what 10 section 2.1 reserves; reading 2 leaves
+the restriction set, the widest loosening a send can meet, to `restriction:edit` alone.
+
+*Tests that pin it.*
+`ConfigurationAdministrationTests.OPS_CFG_002_ALooseningIsRefusedWithoutSystemAdministerAsync`,
+`ConfigurationAdministrationTests.OPS_CFG_002_ATighteningNeedsNoSystemAdministerAsync`,
+`ConfigurationEndpointTests.OPS_CFG_002_ALooseningRequiresSystemAdministerAsync`.
+
+*Chapter text that should change.* The `restriction:edit` row of 10 section 2.1 could
+say that a loosening also needs `system:administer`, or say that it does not.
 
 # Rows for chapter 10
 

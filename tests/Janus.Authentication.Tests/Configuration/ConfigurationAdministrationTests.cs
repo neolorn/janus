@@ -4,6 +4,8 @@ using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Janus.Authentication.Configuration;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Policies;
+using Janus.Authentication.Tests.Policies;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Xunit;
@@ -30,9 +32,22 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
+    private readonly AccessGateInMemory _gate = new();
+    private readonly AdministrativeOrganizationInMemory _administrative = new();
+    private readonly OrganizationId _administering;
+
+    /// <summary>
+    /// A deployment with an administrative organization, in which a test grants the
+    /// permission to loosen to whoever it has make a change.
+    /// </summary>
+    public ConfigurationAdministrationTests()
+    {
+        _administering = OrganizationId.New(_clock);
+        _administrative.Organization = _administering;
+    }
 
     private ConfigurationAdministration Administration =>
-        new(_configuration, _changes, _work, _clock);
+        new(_configuration, _changes, new AdministrativeScope(_gate, _administrative), _work, _clock);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
@@ -196,6 +211,54 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-CFG-002 and chapter 10 section 2.1: a loosening is the administrator's, so a
+    /// caller without <c>system:administer</c> is refused it whatever the session
+    /// proved, and nothing is written.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_CFG_002_ALooseningIsRefusedWithoutSystemAdministerAsync()
+    {
+        Result changed = await Administration.ChangeAsync(
+            Settings.SessionAal2Inactivity,
+            TimeSpan.FromHours(6),
+            "a support window",
+            Satisfied,
+            AccessContext.Of(SubjectId.New(_randomness)),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ErrorCodes.Denied,
+            changed.Match(() => throw new Xunit.Sdk.XunitException("The change was not refused."), error => error).Code);
+
+        Assert.Empty(_changes.Written);
+        Assert.Equal(Settings.SessionAal2Inactivity.Default, await InForceAsync(Settings.SessionAal2Inactivity));
+    }
+
+    /// <summary>
+    /// OPS-CFG-002 AC1 and chapter 10 section 2.1: a tightening costs nothing, the
+    /// permission to loosen included.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_CFG_002_ATighteningNeedsNoSystemAdministerAsync()
+    {
+        Result changed = await Administration.ChangeAsync(
+            Settings.SessionAal2Inactivity,
+            TimeSpan.FromMinutes(30),
+            reason: null,
+            Wanting,
+            AccessContext.Of(SubjectId.New(_randomness)),
+            TestContext.Current.CancellationToken);
+
+        changed.Switch(
+            () => { },
+            error => throw new Xunit.Sdk.XunitException($"The change was refused: {error.Code}."));
+
+        Assert.False(Assert.Single(_changes.Written).Loosening);
+    }
+
+    /// <summary>
     /// OPS-CFG-005: background work changes no setting, because a record of a change
     /// nobody made answers for nothing.
     /// </summary>
@@ -251,7 +314,7 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
             value,
             reason,
             challenge,
-            AccessContext.Of(actor ?? SubjectId.New(_randomness)),
+            AccessContext.Of(Administrator(actor)),
             TestContext.Current.CancellationToken)).Switch(
             () => { },
             error => throw new Xunit.Sdk.XunitException($"The change was refused: {error.Code}."));
@@ -266,8 +329,19 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
             value,
             reason,
             challenge,
-            AccessContext.Of(SubjectId.New(_randomness)),
+            AccessContext.Of(Administrator(actor: null)),
             TestContext.Current.CancellationToken)).Match(
             () => throw new Xunit.Sdk.XunitException("The change was not refused."),
             error => error);
+
+    // Whoever a test has make a change holds the permission to loosen, so that what
+    // the test is about is what decides.
+    private SubjectId Administrator(SubjectId? actor)
+    {
+        SubjectId administrator = actor ?? SubjectId.New(_randomness);
+
+        _gate.Grant(administrator, _administering, Permissions.SystemAdminister);
+
+        return administrator;
+    }
 }

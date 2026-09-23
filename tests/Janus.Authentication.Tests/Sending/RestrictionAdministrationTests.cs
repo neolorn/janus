@@ -5,8 +5,10 @@ using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Janus.Authentication.Configuration;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Policies;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Tests.Configuration;
+using Janus.Authentication.Tests.Policies;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Xunit;
@@ -39,17 +41,31 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
+    private readonly AccessGateInMemory _gate = new();
+    private readonly AdministrativeOrganizationInMemory _administrative = new();
 
     /// <summary>
-    /// A deployment that has named the one key with no default.
+    /// A deployment that has named the one key with no default, administered by
+    /// whoever edits it here.
     /// </summary>
-    public RestrictionAdministrationTests() =>
+    public RestrictionAdministrationTests()
+    {
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
+
+        var administrative = OrganizationId.New(_clock);
+        _administrative.Organization = administrative;
+        _gate.GrantEveryone(administrative, Permissions.SystemAdminister);
+    }
 
     private RestrictionAdministration Administration =>
         new(
             _configuration,
-            new ConfigurationAdministration(_configuration, _changes, _work, _clock),
+            new ConfigurationAdministration(
+                _configuration,
+                _changes,
+                new AdministrativeScope(_gate, _administrative),
+                _work,
+                _clock),
             _ledger,
             _audit,
             RestrictionKeySuppliers.None,
