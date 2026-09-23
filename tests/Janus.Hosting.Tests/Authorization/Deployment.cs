@@ -294,6 +294,36 @@ internal sealed class Deployment(HostFixture fixture)
     }
 
     /// <summary>
+    /// Requests the organization's deletion, as the operation that suspends it does.
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of writing it.</returns>
+    public async Task SuspendAsync(CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await fixture.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE identity.organizations SET deletion_requested_at = @at WHERE id = @organization;",
+            new { at = Noon, organization = Organization.Value },
+            cancellationToken: cancellationToken));
+    }
+
+    /// <summary>
+    /// Cancels the organization's deletion, as the operation that restores it does.
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of writing it.</returns>
+    public async Task RestoreAsync(CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await fixture.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE identity.organizations SET deletion_requested_at = NULL WHERE id = @organization;",
+            new { organization = Organization.Value },
+            cancellationToken: cancellationToken));
+    }
+
+    /// <summary>
     /// Writes a group.
     /// </summary>
     /// <param name="cancellationToken">Abandons the operation.</param>

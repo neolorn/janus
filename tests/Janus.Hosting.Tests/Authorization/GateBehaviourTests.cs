@@ -14,7 +14,7 @@ namespace Janus.Hosting.Tests.Authorization;
 /// <summary>
 /// What the gate decides as the rows change under it
 /// (AUTHZ-GRANT-002, AUTHZ-GRANT-004, AUTHZ-INHERIT-001, AUTHZ-SCOPE-001,
-/// AUTHZ-CACHE-001, AUTHZ-GATE-005, AUTHZ-PRIN-003).
+/// AUTHZ-CACHE-001, AUTHZ-GATE-005, AUTHZ-PRIN-003, IDN-ORG-003).
 /// </summary>
 [Trait("kind", "integration")]
 public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFixture>
@@ -73,6 +73,37 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
         await nested.Deployment.RevokeAsync(grant, TestContext.Current.CancellationToken);
 
         Assert.False(await ChecksAsync(nested.Account, nested.Record));
+    }
+
+    /// <summary>
+    /// IDN-ORG-003 AC1 and AC2: a grant of an organization whose deletion was requested
+    /// confers nothing on the next request, and confers again once the request is
+    /// cancelled, the grant itself untouched.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_ORG_003_AC1_ASuspendedOrganizationConfersNothingAsync()
+    {
+        Nested nested = await NestAsync();
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Top,
+            false,
+            null,
+            null,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(await ChecksAsync(nested.Account, nested.Record));
+
+        await nested.Deployment.SuspendAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(await ChecksAsync(nested.Account, nested.Record));
+
+        await nested.Deployment.RestoreAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(await ChecksAsync(nested.Account, nested.Record));
     }
 
     /// <summary>

@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- A grant of an organization whose deletion has been requested confers nothing from
+  the next request, in checks, filters and capability arrays alike, and confers again
+  once the request is cancelled. `identity.effective_grants` leaves such grants out.
+
 - A loosening of runtime configuration, the named restriction set and the alert
   destinations included, is refused unless the caller also holds `system:administer`
   in the administrative organization. A tightening asks nothing more.
