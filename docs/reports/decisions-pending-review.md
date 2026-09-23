@@ -7118,6 +7118,229 @@ was read and refused.
 group holds a member, belongs to a group, or was given a grant, so it cannot be
 removed; 409", and 09 section 8a could list it under `DELETE /admin/groups`.
 
+---
+
+## 193. What the organization lifecycle routes carry, and the policy row a new organization gets
+
+**Phase 8 · 2026-09-23 · Tier 2 · 09 section 8a, IDN-ORG-002, IDN-ORG-003, 10 section 4, API-CONV-002**
+
+*The question.* 09 section 8a gives `POST /admin/organizations`, which "Creates an
+organization with its policy row (IDN-ORG-002)", and
+`POST /admin/organizations/{id}/delete` · `/delete/cancel`, "Request → suspend → grace
+→ erasure, cancellable (IDN-ORG-003)", with no body, no answer and no word on a repeat.
+10 section 4 gives `policy.<organization>` a default of "`{}` (no override: every field
+inherits `policy.default`)", "one key per organization identifier, created empty when the
+organization is". The configuration store had no write for one member of such a key.
+
+*The readings and the choices.*
+
+1. `POST /admin/organizations` carries `{ name, reason }` and answers 201 `{ id }`.
+   Chosen, as `POST /admin/groups` answers (entry 190).
+2. The policy row: written as `{}` in the transaction that creates the organization,
+   through a new `IConfigurationStore.WriteAsync` for one member of a family, or left
+   unwritten since an unwritten member already reads as `{}`. Chosen: written. The
+   chapter says the key is created with the organization, and a row the deployment
+   holds is what `ReadWrittenAsync` answers for. The write puts in force the value
+   already read, so it carries no `ops.configuration.changed` record; the organization's
+   own record (entry 197) is what answers for it.
+3. `/delete` and `/delete/cancel` carry `{ "reason": "..." }` and answer 204. A request
+   for an organization already being deleted, and a cancellation for one that is not,
+   answer 204 and write and record nothing. Chosen: the state asked for holds, as for a
+   group member already held (entry 190).
+4. A name or reason blank or past 1024 characters after trimming, and an organization
+   the deployment does not hold, answer 400 `api.request.malformed` naming `name`,
+   `reason` or `id`. Chosen.
+
+*Tests that pin it.*
+`OrganizationEndpointTests.IDN_ORG_002_AnOrganizationIsCreatedAsync`,
+`OrganizationEndpointTests.IDN_ORG_003_ASecondRequestChangesNothingAsync`,
+`OrganizationEndpointTests.IDN_ORG_004_ARequestIsCancelledOnlyWithinTheWindowAsync`,
+`OrganizationEndpointTests.IDN_ORG_002_WhatAChangeNamesMustBeReadableAsync`,
+`OrganizationDirectoryTests.IDN_ORG_002_AnOrganizationCreatedIsFoundAsync`,
+`ConfigurationStoreTests.OPS_CFG_008_AC1_AWrittenMemberOfAFamilyIsInForceForTheNextReadAsync`,
+`ConfigurationStoreTests.WriteAsync_AMemberOfAProtectedFamily_IsRefusedAndWritesNothingAsync`,
+`ConfigurationStoreTests.WriteAsync_AMemberValueTheFamilyDoesNotAdmit_IsRefusedAsync`.
+
+*Chapter text that should change.* 09 section 8a could give the bodies of the three
+routes, the 201 and 204 answers, the 400s and the answer to a repeat, and say the policy
+row is `{}` and written without a configuration record.
+
+---
+
+## 194. `organization:manage` is asked in the administrative organization
+
+**Phase 8 · 2026-09-23 · Tier 3 · 10 section 2.1, IDN-ORG-003, AUTHZ-SCOPE-001**
+
+*The question.* 10 section 2.1 gives `organization:manage` as "Organization lifecycle,
+policy, and deletion cancellation" and does not say where it is asked. IDN-ORG-003 says
+of a deletion request "Organization suspends immediately; access stops", which the
+effective grants view now makes true of every grant of the organization (commit
+`0f80902`, entry 196).
+
+*The readings.*
+
+1. Asked in the organization named in the path, as `group:manage` is asked in the
+   group's (entry 190); creation, which names none, asked in the administrative one.
+2. Asked in the administrative organization for all three routes.
+
+*Chosen: 2, the strictest reading.* Under 1 an organization's own administrators could
+delete it, and once they had, the grant that would cancel the request confers nothing,
+so the request could only be undone by carving an exception into the suspension. Under
+2 the permission to end an organization's access and to give it back sits where a
+suspension never reaches, and a permission held in the organization itself grants
+nothing here.
+
+*Tests that pin it.*
+`OrganizationEndpointTests.IDN_ORG_002_TheLifecycleIsGovernedFromTheAdministrativeOrganizationAsync`.
+
+*Chapter text that should change.* 10 section 2.1 could say that `organization:manage`
+is asked in the administrative organization.
+
+---
+
+## 195. A deletion request and its cancellation are stepped up under a new gate `organization:delete`
+
+**Phase 8 · 2026-09-23 · Tier 3 · 09 section 8a, 10 section 5a, AUTH-STEP-001, IDN-LIFE-013**
+
+*The question.* 10 section 5a lists the library's step-up actions "once here so a
+builder does not have to infer them endpoint by endpoint", and names none for
+`/admin/organizations/{id}/delete` or `/delete/cancel`. 09 section 8a says "step-up
+applies where the operation loosens a control (OPS-CFG-002) or touches another person's
+account". A deletion request ends every member's sessions (entry 196); a cancellation
+gives every member back what the organization grants. 09 section 8a steps up the same
+pair for one account: `POST /admin/accounts/{subject}/suspend` · `/reactivate`,
+"reactivation restores grants exactly (IDN-LIFE-013). Requires step-up".
+
+*The readings.*
+
+1. Neither is stepped up, since 10 section 5a names no gate for them.
+2. Both are stepped up under a gate name 10 section 5a already has (`grant:manage` or
+   `account:suspend`).
+3. Both are stepped up under a new gate `organization:delete`, "Request or cancel an
+   organization's deletion", judged last as every step-up is; creating an organization,
+   which touches no account, is not stepped up.
+
+*Chosen: 3, the strictest reading.* 09 section 8a's own rule reaches both routes, and
+the account pair it steps up is the same change made to one person. A borrowed name
+would let a host that loosens the gate for grants or for one account loosen it for a
+whole organization without saying so. One name for the pair is the smaller surface, as
+`identifier:add` covers an add and a replace; `StepUpAction.OrganizationDelete` is
+added to the closed set.
+
+*Tests that pin it.*
+`OrganizationEndpointTests.AUTH_STEP_001_ADeletionAndItsCancellationAreAStepUpActionAsync`,
+`VocabularyContractTests` (the step-up names).
+
+*Chapter text that should change.* 10 section 5a could add the row `organization:delete`
+| Request or cancel an organization's deletion | `POST /admin/organizations/{id}/delete`,
+`/delete/cancel`; 09 section 8a could say "Requires step-up" on that row.
+
+---
+
+## 196. A deletion request ends every member session, and a suspended organization's grants confer nothing
+
+**Phase 8 · 2026-09-23 · Tier 3 · IDN-ORG-003 AC1 and AC2, IDN-ORG-001, entry 155**
+
+*The question.* IDN-ORG-003 AC1: "Requesting deletion halts member access within one
+request cycle: the first request on any member session that reaches the session record
+after the commit is refused." AC2: "Cancelling on day 29 restores all memberships and
+grants intact." Entry 155 recorded this criterion as "the one point of the three that
+leaves a hole". Sessions carry no organization, and
+IDN-ORG-001 makes an organization "NOT a tenancy or isolation boundary".
+
+*The readings.*
+
+1. Only the grants stop: the effective grants view leaves out every grant of an
+   organization whose deletion was requested, and sessions live on.
+2. As 1, and every live session of every current member ends in the transaction that
+   suspends, the requester's own where they are a member.
+3. As 2, and a member cannot sign in again while the organization is suspended.
+
+*Chosen: 2, the strictest reading the chapters allow.* Reading 1 leaves a member's
+session answering every request that needs no grant, which AC1 refuses. Reading 3 would
+shut a person out of their own account, which belongs to the pool and not the
+organization (IDN-ORG-001), including the privacy rights exercised through it and any
+other membership they hold; no chapter ties signing in to an organization. The grants
+half shipped in commit `0f80902` (`identity.effective_grants` joins the organization and
+leaves out a row whose `deletion_requested_at` is set, so checks, filters and
+capability arrays all see nothing); the sessions half ships with the lifecycle routes.
+Ended sessions are not given back on cancellation: AC2 names memberships and grants,
+and both are untouched. The "who can access" read of `GrantStore.OnAsync` still reads
+the grants table; it is brought onto the view with the reverse lookup of
+AUTHZ-DERIVE-007 in this phase.
+
+*Tests that pin it.*
+`GateBehaviourTests.IDN_ORG_003_AC1_ASuspendedOrganizationConfersNothingAsync`,
+`OrganizationEndpointTests.IDN_ORG_003_AC1_ADeletionRequestEndsEveryMemberSessionAsync`,
+`OrganizationDirectoryTests.IDN_ORG_003_AC1_OnlyCurrentMembersAreNamedAsync`,
+`OrganizationDirectoryTests.IDN_ORG_004_ARequestIsKeptUntilItIsCancelledAsync`.
+
+*Chapter text that should change.* IDN-ORG-003 could say that the request ends every
+member session and that the organization's grants confer nothing while it is
+suspended, and that a member may still sign in to their own account.
+
+---
+
+## 197. Every lifecycle change carries a reason and is audited under the organization
+
+**Phase 8 · 2026-09-23 · Tier 3 · IDN-AUD-001, IDN-ORG-003, 10 section 5**
+
+*The question.* No chapter says whether creating an organization, requesting its
+deletion or cancelling the request carries a reason or is audited, and 10 section 5 has
+no audit action for any of them. Only the erasure is recorded
+(`identity.organization.erased`).
+
+*The readings.*
+
+1. No reason and no record.
+2. A record without a reason.
+3. Each carries a reason of 1 to 1024 characters (400 `api.request.malformed` naming
+   `reason` otherwise) and is recorded as `identity.organization.created`,
+   `identity.organization.deletionrequested` or
+   `identity.organization.deletioncancelled`, security category, filed under the
+   organization, the actor as both identities, details `{ reason }`.
+
+*Chosen: 3, the strictest reading*, as for a grant (entry 183) and a group (entry 191).
+A request ends every member session and a cancellation gives back every grant; both
+are changes someone must answer for. A repeat that changes nothing records nothing
+(entry 193).
+
+*Tests that pin it.*
+`OrganizationEndpointTests.IDN_ORG_002_AnOrganizationIsCreatedAsync`,
+`OrganizationDirectoryTests.IDN_ORG_003_AChangeIsRecordedUnderTheOrganizationAsync`,
+`AuditActionsTests.IDN_AUD_001_TheSetOfActionsIsClosed`.
+
+*Chapter text that should change.* 10 section 5 could list the three actions (rows
+under "Rows for chapter 10"); 09 section 8a could name the reason on each route.
+
+---
+
+## 198. A cancellation after the window answers `identity.deletion.windowelapsed`
+
+**Phase 8 · 2026-09-23 · Tier 2 · IDN-ORG-003, 10 section 1.1, 10 section 4**
+
+*The question.* IDN-ORG-003 is cancellable "at any point before the window closes"
+and names no refusal for after it. 10 section 1.1 has
+`identity.deletion.windowelapsed`, "The deletion grace window has closed; cancellation
+is no longer possible", sourced to the account's deletion.
+
+*The readings.*
+
+1. A new code `identity.organization.windowelapsed`.
+2. The existing code, 422, for an organization whose request is at least
+   `organization.deletion.grace` old or that was erased, whether or not the pass that
+   erases has reached it yet.
+
+*Chosen: 2*, the smaller surface; the row's meaning holds word for word for an
+organization.
+
+*Tests that pin it.*
+`OrganizationEndpointTests.IDN_ORG_004_ARequestIsCancelledOnlyWithinTheWindowAsync`.
+
+*Chapter text that should change.* The source column of
+`identity.deletion.windowelapsed` in 10 section 1.1 could add IDN-ORG-003, and 09
+section 8a could list it under `/delete/cancel`.
+
 
 # Rows for chapter 10
 
@@ -7259,6 +7482,9 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `identity.credential.labelled` | routine | `AuditActions.CredentialLabelled` | A credential was given or renamed a label by its holder. (REG-PM-002) |
 | `identity.deletion.cancelled` | routine | `AuditActions.DeletionCancelled` | A deletion was cancelled inside its grace window. (IDN-LIFE-014) |
 | `identity.deletion.requested` | routine | `AuditActions.DeletionRequested` | A deletion was requested, which opens the grace window it can be brought back from. (IDN-LIFE-014) |
+| `identity.organization.created` | security | `AuditActions.OrganizationCreated` | An organization was created, with its policy key holding no override. Details carry `reason`; the row is filed under the organization. (IDN-ORG-002, entry 197) |
+| `identity.organization.deletioncancelled` | security | `AuditActions.OrganizationDeletionCancelled` | An organization's deletion request was cancelled inside its window, which gives back every grant it holds. Details carry `reason`. (IDN-ORG-003, entry 197) |
+| `identity.organization.deletionrequested` | security | `AuditActions.OrganizationDeletionRequested` | An organization's deletion was requested: it is suspended and every member session ended. Details carry `reason`. (IDN-ORG-003, entry 197) |
 | `identity.organization.erased` | routine | `AuditActions.OrganizationErased` | An organization's deletion grace window elapsed and the erasure executed. Details carry `organization`, `deletingSince` and `membershipsEnded`; the row names no subject and no actor. (IDN-ORG-003) |
 | `identity.preferences.changed` | routine | `AuditActions.PreferencesChanged` | The account's preference values were changed, recorded by key and never by value. (REG-PREF-001) |
 | `identity.profile.changed` | routine | `AuditActions.ProfileChanged` | A profile attribute of the account was changed. (IDN-ATTR-001) |

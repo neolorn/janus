@@ -118,6 +118,28 @@ public static class AuditActions
     public static AuditAction OrganizationErased { get; } = AuditAction.Parse("identity.organization.erased");
 
     /// <summary>
+    /// An organization was created, with no override of the system policy.
+    /// </summary>
+    /// <remarks>Implements IDN-ORG-002 and IDN-AUD-001.</remarks>
+    public static AuditAction OrganizationCreated { get; } = AuditAction.Parse("identity.organization.created");
+
+    /// <summary>
+    /// An organization's deletion was requested, which suspended it and opened the
+    /// grace window.
+    /// </summary>
+    /// <remarks>Implements IDN-ORG-003 and IDN-AUD-001.</remarks>
+    public static AuditAction OrganizationDeletionRequested { get; } =
+        AuditAction.Parse("identity.organization.deletionrequested");
+
+    /// <summary>
+    /// An organization's deletion was cancelled inside its grace window, which lifted
+    /// the suspension.
+    /// </summary>
+    /// <remarks>Implements IDN-ORG-003 and IDN-AUD-001.</remarks>
+    public static AuditAction OrganizationDeletionCancelled { get; } =
+        AuditAction.Parse("identity.organization.deletioncancelled");
+
+    /// <summary>
     /// A takedown was triggered, naming what raised it and the reason written for it.
     /// </summary>
     /// <remarks>Implements IDN-LIFE-003, chapter 10 section 5.</remarks>

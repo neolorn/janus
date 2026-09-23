@@ -133,6 +133,7 @@ internal sealed class Deployment : IAsyncDisposable
         Signals = new RegistrationSignalsInMemory(Clock);
         Grants = new OidcAuthorizationStoreInMemory(Tokens);
         Provider = new ProviderInMemory(this);
+        Organizations = new Janus.Authentication.Tests.Organizations.OrganizationsInMemory(Memberships);
 
         Declared = preferences ?? PreferenceDeclarations.None;
         Accounts = new AccountDirectoryInMemory(Declared);
@@ -452,6 +453,17 @@ internal sealed class Deployment : IAsyncDisposable
     public Janus.Authorization.Tests.Groups.GroupAuditInMemory GroupChanges { get; } = new();
 
     /// <summary>
+    /// The organizations the deployment holds, their members those placed in
+    /// <see cref="Memberships"/>.
+    /// </summary>
+    public Janus.Authentication.Tests.Organizations.OrganizationsInMemory Organizations { get; }
+
+    /// <summary>
+    /// The changes to organizations the deployment wrote down.
+    /// </summary>
+    public Janus.Authentication.Tests.Organizations.OrganizationAuditInMemory OrganizationChanges { get; } = new();
+
+    /// <summary>
     /// The records the host registered.
     /// </summary>
     public Janus.Authorization.Tests.Resources.ResourcesInMemory Resources { get; } = new();
@@ -472,6 +484,7 @@ internal sealed class Deployment : IAsyncDisposable
         PrivacyAdministrative.Organization = organization;
         GateAdministrative.Organization = organization;
         Gate.Administrative = organization;
+        Organizations.Seed(organization, administrative: true);
     }
 
     /// <summary>
@@ -694,6 +707,9 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IGrants, Janus.Authorization.Grants.GrantService>();
         _ = services.AddScoped<IRoles, Janus.Authorization.Roles.RoleService>();
         _ = services.AddScoped<IGroups, Janus.Authorization.Groups.GroupService>();
+        _ = services.AddSingleton<Janus.Authentication.Organizations.IOrganizationDirectory>(Organizations);
+        _ = services.AddSingleton<Janus.Authentication.Organizations.IOrganizationAudit>(OrganizationChanges);
+        _ = services.AddScoped<IOrganizations, Janus.Authentication.Organizations.OrganizationService>();
         _ = services.AddScoped<SigningKeys>();
         _ = services.AddScoped<OidcService>();
         _ = services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());

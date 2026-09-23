@@ -47,6 +47,7 @@ public sealed class VocabularyContractTests
         "restriction:edit",
         "restriction:grant",
         "breakglass:replace",
+        "organization:delete",
     ];
 
     // The catalogue of chapter 02 AUTH-FACT-002 that carries an identifier.

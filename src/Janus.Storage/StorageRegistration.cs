@@ -7,6 +7,7 @@ using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Oidc;
+using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Recovery;
@@ -43,6 +44,7 @@ using Janus.Storage.Authentication.Credentials;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Identifiers;
 using Janus.Storage.Authentication.Oidc;
+using Janus.Storage.Authentication.Organizations;
 using Janus.Storage.Authentication.Passwords;
 using Janus.Storage.Authentication.Policies;
 using Janus.Storage.Authentication.Recovery;
@@ -239,6 +241,8 @@ internal static class StorageRegistration
         services.AddScoped<IGrantStore, GrantStore>();
         services.AddScoped<IGroupStore, GroupStore>();
         services.AddScoped<IGroupAudit, GroupAudit>();
+        services.AddScoped<IOrganizationDirectory, OrganizationDirectory>();
+        services.AddScoped<IOrganizationAudit, OrganizationAudit>();
         services.AddScoped<IResourceStore, ResourceStore>();
 
         services.AddScoped<IAccessEvaluator, AccessEvaluator>();

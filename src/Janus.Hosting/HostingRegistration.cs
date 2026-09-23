@@ -10,6 +10,7 @@ using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Oidc;
+using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Recovery;
@@ -32,6 +33,7 @@ using Janus.Hosting.Bff;
 using Janus.Hosting.Configuration;
 using Janus.Hosting.Credentials;
 using Janus.Hosting.Oidc;
+using Janus.Hosting.Organizations;
 using Janus.Hosting.Passwords;
 using Janus.Hosting.Privacy;
 using Janus.Hosting.Recovery;
@@ -328,6 +330,7 @@ public static class HostingRegistration
         services.AddScoped<Janus.Authorization.Gate.AdministrativeScope>();
         services.AddScoped<IGrants, GrantService>();
         services.AddScoped<IRoles, RoleService>();
+        services.AddScoped<IOrganizations, OrganizationService>();
         services.AddScoped<IGroups, GroupService>();
         services.AddScoped<IDerivationMaterialiser, DerivationMaterialiser>();
         services.AddScoped<ModelValidation>();
@@ -384,6 +387,7 @@ public static class HostingRegistration
         options.SerializerOptions.TypeInfoResolverChain.Add(ConfigurationJson.Default);
         options.SerializerOptions.TypeInfoResolverChain.Add(SendingJson.Default);
         options.SerializerOptions.TypeInfoResolverChain.Add(AuthorizationJson.Default);
+        options.SerializerOptions.TypeInfoResolverChain.Add(OrganizationJson.Default);
     }
 
     // The word list is a file a deployment holds beside the application, where it

@@ -229,6 +229,16 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /admin/organizations` creates an organization with its policy key holding no
+  override; `POST /admin/organizations/{id}/delete` suspends one, ending every session
+  of its members, and `POST /admin/organizations/{id}/delete/cancel` restores it inside
+  `organization.deletion.grace` (422 `identity.deletion.windowelapsed` after). All ask
+  `organization:manage` in the administrative organization and a reason, and are
+  recorded in the audit trail; the deletion and its cancellation also need step-up
+  under the new gate `organization:delete`, and the administrative organization is
+  refused with 409 `identity.organization.protected`. `IOrganizations` is the same set
+  of operations in process.
+
 - `IConfigurationStore.WriteAsync` for one member of a key that exists once per
   organization or once per declared category: it puts the value in force for the next
   read, answers what was in force before, and refuses a protected family or a value the
