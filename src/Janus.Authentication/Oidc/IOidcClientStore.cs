@@ -21,18 +21,6 @@ internal interface IOidcClientStore
     ValueTask<OidcClient?> FindAsync(string clientId, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Whether the secret presented is the client's.
-    /// </summary>
-    /// <param name="clientId">Which client.</param>
-    /// <param name="fingerprint">What the presented secret hashes to.</param>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Whether it authenticates.</returns>
-    ValueTask<bool> AuthenticatesAsync(
-        string clientId,
-        byte[] fingerprint,
-        CancellationToken cancellationToken);
-
-    /// <summary>
     /// Every registered client, which is what a deployment's own listing reads.
     /// </summary>
     /// <param name="cancellationToken">Abandons the operation.</param>

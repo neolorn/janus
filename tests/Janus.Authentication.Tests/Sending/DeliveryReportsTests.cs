@@ -26,10 +26,6 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
     private readonly ConfigurationInMemory _configuration = new();
     private readonly SendLedgerInMemory _ledger = new();
     private readonly CallbackLedgerInMemory _callbacks = new();
-    private readonly MessageTemplatesInMemory _templates = new();
-    private readonly MailTransportInMemory _mail = new();
-    private readonly SmsTransportInMemory _sms = new();
-    private readonly SmsBalanceLedgerInMemory _balances = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
@@ -42,21 +38,6 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
 
     private DeliveryReports Reports =>
         new(_configuration, _ledger, _callbacks, _work, _events, _clock);
-
-    private SendingService Sending =>
-        new(
-            _configuration,
-            _ledger,
-            _templates,
-            _mail,
-            _sms,
-            RestrictionKeySuppliers.None,
-            Considered.Nothing(_work, _clock),
-            new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
-            _work,
-            _events,
-            _clock,
-            _randomness);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
@@ -325,9 +306,9 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
     {
         var reference = SendReference.Draw(_randomness);
 
-        Assert.Equal(32, reference.Fingerprint().Length);
-        Assert.Equal(reference.Fingerprint(), SendReference.FingerprintOf(reference.Value));
-        Assert.NotEqual(reference.Fingerprint(), SendReference.FingerprintOf(reference.Value + "0"));
+        Assert.Equal(32, SendReferences.Of(reference).Length);
+        Assert.Equal(SendReferences.Of(reference), SendReferences.Of(reference.Value));
+        Assert.NotEqual(SendReferences.Of(reference), SendReferences.Of(reference.Value + "0"));
     }
 
     private static PhoneNumber Number(string entered) =>
@@ -358,15 +339,23 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
             () => { },
             error => throw new Xunit.Sdk.XunitException($"The report was refused: {error.Code}."));
 
-    private async Task<SendReference> SentAsync() =>
-        (await Sending.SendAsync(
-            new SendRequest(
-                SendDestination.Of(Phone),
-                MessageKind.VerificationCode,
-                RestrictionPurpose.Verification,
-                "198.51.100.7",
-                "en"),
-            TestContext.Current.CancellationToken)).Match(
-            reference => reference,
-            error => throw new Xunit.Sdk.XunitException($"The send was refused: {error.Code}."));
+    // What the ledger holds after the handler has carried one text message: the two
+    // keys a text message counts against, under the reference the gateway will
+    // report on (AUTH-ABUSE-004, INT-SMS-005).
+    private async Task<SendReference> SentAsync()
+    {
+        var reference = SendReference.Draw(_randomness);
+
+        await _ledger.RecordAsync(
+            SendReferences.Of(reference),
+            [
+                new SendCount(new RestrictionKey("sms.destination", Phone.Value), TimeSpan.FromHours(24)),
+                new SendCount(new RestrictionKey("sms.source", "198.51.100.7"), TimeSpan.FromHours(24)),
+            ],
+            [],
+            _clock.GetUtcNow(),
+            TestContext.Current.CancellationToken);
+
+        return reference;
+    }
 }

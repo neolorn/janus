@@ -8,7 +8,263 @@ against the public contract of LIB-API-001.
 
 ## [Unreleased]
 
+### Changed
+
+- An application now establishes its own session from the one the authentication
+  application holds without a line of host code: `GET /auth/signon` forwards the
+  browser to the provider with proof key and a state bound to its pre-authentication
+  session, `GET /auth/signon/return` trades the code on the server's own connection
+  and drops what came back, and the browser goes on to where it was heading with a
+  session of this application's own. A host declares the client identifier this
+  application is registered under and hands the library the matching secret from its
+  secrets manager, both of which startup now requires; the address of the
+  authentication application is declared beside its sign-in screen.
+
+- The OpenID Connect provider is now the protocol library's throughout. It validates
+  the clients, issues and rotates the codes and the tokens, proves the verifier and
+  catches a reuse, and it keeps its own records in three tables of the library's. What
+  the library still decides is what no protocol server can know: the session record
+  every token is minted from, the kind of client, the one destination a code returns
+  to, and the key that signs, which is the key the deployment's own store holds and
+  publishes. An upgrade runs a migration that drops `oidc_codes` and
+  `oidc_refresh_tokens` and creates `oidc_authorizations`, `oidc_tokens` and
+  `oidc_scopes`; a code or refresh token outstanding at the upgrade does not survive
+  it.
+
+- A browser application's own layer that asks for `offline_access` is now refused
+  where it asks, with the protocol's `invalid_request`, rather than issued a code and
+  handed nothing at the exchange. An authorization request naming a client the registry
+  does not hold is answered 400 rather than 401.
+
+- Codes and refresh tokens are encrypted under a key derived from the deployment's
+  key-encryption key, so every instance reads what any other wrote, a restart loses
+  nothing, and a key rotation leaves the ones already issued readable.
+
+- The records of processing now apply the three rows of the shipped provider register
+  the library itself makes true: the hosting provider always, the mail server while the
+  deployment uses the library's own mail transport, and the password screening service
+  while screening is online. They appear whether or not the deployment declared them,
+  each flagged for a missing agreement reference until it gives one. The rest of the
+  register is still offered rather than applied, and a deployment that declared one of
+  the three reports its own row in place of the shipped default.
+
+- The subject access export now carries every group the account page shows the person,
+  the credentials among them, and the whole standing group. Beside the profile, the
+  identifiers, the preferences and the live sessions it carries the enrolled
+  credentials and the password by property and label, how the recovery code set
+  stands, the browsers the account is known at, its memberships, the roles it holds,
+  the assurance it can reach, and the terms version, notice version and affirmation
+  the terms step recorded. No secret material crosses.
+
+- The privacy dashboard's grant records which of the two things it was: a grant made on
+  the subject's own pages records `dashboard`, and one answering the prompt a material
+  revision raised, over a consent the revision ended and the subject never took back,
+  records `reconsent`. A host granting through the contract still names its own
+  mechanism.
+
+- A purpose declaration now names the legal document that governs its consent, and the
+  privacy notice governs the purposes that name none. A consent is recorded against the
+  version of that document, and a material revision of it ends the live consents of the
+  purposes that name it and of no others, so revising a consent text no longer leaves
+  those consents standing and revising the notice no longer ends consents a separate
+  text governs. A purpose declared on two types against two documents fails startup.
+
+- A carrier reporting a recent change of SIM or of network now withholds the entry a
+  text would carry, instead of only being written down. The second-step challenge
+  offers the account's other methods in its place, and a sign-in that had no other
+  second step is refused with `auth.factor.rejected` rather than completing below what
+  the account asked for. A sign-in link by text is the whole of a sign-in, so it is
+  refused outright; the question is asked of the number and never of the account, so a
+  number no account holds is refused in the same bytes.
+
+- The waiting screen's event stream is woken by the database: the transaction that
+  verifies or completes a registration step announces the session on a PostgreSQL
+  channel, and every instance holding a stream open for it hears the announcement.
+  The stream still reads the state back on an interval, now the configuration key
+  `registration.events.pollinterval`, so a deployment that cannot hear the channel
+  loses promptness and never an event.
+
+- A session cookie that no longer resolves no longer refuses the request. The
+  pipeline clears the cookie and carries the request on as anonymous, so a person
+  whose session ended can reach the sign-in endpoints with the dead cookie still in
+  the browser. The endpoints that answer only a signed-in person are held to a
+  session in one stage, which answers 401 `auth.session.expired`, carrying what has
+  to be done again where the session had ended.
+
+- The outbound addresses the library calls are two configuration keys of its own,
+  `integration.mail.endpoint` and `integration.sms.endpoint`, both protected. A
+  deployment that supplies its own mail or SMS transport leaves them empty and calls
+  its provider wherever it decides. The register a host used to declare its endpoints
+  in is gone: the library checked addresses it never calls, and a host's own outbound
+  calls are the host's to check.
+
+- The audit actions the library records are now one catalogue, `AuditActions`, instead
+  of a code spelled where it happened to be written. The set is closed and a contract
+  test fails on an action added or respelled without the catalogue saying so, as the
+  error codes already do.
+
+- The four preference types are now spelled as the specification spells them:
+  `PreferenceKind.String`, `Boolean`, `Integer` and `Enum`. The names a host reads on
+  the wire are unchanged.
+
+- A refusal from the access gate now carries a correlation identifier whatever the
+  request was made under, background work included. The trail records the refusal with
+  neither identity named, which is the recorded fact rather than an omission, and the
+  database refuses any other kind of event that names neither.
+
+- The serialized model now lists what the maintenance credential may reach: the two
+  audit partition functions it may execute and the rights it holds on the wrapped keys.
+  A reviewer reads them in `artifacts/model.json` beside the rest of the model rather
+  than only in the migration that grants them.
+
+- The case-insensitive collation moves out of the default schema and into the schema
+  the library owns, so nothing of the library's can collide with an object a host holds
+  in `public`. A database already carrying it is moved by a migration.
+
+- A consent is now read against the data subject of the record being acted on rather
+  than against the caller. A host says who that subject is when it registers a record,
+  reading the column its resource type declares for its encrypted fields, and the gate
+  reads that subject's consent for the purpose the action is done for. Staff, system
+  and background callers are gated exactly as the subject's own request is, and a check
+  that names no record, or a record naming no subject, is refused where the purpose
+  rests on consent. A deployment binding a consent-based purpose to a type whose
+  encrypted fields name no one subject column does not start.
+
+- The children's column of the records of processing now follows the `children`
+  sensitivity category a resource type declares, like every other category, instead of
+  being true for every row wherever the deployment admits minors. A deployment that
+  admits minors and declares no children's type carries the new register flag
+  `children-undeclared`, so an empty column is reported rather than read as no
+  children's processing.
+
+- Deciding a privacy request now tells its three refusals apart for the member of staff
+  working the queue: 403 `authz.denied` without the permission, 404
+  `privacy.request.notfound` for an identifier naming no request, and 409
+  `privacy.request.decided` where a decision already stands. All three used to answer
+  alike, which left the queue unworkable without guessing.
+
+- Three privacy refusals now carry codes of their own instead of the general denial. A
+  document or version that was never published answers 404 `privacy.document.notfound`; a
+  grant or withdrawal on a purpose that is undeclared or rests on another basis answers
+  422 `privacy.purpose.noconsent`; a grant before any privacy notice has been published
+  answers 409 `privacy.notice.unpublished`. None of the three is a permission problem, and
+  none reads as one now.
+
+- A WebAuthn creation ceremony now carries who the credential is for: the handle is the
+  account's subject identifier, the name is its primary email and the display name is
+  what the account shows or empty. An authenticator can therefore offer the credential
+  back unprompted. An assertion that returns a handle naming another account, or one the
+  library never issued, is refused as a wrong credential is.
+
+- Where a browser holding no session is sent to sign in is now a declaration with no
+  default. A deployment that registers none does not start, instead of meeting an
+  interactive authorization request with nowhere to forward it. `login_required` is now
+  the answer to `prompt=none` alone, which is what a silent request asks to be told.
+
+- The addresses of the frontend's password and passkey pages are now a declaration with
+  no default. A deployment that registers none does not start, naming the declaration it
+  left out, instead of serving neither well-known document to a password manager. Both
+  documents therefore always answer.
+
+- A request the library cannot read is now answered with the same body as every other
+  refusal: `api.request.malformed`, a correlation identifier, and a `details.member`
+  naming the member the reader stopped at or the one the endpoint required. A 400 used
+  to carry no body at all, which left the one refusal a caller could not trace.
+
+- A browser that already holds a session and asks to register is now refused with
+  `identity.registration.signedin` and 409. It used to be answered with the account
+  document, which put an account's own details on a registration route. Nothing is
+  staged for it either way; the frontend navigates to the account application.
+
 ### Added
+
+- The two default declarations the library was always meant to ship now exist:
+  `LawfulBases.Default`, the six lawful bases with the four properties the library
+  branches on, and `SensitiveCategories.Default`, the eight sensitive-data categories.
+  A deployment declares them instead of writing them out, and a deployment in another
+  jurisdiction declares its own list with its own flags and the library changes not at
+  all. Nothing in the library chooses a path by a basis or a category; the one category
+  read by name is the children's, which is the children's column of the records of
+  processing.
+
+- The erasure at the end of an organization deletion window is built: when the window
+  elapses, every current membership of the organization ends, what the organization was
+  called becomes its own identifier, and the instant the erasure executed is written
+  onto the row. No row is removed and the identifier goes on resolving. The new
+  `OrganizationErased` event carries the organization and how many memberships ended,
+  and the erasure is written to the audit trail as `identity.organization.erased`. A
+  window cancelled inside itself is never reached, and an erasure asked for before the
+  window elapses writes nothing.
+
+- An account holds one membership unless the deployment enables
+  `organization.multiplememberships`. A second one answers
+  `identity.membership.limitreached` and nothing is written; enabling the setting
+  admits it, with no migration and no deploy. A membership the account ended leaves
+  room for another, and a second membership of an organization the account is already
+  a member of is refused whatever the setting says, naming that organization.
+
+- Startup now verifies that the database carries the schema this build was compiled
+  against, before any other check reads a table and before the host's web server
+  starts. A database behind the model answers `model.startup.schemamismatch`, names
+  every migration still owed, and stops the application with a non-zero exit. The check
+  applies nothing, so an un-migrated database is left exactly as it was found, and a
+  database ahead of the model starts, which is the expand half of a rollout.
+
+- Four events reach the host that were missing from the emitted contract:
+  `CredentialEnrolled` when an authenticator reaches active, and `CredentialSuspended`,
+  `CredentialRestored` and `CredentialInvalidated` as a loss report opens, is cancelled
+  and completes. Each carries the credential, its catalogue entry and whose account it
+  is, and the suspension carries when its window ends. None carries secret material.
+
+- The client registry is the one list of return destinations. Every registered client's
+  return address is read at startup and a deployment holding one that is not an absolute
+  origin does not start. The client a destination falls back to is named in the new
+  protected key `redirect.defaultclient`, read against the registry at startup, and a
+  registration begun with a client identifier the registry does not hold now stores that
+  default rather than nothing, so the completion returns the person to it. A deployment
+  that names no default starts and returns nothing, as before.
+
+- An account shows a photo. `GET`, `PUT` and `DELETE /account/photo` read it, replace
+  it and give it up, and the image is served through the session gate as `image/jpeg`
+  from no address a cache could share. Availability is the organization's, held in the
+  new key `photo.enabled.<organization>` and off until an organization is given it; an
+  account of no organization, and one whose organization shows none, is answered as an
+  account with no photo. The library reads no image itself: a deployment declares an
+  `ImageCodec`, which decides by content what an upload is, holds it to
+  `photo.maxdimension` and answers the JPEG that is stored, encrypted under the
+  subject key like any other personal field. A deployment whose policy shows photos
+  and which declared no codec does not start.
+
+- Every runtime configuration change now goes through one operation that classifies it,
+  gates it and writes it down. A change that loosens the deployment, and any change to a
+  key that has no direction, needs the step-up gate met and a written reason; a
+  tightening needs neither. Both are recorded with who made it, the key, the value
+  before and after, the direction, the reason and the time, and the record reads back by
+  setting and by actor. Changing the alert destinations goes through the same operation,
+  and a change with no reason is refused before the destinations being replaced are told.
+
+- The library now ships the words of every message it sends, in English and in Arabic.
+  A deployment that registers a catalogue of its own keeps it; one that registers none
+  sends out of the shipped texts instead of failing to start. The startup check still
+  refuses a deployment whose catalogue has no text for a declared language, or a text
+  message that does not fit one message.
+
+- Publishing an event now answers for itself. An operation records its event inside the
+  transaction that made it true and commits nothing it could not publish, so a change
+  never reaches the database without its event reaching a consumer. Every method of the
+  public contract now returns an outcome, `IEvents.PublishAsync` included.
+
+- A text-message template is now checked against its budget with every place the
+  library fills at its widest, so a template that fits as it is written but not once a
+  code, a link or an alert's detail is in it stops the deployment instead of costing two
+  messages at every send. Nothing is measured at the moment of a send.
+
+- Every message the library sends is now written to its own outbox table inside the
+  transaction that made it necessary, carried from that row, and removed once a
+  transport has taken it. An operation that fails sends nothing, a message undertaken
+  by one that succeeds is not lost with the process, and a transport that refuses
+  leaves the message waiting rather than dropped. The row holds the whole of the
+  message encrypted under a key of its own.
 
 - Startup now refuses a declaration whose encrypted field names no subject column, a
   column the declared type does not hold, or one holding something that is not a
@@ -784,11 +1040,53 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- How long a send counter is kept now follows the restrictions as they stand rather than
+  the interval the send was counted under. The record holds the keyed hash and the times
+  and nothing else, and the read before every send takes with it every record whose
+  newest time is older than the longest interval now declared, so shortening an interval
+  reaches the sends already counted.
+- Notification handling is now a contract a deployment can replace: `INotificationHandler`
+  in `Janus.Core` takes which message goes to which destination in which language, and
+  the shipped handler that renders the deployment's templates and hands them to the mail
+  and SMS transports is registered only if the deployment registers none of its own.
+- The city shown on a session is now resolved by the library from the address the
+  session was used from, and no longer given by the caller: it is not a field on any
+  request. While no location database is present the listing shows no city and the
+  `degradation` condition is raised once a window.
+- A verification code is now an aggregate with a table of its own. It lives
+  `code.verification.lifetime` whatever issued it, dies on the try that reaches
+  `code.verification.attempts`, and is spent by the first right one. The new-device
+  check issues and answers through it, and a sign-in in progress no longer carries a
+  code or a count of wrong ones.
+- The offline leaked-password list now travels in the package. A deployment that holds
+  no corpus file of its own still falls back to a dated list when the range API cannot
+  answer, and the list is refreshed with each release rather than by the operator.
+- The self-hosted compromised-password corpus is now reached at the address
+  `password.blocklist.selfhosted.address` names, over the same range protocol the
+  primary source uses, rather than read from a second file beside the application. A
+  deployment that names `selfHosted` and no address does not start.
+- A password longer than `password.maximum` is now refused with
+  `auth.password.toolong` rather than with the configuration code for a value above a
+  ceiling. A password field no longer answers with a sentence about configuration.
+- A check, a capability page or an explanation on a type a derivation reaches is now
+  refused without the host's rows whatever that derivation confers, rather than only
+  where the role it confers allows what is being asked. A call site that passes today
+  can no longer start faulting because an administrator edited a role.
+- An explanation can now be asked with the host's own rows, and on a type a derivation
+  reaches it names the grant the fact produced: no identifier, the derived kind, the
+  role the derivation confers, and the container it was inherited from. Asked without
+  those rows such a type is refused rather than answered from the stored grants alone.
+  The identifier an explained grant carries is optional for the same reason: a derived
+  grant is a fact being true and no row holds it.
+- A page of capabilities now costs one query over the host's own rows however many
+  permissions it asks for. Every derivation reaching the type is evaluated in that one
+  query, and what the role each confers allows is read from the model, so a page that
+  offers three actions costs what a page offering one costs.
 - A sign-in whose password an invalidation left below the single-factor floor now
   completes and says so, so the person is asked for a new password at the next
   sign-in rather than being locked out.
-- The case-insensitive collation is created in the default schema, because a column
-  names a collation by one identifier and cannot reach one held in another schema.
+- The case-insensitive collation is created in the schema the library owns, like
+  everything else of the library's, and a column names it by that schema.
 - A configuration key loosens the way its row states. Where a row states nothing, a
   key with only a ceiling loosens upward, a key with only a floor loosens downward,
   and a flag loosens away from its default, so a tightening no longer costs the
@@ -814,6 +1112,12 @@ against the public contract of LIB-API-001.
   the identifier began with a digit, which is about half of them.
 
 ### Removed
+
+- `IOidc.FindClientAsync`, `IOidc.MintAsync`, `IOidc.ReuseAsync` and `MintedSession`.
+  The contract now carries the two operations a host calls in process and the library
+  answers over HTTP, `ClaimsAsync` and `KeysAsync`; what the library holds of a session
+  while a token is minted is the provider's own work and never was an operation a host
+  called.
 
 - `alerting.destinationchange.notify`. The notice to the previous destinations is
   not suppressible, so no switch for it exists.

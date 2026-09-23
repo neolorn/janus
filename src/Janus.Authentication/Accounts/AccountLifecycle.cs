@@ -39,7 +39,7 @@ internal sealed class AccountLifecycle(
     IIdentifierDirectory identifiers,
     ILifecycleLinkStore links,
     ISessionStore sessions,
-    SendingService sending,
+    INotificationHandler sending,
     IAccountAudit audit,
     StepUpGuard stepUp,
     IEvents events,
@@ -49,16 +49,16 @@ internal sealed class AccountLifecycle(
     RandomNumberGenerator randomness)
 {
     private static readonly AuditAction Deactivated =
-        AuditAction.Parse("identity.account.deactivated");
+        AuditActions.AccountDeactivated;
 
     private static readonly AuditAction Reactivated =
-        AuditAction.Parse("identity.account.reactivated");
+        AuditActions.AccountReactivated;
 
     private static readonly AuditAction DeletionRequested =
-        AuditAction.Parse("identity.deletion.requested");
+        AuditActions.DeletionRequested;
 
     private static readonly AuditAction DeletionCancelled =
-        AuditAction.Parse("identity.deletion.cancelled");
+        AuditActions.DeletionCancelled;
 
     /// <summary>
     /// Takes the account down at its own request.
@@ -121,7 +121,7 @@ internal sealed class AccountLifecycle(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        await events
+        Result published = await events
             .PublishAsync(
                 new AccountSuspended(now, Key(subject, now), SuspensionOrigin.Self)
                 {
@@ -130,6 +130,11 @@ internal sealed class AccountLifecycle(
                 },
                 cancellationToken)
             .ConfigureAwait(false);
+
+        if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+        {
+            return Result.Failure(unpublished);
+        }
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
@@ -177,7 +182,7 @@ internal sealed class AccountLifecycle(
         await directory.ReinstateAsync(link.Subject, cancellationToken).ConfigureAwait(false);
         await links.RemoveAsync(link.Subject, cancellationToken).ConfigureAwait(false);
 
-        await events
+        Result published = await events
             .PublishAsync(
                 new AccountReactivated(now, Key(link.Subject, now))
                 {
@@ -186,6 +191,11 @@ internal sealed class AccountLifecycle(
                 },
                 cancellationToken)
             .ConfigureAwait(false);
+
+        if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+        {
+            return Result.Failure(unpublished);
+        }
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
@@ -263,7 +273,7 @@ internal sealed class AccountLifecycle(
         _ = await TellAsync(subject, MessageKind.DeletionNotice, source, token.Value, cancellationToken)
             .ConfigureAwait(false);
 
-        await events
+        Result published = await events
             .PublishAsync(
                 new AccountDeletionRequested(now, Key(subject, now), DeletionOrigin.Self, erasesAt)
                 {
@@ -272,6 +282,11 @@ internal sealed class AccountLifecycle(
                 },
                 cancellationToken)
             .ConfigureAwait(false);
+
+        if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+        {
+            return Result.Failure<DateTimeOffset>(unpublished);
+        }
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
@@ -326,7 +341,7 @@ internal sealed class AccountLifecycle(
         await directory.CancelDeletionAsync(link.Subject, cancellationToken).ConfigureAwait(false);
         await links.RemoveAsync(link.Subject, cancellationToken).ConfigureAwait(false);
 
-        await events
+        Result published = await events
             .PublishAsync(
                 new AccountDeletionCancelled(now, Key(link.Subject, now))
                 {
@@ -335,6 +350,11 @@ internal sealed class AccountLifecycle(
                 },
                 cancellationToken)
             .ConfigureAwait(false);
+
+        if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+        {
+            return Result.Failure(unpublished);
+        }
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 

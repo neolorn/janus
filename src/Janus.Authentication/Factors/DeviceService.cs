@@ -127,11 +127,16 @@ internal sealed class DeviceService(
 
         // One browser is remembered per check, so its identifier is what a consumer
         // recognises the repeat of one check by (AUTH-FACT-016).
-        await events
+        Result published = await events
             .PublishAsync(
                 new DeviceVerified(time.GetUtcNow(), Verified + ":" + browser, browser),
                 cancellationToken)
             .ConfigureAwait(false);
+
+        if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+        {
+            return Result.Failure<OpaqueToken>(unpublished);
+        }
 
         return Result.Success(token);
     }

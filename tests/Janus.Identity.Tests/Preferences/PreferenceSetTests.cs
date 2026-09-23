@@ -26,12 +26,12 @@ public sealed class PreferenceSetTests
     [
         new PreferenceDeclaration(
             "theme",
-            PreferenceKind.Choice,
+            PreferenceKind.Enum,
             "dark",
             Choices: new HashSet<string> { "dark", "light" }),
-        new PreferenceDeclaration("text-size", PreferenceKind.Number, "16"),
-        new PreferenceDeclaration("motto", PreferenceKind.Text, string.Empty),
-        new PreferenceDeclaration("beta-features", PreferenceKind.Flag, "false", AdministratorOnly: true),
+        new PreferenceDeclaration("text-size", PreferenceKind.Integer, "16"),
+        new PreferenceDeclaration("motto", PreferenceKind.String, string.Empty),
+        new PreferenceDeclaration("beta-features", PreferenceKind.Boolean, "false", AdministratorOnly: true),
     ]);
 
     /// <summary>

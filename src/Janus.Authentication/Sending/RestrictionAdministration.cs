@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
+using Janus.Authentication.Configuration;
 using Janus.Authentication.Factors;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -16,7 +17,8 @@ namespace Janus.Authentication.Sending;
 /// configuration, stepped up, audited, and alerted on where a change lets more
 /// through than before.
 /// </summary>
-/// <param name="configuration">Where the restriction set is read and written.</param>
+/// <param name="configuration">Where the restriction set is read.</param>
+/// <param name="administration">The one operation a runtime setting is written through.</param>
 /// <param name="ledger">Where credit is added.</param>
 /// <param name="audit">Where the change is written down.</param>
 /// <param name="suppliers">The host-registered key suppliers.</param>
@@ -30,6 +32,7 @@ namespace Janus.Authentication.Sending;
 /// </remarks>
 internal sealed class RestrictionAdministration(
     IConfigurationStore configuration,
+    ConfigurationAdministration administration,
     ISendLedger ledger,
     ISendAudit audit,
     RestrictionKeySuppliers suppliers,
@@ -117,14 +120,23 @@ internal sealed class RestrictionAdministration(
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
-        _ = (await configuration
-                .WriteAsync(Settings.Restrictions, written, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(value => value, error => Held<IReadOnlyList<Restriction>>(error, ref failure));
+        // OPS-CFG-002, OPS-CFG-005: every runtime write goes through the one operation
+        // that classifies it, gates it and writes it down. The restriction set carries
+        // its own direction, so a tightening passes here as it does at this method's
+        // own gate.
+        Result changed = await administration
+            .ChangeAsync(
+                Settings.Restrictions,
+                written,
+                reason,
+                challenge,
+                AccessContext.Of(actor),
+                cancellationToken)
+            .ConfigureAwait(false);
 
-        if (failure is not null)
+        if (changed.Match(() => (Error?)null, error => error) is Error unchanged)
         {
-            return Result.Failure(failure);
+            return Result.Failure(unchanged);
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -133,9 +145,7 @@ internal sealed class RestrictionAdministration(
             .EditedAsync(name, before, replacement, loosening, reason, actor, now, cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
-        await events
+        Result published = await events
             .PublishAsync(
                 new SendingRestrictionChanged(now, Edit + ":" + name + ":" + now.Ticks, name, loosening)
                 {
@@ -144,14 +154,26 @@ internal sealed class RestrictionAdministration(
                 cancellationToken)
             .ConfigureAwait(false);
 
+        if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+        {
+            return Result.Failure(unpublished);
+        }
+
         if (loosening)
         {
-            await events
+            Result alerted = await events
                 .PublishAsync(
                     Alerts.Of(AlertCondition.RestrictionLoosened, name, now, Named(name)),
                     cancellationToken)
                 .ConfigureAwait(false);
+
+            if (alerted.Match(() => (Error?)null, error => error) is Error unalerted)
+            {
+                return Result.Failure(unalerted);
+            }
         }
+
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success();
     }
@@ -230,11 +252,9 @@ internal sealed class RestrictionAdministration(
             .GrantedAsync(name, credit, reason, actor, now, cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
         // The plain key value never leaves this method: the event carries the
         // restriction, the credit and the reason (AUTH-ABUSE-004, chapter 10 5b).
-        await events
+        Result published = await events
             .PublishAsync(
                 new SendingRestrictionGranted(
                     now,
@@ -248,11 +268,23 @@ internal sealed class RestrictionAdministration(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        await events
+        if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+        {
+            return Result.Failure(unpublished);
+        }
+
+        Result alerted = await events
             .PublishAsync(
                 Alerts.Of(AlertCondition.RestrictionGranted, name, now, Named(name)),
                 cancellationToken)
             .ConfigureAwait(false);
+
+        if (alerted.Match(() => (Error?)null, error => error) is Error unalerted)
+        {
+            return Result.Failure(unalerted);
+        }
+
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success();
     }

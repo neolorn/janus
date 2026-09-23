@@ -536,9 +536,9 @@ exists for one of those subjects on the resource **or on any of its ancestors**
 `Expression<Func<TResource, bool>>` built from the host's resource-identifier selector
 and two `IQueryable`s the host supplies **from its own `DbContext`**: `AncestryEntry`
 and `EffectiveGrant`, public plain records in `Janus.Core`, mapped into the host's
-context by `MapJanusAuthorization(ModelBuilder)` in `Janus.Hosting`; the subquery is a
+context by `MapAuthorizationTables(ModelBuilder)` in `Janus.Hosting`; the subquery is a
 same-context correlated `EXISTS` that EF Core translates. The SQL rendering is the same
-`EXISTS` over `janus.ancestry` and `janus.effective_grants`, with the row alias and
+`EXISTS` over `identity.ancestry` and `identity.effective_grants`, with the row alias and
 column supplied by the caller and the subject set, permission and resource type as
 parameters. Neither rendering ever enumerates permitted resources (AUTHZ-PRIN-002).
 

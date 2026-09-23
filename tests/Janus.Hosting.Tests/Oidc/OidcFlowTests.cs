@@ -92,6 +92,32 @@ public sealed class OidcFlowTests
     }
 
     /// <summary>
+    /// AUTH-KEY-001 AC2, D-162: what signs a token is the key the deployment's own
+    /// store holds, so the header of an issued token names a key the set publishes and
+    /// no key of the server's own exists to sign with.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_KEY_001_AC2_TheKeyThatSignsIsTheKeyTheSetPublishesAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Browser browser = await PreparedAsync(deployment);
+        var machine = new Machine(deployment);
+        string code = await CodeAsync(browser, Application);
+        Answer exchanged = await machine.PostAsync("/oidc/token", Code(code, Application));
+        JsonElement published = (await machine.GetAsync("/oidc/jwks", bearer: string.Empty))
+            .Json()
+            .GetProperty("keys")[0];
+
+        Assert.Equal(StatusCodes.Status200OK, exchanged.Status);
+        Assert.Equal(1, deployment.Keys.Count);
+        Assert.Equal(
+            published.GetProperty("kid").GetString(),
+            Header(exchanged.Text("access_token"), "kid"));
+    }
+
+    /// <summary>
     /// AUTH-SESS-012 AC1 and AC2, AUTH-OIDC-002 AC1: a browser holding a live session
     /// is sent back to the client with a code and nothing else, without being asked
     /// anything.
@@ -131,15 +157,18 @@ public sealed class OidcFlowTests
     }
 
     /// <summary>
-    /// AUTH-SESS-012 AC3: where the host declared where its sign-in screen is, a
-    /// request that is not silent is forwarded to it rather than answered.
+    /// AUTH-SESS-012 AC3: a request that is not silent is forwarded to the sign-in
+    /// screen the deployment declared, and is never told `login_required`, which is
+    /// what `prompt=none` asked to be told and it did not.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task AUTH_SESS_012_AC3_AnInteractiveRequestReachesTheSignInScreenAsync()
     {
         await using var deployment = new Deployment(
-            signIn: new AuthenticationAddresses("https://janus.example.test/signin"));
+            signIn: new AuthenticationAddresses(
+                "https://janus.example.test/signin",
+                "https://janus.example.test"));
 
         await RegisteredAsync(deployment);
 
@@ -151,6 +180,8 @@ public sealed class OidcFlowTests
             "https://janus.example.test/signin",
             Where(answered),
             StringComparison.Ordinal);
+
+        Assert.DoesNotContain("login_required", Where(answered), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -187,9 +218,9 @@ public sealed class OidcFlowTests
         Browser browser = await PreparedAsync(deployment);
         Answer answered = await browser.SendAsync("GET", Authorize("nobody", silent: true));
 
-        Assert.Equal(StatusCodes.Status401Unauthorized, answered.Status);
+        Assert.Equal(StatusCodes.Status400BadRequest, answered.Status);
         Assert.Null(answered.Location);
-        Assert.Contains("invalid_client", answered.Body, StringComparison.Ordinal);
+        Assert.Empty(deployment.Tokens.All);
     }
 
     /// <summary>
@@ -470,6 +501,27 @@ public sealed class OidcFlowTests
     }
 
     /// <summary>
+    /// AUTH-OIDC-002 AC1 and AC2, chapter 09 section 9: a browser application's own
+    /// layer that asks to be given something to hold is refused where it asks, and is
+    /// never quietly handed a code that would carry it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_002_AC1_ABrowserApplicationAskingToHoldOneIsRefusedAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Browser browser = await PreparedAsync(deployment);
+        Answer answered = await browser.SendAsync(
+            "GET",
+            Authorize(Application, silent: true, Destination, "openid email offline_access"));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, answered.Status);
+        Assert.Null(answered.Location);
+        Assert.Empty(deployment.Tokens.All);
+    }
+
+    /// <summary>
     /// AUTH-SESS-012 AC6: the exchange hands a browser application's own layer an
     /// access token and nothing it could hold the session with afterwards.
     /// </summary>
@@ -518,10 +570,21 @@ public sealed class OidcFlowTests
         Base64Url.EncodeToString(SHA256.HashData(Encoding.ASCII.GetBytes(Verifier)));
 
     private static string Authorize(string clientId, bool silent, string redirect = Destination) =>
+        Authorize(
+            clientId,
+            silent,
+            redirect,
+            // 09 section 9: what may be asked for is what the kind of client may hold,
+            // and a browser application's own layer holds nothing after the exchange.
+            string.Equals(clientId, Protocol, StringComparison.Ordinal)
+                ? "openid email offline_access"
+                : "openid email");
+
+    private static string Authorize(string clientId, bool silent, string redirect, string scope) =>
         "/oidc/authorize?response_type=code"
         + "&client_id=" + Uri.EscapeDataString(clientId)
         + "&redirect_uri=" + Uri.EscapeDataString(redirect)
-        + "&scope=" + Uri.EscapeDataString("openid email offline_access")
+        + "&scope=" + Uri.EscapeDataString(scope)
         + "&state=the-state"
         + "&code_challenge=" + Challenge
         + "&code_challenge_method=S256"
@@ -575,6 +638,13 @@ public sealed class OidcFlowTests
 
         return read;
     }
+
+    private static string Header(string token, string name) =>
+        JsonDocument
+            .Parse(Base64Url.DecodeFromChars(token.Split('.')[0]))
+            .RootElement
+            .GetProperty(name)
+            .GetString() ?? string.Empty;
 
     private static string Claim(string token, string name)
     {

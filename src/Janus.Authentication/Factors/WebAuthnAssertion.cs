@@ -12,9 +12,13 @@ namespace Janus.Authentication.Factors;
 /// <param name="Counter">
 /// The signature counter the authenticator reported, nought where it keeps none.
 /// </param>
+/// <param name="UserHandle">
+/// The handle the authenticator returned, where it keeps one (REG-PM-001).
+/// </param>
 /// <remarks>Implements AUTH-FACT-014.</remarks>
 internal sealed record WebAuthnAssertion(
     ReadOnlyMemory<byte> CredentialId,
     string RelyingPartyId,
     bool UserVerified,
-    uint Counter);
+    uint Counter,
+    string? UserHandle = null);

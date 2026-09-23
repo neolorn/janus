@@ -72,7 +72,7 @@ performance one.
 collation for identifier columns.
 
 **Values (D-153).** Database locale `und-x-icu`. The case-insensitive collation is
-`janus_ci`, created as `(provider = icu, locale = 'und-u-ks-level2', deterministic = false)`
+`identity_ci`, created as `(provider = icu, locale = 'und-u-ks-level2', deterministic = false)`
 and applied to the plaintext text columns a person spells and the library compares or
 sorts: organization names and locked domain names today; a column added later that
 meets that description takes it (D-155). Identifiers and personal fields are
@@ -154,8 +154,8 @@ model and SHALL refuse to start if it does not.
 rights used only by the migration step, and one for the application with row-level
 access only.
 
-**Values (D-157).** The roles are `janus_migrate`, `janus_app` and, for OPS-MIG-003a,
-`janus_maintenance`. The migration creates the two runtime roles if absent (`NOLOGIN`;
+**Values (D-157).** The roles are `identity_migrate`, `identity_app` and, for OPS-MIG-003a,
+`identity_maintenance`. The migration creates the two runtime roles if absent (`NOLOGIN`;
 the deployment attaches credentials, INF-HOST-003) and writes every `GRANT` and `REVOKE`
 against those names.
 

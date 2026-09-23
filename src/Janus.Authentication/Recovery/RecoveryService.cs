@@ -64,7 +64,7 @@ internal sealed class RecoveryService(
     SessionService sessions,
     StepUpGuard stepUp,
     IAccessGate gate,
-    SendingService sending,
+    INotificationHandler sending,
     NonExistenceNotice nonExistence,
     ThrottleService throttle,
     IEvents events,
@@ -725,8 +725,19 @@ internal sealed class RecoveryService(
             .ApprovedAsync(approver, subject, reason, channel.Kind, now, cancellationToken)
             .ConfigureAwait(false);
 
-        await RaiseAsync(subject, approver, forAccount + 1, byApprover + 1, now, cancellationToken)
+        Result raised = await RaiseAsync(
+                subject,
+                approver,
+                forAccount + 1,
+                byApprover + 1,
+                now,
+                cancellationToken)
             .ConfigureAwait(false);
+
+        if (raised.Match(() => (Error?)null, error => error) is Error unraised)
+        {
+            return Result.Failure<ApprovedRecovery>(unraised);
+        }
 
         if (await StandingAsync(subject, now - lifetime, cancellationToken).ConfigureAwait(false)
             < required)
@@ -836,7 +847,7 @@ internal sealed class RecoveryService(
 
     // OPS-ALERT-001: the two thresholds of chapter 10 section 4.9 are what makes an
     // unusual frequency visible without anyone watching for it.
-    private async ValueTask RaiseAsync(
+    private async ValueTask<Result> RaiseAsync(
         SubjectId subject,
         SubjectId approver,
         int forAccount,
@@ -856,27 +867,41 @@ internal sealed class RecoveryService(
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<int>(error, ref failure));
 
+        // The thresholds are the alert's, not the approval's: one that will not read
+        // leaves the alert unraised and the approval as it stands.
         if (failure is not null)
         {
-            return;
+            return Result.Success();
         }
 
         if (forAccount >= account)
         {
-            await events
+            Result published = await events
                 .PublishAsync(
                     Alerts.Of(AlertCondition.RecoveryClustering, subject.ToString(), now),
                     cancellationToken)
                 .ConfigureAwait(false);
+
+            if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+            {
+                return Result.Failure(unpublished);
+            }
         }
 
         if (byApprover >= raised)
         {
-            await events
+            Result published = await events
                 .PublishAsync(
                     Alerts.Of(AlertCondition.ApproverVolume, approver.ToString(), now),
                     cancellationToken)
                 .ConfigureAwait(false);
+
+            if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+            {
+                return Result.Failure(unpublished);
+            }
         }
+
+        return Result.Success();
     }
 }

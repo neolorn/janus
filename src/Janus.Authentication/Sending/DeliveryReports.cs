@@ -104,7 +104,7 @@ internal sealed class DeliveryReports(
         }
 
         bool released = await ledger
-            .ReleaseAsync(SendReference.FingerprintOf(reference), cancellationToken)
+            .ReleaseAsync(SendReferences.Of(reference), cancellationToken)
             .ConfigureAwait(false);
 
         if (!released)
@@ -136,11 +136,16 @@ internal sealed class DeliveryReports(
 
         if (rejected > threshold)
         {
-            await events
+            Result published = await events
                 .PublishAsync(
                     Alerts.Of(AlertCondition.CallbackVerificationFailed, source, now),
                     cancellationToken)
                 .ConfigureAwait(false);
+
+            if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+            {
+                return Result.Failure(unpublished);
+            }
         }
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);

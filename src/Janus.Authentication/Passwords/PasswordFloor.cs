@@ -1,9 +1,6 @@
 using System;
-using System.Collections.Generic;
 using System.Text;
-using System.Text.Json;
 using Janus.Core;
-using Janus.Core.Configuration;
 
 namespace Janus.Authentication.Passwords;
 
@@ -55,12 +52,7 @@ internal static class PasswordFloor
     {
         if (characters > maximum)
         {
-            return Result.Failure(new Error(
-                ErrorCodes.ConfigurationValueAboveCeiling,
-                new Dictionary<string, JsonElement>(capacity: 1, StringComparer.Ordinal)
-                {
-                    ["key"] = JsonSerializer.SerializeToElement(Settings.PasswordMaximum.Key.ToString()),
-                }));
+            return Result.Failure(Error.From(ErrorCodes.PasswordTooLong));
         }
 
         // Below the single-factor floor the password may exist only while it can never

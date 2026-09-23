@@ -1,6 +1,10 @@
 using System;
+using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Authorization.Model;
+using Janus.Core;
 using Npgsql;
 using Xunit;
 
@@ -181,6 +185,44 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
     }
 
     /// <summary>
+    /// OPS-MIG-003a AC2, AC4: what the serialized model lists for the maintenance
+    /// credential is what the database grants it, so the listing a reviewer reads
+    /// cannot drift from the migration that writes the grants.
+    /// </summary>
+    [Fact]
+    public async Task OPS_MIG_003a_AC4_TheListedGrantsAreTheOnesTheDatabaseHoldsAsync()
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        IEnumerable<string> held = await connection.QueryAsync<string>(
+            """
+            SELECT 'SCHEMA ' || nspname || ' ' || right_held
+            FROM pg_namespace,
+                 unnest(ARRAY['USAGE', 'CREATE']) AS right_held
+            WHERE nspname = 'janus'
+              AND has_schema_privilege('janus_maintenance', oid, right_held)
+            UNION ALL
+            SELECT 'TABLE janus.' || relname || ' ' || right_held
+            FROM pg_class
+            JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace,
+                 unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE']) AS right_held
+            WHERE nspname = 'janus'
+              AND relkind IN ('r', 'p')
+              AND has_table_privilege('janus_maintenance', pg_class.oid, right_held)
+            UNION ALL
+            SELECT 'FUNCTION janus.' || proname || '('
+                   || pg_get_function_identity_arguments(pg_proc.oid) || ') EXECUTE'
+            FROM pg_proc
+            JOIN pg_namespace ON pg_namespace.oid = pg_proc.pronamespace
+            WHERE nspname = 'janus'
+              AND has_function_privilege('janus_maintenance', pg_proc.oid, 'EXECUTE')
+            ORDER BY 1
+            """);
+
+        Assert.Equal(Listed(), held);
+    }
+
+    /// <summary>
     /// OPS-MIG-003 AC1: the application role executes no schema-altering statement.
     /// </summary>
     [Fact]
@@ -225,6 +267,25 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
             WHERE child.relkind = 'r'
                 AND parent.relname IN ('audit_records_security', 'audit_records_routine')
             """);
+
+    private static List<string> Listed()
+    {
+        using var written = JsonDocument.Parse(
+            AuthorizationModel.Of(new AuthorizationDeclarationBuilder().Build()).Serialize());
+
+        var listed = new List<string>();
+
+        foreach (JsonElement grant in
+            written.RootElement.GetProperty("maintenanceGrants").EnumerateArray())
+        {
+            listed.Add(
+                grant.GetProperty("on").GetString()
+                + " "
+                + grant.GetProperty("right").GetString());
+        }
+
+        return listed;
+    }
 
     private async Task<NpgsqlConnection> AsAsync(string role)
     {

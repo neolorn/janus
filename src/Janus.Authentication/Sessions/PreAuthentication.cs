@@ -60,6 +60,11 @@ internal sealed class PreAuthentication
     public EnrolmentSessionId? Enrolment { get; private set; }
 
     /// <summary>
+    /// The sign-on this browser has in flight, where it has one (BFF-SESS-006).
+    /// </summary>
+    public SignOnAttempt? SignOn { get; private set; }
+
+    /// <summary>
     /// Issues one for a browser that carried nothing.
     /// </summary>
     /// <param name="secret">The token the cookie carries.</param>
@@ -84,6 +89,7 @@ internal sealed class PreAuthentication
     /// <param name="expiresAt">When it stops answering.</param>
     /// <param name="registration">The registration in flight, where there is one.</param>
     /// <param name="enrolment">The enrolment in flight, where there is one.</param>
+    /// <param name="signOn">The sign-on in flight, where there is one.</param>
     /// <returns>The pre-authentication session.</returns>
     /// <exception cref="ArgumentNullException">Either fingerprint is absent.</exception>
     public static PreAuthentication Existing(
@@ -92,7 +98,8 @@ internal sealed class PreAuthentication
         DateTimeOffset createdAt,
         DateTimeOffset expiresAt,
         RegistrationSessionId? registration,
-        EnrolmentSessionId? enrolment = null)
+        EnrolmentSessionId? enrolment = null,
+        SignOnAttempt? signOn = null)
     {
         ArgumentNullException.ThrowIfNull(fingerprint);
         ArgumentNullException.ThrowIfNull(csrfFingerprint);
@@ -101,6 +108,7 @@ internal sealed class PreAuthentication
         {
             Registration = registration,
             Enrolment = enrolment,
+            SignOn = signOn,
         };
     }
 
@@ -136,6 +144,13 @@ internal sealed class PreAuthentication
     }
 
     /// <summary>
+    /// Records the sign-on this browser has just started, which is what binds the
+    /// code that comes back to the browser that asked for it (BFF-SESS-006).
+    /// </summary>
+    /// <param name="attempt">What the return is judged against.</param>
+    public void Carry(SignOnAttempt attempt) => SignOn = attempt;
+
+    /// <summary>
     /// Forgets what the browser had in flight, which is what abandoning a
     /// registration or finishing an enrolment leaves behind.
     /// </summary>
@@ -144,4 +159,10 @@ internal sealed class PreAuthentication
         Registration = null;
         Enrolment = null;
     }
+
+    /// <summary>
+    /// Forgets the sign-on, which every return ends with whether it succeeded or not,
+    /// so one code answers once and a second return has nothing to be judged against.
+    /// </summary>
+    public void Abandon() => SignOn = null;
 }

@@ -54,7 +54,7 @@ public sealed class LegalDocumentTests : IAsyncDisposable
         new LegalDocumentService(
             _store,
             new AdministrativeScope(_gate, _memberships),
-            new Supersession(_consents, _events),
+            new Supersession(_consents, Declaration.Processing, _events),
             _configuration,
             _audit,
             _alerts,
@@ -263,7 +263,9 @@ public sealed class LegalDocumentTests : IAsyncDisposable
             version: null,
             CancellationToken.None);
 
-        Assert.Equal(ErrorCodes.Denied, refused.Match(_ => default, error => error.Code));
+        Assert.Equal(
+            ErrorCodes.DocumentNotFound,
+            refused.Match(_ => default, error => error.Code));
     }
 
     /// <summary>

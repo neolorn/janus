@@ -119,18 +119,27 @@ internal sealed class ConsentStore(JanusDbContext context) : IConsentStore
 
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<HeldConsent>> LiveAgainstAnotherAsync(
-        string noticeVersion,
-        CancellationToken cancellationToken) =>
-    [
-        .. (await context.Consents
-                .Where(consent => consent.WithdrawnAt == null
-                    && consent.SupersededAt == null
-                    && consent.NoticeVersion != noticeVersion)
-                .OrderBy(consent => consent.GrantedAt)
-                .ToListAsync(cancellationToken)
-                .ConfigureAwait(false))
-            .Select(consent => new HeldConsent(consent.Subject, Read(consent))),
-    ];
+        IReadOnlyCollection<string> purposes,
+        string version,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(purposes);
+
+        string[] named = [.. purposes];
+
+        return
+        [
+            .. (await context.Consents
+                    .Where(consent => consent.WithdrawnAt == null
+                        && consent.SupersededAt == null
+                        && named.Contains(consent.Purpose)
+                        && consent.NoticeVersion != version)
+                    .OrderBy(consent => consent.GrantedAt)
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false))
+                .Select(consent => new HeldConsent(consent.Subject, Read(consent))),
+        ];
+    }
 
     private static ConsentRecord Read(ConsentRecordRow row) =>
         new(

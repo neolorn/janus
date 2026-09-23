@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -57,6 +59,33 @@ internal sealed class ConfigurationInMemory : IConfigurationStore
         return ValueTask.FromResult(family.HasDefault
             ? Result.Success(family.Default)
             : Result.Failure<TValue>(new Error(ErrorCodes.StartupDeclarationMissing, Nothing)));
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<Result<IReadOnlyDictionary<string, TValue>>> ReadWrittenAsync<TValue>(
+        SettingFamily<TValue> family,
+        CancellationToken cancellationToken)
+    {
+        string prefix = family.Prefix + ".";
+
+        Dictionary<string, TValue> written = new(StringComparer.Ordinal);
+
+        foreach (KeyValuePair<ConfigurationKey, object> held in _values)
+        {
+            string key = held.Key.ToString();
+
+            // A key that exists once for the deployment can sit under a family's
+            // prefix, as policy.default sits under policy; the catalogue is what says
+            // it is not a member of the family.
+            if (key.StartsWith(prefix, StringComparison.Ordinal)
+                && !Settings.All.Any(setting => setting.Key == held.Key))
+            {
+                written[key[prefix.Length..]] = (TValue)held.Value;
+            }
+        }
+
+        return ValueTask.FromResult(
+            Result.Success<IReadOnlyDictionary<string, TValue>>(written));
     }
 
     /// <inheritdoc/>

@@ -341,6 +341,61 @@ public sealed class ConsentTests : IAsyncDisposable
             entry => Assert.Equal(Recommendations, entry.Details["purpose"].GetString()));
     }
 
+    /// <summary>
+    /// PRIV-CONS-008a AC3: a purpose that is undeclared, or that rests on a basis
+    /// other than consent, is refused by the code that says which of the two it is,
+    /// on the withdrawal as on the grant, rather than by a refusal that reads as a
+    /// permission the caller lacks.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_008a_AC3_APurposeThatTakesNoConsentIsNamedAsSuchAsync()
+    {
+        Assert.Equal(ErrorCodes.PurposeNoConsent, await RefusedGrantAsync(Fulfilment));
+        Assert.Equal(ErrorCodes.PurposeNoConsent, await RefusedGrantAsync("nothing-declared"));
+        Assert.Equal(ErrorCodes.PurposeNoConsent, await RefusedWithdrawalAsync(Fulfilment));
+        Assert.Empty(await HeldAsync());
+    }
+
+    /// <summary>
+    /// PRIV-CONS-005: a consent stands against the notice version in force, so a
+    /// deployment that has published no notice has nothing for one to stand against,
+    /// and the refusal names that rather than reading as a permission the caller
+    /// lacks.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_005_AConsentBeforeAnyNoticeIsPublishedIsRefusedAsync()
+    {
+        var unpublished = new ConsentService(
+            _consents,
+            new LegalDocumentStoreInMemory(),
+            Declaration.Processing,
+            _events,
+            _audit,
+            _work,
+            _clock);
+
+        Result refused = await unpublished.GrantAsync(
+            Acting,
+            Marketing,
+            ConsentMechanism.Dashboard,
+            CancellationToken.None);
+
+        Assert.Equal(
+            ErrorCodes.NoticeUnpublished,
+            refused.Match(() => default(ErrorCode?), error => error.Code));
+        Assert.Empty(await HeldAsync());
+    }
+
+    private async Task<ErrorCode?> RefusedGrantAsync(string purpose) =>
+        (await Consents.GrantAsync(Acting, purpose, ConsentMechanism.Dashboard, CancellationToken.None))
+        .Match(() => default(ErrorCode?), error => error.Code);
+
+    private async Task<ErrorCode?> RefusedWithdrawalAsync(string purpose) =>
+        (await Consents.WithdrawAsync(Acting, purpose, CancellationToken.None))
+        .Match(() => default(ErrorCode?), error => error.Code);
+
     private async Task<bool> GrantAsync(
         string purpose,
         ConsentMechanism mechanism = ConsentMechanism.Dashboard) =>

@@ -57,16 +57,11 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     public const string MigrationsHistoryTable = "__janus_migrations_history";
 
     /// <summary>
-    /// The case-insensitive collation the plaintext columns a person spells carry.
+    /// The case-insensitive collation the plaintext columns a person spells carry,
+    /// created in the schema the library owns like everything else of the library's
+    /// (OPS-DB-002).
     /// </summary>
     public const string CaseInsensitiveCollation = "janus_ci";
-
-    /// <summary>
-    /// The schema the collation is created in. A column names a collation by one
-    /// identifier and never by a schema and a name, so the collation has to be
-    /// reachable from the search path; the library's own schema is not.
-    /// </summary>
-    public const string CollationSchema = "public";
 
     /// <summary>
     /// The accounts.
@@ -338,6 +333,17 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     public DbSet<ChallengeRecord> SignInChallenges => Set<ChallengeRecord>();
 
     /// <summary>
+    /// The verification codes outstanding, which are no credential of anyone's
+    /// (AUTH-FACT-004).
+    /// </summary>
+    public DbSet<VerificationCodeRecord> VerificationCodes => Set<VerificationCodeRecord>();
+
+    /// <summary>
+    /// The messages undertaken and not yet carried.
+    /// </summary>
+    public DbSet<SendDeliveryRecord> SendOutbox => Set<SendDeliveryRecord>();
+
+    /// <summary>
     /// The credential creation ceremonies accounts have open.
     /// </summary>
     public DbSet<KeyCeremonyRecord> KeyCeremonies => Set<KeyCeremonyRecord>();
@@ -378,14 +384,19 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     public DbSet<OidcClientRecord> OidcClients => Set<OidcClientRecord>();
 
     /// <summary>
-    /// The authorization codes waiting to be exchanged.
+    /// The grants the clients hold.
     /// </summary>
-    public DbSet<AuthorizationCodeRecord> AuthorizationCodes => Set<AuthorizationCodeRecord>();
+    public DbSet<OidcAuthorizationRecord> OidcAuthorizations => Set<OidcAuthorizationRecord>();
 
     /// <summary>
-    /// The refresh tokens, by family.
+    /// The codes and tokens issued under those grants.
     /// </summary>
-    public DbSet<RefreshTokenRecord> RefreshTokens => Set<RefreshTokenRecord>();
+    public DbSet<OidcTokenRecord> OidcTokens => Set<OidcTokenRecord>();
+
+    /// <summary>
+    /// The scopes the deployment registered beyond the ones the provider is built with.
+    /// </summary>
+    public DbSet<OidcScopeRecord> OidcScopes => Set<OidcScopeRecord>();
 
     /// <summary>
     /// The keys the provider signs tokens with.
@@ -403,7 +414,7 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         // created here rather than by hand so that a database built from the migrations
         // alone carries it.
         modelBuilder.HasCollation(
-            CollationSchema,
+            Schema,
             CaseInsensitiveCollation,
             locale: "und-u-ks-level2",
             provider: "icu",
@@ -452,6 +463,8 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new PreAuthenticationConfiguration());
         modelBuilder.ApplyConfiguration(new PendingVerificationConfiguration());
         modelBuilder.ApplyConfiguration(new ChallengeConfiguration());
+        modelBuilder.ApplyConfiguration(new VerificationCodeConfiguration());
+        modelBuilder.ApplyConfiguration(new SendDeliveryConfiguration());
         modelBuilder.ApplyConfiguration(new KeyCeremonyConfiguration());
         modelBuilder.ApplyConfiguration(new PendingSignInConfiguration());
         modelBuilder.ApplyConfiguration(new PolicyRaiseConfiguration());
@@ -460,8 +473,9 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new LossReportConfiguration());
         modelBuilder.ApplyConfiguration(new LifecycleLinkConfiguration());
         modelBuilder.ApplyConfiguration(new OidcClientConfiguration());
-        modelBuilder.ApplyConfiguration(new AuthorizationCodeConfiguration());
-        modelBuilder.ApplyConfiguration(new RefreshTokenConfiguration());
+        modelBuilder.ApplyConfiguration(new OidcAuthorizationConfiguration());
+        modelBuilder.ApplyConfiguration(new OidcTokenConfiguration());
+        modelBuilder.ApplyConfiguration(new OidcScopeConfiguration());
         modelBuilder.ApplyConfiguration(new SigningKeyConfiguration());
         modelBuilder.ApplyConfiguration(new DocumentVersionConfiguration());
         modelBuilder.ApplyConfiguration(new DocumentTranslationConfiguration());

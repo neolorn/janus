@@ -229,7 +229,7 @@ default, of which fourteen could be defaulted and six belonged here (D-107).*
 queries. The library SHALL NOT query host tables.
 
 **Values (D-159).** The host maps the two contract tables into its own `DbContext` with
-`MapJanusAuthorization(ModelBuilder)` and passes their `DbSet`s to the filter; the
+`MapAuthorizationTables(ModelBuilder)` and passes their `DbSet`s to the filter; the
 library reads nothing of the host's, and the host's query stays one query.
 
 *Source: D-015, AUTHZ-PRIN-002*

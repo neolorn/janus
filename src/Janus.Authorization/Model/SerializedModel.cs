@@ -14,7 +14,11 @@ namespace Janus.Authorization.Model;
 /// <param name="StepUpGates">The gate each bound action is bound to, by permission.</param>
 /// <param name="LawfulBases">The bases a purpose may rest on, by key.</param>
 /// <param name="SensitiveCategories">The categories a type may carry.</param>
-/// <remarks>Implements AUTHZ-MODEL-005.</remarks>
+/// <param name="MaintenanceGrants">
+/// What the maintenance credential of OPS-MIG-003a may reach, so a reviewer reads it
+/// here rather than only in the migration that writes it.
+/// </param>
+/// <remarks>Implements AUTHZ-MODEL-005, OPS-MIG-003a.</remarks>
 internal sealed record SerializedModel(
     IReadOnlyList<SerializedModel.Type> ResourceTypes,
     IReadOnlyList<SerializedModel.Relationship> Relationships,
@@ -22,8 +26,16 @@ internal sealed record SerializedModel(
     IReadOnlyList<string> ReadingActions,
     IReadOnlyList<SerializedModel.StepUpGate> StepUpGates,
     IReadOnlyList<SerializedModel.Basis> LawfulBases,
-    IReadOnlyList<string> SensitiveCategories)
+    IReadOnlyList<string> SensitiveCategories,
+    IReadOnlyList<SerializedModel.MaintenanceGrant> MaintenanceGrants)
 {
+    /// <summary>
+    /// One right the maintenance credential holds.
+    /// </summary>
+    /// <param name="On">What the right is on, its kind first.</param>
+    /// <param name="Right">The right itself.</param>
+    internal sealed record MaintenanceGrant(string On, string Right);
+
     /// <summary>
     /// One resource type.
     /// </summary>

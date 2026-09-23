@@ -53,6 +53,17 @@ public sealed class HostFixture : IAsyncLifetime
     internal HostContext Context() =>
         new(new DbContextOptionsBuilder<HostContext>().UseNpgsql(ConnectionString).Options);
 
+    /// <summary>
+    /// The same context with the statements it sends counted.
+    /// </summary>
+    /// <param name="counted">Where the count is kept.</param>
+    /// <returns>The context.</returns>
+    internal HostContext Context(CountedCommands counted) =>
+        new(new DbContextOptionsBuilder<HostContext>()
+            .UseNpgsql(ConnectionString)
+            .AddInterceptors(counted)
+            .Options);
+
     /// <inheritdoc/>
     public async ValueTask InitializeAsync()
     {
@@ -73,7 +84,11 @@ public sealed class HostFixture : IAsyncLifetime
                     ('retention.history', 'P2Y');
 
                 CREATE SCHEMA host;
-                CREATE TABLE host.documents (id text PRIMARY KEY, title text NOT NULL);
+                CREATE TABLE host.documents (
+                    id text PRIMARY KEY,
+                    title text NOT NULL,
+                    owner uuid,
+                    notes text NOT NULL DEFAULT '');
                 CREATE TABLE host.reviewers (
                     workspace_id text NOT NULL,
                     reviewer uuid NOT NULL,
@@ -96,6 +111,7 @@ public sealed class HostFixture : IAsyncLifetime
             ConnectionString,
             new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = material }),
             Encoding.UTF8.GetBytes("the fingerprint key of this deployment"),
+            Encoding.UTF8.GetBytes("the secret this application presents"),
             Declaration(),
             JanusApplication.Public);
 
@@ -165,6 +181,7 @@ public sealed class HostFixture : IAsyncLifetime
             .Resource<HostDocument>("document", type => type
                 .ContainedIn("workspace")
                 .Sensitive("financial")
+                .Encrypted(held => held.Notes, held => held.Owner)
                 .Purpose("running the host", "contract", data: ["identity"], subjects: ["members"])
                 .Purpose(
                     "recommendations",
@@ -173,6 +190,10 @@ public sealed class HostFixture : IAsyncLifetime
                     subjects: ["members"]))
             .Resource<HostNote>("note", type => type
                 .ContainedIn("workspace")
+                .Discloses()
+                .Purpose("running the host", "contract", data: ["identity"], subjects: ["members"]))
+            .Resource<HostReport>("report", type => type
+                .BelongsToOrganization()
                 .Discloses()
                 .Purpose("running the host", "contract", data: ["identity"], subjects: ["members"]))
             .Build();

@@ -186,4 +186,7 @@ secret scanning unavailable on this plan as `08` section 10 records, so the scan
 OPS-DEP-004 requires is the gitleaks gate (D-150). Branch protection on `main`
 requires the seventeen status checks, applies to administrators, requires no approval,
 and refuses force pushes and deletion. The instruction files and `tmp/` are excluded
-through `.git/info/exclude`.
+through `.git/info/exclude`. The repository runs public during development by the
+owner's choice, because Actions minutes on a public repository do not count against the
+private quota, and becomes private once the library is finished, stable and integrated
+with its first host.

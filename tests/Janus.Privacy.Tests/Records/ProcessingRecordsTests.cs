@@ -173,25 +173,73 @@ public sealed class ProcessingRecordsTests
         Assert.True(marketing.NonSensitive);
         Assert.Empty(marketing.SensitiveCategories);
 
-        // PRIV-MINOR-001: the affirmation is required by default, so the service is
-        // 18+ only and no row is in the children's column.
+        // PRIV-SENS-001: no type here declares the children's category, so no row is
+        // in the children's column.
         Assert.All(register.Records, record => Assert.False(record.Children));
     }
 
     /// <summary>
-    /// PRIV-MINOR-001: a deployment that admits minors is in the children's column,
-    /// because any purpose may then be over a child's data.
+    /// PRIV-SENS-001 AC2, PRIV-ROPA-001: the children's column is a sensitivity
+    /// category like any other, so a purpose is in it exactly where a type it is
+    /// declared on declares that category, and the rest of the register is not.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task PRIV_ROPA_001_AC1_ADeploymentAdmittingMinorsIsInTheChildrensColumnAsync()
+    public async Task PRIV_SENS_001_AC2_TheChildrensColumnFollowsTheDeclaredCategoryAsync()
+    {
+        ProcessingRegister register = Generated(await Records(Childrens())
+            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
+
+        Assert.True(Row(register, "schooling").Children);
+        Assert.False(Row(register, "marketing").Children);
+        Assert.Equal(["children"], Row(register, "schooling").SensitiveCategories);
+    }
+
+    /// <summary>
+    /// PRIV-ROPA-001, PRIV-MINOR-001: a deployment that admits minors and declares no
+    /// type as children's data is told so on the register, because a register showing
+    /// no children's processing at all is what a regulator would object to.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_ROPA_001_ADeploymentAdmittingMinorsAndDeclaringNoneIsFlaggedAsync()
     {
         _configuration.Set(Settings.RegistrationAdultAffirmation, AttributeRequirement.Off);
 
         ProcessingRegister register = Generated(await Records(Declaration.Declared().Build())
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
 
-        Assert.All(register.Records, record => Assert.True(record.Children));
+        Assert.Contains(
+            register.Flags,
+            flag => flag.Finding is RegisterFinding.ChildrenUndeclared);
+        Assert.All(register.Records, record => Assert.False(record.Children));
+    }
+
+    /// <summary>
+    /// PRIV-ROPA-001: the flag reports an absence, so a deployment admitting minors
+    /// that does declare a children's type carries none, and so does one that admits
+    /// no minors at all.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_ROPA_001_ADeploymentThatDeclaredOneIsNotFlaggedAsync()
+    {
+        _configuration.Set(Settings.RegistrationAdultAffirmation, AttributeRequirement.Off);
+
+        ProcessingRegister declared = Generated(await Records(Childrens())
+            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
+
+        _configuration.Set(Settings.RegistrationAdultAffirmation, AttributeRequirement.Required);
+
+        ProcessingRegister adults = Generated(await Records(Declaration.Declared().Build())
+            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
+
+        Assert.DoesNotContain(
+            declared.Flags,
+            flag => flag.Finding is RegisterFinding.ChildrenUndeclared);
+        Assert.DoesNotContain(
+            adults.Flags,
+            flag => flag.Finding is RegisterFinding.ChildrenUndeclared);
     }
 
     /// <summary>
@@ -289,12 +337,15 @@ public sealed class ProcessingRecordsTests
         ProcessingRegister register = Generated(await Records(declared)
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
 
+        // The hosting provider is applied beside the two declared rows because every
+        // deployment is hosted somewhere; the screening service is applied because
+        // the shipped default screens passwords online.
         Assert.Equal(
-            ["sms gateway", "shipping provider"],
+            ["sms gateway", "shipping provider", "hosting provider", "password screening"],
             register.Recipients.Select(recipient => recipient.Name));
 
         Assert.All(
-            register.Recipients,
+            register.Recipients.Where(recipient => recipient.Name is not "password screening"),
             recipient => Assert.Equal(
                 RecipientCharacterisation.Processor,
                 recipient.Characterisation));
@@ -302,7 +353,7 @@ public sealed class ProcessingRecordsTests
         Assert.Equal("DPA-7", register.Recipients[0].AgreementReference);
 
         Assert.Equal(
-            ["shipping provider"],
+            ["shipping provider", "hosting provider"],
             register.Flags
                 .Where(flag => flag.Finding is RegisterFinding.AgreementMissing)
                 .Select(flag => flag.Subject));
@@ -310,8 +361,107 @@ public sealed class ProcessingRecordsTests
         Assert.All(
             register.Records,
             record => Assert.Equal(
-                ["sms gateway", "shipping provider"],
+                ["sms gateway", "shipping provider", "hosting provider", "password screening"],
                 record.Recipients));
+    }
+
+    /// <summary>
+    /// PRIV-ROPA-002: the rows the library itself makes true are in the register of a
+    /// deployment that declared no recipient at all, because the library calls the
+    /// mail server and the screening service and the deployment is hosted somewhere.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_ROPA_002_TheRowsTheLibraryMakesTrueAreAppliedWithoutADeclarationAsync()
+    {
+        _configuration.Set(Settings.IntegrationMailEndpoint, "https://mail.example.test/api");
+
+        ProcessingRegister register = Generated(await Records(Declaration.Declared().Build())
+            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            ["mail server", "hosting provider", "password screening"],
+            register.Recipients.Select(recipient => recipient.Name));
+
+        // Each ships with no agreement reference, so each processor among them is
+        // flagged until the deployment gives it one.
+        Assert.Equal(
+            ["mail server", "hosting provider"],
+            register.Flags
+                .Where(flag => flag.Finding is RegisterFinding.AgreementMissing)
+                .Select(flag => flag.Subject));
+    }
+
+    /// <summary>
+    /// PRIV-ROPA-002: the rest of the shipped register is offered and not applied,
+    /// because a generic library cannot know that a deployment takes payments, ships
+    /// anything or sends its own text messages.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_ROPA_002_TheRestOfTheShippedRegisterIsOfferedAndNotAppliedAsync()
+    {
+        ProcessingRegister register = Generated(await Records(Declaration.Declared().Build())
+            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
+
+        Assert.DoesNotContain(
+            register.Recipients.Select(recipient => recipient.Name),
+            name => name is "payment provider" or "shipping provider" or "sms gateway"
+                or "developer");
+    }
+
+    /// <summary>
+    /// PRIV-ROPA-002: a deployment that calls neither the library's own mail
+    /// transport nor the online screening service reports neither of them, so the
+    /// register states what is true of that deployment and not of a shipped list.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_ROPA_002_AnUncalledProviderIsNotInTheRegisterAsync()
+    {
+        _configuration.Set(Settings.PasswordBlocklistSource, BlocklistSource.SelfHosted);
+
+        ProcessingRegister register = Generated(await Records(Declaration.Declared().Build())
+            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            ["hosting provider"],
+            register.Recipients.Select(recipient => recipient.Name));
+    }
+
+    /// <summary>
+    /// PRIV-ROPA-002: the shipped rows are defaults the host edits, so a deployment
+    /// that declared one of the applied rows reports its own row in place of the
+    /// default and not beside it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_ROPA_002_AC2_AnEditedRowStandsInPlaceOfTheShippedDefaultAsync()
+    {
+        _configuration.Set(Settings.IntegrationMailEndpoint, "https://mail.example.test/api");
+
+        AuthorizationDeclaration declared = Declaration.Declared()
+            .Recipient(new RecipientDeclaration(
+                "Mail server",
+                RecipientCharacterisation.Processor,
+                ["mailbox contents", "account identifiers"],
+                Location: null,
+                "DPA-3",
+                Callback: false))
+            .Build();
+
+        ProcessingRegister register = Generated(await Records(declared)
+            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            ["Mail server", "hosting provider", "password screening"],
+            register.Recipients.Select(recipient => recipient.Name));
+
+        Assert.Equal(
+            ["hosting provider"],
+            register.Flags
+                .Where(flag => flag.Finding is RegisterFinding.AgreementMissing)
+                .Select(flag => flag.Subject));
     }
 
     /// <summary>
@@ -520,6 +670,17 @@ public sealed class ProcessingRecordsTests
         outcome.Match(
             register => register,
             error => throw new InvalidOperationException(error.Code.ToString()));
+
+    // A deployment that declares one of its types as children's data, which is the
+    // category the register's children's column reports (PRIV-SENS-001).
+    private static AuthorizationDeclaration Childrens() =>
+        Declaration.Declared()
+            .SensitiveCategory("children")
+            .Resource<Declaration.Enrolment>("enrolment", enrolment => enrolment
+                .BelongsToOrganization()
+                .Sensitive("children")
+                .Purpose("schooling", "contract", data: ["identity"], subjects: ["pupils"]))
+            .Build();
 
     private static ProcessingRecord Row(ProcessingRegister register, string purpose) =>
         Assert.Single(register.Records, record => record.Purpose == purpose);

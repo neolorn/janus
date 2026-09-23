@@ -20,10 +20,14 @@ namespace Janus.Core;
 /// is over no sensitive type.
 /// </param>
 /// <param name="Types">The resource types declaring it.</param>
+/// <param name="Document">
+/// The legal document whose version a consent for it is recorded against, or nothing
+/// where the privacy notice governs it (PRIV-CONS-007).
+/// </param>
 /// <remarks>
 /// Implements PRIV-BASIS-001, PRIV-BASIS-003, PRIV-SENS-002, PRIV-CONS-002,
-/// PRIV-RIGHT-001a and PRIV-ROPA-001. A purpose is one thing to the person exercising
-/// a right over it, whichever of the host's types carry it.
+/// PRIV-CONS-007, PRIV-RIGHT-001a and PRIV-ROPA-001. A purpose is one thing to the
+/// person exercising a right over it, whichever of the host's types carry it.
 /// </remarks>
 public sealed record DeclaredPurpose(
     string Name,
@@ -33,4 +37,5 @@ public sealed record DeclaredPurpose(
     IReadOnlyList<string> DataCategories,
     IReadOnlyList<string> SubjectCategories,
     IReadOnlyList<string> SensitiveCategories,
-    IReadOnlyList<ResourceType> Types);
+    IReadOnlyList<ResourceType> Types,
+    string? Document);

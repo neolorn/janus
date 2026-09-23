@@ -36,9 +36,15 @@ internal static class ApiStatus
         [ErrorCodes.StartupKeyUnavailable] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupRelyingPartyId] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupLabelLimit] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupRedirectClient] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupSchemaMismatch] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.PolicyUnregistered] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.DerivationSourcesMissing] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.SystemFault] = StatusCodes.Status500InternalServerError,
+
+        // The request itself could not be read, so nothing about the deployment was
+        // reached and nothing about it is answered.
+        [ErrorCodes.RequestMalformed] = StatusCodes.Status400BadRequest,
 
         // Session death, and nothing else.
         [ErrorCodes.SessionExpired] = StatusCodes.Status401Unauthorized,
@@ -54,10 +60,13 @@ internal static class ApiStatus
         [ErrorCodes.ConfigurationChangeStepUpRequired] = StatusCodes.Status403Forbidden,
         [ErrorCodes.PolicyGraceExpired] = StatusCodes.Status403Forbidden,
         [ErrorCodes.ConsentRequired] = StatusCodes.Status403Forbidden,
+        [ErrorCodes.PhotoNotEnabled] = StatusCodes.Status403Forbidden,
 
         // Not found, and the concealed denial that answers the same way.
         [ErrorCodes.CredentialNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.GrantNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.DocumentNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.RequestNotFound] = StatusCodes.Status404NotFound,
 
         // A conflict with what is already there, or a precondition the state fails.
         [ErrorCodes.ChangePending] = StatusCodes.Status409Conflict,
@@ -68,6 +77,7 @@ internal static class ApiStatus
         [ErrorCodes.UsernameTaken] = StatusCodes.Status409Conflict,
         [ErrorCodes.UsernameReserved] = StatusCodes.Status409Conflict,
         [ErrorCodes.UsernameCoolingOff] = StatusCodes.Status409Conflict,
+        [ErrorCodes.MembershipLimitReached] = StatusCodes.Status409Conflict,
         [ErrorCodes.OrganizationProtected] = StatusCodes.Status409Conflict,
         [ErrorCodes.GrantDuplicate] = StatusCodes.Status409Conflict,
         [ErrorCodes.GrantExpired] = StatusCodes.Status409Conflict,
@@ -76,9 +86,12 @@ internal static class ApiStatus
         [ErrorCodes.LossReportNotPermitted] = StatusCodes.Status409Conflict,
         [ErrorCodes.CredentialNotUpgradable] = StatusCodes.Status409Conflict,
         [ErrorCodes.RequestDuplicate] = StatusCodes.Status409Conflict,
+        [ErrorCodes.RequestDecided] = StatusCodes.Status409Conflict,
         [ErrorCodes.ErasureNotFailed] = StatusCodes.Status409Conflict,
         [ErrorCodes.TakedownActive] = StatusCodes.Status409Conflict,
         [ErrorCodes.AccountAdministrativelySuspended] = StatusCodes.Status409Conflict,
+        [ErrorCodes.RegistrationSignedIn] = StatusCodes.Status409Conflict,
+        [ErrorCodes.NoticeUnpublished] = StatusCodes.Status409Conflict,
 
         // Well formed, and refused on what it says.
         [ErrorCodes.AffirmationRequired] = StatusCodes.Status422UnprocessableEntity,
@@ -88,6 +101,8 @@ internal static class ApiStatus
         [ErrorCodes.ProfileInvalid] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ProfileNotAccepted] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ProfileUnderage] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.PhotoInvalid] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.PhotoTooLarge] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.RegistrationIncomplete] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.UsernameInvalid] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.PreferenceUndeclared] = StatusCodes.Status422UnprocessableEntity,
@@ -109,6 +124,7 @@ internal static class ApiStatus
         [ErrorCodes.RecoveryChannelNotOnAccount] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.RecoverySelfApproval] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.PasswordBlocklisted] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.PasswordTooLong] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.PasswordTooShort] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ScreeningUnavailable] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.WebAuthnAlgorithmNotAllowed] = StatusCodes.Status422UnprocessableEntity,
@@ -125,6 +141,7 @@ internal static class ApiStatus
         [ErrorCodes.CallbackRejected] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.EndpointInsecure] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.SmsBalanceFloor] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.PurposeNoConsent] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.PurposeNotObjectable] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.NoticeGoverningTextMissing] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.RequestReceivedFuture] = StatusCodes.Status422UnprocessableEntity,

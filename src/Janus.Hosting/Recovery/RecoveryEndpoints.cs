@@ -24,8 +24,6 @@ namespace Janus.Hosting.Recovery;
 /// </remarks>
 internal static class RecoveryEndpoints
 {
-    private static readonly IResult Malformed = TypedResults.BadRequest();
-
     private static readonly IResult Nothing = TypedResults.NoContent();
 
     private static readonly IResult Accepted = TypedResults.StatusCode(StatusCodes.Status202Accepted);
@@ -44,10 +42,10 @@ internal static class RecoveryEndpoints
 
         _ = group.MapPost("/begin", BeginAsync);
         _ = group.MapPost("/complete", CompleteAsync);
-        _ = group.MapPost("/report-loss", ReportLossAsync);
+        _ = SessionRequired.On(group.MapPost("/report-loss", ReportLossAsync));
         _ = group.MapPost("/report-loss/{id:guid}/cancel", CancelLossAsync);
 
-        _ = endpoints.MapPost("/admin/recovery/approve", ApproveAsync);
+        _ = SessionRequired.On(endpoints.MapPost("/admin/recovery/approve", ApproveAsync));
         _ = endpoints.MapPost("/enrol/begin", EnrolAsync);
 
         return endpoints;
@@ -66,7 +64,7 @@ internal static class RecoveryEndpoints
         ArgumentNullException.ThrowIfNull(context);
 
         return request.Identifier is not { Length: > 0 } identifier
-            ? Malformed
+            ? Answers.Malformed("identifier")
             : Answers.Of(
                 await recovery
                     .BeginAsync(
@@ -90,10 +88,17 @@ internal static class RecoveryEndpoints
         ArgumentNullException.ThrowIfNull(recovery);
         ArgumentNullException.ThrowIfNull(context);
 
-        return request.Token is not { Length: > 0 } token
-            || request.Password is not { Length: > 0 } password
-            ? Malformed
-            : Answers.Of(
+        if (request.Token is not { Length: > 0 } token)
+        {
+            return Answers.Malformed("token");
+        }
+
+        if (request.Password is not { Length: > 0 } password)
+        {
+            return Answers.Malformed("password");
+        }
+
+        return Answers.Of(
                 await recovery
                     .CompleteAsync(
                         token,
@@ -119,13 +124,10 @@ internal static class RecoveryEndpoints
         ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(context);
 
-        if (browser.Context is not AccessContext holder)
-        {
-            return Nobody();
-        }
+        AccessContext holder = Asking(browser);
 
         return !Guid.TryParse(request.CredentialId, out Guid credential)
-            ? Malformed
+            ? Answers.Malformed("credentialId")
             : Answers.Of(
                 await recovery
                     .ReportLossAsync(
@@ -179,19 +181,23 @@ internal static class RecoveryEndpoints
         ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(context);
 
-        if (browser.Context is not AccessContext approver || browser.Live is null)
+        AccessContext approver = Asking(browser);
+
+        if (!Guid.TryParse(request.Subject, out Guid subject))
         {
-            return Nobody();
+            return Answers.Malformed("subject");
         }
 
-        return !Guid.TryParse(request.Subject, out Guid subject)
-            || request.ChannelUsed is not { Length: > 0 } channel
-            ? Malformed
-            : Answers.Of(
+        if (request.ChannelUsed is not { Length: > 0 } channel)
+        {
+            return Answers.Malformed("channelUsed");
+        }
+
+        return Answers.Of(
                 await recovery
                     .ApproveAsync(
                         approver,
-                        browser.Live.Id,
+                        browser.Required.Id,
                         new SubjectId(subject),
                         request.Reason ?? string.Empty,
                         channel,
@@ -224,7 +230,7 @@ internal static class RecoveryEndpoints
 
         if (request.Token is not { Length: > 0 } token)
         {
-            return Malformed;
+            return Answers.Malformed("token");
         }
 
         if (browser.FirstContact is not PreAuthentication contact)
@@ -253,6 +259,16 @@ internal static class RecoveryEndpoints
             RecoveryJson.Default.EnrolmentSessionView,
             contentType: null,
             StatusCodes.Status200OK);
+    }
+
+    // BFF-STEP-001: the endpoints that read this are mounted as ones that need a
+    // session, so the stage that requires one has already answered a request that
+    // arrived without it.
+    private static AccessContext Asking(RequestSession browser)
+    {
+        ArgumentNullException.ThrowIfNull(browser);
+
+        return AccessContext.Of(browser.Required.Subject);
     }
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)

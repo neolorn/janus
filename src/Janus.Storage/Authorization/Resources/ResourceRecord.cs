@@ -28,6 +28,13 @@ internal sealed class ResourceRecord
     public OrganizationId Organization { get; set; }
 
     /// <summary>
+    /// The <c>subject</c> column: the data subject of the record, as the column the
+    /// type declares for its encrypted fields holds it, absent where the record is
+    /// about nobody (PRIV-RIGHT-005a, PRIV-SENS-002).
+    /// </summary>
+    public SubjectId? Subject { get; set; }
+
+    /// <summary>
     /// The <c>contained_in_type</c> column, absent where nothing contains the record.
     /// </summary>
     public ResourceType? ContainedInType { get; set; }

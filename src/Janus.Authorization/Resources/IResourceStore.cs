@@ -28,6 +28,19 @@ internal interface IResourceStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads the registered records of one type on a page, in the order asked for,
+    /// leaving out any the library holds no row for.
+    /// </summary>
+    /// <param name="type">The kind of thing.</param>
+    /// <param name="resources">Which records.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The registrations the library holds.</returns>
+    ValueTask<IReadOnlyList<RegisteredResource>> FindManyAsync(
+        ResourceType type,
+        IReadOnlyList<ResourceId> resources,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Records a new resource and the ancestry that follows from it.
     /// </summary>
     /// <param name="resource">The record the host created.</param>

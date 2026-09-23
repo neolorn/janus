@@ -355,35 +355,45 @@ public sealed class ModelTests
             "objections.withdrawn_at",
 
             // Not an account field: the clients the deployment registered with the
-            // provider, the codes waiting to be exchanged and the refresh tokens of
-            // AUTH-OIDC-001, AUTH-OIDC-003 and AUTH-SESS-012.
+            // provider, and the authorizations, scopes and tokens the protocol server
+            // keeps in the library's tables (AUTH-OIDC-001 to AUTH-OIDC-004,
+            // AUTH-SESS-012).
+            "oidc_authorizations.application_id",
+            "oidc_authorizations.concurrency_token",
+            "oidc_authorizations.created_at",
+            "oidc_authorizations.id",
+            "oidc_authorizations.properties",
+            "oidc_authorizations.scopes",
+            "oidc_authorizations.status",
+            "oidc_authorizations.subject",
+            "oidc_authorizations.type",
             "oidc_clients.client_id",
             "oidc_clients.kind",
             "oidc_clients.name",
             "oidc_clients.redirect",
             "oidc_clients.scopes",
             "oidc_clients.secret",
-            "oidc_codes.challenge",
-            "oidc_codes.challenge_method",
-            "oidc_codes.client_id",
-            "oidc_codes.expires_at",
-            "oidc_codes.fingerprint",
-            "oidc_codes.issued_at",
-            "oidc_codes.nonce",
-            "oidc_codes.redirect",
-            "oidc_codes.scope",
-            "oidc_codes.session",
-            "oidc_codes.spent_at",
-            "oidc_codes.subject",
-            "oidc_refresh_tokens.client_id",
-            "oidc_refresh_tokens.consumed_at",
-            "oidc_refresh_tokens.expires_at",
-            "oidc_refresh_tokens.family",
-            "oidc_refresh_tokens.fingerprint",
-            "oidc_refresh_tokens.issued_at",
-            "oidc_refresh_tokens.scope",
-            "oidc_refresh_tokens.session",
-            "oidc_refresh_tokens.subject",
+            "oidc_scopes.description",
+            "oidc_scopes.descriptions",
+            "oidc_scopes.display_name",
+            "oidc_scopes.display_names",
+            "oidc_scopes.id",
+            "oidc_scopes.name",
+            "oidc_scopes.properties",
+            "oidc_scopes.resources",
+            "oidc_tokens.application_id",
+            "oidc_tokens.authorization_id",
+            "oidc_tokens.concurrency_token",
+            "oidc_tokens.created_at",
+            "oidc_tokens.expires_at",
+            "oidc_tokens.id",
+            "oidc_tokens.payload",
+            "oidc_tokens.properties",
+            "oidc_tokens.redeemed_at",
+            "oidc_tokens.reference_id",
+            "oidc_tokens.status",
+            "oidc_tokens.subject",
+            "oidc_tokens.type",
 
             // The organization of IDN-ORG-001, with the mark IDN-ORG-004 reads and
             // the deletion window of IDN-ORG-003.
@@ -427,14 +437,18 @@ public sealed class ModelTests
             "policy_raises.value",
 
             // Not an account field: what a browser carries before it holds a session,
-            // keyed as the session table is and carrying the registration session in
-            // flight (BFF-CSRF-005a, BFF-CSRF-005b).
+            // keyed as the session table is and carrying the registration session and
+            // the sign-on in flight (BFF-CSRF-005a, BFF-CSRF-005b, BFF-SESS-006).
             "preauthentication_sessions.created_at",
             "preauthentication_sessions.csrf_fingerprint",
             "preauthentication_sessions.enrolment",
             "preauthentication_sessions.expires_at",
             "preauthentication_sessions.fingerprint",
             "preauthentication_sessions.registration",
+            "preauthentication_sessions.signon_key_version",
+            "preauthentication_sessions.signon_return",
+            "preauthentication_sessions.signon_state",
+            "preauthentication_sessions.signon_verifier",
 
             // Not an account field: that an export was taken and when, which is what
             // the rate limit of D-086 counts and nothing more.
@@ -529,13 +543,16 @@ public sealed class ModelTests
             "registration_sources.id",
             "registration_sources.source",
 
-            // Authorization: the host's records as AUTHZ-INHERIT-001 registers them, and
-            // the one containing each.
+            // Authorization: the host's records as AUTHZ-INHERIT-001 registers them, the
+            // one containing each, and the data subject each is about, which the host
+            // reads from the column its type declares for its encrypted fields and the
+            // consent gate of PRIV-SENS-002 reads the consent of.
             "resources.contained_in_id",
             "resources.contained_in_type",
             "resources.organization",
             "resources.resource_id",
             "resources.resource_type",
+            "resources.subject",
 
             // Authorization: what a role allows (AUTHZ-GRANT-004), read live so that
             // editing it takes effect at once.
@@ -548,9 +565,18 @@ public sealed class ModelTests
             // kept apart from them.
             "send_counters.key",
             "send_counters.sent_at",
-            "send_counters.settles_at",
             "send_grants.credit",
             "send_grants.key",
+
+            // The messages undertaken and not yet carried (D-022), each the whole of
+            // what is to be sent under a key of the row's own, so that removing the row
+            // removes the message with it (IDN-PRIN-003, PRIV-RIGHT-005a).
+            "send_outbox.enc_message",
+            "send_outbox.id",
+            "send_outbox.key_version",
+            "send_outbox.recorded_at",
+            "send_outbox.subject",
+            "send_outbox.wrapped_key",
 
             // Not an account field: the message a transport took (AUTH-ABUSE-004,
             // INT-SMS-005), held by the hash of its correlation reference so that a
@@ -593,8 +619,6 @@ public sealed class ModelTests
             // Not an account field: a sign-in in flight, keyed by what the caller's handle
             // hashes to and carrying what it has presented so far (AUTH-FACT-001).
             "signin_challenges.created_at",
-            "signin_challenges.device_attempts",
-            "signin_challenges.device_code",
             "signin_challenges.expires_at",
             "signin_challenges.handle",
             "signin_challenges.presented",
@@ -651,6 +675,15 @@ public sealed class ModelTests
             "username_holds.fingerprint",
             "username_holds.held_from",
             "username_holds.releases_at",
+
+            // Not an account field: a code the library sent to prove control of a
+            // channel, held apart from every credential and spent on presentation
+            // (AUTH-FACT-004).
+            "verification_codes.attempts",
+            "verification_codes.code",
+            "verification_codes.expires_at",
+            "verification_codes.holder",
+            "verification_codes.issued_at",
         ];
 
         Assert.Equal(expected, Columns().OrderBy(name => name, StringComparer.Ordinal));

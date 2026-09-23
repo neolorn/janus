@@ -116,7 +116,7 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
         await using JanusDbContext reading = database.Context();
 
         IReadOnlyList<HeldConsent> held = await new ConsentStore(reading)
-            .LiveAgainstAnotherAsync("2", TestContext.Current.CancellationToken);
+            .LiveAgainstAnotherAsync([Recommendations], "2", TestContext.Current.CancellationToken);
 
         SubjectId[] mine = [asked, current, withdrawn];
 

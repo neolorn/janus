@@ -49,10 +49,10 @@ public sealed class CredentialServiceTests : IAsyncDisposable
 
     private static readonly OrganizationId Staff = new(Guid.NewGuid());
 
-    private static readonly SessionOrigin Somewhere = new(
-        Source,
-        new DeviceDescription("Firefox", "Fedora"),
-        new SessionLocation("Alexandria", "EG"));
+    private static readonly SessionOrigin Somewhere = new(Source, new DeviceDescription("Firefox", "Fedora"))
+    {
+        Location = new SessionLocation("Alexandria", "EG"),
+    };
 
     private readonly KeyCeremonyStoreInMemory _ceremonies = new();
     private readonly RecoveryLinkStoreInMemory _links = new();
@@ -73,14 +73,11 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly AccessGateInMemory _gate = new();
+    private readonly LocationResolverInMemory _locations = new();
     private readonly ThrottleLedgerInMemory _throttle = new();
-    private readonly SendLedgerInMemory _ledger = new();
     private readonly NoticeLedgerInMemory _notices = new();
-    private readonly MessageTemplatesInMemory _templates = new();
-    private readonly MailTransportInMemory _mail = new();
-    private readonly SmsTransportInMemory _sms = new();
-    private readonly SmsBalanceLedgerInMemory _balances = new();
     private readonly ConfigurationInMemory _configuration = new();
+    private readonly NotificationHandlerInMemory _notifications = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
@@ -98,19 +95,6 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             Settings.WebAuthnOrigins,
             (IReadOnlyList<string>)[Origin, "https://id.example.com"]);
 
-        MessageKind[] messages = [MessageKind.SecurityNotice, MessageKind.CredentialEnrolled];
-
-        foreach (MessageKind message in messages)
-        {
-            foreach (SendKind kind in Enum.GetValues<SendKind>())
-            {
-                _templates.Set(
-                    message,
-                    kind,
-                    Language,
-                    new MessageTemplate(kind is SendKind.Email ? "subject" : null, "body"));
-            }
-        }
     }
 
     /// <inheritdoc/>
@@ -130,13 +114,33 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     {
         (SubjectId subject, SessionId session) = await SignedInAsync();
 
-        _mail.Taken.Clear();
-        _sms.Taken.Clear();
+        _notifications.Sent.Clear();
 
         _ = await ConfirmedAsync(subject, session);
 
-        Assert.NotEmpty(_mail.Taken);
-        Assert.NotEmpty(_sms.Taken);
+        Assert.NotEmpty(_notifications.Mail);
+        Assert.NotEmpty(_notifications.Texts);
+    }
+
+    /// <summary>
+    /// AUTH-STEP-007, chapter 10 section 5b: an authenticator that reached active is
+    /// announced once, carrying what was enrolled and whose it is.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_STEP_007_AnEnrolmentThatReachedActiveIsAnnouncedAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+
+        EnrolledCredential enrolled = await ConfirmedAsync(subject, session);
+
+        CredentialEnrolled announced = Assert.Single(_events.Of<CredentialEnrolled>());
+
+        Assert.Equal(enrolled.Credential, announced.Credential);
+        Assert.Equal(FactorCatalogue.Generated, announced.Kind);
+        Assert.Equal(subject, announced.Subject);
+        Assert.Equal(subject, announced.Actor);
+        Assert.Equal(Noon, announced.RaisedAt);
     }
 
     /// <summary>
@@ -167,6 +171,29 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             (await _authenticators.FindAsync(
                 enrolled.Credential,
                 TestContext.Current.CancellationToken))!.State);
+    }
+
+    /// <summary>
+    /// REG-PM-001: the ceremony an account opens carries that account's own subject
+    /// identifier as the handle and its primary email as the name, and the display
+    /// name is empty where the account shows none.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_PM_001_TheCeremonyCarriesTheAccountsHandleAndPrimaryEmailAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+
+        CredentialCeremony ceremony = Value(await Service.BeginKeyAsync(
+            Authority(subject, session),
+            Factor.Passkey,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            subject.Value,
+            new Guid(Base64Url.DecodeFromChars(ceremony.User.Id), bigEndian: true));
+        Assert.Equal(Address, ceremony.User.Name);
+        Assert.Equal(string.Empty, ceremony.User.DisplayName);
     }
 
     /// <summary>
@@ -623,6 +650,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     private CredentialService Service =>
         new(
             Keys,
+            _accounts,
             Totp,
             Codes,
             Passwords,
@@ -635,8 +663,9 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             _passwords,
             _identifiers,
             _live,
-            Sending,
+            _notifications,
             _credentials,
+            _events,
             _configuration,
             _work,
             _clock);
@@ -655,7 +684,16 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     private PolicyResolution Policies => new(_memberships, _configuration, _raises);
 
     private SessionService Sessions =>
-        new(_live, _audit, Policies, _configuration, _gate, _work, _clock, _randomness);
+        new(
+            _live,
+            _audit,
+            Policies,
+            _configuration,
+            _gate,
+            _locations,
+            _work,
+            _clock,
+            _randomness);
 
     private ThrottleService Throttle =>
         new(_configuration, _throttle, _work, _events, _clock);
@@ -668,8 +706,9 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             _sets,
             _identifiers,
             Policies,
-            Sending,
+            _notifications,
             _credentials,
+            _events,
             _configuration,
             _work,
             _clock,
@@ -692,8 +731,8 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             Sessions,
             Guard,
             _gate,
-            Sending,
-            new NonExistenceNotice(_configuration, Sending, _notices, _work, _events, _clock),
+            _notifications,
+            new NonExistenceNotice(_configuration, _notifications, _notices, _work, _events, _clock),
             Throttle,
             _events,
             _configuration,
@@ -709,21 +748,6 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             _configuration,
             _work,
             _clock);
-
-    private SendingService Sending =>
-        new(
-            _configuration,
-            _ledger,
-            _templates,
-            _mail,
-            _sms,
-            RestrictionKeySuppliers.None,
-            Considered.Nothing(_work, _clock),
-            new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
-            _work,
-            _events,
-            _clock,
-            _randomness);
 
     private static CredentialAuthority Authority(SubjectId subject, SessionId session) =>
         CredentialAuthority.Of(AccessContext.Of(subject), session);

@@ -335,19 +335,22 @@ internal sealed class Deployment(HostFixture fixture)
     /// <param name="reference">The record.</param>
     /// <param name="containedIn">What contains it, or nothing.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <param name="subject">Whose data the record is, where it is anybody's.</param>
     /// <returns>The work of writing it.</returns>
     public async Task RegisterAsync(
         ResourceReference reference,
         ResourceReference? containedIn,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        SubjectId? subject = null)
     {
         await using NpgsqlConnection connection = await fixture.OpenAsync();
 
         await connection.ExecuteAsync(new CommandDefinition(
             """
             INSERT INTO janus.resources
-                (resource_type, resource_id, organization, contained_in_type, contained_in_id)
-            VALUES (@type, @id, @organization, @containerType, @containerId);
+                (resource_type, resource_id, organization, subject,
+                 contained_in_type, contained_in_id)
+            VALUES (@type, @id, @organization, @subject, @containerType, @containerId);
             INSERT INTO janus.ancestry
                 (resource_type, resource_id, ancestor_type, ancestor_id, depth, organization)
             SELECT @type, @id, @type, @id, 0, @organization
@@ -362,6 +365,7 @@ internal sealed class Deployment(HostFixture fixture)
                 type = reference.Type.ToString(),
                 id = reference.Id.ToString(),
                 organization = Organization.Value,
+                subject = subject?.Value,
                 containerType = containedIn?.Type.ToString(),
                 containerId = containedIn?.Id.ToString(),
             },

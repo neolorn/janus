@@ -7,6 +7,7 @@ using Janus.Core;
 using Janus.Identity.Accounts;
 using Janus.Identity.Preferences;
 using Janus.Identity.Profiles;
+using Janus.Privacy.SubjectKeys;
 
 namespace Janus.Storage.Authentication.Accounts;
 
@@ -16,7 +17,8 @@ namespace Janus.Storage.Authentication.Accounts;
 /// </summary>
 /// <param name="accounts">Where the account row is read.</param>
 /// <param name="profiles">Where the profile is read and written.</param>
-/// <param name="photos">Where the photo's instant is read.</param>
+/// <param name="photos">Where the photo is read and written.</param>
+/// <param name="keys">Where a subject's key is read, to know whether it still reads.</param>
 /// <param name="preferences">Where the preferences are read and written.</param>
 /// <param name="declarations">The preference keys the host declared.</param>
 /// <remarks>
@@ -28,6 +30,7 @@ internal sealed class AccountDirectory(
     IAccountStore accounts,
     IProfileStore profiles,
     IProfilePhotoStore photos,
+    ISubjectKeyStore keys,
     IPreferenceStore preferences,
     PreferenceDeclarations declarations) : IAccountDirectory
 {
@@ -156,6 +159,42 @@ internal sealed class AccountDirectory(
 
         await profiles.RecordAsync(profile, cancellationToken).ConfigureAwait(false);
     }
+
+    /// <inheritdoc/>
+    public async ValueTask<ReadOnlyMemory<byte>> PhotoAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        // PRIV-RIGHT-005 AC4: erasure overwrites the key the image is encrypted under
+        // and leaves the row where it stands, so an account whose key is gone shows
+        // what an account with no photo shows rather than failing on ciphertext
+        // nothing can read (D-157).
+        SubjectKey? key = await keys.FindBySubjectAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (key is null || key.IsErased)
+        {
+            return ReadOnlyMemory<byte>.Empty;
+        }
+
+        ProfilePhoto? photo = await photos.FindBySubjectAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        return photo?.Image ?? ReadOnlyMemory<byte>.Empty;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask RecordPhotoAsync(
+        SubjectId subject,
+        ReadOnlyMemory<byte> image,
+        DateTimeOffset at,
+        CancellationToken cancellationToken) =>
+        await photos.RecordAsync(ProfilePhoto.Of(subject, image, at), cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async ValueTask RemovePhotoAsync(SubjectId subject, CancellationToken cancellationToken) =>
+        await photos.RemoveAsync(subject, cancellationToken).ConfigureAwait(false);
 
     /// <inheritdoc/>
     public async ValueTask<HeldPreferences> PreferencesAsync(

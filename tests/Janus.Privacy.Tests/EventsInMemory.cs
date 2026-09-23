@@ -26,12 +26,23 @@ internal sealed class EventsInMemory : IEvents
         where TEvent : JanusEvent =>
         [.. Published.OfType<TEvent>()];
 
+    /// <summary>
+    /// What the publication answers with instead of taking the event, where a test
+    /// stands in for a consumer that would not take it.
+    /// </summary>
+    public Error? Refusal { get; set; }
+
     /// <inheritdoc/>
-    public ValueTask PublishAsync<TEvent>(TEvent raised, CancellationToken cancellationToken)
+    public ValueTask<Result> PublishAsync<TEvent>(TEvent raised, CancellationToken cancellationToken)
         where TEvent : JanusEvent
     {
+        if (Refusal is Error refused)
+        {
+            return ValueTask.FromResult(Result.Failure(refused));
+        }
+
         Published.Add(raised);
 
-        return ValueTask.CompletedTask;
+        return ValueTask.FromResult(Result.Success());
     }
 }

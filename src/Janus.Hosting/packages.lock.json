@@ -406,7 +406,8 @@
           "Janus.Identity": "[1.0.0, )",
           "Janus.Privacy": "[1.0.0, )",
           "Microsoft.EntityFrameworkCore": "[10.0.4, )",
-          "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )"
+          "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
+          "OpenIddict.Server": "[7.7.1, )"
         }
       },
       "Dapper": {

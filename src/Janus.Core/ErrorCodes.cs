@@ -146,6 +146,33 @@ public static class ErrorCodes
     public static ErrorCode StartupLabelLimit { get; } = ErrorCode.Parse("model.startup.labellimit");
 
     /// <summary>
+    /// Startup: a registered client's return destination is not an absolute origin,
+    /// or <c>redirect.defaultclient</c> names no registered browser application. The
+    /// details name the client under <c>client</c> or the setting under <c>key</c>;
+    /// correct the destination, or name a client the registry holds.
+    /// </summary>
+    /// <remarks>Implements API-REDIR-001, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupRedirectClient { get; } = ErrorCode.Parse("model.startup.redirectclient");
+
+    /// <summary>
+    /// Startup: the database schema is behind the model, so a migration the pipeline
+    /// should have applied has not been. The details name the migrations still to
+    /// apply under <c>pending</c>; apply them and start again. A schema ahead of the
+    /// model is the expand half of a rollout and is not this fault.
+    /// </summary>
+    /// <remarks>Implements OPS-MIG-002, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupSchemaMismatch { get; } = ErrorCode.Parse("model.startup.schemamismatch");
+
+    /// <summary>
+    /// The account already holds a membership, and this deployment allows one. Enable
+    /// <c>organization.multiplememberships</c>, or end the membership held first. The
+    /// details name the organization where the membership offered is of the one the
+    /// account is already a member of.
+    /// </summary>
+    /// <remarks>Implements IDN-MEM-002, chapter 10 section 1.1.</remarks>
+    public static ErrorCode MembershipLimitReached { get; } = ErrorCode.Parse("identity.membership.limitreached");
+
+    /// <summary>
     /// The organization named is the administrative one, which is not deletable.
     /// Delete another organization, or none.
     /// </summary>
@@ -288,6 +315,13 @@ public static class ErrorCodes
     public static ErrorCode RegistrationIncomplete { get; } = ErrorCode.Parse("identity.registration.incomplete");
 
     /// <summary>
+    /// The browser asking to register already holds a session. Nothing is staged for
+    /// it; send it to the account application instead.
+    /// </summary>
+    /// <remarks>Implements REG-SESS-002, chapter 10 section 1.1.</remarks>
+    public static ErrorCode RegistrationSignedIn { get; } = ErrorCode.Parse("identity.registration.signedin");
+
+    /// <summary>
     /// The date of birth is under eighteen where the deployment takes an adult
     /// affirmation. The registration session has ended; nothing further is accepted in
     /// it.
@@ -309,6 +343,27 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements REG-PROF-001, REG-IDENT-009, chapter 10 section 1.1.</remarks>
     public static ErrorCode ProfileNotAccepted { get; } = ErrorCode.Parse("identity.profile.notaccepted");
+
+    /// <summary>
+    /// The upload is not an image the deployment's codec accepts: the bytes are read
+    /// for what they are and never for what the request called them. Send a JPEG, PNG
+    /// or WebP image.
+    /// </summary>
+    /// <remarks>Implements IDN-ATTR-004, chapter 10 section 1.1.</remarks>
+    public static ErrorCode PhotoInvalid { get; } = ErrorCode.Parse("identity.photo.invalid");
+
+    /// <summary>
+    /// The upload is longer than <c>photo.maxbytes</c> allows. Send a smaller image.
+    /// </summary>
+    /// <remarks>Implements IDN-ATTR-004, chapter 10 section 1.1.</remarks>
+    public static ErrorCode PhotoTooLarge { get; } = ErrorCode.Parse("identity.photo.toolarge");
+
+    /// <summary>
+    /// No organization the account belongs to shows a photo, so there is none to set
+    /// or to read. Ask an administrator to give the organization photos.
+    /// </summary>
+    /// <remarks>Implements IDN-ATTR-002, chapter 10 section 1.1.</remarks>
+    public static ErrorCode PhotoNotEnabled { get; } = ErrorCode.Parse("identity.photo.notenabled");
 
     /// <summary>
     /// A second username change fell inside <c>identifiers.username.changecooloff</c>.
@@ -499,6 +554,13 @@ public static class ErrorCodes
     public static ErrorCode PasswordBlocklisted { get; } = ErrorCode.Parse("auth.password.blocklisted");
 
     /// <summary>
+    /// The password is longer than the deployment accepts. Nothing is truncated to make
+    /// it fit, because a truncated password is not the password that was chosen.
+    /// </summary>
+    /// <remarks>Implements AUTH-PASS-001, chapter 10 section 1.2.</remarks>
+    public static ErrorCode PasswordTooLong { get; } = ErrorCode.Parse("auth.password.toolong");
+
+    /// <summary>
     /// The password is below the floor that applies to it. The shorter floor is reached
     /// by holding a second factor, not by choosing it.
     /// </summary>
@@ -584,10 +646,16 @@ public static class ErrorCodes
     public static ErrorCode RestrictionExceeded { get; } = ErrorCode.Parse("auth.restriction.exceeded");
 
     /// <summary>
-    /// A restriction grant, or an edit that loosens a restriction, arrived without a
-    /// written reason. State the reason and submit it again.
+    /// A runtime configuration change, a restriction grant, or an edit that loosens a
+    /// restriction, arrived without a written reason. State the reason and submit it
+    /// again.
     /// </summary>
-    /// <remarks>Implements AUTH-ABUSE-004, OPS-CFG-002, chapter 10 section 1.2.</remarks>
+    /// <remarks>
+    /// Implements AUTH-ABUSE-004, OPS-CFG-002, OPS-CFG-005, chapter 9
+    /// <c>PUT /admin/config/{key}</c> and chapter 10 section 1.2. The code is the one
+    /// chapter 9 names for a configuration change with no reason, which is why a code
+    /// of the restriction area answers for every setting.
+    /// </remarks>
     public static ErrorCode RestrictionReasonRequired { get; } = ErrorCode.Parse("auth.restriction.reasonrequired");
 
     /// <summary>
@@ -708,6 +776,13 @@ public static class ErrorCodes
     public static ErrorCode ConsentWrittenRequired { get; } = ErrorCode.Parse("privacy.consent.writtenrequired");
 
     /// <summary>
+    /// The document or the version asked for does not exist, or was never published.
+    /// Ask for a version that was published, or the current one.
+    /// </summary>
+    /// <remarks>Implements PRIV-CONS-005, chapter 10 section 1.4.</remarks>
+    public static ErrorCode DocumentNotFound { get; } = ErrorCode.Parse("privacy.document.notfound");
+
+    /// <summary>
     /// An erasure that has not exhausted its retries cannot be completed by hand.
     /// Let the deliveries run out first.
     /// </summary>
@@ -723,11 +798,40 @@ public static class ErrorCodes
         ErrorCode.Parse("privacy.notice.governingtextmissing");
 
     /// <summary>
+    /// No privacy notice has been published, so there is no version a consent could
+    /// be given against. Publish one first.
+    /// </summary>
+    /// <remarks>Implements PRIV-CONS-005, PRIV-CONS-008a, chapter 10 section 1.4.</remarks>
+    public static ErrorCode NoticeUnpublished { get; } = ErrorCode.Parse("privacy.notice.unpublished");
+
+    /// <summary>
+    /// The purpose is undeclared, or rests on a basis other than consent, so it is
+    /// not the subject's to agree to or to withdraw. Act on a purpose the deployment
+    /// declared as resting on consent.
+    /// </summary>
+    /// <remarks>Implements PRIV-CONS-008a, PRIV-SENS-002a, chapter 10 section 1.4.</remarks>
+    public static ErrorCode PurposeNoConsent { get; } = ErrorCode.Parse("privacy.purpose.noconsent");
+
+    /// <summary>
     /// The basis the purpose rests on carries no right to object. Withdraw the
     /// consent instead where the basis is consent.
     /// </summary>
     /// <remarks>Implements PRIV-RIGHT-001a, chapter 10 section 1.4.</remarks>
     public static ErrorCode PurposeNotObjectable { get; } = ErrorCode.Parse("privacy.purpose.notobjectable");
+
+    /// <summary>
+    /// The request has already been decided, and a decision stands. Read the request
+    /// to see what was decided on it.
+    /// </summary>
+    /// <remarks>Implements PRIV-RIGHT-001, chapter 10 section 1.4.</remarks>
+    public static ErrorCode RequestDecided { get; } = ErrorCode.Parse("privacy.request.decided");
+
+    /// <summary>
+    /// No privacy request carries that identifier. Work the queue for the identifier
+    /// of the request being decided.
+    /// </summary>
+    /// <remarks>Implements PRIV-RIGHT-001, chapter 10 section 1.4.</remarks>
+    public static ErrorCode RequestNotFound { get; } = ErrorCode.Parse("privacy.request.notfound");
 
     /// <summary>
     /// An identical request is already open. Wait for the decision on it rather than
@@ -742,6 +846,14 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements PRIV-RIGHT-002, chapter 10 section 1.4.</remarks>
     public static ErrorCode RequestReceivedFuture { get; } = ErrorCode.Parse("privacy.request.receivedfuture");
+
+    /// <summary>
+    /// The request could not be read: its body is not the shape the endpoint takes, or
+    /// a member it requires is absent. Where the offending member is known,
+    /// <c>details.member</c> names it and carries nothing of its value.
+    /// </summary>
+    /// <remarks>Implements API-CONV-002, chapter 10 sections 1.5 and 6.</remarks>
+    public static ErrorCode RequestMalformed { get; } = ErrorCode.Parse("api.request.malformed");
 
     /// <summary>
     /// An unhandled fault. The body carries the correlation identifier and nothing

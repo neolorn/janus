@@ -44,6 +44,42 @@ public interface IAccount
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// The image the account shows for itself.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The stored JPEG, empty where the account shows none and where no organization
+    /// it belongs to shows photos at all.
+    /// </returns>
+    ValueTask<Result<ReadOnlyMemory<byte>>> ReadPhotoAsync(
+        AccessContext context,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Makes an upload into the image the account shows, replacing what it showed. The
+    /// bytes are read for what they are by the codec the deployment declared, held to
+    /// the configured bounds, and stored as that codec re-encoded them.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="upload">The uploaded bytes.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or the refusal and its code.</returns>
+    ValueTask<Result> SetPhotoAsync(
+        AccessContext context,
+        ReadOnlyMemory<byte> upload,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Gives up the image the account shows, which an account that shows none is
+    /// unchanged by.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or the refusal and its code.</returns>
+    ValueTask<Result> RemovePhotoAsync(AccessContext context, CancellationToken cancellationToken);
+
+    /// <summary>
     /// The language, the time zone and the value in force for every key the host
     /// declared.
     /// </summary>

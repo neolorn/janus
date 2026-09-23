@@ -1,8 +1,12 @@
 using System;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Sessions;
+using Janus.Core;
+using Janus.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Authentication.Sessions;
@@ -12,12 +16,17 @@ namespace Janus.Storage.Authentication.Sessions;
 /// <c>preauthentication_sessions</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
+/// <param name="keyEncryptionKeys">The versions the proof key is wrapped under.</param>
 /// <remarks>
-/// Implements BFF-CSRF-005a and CONV-DESIGN-003. Nothing here is a personal field, so
-/// no key is unwrapped and none is needed: the row is two fingerprints, two instants
-/// and what the browser has in flight.
+/// Implements BFF-CSRF-005a, BFF-SESS-006, CONV-DESIGN-003 and OPS-SEC-001. Nothing
+/// here is a personal field: the row is two fingerprints, two instants and what the
+/// browser has in flight. The one secret among them is the sign-on proof key, which
+/// the server presents and the browser never sees, so it is wrapped on the way in and
+/// unwrapped for the one caller that redeems a code with it.
 /// </remarks>
-internal sealed class PreAuthenticationStore(JanusDbContext context) : IPreAuthenticationStore
+internal sealed class PreAuthenticationStore(
+    JanusDbContext context,
+    KeyEncryptionKeys keyEncryptionKeys) : IPreAuthenticationStore
 {
     /// <inheritdoc/>
     public async ValueTask<PreAuthentication?> FindAsync(
@@ -38,7 +47,8 @@ internal sealed class PreAuthenticationStore(JanusDbContext context) : IPreAuthe
                 record.CreatedAt,
                 record.ExpiresAt,
                 record.Registration,
-                record.Enrolment);
+                record.Enrolment,
+                Read(record));
     }
 
     /// <inheritdoc/>
@@ -78,6 +88,8 @@ internal sealed class PreAuthenticationStore(JanusDbContext context) : IPreAuthe
         record.ExpiresAt = preAuthentication.ExpiresAt;
         record.Registration = preAuthentication.Registration;
         record.Enrolment = preAuthentication.Enrolment;
+
+        Write(record, preAuthentication.SignOn);
     }
 
     /// <inheritdoc/>
@@ -92,6 +104,61 @@ internal sealed class PreAuthenticationStore(JanusDbContext context) : IPreAuthe
         if (record is not null)
         {
             context.PreAuthenticationSessions.Remove(record);
+        }
+    }
+
+    // BFF-SESS-006: the four columns are written together, so a row either carries a
+    // whole sign-on or carries none, and the proof key goes down wrapped.
+    private void Write(PreAuthenticationRecord record, SignOnAttempt? attempt)
+    {
+        if (attempt is null)
+        {
+            record.SignOnState = null;
+            record.SignOnVerifier = null;
+            record.SignOnKeyVersion = null;
+            record.SignOnReturn = null;
+
+            return;
+        }
+
+        byte[] verifier = Encoding.ASCII.GetBytes(attempt.Verifier);
+
+        try
+        {
+            record.SignOnState = attempt.StateFingerprint;
+            record.SignOnVerifier = PersonalFieldCipher.Wrap(verifier, keyEncryptionKeys.Current.Span);
+            record.SignOnKeyVersion = keyEncryptionKeys.CurrentVersion;
+            record.SignOnReturn = attempt.ReturnTo;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(verifier);
+        }
+    }
+
+    private SignOnAttempt? Read(PreAuthenticationRecord record)
+    {
+        if (record.SignOnState is not byte[] state
+            || record.SignOnVerifier is not byte[] wrapped
+            || record.SignOnKeyVersion is not int version
+            || record.SignOnReturn is not string returnTo)
+        {
+            return null;
+        }
+
+        byte[] verifier = PersonalFieldCipher.Unwrap(
+            PersonalDataFormat.Marker,
+            version,
+            wrapped,
+            keyEncryptionKeys);
+
+        try
+        {
+            return new SignOnAttempt(state, Encoding.ASCII.GetString(verifier), returnTo);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(verifier);
         }
     }
 

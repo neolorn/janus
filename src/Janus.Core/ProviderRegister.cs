@@ -10,9 +10,12 @@ namespace Janus.Core;
 /// deployment's own.
 /// </summary>
 /// <remarks>
-/// Implements PRIV-ROPA-002. Nothing is applied by being shipped: a host declares the
-/// rows it actually has, which is why every row here carries no agreement reference
-/// and is flagged until the deployment gives it one.
+/// Implements PRIV-ROPA-002. A host declares the rows it actually has, because a
+/// generic library cannot know that a deployment takes payments or ships anything.
+/// The three rows the library itself makes true (the hosting provider, and the mail
+/// server and the screening service where it calls them) are applied by the records
+/// of processing whether or not the deployment declares them. Every row here carries
+/// no agreement reference and is flagged until the deployment gives it one.
 /// </remarks>
 public static class ProviderRegister
 {

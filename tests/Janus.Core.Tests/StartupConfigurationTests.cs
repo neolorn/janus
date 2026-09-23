@@ -103,6 +103,31 @@ public sealed class StartupConfigurationTests
         Start(Named(without: Settings.ServiceName.Key));
 
     /// <summary>
+    /// INT-PWD-003: a deployment that hosts the corpus itself says where it answers,
+    /// there being nowhere else to look for it.
+    /// </summary>
+    [Fact]
+    public void ThrowIfIncomplete_TheCorpusIsSelfHosted_RequiresItsAddress()
+    {
+        StartupException fault = Assert.Throws<StartupException>(
+            () => Start(
+                Named(without: Settings.PasswordBlocklistSelfHostedAddress.Key),
+                blocklistSource: BlocklistSource.SelfHosted));
+
+        Assert.Equal(
+            "password.blocklist.selfhosted.address",
+            fault.Failure?.Details["key"].GetString());
+    }
+
+    /// <summary>
+    /// The same deployment on the primary source starts without naming an address of
+    /// its own.
+    /// </summary>
+    [Fact]
+    public void ThrowIfIncomplete_TheCorpusIsNotSelfHosted_NeedsNoAddress() =>
+        Start(Named(without: Settings.PasswordBlocklistSelfHostedAddress.Key));
+
+    /// <summary>
     /// PRIV-ROPA-001: the hosting environment is a cell of the register, so it is
     /// needed only by a deployment that generates one.
     /// </summary>
@@ -214,15 +239,18 @@ public sealed class StartupConfigurationTests
             Settings.PasswordArgon2Iterations.Default)));
 
     // Startup against a deployment inside Egypt that screens passwords against the
-    // leaked list alone and generates no register, which is the shipped shape.
+    // leaked list alone over the primary source and generates no register, which is
+    // the shipped shape.
     private static void Start(
         IReadOnlySet<ConfigurationKey> named,
         HostingLocation location = HostingLocation.Inside,
+        BlocklistSource blocklistSource = BlocklistSource.RangeApi,
         IReadOnlySet<BlocklistRejectionSource>? blocklistSources = null,
         bool recordsOfProcessing = false) =>
         Settings.ThrowIfIncomplete(
             named,
             location,
+            blocklistSource,
             blocklistSources ?? Settings.PasswordBlocklistSources.Default,
             recordsOfProcessing);
 

@@ -40,6 +40,8 @@ namespace Janus.Authentication.SignIn;
 /// <param name="policies">What policy governs the account, and what it has raised.</param>
 /// <param name="throttle">The progressive delay.</param>
 /// <param name="sending">Where a message goes out.</param>
+/// <param name="signals">What is known about a number before a text leans on it.</param>
+/// <param name="codes">The verification codes, which live and die on their own rules.</param>
 /// <param name="configuration">Where the lifetimes and the limits come from.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
@@ -67,7 +69,9 @@ internal sealed class AuthenticationService(
     SessionService sessions,
     PolicyResolution policies,
     ThrottleService throttle,
-    SendingService sending,
+    INotificationHandler sending,
+    PhoneSignals signals,
+    VerificationCodes codes,
     IConfigurationStore configuration,
     IUnitOfWork work,
     TimeProvider time,
@@ -134,13 +138,12 @@ internal sealed class AuthenticationService(
         string challenge,
         FactorPresentation presented,
         DeviceDescription device,
-        SessionLocation? location,
         string source,
         CancellationToken cancellationToken) =>
         (await PresentAsync(
                 challenge,
                 presented,
-                new SessionOrigin(source, device, location),
+                new SessionOrigin(source, device),
                 remembered: null,
                 trusted: null,
                 cancellationToken)
@@ -152,13 +155,12 @@ internal sealed class AuthenticationService(
         string challenge,
         string code,
         DeviceDescription device,
-        SessionLocation? location,
         string source,
         CancellationToken cancellationToken) =>
         (await VerifyDeviceAsync(
                 challenge,
                 code,
-                new SessionOrigin(source, device, location),
+                new SessionOrigin(source, device),
                 cancellationToken)
             .ConfigureAwait(false))
         .Match(outcome => Result.Success(outcome.Progress), Result.Failure<SignInProgress>);
@@ -198,7 +200,6 @@ internal sealed class AuthenticationService(
         string linkToken,
         bool press,
         DeviceDescription device,
-        SessionLocation? location,
         string source,
         CancellationToken cancellationToken) =>
         (await LandAsync(
@@ -206,7 +207,7 @@ internal sealed class AuthenticationService(
                 browser,
                 linkToken,
                 press,
-                new SessionOrigin(source, device, location),
+                new SessionOrigin(source, device),
                 remembered: null,
                 cancellationToken)
             .ConfigureAwait(false))
@@ -342,47 +343,25 @@ internal sealed class AuthenticationService(
 
         Challenge? open = await OpenAsync(challenge, cancellationToken).ConfigureAwait(false);
 
-        if (open?.Subject is not SubjectId subject || open.DeviceCode is null)
+        if (open?.Subject is not SubjectId subject)
         {
             return Result.Failure<SignInOutcome>(Error.From(ErrorCodes.CodeExpired));
         }
 
         Error? failure = null;
 
-        int attempts = (await configuration
-                .ReadAsync(Settings.CodeVerificationAttempts, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(value => value, error => Withheld<int>(error, ref failure));
+        // AUTH-FACT-004: the code answers to its own rules, so the sign-in learns only
+        // whether it was the one outstanding and never holds it.
+        Result presented = await codes
+            .PresentAsync(open.Fingerprint, code, cancellationToken)
+            .ConfigureAwait(false);
 
-        if (failure is not null)
+        Error? refused = presented.Match<Error?>(() => null, error => error);
+
+        if (refused is not null)
         {
-            return Result.Failure<SignInOutcome>(failure);
+            return Result.Failure<SignInOutcome>(refused);
         }
-
-        if (!VerificationCode.Matches(open.DeviceCode, code))
-        {
-            open.Missed();
-
-            // Enough wrong codes end the code, and the sign-in with it: a correct one
-            // afterwards is refused too (AUTH-FACT-004).
-            if (open.DeviceAttempts >= attempts)
-            {
-                open.Spent();
-            }
-
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-            await challenges.RecordAsync(open, cancellationToken).ConfigureAwait(false);
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
-            return Result.Failure<SignInOutcome>(
-                Error.From(open.IsHeld ? ErrorCodes.CodeInvalid : ErrorCodes.CodeExpired));
-        }
-
-        open.Spent();
-
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-        await challenges.RecordAsync(open, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         OpaqueToken? browser = (await devices
                 .VerifiedAsync(subject, origin.Device, cancellationToken)
@@ -912,6 +891,29 @@ internal sealed class AuthenticationService(
 
         List<Factor> wanted = Wanted(policy, enrolled, reached, trusts);
 
+        // AUTH-FACT-002b: where the carrier reports a recent change of SIM or of
+        // network, the entries a text carries are withheld from this sign-in and the
+        // account's other second steps are offered in their place.
+        int offered = wanted.Count;
+
+        List<Factor> textable = [.. wanted.Where(entry => FactorCatalogue.Of(entry).Restricted)];
+
+        foreach (Factor carried in textable)
+        {
+            if (!await TextableAsync(subject, carried, cancellationToken).ConfigureAwait(false))
+            {
+                _ = wanted.Remove(carried);
+            }
+        }
+
+        // Withholding the only second step cannot let the sign-in through below the
+        // level the account's own asked for, so a challenge left with nothing to
+        // present is refused rather than completed.
+        if (offered > 0 && wanted.Count is 0)
+        {
+            return Result.Failure<SignInOutcome>(Error.From(ErrorCodes.FactorRejected));
+        }
+
         if (wanted.Count > 0)
         {
             return Result.Success(new SignInOutcome(
@@ -956,6 +958,25 @@ internal sealed class AuthenticationService(
                     remembered is null ? null : OpaqueToken.Of(remembered),
                     trusted,
                     cancellationToken)
+                .ConfigureAwait(false);
+    }
+
+    // AUTH-FACT-002b: the entry rides the number the account would be texted at, so
+    // it is that number the signal is asked about.
+    private async ValueTask<bool> TextableAsync(
+        SubjectId subject,
+        Factor carried,
+        CancellationToken cancellationToken)
+    {
+        HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+        IReadOnlyList<HeldIdentifier> numbers = held.OfKind(IdentifierKind.Phone);
+        HeldIdentifier? texted = numbers.FirstOrDefault(number => number.IsPrimary)
+            ?? (numbers.Count is 0 ? null : numbers[0]);
+
+        return texted is null
+            || await signals
+                .AllowsAsync(carried, texted.Canonical, subject, cancellationToken)
                 .ConfigureAwait(false);
     }
 
@@ -1022,7 +1043,15 @@ internal sealed class AuthenticationService(
 
         string language = await identifiers.LanguageAsync(subject, cancellationToken)
             .ConfigureAwait(false) ?? string.Empty;
-        string code = VerificationCode.Draw(randomness);
+
+        string code = (await codes.IssueAsync(open.Fingerprint, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(drawn => drawn, error => Withheld<string>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<SignInOutcome>(failure);
+        }
 
         _ = (await sending
                 .SendAsync(
@@ -1047,12 +1076,6 @@ internal sealed class AuthenticationService(
         {
             return Result.Failure<SignInOutcome>(failure);
         }
-
-        open.Holding(VerificationCode.Held(code));
-
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-        await challenges.RecordAsync(open, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success(new SignInOutcome(
             new SignInProgress(

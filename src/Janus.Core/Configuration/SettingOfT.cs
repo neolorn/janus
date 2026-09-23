@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Janus.Core.Configuration;
 
@@ -34,6 +35,27 @@ public abstract class Setting<TValue> : Setting
     public TValue Default => IsRequired
         ? throw new InvalidOperationException("The deployment names " + Key + "; it has no default.")
         : _fallback;
+
+    /// <summary>
+    /// Whether changing the value from one to another loosens the deployment, which is
+    /// what decides whether the change costs step-up, a written reason and an audit
+    /// entry.
+    /// </summary>
+    /// <param name="before">The value in force.</param>
+    /// <param name="after">The value it would become.</param>
+    /// <returns>Whether the change loosens.</returns>
+    /// <remarks>
+    /// Implements OPS-CFG-002 and the chapter 10 section 4 direction paragraph. A key
+    /// that loosens upward loosens on a greater value, one that loosens downward on a
+    /// lesser, and one with no direction on any change at all, which is what D-079b
+    /// classifies a setting with no direction as.
+    /// </remarks>
+    public virtual bool Loosens(TValue before, TValue after) => Loosening switch
+    {
+        SettingDirection.Increase => Comparer<TValue>.Default.Compare(after, before) > 0,
+        SettingDirection.Decrease => Comparer<TValue>.Default.Compare(after, before) < 0,
+        _ => !EqualityComparer<TValue>.Default.Equals(before, after),
+    };
 
     /// <summary>
     /// Reads a value the deployment named, refusing one the constraints do not admit

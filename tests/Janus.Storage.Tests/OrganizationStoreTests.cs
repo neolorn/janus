@@ -162,11 +162,10 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
         await using (JanusDbContext writing = database.Context())
         {
             MembershipStore store = Memberships(writing);
+            Membership beginning = Made(NewId(), subject, first);
+            await store.CreateAsync(beginning, TestContext.Current.CancellationToken);
             await store.CreateAsync(
-                Membership.Create(NewId(), subject, first, Noon),
-                TestContext.Current.CancellationToken);
-            await store.CreateAsync(
-                Membership.Create(NewId(), subject, second, Noon),
+                Made(NewId(), subject, second, beginning),
                 TestContext.Current.CancellationToken);
 
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -194,7 +193,7 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
         await using (JanusDbContext writing = database.Context())
         {
             await Memberships(writing).CreateAsync(
-                Membership.Create(id, subject, organization, Noon),
+                Made(id, subject, organization),
                 TestContext.Current.CancellationToken);
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
@@ -235,11 +234,10 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
     {
         await using JanusDbContext context = database.Context();
 
-        var membership = Membership.Create(
+        Membership membership = Made(
             NewId(),
             new SubjectId(Guid.NewGuid()),
-            new OrganizationId(Guid.NewGuid()),
-            Noon);
+            new OrganizationId(Guid.NewGuid()));
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await Memberships(context).RecordAsync(membership, TestContext.Current.CancellationToken));
@@ -276,6 +274,17 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
 
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
+
+    // IDN-MEM-002: how many memberships an account may hold at once is a setting these
+    // cases are not about, so they say what the row they are about needs.
+    private static Membership Made(
+        MembershipId id,
+        SubjectId subject,
+        OrganizationId organization,
+        params Membership[] held) =>
+        Membership
+            .Create(id, subject, organization, held, multiple: true, Noon)
+            .Match(made => made, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
 
     private static MembershipId NewId() => new(Guid.CreateVersion7());
 

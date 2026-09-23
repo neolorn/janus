@@ -13,8 +13,8 @@ namespace Janus.Authorization.Tests.Gate;
 [Trait("kind", "unit")]
 public sealed class StepUpGatesTests
 {
-    private static readonly Permission Bound = Permission.Parse("document:edit");
-    private static readonly Permission Unbound = Permission.Parse("document:read");
+    private static readonly Permission Bound = Permission.Parse("article:edit");
+    private static readonly Permission Unbound = Permission.Parse("article:read");
 
     /// <summary>
     /// AUTH-STEP-001 AC1: the gate is bound to the permission, so exercising it asks

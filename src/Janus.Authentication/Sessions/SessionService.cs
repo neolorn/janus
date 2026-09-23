@@ -22,6 +22,7 @@ namespace Janus.Authentication.Sessions;
 /// <param name="policies">Where the principal's policy is resolved.</param>
 /// <param name="configuration">Where the lifetimes are read from.</param>
 /// <param name="gate">Where a permission is evaluated.</param>
+/// <param name="locations">What the address a session was used from resolves to.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where a session secret is drawn from.</param>
@@ -36,6 +37,7 @@ internal sealed class SessionService(
     PolicyResolution policies,
     IConfigurationStore configuration,
     IAccessGate gate,
+    ILocationResolver locations,
     IUnitOfWork work,
     TimeProvider time,
     RandomNumberGenerator randomness) : ISessions
@@ -162,9 +164,19 @@ internal sealed class SessionService(
         (TimeSpan inactivity, TimeSpan _) =
             await LifetimesAsync(policy, cancellationToken).ConfigureAwait(false);
 
+        Result<SessionOrigin> located = await LocatedAsync(origin, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (located.Match(_ => (Error?)null, error => error) is Error unlocated)
+        {
+            return Result.Failure<Session>(unlocated);
+        }
+
+        SessionOrigin used = located.Match(one => one, _ => origin);
+
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
-        session.Touch(origin, now, inactivity);
+        session.Touch(used, now, inactivity);
         await sessions.RecordAsync(session, cancellationToken).ConfigureAwait(false);
 
         // Use of a session standing on the record is use of the record: one session
@@ -172,7 +184,7 @@ internal sealed class SessionService(
         // (AUTH-SESS-004, AUTH-SESS-005).
         if (!ReferenceEquals(spine, session))
         {
-            spine.Touch(origin, now, inactivity);
+            spine.Touch(used, now, inactivity);
             await sessions.RecordAsync(spine, cancellationToken).ConfigureAwait(false);
         }
 
@@ -294,10 +306,18 @@ internal sealed class SessionService(
         var restored = OpaqueToken.Draw(randomness);
         var restoredToken = OpaqueToken.Draw(randomness);
 
+        Result<SessionOrigin> located = await LocatedAsync(origin, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (located.Match(_ => (Error?)null, error => error) is Error unlocated)
+        {
+            return Result.Failure<IssuedSession>(unlocated);
+        }
+
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
         session.Present(proved, now);
-        session.Touch(origin, now, inactivity);
+        session.Touch(located.Match(one => one, _ => origin), now, inactivity);
         await sessions.RecordAsync(session, cancellationToken).ConfigureAwait(false);
         await sessions
             .ReplaceSecretAsync(
@@ -387,7 +407,20 @@ internal sealed class SessionService(
         (TimeSpan inactivity, TimeSpan _) =
             await LifetimesAsync(policy, cancellationToken).ConfigureAwait(false);
 
-        Session derived = record.Derive(SessionId.New(time), type, origin, now, inactivity);
+        Result<SessionOrigin> located = await LocatedAsync(origin, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (located.Match(_ => (Error?)null, error => error) is Error unlocated)
+        {
+            return Result.Failure<IssuedSession>(unlocated);
+        }
+
+        Session derived = record.Derive(
+            SessionId.New(time),
+            type,
+            located.Match(one => one, _ => origin),
+            now,
+            inactivity);
         var secret = OpaqueToken.Draw(randomness);
         var token = OpaqueToken.Draw(randomness);
 
@@ -634,6 +667,16 @@ internal sealed class SessionService(
         (await configuration.ReadAsync(setting, cancellationToken).ConfigureAwait(false))
             .Match(value => value, _ => setting.Default);
 
+    // INT-GEN-006: the address is the session's own and the city is what the local
+    // database makes of it, so nothing outside the library writes a place into one.
+    private async ValueTask<Result<SessionOrigin>> LocatedAsync(
+        SessionOrigin origin,
+        CancellationToken cancellationToken) =>
+        (await locations.ResolveAsync(origin.Address, cancellationToken).ConfigureAwait(false))
+            .Match(
+                place => Result.Success(origin with { Location = place }),
+                Result.Failure<SessionOrigin>);
+
     private async ValueTask<Result<IssuedSession>> BeginAsync(
         SubjectId subject,
         IReadOnlyCollection<Factor> presented,
@@ -676,11 +719,20 @@ internal sealed class SessionService(
             await LifetimesAsync(policy, cancellationToken).ConfigureAwait(false);
 
         DateTimeOffset now = time.GetUtcNow();
+
+        Result<SessionOrigin> located = await LocatedAsync(origin, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (located.Match(_ => (Error?)null, error => error) is Error unlocated)
+        {
+            return Result.Failure<IssuedSession>(unlocated);
+        }
+
         var session = Session.Begin(
             SessionId.New(time),
             subject,
             reached.Value,
-            origin,
+            located.Match(one => one, _ => origin),
             now,
             inactivity,
             absolute,

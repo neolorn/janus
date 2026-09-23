@@ -47,7 +47,7 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
             ORDER BY column_name
             """);
 
-        Assert.Equal(["key", "sent_at", "settles_at"], columns);
+        Assert.Equal(["key", "sent_at"], columns);
 
         RestrictionKey destination = Destination(number);
 
@@ -59,7 +59,6 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
         Assert.Equal(Fingerprint.Length, stored.Key.Length);
         Assert.Equal(-1, stored.Key.AsSpan().IndexOf(Encoding.UTF8.GetBytes(number)));
         Assert.Equal([Noon], stored.SentAt);
-        Assert.Equal(Noon + Day, stored.SettlesAt);
     }
 
     /// <summary>
@@ -73,19 +72,39 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
         var source = new RestrictionKey("sms.source", "198.51.100.2");
 
         await RecordedAsync(Reference(2), [new SendCount(destination, TimeSpan.FromHours(1))], Noon);
+        await RecordedAsync(Reference(3), [new SendCount(source, Day)], Noon + TimeSpan.FromHours(2));
 
         Assert.NotNull(await FindAsync(destination));
 
-        await RecordedAsync(Reference(3), [new SendCount(source, Day)], Noon + TimeSpan.FromHours(2));
+        _ = await CountedAsync(source, Noon + TimeSpan.FromHours(2));
 
         Assert.Null(await FindAsync(destination));
         Assert.NotNull(await FindAsync(source));
     }
 
     /// <summary>
-    /// PRIV-RET-005 AC2: the record settles at the longest interval any bucket counts
-    /// over, so it lives at most that long and is gone the next time the ledger is
-    /// written after it.
+    /// AUTH-ABUSE-004 AC6: what a record is kept for is what the restrictions now
+    /// declare, so an interval the host shortens reaches the sends already counted.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC6_AShortenedIntervalReachesTheSendsAlreadyCountedAsync()
+    {
+        RestrictionKey destination = Destination("+201001234565");
+
+        await RecordedAsync(Reference(10), [new SendCount(destination, Day)], Noon);
+
+        Assert.NotNull(await FindAsync(destination));
+
+        // The host now declares one hour where it declared a day, and the record
+        // written under the day goes with the sweep of the next read.
+        _ = await CountedAsync(destination, Noon + TimeSpan.FromHours(2) - TimeSpan.FromHours(1));
+
+        Assert.Null(await FindAsync(destination));
+    }
+
+    /// <summary>
+    /// PRIV-RET-005 AC2: the record lives at most the longest interval any bucket
+    /// counts over, and is gone the next time the ledger is read after it.
     /// </summary>
     [Fact]
     public async Task PRIV_RET_005_AC2_TheRecordLivesAtMostTheLongestBucketIntervalAsync()
@@ -110,12 +129,14 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
         SendCounterRecord stored = await FindAsync(destination)
             ?? throw new Xunit.Sdk.XunitException("The key was not counted.");
 
-        Assert.Equal(Noon + longest, stored.SettlesAt);
+        Assert.Equal([Noon], stored.SentAt);
 
         await RecordedAsync(
             Reference(9),
             [new SendCount(other, Day)],
             Noon + longest + TimeSpan.FromSeconds(1));
+
+        _ = await CountedAsync(other, Noon + longest + TimeSpan.FromSeconds(1) - longest);
 
         Assert.Null(await FindAsync(destination));
     }
@@ -162,11 +183,11 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
 
         await RecordedAsync(Reference(5), [new SendCount(destination, Day)], Noon, [destination]);
 
-        Assert.Equal(1, (await StandingAsync(destination)).Credit);
+        Assert.Equal(1, (await StandingAsync(destination, Noon - Day)).Credit);
 
         await RecordedAsync(Reference(6), [new SendCount(destination, Day)], Noon, [destination]);
 
-        Assert.Equal(0, (await StandingAsync(destination)).Credit);
+        Assert.Equal(0, (await StandingAsync(destination, Noon - Day)).Credit);
     }
 
     private static RestrictionKey Destination(string number) => new("sms.destination", number);
@@ -193,14 +214,16 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
-    private async Task<SendCounter> StandingAsync(RestrictionKey key)
+    private async Task<SendCounter> StandingAsync(RestrictionKey key, DateTimeOffset stale) =>
+        (await CountedAsync(key, stale))[key];
+
+    private async Task<IReadOnlyDictionary<RestrictionKey, SendCounter>> CountedAsync(
+        RestrictionKey key,
+        DateTimeOffset stale)
     {
         await using JanusDbContext reading = database.Context();
 
-        IReadOnlyDictionary<RestrictionKey, SendCounter> standing = await Ledger(reading)
-            .CountersAsync([key], TestContext.Current.CancellationToken);
-
-        return standing[key];
+        return await Ledger(reading).CountersAsync([key], stale, TestContext.Current.CancellationToken);
     }
 
     private async Task<SendCounterRecord?> FindAsync(RestrictionKey key)

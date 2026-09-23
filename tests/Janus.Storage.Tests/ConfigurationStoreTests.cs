@@ -152,6 +152,36 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
         Assert.False(Value(read)?.SelfServiceRecovery);
     }
 
+    /// <summary>
+    /// `10` section 4: the row carries the key's written form, so a row that does not
+    /// parse is a fault and never a default quietly standing in for it.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_AStoredValueThatDoesNotParse_IsAFaultAsync()
+    {
+        await using JanusDbContext context = database.Context();
+
+        var written = new SettingRecord
+        {
+            Key = Catalogue.LinkMagicLifetime.Key,
+            Value = "a quarter of an hour",
+        };
+
+        context.Settings.Add(written);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Result<TimeSpan> read = await new ConfigurationStore(context).ReadAsync(
+            Catalogue.LinkMagicLifetime,
+            TestContext.Current.CancellationToken);
+
+        // The row is the class's database, which the other cases read too, so what
+        // this one wrote goes out with it.
+        context.Settings.Remove(written);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, Code(read));
+    }
+
     private static TValue? Value<TValue>(Result<TValue> outcome)
     {
         TValue? held = default;

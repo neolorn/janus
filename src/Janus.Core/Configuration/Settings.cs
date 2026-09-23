@@ -127,6 +127,15 @@ public static class Settings
             minimum: 1,
             loosening: SettingDirection.Decrease);
 
+    /// <summary>
+    /// Where the corpus a deployment hosts itself answers. It serves the same ranges
+    /// the primary source does, which is the whole of bringing the integration
+    /// in-house. The deployment names it where <c>password.blocklist.source</c> is
+    /// <c>selfHosted</c>.
+    /// </summary>
+    public static TextSetting PasswordBlocklistSelfHostedAddress { get; } =
+        new("password.blocklist.selfhosted.address", SettingScope.Runtime);
+
     /// <summary>How stale the leaked-password corpus may be.</summary>
     public static DurationSetting PasswordBlocklistCorpusMaxAge { get; } =
         new("password.blocklist.corpusmaxage", SettingScope.Runtime, "P30D");
@@ -294,6 +303,21 @@ public static class Settings
     /// </summary>
     public static IntegerSetting AbuseBotDefenceRepeatedAttempts { get; } =
         new("abuse.botdefence.repeatedattempts", SettingScope.Runtime, 3, loosening: SettingDirection.Increase);
+
+    /// <summary>
+    /// Where the shipped default mail transport is called. Empty while the deployment
+    /// supplies a transport of its own, which is called wherever it decides
+    /// (LIB-EXT-001, INT-MAIL-008).
+    /// </summary>
+    public static TextSetting IntegrationMailEndpoint { get; } =
+        new("integration.mail.endpoint", SettingScope.Protected, string.Empty);
+
+    /// <summary>
+    /// Where the shipped default SMS transport is called. Empty while the deployment
+    /// supplies a transport of its own (LIB-EXT-001, INT-SMS-001).
+    /// </summary>
+    public static TextSetting IntegrationSmsEndpoint { get; } =
+        new("integration.sms.endpoint", SettingScope.Protected, string.Empty);
 
     /// <summary>Callbacks accepted from one source a minute, before any lookup.</summary>
     public static IntegerSetting IntegrationCallbackRateLimit { get; } =
@@ -559,6 +583,14 @@ public static class Settings
         new("registration.session.lifetime", SettingScope.Runtime, "PT24H", ceiling: "PT72H");
 
     /// <summary>
+    /// How often the waiting screen's stream reads the registration state back where
+    /// no signal has reached it. The floor is the interval: a press has to feel
+    /// immediate to the person waiting, and the signal is what usually answers first.
+    /// </summary>
+    public static DurationSetting RegistrationEventsPollInterval { get; } =
+        new("registration.events.pollinterval", SettingScope.Runtime, "PT1S", floor: "PT1S");
+
+    /// <summary>
     /// Verified email addresses an account may hold. One is single-address mode, where
     /// a replacement happens in one operation.
     /// </summary>
@@ -807,6 +839,14 @@ public static class Settings
         new("oidc.code.lifetime", SettingScope.Runtime, "PT60S", ceiling: "PT10M");
 
     /// <summary>
+    /// The registered client a browser falls back to where the one a request named is
+    /// not one the registry holds. Empty while the deployment names none, and refused
+    /// at startup where it names a client the registry does not hold (API-REDIR-001).
+    /// </summary>
+    public static TextSetting RedirectDefaultClient { get; } =
+        new("redirect.defaultclient", SettingScope.Protected, string.Empty);
+
+    /// <summary>
     /// The algorithm tokens are signed with. The one place the value is held.
     /// </summary>
     public static ChoiceSetting<string> TokenSigningAlgorithm { get; } =
@@ -829,6 +869,13 @@ public static class Settings
     /// </summary>
     public static SettingFamily<PolicyOverride> OrganizationPolicy { get; } =
         new("policy", SettingScope.Runtime, SettingForms.Override, PolicyOverride.None);
+
+    /// <summary>
+    /// Whether an organization's accounts show a profile photo: one key per
+    /// organization, off until the organization is given one.
+    /// </summary>
+    public static SettingFamily<bool> OrganizationPhoto { get; } =
+        new("photo.enabled", SettingScope.Runtime, SettingForms.Flag, false);
 
     /// <summary>
     /// How long a host-declared category of data is kept: one key per declared
@@ -875,6 +922,7 @@ public static class Settings
         PasswordMaximum,
         PasswordBlocklistSource,
         PasswordBlocklistSources,
+        PasswordBlocklistSelfHostedAddress,
         PasswordBlocklistCorpusMaxAge,
         PasswordArgon2Memory,
         PasswordArgon2Iterations,
@@ -908,6 +956,8 @@ public static class Settings
         AbuseSourceRateLimit,
         AbuseBotDefenceRepeatedAttempts,
         IntegrationCallbackRateLimit,
+        IntegrationMailEndpoint,
+        IntegrationSmsEndpoint,
         Restrictions,
         CodeVerificationLifetime,
         CodeVerificationAttempts,
@@ -951,6 +1001,7 @@ public static class Settings
         RegistrationPhone,
         RegistrationAdultAffirmation,
         RegistrationSessionLifetime,
+        RegistrationEventsPollInterval,
         IdentifiersEmailMax,
         IdentifiersPhoneMax,
         IdentifiersUsernameEnabled,
@@ -990,6 +1041,7 @@ public static class Settings
         TokenSignatureVerification,
         OidcAccessTokenLifetime,
         OidcCodeLifetime,
+        RedirectDefaultClient,
         TokenSigningAlgorithm,
         TokenSigningRotation,
     ];
@@ -999,7 +1051,7 @@ public static class Settings
     /// per host-declared category.
     /// </summary>
     public static IReadOnlyList<SettingFamily> Families { get; } =
-        [OrganizationPolicy, HostCategoryRetention, OrganizationStepUpEnforcement];
+        [OrganizationPhoto, OrganizationPolicy, HostCategoryRetention, OrganizationStepUpEnforcement];
 
     /// <summary>
     /// The keys a deployment has to name, because they name the deployment and the
@@ -1059,6 +1111,7 @@ public static class Settings
     /// Where the deployment holds its data, or <see langword="null"/> where it named
     /// no value for <c>hosting.location</c>.
     /// </param>
+    /// <param name="blocklistSource">The value named for <c>password.blocklist.source</c>.</param>
     /// <param name="blocklistSources">The value named for <c>password.blocklist.sources</c>.</param>
     /// <param name="recordsOfProcessing">
     /// Whether the deployment generates the records of processing.
@@ -1077,6 +1130,7 @@ public static class Settings
     public static void ThrowIfIncomplete(
         IReadOnlySet<ConfigurationKey> named,
         HostingLocation? location,
+        BlocklistSource blocklistSource,
         IReadOnlySet<BlocklistRejectionSource> blocklistSources,
         bool recordsOfProcessing)
     {
@@ -1090,7 +1144,7 @@ public static class Settings
 
         foreach (Setting setting in Required)
         {
-            if (!Applies(setting, location, blocklistSources, recordsOfProcessing))
+            if (!Applies(setting, location, blocklistSource, blocklistSources, recordsOfProcessing))
             {
                 continue;
             }
@@ -1102,17 +1156,23 @@ public static class Settings
         }
     }
 
-    // The three conditional declarations of the section 4 preamble. Every other
-    // required key is named whatever the deployment does.
+    // The conditional declarations of the section 4 preamble. Every other required
+    // key is named whatever the deployment does.
     private static bool Applies(
         Setting setting,
         HostingLocation? location,
+        BlocklistSource blocklistSource,
         IReadOnlySet<BlocklistRejectionSource> blocklistSources,
         bool recordsOfProcessing)
     {
         if (setting.Key == HostingCrossBorderBasis.Key)
         {
             return location == Configuration.HostingLocation.Outside;
+        }
+
+        if (setting.Key == PasswordBlocklistSelfHostedAddress.Key)
+        {
+            return blocklistSource is BlocklistSource.SelfHosted;
         }
 
         if (setting.Key == ServiceName.Key)

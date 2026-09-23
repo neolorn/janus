@@ -49,7 +49,7 @@ namespace Janus.Authentication.Registration;
 internal sealed class RegistrationService(
     IRegistrationSessionStore sessions,
     IRegistrationDirectory directory,
-    SendingService sending,
+    INotificationHandler sending,
     INoticeLedger notices,
     PasswordService passwords,
     IPasswordStore passwordStore,
@@ -92,15 +92,16 @@ internal sealed class RegistrationService(
         }
 
         // API-REDIR-002 AC1 and AC2: the identifier is resolved where it is captured,
-        // and one the registry does not hold is stored as the default rather than
-        // refused, so by the last step there is nothing left to validate.
+        // and one the registry does not hold is stored as the configured default
+        // rather than refused, so by the last step there is nothing left to validate.
         OidcClient? originating =
             await clients.FindAsync(client, cancellationToken).ConfigureAwait(false);
 
         var session = RegistrationSession.Open(
             RegistrationSessionId.New(time),
             SubjectId.New(randomness),
-            originating?.ClientId ?? string.Empty,
+            originating?.ClientId
+                ?? await DefaultClientAsync(cancellationToken).ConfigureAwait(false),
             language,
             source,
             time.GetUtcNow(),
@@ -622,7 +623,6 @@ internal sealed class RegistrationService(
         string noticeVersion,
         IReadOnlyDictionary<string, bool> consents,
         DeviceDescription device,
-        SessionLocation? location,
         CancellationToken cancellationToken)
     {
         // API-REDIR-002 AC4: where the person is returned is read from what the
@@ -636,7 +636,6 @@ internal sealed class RegistrationService(
                     noticeVersion,
                     consents,
                     device,
-                    location,
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match(
@@ -644,6 +643,14 @@ internal sealed class RegistrationService(
                     new RegistrationCompleted(outcome.Subject, outcome.Session.Id, landing)),
                 Result.Failure<RegistrationCompleted>);
     }
+
+    // API-REDIR-001: the one destination the library falls back to is a client the
+    // deployment named, which startup has already read against the registry, so a
+    // deployment that named none stores nothing and the frontend decides.
+    private async ValueTask<string> DefaultClientAsync(CancellationToken cancellationToken) =>
+        (await configuration
+            .ReadAsync(Settings.RedirectDefaultClient, cancellationToken).ConfigureAwait(false))
+        .Match(value => value, _ => string.Empty);
 
     private async ValueTask<string> LandingAsync(
         RegistrationSessionId session,
@@ -671,7 +678,6 @@ internal sealed class RegistrationService(
     /// <param name="noticeVersion">The version of the notice presented.</param>
     /// <param name="consents">What each consent control was left at.</param>
     /// <param name="device">What the browser said it is.</param>
-    /// <param name="location">Where the request came from, where that is known.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The account, the session it is signed in on, and the browser token.</returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
@@ -681,7 +687,6 @@ internal sealed class RegistrationService(
         string noticeVersion,
         IReadOnlyDictionary<string, bool> consents,
         DeviceDescription device,
-        SessionLocation? location,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(termsVersion);
@@ -751,7 +756,7 @@ internal sealed class RegistrationService(
                 .BeginAsync(
                     live.Provisional,
                     SecurityStep.Presented(live, policy.LoginFactors),
-                    new SessionOrigin(live.Source, device, location),
+                    new SessionOrigin(live.Source, device),
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Held<IssuedSession>(error, ref failure));
@@ -785,9 +790,8 @@ internal sealed class RegistrationService(
         // Nothing of the session survives it: an account exists now, and a staged
         // copy of what made it would be a second place the same facts live.
         await sessions.RemoveAsync(live.Id, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-        await events
+        Result published = await events
             .PublishAsync(
                 new AccountRegistered(now, live.Provisional.ToString())
                 {
@@ -795,6 +799,13 @@ internal sealed class RegistrationService(
                 },
                 cancellationToken)
             .ConfigureAwait(false);
+
+        if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+        {
+            return Result.Failure<RegistrationOutcome>(unpublished);
+        }
+
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success(new RegistrationOutcome(live.Provisional, issued, browser));
     }

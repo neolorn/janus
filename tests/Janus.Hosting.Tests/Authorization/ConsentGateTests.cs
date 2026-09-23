@@ -202,6 +202,88 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
         Assert.Equal([CapabilityResidual.Consent], residual[HostPermissions.Recommend]);
     }
 
+    /// <summary>
+    /// PRIV-SENS-002 AC1: without the data subject's recorded written consent, whoever
+    /// the caller is. A member of staff acting on a customer's record is admitted by
+    /// the customer's consent and by nothing the staff member consented to.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_SENS_002_AC1_StaffAreGatedByTheRecordsSubjectsConsentAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        RoleName role = await deployment.BeginAsync(
+            [HostPermissions.Read, HostPermissions.Recommend],
+            cancellationToken);
+        SubjectId customer = await deployment.AccountAsync(cancellationToken);
+        SubjectId staff = await deployment.AccountAsync(cancellationToken);
+
+        ResourceReference workspace = Reference(Workspace);
+        ResourceReference record = Reference(Document);
+
+        await deployment.RegisterAsync(workspace, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(record, workspace, cancellationToken, customer);
+        await deployment.GrantAsync(
+            GrantSubject.Of(staff),
+            role,
+            workspace,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        var acting = new Granted(staff, record);
+
+        await RecordAsync(staff, Held(ConsentKind.Written));
+
+        Assert.Equal(ErrorCodes.ConsentRequired, await RefusalAsync(acting));
+
+        await RecordAsync(customer, Held(ConsentKind.Written));
+
+        Assert.Null(await RefusalAsync(acting));
+    }
+
+    /// <summary>
+    /// PRIV-SENS-002 AC1: a record naming no data subject has nobody's consent to
+    /// read, so the consent-based purpose is refused on it however much the caller
+    /// consented to for themselves.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_SENS_002_AC1_ARecordNamingNoSubjectAdmitsNoConsentedActionAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        RoleName role = await deployment.BeginAsync(
+            [HostPermissions.Read, HostPermissions.Recommend],
+            cancellationToken);
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+
+        ResourceReference workspace = Reference(Workspace);
+        ResourceReference record = Reference(Document);
+
+        await deployment.RegisterAsync(workspace, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(record, workspace, cancellationToken);
+        await deployment.GrantAsync(
+            GrantSubject.Of(account),
+            role,
+            workspace,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        var acting = new Granted(account, record);
+
+        await RecordAsync(account, Held(ConsentKind.Written));
+
+        Assert.Equal(ErrorCodes.ConsentRequired, await RefusalAsync(acting));
+        Assert.Null(await RefusalAsync(acting, HostPermissions.Read));
+    }
+
     private static ConsentRecord Held(ConsentKind kind) =>
         new(
             Recommendations,
@@ -228,8 +310,11 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
         ResourceReference workspace = Reference(Workspace);
         ResourceReference record = Reference(Document);
 
+        // PRIV-SENS-002 AC1: the consent the gate reads is the record's data subject's,
+        // which the host writes from the column its type declares for its encrypted
+        // fields.
         await deployment.RegisterAsync(workspace, containedIn: null, cancellationToken);
-        await deployment.RegisterAsync(record, workspace, cancellationToken);
+        await deployment.RegisterAsync(record, workspace, cancellationToken, account);
         await deployment.GrantAsync(
             GrantSubject.Of(account),
             role,
@@ -254,15 +339,19 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
         await work.CommitAsync(TestContext.Current.CancellationToken);
     }
 
+    // The type a document sits in declares a derivation, so the check is asked with the
+    // rows that derivation is evaluated over (AUTHZ-DERIVE-001, D-162).
     private async Task<ErrorCode?> RefusalAsync(Granted granted, Permission? permission = null)
     {
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
 
         Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
             .RequireAsync(
                 AccessContext.Of(granted.Account),
                 permission ?? HostPermissions.Recommend,
                 granted.Record,
+                Sources(reading),
                 TestContext.Current.CancellationToken);
 
         return outcome.Match(() => (ErrorCode?)null, error => error.Code);
@@ -272,6 +361,7 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
         RequiredAsync(Granted granted)
     {
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
 
         Result<IReadOnlyList<Capability>> answered = await scope.ServiceProvider
             .GetRequiredService<IAccessGate>()
@@ -280,12 +370,17 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
                 Document,
                 [granted.Record.Id],
                 [HostPermissions.Read, HostPermissions.Recommend],
+                Sources(reading),
                 TestContext.Current.CancellationToken);
 
         return answered.Match(
             capabilities => capabilities[0].Requires,
             error => throw new InvalidOperationException(error.Code.ToString()));
     }
+
+    private static FilterSources<HostDocument> Sources(HostContext reading) =>
+        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, document => document.Id)
+            .Relationship("reviewer", reading.Reviewers);
 
     // One case's rows: the account holding the grant and the record it holds it on.
     private sealed record Granted(SubjectId Account, ResourceReference Record);

@@ -23,6 +23,8 @@ namespace Janus.Hosting.Tests.Passwords;
 public sealed class ScreeningTests : IDisposable
 {
     private const string Password = "a horse outstanding in its field";
+    private const string Listed = "password";
+    private const string SelfHosted = "https://corpus.example/range";
     private const string Line = "\n";
 
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
@@ -35,6 +37,9 @@ public sealed class ScreeningTests : IDisposable
     private readonly ConfigurationInMemory _configuration = new();
     private readonly ScreeningLogInMemory _log = new();
 
+    private OfflineCorpus _offline = new();
+    private DateTimeOffset _now = Noon;
+
     /// <summary>
     /// INT-PWD-001 AC1: the request carries the first five characters of the hash and
     /// nothing else, so the service is asked about a range and never about a password.
@@ -42,14 +47,14 @@ public sealed class ScreeningTests : IDisposable
     [Fact]
     public async Task INT_PWD_001_AC1_TheRequestCarriesThePrefixOnlyAsync()
     {
-        _service.Holds(Prefix(), Suffix() + ":12");
+        _service.Holds(Prefix(Password), Suffix(Password) + ":12");
 
         Assert.False(await AcceptedAsync());
 
         Uri asked = Assert.Single(_service.Asked);
 
-        Assert.Equal(Prefix(), asked.Segments[^1]);
-        Assert.EndsWith("/range/" + Prefix(), asked.AbsolutePath, StringComparison.Ordinal);
+        Assert.Equal(Prefix(Password), asked.Segments[^1]);
+        Assert.EndsWith("/range/" + Prefix(Password), asked.AbsolutePath, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -59,29 +64,28 @@ public sealed class ScreeningTests : IDisposable
     [Fact]
     public async Task INT_PWD_001_AC2_NoFullHashAppearsInTheRequestAsync()
     {
-        _service.Holds(Prefix(), Suffix());
+        _service.Holds(Prefix(Password), Suffix(Password));
 
         Assert.False(await AcceptedAsync());
 
         Uri asked = Assert.Single(_service.Asked);
 
-        Assert.DoesNotContain(Hash(), asked.AbsoluteUri, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(Suffix(), asked.AbsoluteUri, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(Hash(Password), asked.AbsoluteUri, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(Suffix(Password), asked.AbsoluteUri, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(Password, asked.AbsoluteUri, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// INT-PWD-002 AC1 and AUTH-PASS-004 AC2: with the service unreachable the offline
-    /// list answers and the fall back is recorded, so a degradation is visible rather
-    /// than silent.
+    /// INT-PWD-002 AC1 and AUTH-PASS-004 AC2: with the service unreachable the list
+    /// the package carries answers, on a deployment that holds no file of its own, and
+    /// the fall back is recorded so the degradation is visible rather than silent.
     /// </summary>
     [Fact]
     public async Task INT_PWD_002_AC1_WithTheServiceUnreachableTheOfflineListAnswersAsync()
     {
         _service.Reachable = false;
-        await CorpusAsync(LeakedPasswordCorpus.OfflineFile, Hash());
 
-        Assert.False(await AcceptedAsync());
+        Assert.False(await AcceptedAsync(Listed));
         Assert.Equal(
             [(BlocklistSource.RangeApi, BlocklistSource.Offline)],
             [.. _log.Entries]);
@@ -95,37 +99,58 @@ public sealed class ScreeningTests : IDisposable
     public async Task AUTH_PASS_004_AC2_TheOfflineListAcceptsWhatItDoesNotHoldAsync()
     {
         _service.Reachable = false;
-        await CorpusAsync(LeakedPasswordCorpus.OfflineFile, "0000000000000000000000000000000000000000");
 
         Assert.True(await AcceptedAsync());
         Assert.Single(_log.Entries);
     }
 
     /// <summary>
-    /// INT-PWD-002 AC2: with the service unreachable and no offline list to fall back
-    /// to, the password is refused rather than accepted unscreened.
+    /// INT-PWD-002 AC2: with the service unreachable and the list the package carries
+    /// unreadable, the password is refused rather than accepted unscreened.
     /// </summary>
     [Fact]
     public async Task INT_PWD_002_AC2_WithNeitherAvailableTheOperationFailsAsync()
     {
         _service.Reachable = false;
+        _offline = new OfflineCorpus(() => null);
 
         Assert.Equal(ErrorCodes.ScreeningUnavailable, await RefusalAsync());
     }
 
     /// <summary>
-    /// INT-PWD-003 AC1: naming the self-hosted corpus is the whole switch, and the
-    /// corpus the deployment holds is what answers afterwards.
+    /// INT-PWD-003 AC1: naming the self-hosted corpus and where it answers is the
+    /// whole switch, and the deployment's own corpus is what is asked afterwards.
     /// </summary>
     [Fact]
     public async Task INT_PWD_003_AC1_SwitchingToTheSelfHostedCorpusIsConfigurationOnlyAsync()
     {
-        await CorpusAsync(LeakedPasswordCorpus.SelfHostedFile, Hash());
+        _service.Holds(Prefix(Password), Suffix(Password) + ":3");
         _configuration.Set(Settings.PasswordBlocklistSource, BlocklistSource.SelfHosted);
+        _configuration.Set(Settings.PasswordBlocklistSelfHostedAddress, SelfHosted);
 
         Assert.False(await AcceptedAsync());
-        Assert.Empty(_service.Asked);
+
+        Uri asked = Assert.Single(_service.Asked);
+
+        Assert.Equal(SelfHosted + "/" + Prefix(Password), asked.AbsoluteUri);
         Assert.Empty(_log.Entries);
+    }
+
+    /// <summary>
+    /// INT-PWD-002 and INT-PWD-003: a deployment that names the self-hosted corpus and
+    /// no address for it has nowhere to ask, so the list the package carries answers
+    /// and the fall back is recorded rather than the password waved through.
+    /// </summary>
+    [Fact]
+    public async Task ScreenAsync_TheSelfHostedCorpusWithNoAddress_FallsBackAsync()
+    {
+        _configuration.Set(Settings.PasswordBlocklistSource, BlocklistSource.SelfHosted);
+
+        Assert.False(await AcceptedAsync(Listed));
+        Assert.Empty(_service.Asked);
+        Assert.Equal(
+            [(BlocklistSource.SelfHosted, BlocklistSource.Offline)],
+            [.. _log.Entries]);
     }
 
     /// <summary>
@@ -136,7 +161,7 @@ public sealed class ScreeningTests : IDisposable
     public async Task ScreenAsync_ACorpusOlderThanTheMaximumAge_RefusesAsync()
     {
         _service.Reachable = false;
-        await CorpusAsync(LeakedPasswordCorpus.OfflineFile, Hash(), drawn: "2026-01-01");
+        _now = Noon.AddYears(10);
 
         Assert.Equal(ErrorCodes.ScreeningUnavailable, await RefusalAsync());
     }
@@ -149,7 +174,7 @@ public sealed class ScreeningTests : IDisposable
     public async Task ScreenAsync_ACorpusWithNoDate_RefusesAsync()
     {
         _service.Reachable = false;
-        await WrittenAsync(LeakedPasswordCorpus.OfflineFile, Hash() + Line);
+        _offline = new OfflineCorpus(() => Written(Hash(Password) + Line));
 
         Assert.Equal(ErrorCodes.ScreeningUnavailable, await RefusalAsync());
     }
@@ -161,7 +186,7 @@ public sealed class ScreeningTests : IDisposable
     [Fact]
     public async Task ScreenAsync_TheDictionarySourceWithNoList_RefusesAsync()
     {
-        _service.Holds(Prefix(), "0000000000000000000000000000000000000");
+        _service.Holds(Prefix(Password), "0000000000000000000000000000000000000");
         _configuration.Set<IReadOnlySet<BlocklistRejectionSource>>(
             Settings.PasswordBlocklistSources,
             new HashSet<BlocklistRejectionSource>
@@ -180,7 +205,7 @@ public sealed class ScreeningTests : IDisposable
     [Fact]
     public async Task ScreenAsync_TheDictionarySourceAndAListedWord_RefusesAsync()
     {
-        _service.Holds(Prefix(), "0000000000000000000000000000000000000");
+        _service.Holds(Prefix(Password), "0000000000000000000000000000000000000");
         await WrittenAsync(WordList.WordsFile, "# an English list" + Line + "HORSE" + Line + "FIELD" + Line);
         _configuration.Set<IReadOnlySet<BlocklistRejectionSource>>(
             Settings.PasswordBlocklistSources,
@@ -207,22 +232,26 @@ public sealed class ScreeningTests : IDisposable
     // The corpus is published as ranges of this hash (INT-PWD-001), so the test
     // computes the same lookup key the screening does; it is no security claim.
 #pragma warning disable CA5350 // The corpus is published as SHA-1 ranges (INT-PWD-001); the value is a lookup key.
-    private static string Hash() =>
-        Convert.ToHexString(SHA1.HashData(Encoding.UTF8.GetBytes(Password)));
+    private static string Hash(string password) =>
+        Convert.ToHexString(SHA1.HashData(Encoding.UTF8.GetBytes(password)));
 #pragma warning restore CA5350
 
-    private static string Prefix() => Hash()[..5];
+    private static string Prefix(string password) => Hash(password)[..5];
 
-    private static string Suffix() => Hash()[5..];
+    private static string Suffix(string password) => Hash(password)[5..];
 
-    private async Task<bool> AcceptedAsync() =>
-        (await ScreenedAsync()).Match(() => true, _ => false);
+    private static MemoryStream Written(string contents) =>
+        new MemoryStream(Encoding.UTF8.GetBytes(contents));
 
-    private async Task<ErrorCode> RefusalAsync() => (await ScreenedAsync()).Match(
-        () => throw new Xunit.Sdk.XunitException("The password was accepted."),
-        error => error.Code);
+    private async Task<bool> AcceptedAsync(string password = Password) =>
+        (await ScreenedAsync(password)).Match(() => true, _ => false);
 
-    private async Task<Result> ScreenedAsync()
+    private async Task<ErrorCode> RefusalAsync(string password = Password) =>
+        (await ScreenedAsync(password)).Match(
+            () => throw new Xunit.Sdk.XunitException("The password was accepted."),
+            error => error.Code);
+
+    private async Task<Result> ScreenedAsync(string password)
     {
         using var client = new HttpClient(_service, disposeHandler: false)
         {
@@ -230,23 +259,16 @@ public sealed class ScreeningTests : IDisposable
         };
 
         var screening = new PasswordScreening(
-            new LeakedPasswordCorpus(
-                client,
-                _configuration,
-                new FixedTime(Noon),
-                _directory),
+            new LeakedPasswordCorpus(client, _configuration, new FixedTime(_now), _offline),
             new WordList(_directory),
             _configuration,
             _log);
 
         return await screening.ScreenAsync(
-            Encoding.UTF8.GetBytes(Password),
+            Encoding.UTF8.GetBytes(password),
             [],
             TestContext.Current.CancellationToken);
     }
-
-    private async Task CorpusAsync(string file, string hash, string drawn = "2026-09-18") =>
-        await WrittenAsync(file, "# " + drawn + Line + hash + ":7" + Line);
 
     private async Task WrittenAsync(string file, string contents)
     {

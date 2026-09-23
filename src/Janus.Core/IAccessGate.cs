@@ -56,8 +56,9 @@ public interface IAccessGate
     /// evaluated beside the stored grants.
     /// </returns>
     /// <remarks>
-    /// AUTHZ-DERIVE-001, AUTHZ-PRIN-001 AC2, D-161: a type that declares a derivation
-    /// is asked through this overload, and the one without sources is refused with
+    /// AUTHZ-DERIVE-001, AUTHZ-PRIN-001 AC2, D-161: a type a derivation reaches, on
+    /// itself or through a container, is asked through this overload, whatever the role
+    /// the derivation confers allows; the one without sources is refused with
     /// <c>authz.derivation.sourcesmissing</c>, so no path answers from stored grants
     /// alone.
     /// </remarks>
@@ -152,6 +153,38 @@ public interface IAccessGate
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Why access was granted or refused, on a type whose access follows in part from a
+    /// fact in the host's own data.
+    /// </summary>
+    /// <typeparam name="TResource">The host's row.</typeparam>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="permission">What they are asking to do.</param>
+    /// <param name="resource">Which record.</param>
+    /// <param name="sources">
+    /// The same contract tables and relationship rows the check and the page take, from
+    /// the host's own context.
+    /// </param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The same explanation as the overload without sources, with every declared
+    /// derivation evaluated beside the stored grants. A grant a fact produced carries
+    /// no identifier and names itself as derived (AUTHZ-DERIVE-005, chapter 10 section
+    /// 5.6).
+    /// </returns>
+    /// <remarks>
+    /// AUTHZ-GATE-004, AUTHZ-DERIVE-001, D-162: a type a derivation reaches is
+    /// explained through this overload, and the one without sources is refused with
+    /// <c>authz.derivation.sourcesmissing</c> rather than saying that no grant matched
+    /// for a record the filter admits.
+    /// </remarks>
+    ValueTask<Result<AccessExplanation>> ExplainAsync<TResource>(
+        AccessContext context,
+        Permission permission,
+        ResourceReference resource,
+        FilterSources<TResource> sources,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// The refusal a correlation identifier stands for, for a support role holding
     /// <c>audit:read</c>.
     /// </summary>
@@ -207,9 +240,10 @@ public interface IAccessGate
     /// declared derivation evaluated beside the stored grants.
     /// </returns>
     /// <remarks>
-    /// AUTHZ-DERIVE-001, AUTHZ-GATE-005 AC1, D-161: each derivation costs one further
-    /// query for the whole page, whatever the page's size, and the overload without
-    /// sources is refused on a type that declares one.
+    /// AUTHZ-DERIVE-001, AUTHZ-GATE-005 AC1, D-162: the derivations cost one further
+    /// query for the whole page, carrying one clause each, whatever the page's size and
+    /// however many permissions are asked for; the overload without sources is refused
+    /// on a type a derivation reaches, whatever it confers.
     /// </remarks>
     ValueTask<Result<IReadOnlyList<Capability>>> CapabilitiesAsync<TResource>(
         AccessContext context,

@@ -1,5 +1,5 @@
 using System;
-using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
@@ -12,21 +12,24 @@ using Janus.Core;
 using Janus.Storage.Authentication.Oidc;
 using Janus.Storage.Authentication.Sessions;
 using Npgsql;
+using OpenIddict.Abstractions;
 using Xunit;
 
 namespace Janus.Storage.Tests.Authentication;
 
 /// <summary>
-/// What the provider keeps: the registry a client is read from, the code and the
-/// refresh token held as what they hash to, the signing key whose private half is
-/// wrapped, and the sweep that takes what has expired (AUTH-OIDC-001, AUTH-OIDC-003,
-/// AUTH-KEY-001, AUTH-KEY-002, AUTH-KEY-003).
+/// What the provider keeps: the registry a client is read from, the grants and the
+/// tokens the protocol server writes through the library's own stores, the signing key
+/// whose private half is wrapped, and the sweep that takes what can no longer be
+/// presented (AUTH-OIDC-001, AUTH-OIDC-002, AUTH-OIDC-003, AUTH-KEY-001, AUTH-KEY-002,
+/// AUTH-KEY-003).
 /// </summary>
 [Trait("kind", "integration")]
 public sealed class OidcStoreTests(DatabaseFixture database)
     : IClassFixture<DatabaseFixture>, IDisposable
 {
     private const string ClientId = "mail-server";
+    private const string Browser = "browser-app";
     private const string Destination = "https://mail.example.test/signin/callback";
     private const string Secret = "a-secret-the-deployment-set";
 
@@ -35,13 +38,14 @@ public sealed class OidcStoreTests(DatabaseFixture database)
     private readonly Deployment _deployment = new(database);
 
     /// <summary>
-    /// AUTH-OIDC-001 AC2: the registry authenticates a client by what its secret
-    /// hashes to, and the column holds nothing the secret could be read out of.
+    /// AUTH-OIDC-001 AC2: the registry holds what the secret hashes to, the column
+    /// holds nothing the secret could be read out of, and what the protocol server is
+    /// handed to compare against is that same fingerprint.
     /// </summary>
     [Fact]
     public async Task AUTH_OIDC_001_AC2_TheRegistryHoldsWhatTheSecretHashesToAsync()
     {
-        await RegisteredAsync();
+        await RegisteredAsync(ClientId, OidcClientKind.Protocol);
 
         await using NpgsqlConnection connection = await database.OpenAsync();
 
@@ -53,14 +57,66 @@ public sealed class OidcStoreTests(DatabaseFixture database)
 
         await using JanusDbContext reading = database.Context();
 
-        Assert.True(await new OidcClientStore(reading).AuthenticatesAsync(
+        var applications = new OidcApplicationStore(reading);
+        OidcClientRecord? held = await applications.FindByClientIdAsync(
             ClientId,
-            OpaqueToken.Of(Secret).Fingerprint(),
-            TestContext.Current.CancellationToken));
-        Assert.False(await new OidcClientStore(reading).AuthenticatesAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(held);
+        Assert.Equal(
+            Convert.ToBase64String(OpaqueToken.Of(Secret).Fingerprint()),
+            await applications.GetClientSecretAsync(held, TestContext.Current.CancellationToken));
+        Assert.Equal(
+            ImmutableArray.Create(Destination),
+            await applications.GetRedirectUrisAsync(held, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-001 AC3: the registry is the deployment's, so a request that reached
+    /// the store is refused rather than kept.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_OIDC_001_AC3_NoRequestWritesTheRegistryAsync()
+    {
+        await RegisteredAsync(ClientId, OidcClientKind.Protocol);
+
+        await using JanusDbContext reading = database.Context();
+
+        var applications = new OidcApplicationStore(reading);
+        OidcClientRecord held = (await applications.FindByClientIdAsync(
             ClientId,
-            OpaqueToken.Of("not-the-secret").Fingerprint(),
-            TestContext.Current.CancellationToken));
+            TestContext.Current.CancellationToken))!;
+
+        _ = await Assert.ThrowsAsync<NotSupportedException>(async () =>
+            await applications.InstantiateAsync(TestContext.Current.CancellationToken));
+        _ = await Assert.ThrowsAsync<NotSupportedException>(async () =>
+            await applications.SetRedirectUrisAsync(
+                held,
+                ["https://attacker.test/collect"],
+                TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-002 AC1 and AC2, chapter 09 section 9: the grant that refreshes a
+    /// token is a protocol client's and a browser application's own layer does not
+    /// hold it.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_OIDC_002_AC1_OnlyAProtocolClientMayRefreshAsync()
+    {
+        await RegisteredAsync(ClientId, OidcClientKind.Protocol);
+        await RegisteredAsync(Browser, OidcClientKind.BrowserApplication);
+
+        await using JanusDbContext reading = database.Context();
+
+        var applications = new OidcApplicationStore(reading);
+
+        Assert.Contains(
+            OpenIddictConstants.Permissions.GrantTypes.RefreshToken,
+            await PermittedAsync(applications, ClientId));
+        Assert.DoesNotContain(
+            OpenIddictConstants.Permissions.GrantTypes.RefreshToken,
+            await PermittedAsync(applications, Browser));
     }
 
     /// <summary>
@@ -99,163 +155,209 @@ public sealed class OidcStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
-    /// AUTH-KEY-003 AC1: a code that has expired is taken by the sweep, which is one
-    /// call and no person's task; one that has not is left where it is.
+    /// AUTH-KEY-003 AC1: a row that can no longer be presented is taken by the sweep,
+    /// which is one call and no person's task; a redeemed row inside the window is
+    /// left where it is, because that is what catches the second presentation.
     /// </summary>
     [Fact]
-    public async Task AUTH_KEY_003_AC1_TheSweepTakesTheCodesThatHaveExpiredAsync()
+    public async Task AUTH_KEY_003_AC1_TheSweepTakesTheTokensThatCanNoLongerBePresentedAsync()
     {
-        (SubjectId subject, SessionId session) = await SignedInAsync();
+        SubjectId subject = await SignedInAsync();
 
-        OidcClient client = await RegisteredAsync();
-        AuthorizationCode spent = Code(client, subject, session, TimeSpan.FromSeconds(60));
-        AuthorizationCode fresh = Code(client, subject, session, TimeSpan.FromHours(1));
+        await RegisteredAsync(ClientId, OidcClientKind.Protocol);
 
-        await using (JanusDbContext writing = database.Context())
+        Guid grant = await GrantedAsync(subject);
+        Guid gone = await TokenAsync(subject, grant, Noon, Noon + TimeSpan.FromMinutes(1));
+        Guid live = await TokenAsync(subject, grant, Noon, Noon + TimeSpan.FromDays(7));
+        Guid spent = await TokenAsync(
+            subject,
+            grant,
+            Noon,
+            Noon + TimeSpan.FromDays(7),
+            OpenIddictConstants.Statuses.Redeemed);
+        Guid recent = await TokenAsync(
+            subject,
+            grant,
+            Noon + TimeSpan.FromMinutes(10),
+            Noon + TimeSpan.FromDays(7),
+            OpenIddictConstants.Statuses.Redeemed);
+
+        await using (JanusDbContext sweeping = database.Context())
         {
-            await new AuthorizationCodeStore(writing)
-                .AddAsync(spent, TestContext.Current.CancellationToken);
-            await new AuthorizationCodeStore(writing)
-                .AddAsync(fresh, TestContext.Current.CancellationToken);
-            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+            Assert.True(
+                await new OidcTokenStore(sweeping).PruneAsync(
+                    Noon + TimeSpan.FromMinutes(5),
+                    TestContext.Current.CancellationToken) >= 2);
         }
-
-        await using JanusDbContext sweeping = database.Context();
-
-        Assert.Equal(
-            1,
-            await new AuthorizationCodeStore(sweeping).SweepAsync(
-                Noon + TimeSpan.FromMinutes(5),
-                TestContext.Current.CancellationToken));
 
         await using JanusDbContext reading = database.Context();
 
-        Assert.Null(await new AuthorizationCodeStore(reading)
-            .FindAsync(spent.Fingerprint, TestContext.Current.CancellationToken));
-        Assert.NotNull(await new AuthorizationCodeStore(reading)
-            .FindAsync(fresh.Fingerprint, TestContext.Current.CancellationToken));
+        var tokens = new OidcTokenStore(reading);
+
+        Assert.Null(await FoundAsync(tokens, gone));
+        Assert.Null(await FoundAsync(tokens, spent));
+        Assert.NotNull(await FoundAsync(tokens, live));
+        Assert.NotNull(await FoundAsync(tokens, recent));
     }
 
     /// <summary>
-    /// AUTH-KEY-003 AC1: a refresh token that has passed the expiry the session gave
-    /// it is taken by the same sweep, consumed or not.
+    /// AUTH-OIDC-003 AC1: a reuse takes every token issued under the grant, and leaves
+    /// the tokens of another grant exactly where they were.
     /// </summary>
     [Fact]
-    public async Task AUTH_KEY_003_AC1_TheSweepTakesTheRefreshTokensThatHaveExpiredAsync()
+    public async Task AUTH_OIDC_003_AC1_RevokingAGrantTakesEveryTokenUnderItAsync()
     {
-        (SubjectId subject, SessionId session) = await SignedInAsync();
+        SubjectId subject = await SignedInAsync();
 
-        _ = await RegisteredAsync();
+        await RegisteredAsync(ClientId, OidcClientKind.Protocol);
 
-        RefreshToken spent = Token(subject, session, Noon + TimeSpan.FromMinutes(1));
-        RefreshToken live = Token(subject, session, Noon + TimeSpan.FromDays(7));
+        Guid reused = await GrantedAsync(subject);
+        Guid other = await GrantedAsync(subject);
+        Guid first = await TokenAsync(subject, reused, Noon, Noon + TimeSpan.FromDays(7));
+        Guid second = await TokenAsync(subject, reused, Noon, Noon + TimeSpan.FromDays(7));
+        Guid apart = await TokenAsync(subject, other, Noon, Noon + TimeSpan.FromDays(7));
 
-        await using (JanusDbContext writing = database.Context())
+        await using (JanusDbContext revoking = database.Context())
         {
-            await new RefreshTokenStore(writing).AddAsync(spent, TestContext.Current.CancellationToken);
-            await new RefreshTokenStore(writing).AddAsync(live, TestContext.Current.CancellationToken);
-            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+            Assert.Equal(
+                2,
+                await new OidcTokenStore(revoking).RevokeByAuthorizationIdAsync(
+                    reused.ToString(),
+                    TestContext.Current.CancellationToken));
         }
-
-        await using JanusDbContext sweeping = database.Context();
-
-        Assert.Equal(
-            1,
-            await new RefreshTokenStore(sweeping).SweepAsync(
-                Noon + TimeSpan.FromMinutes(5),
-                TestContext.Current.CancellationToken));
 
         await using JanusDbContext reading = database.Context();
 
-        Assert.Null(await new RefreshTokenStore(reading)
-            .FindAsync(spent.Fingerprint, TestContext.Current.CancellationToken));
-        Assert.NotNull(await new RefreshTokenStore(reading)
-            .FindAsync(live.Fingerprint, TestContext.Current.CancellationToken));
+        var tokens = new OidcTokenStore(reading);
+
+        Assert.Equal(OpenIddictConstants.Statuses.Revoked, (await FoundAsync(tokens, first))!.Status);
+        Assert.Equal(OpenIddictConstants.Statuses.Revoked, (await FoundAsync(tokens, second))!.Status);
+        Assert.Equal(OpenIddictConstants.Statuses.Valid, (await FoundAsync(tokens, apart))!.Status);
     }
 
     /// <summary>
-    /// AUTH-OIDC-003 AC1: a family is removed whole, which is what a reuse costs every
-    /// token standing beside the one presented.
+    /// AUTH-OIDC-003 AC1: two presentations of one token cannot both change the row,
+    /// so the second is refused rather than lost.
     /// </summary>
     [Fact]
-    public async Task AUTH_OIDC_003_AC1_AFamilyIsRemovedWholeAsync()
+    public async Task AUTH_OIDC_003_AC1_TwoWritesOfOneRowCannotBothSucceedAsync()
     {
-        (SubjectId subject, SessionId session) = await SignedInAsync();
+        SubjectId subject = await SignedInAsync();
 
-        _ = await RegisteredAsync();
+        await RegisteredAsync(ClientId, OidcClientKind.Protocol);
 
-        var family = RefreshFamilyId.New(TimeProvider.System);
-        RefreshToken first = Token(subject, session, Noon + TimeSpan.FromDays(7), family);
-        RefreshToken second = Token(subject, session, Noon + TimeSpan.FromDays(7), family);
-        RefreshToken other = Token(subject, session, Noon + TimeSpan.FromDays(7));
+        Guid grant = await GrantedAsync(subject);
+        Guid issued = await TokenAsync(subject, grant, Noon, Noon + TimeSpan.FromDays(7));
 
-        await using (JanusDbContext writing = database.Context())
-        {
-            foreach (RefreshToken token in new[] { first, second, other })
-            {
-                await new RefreshTokenStore(writing).AddAsync(token, TestContext.Current.CancellationToken);
-            }
+        await using JanusDbContext first = database.Context();
+        await using JanusDbContext second = database.Context();
 
-            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
-        }
+        var one = new OidcTokenStore(first);
+        var two = new OidcTokenStore(second);
+        OidcTokenRecord held = (await FoundAsync(one, issued))!;
+        OidcTokenRecord same = (await FoundAsync(two, issued))!;
 
-        await using JanusDbContext removing = database.Context();
+        await one.SetStatusAsync(
+            held,
+            OpenIddictConstants.Statuses.Redeemed,
+            TestContext.Current.CancellationToken);
+        await one.UpdateAsync(held, TestContext.Current.CancellationToken);
 
-        await new RefreshTokenStore(removing)
-            .RemoveFamilyAsync(family, TestContext.Current.CancellationToken);
+        await two.SetStatusAsync(
+            same,
+            OpenIddictConstants.Statuses.Revoked,
+            TestContext.Current.CancellationToken);
 
-        await using JanusDbContext reading = database.Context();
-
-        Assert.Empty(await new RefreshTokenStore(reading)
-            .OfAsync(family, TestContext.Current.CancellationToken));
-        Assert.NotNull(await new RefreshTokenStore(reading)
-            .FindAsync(other.Fingerprint, TestContext.Current.CancellationToken));
+        _ = await Assert.ThrowsAsync<OpenIddictExceptions.ConcurrencyException>(async () =>
+            await two.UpdateAsync(same, TestContext.Current.CancellationToken));
     }
 
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
-    private static AuthorizationCode Code(
-        OidcClient client,
-        SubjectId subject,
-        SessionId session,
-        TimeSpan lifetime) =>
-        AuthorizationCode.Issue(
-            RandomNumberGenerator.GetBytes(32),
-            client,
-            subject,
-            session,
-            Destination,
-            "a-challenge-of-the-verifier",
-            "S256",
-            "openid email",
-            nonce: null,
-            Noon,
-            lifetime);
+    private static async Task<ImmutableArray<string>> PermittedAsync(
+        OidcApplicationStore applications,
+        string clientId)
+    {
+        OidcClientRecord held = (await applications.FindByClientIdAsync(
+            clientId,
+            TestContext.Current.CancellationToken))!;
 
-    private static RefreshToken Token(
-        SubjectId subject,
-        SessionId session,
-        DateTimeOffset expiresAt,
-        RefreshFamilyId? family = null) =>
-        RefreshToken.Issue(
-            RandomNumberGenerator.GetBytes(32),
-            family ?? RefreshFamilyId.New(TimeProvider.System),
-            ClientId,
-            subject,
-            session,
-            "openid email offline_access",
-            Noon,
-            expiresAt);
+        return await applications.GetPermissionsAsync(held, TestContext.Current.CancellationToken);
+    }
+
+    private static async Task<OidcTokenRecord?> FoundAsync(OidcTokenStore tokens, Guid id) =>
+        await tokens.FindByIdAsync(id.ToString(), TestContext.Current.CancellationToken);
 
     private SigningKeyStore Keys(JanusDbContext context) => new(context, _deployment.Keys);
 
-    private async Task<OidcClient> RegisteredAsync()
+    private async Task<Guid> GrantedAsync(SubjectId subject)
+    {
+        await using JanusDbContext writing = database.Context();
+
+        var authorizations = new OidcAuthorizationStore(writing);
+        OidcAuthorizationRecord grant = await authorizations.InstantiateAsync(
+            TestContext.Current.CancellationToken);
+
+        await authorizations.SetApplicationIdAsync(grant, ClientId, TestContext.Current.CancellationToken);
+        await authorizations.SetSubjectAsync(
+            grant,
+            subject.ToString(),
+            TestContext.Current.CancellationToken);
+        await authorizations.SetStatusAsync(
+            grant,
+            OpenIddictConstants.Statuses.Valid,
+            TestContext.Current.CancellationToken);
+        await authorizations.SetTypeAsync(
+            grant,
+            OpenIddictConstants.AuthorizationTypes.AdHoc,
+            TestContext.Current.CancellationToken);
+        await authorizations.SetScopesAsync(
+            grant,
+            ["openid", "email"],
+            TestContext.Current.CancellationToken);
+        await authorizations.SetCreationDateAsync(grant, Noon, TestContext.Current.CancellationToken);
+        await authorizations.CreateAsync(grant, TestContext.Current.CancellationToken);
+
+        return grant.Id;
+    }
+
+    private async Task<Guid> TokenAsync(
+        SubjectId subject,
+        Guid grant,
+        DateTimeOffset createdAt,
+        DateTimeOffset expiresAt,
+        string status = OpenIddictConstants.Statuses.Valid)
+    {
+        await using JanusDbContext writing = database.Context();
+
+        var tokens = new OidcTokenStore(writing);
+        OidcTokenRecord token = await tokens.InstantiateAsync(TestContext.Current.CancellationToken);
+
+        await tokens.SetApplicationIdAsync(token, ClientId, TestContext.Current.CancellationToken);
+        await tokens.SetAuthorizationIdAsync(
+            token,
+            grant.ToString(),
+            TestContext.Current.CancellationToken);
+        await tokens.SetSubjectAsync(token, subject.ToString(), TestContext.Current.CancellationToken);
+        await tokens.SetStatusAsync(token, status, TestContext.Current.CancellationToken);
+        await tokens.SetTypeAsync(
+            token,
+            OpenIddictConstants.TokenTypeHints.RefreshToken,
+            TestContext.Current.CancellationToken);
+        await tokens.SetCreationDateAsync(token, createdAt, TestContext.Current.CancellationToken);
+        await tokens.SetExpirationDateAsync(token, expiresAt, TestContext.Current.CancellationToken);
+        await tokens.CreateAsync(token, TestContext.Current.CancellationToken);
+
+        return token.Id;
+    }
+
+    private async Task RegisteredAsync(string clientId, OidcClientKind kind)
     {
         var client = new OidcClient(
-            ClientId,
-            "The mail server",
-            OidcClientKind.Protocol,
+            clientId,
+            "The " + clientId,
+            kind,
             Destination,
             ["openid", "email", "offline_access"]);
 
@@ -266,21 +368,16 @@ public sealed class OidcStoreTests(DatabaseFixture database)
             OpaqueToken.Of(Secret).Fingerprint(),
             TestContext.Current.CancellationToken);
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
-
-        return client;
     }
 
-    private async Task<(SubjectId Subject, SessionId Session)> SignedInAsync()
+    private async Task<SubjectId> SignedInAsync()
     {
         SubjectId subject = await _deployment.AccountAsync(Noon);
         var record = Session.Begin(
             SessionId.New(TimeProvider.System),
             subject,
             new Assurance(AssuranceLevel.Aal2, PhishingResistant: true),
-            new SessionOrigin(
-                "198.51.100.7",
-                new DeviceDescription("Firefox", "Linux"),
-                new SessionLocation("Cairo", "EG")),
+            new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")) { Location = new SessionLocation("Cairo", "EG") },
             Noon,
             TimeSpan.FromDays(1),
             TimeSpan.FromDays(30),
@@ -295,6 +392,6 @@ public sealed class OidcStoreTests(DatabaseFixture database)
             TestContext.Current.CancellationToken);
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        return (subject, record.Id);
+        return subject;
     }
 }

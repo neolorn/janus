@@ -1,5 +1,4 @@
 using System;
-using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Janus.Authentication.Sending;
 using Janus.Core;
@@ -21,16 +20,11 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
     private const string Source = "198.51.100.7";
 
     private readonly ConfigurationInMemory _configuration = new();
-    private readonly SendLedgerInMemory _ledger = new();
     private readonly NoticeLedgerInMemory _notices = new();
-    private readonly MessageTemplatesInMemory _templates = new();
-    private readonly MailTransportInMemory _mail = new();
-    private readonly SmsTransportInMemory _sms = new();
-    private readonly SmsBalanceLedgerInMemory _balances = new();
+    private readonly NotificationHandlerInMemory _notifications = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
-    private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
 
     /// <summary>
     /// A deployment that has named the one key with no default.
@@ -38,32 +32,10 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
     public NonExistenceNoticeTests() => _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
 
     private NonExistenceNotice Notice =>
-        new(
-            _configuration,
-            new SendingService(
-                _configuration,
-                _ledger,
-                _templates,
-                _mail,
-                _sms,
-                RestrictionKeySuppliers.None,
-                Considered.Nothing(_work, _clock),
-                new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
-                _work,
-                _events,
-                _clock,
-                _randomness),
-            _notices,
-            _work,
-            _events,
-            _clock);
+        new(_configuration, _notifications, _notices, _work, _events, _clock);
 
     /// <inheritdoc/>
-    public async ValueTask DisposeAsync()
-    {
-        await _work.DisposeAsync();
-        _randomness.Dispose();
-    }
+    public async ValueTask DisposeAsync() => await _work.DisposeAsync();
 
     /// <summary>
     /// AUTH-ABUSE-003 AC3: the address is told, and what it is told names nothing
@@ -72,19 +44,14 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
     [Fact]
     public async Task AUTH_ABUSE_003_AC3_TheAddressIsToldAndTheMessageNamesNobodyAsync()
     {
-        _templates.Set(
-            MessageKind.NoAccount,
-            SendKind.Email,
-            "en",
-            new MessageTemplate("about your address", "no account here. sign in or recover."));
-
         Assert.True(await ToldAsync("nobody@example.test"));
 
-        MailMessage sent = Assert.Single(_mail.Taken);
+        SendRequest sent = Assert.Single(_notifications.Mail);
 
-        Assert.Equal("nobody@example.test", sent.Destination.Value);
-        Assert.DoesNotContain(Source, sent.Body, StringComparison.Ordinal);
-        Assert.DoesNotContain(Source, sent.Subject, StringComparison.Ordinal);
+        Assert.Equal("nobody@example.test", sent.Destination.Canonical);
+        Assert.Equal(MessageKind.NoAccount, sent.Message);
+        Assert.Null(sent.Subject);
+        Assert.Empty(sent.Values);
     }
 
     /// <summary>
@@ -99,12 +66,12 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
         _clock.Advance(TimeSpan.FromMinutes(30));
 
         Assert.False(await ToldAsync("nobody@example.test"));
-        Assert.Single(_mail.Taken);
+        Assert.Single(_notifications.Mail);
 
         _clock.Advance(TimeSpan.FromMinutes(31));
 
         Assert.True(await ToldAsync("nobody@example.test"));
-        Assert.Equal(2, _mail.Taken.Count);
+        Assert.Equal(2, _notifications.Mail.Count);
     }
 
     /// <summary>
@@ -127,24 +94,6 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
 
         Assert.Equal(AlertCondition.NonexistentNoticeRate, raised.Condition);
         Assert.Equal(AlertSeverity.Normal, raised.Severity);
-    }
-
-    /// <summary>
-    /// The notice carries no value at all, so no template place can be filled with
-    /// anything about the request (AUTH-ABUSE-003).
-    /// </summary>
-    [Fact]
-    public async Task TellAsync_ANoticeToAnUnknownAddress_FillsNoTemplatePlaceAsync()
-    {
-        _templates.Set(
-            MessageKind.NoAccount,
-            SendKind.Email,
-            "en",
-            new MessageTemplate("about your address", "asked from {source} for {identifier}"));
-
-        Assert.True(await ToldAsync("nobody@example.test"));
-
-        Assert.Equal("asked from {source} for {identifier}", Assert.Single(_mail.Taken).Body);
     }
 
     private async Task<bool> ToldAsync(string address)

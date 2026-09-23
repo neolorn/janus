@@ -22,8 +22,6 @@ namespace Janus.Hosting.Credentials;
 /// </remarks>
 internal static class CredentialEndpoints
 {
-    private static readonly IResult Malformed = TypedResults.BadRequest();
-
     private static readonly IResult Nothing = TypedResults.NoContent();
 
     /// <summary>
@@ -72,7 +70,7 @@ internal static class CredentialEndpoints
         }
 
         return request.Password is not { Length: > 0 } password
-            ? Malformed
+            ? Answers.Malformed("password")
             : Answers.Of(
                 await credentials
                     .SetPasswordAsync(
@@ -101,7 +99,7 @@ internal static class CredentialEndpoints
         }
 
         return request.Kind is not Factor kind
-            ? Malformed
+            ? Answers.Malformed("kind")
             : Answers.Of(
                 await credentials.BeginKeyAsync(authority, kind, cancellationToken)
                     .ConfigureAwait(false),
@@ -126,10 +124,17 @@ internal static class CredentialEndpoints
             return Nobody();
         }
 
-        return request.Credential is not AuthenticatorAttestation attestation
-            || request.Label is not { Length: > 0 } label
-            ? Malformed
-            : Answers.Of(
+        if (request.Credential is not AuthenticatorAttestation attestation)
+        {
+            return Answers.Malformed("credential");
+        }
+
+        if (request.Label is not { Length: > 0 } label)
+        {
+            return Answers.Malformed("label");
+        }
+
+        return Answers.Of(
                 await credentials
                     .CompleteKeyAsync(
                         authority,
@@ -177,7 +182,7 @@ internal static class CredentialEndpoints
         }
 
         return request.Label is not { Length: > 0 } label
-            ? Malformed
+            ? Answers.Malformed("label")
             : Answers.Of(
                 await credentials.BeginGeneratorAsync(authority, label, cancellationToken)
                     .ConfigureAwait(false),
@@ -206,10 +211,17 @@ internal static class CredentialEndpoints
             return Nobody();
         }
 
-        return !Guid.TryParse(request.CredentialId, out Guid credential)
-            || request.Code is not { Length: > 0 } code
-            ? Malformed
-            : Answers.Of(
+        if (!Guid.TryParse(request.CredentialId, out Guid credential))
+        {
+            return Answers.Malformed("credentialId");
+        }
+
+        if (request.Code is not { Length: > 0 } code)
+        {
+            return Answers.Malformed("code");
+        }
+
+        return Answers.Of(
                 await credentials
                     .ConfirmGeneratorAsync(
                         authority,

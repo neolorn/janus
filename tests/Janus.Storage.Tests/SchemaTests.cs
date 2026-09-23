@@ -49,7 +49,7 @@ public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<Databa
         await using NpgsqlConnection connection = await database.OpenAsync();
 
         bool same = await connection.ExecuteScalarAsync<bool>(
-            "SELECT 'Ahmed' = 'ahmed' COLLATE janus_ci");
+            "SELECT 'Ahmed' = 'ahmed' COLLATE janus.janus_ci");
 
         Assert.True(same);
     }
@@ -87,6 +87,27 @@ public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<Databa
         Assert.Contains("accounts", tables);
         Assert.Contains("subject_keys", tables);
         Assert.Contains("settings", tables);
+    }
+
+    /// <summary>
+    /// OPS-DB-002 AC1: the collation is the library's, so it is created in the library's
+    /// own schema and nowhere else. A column names it by that schema.
+    /// </summary>
+    [Fact]
+    public async Task OPS_DB_002_AC1_TheCollationLivesInTheLibrarysSchemaAsync()
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        IEnumerable<string> schemas = await connection.QueryAsync<string>(
+            """
+            SELECT held.nspname
+            FROM pg_collation AS defined
+            JOIN pg_namespace AS held ON held.oid = defined.collnamespace
+            WHERE defined.collname = @name
+            """,
+            new { name = JanusDbContext.CaseInsensitiveCollation });
+
+        Assert.Equal([JanusDbContext.Schema], schemas);
     }
 
     /// <summary>

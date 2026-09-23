@@ -22,7 +22,7 @@ namespace Janus.Storage.Authentication.Oidc;
 /// </remarks>
 internal sealed class OidcAudit(IAuditStore records, TimeProvider time) : IOidcAudit
 {
-    private static readonly AuditAction Reused = AuditAction.Parse("auth.oidc.refreshreused");
+    private static readonly AuditAction Reused = AuditActions.RefreshTokenReused;
 
     private const string Client = "client";
 

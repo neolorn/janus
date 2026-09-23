@@ -118,7 +118,8 @@ public sealed class LegalDocumentEndpointTests
 
         Answer answered = await new Browser(deployment).SendAsync("GET", "/privacy/notice");
 
-        Assert.Equal(StatusCodes.Status403Forbidden, answered.Status);
+        Assert.Equal(StatusCodes.Status404NotFound, answered.Status);
+        Assert.Equal(ErrorCodes.DocumentNotFound.ToString(), answered.Text("code"));
     }
 
     // The store holds versions in the order they were written, so the last published

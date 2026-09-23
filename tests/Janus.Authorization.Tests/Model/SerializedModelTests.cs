@@ -26,6 +26,32 @@ public sealed class SerializedModelTests
     }
 
     /// <summary>
+    /// OPS-MIG-003a AC2, AC4: the maintenance credential's functions and the rights it
+    /// holds on the wrapped keys are read in the serialized model, not only in the
+    /// migration that grants them.
+    /// </summary>
+    [Fact]
+    public void OPS_MIG_003a_AC4_TheMaintenanceGrantsAreListedInTheSerializedModel()
+    {
+        string written = AuthorizationModel.Of(HostDomain.Declared().Build()).Serialize();
+
+        foreach (string listed in
+            new[]
+            {
+                "FUNCTION janus.audit_drop_expired_partitions("
+                    + "security_retention interval, routine_retention interval)",
+                "FUNCTION janus.audit_ensure_partitions()",
+                "SCHEMA janus",
+                "TABLE janus.subject_keys",
+            })
+        {
+            Assert.Contains(listed, written, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("\"maintenanceGrants\"", written, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// AUTHZ-MODEL-005 AC2: a change to what the host declared is a difference in the
     /// file, on the line the change was made.
     /// </summary>
@@ -34,11 +60,11 @@ public sealed class SerializedModelTests
     {
         var before = AuthorizationModel.Of(HostDomain.Declared().Build());
         var after = AuthorizationModel.Of(
-            HostDomain.Declared().Permission("document:publish").Build());
+            HostDomain.Declared().Permission("article:publish").Build());
 
         Assert.NotEqual(before.Serialize(), after.Serialize());
-        Assert.DoesNotContain("document:publish", before.Serialize(), StringComparison.Ordinal);
-        Assert.Contains("document:publish", after.Serialize(), StringComparison.Ordinal);
+        Assert.DoesNotContain("article:publish", before.Serialize(), StringComparison.Ordinal);
+        Assert.Contains("article:publish", after.Serialize(), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -62,8 +88,8 @@ public sealed class SerializedModelTests
     // difference a deterministic serialization has to absorb.
     private static AuthorizationDeclarationBuilder Reordered() =>
         new AuthorizationDeclarationBuilder()
-            .Permission("document:edit")
-            .Permission("document:read")
+            .Permission("article:edit")
+            .Permission("article:read")
             .LawfulBasis(new LawfulBasisDeclaration("interest", false, false, true, true))
             .LawfulBasis(new LawfulBasisDeclaration("contract", false, false, false, false))
             .Relationship<HostDomain.Folder>(
@@ -75,7 +101,7 @@ public sealed class SerializedModelTests
                 folder => folder.Id,
                 "id")
             .SensitiveCategory("financial")
-            .Resource<HostDomain.Document>("document", document => document
+            .Resource<HostDomain.Article>("article", article => article
                 .ContainedIn("folder")
                 .Purpose("collaboration", "contract", data: ["content", "identity"], subjects: ["members"])
                 .Encrypted(item => item.Body, item => item.Author))

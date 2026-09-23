@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -22,6 +23,54 @@ namespace Janus.Authorization.Gate;
 /// </remarks>
 internal sealed class Derivations(AuthorizationModel model, IRoleStore roles)
 {
+    /// <summary>
+    /// Every derivation the host's own rows decide that reaches records of the type,
+    /// with what the role it confers allows.
+    /// </summary>
+    /// <param name="type">The kind of thing the records are.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// One entry per reaching derivation, a materialised one left out. What the role
+    /// allows is read here and mapped in memory, so a page costs no query per
+    /// permission (AUTHZ-GATE-005 AC1).
+    /// </returns>
+    public async ValueTask<IReadOnlyList<ConferredDerivation>> ConferringAsync(
+        ResourceType type,
+        CancellationToken cancellationToken)
+    {
+        var conferring = new List<ConferredDerivation>();
+
+        foreach (ReachingDerivation each in model.Derivations(type))
+        {
+            if (each.Derivation.Materialised)
+            {
+                continue;
+            }
+
+            Role? role = await roles.FindAsync(each.Derivation.Role, cancellationToken)
+                .ConfigureAwait(false);
+
+            conferring.Add(new ConferredDerivation(
+                each.Relationship,
+                each.Derivation.Role,
+                role is null ? FrozenSet<Permission>.Empty : role.Permissions));
+        }
+
+        return conferring;
+    }
+
+    /// <summary>
+    /// Whether a derivation the host's own rows decide reaches records of the type,
+    /// those declared on a type containing it included.
+    /// </summary>
+    /// <param name="type">The kind of thing the records are.</param>
+    /// <returns>
+    /// Whether one reaches it, whatever the role it confers allows. A materialised
+    /// derivation is left out: its grants are rows and are read as rows.
+    /// </returns>
+    public bool Reaches(ResourceType type) =>
+        model.Derivations(type).Any(each => !each.Derivation.Materialised);
+
     /// <summary>
     /// The relationships whose derivations confer one of the permissions on records of
     /// the type, those declared on a type containing it included.

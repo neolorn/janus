@@ -24,7 +24,7 @@ namespace Janus.Hosting.Privacy;
 /// </remarks>
 internal sealed class SubjectNotices(
     IIdentifierDirectory identifiers,
-    SendingService sending,
+    INotificationHandler sending,
     IConfigurationStore configuration) : ISubjectNotices
 {
     private static readonly IReadOnlyDictionary<string, string> Nothing =

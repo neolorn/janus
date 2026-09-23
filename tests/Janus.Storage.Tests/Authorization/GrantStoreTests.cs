@@ -424,7 +424,7 @@ public sealed class GrantStoreTests(DatabaseFixture database)
         await transaction.BeginAsync(TestContext.Current.CancellationToken);
 
         await new ResourceStore(writing, new DataConnections(writing)).RegisterAsync(
-            RegisteredResource.Create(reference, organization, containedIn),
+            RegisteredResource.Create(reference, organization, subject: null, containedIn),
             TestContext.Current.CancellationToken);
 
         await transaction.CommitAsync(TestContext.Current.CancellationToken);

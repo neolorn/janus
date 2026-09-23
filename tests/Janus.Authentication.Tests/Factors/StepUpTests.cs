@@ -697,7 +697,7 @@ public sealed class StepUpTests : IDisposable
     }
 
     private static SessionOrigin Origin() =>
-        new("198.51.100.7", new DeviceDescription("Firefox", "Linux"), null);
+        new("198.51.100.7", new DeviceDescription("Firefox", "Linux"));
 
     private static IReadOnlyList<IReadOnlyList<Factor>> Offered(StepUpChallenge challenge) =>
         challenge.Combinations;

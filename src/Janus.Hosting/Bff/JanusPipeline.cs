@@ -27,8 +27,13 @@ public static class JanusPipeline
     {
         ArgumentNullException.ThrowIfNull(application);
 
-        // BFF-ORDER-001 stages 2 and 3. The cheap rejections come first, before
-        // anything reads the session.
+        // BFF-ORDER-001 stage 11, which is last on the way out and therefore first on
+        // the way in: a body the reader could not parse fails at the endpoint, after
+        // every stage before it has run (API-CONV-002).
+        _ = application.UseMiddleware<MalformedRequest>();
+
+        // Stages 2 and 3. The cheap rejections come first, before anything reads the
+        // session.
         _ = application.UseMiddleware<ResourceIsolation>();
         _ = application.UseMiddleware<CustomRequestHeader>();
         _ = application.UseMiddleware<OriginValidation>();
@@ -39,6 +44,11 @@ public static class JanusPipeline
         _ = application.UseMiddleware<SessionResolution>();
         _ = application.UseMiddleware<FirstContact>();
         _ = application.UseMiddleware<SynchronizerToken>();
+
+        // Stage 8's floor: an endpoint that answers only a signed-in person is held
+        // to one here, after the stages that establish what the browser carries and
+        // before anything reads a body (BFF-STEP-001).
+        _ = application.UseMiddleware<SessionRequirement>();
 
         // AUTH-SESS-012: the authorization endpoint is answered here, after the layers
         // that established what the browser carries, because what it issues a code
@@ -65,6 +75,7 @@ public static class JanusPipeline
             context => MachineRoutes.Governs(context.Request.Path),
             branch =>
             {
+                _ = branch.UseMiddleware<MalformedRequest>();
                 _ = branch.UseMiddleware<MachineProfile>();
                 _ = branch.UseAuthentication();
             });

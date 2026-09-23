@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Janus.Core;
+using Janus.Core.Configuration;
 
 namespace Janus.Authentication.Sending;
 
@@ -46,7 +47,22 @@ internal static class Restrictions
         // restrictions for the same reason, and answers to the one whose purpose names
         // notifications (AUTH-ABUSE-004).
         return !request.IsAlert
-            && (!request.IsNoticeToHolder || restriction.Purpose is not RestrictionPurpose.Any);
+            && (!IsNoticeToHolder(request) || restriction.Purpose is not RestrictionPurpose.Any);
+    }
+
+    /// <summary>
+    /// Whether one send is a security notice to an address an account already holds,
+    /// which is outside the destination restrictions so that an attacker who drains a
+    /// bucket cannot silence the notice that says so (AUTH-ABUSE-004).
+    /// </summary>
+    /// <param name="request">The send.</param>
+    /// <returns>Whether it is such a notice.</returns>
+    /// <exception cref="ArgumentNullException">The send is absent.</exception>
+    public static bool IsNoticeToHolder(SendRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return MessageChannels.Notices.Contains(request.Message) && request.Subject is not null;
     }
 
     /// <summary>
@@ -127,32 +143,8 @@ internal static class Restrictions
     /// <param name="before">What stood, or nothing where the restriction is new.</param>
     /// <param name="after">What replaces it, or nothing where it is deleted.</param>
     /// <returns>Whether the change is a loosening.</returns>
-    public static bool IsLoosening(Restriction? before, Restriction? after)
-    {
-        if (before is null)
-        {
-            return false;
-        }
-
-        if (after is null)
-        {
-            return true;
-        }
-
-        if (after.Key != before.Key
-            || after.HostKeyName != before.HostKeyName
-            || (after.Purpose is not RestrictionPurpose.Any && after.Purpose != before.Purpose))
-        {
-            return true;
-        }
-
-        return before.Buckets.Any(bucket => !after.Buckets.Any(kept => AtLeastAsStrict(kept, bucket)));
-    }
-
-    private static bool AtLeastAsStrict(Bucket kept, Bucket bucket) =>
-        kept.Maximum <= bucket.Maximum
-        && kept.Interval >= bucket.Interval
-        && (kept.Window == bucket.Window || kept.Window is BucketWindow.Sliding);
+    public static bool IsLoosening(Restriction? before, Restriction? after) =>
+        RestrictionSetSetting.Loosens(before, after);
 
     private static DateTimeOffset Opened(Bucket bucket, DateTimeOffset now) =>
         bucket.Window is BucketWindow.Sliding

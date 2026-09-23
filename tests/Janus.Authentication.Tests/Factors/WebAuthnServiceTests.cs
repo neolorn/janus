@@ -1,4 +1,5 @@
 using System;
+using System.Buffers.Text;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
@@ -58,9 +59,11 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
     {
         WebAuthnCeremony passkey = Value(await Service.BeginAsync(
             Factor.Passkey,
+            Person(Without()),
             TestContext.Current.CancellationToken));
         WebAuthnCeremony key = Value(await Service.BeginAsync(
             Factor.SecurityKey,
+            Person(Without()),
             TestContext.Current.CancellationToken));
 
         Assert.True(passkey.DiscoverableCredential);
@@ -97,9 +100,11 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
     {
         WebAuthnCeremony passkey = Value(await Service.BeginAsync(
             Factor.Passkey,
+            Person(Without()),
             TestContext.Current.CancellationToken));
         WebAuthnCeremony key = Value(await Service.BeginAsync(
             Factor.SecurityKey,
+            Person(Without()),
             TestContext.Current.CancellationToken));
 
         Assert.Equal("example.com", passkey.RelyingPartyId);
@@ -109,29 +114,43 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-PM-001 AC1: a user handle is what would carry personal data into an
-    /// authenticator, and the library issues none: the ceremony is not a function of
-    /// the account, and what the browser is handed is the relying party, the
-    /// algorithms and the challenge.
+    /// REG-PM-001 AC1: the handle is the subject identifier and nothing else, so the
+    /// one field an authenticator stores and offers unprompted carries an opaque
+    /// value the library drew from randomness and no fact about the person.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task REG_PM_001_AC1_NoCeremonyCarriesAUserHandleAtAllAsync()
+    public async Task REG_PM_001_AC1_TheHandleIsTheSubjectIdentifierAndNothingElseAsync()
+    {
+        SubjectId subject = Without();
+
+        WebAuthnCeremony ceremony = Value(await Service.BeginAsync(
+            Factor.Passkey,
+            Person(subject),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            subject.Value,
+            new Guid(Base64Url.DecodeFromChars(ceremony.User.Id), bigEndian: true));
+        Assert.Equal(16, Base64Url.DecodeFromChars(ceremony.User.Id).Length);
+    }
+
+    /// <summary>
+    /// REG-PM-001: the ceremony carries the primary email as the name and the display
+    /// name as the display name, which is what an authenticator shows when it offers
+    /// the credential back.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_PM_001_TheCeremonyCarriesTheNameAndTheDisplayNameAsync()
     {
         WebAuthnCeremony ceremony = Value(await Service.BeginAsync(
             Factor.Passkey,
+            Person(Without()),
             TestContext.Current.CancellationToken));
 
-        foreach (Type shape in new[] { typeof(WebAuthnCeremony), typeof(CredentialCeremony) })
-        {
-            Assert.Equal(
-                ["Algorithms", "Challenge", "DiscoverableCredential", "RelyingPartyId"],
-                shape.GetProperties().Select(property => property.Name).Order(StringComparer.Ordinal));
-        }
-
-        Assert.DoesNotContain(
-            Service.GetType().GetMethod(nameof(WebAuthnService.BeginAsync))!.GetParameters(),
-            parameter => parameter.ParameterType == typeof(SubjectId));
+        Assert.Equal("person@example.com", ceremony.User.Name);
+        Assert.Equal("A Person", ceremony.User.DisplayName);
         Assert.Equal("example.com", ceremony.RelyingPartyId);
     }
 
@@ -498,6 +517,46 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-PM-001: the handle an authenticator returns is what says whose credential
+    /// answered, so one naming another account is refused as a wrong credential is.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_PM_001_AnAssertionWhoseHandleNamesAnotherAccountIsRefusedAsync()
+    {
+        SubjectId subject = Subject();
+
+        await EnrolledAsync(subject, Registration());
+
+        Assert.Null(Refusal(await Service.PresentAsync(
+            Assertion() with { UserHandle = WebAuthnService.Handle(subject) },
+            TestContext.Current.CancellationToken)));
+
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            Refusal(await Service.PresentAsync(
+                Assertion() with { UserHandle = WebAuthnService.Handle(Without()) },
+                TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// REG-PM-001: a handle that is not one the library ever issued names no account,
+    /// which is refused for the same reason a handle naming another one is.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_PM_001_AnAssertionWhoseHandleIsNotOneWeIssuedIsRefusedAsync()
+    {
+        await EnrolledAsync(Subject(), Registration());
+
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            Refusal(await Service.PresentAsync(
+                Assertion() with { UserHandle = "not-a-handle" },
+                TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
     /// AUTH-FACT-014: a kind no ceremony creates begins none.
     /// </summary>
     /// <returns>The work of running it.</returns>
@@ -505,7 +564,7 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
     public async Task BeginAsync_AKindNoCeremonyCreates_IsRefusedAsync() =>
         Assert.Equal(
             ErrorCodes.FactorRejected,
-            Refusal(await Service.BeginAsync(Factor.Totp, TestContext.Current.CancellationToken)));
+            Refusal(await Service.BeginAsync(Factor.Totp, Person(Without()), TestContext.Current.CancellationToken)));
 
     /// <summary>
     /// AUTH-FACT-014: an assertion naming a credential the deployment does not hold
@@ -603,6 +662,11 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             BackupEligible: false,
             BackupState: false,
             Counter: 0);
+
+    // REG-PM-001: the handle is the subject identifier; the two shown values are the
+    // account's own primary email and display name.
+    private static CeremonyUser Person(SubjectId subject) =>
+        new(WebAuthnService.Handle(subject), "person@example.com", "A Person");
 
     private static WebAuthnAssertion Assertion() =>
         new(

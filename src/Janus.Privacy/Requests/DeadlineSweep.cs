@@ -39,7 +39,7 @@ internal sealed class DeadlineSweep(
     /// </summary>
     internal const string Source = "privacy.request.lapse";
 
-    private static readonly AuditAction Lapsed = AuditAction.Parse("privacy.request.lapsed");
+    private static readonly AuditAction Lapsed = AuditActions.RequestLapsed;
 
     /// <summary>
     /// Runs one pass.

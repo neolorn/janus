@@ -60,6 +60,8 @@ identifiers.phone.max
 identifiers.username.changecooloff
 identifiers.username.enabled
 integration.callback.ratelimit
+integration.mail.endpoint
+integration.sms.endpoint
 legal.governinglanguage
 link.invitation.lifetime
 link.magic.lifetime
@@ -81,6 +83,7 @@ password.argon2.iterations
 password.argon2.memory
 password.argon2.parallelism
 password.blocklist.corpusmaxage
+password.blocklist.selfhosted.address
 password.blocklist.source
 password.blocklist.sources
 password.floor.singlefactor
@@ -106,7 +109,9 @@ recovery.invalidation.window
 recovery.link.lifetime
 recovery.ratelimit.account
 recovery.ratelimit.approver
+redirect.defaultclient
 registration.adultaffirmation
+registration.events.pollinterval
 registration.phone
 registration.session.lifetime
 restrictions

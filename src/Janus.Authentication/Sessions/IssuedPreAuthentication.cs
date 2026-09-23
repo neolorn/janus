@@ -12,5 +12,12 @@ namespace Janus.Authentication.Sessions;
 /// What the script-readable cookie carries, which a state-changing request presents
 /// back and which is bound to this browser and no other.
 /// </param>
+/// <param name="Session">
+/// The session just written, which the request that issued it goes on to bind a
+/// sign-on to rather than reading back what it has only now stored (BFF-SESS-006).
+/// </param>
 /// <remarks>Implements BFF-CSRF-005a and BFF-CSRF-006.</remarks>
-internal sealed record IssuedPreAuthentication(OpaqueToken Secret, OpaqueToken CsrfToken);
+internal sealed record IssuedPreAuthentication(
+    OpaqueToken Secret,
+    OpaqueToken CsrfToken,
+    PreAuthentication Session);

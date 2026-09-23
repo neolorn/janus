@@ -227,10 +227,10 @@ public sealed class PreferenceStoreTests(DatabaseFixture database) : IClassFixtu
     [
         new PreferenceDeclaration(
             "theme",
-            PreferenceKind.Choice,
+            PreferenceKind.Enum,
             "dark",
             Choices: new HashSet<string> { "dark", "light" }),
-        new PreferenceDeclaration("text-size", PreferenceKind.Number, "16"),
+        new PreferenceDeclaration("text-size", PreferenceKind.Integer, "16"),
     ]);
 
     private PreferenceStore Store(JanusDbContext context) =>

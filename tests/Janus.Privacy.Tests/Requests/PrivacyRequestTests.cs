@@ -295,8 +295,8 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// PRIV-RIGHT-002 AC5: a decision is made once; a second one finds nothing to
-    /// decide.
+    /// PRIV-RIGHT-002 AC5, PRIV-RIGHT-001: a decision is made once, and the second
+    /// attempt is told that one already stands rather than that it may not ask.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -310,7 +310,35 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
         Result again = await Requests
             .FulfilAsync(staff, receipt.RequestId, CancellationToken.None);
 
-        Assert.Equal(ErrorCodes.Denied, again.Match(() => default, error => error.Code));
+        Assert.Equal(ErrorCodes.RequestDecided, again.Match(() => default, error => error.Code));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001: the three ways a decision is refused are told apart for the
+    /// member of staff working the queue: no permission, no such request, and a
+    /// decision that already stands. Nothing under the administrative routes is
+    /// concealed from somebody whose business it is.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_001_AC2_TheThreeWaysADecisionIsRefusedAreToldApartAsync()
+    {
+        PrivacyRequestReceipt receipt = await SubmittedAsync(PrivacyRequestType.Restriction);
+
+        Result withoutPermission = await Requests
+            .FulfilAsync(AccessContext.Of(Ahmed), receipt.RequestId, CancellationToken.None);
+
+        Result noSuchRequest = await Requests.FulfilAsync(
+            AccessContext.Of(Mona),
+            new PrivacyRequestId(Guid.Parse("99999999-9999-4999-8999-999999999999")),
+            CancellationToken.None);
+
+        Assert.Equal(
+            ErrorCodes.Denied,
+            withoutPermission.Match(() => default, error => error.Code));
+        Assert.Equal(
+            ErrorCodes.RequestNotFound,
+            noSuchRequest.Match(() => default, error => error.Code));
     }
 
     /// <summary>

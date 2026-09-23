@@ -2,6 +2,7 @@ using System;
 using System.Security.Cryptography;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
+using Janus.Authentication.Configuration;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
@@ -36,6 +37,7 @@ using Janus.Privacy.Requests;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Accounts;
 using Janus.Storage.Authentication.Alerting;
+using Janus.Storage.Authentication.Configuration;
 using Janus.Storage.Authentication.Credentials;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Identifiers;
@@ -72,6 +74,7 @@ using Janus.Storage.Privacy.SubjectKeys;
 using Janus.Storage.Settings;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using OpenIddict.Abstractions;
 
 namespace Janus.Storage;
 
@@ -113,6 +116,9 @@ internal static class StorageRegistration
                 JanusDbContext.Schema)));
 
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddSingleton<IRegistrationSignals>(provider => new RegistrationSignals(
+            connectionString,
+            provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<DataConnections>();
 
         services.AddSingleton<RandomNumberGenerator>(_ => RandomNumberGenerator.Create());
@@ -135,6 +141,7 @@ internal static class StorageRegistration
         services.AddScoped<IRegisterRoles, RegisterRoles>();
         services.AddScoped<IOrganizationStore, OrganizationStore>();
         services.AddScoped<IMembershipStore, MembershipStore>();
+        services.AddScoped<Janus.Privacy.Erasures.IOrganizationStates, OrganizationStates>();
         services.AddScoped<IIdentifierStore>(provider => new IdentifierStore(
             provider.GetRequiredService<JanusDbContext>(),
             keyEncryptionKeys,
@@ -167,6 +174,7 @@ internal static class StorageRegistration
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IRegistrationSessionStore>(provider => new RegistrationSessionStore(
             provider.GetRequiredService<JanusDbContext>(),
+            provider.GetRequiredService<DataConnections>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IRegistrationDirectory>(provider => new RegistrationDirectory(
@@ -189,6 +197,7 @@ internal static class StorageRegistration
         services.AddScoped<IMembershipLookup, MembershipLookup>();
         services.AddScoped<IPreAuthenticationStore, PreAuthenticationStore>();
         services.AddScoped<IChallengeStore, ChallengeStore>();
+        services.AddScoped<IVerificationCodeStore, VerificationCodeStore>();
         services.AddScoped<IKeyCeremonyStore, KeyCeremonyStore>();
         services.AddScoped<IPendingSignInStore>(provider => new PendingSignInStore(
             provider.GetRequiredService<JanusDbContext>(),
@@ -205,8 +214,10 @@ internal static class StorageRegistration
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IOidcClientStore, OidcClientStore>();
-        services.AddScoped<IAuthorizationCodeStore, AuthorizationCodeStore>();
-        services.AddScoped<IRefreshTokenStore, RefreshTokenStore>();
+        services.AddScoped<IOpenIddictApplicationStore<OidcClientRecord>, OidcApplicationStore>();
+        services.AddScoped<IOpenIddictAuthorizationStore<OidcAuthorizationRecord>, OidcAuthorizationStore>();
+        services.AddScoped<IOpenIddictScopeStore<OidcScopeRecord>, OidcScopeStore>();
+        services.AddScoped<IOpenIddictTokenStore<OidcTokenRecord>, OidcTokenStore>();
         services.AddScoped<ISigningKeyStore>(provider => new SigningKeyStore(
             provider.GetRequiredService<JanusDbContext>(),
             keyEncryptionKeys));
@@ -230,6 +241,10 @@ internal static class StorageRegistration
         services.AddScoped<IRecordedConsents, RecordedConsents>();
         services.AddScoped<IAccessAudit, AccessAudit>();
 
+        services.AddScoped<ISendOutbox>(provider => new SendDeliveryStore(
+            provider.GetRequiredService<JanusDbContext>(),
+            keyEncryptionKeys,
+            provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<ISendLedger>(provider => new SendLedger(
             provider.GetRequiredService<JanusDbContext>(),
             fingerprintKey));
@@ -247,6 +262,7 @@ internal static class StorageRegistration
             fingerprintKey));
         services.AddScoped<ISmsBalanceLedger, SmsBalanceLedger>();
         services.AddScoped<IAlertLedger, AlertLedger>();
+        services.AddScoped<IConfigurationAudit, ConfigurationAudit>();
         services.AddScoped<ISendAudit, SendAudit>();
         services.AddScoped<IBotDefenceAudit, BotDefenceAudit>();
         services.AddScoped<IPhoneSignalAudit, PhoneSignalAudit>();

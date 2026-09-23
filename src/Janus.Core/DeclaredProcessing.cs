@@ -94,7 +94,27 @@ public sealed class DeclaredProcessing
             [.. Distinct([.. already?.DataCategories ?? [], .. declared.DataCategories])],
             [.. Distinct([.. already?.SubjectCategories ?? [], .. declared.SubjectCategories])],
             [.. Distinct(sensitive)],
-            [.. already?.Types ?? [], type.Name]);
+            [.. already?.Types ?? [], type.Name],
+            Document(declared, already));
+    }
+
+    // PRIV-CONS-007: the document a consent for the purpose is recorded against is
+    // one document, so two types declaring the same purpose against two documents,
+    // or one against a document and one against the notice, is a deployment that
+    // cannot say which revision ends the consent.
+    private static string? Document(PurposeDeclaration declared, DeclaredPurpose? already)
+    {
+        if (already is not null
+            && !string.Equals(already.Document, declared.Document, StringComparison.Ordinal))
+        {
+            throw new StartupException(
+                "The purpose " + declared.Name
+                + " names two governing documents, "
+                + (already.Document ?? "the privacy notice") + " and "
+                + (declared.Document ?? "the privacy notice") + ".");
+        }
+
+        return declared.Document;
     }
 
     // The written path where sensitive data rests on a basis that requires it, the

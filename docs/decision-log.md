@@ -7805,7 +7805,7 @@ choices inside them to the implementer: architectural style, how a use case is
 organised, persistence pattern, domain modelling, results, the HTTP layer, dependency
 injection, the permitted packages, formatting, and the small conventions that make a
 codebase read as one hand's work. The user asked that none of these be left to the
-implementing agent, that the choices be the current mainstream best fit for a security
+implementer, that the choices be the current mainstream best fit for a security
 library of this shape, and that two named conventions govern commits and the
 changelog. Chapter `08` now states all of them as requirements enforced by tooling
 wherever tooling exists.
@@ -8096,9 +8096,9 @@ has a value. Seven were owner decisions; the rest are mechanical fills.
   them `system.fault` (500), `config.value.lastdestination`,
   `model.startup.declarationmissing` and three preference refusals. Three closed sets
   were added: capability residuals (5.20), consent mechanism (5.21), age group (5.22,
-  `minor` · `adult`). Cookies are `__Host-janus-session`, `-preauth`, `-csrf`, `-device`,
-  `-browser`; the CSRF header is `X-Janus-Request`. The DNS record is
-  `_janus-verify.<domain>`. The CLI verbs are `bootstrap`, `rotate-kek`,
+  `minor` · `adult`). Cookies are `__Host-identity-session`, `-preauth`, `-csrf`, `-device`,
+  `-browser` (D-163: the `identity-` prefix); the CSRF header is `X-Identity-Request`. The DNS record is
+  `_identity-verify.<domain>`. The CLI verbs are `bootstrap`, `rotate-kek`,
   `rotate-fingerprint-key`, `replay-erasures`.
 - *Shapes.* The registration state document, the SSE events, `policyRequirement`,
   `passwordChangeRequired`, the device description (`{ browser, os }` from the
@@ -8213,7 +8213,7 @@ field cipher runs.
    and third never overlap, a username must contain a letter; an all-digit choice is
    refused with `identity.username.invalid`, a code the profile's other refusals also
    use.
-3. **`janus_ci` applies to what is plaintext and spelled by a person**: organization
+3. **`identity_ci` applies to what is plaintext and spelled by a person**: organization
    names and locked domain names today. Identifiers are fingerprints and personal fields
    are ciphertext; a collation cannot see through either, and D-153's wording that named
    display names and usernames was wrong.
@@ -8225,7 +8225,7 @@ REG-IDENT-009 · `10` section 1.1.
 
 ## D-156 — Phase 1 questions, third stop: a port is tested against its aggregate; test infrastructure is Tier 1
 
-**Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-149 (CONV-LAYOUT-002 grants), the agent instructions (Tier 1) · **Extends:** D-155
+**Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-149 (CONV-LAYOUT-002 grants), the working guide (rule tiers) · **Extends:** D-155
 
 **TL;DR.** D-155 made the port implementation the one place encryption happens, and the
 grant list then left no project able to test it: Storage's tests could see the store but
@@ -8240,7 +8240,7 @@ to Tier 1 so it never ends a run again.
    the field cipher inside it, untested for four phases.
 2. **Test infrastructure is Tier 1.** A project reference, a grant to a test project, an
    analyser scope in a test project or a fixture arrangement, when it touches no runtime
-   code and no shipped surface, is resolved by the agent with the least change,
+   code and no shipped surface, is resolved by the implementer with the least change,
    including to the gate test that enforces the list, and recorded; the owner brings
    `08` into line afterwards. Three of the last eight stops were of this kind, and none
    of them had a second defensible answer.
@@ -8266,7 +8266,7 @@ contradiction of my own making.
    exists; `Organization.IsAdministrative` is what IDN-ORG-004 checks. Rejected: a
    well-known fixed identifier (leaks structure into an opaque id) and a settings key
    (a domain invariant does not live in configuration).
-3. **Database roles** are `janus_migrate`, `janus_app`, `janus_maintenance`; the
+3. **Database roles** are `identity_migrate`, `identity_app`, `identity_maintenance`; the
    migration creates the runtime roles `NOLOGIN` if absent and the deployment attaches
    credentials.
 4. **`audit_drop_expired_partitions` takes the two retention periods as arguments**,
@@ -8282,12 +8282,12 @@ OPS-MIG-003.
 
 ## D-158 — Phase 1, fifth stop: merge commits are outside the message rule; a gate's own defect is Tier 1
 
-**Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-149 (CONV-VCS-003), the agent instructions (Tier 1) · **Extends:** D-157
+**Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-149 (CONV-VCS-003), the working guide (rule tiers) · **Extends:** D-157
 
 **TL;DR.** The commit-message gate has been red on `main` since the first merge because
 it inspects the merge commit the platform writes. A merge commit carries no change and
 was never what CONV-VCS-003 is about; the gate skips two-parent commits. And a gate that
-fails on something its own chapter does not say is a defect in the gate, which the agent
+fails on something its own chapter does not say is a defect in the gate, which the implementer
 fixes and records rather than stopping for.
 
 Rejected: a Conventional message on every merge commit. It would have to be typed at
@@ -8316,8 +8316,8 @@ row: does a live, non-denied grant for this permission exist for one of those su
 on the resource or any ancestor. LINQ: `Expression<Func<TResource, bool>>` built from the
 host's identifier selector and the host's `IQueryable<AncestryEntry>` and
 `IQueryable<EffectiveGrant>` (public records in `Janus.Core`, mapped by
-`MapJanusAuthorization(ModelBuilder)` in `Janus.Hosting`). SQL: the same `EXISTS` over
-`janus.ancestry` and `janus.effective_grants` with alias and column from the caller and
+`MapAuthorizationTables(ModelBuilder)` in `Janus.Hosting`). SQL: the same `EXISTS` over
+`identity.ancestry` and `identity.effective_grants` with alias and column from the caller and
 everything else parameterised. Both derive from one rule object; the truth table runs
 through both.
 
@@ -8366,12 +8366,12 @@ tools for a reason.
 
 ---
 
-## D-161 — Phase 2, third stop: derived checks take sources; refresh is the host's call; the agent decides alone through Milestone 1
+## D-161 — Phase 2, third stop: derived checks take sources; refresh is the host's call; the implementer decides alone through Milestone 1
 
-**Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-160, D-043, the agent instructions (Tiers 2 and 3) · **Extends:** D-160
+**Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-160, D-043, the working guide (rule tiers) · **Extends:** D-160
 
 **TL;DR.** Three derivation gaps closed, and a change of working mode: the owner cannot
-attend the remaining stops, so the agent decides and records instead of stopping.
+attend the remaining stops, so the implementer decides and records instead of stopping.
 
 1. **Single check and capabilities on a derived type** take the same host-supplied
    sources the filter takes; without them the call is refused with
@@ -8384,15 +8384,282 @@ attend the remaining stops, so the agent decides and records instead of stopping
 3. **Reverse lookup over derivations** is the phase 8 view: stored and materialised
    grants by query, unmaterialised derivations evaluated over the host-supplied relation
    within `authz.reverselookup.budget`, `partial: true` past it.
-4. **Working mode.** Tier 2 questions are decided by the agent (most consistent reading,
+4. **Working mode.** Tier 2 questions are decided by the implementer (most consistent reading,
    fail closed, smaller surface, no package) and recorded under **Decided in the owner's
    absence** with the chapter text that should change; Tier 3 questions are decided the
-   same way with the strictest reading. The chapters are not edited by the agent; the
+   same way with the strictest reading. The chapters are not edited by the implementer; the
    owner reconciles them from the report entries afterwards. The Milestone 1 exit gate
    and the ban on Milestone 2 stand.
 
 **Propagated to:** `03` AUTHZ-DERIVE-001, 005, 007 · `10` sections 1.3, 4.5a ·
 the working guide sections 3 and 6.
+
+---
+
+## D-162 — Review of the 109 decisions taken through phase 7: 27 reversed, 14 settled, the rest kept
+
+**Date:** 2026-09-22 · **Status:** accepted · **Amends:** D-149, D-153, D-155, D-160, D-161 and the items named below · **Extends:** D-161
+
+**TL;DR.** The ledger of decisions taken in the owner's absence (phases 2 to 7, entries 1
+to 109) was audited entry by entry against the chapters, together with the 88 Tier 1
+resolutions and the code-to-chapter comparison. 68 decisions stand and their chapter text
+is reconciled in a later pass. 27 are reversed here, each with the correct handling. 14
+were open choices; each is settled here. Twelve Tier 1 resolutions failed a condition; the
+ones that matter are reversed below. Nine error codes and one enumeration the code
+defines gain their `10` rows in the same pass. This entry is the specification for every
+point it settles; the ledger entries it names are superseded by it.
+
+### A. The repository carries a trace and it comes out
+
+Ledger 1 committed the guide copy of the working instructions. That file, whatever it is called, is an
+instruction file for the tooling and is excluded from history by rule; the decision that
+committed it was marked Tier 3 and took the weaker reading. **Instruction:** remove
+the guide copy of the working instructions from the repository and from every commit of its history with a
+history filter, temporarily lifting the force-push protection on `main` for that one
+operation and restoring it after; restore the exclusion pattern so a file of that name
+is excluded at any depth; verify with a whole-history search that no commit, message or
+file names an instruction file, a tool, a model or a vendor. The decision log and the
+implementation plan were corrected on the owner's side in this update for the same
+reason (they said "agent"; they now say "implementer").
+
+### B. Reversals
+
+Each paragraph names the ledger entry, what was wrong, and what to build. A reversal is
+the specification for its point.
+
+**2.** The refusal `authz.derivation.sourcesmissing` applies on any type that a
+non-materialised derivation is declared on or reaches through containment, whatever the
+derivation confers; the narrowing to "a derivation that confers what is asked" makes a
+host call site pass until an administrator edits a role, then fault. Materialised
+derivations stay excluded.
+
+**3.** `ExplainAsync` takes the same sources as the check and the page; without them on
+a derived type it is refused with `authz.derivation.sourcesmissing`; with them it names
+the deciding grant, a derived one as `{ id: null, kind: derived, subjectType, subjectId,
+role, deny: false, inheritedFrom }` (`10` 5.6 already has the kind). Refusing every
+explanation on such a type removed a SHALL operation.
+
+**4.** The capability page is one host-context query: beside the stored-grant
+capabilities it projects one `EXISTS` per derivation reaching the type, and the role each
+derivation confers is model data mapped in memory. AUTHZ-GATE-005 AC1 ("without
+additional queries") stands as written.
+
+**11.** A password beyond `password.maximum` is refused with `auth.password.toolong`
+(422), a new `10` 1.2 row; `config.value.aboveceiling` is a configuration-management code
+and would put a configuration sentence on a password field.
+
+**12.** The offline leaked list is a resource embedded in the package, dated, working
+with no deployment file (AUTH-PASS-004 Values). The self-hosted corpus address is a new
+key `password.blocklist.selfhosted.address` (string, required only when
+`password.blocklist.source` is `selfHosted`, the `service.name` pattern).
+
+**17.** The verification-code aggregate of AUTH-FACT-004 and its port are built in
+`Janus.Authentication` now (lifetime `code.verification.lifetime`, attempt cap
+`code.verification.attempts`, invalidation on the cap, single use, its own storage per
+AC2); the device check of AUTH-FACT-016 issues its code through it. AC2 and AC3 are proved.
+
+**19.** `IConfigurationStore` is implemented in `Janus.Storage` over the `settings` table
+using the `10` section 4 value grammar (a stored value that does not parse is a fault),
+and every authentication service is registered in `AddJanus`. This was phase 0's item.
+
+**20.** The session takes the client address it already records; an internal resolver
+port maps address to `{ city, country }`; until INT-GEN-006 is built the implementation
+answers no location and raises the degradation. No caller-supplied place on any signature.
+
+**22.** The restriction model (keys, purposes, buckets, grants, evaluation) stays in
+`Janus.Authentication`. The notification-handling contract (send a message kind to a
+subject in a language) is declared in `Janus.Core` beside the transport ports; the
+pipeline with retry, template resolution, the outbox publisher and the alert router live
+in `Janus.Hosting` with the hosted worker (CONV-LAYOUT-001, LIB-EXT-001).
+
+**23.** Every send is written as a row in the library's own outbox table inside the
+caller's transaction and delivered by the worker under `outbox.retry.*` with status
+recorded (D-022, INF-BG-001); until the publisher exists (phase 9) the send path attempts
+once at commit and leaves the row in its recorded state. A refused or failed delivery
+counts against no bucket. Exhaustion raises the `degradation` condition.
+
+**26.** At startup every template in every language of `notification.languages` is
+rendered with the maximum-width value of each placeholder (defined once per placeholder
+beside the message kind) and refused where it exceeds the single-message budget (70
+non-GSM, 160 GSM-7). No measurement at send. "Any rendered template" stands.
+
+**29.** `IEvents.PublishAsync` returns `ValueTask<Result>`; on failure the outbox row
+stays unmarked for the publisher and the degradation is raised; on success the row is
+marked. No exemption for ports from CONV-DESIGN-005.
+
+**31.** No settle column on a destination record. Before a send's counters are read,
+destination rows whose newest timestamp is older than the longest interval any current
+destination restriction declares are deleted (one indexed delete). The record holds the
+HMAC and timestamps only, and a tightened interval is honoured for sends already counted.
+
+**32.** `Janus.Hosting` ships the default message catalogue (LIB-EXT-001) in the
+languages the library carries; a host may replace it. The startup check refuses only a
+message with no text in a declared language or over budget. No deployment fails startup
+for declaring no catalogue. The default texts are the owner's to review before release.
+
+**34.** The general configuration audit is built now: every runtime write goes through
+one operation taking the access context and a reason, classifying direction per `10`
+section 4, requiring step-up and a non-empty reason for a loosening or a no-direction
+change, writing actor, key, before, after, timestamp and reason, queryable by setting and
+by actor (OPS-CFG-002, OPS-CFG-005). `IConfigurationStore.WriteAsync` is called only from
+it; the alert-destination change goes through it.
+
+**46.** `POST /register` from a browser holding a live session creates nothing and
+answers 409 with `identity.registration.signedin` (new `10` 1.1 row); the frontend
+navigates to the account application. No account document crosses that boundary.
+
+**49.** A request the reader cannot parse answers 400 with the API-CONV-002 body:
+`api.request.malformed` (new `10` 1.5 row), `correlationId`, `details` naming the
+offending member and nothing of its value.
+
+**50.** The passkey-pages declaration is required with no default and its absence fails
+startup with `model.startup.declarationmissing`; it joins LIB-HOST-001's table.
+
+**58 and 59.** Degraded mode is removed. The OpenIddict store interfaces (application,
+authorization, token, scope) are implemented in `Janus.Storage` over the library's
+tables; the server's own handlers validate clients and issue codes and tokens; the
+library adds only the session-bound minting of AUTH-OIDC-004 and the client kind of `09`
+section 9. The server's signing credentials come from the library's key store through a
+credential source the rotation job updates in process; no ephemeral pair.
+`IOidc.FindClientAsync` no longer answers `authz.denied`; the protocol error is the
+server's.
+
+**61.** The authentication application's sign-in address is a required declaration
+(LIB-HOST-001 row), absent fails startup with `model.startup.declarationmissing`;
+`login_required` is answered for `prompt=none` only.
+
+**66.** The client half of BFF-SESS-006 is the library's middleware (BFF-OWN-001): the
+host declares each application's client identifier (LIB-HOST-001 row), the client secret
+comes through the secrets-manager path of OPS-SEC-001, the flow runs with no token
+retained.
+
+**75.** The registration ceremony's `begin` carries `user.id` equal to the subject
+identifier (the registration session's provisional handle, reserved as the future
+`SubjectId`), `user.name` the primary email, `user.displayName` the display name or empty
+(REG-PM-001, REG-SESS-001); the assertion path resolves the account from the returned
+handle.
+
+**83.** No `privacy.denied` exists and `authz.denied` is wrong for the three cases. New
+`10` 1.4 rows: `privacy.document.notfound` (404, a document or version that does not
+exist or was never published), `privacy.purpose.noconsent` (422, a grant or withdrawal on
+a purpose that is undeclared or not consent-based), `privacy.notice.unpublished` (409, a
+grant before any notice version exists).
+
+**89.** The `consent` residual and `privacy.consent.required` are evaluated against the
+consent of the record's data subject, resolved from the subject column the type declares
+for its encrypted fields, for the purpose bound to the action; a system or staff principal
+is gated identically; a consent-based purpose bound to an action on a type with no subject
+column fails startup validation. PRIV-SENS-002 AC1 reads "without the data subject's
+recorded written consent, whoever the caller is".
+
+**93.** Under `/admin` nothing is concealed: a missing permission is 403 `authz.denied`,
+an identifier naming no row is 404 `privacy.request.notfound`, a request already decided
+is 409 `privacy.request.decided` (two new `10` 1.4 rows).
+
+**104.** The children's column of the register is true for a purpose exactly when its
+type declares the `children` sensitivity category; when `registration.adultaffirmation` is
+`off` and no type declares it, the register carries the flag `children-undeclared`
+instead of an invented column.
+
+**Tier 1 reversals.** The `identity_ci` collation is created in the `identity` schema
+(`COLLATE identity.identity_ci` is valid; OPS-DB-002 applies). The grants of OPS-MIG-003a are
+listed in the serialized model output (`artifacts/model.json`), not only in the
+migration. Every gate refusal carries `correlationId`, including one for an anonymous
+principal. `AuditAction` is a closed vocabulary: list every member in the ledger for a
+`10` section 5 row and add no member without listing it. `MessageKind` is likewise a
+closed set: list its members in the ledger for a `10` section 5 row. `PreferenceKind`
+spells its members as LIB-HOST-001 does: `string` · `boolean` · `integer` · `enum`.
+
+### C. The fourteen open choices, settled
+
+**10.** The synchronizer token travels in `X-Identity-Csrf`; `X-Identity-Request` stays a
+presence check. D-153's sentence naming one header is corrected. **27.** The shipped
+default transports take `10` keys `integration.mail.endpoint` and
+`integration.sms.endpoint` (protected, required only when the default transport is used);
+INT-GEN-001's check names the key; no host-declared endpoint register. **35.** A removed
+identifier stays reserved for the undo window; an attempt to take it answers exactly as a
+duplicate does. **41.** Stage 5 clears a dead cookie and leaves the request anonymous;
+the requirement of a session is asserted once in the pipeline for endpoints that need one
+and answers 401 `auth.session.expired` there. **48.** The registration event stream is
+driven by PostgreSQL `LISTEN`/`NOTIFY` raised in the transaction that verifies or
+completes a step, with a poll fallback every `registration.events.pollinterval` (new key,
+default `PT1S`, floor `PT1S`). **55.** The photo stays in the library (D-060) and the
+codec does not: a host-declared **image codec** (LIB-HOST-001, optional) validates by
+content, bounds and re-encodes to JPEG with metadata removed; the library stores what it
+returns, encrypted; while any policy enables photos and no codec is declared, startup
+fails with `model.startup.declarationmissing`. The photo endpoints and their three codes
+are built. **60.** API-REDIR-001's list is the set of origins of the registered clients'
+redirect addresses, and the default is a named first-party client in a new key
+`redirect.defaultclient`, validated against the registry at startup. **68.** On a `risk`
+answer the SMS factor is withheld for that sign-in and the challenge offers the account's
+other factors; `phoneLink` alone is refused with `auth.factor.rejected`. **82.** A purpose
+declaration names the document that governs its consent, defaulting to the privacy
+notice; a material revision of a document supersedes the live consents of the purposes
+that name it; the consent record names that document's version. **87.** A grant for a
+purpose on which the subject holds a superseded, unwithdrawn consent records `reconsent`;
+any other grant records `dashboard`. **98.** `POST /account/reactivate` takes `linkToken`;
+the `09` block is corrected. **102.** The export carries every group `GET /account`
+shows the person, credentials included, and the whole Standing group. **103.** The
+shipped provider register applies by default only the rows the library itself makes true
+(password screening while online screening is configured, the hosting provider from
+`hosting.location`, the mail server while mail is configured) and offers the rest;
+`location` stays `inside` · `outside`, resolved from `hosting.location` at generation.
+
+### D. Missing from phases already closed
+
+Build now, in the phase whose item it is: `CredentialEnrolled` (AUTH-STEP-007);
+`CredentialSuspended`, `CredentialRestored`, `CredentialInvalidated` (AUTH-RECOV-007);
+`OrganizationErased` with the grace-window execution it reports (IDN-ORG-003; the
+scheduling may wait for phase 9, the operation may not); `AlertRaised` as a 5b event;
+`model.startup.schemamismatch` raised by the phase 1 schema check; the
+`identity.membership.limitreached` refusal in the membership aggregate; the photo
+endpoints and codes (with C.55). `identity.account.restricted` is retired in favour of
+`authz.restricted`. IDN-LIFE-012's `identity.link.lastcredential` is built with provider
+linking, which lands in phase 8 if it has not landed. Verify with one repository search
+that the shipped Egypt default declarations of PRIV-BASIS-001 and PRIV-SENS-001 exist in
+source. `MembershipChanged` is emitted where membership begins and ends (phase 8).
+
+### E. New `10` rows from this review
+
+Codes: `auth.password.toolong` (422), `auth.credential.labelinvalid` (422),
+`auth.credential.notfound` (404, concealed), `auth.credential.notupgradable` (409),
+`identity.identifier.invalid` (400), `identity.identifier.locked` (409),
+`identity.identifier.maximum` (409), `identity.profile.invalid` (422),
+`identity.profile.notaccepted` (422), `identity.registration.incomplete` (409),
+`identity.registration.signedin` (409), `api.request.malformed` (400),
+`privacy.document.notfound` (404), `privacy.purpose.noconsent` (422),
+`privacy.notice.unpublished` (409), `privacy.request.notfound` (404),
+`privacy.request.decided` (409). Keys: `password.blocklist.selfhosted.address`,
+`integration.mail.endpoint`, `integration.sms.endpoint`, `registration.events.pollinterval`,
+`redirect.defaultclient`. Declarations added to LIB-HOST-001: passkey pages, sign-in
+address, application client identifiers, image codec. Vocabularies: `AuditAction`,
+`MessageKind` (from the ledger lists). The owner writes these rows and the chapter text
+of the 68 kept decisions in the reconciliation pass that follows.
+
+**Propagated to:** `10` (sections 1, 4, 5), `07` LIB-HOST-001, and the chapters the kept
+and reversed entries name, in the reconciliation pass.
+
+---
+
+## D-163 — The product name is not a naming element
+
+**Date:** 2026-09-23 · **Status:** accepted · **Amends:** D-153 (cookie, header and DNS names), D-155 and D-157 (collation and roles), D-159 (`MapAuthorizationTables`), D-149 (`AddIdentityArea`)
+
+**TL;DR.** The code had taken to prefixing things with the product name: `JanusDbContext`,
+`JanusEvent`, `JanusApplication`, the `janus` schema, `janus_*` roles, `__Host-janus-*`
+cookies, `X-Janus-*` headers, `_janus-verify`. A name says what a thing is; the library's
+identity is already carried by the namespace, and a product rename would otherwise mean
+touching every one of these for no gain. The name stays only where .NET convention ties
+it to the package: namespaces, project and package identifiers, and `AddJanus`. Every
+other occurrence is renamed for what the thing is (`StoreContext`, `DomainEvent`, and so
+on), and where a prefix must separate the library's artefacts from a host's, the neutral
+word `identity` is used: schema `identity`, roles `identity_app`, `identity_migrate`,
+`identity_maintenance`, collation `identity_ci`, cookies `__Host-identity-*`, headers
+`X-Identity-Request` and `X-Identity-Csrf`, DNS `_identity-verify` with value
+`identity-domain-verification=`. CONV-NAME-001 gains the rule and a scan enforces it.
+
+**Propagated to:** `08` CONV-NAME-001, CONV-DESIGN-007, CONV-LAYOUT-002 · `02`, `03`,
+`06`, `07`, `09`, `17`, `20` where the renamed identifiers appear.
 
 ---
 
@@ -8566,7 +8833,9 @@ the working guide sections 3 and 6.
 | Phase 1, fifth stop: merge commits outside CONV-VCS-003; a gate's own defect is Tier 1 | D-158 |
 | Phase 2 question: the filter is a same-context EXISTS over the contract tables; subject set first | D-159 |
 | Phase 2, second stop: host-supplied relations; reading vs modifying; gate binding; hosted-service validation | D-160 |
-| Phase 2, third stop: derived checks take sources; host-called refresh; the agent decides alone through Milestone 1 | D-161 |
+| Phase 2, third stop: derived checks take sources; host-called refresh; the implementer decides alone through Milestone 1 | D-161 |
+| Review of the 109 absent-owner decisions: 27 reversed, 14 settled, trace removed | D-162 |
+| The product name is not a naming element; neutral `identity` prefix | D-163 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

@@ -5,7 +5,7 @@ namespace Janus.Authorization.Tests;
 
 /// <summary>
 /// A host's own domain, as a host would declare it: a workspace owned by an
-/// organization, folders nested in it, documents in the folders, and a reviewer named
+/// organization, folders nested in it, articles in the folders, and a reviewer named
 /// on a folder whose role follows from that fact alone.
 /// </summary>
 /// <remarks>
@@ -25,6 +25,12 @@ internal static class HostDomain
 
         /// <summary>The organization owning it.</summary>
         public Guid OrganizationId { get; init; }
+
+        /// <summary>Whose workspace it is, which its encrypted field is held under.</summary>
+        public SubjectId Owner { get; init; }
+
+        /// <summary>What the person called it, held under the owner's key.</summary>
+        public byte[] Title { get; init; } = [];
     }
 
     /// <summary>
@@ -43,11 +49,11 @@ internal static class HostDomain
     }
 
     /// <summary>
-    /// A document in a folder, whose body is held under its author's key.
+    /// An article in a folder, whose body is held under its author's key.
     /// </summary>
-    internal sealed class Document
+    internal sealed class Article
     {
-        /// <summary>The document.</summary>
+        /// <summary>The article.</summary>
         public string Id { get; init; } = string.Empty;
 
         /// <summary>The folder containing it.</summary>
@@ -61,7 +67,7 @@ internal static class HostDomain
     }
 
     /// <summary>
-    /// A document not yet published, kept in the same folder.
+    /// An article not yet published, kept in the same folder.
     /// </summary>
     internal sealed class Draft
     {
@@ -90,12 +96,12 @@ internal static class HostDomain
         new() { Id = Named(), WorkspaceId = workspace, Reviewer = reviewer };
 
     /// <summary>
-    /// A document in a folder.
+    /// An article in a folder.
     /// </summary>
     /// <param name="folder">The folder containing it.</param>
     /// <param name="author">The subject whose key the body is held under.</param>
-    /// <returns>The document.</returns>
-    public static Document NewDocument(string folder, SubjectId author) =>
+    /// <returns>The article.</returns>
+    public static Article NewArticle(string folder, SubjectId author) =>
         new() { Id = Named(), FolderId = folder, Author = author };
 
     /// <summary>
@@ -115,8 +121,8 @@ internal static class HostDomain
             .LawfulBasis(new LawfulBasisDeclaration("contract", false, false, false, false))
             .LawfulBasis(new LawfulBasisDeclaration("interest", false, false, true, true))
             .SensitiveCategory("financial")
-            .Permission("document:read")
-            .Permission("document:edit")
+            .Permission("article:read")
+            .Permission("article:edit")
             .Relationship<Folder>(
                 "reviewer",
                 "folder",
@@ -132,7 +138,7 @@ internal static class HostDomain
                 .ContainedIn("workspace")
                 .Purpose("collaboration", "contract", data: ["identity", "content"], subjects: ["members"])
                 .Derivation("reviewer", "reader"))
-            .Resource<Document>("document", document => document
+            .Resource<Article>("article", article => article
                 .ContainedIn("folder")
                 .Purpose("collaboration", "contract", data: ["identity", "content"], subjects: ["members"])
                 .Encrypted(item => item.Body, item => item.Author));

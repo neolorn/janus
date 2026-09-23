@@ -36,10 +36,7 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
     private static readonly DateTimeOffset Noon =
         new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
-    private static readonly SessionOrigin Somewhere = new(
-        Source,
-        new DeviceDescription("Firefox", "Fedora"),
-        Location: null);
+    private static readonly SessionOrigin Somewhere = new(Source, new DeviceDescription("Firefox", "Fedora"));
 
     private static readonly PreferenceDeclarations Declared = PreferenceDeclarations.Of([]);
 
@@ -47,17 +44,13 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
     private readonly IdentifierDirectoryInMemory _identifiers = new();
     private readonly LifecycleLinkStoreInMemory _links = new();
     private readonly SessionStoreInMemory _sessions = new();
-    private readonly SendLedgerInMemory _ledger = new();
-    private readonly MessageTemplatesInMemory _templates = new();
-    private readonly MailTransportInMemory _mail = new();
-    private readonly SmsTransportInMemory _sms = new();
-    private readonly SmsBalanceLedgerInMemory _balances = new();
     private readonly AccountAuditInMemory _audit = new();
     private readonly AuthenticatorStoreInMemory _authenticators = new();
     private readonly PasswordStoreInMemory _passwords = new();
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly ConfigurationInMemory _configuration = new();
+    private readonly NotificationHandlerInMemory _notifications = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
@@ -77,8 +70,6 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
         _passwords.Hold(_person, Noon);
         _ = _identifiers.Verified(_person, IdentifierKind.Email, Primary);
 
-        Template(MessageKind.DeactivationNotice, "deactivated", "{token}");
-        Template(MessageKind.DeletionNotice, "deleting", "{token}");
     }
 
     private AccountLifecycle Lifecycle =>
@@ -87,19 +78,7 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
             _identifiers,
             _links,
             _sessions,
-            new SendingService(
-                _configuration,
-                _ledger,
-                _templates,
-                _mail,
-                _sms,
-                RestrictionKeySuppliers.None,
-                Considered.Nothing(_work, _clock),
-                new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
-                _work,
-                _events,
-                _clock,
-                _randomness),
+            _notifications,
             _audit,
             new StepUpGuard(
                 _sessions,
@@ -220,7 +199,7 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
                 TestContext.Current.CancellationToken)));
 
         Assert.Equal(AccountState.Active, await StateAsync());
-        Assert.Empty(_mail.Taken);
+        Assert.Empty(_notifications.Mail);
     }
 
     /// <summary>
@@ -269,7 +248,7 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
 
         Assert.Equal(DeletionOrigin.Self, held.By);
         Assert.Equal(Noon, held.Since);
-        Assert.Equal("deleting", _mail.Taken.Single().Subject);
+        Assert.Equal(MessageKind.DeletionNotice, _notifications.Mail.Single().Message);
     }
 
     /// <summary>
@@ -366,7 +345,7 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
                 TestContext.Current.CancellationToken)));
 
         Assert.Equal(AccountState.Active, await StateAsync());
-        Assert.Empty(_mail.Taken);
+        Assert.Empty(_notifications.Mail);
     }
 
     /// <summary>
@@ -407,6 +386,29 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
         _ = Assert.Single(_events.Of<AccountDeletionCancelled>());
     }
 
+    /// <summary>
+    /// CONV-DESIGN-005 AC1 and D-022: an event the port would not take fails the
+    /// operation that made it, so nothing is committed that no consumer was told of.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_005_AC1_AnEventThatIsNotTakenFailsTheOperationAsync()
+    {
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            Refused(await Lifecycle.DeactivateAsync(
+                Acting,
+                Stepped(),
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.Equal(0, _work.Committed);
+        Assert.Empty(_events.Published);
+        Assert.Empty(_audit.Recorded);
+    }
+
     private static void Accepted(Result outcome) =>
         outcome.Switch(() => { }, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
 
@@ -426,7 +428,7 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
             error => error.Code);
 
     // The token the notice carried, read off the body the template put it in.
-    private string Link() => _mail.Taken[^1].Body;
+    private string Link() => _notifications.Mail[^1].Values["token"];
 
     private async Task<AccountState?> StateAsync() =>
         await _directory.StateAsync(_person, TestContext.Current.CancellationToken);
@@ -469,19 +471,5 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
         _randomness.GetBytes(fingerprint);
 
         return fingerprint;
-    }
-
-    // The catalogue as a deployment fills it, with a subject a test can read the
-    // message kind off and a text that carries the link the notice was sent for.
-    private void Template(MessageKind message, string subject, string text)
-    {
-        foreach (SendKind kind in Enum.GetValues<SendKind>())
-        {
-            _templates.Set(
-                message,
-                kind,
-                "en",
-                new MessageTemplate(kind is SendKind.Email ? subject : null, text));
-        }
     }
 }

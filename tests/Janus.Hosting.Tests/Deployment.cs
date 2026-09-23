@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Serialization;
+using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Accounts;
@@ -39,7 +41,9 @@ using Janus.Hosting.Oidc;
 using Janus.Hosting.Privacy;
 using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
+using Janus.Hosting.Sending;
 using Janus.Hosting.Tests.Bff;
+using Janus.Hosting.Tests.Oidc;
 using Janus.Privacy;
 using Janus.Privacy.Consents;
 using Janus.Privacy.Documents;
@@ -51,11 +55,13 @@ using Janus.Privacy.Tests.Documents;
 using Janus.Privacy.Tests.Exports;
 using Janus.Privacy.Tests.Outbox;
 using Janus.Privacy.Tests.Requests;
+using Janus.Storage.Authentication.Oidc;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using OpenIddict.Abstractions;
 
 namespace Janus.Hosting.Tests;
 
@@ -68,9 +74,32 @@ internal sealed class Deployment : IAsyncDisposable
 {
     private static readonly DateTimeOffset Noon = new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
+    // AUTH-KEY-002, OPS-SEC-001: what the codes and the refresh tokens the provider
+    // writes are encrypted under, which a deployment is handed and never generates.
+    private static readonly KeyEncryptionKeys Wrapping = new(
+        1,
+        new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] });
+
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
     private readonly WebApplication _application;
     private readonly RequestDelegate _pipeline;
+
+    // LIB-HOST-001: where a browser holding no session is sent is a declaration no
+    // deployment starts without, so every deployment here carries one (AUTH-SESS-012).
+    private static readonly AuthenticationAddresses Screen = new(
+        "https://janus.example.test/signin",
+        "https://janus.example.test");
+
+    // LIB-HOST-001, BFF-SESS-006: which client of the provider this application is
+    // is a declaration no deployment starts without either.
+    private static readonly SignOnClient Registered = new("this-application");
+
+    // LIB-HOST-001: the frontend's pages are a declaration no deployment starts
+    // without, so every deployment here carries one (REG-PM-001).
+    private static readonly PasskeyAddresses Pages = new(
+        "https://accounts.example.test/password",
+        "https://accounts.example.test/passkeys/new",
+        "https://accounts.example.test/passkeys");
 
     /// <summary>
     /// Mounts the library over fakes.
@@ -80,16 +109,22 @@ internal sealed class Deployment : IAsyncDisposable
     /// <param name="prefix">The path the host mounts the library under.</param>
     /// <param name="preferences">The preference keys the host declared.</param>
     /// <param name="signIn">Where the host's own sign-in screen is.</param>
+    /// <param name="client">Which client of the provider this application is.</param>
     public Deployment(
         JanusApplication application = JanusApplication.Public,
         PasskeyAddresses? addresses = null,
         string prefix = "",
         PreferenceDeclarations? preferences = null,
-        AuthenticationAddresses? signIn = null)
+        AuthenticationAddresses? signIn = null,
+        SignOnClient? client = null)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
         builder.Logging.ClearProviders();
+
+        Signals = new RegistrationSignalsInMemory(Clock);
+        Grants = new OidcAuthorizationStoreInMemory(Tokens);
+        Provider = new ProviderInMemory(this);
 
         Declared = preferences ?? PreferenceDeclarations.None;
         Accounts = new AccountDirectoryInMemory(Declared);
@@ -102,8 +137,9 @@ internal sealed class Deployment : IAsyncDisposable
         Register(
             builder.Services,
             application,
-            addresses ?? PasskeyAddresses.None,
-            signIn ?? AuthenticationAddresses.None);
+            addresses ?? Pages,
+            signIn ?? Screen,
+            client ?? Registered);
 
         _application = builder.Build();
 
@@ -128,7 +164,28 @@ internal sealed class Deployment : IAsyncDisposable
         _ = ((IApplicationBuilder)_application).UseEndpoints(_ => { });
 
         _pipeline = ((IApplicationBuilder)_application).Build();
+
+        // AUTH-KEY-001: the server is put together with the key the store holds at
+        // startup, which is what the hosted service of the same name does in a
+        // deployment that a web server starts.
+        using (IServiceScope scope = _application.Services.CreateScope())
+        {
+            _ = _application.Services
+                .GetRequiredService<SigningCredentialSource>()
+                .CurrentAsync(
+                    scope.ServiceProvider.GetRequiredService<SigningKeys>(),
+                    CancellationToken.None)
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+        }
     }
+
+    /// <summary>
+    /// The provider this application's back channel reaches, which is this same
+    /// deployment (BFF-SESS-006 AC2).
+    /// </summary>
+    public ProviderInMemory Provider { get; }
 
     /// <summary>
     /// The clock the whole deployment reads.
@@ -139,6 +196,16 @@ internal sealed class Deployment : IAsyncDisposable
     /// The settings table, for the keys a test switches.
     /// </summary>
     public ConfigurationInMemory Configuration { get; } = new();
+
+    /// <summary>
+    /// Which organizations a principal belongs to.
+    /// </summary>
+    public MembershipLookupInMemory Memberships { get; } = new();
+
+    /// <summary>
+    /// What an uploaded image is read and re-encoded by.
+    /// </summary>
+    public ImageCodecInMemory Codec { get; } = new();
 
     /// <summary>
     /// What went out by mail.
@@ -154,6 +221,11 @@ internal sealed class Deployment : IAsyncDisposable
     /// The registration sessions as they stand.
     /// </summary>
     public RegistrationSessionStoreInMemory Registrations { get; } = new();
+
+    /// <summary>
+    /// The channel the waiting screen's stream waits on.
+    /// </summary>
+    public RegistrationSignalsInMemory Signals { get; }
 
     /// <summary>
     /// The accounts registration created.
@@ -276,14 +348,19 @@ internal sealed class Deployment : IAsyncDisposable
     public SubjectNoticesInMemory Notices { get; } = new();
 
     /// <summary>
-    /// The authorization codes outstanding.
+    /// The codes and tokens the provider issued.
     /// </summary>
-    public AuthorizationCodeStoreInMemory Codes { get; } = new();
+    public OidcTokenStoreInMemory Tokens { get; } = new();
 
     /// <summary>
-    /// The refresh tokens outstanding.
+    /// The grants the codes and tokens hang from.
     /// </summary>
-    public RefreshTokenStoreInMemory Tokens { get; } = new();
+    public OidcAuthorizationStoreInMemory Grants { get; }
+
+    /// <summary>
+    /// The scopes the deployment registered beyond the ones the provider is built with.
+    /// </summary>
+    public OidcScopeStoreInMemory Scopes { get; } = new();
 
     /// <summary>
     /// The signing keys the deployment holds.
@@ -296,9 +373,14 @@ internal sealed class Deployment : IAsyncDisposable
     public OidcAuditInMemory OidcAudit { get; } = new();
 
     /// <summary>
-    /// What the provider logged about a request it refused or corrected.
+    /// What the provider logged about a request it corrected.
     /// </summary>
-    public LogInMemory<AuthorizationValidation> OidcLog { get; } = new();
+    public LogInMemory<RegisteredDestination> OidcLog { get; } = new();
+
+    /// <summary>
+    /// What the sign-on recorded when it would not carry a return (BFF-SESS-006 AC3).
+    /// </summary>
+    public LogInMemory<SignOn> SignOnLog { get; } = new();
 
     /// <summary>
     /// Every endpoint the library mounted.
@@ -350,7 +432,8 @@ internal sealed class Deployment : IAsyncDisposable
         IServiceCollection services,
         JanusApplication application,
         PasskeyAddresses addresses,
-        AuthenticationAddresses signIn)
+        AuthenticationAddresses signIn,
+        SignOnClient client)
     {
         _ = services.AddSingleton<TimeProvider>(Clock);
         _ = services.AddSingleton(_randomness);
@@ -359,6 +442,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IEvents>(Events);
 
         _ = services.AddSingleton<IRegistrationSessionStore>(Registrations);
+        _ = services.AddSingleton<IRegistrationSignals>(Signals);
         _ = services.AddSingleton<IRegistrationDirectory>(Directory);
         _ = services.AddSingleton<IPreAuthenticationStore>(Contacts);
         _ = services.AddSingleton<ISessionStore>(Sessions);
@@ -372,6 +456,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IPasswordStore>(Passwords);
 
         _ = services.AddSingleton<ISendLedger, SendLedgerInMemory>();
+        _ = services.AddSingleton<ISendOutbox, SendOutboxInMemory>();
         _ = services.AddSingleton<INoticeLedger, NoticeLedgerInMemory>();
         _ = services.AddSingleton<ISmsBalanceLedger, SmsBalanceLedgerInMemory>();
         _ = services.AddSingleton<ILeakedPasswordCorpus, LeakedPasswordCorpusInMemory>();
@@ -380,9 +465,11 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IRecoveryCodeStore, RecoveryCodeStoreInMemory>();
         _ = services.AddSingleton<IDeviceStore, DeviceStoreInMemory>();
         _ = services.AddSingleton<ISessionAudit, SessionAuditInMemory>();
-        _ = services.AddSingleton<IMembershipLookup, MembershipLookupInMemory>();
+        _ = services.AddSingleton<IMembershipLookup>(Memberships);
+        _ = services.AddSingleton(Codec.Declared);
         _ = services.AddSingleton<IPolicyRaiseStore, PolicyRaiseStoreInMemory>();
         _ = services.AddSingleton<IChallengeStore, ChallengeStoreInMemory>();
+        _ = services.AddSingleton<IVerificationCodeStore, VerificationCodeStoreInMemory>();
         _ = services.AddSingleton<IPendingSignInStore, PendingSignInStoreInMemory>();
         _ = services.AddSingleton<IAccessGate>(Gate);
         _ = services.AddSingleton<IAccountAudit, AccountAuditInMemory>();
@@ -393,20 +480,40 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IRecoveryAudit, RecoveryAuditInMemory>();
         _ = services.AddSingleton<IKeyCeremonyStore, KeyCeremonyStoreInMemory>();
         _ = services.AddSingleton<IOidcClientStore>(Clients);
-        _ = services.AddSingleton<IAuthorizationCodeStore>(Codes);
-        _ = services.AddSingleton<IRefreshTokenStore>(Tokens);
         _ = services.AddSingleton<ISigningKeyStore>(Keys);
         _ = services.AddSingleton<IOidcAudit>(OidcAudit);
-        _ = services.AddSingleton<ILogger<AuthorizationValidation>>(OidcLog);
+        _ = services.AddSingleton<ILogger<RegisteredDestination>>(OidcLog);
+        _ = services.AddSingleton<ILogger<SignOn>>(SignOnLog);
+
+        // The records the protocol server keeps are the library's rows, so a
+        // deployment that runs over fakes holds them the way it holds every other
+        // table (D-162, CONV-TEST-002).
+        _ = services.AddSingleton<IOpenIddictApplicationStore<OidcClientRecord>>(
+            new OidcApplicationStoreInMemory(Clients));
+        _ = services.AddSingleton<IOpenIddictAuthorizationStore<OidcAuthorizationRecord>>(Grants);
+        _ = services.AddSingleton<IOpenIddictScopeStore<OidcScopeRecord>>(Scopes);
+        _ = services.AddSingleton<IOpenIddictTokenStore<OidcTokenRecord>>(Tokens);
 
         _ = services.AddSingleton(RestrictionKeySuppliers.None);
         _ = services.AddSingleton(Declared);
         _ = services.AddSingleton(ReservedUsernames.Default);
         _ = services.AddSingleton(addresses);
         _ = services.AddSingleton(signIn);
+        _ = services.AddSingleton(client);
+
+        // BFF-SESS-006: the client half of the sign-on is the library's, and the
+        // connection it trades a code on reaches this same deployment's machine
+        // profile, which is what a second application's back channel reaches.
+        _ = services.AddSingleton(new SignOnSecret(
+            Encoding.UTF8.GetBytes("a-secret-the-deployment-set")));
+        _ = services.AddScoped<SignOn>();
+        _ = services.AddHttpClient(SignOn.Channel)
+            .ConfigurePrimaryHttpMessageHandler(() => Provider);
 
         _ = services.AddScoped<SmsBalance>();
         _ = services.AddScoped<SendingService>();
+        _ = services.AddScoped<INotificationHandler>(
+            provider => provider.GetRequiredService<SendingService>());
         _ = services.AddSingleton<IPhoneSignalAudit, PhoneSignalAuditInMemory>();
         _ = services.AddScoped(provider => new PhoneSignals(
             provider.GetService<PhoneSignalProvider>(),
@@ -425,6 +532,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<PolicyResolution>();
         _ = services.AddScoped<StepUpGuard>();
         _ = services.AddScoped<IStepUpGate, StepUpGate>();
+        _ = services.AddScoped<ILocationResolver, LocationResolverInMemory>();
         _ = services.AddScoped<SessionService>();
         _ = services.AddScoped<ISessions>(provider => provider.GetRequiredService<SessionService>());
         _ = services.AddScoped<PreAuthenticationService>();
@@ -435,11 +543,20 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IIdentifiers>(provider =>
             provider.GetRequiredService<IdentifierService>());
         _ = services.AddScoped<AccountLifecycle>();
+        _ = services.AddScoped(provider => new ProfilePhotos(
+            provider.GetRequiredService<IAccountDirectory>(),
+            provider.GetRequiredService<IMembershipLookup>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IAccountAudit>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<ImageCodec>(),
+            provider.GetRequiredService<TimeProvider>()));
         _ = services.AddScoped<AccountService>();
         _ = services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
         _ = services.AddScoped<TotpService>();
         _ = services.AddScoped<WebAuthnService>();
         _ = services.AddScoped<SignInLinks>();
+        _ = services.AddScoped<VerificationCodes>();
         _ = services.AddScoped<AuthenticationService>();
         _ = services.AddScoped<IAuthentication>(provider =>
             provider.GetRequiredService<AuthenticationService>());
@@ -476,10 +593,11 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<SigningKeys>();
         _ = services.AddScoped<OidcService>();
         _ = services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
-        _ = services.AddOidc();
+        _ = services.AddOidc(Wrapping);
 
         _ = services.AddSingleton(new BrowserSessionCookies(application));
         _ = services.AddScoped<SynchronizerTokens>();
+        _ = services.AddScoped<MalformedRequest>();
         _ = services.AddScoped<ResourceIsolation>();
         _ = services.AddScoped<CustomRequestHeader>();
         _ = services.AddScoped<OriginValidation>();
@@ -487,7 +605,10 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<SessionResolution>();
         _ = services.AddScoped<FirstContact>();
         _ = services.AddScoped<SynchronizerToken>();
+        _ = services.AddScoped<SessionRequirement>();
         _ = services.AddScoped<MachineProfile>();
+
+        _ = services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
 
         _ = services.ConfigureHttpJsonOptions(options =>
         {

@@ -18,6 +18,20 @@ internal sealed record Answer(
     IReadOnlyList<string> SetCookie)
 {
     /// <summary>
+    /// The response headers, by name.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> Headers { get; init; } =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// One response header.
+    /// </summary>
+    /// <param name="name">Which header.</param>
+    /// <returns>Its value, or nothing where the answer carried none.</returns>
+    public string? Header(string name) =>
+        Headers.TryGetValue(name, out string? value) ? value : null;
+
+    /// <summary>
     /// The body read as JSON.
     /// </summary>
     /// <returns>The document.</returns>

@@ -84,8 +84,6 @@ internal sealed class SmsBalance(
             .RecordAsync(new BalanceReading(now, balance), Baseline + interval, cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
         IReadOnlyList<BalanceReading> taken = await readings
             .SinceAsync(now - Baseline, cancellationToken)
             .ConfigureAwait(false);
@@ -95,12 +93,19 @@ internal sealed class SmsBalance(
 
         if (Drained(balance, floor, recent, mean, factor))
         {
-            await events
+            Result published = await events
                 .PublishAsync(
                     Alerts.Of(AlertCondition.SmsBalance, null, now, Details(balance, floor, recent)),
                     cancellationToken)
                 .ConfigureAwait(false);
+
+            if (published.Match(() => (Error?)null, error => error) is Error unpublished)
+            {
+                return Result.Failure<decimal>(unpublished);
+            }
         }
+
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success(balance);
     }

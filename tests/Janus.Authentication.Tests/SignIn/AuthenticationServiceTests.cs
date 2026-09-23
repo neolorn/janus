@@ -60,18 +60,19 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly AccessGateInMemory _gate = new();
+    private readonly LocationResolverInMemory _locations = new();
     private readonly ThrottleLedgerInMemory _throttle = new();
-    private readonly SendLedgerInMemory _ledger = new();
     private readonly NoticeLedgerInMemory _notices = new();
-    private readonly MessageTemplatesInMemory _templates = new();
-    private readonly MailTransportInMemory _mail = new();
-    private readonly SmsTransportInMemory _sms = new();
-    private readonly SmsBalanceLedgerInMemory _balances = new();
+    private readonly VerificationCodeStoreInMemory _codes = new();
     private readonly ConfigurationInMemory _configuration = new();
+    private readonly NotificationHandlerInMemory _notifications = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
+    private readonly PhoneSignalAuditInMemory _considered = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
+
+    private PhoneSignalProvider? _provider;
 
     /// <summary>
     /// A deployment that has named the one key with no default and holds a template
@@ -82,25 +83,6 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.WebAuthnRelyingPartyId, "example.test");
         _configuration.Set(Settings.WebAuthnOrigins, ["https://example.test"]);
-
-        MessageKind[] messages =
-        [
-            MessageKind.VerificationCode,
-            MessageKind.SignInLink,
-            MessageKind.NoAccount,
-        ];
-
-        foreach (SendKind kind in Enum.GetValues<SendKind>())
-        {
-            foreach (MessageKind message in messages)
-            {
-                _templates.Set(
-                    message,
-                    kind,
-                    Language,
-                    new MessageTemplate(kind is SendKind.Email ? "subject" : null, "{code} {token}"));
-            }
-        }
     }
 
     private AuthenticationService Service =>
@@ -133,11 +115,18 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             Sessions,
             Policies,
             Throttle,
-            Sending,
+            _notifications,
+            Signals,
+            Codes,
             _configuration,
             _work,
             _clock,
             _randomness);
+
+    private PhoneSignals Signals => new(_provider, _considered, _work, _clock);
+
+    private VerificationCodes Codes =>
+        new(_codes, _configuration, _work, _clock, _randomness);
 
     private SignInLinks Links =>
         new(
@@ -145,8 +134,9 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             _identifiers,
             _accounts,
             Policies,
-            Sending,
-            new NonExistenceNotice(_configuration, Sending, _notices, _work, _events, _clock),
+            _notifications,
+            new NonExistenceNotice(_configuration, _notifications, _notices, _work, _events, _clock),
+            Signals,
             Throttle,
             _configuration,
             _work,
@@ -159,7 +149,16 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         new(_devices, _configuration, _work, _events, _clock, _randomness);
 
     private SessionService Sessions =>
-        new(_live, _audit, Policies, _configuration, _gate, _work, _clock, _randomness);
+        new(
+            _live,
+            _audit,
+            Policies,
+            _configuration,
+            _gate,
+            _locations,
+            _work,
+            _clock,
+            _randomness);
 
     private ThrottleService Throttle =>
         new(_configuration, _throttle, _work, _events, _clock);
@@ -172,21 +171,6 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             _configuration,
             _work,
             _clock);
-
-    private SendingService Sending =>
-        new(
-            _configuration,
-            _ledger,
-            _templates,
-            _mail,
-            _sms,
-            RestrictionKeySuppliers.None,
-            Considered.Nothing(_work, _clock),
-            new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
-            _work,
-            _events,
-            _clock,
-            _randomness);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
@@ -402,7 +386,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         Assert.True(asked.Match(() => true, _ => false));
         Assert.Null(await _pending.FindAsync(subject, Factor.EmailLink, TestContext.Current.CancellationToken));
-        Assert.Empty(_mail.Taken);
+        Assert.Empty(_notifications.Mail);
     }
 
     /// <summary>
@@ -426,7 +410,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             browser: null,
             TestContext.Current.CancellationToken);
 
-        string carried = _sms.Taken[^1].Text.Split(' ')[1];
+        string carried = _notifications.Texts[^1].Values["token"];
 
         Assert.NotNull(await _pending.FindAsync(
             subject,
@@ -459,7 +443,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
                 TestContext.Current.CancellationToken))
             .Match(() => true, _ => false));
 
-        Assert.Empty(_sms.Taken);
+        Assert.Empty(_notifications.Texts);
         Assert.Null(await _pending.FindAsync(
             subject,
             Factor.PhoneLink,
@@ -474,7 +458,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             browser: null,
             TestContext.Current.CancellationToken);
 
-        Assert.NotEmpty(_sms.Taken);
+        Assert.NotEmpty(_notifications.Texts);
     }
 
     /// <summary>
@@ -501,7 +485,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Result<SignInOutcome> reached = await Service.PresentAsync(
             began.Challenge,
             new FactorPresentation(Factor.Password) { Value = Secret },
-            new SessionOrigin(Source, Browser, null),
+            new SessionOrigin(Source, Browser),
             remembered: null,
             trusted.Value,
             TestContext.Current.CancellationToken);
@@ -528,7 +512,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         Assert.Equal(SignInStatus.DeviceVerificationRequired, reached.Status);
         Assert.Null(reached.Session);
-        Assert.Single(_mail.Taken);
+        Assert.Single(_notifications.Mail);
     }
 
     /// <summary>
@@ -548,7 +532,6 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             began.Challenge,
             Code(),
             Browser,
-            location: null,
             Source,
             TestContext.Current.CancellationToken);
 
@@ -581,7 +564,6 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
                 began.Challenge,
                 "000000",
                 Browser,
-                location: null,
                 Source,
                 TestContext.Current.CancellationToken);
 
@@ -592,7 +574,6 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             began.Challenge,
             right,
             Browser,
-            location: null,
             Source,
             TestContext.Current.CancellationToken);
 
@@ -684,6 +665,150 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Assert.Equal(SignInStatus.Complete, reached.Status);
         Assert.Null(reached.Requirement);
     }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC6: a carrier reporting a recent change of SIM or of network
+    /// withholds the text code from that sign-in, and the account's other second
+    /// steps are offered in its place.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC6_AReportedChangeWithholdsTheTextCodeAndOffersTheRestAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.PhoneCode);
+        Holds(subject, Factor.Totp);
+        Answers(PhoneSignal.Risk);
+
+        SignInProgress reached = await SignedInAsync(subject, Factor.Password, Secret);
+
+        Assert.Equal(SignInStatus.FactorRequired, reached.Status);
+        Assert.Equal([Factor.Totp], reached.Required);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC6: an answer that reports nothing leaves the text code on
+    /// offer, so what the signal changes is the one case it speaks to.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC6_AnAnswerThatReportsNoChangeLeavesTheTextCodeOnOfferAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.PhoneCode);
+        Holds(subject, Factor.Totp);
+        Answers(PhoneSignal.Clear);
+
+        SignInProgress reached = await SignedInAsync(subject, Factor.Password, Secret);
+
+        Assert.Equal([Factor.PhoneCode, Factor.Totp], reached.Required);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC6: withholding the only second step leaves nothing to offer,
+    /// and a sign-in with nothing left to present is refused rather than completing
+    /// below the level the account's own second step asked for.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC6_AReportedChangeRefusesASignInWhoseOnlySecondStepIsTheTextCodeAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.PhoneCode);
+        Answers(PhoneSignal.Risk);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            Refused(await PresentAsync(began.Challenge, Factor.Password, Secret)));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC6: what the signal refused is recorded with the entry it was
+    /// asked about and without the number, which is the trail an operator reads.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC6_AWithholdingIsRecordedWithTheEntryAndNotTheNumberAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.PhoneCode);
+        Holds(subject, Factor.Totp);
+        Answers(PhoneSignal.Risk);
+
+        _ = await SignedInAsync(subject, Factor.Password, Secret);
+
+        (Factor Factor, PhoneSignal? Signal, SubjectId? Subject) recorded =
+            Assert.Single(_considered.Records);
+
+        Assert.Equal(Factor.PhoneCode, recorded.Factor);
+        Assert.Equal(PhoneSignal.Risk, recorded.Signal);
+        Assert.Equal(subject, recorded.Subject);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC6, AUTH-FACT-003: a sign-in link by text is the whole of the
+    /// sign-in, so there is nothing to offer beside it and the ask is refused; no
+    /// link goes to the number.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC6_AReportedChangeRefusesASignInLinkByTextAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneLink);
+        Answers(PhoneSignal.Risk);
+
+        Result asked = await Service.SendLinkAsync(
+            Number,
+            Language,
+            Source,
+            browser: null,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.FactorRejected, asked.Match(() => (ErrorCode?)null, error => error.Code));
+        Assert.Empty(_notifications.Texts);
+        Assert.NotEqual(default, subject);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-003 AC1: the question is asked of the number and never of the
+    /// account, so a number no account holds is refused in the same bytes and nothing
+    /// about existence is told either way.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_003_AC1_ANumberNoAccountHoldsIsRefusedInTheSameBytesAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneLink);
+        Answers(PhoneSignal.Risk);
+
+        Result held = await Service.SendLinkAsync(
+            Number,
+            Language,
+            Source,
+            browser: null,
+            TestContext.Current.CancellationToken);
+
+        Result nobodys = await Service.SendLinkAsync(
+            "+441632960099",
+            Language,
+            Source,
+            browser: null,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            held.Match(() => (ErrorCode?)null, error => error.Code),
+            nobodys.Match(() => (ErrorCode?)null, error => error.Code));
+        Assert.Empty(_notifications.Texts);
+        Assert.NotEqual(default, subject);
+    }
+
+    // AUTH-FACT-002b: the deployment's own provider, standing for the carrier.
+    private void Answers(PhoneSignal signal) =>
+        _provider = new PhoneSignalProvider((_, _) => ValueTask.FromResult(signal));
 
     private async ValueTask<SubjectId> AccountAsync()
     {
@@ -791,7 +916,6 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             challenge,
             new FactorPresentation(factor) { Value = value },
             Browser,
-            location: null,
             Source,
             TestContext.Current.CancellationToken);
 
@@ -844,16 +968,15 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
                 token,
                 press,
                 Browser,
-                location: null,
                 Source,
                 TestContext.Current.CancellationToken))
         .Match(landing => landing, error => throw new InvalidOperationException(error.Code.ToString()));
 
     // The message body is the code and the link token in that order, so the test reads
     // what the person reads rather than what the store holds.
-    private string Code() => _mail.Taken[^1].Body.Split(' ')[0];
+    private string Code() => _notifications.Mail[^1].Values["code"];
 
-    private string Token() => _mail.Taken[^1].Body.Split(' ')[1];
+    private string Token() => _notifications.Mail[^1].Values["token"];
 
     private static SignInProgress Reached(Result<SignInProgress> outcome) =>
         outcome.Match(

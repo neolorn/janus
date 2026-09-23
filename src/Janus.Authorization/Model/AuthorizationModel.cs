@@ -296,8 +296,24 @@ internal sealed class AuthorizationModel
                         binding.Key.ToString(), binding.Value))
                     .OrderBy(binding => binding.Permission, StringComparer.Ordinal)],
                 [.. _bases.Values.OrderBy(basis => basis.Key, StringComparer.Ordinal).Select(Serialized)],
-                [.. _sensitiveCategories.Order(StringComparer.Ordinal)]),
+                [.. _sensitiveCategories.Order(StringComparer.Ordinal)],
+                MaintenanceGrants),
             ModelJson.Default.SerializedModel);
+
+    // OPS-MIG-003a AC2, AC4: what the maintenance credential may reach, written out
+    // here so it is read in the serialized model and not only in the migration that
+    // grants it. DatabaseRoleTests holds the two against each other.
+    private static readonly SerializedModel.MaintenanceGrant[] MaintenanceGrants =
+    [
+        new(
+            "FUNCTION janus.audit_drop_expired_partitions("
+            + "security_retention interval, routine_retention interval)",
+            "EXECUTE"),
+        new("FUNCTION janus.audit_ensure_partitions()", "EXECUTE"),
+        new("SCHEMA janus", "USAGE"),
+        new("TABLE janus.subject_keys", "SELECT"),
+        new("TABLE janus.subject_keys", "UPDATE"),
+    ];
 
     private static SerializedModel.Type Serialized(ResourceTypeDeclaration type) =>
         new(
@@ -565,7 +581,43 @@ internal sealed class AuthorizationModel
                     purpose.Name,
                     "a purpose is declared with the categories of data it requires");
             }
+
+            // PRIV-SENS-002 AC1: the consent the gate reads is the record's data
+            // subject's, resolved from the column the type declares for its encrypted
+            // fields. A consent-based purpose on a type that names no such column, or
+            // names two, leaves the gate with nobody's consent to read, so the
+            // deployment stops here rather than admitting the action on nobody's.
+            if (basis.IsConsent && SubjectColumn(type) is null)
+            {
+                throw Refused(
+                    ErrorCodes.StartupDeclarationMissing,
+                    "key",
+                    type.Name + "." + purpose.Name,
+                    "the purpose rests on consent and the type names no one column as "
+                    + "the subject of its encrypted fields");
+            }
         }
+    }
+
+    // PRIV-RIGHT-005a: one record has one data subject, so the encrypted fields of a
+    // type name one column between them; a type naming two names no data subject the
+    // consent gate could read.
+    internal static string? SubjectColumn(ResourceTypeDeclaration type)
+    {
+        string? named = null;
+
+        foreach (EncryptedFieldDeclaration field in type.EncryptedFields)
+        {
+            if (named is not null
+                && !string.Equals(named, field.SubjectColumn, StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            named = field.SubjectColumn;
+        }
+
+        return named;
     }
 
     private static void CheckDerivations(

@@ -53,33 +53,17 @@ public sealed class LossReportsTests : IAsyncDisposable
     private readonly CredentialAuditInMemory _credentials = new();
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
-    private readonly SendLedgerInMemory _ledger = new();
-    private readonly MessageTemplatesInMemory _templates = new();
-    private readonly MailTransportInMemory _mail = new();
-    private readonly SmsTransportInMemory _sms = new();
-    private readonly SmsBalanceLedgerInMemory _balances = new();
     private readonly ConfigurationInMemory _configuration = new();
-    private readonly UnitOfWorkInMemory _work = new();
+    private readonly NotificationHandlerInMemory _notifications = new();
     private readonly EventsInMemory _events = new();
+    private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
 
     /// <summary>
     /// A deployment that can send the notices the window carries.
     /// </summary>
-    public LossReportsTests()
-    {
-        _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
-
-        foreach (SendKind kind in Enum.GetValues<SendKind>())
-        {
-            _templates.Set(
-                MessageKind.SecurityNotice,
-                kind,
-                Language,
-                new MessageTemplate(kind is SendKind.Email ? "subject" : null, "{token}"));
-        }
-    }
+    public LossReportsTests() => _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
@@ -108,7 +92,87 @@ public sealed class LossReportsTests : IAsyncDisposable
         Assert.NotNull(reported);
         Assert.Equal(_clock.GetUtcNow() + TimeSpan.FromDays(7), reported.InvalidatesAt);
         Assert.Equal(AuthenticatorState.Suspended, await StateAsync(generator));
-        Assert.NotEmpty(_mail.Taken);
+        Assert.NotEmpty(_notifications.Mail);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007, chapter 10 section 5b: the three things that become of a
+    /// reported credential are each announced, carrying what it is and, for the
+    /// suspension, when the window ends.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_007_EachTurnOfAReportIsAnnouncedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        AuthenticatorId generator = await EnrolledAsync(subject);
+
+        _ = await Service.ReportAsync(
+            AccessContext.Of(subject),
+            generator,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        CredentialSuspended suspended = Assert.Single(_events.Of<CredentialSuspended>());
+
+        Assert.Equal(generator, suspended.Credential);
+        Assert.Equal(FactorCatalogue.Generated, suspended.Kind);
+        Assert.Equal(subject, suspended.Subject);
+        Assert.Equal(_clock.GetUtcNow() + TimeSpan.FromDays(7), suspended.InvalidatesAt);
+
+        _ = await Service.CancelAsync(
+            AccessContext.Of(subject),
+            generator,
+            cancelToken: null,
+            TestContext.Current.CancellationToken);
+
+        CredentialRestored restored = Assert.Single(_events.Of<CredentialRestored>());
+
+        Assert.Equal(generator, restored.Credential);
+        Assert.Equal(subject, restored.Subject);
+        Assert.Equal(subject, restored.Actor);
+
+        _ = await Service.ReportAsync(
+            AccessContext.Of(subject),
+            generator,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        _clock.Advance(TimeSpan.FromDays(8));
+
+        _ = await Service.AdvanceAsync(TestContext.Current.CancellationToken);
+
+        CredentialInvalidated invalidated = Assert.Single(_events.Of<CredentialInvalidated>());
+
+        Assert.Equal(generator, invalidated.Credential);
+        Assert.Equal(FactorCatalogue.Generated, invalidated.Kind);
+        Assert.Equal(subject, invalidated.Subject);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007: a sweep whose announcement was refused answers with the
+    /// refusal, so an invalidation no consumer was told of is not reported as work
+    /// the sweep carried (LIB-API-001).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_007_ASweepWhoseAnnouncementIsRefusedAnswersWithTheRefusalAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        AuthenticatorId generator = await EnrolledAsync(subject);
+
+        _ = await Service.ReportAsync(
+            AccessContext.Of(subject),
+            generator,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        _clock.Advance(TimeSpan.FromDays(8));
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            Refused(await Service.AdvanceAsync(TestContext.Current.CancellationToken)));
     }
 
     /// <summary>
@@ -222,7 +286,7 @@ public sealed class LossReportsTests : IAsyncDisposable
         Assert.True(Succeeded(await Service.CancelAsync(
             AccessContext.Of(new SubjectId(Guid.NewGuid())),
             generator,
-            _mail.Taken[^1].Body.Trim(),
+            _notifications.Mail[^1].Values["token"],
             TestContext.Current.CancellationToken)));
 
         Assert.Equal(AuthenticatorState.Active, await StateAsync(generator));
@@ -239,8 +303,7 @@ public sealed class LossReportsTests : IAsyncDisposable
         SubjectId subject = await AccountAsync();
         AuthenticatorId generator = await EnrolledAsync(subject);
 
-        _mail.Accepts = false;
-        _sms.Accepts = false;
+        _notifications.Refusal = Error.From(ErrorCodes.SystemFault);
 
         _ = await Service.ReportAsync(
             AccessContext.Of(subject),
@@ -413,15 +476,15 @@ public sealed class LossReportsTests : IAsyncDisposable
             Source,
             TestContext.Current.CancellationToken);
 
-        string first = _mail.Taken[^1].Body.Trim();
-        int sent = _mail.Taken.Count;
+        string first = _notifications.Mail[^1].Values["token"];
+        int sent = _notifications.Mail.Count;
 
         _clock.Advance(TimeSpan.FromDays(1));
 
         _ = await Service.AdvanceAsync(TestContext.Current.CancellationToken);
 
-        Assert.True(_mail.Taken.Count > sent);
-        Assert.Equal(first, _mail.Taken[^1].Body.Trim());
+        Assert.True(_notifications.Mail.Count > sent);
+        Assert.Equal(first, _notifications.Mail[^1].Values["token"]);
     }
 
     private LossReports Service =>
@@ -432,8 +495,9 @@ public sealed class LossReportsTests : IAsyncDisposable
             _sets,
             _identifiers,
             Policies,
-            Sending,
+            _notifications,
             _credentials,
+            _events,
             _configuration,
             _work,
             _clock,
@@ -461,21 +525,6 @@ public sealed class LossReportsTests : IAsyncDisposable
             _configuration,
             _work,
             _clock);
-
-    private SendingService Sending =>
-        new(
-            _configuration,
-            _ledger,
-            _templates,
-            _mail,
-            _sms,
-            RestrictionKeySuppliers.None,
-            Considered.Nothing(_work, _clock),
-            new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
-            _work,
-            _events,
-            _clock,
-            _randomness);
 
     private string Code(AuthenticatorId generator) =>
         new Totp(

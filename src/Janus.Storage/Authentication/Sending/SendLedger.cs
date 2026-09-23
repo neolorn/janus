@@ -28,9 +28,19 @@ internal sealed class SendLedger(JanusDbContext context, ReadOnlyMemory<byte> fi
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyDictionary<RestrictionKey, SendCounter>> CountersAsync(
         IReadOnlyCollection<RestrictionKey> keys,
+        DateTimeOffset stale,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(keys);
+
+        // AUTH-ABUSE-004 AC6: a record whose newest time decides nothing holds
+        // nothing, so it goes before anything is read rather than standing until the
+        // key it names is sent to again. The times are written oldest first, so the
+        // newest is the last of them and the index is over that expression.
+        _ = await context.SendCounters
+            .Where(counter => counter.SentAt[counter.SentAt.Length - 1] < stale)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         var standing = new Dictionary<RestrictionKey, SendCounter>();
 
@@ -69,14 +79,6 @@ internal sealed class SendLedger(JanusDbContext context, ReadOnlyMemory<byte> fi
         ArgumentNullException.ThrowIfNull(counted);
         ArgumentNullException.ThrowIfNull(spent);
 
-        // A counter every time in which has aged out holds nothing, so it goes
-        // rather than standing until the key is sent to again (AUTH-ABUSE-004). The
-        // sweep runs before the rows below are read, so none of them is tracked.
-        await context.SendCounters
-            .Where(counter => counter.SettlesAt < at)
-            .ExecuteDeleteAsync(cancellationToken)
-            .ConfigureAwait(false);
-
         TimeSpan settles = TimeSpan.Zero;
 
         foreach (SendCount count in counted)
@@ -95,17 +97,11 @@ internal sealed class SendLedger(JanusDbContext context, ReadOnlyMemory<byte> fi
 
             if (counter is null)
             {
-                context.SendCounters.Add(new SendCounterRecord
-                {
-                    Key = hashed,
-                    SentAt = kept,
-                    SettlesAt = at + count.Retain,
-                });
+                context.SendCounters.Add(new SendCounterRecord { Key = hashed, SentAt = kept });
             }
             else
             {
                 counter.SentAt = kept;
-                counter.SettlesAt = at + count.Retain;
             }
 
             if (count.Retain > settles)

@@ -37,16 +37,13 @@ public sealed class AccountServiceTests : IAsyncDisposable
     private static readonly DateTimeOffset Noon =
         new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
-    private static readonly SessionOrigin Somewhere = new(
-        Source,
-        new DeviceDescription("Firefox", "Fedora"),
-        Location: null);
+    private static readonly SessionOrigin Somewhere = new(Source, new DeviceDescription("Firefox", "Fedora"));
 
     private static readonly PreferenceDeclarations Declared = PreferenceDeclarations.Of(
     [
-        new PreferenceDeclaration("theme", PreferenceKind.Text, "system"),
-        new PreferenceDeclaration("reducedMotion", PreferenceKind.Flag, "false"),
-        new PreferenceDeclaration("tier", PreferenceKind.Text, "standard", AdministratorOnly: true),
+        new PreferenceDeclaration("theme", PreferenceKind.String, "system"),
+        new PreferenceDeclaration("reducedMotion", PreferenceKind.Boolean, "false"),
+        new PreferenceDeclaration("tier", PreferenceKind.String, "standard", AdministratorOnly: true),
     ]);
 
     private readonly AccountDirectoryInMemory _directory = new(Declared);
@@ -55,17 +52,13 @@ public sealed class AccountServiceTests : IAsyncDisposable
     private readonly RecoveryCodeStoreInMemory _recoveryCodes = new();
     private readonly AccountAuditInMemory _audit = new();
     private readonly LifecycleLinkStoreInMemory _links = new();
-    private readonly SendLedgerInMemory _ledger = new();
-    private readonly MessageTemplatesInMemory _templates = new();
-    private readonly MailTransportInMemory _mail = new();
-    private readonly SmsTransportInMemory _sms = new();
-    private readonly SmsBalanceLedgerInMemory _balances = new();
     private readonly EventsInMemory _events = new();
     private readonly SessionStoreInMemory _sessions = new();
     private readonly PasswordStoreInMemory _passwords = new();
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly ConfigurationInMemory _configuration = new();
+    private readonly NotificationHandlerInMemory _notifications = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
@@ -90,19 +83,7 @@ public sealed class AccountServiceTests : IAsyncDisposable
                 _identifiers,
                 _links,
                 _sessions,
-                new SendingService(
-                    _configuration,
-                    _ledger,
-                    _templates,
-                    _mail,
-                    _sms,
-                    RestrictionKeySuppliers.None,
-                    Considered.Nothing(_work, _clock),
-                    new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
-                    _work,
-                    _events,
-                    _clock,
-                    _randomness),
+                _notifications,
                 _audit,
                 Gate,
                 _events,
@@ -118,9 +99,20 @@ public sealed class AccountServiceTests : IAsyncDisposable
             Gate,
             ReservedUsernames.Default,
             Declared,
+            Photos,
             _configuration,
             _work,
             _clock);
+
+    // The photo has its own tests and its own codec; nothing here reaches one.
+    private ProfilePhotos Photos => new(
+        _directory,
+        _memberships,
+        _configuration,
+        _audit,
+        _work,
+        codec: null,
+        _clock);
 
     private StepUpGuard Gate => new(
         _sessions,

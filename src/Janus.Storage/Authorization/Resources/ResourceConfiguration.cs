@@ -43,6 +43,12 @@ internal sealed class ResourceConfiguration : IEntityTypeConfiguration<ResourceR
             .HasColumnName("organization")
             .HasConversion(id => id.Value, value => new OrganizationId(value));
 
+        builder.Property(resource => resource.Subject)
+            .HasColumnName("subject")
+            .HasConversion(new ValueConverter<SubjectId, Guid>(
+                id => id.Value,
+                value => new SubjectId(value)));
+
         builder.Property(resource => resource.ContainedInType)
             .HasColumnName("contained_in_type")
             .HasConversion(new ValueConverter<ResourceType, string>(

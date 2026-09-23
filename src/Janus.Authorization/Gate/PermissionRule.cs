@@ -232,12 +232,54 @@ internal sealed class PermissionRule
 
         foreach (RelationshipDeclaration relationship in _derivations)
         {
-            IQueryable<string> one = Admits(sources, ancestry, type, page, relationship);
+            IQueryable<string> one = Admits(sources, ancestry, type, page, relationship)
+                .Select(entry => entry.ResourceId);
 
             admitted = admitted is null ? one : admitted.Union(one);
         }
 
         return admitted?.Distinct();
+    }
+
+    /// <summary>
+    /// The same records, each carrying the relationship whose derivation admitted it,
+    /// as one query with one clause per derivation and none per record.
+    /// </summary>
+    /// <typeparam name="TResource">The host's row.</typeparam>
+    /// <param name="sources">The contract tables and the relationship rows.</param>
+    /// <param name="resources">The records of the page.</param>
+    /// <returns>
+    /// The query, or nothing where no derivation reaches the type or the page is empty.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The sources or the records are absent.</exception>
+    public IQueryable<AdmittedRecord>? ToAdmittedRecords<TResource>(
+        FilterSources<TResource> sources,
+        IReadOnlyList<ResourceId> resources)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+        ArgumentNullException.ThrowIfNull(resources);
+
+        if (_derivations.Count == 0 || resources.Count == 0)
+        {
+            return null;
+        }
+
+        string[] page = [.. resources.Select(resource => resource.ToString())];
+        IQueryable<AncestryEntry> ancestry = sources.Ancestry;
+        string type = Type.ToString();
+        IQueryable<AdmittedRecord>? admitted = null;
+
+        foreach (RelationshipDeclaration relationship in _derivations)
+        {
+            string named = relationship.Name;
+
+            IQueryable<AdmittedRecord> one = Admits(sources, ancestry, type, page, relationship)
+                .Select(entry => new AdmittedRecord(entry.ResourceId, entry.AncestorId, named));
+
+            admitted = admitted is null ? one : admitted.Concat(one);
+        }
+
+        return admitted;
     }
 
     /// <summary>
@@ -392,7 +434,7 @@ internal sealed class PermissionRule
     // row: the records of the page with a container the relationship names, held by one
     // of the principal's subjects. One query per derivation, whatever the page's size
     // (AUTHZ-GATE-005 AC1).
-    private IQueryable<string> Admits<TResource>(
+    private IQueryable<AncestryEntry> Admits<TResource>(
         FilterSources<TResource> sources,
         IQueryable<AncestryEntry> ancestry,
         string type,
@@ -428,8 +470,7 @@ internal sealed class PermissionRule
         return ancestry
             .Where(Expression.Lambda<Func<AncestryEntry, bool>>(
                 Expression.AndAlso(scoped.Body, held),
-                above))
-            .Select(entry => entry.ResourceId);
+                above));
     }
 
     // Whether the row is held by one of the principal's subjects. The column is the

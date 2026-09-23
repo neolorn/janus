@@ -16,6 +16,11 @@ namespace Janus.Core;
 /// counter, base64url.
 /// </param>
 /// <param name="Signature">The signature over the two, base64url.</param>
+/// <param name="UserHandle">
+/// The handle the authenticator returned, base64url, where it keeps one: a
+/// discoverable credential carries the account it belongs to, a second-factor
+/// security key carries nothing (REG-PM-001).
+/// </param>
 /// <remarks>
 /// Implements AUTH-FACT-011 and AUTH-FACT-014. The library verifies the signature
 /// itself; nothing a caller asserts about the ceremony is taken on trust.
@@ -24,4 +29,5 @@ public sealed record AuthenticatorAssertion(
     string CredentialId,
     string ClientDataJson,
     string AuthenticatorData,
-    string Signature);
+    string Signature,
+    string? UserHandle = null);

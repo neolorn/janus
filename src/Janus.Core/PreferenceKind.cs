@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 
 namespace Janus.Core;
@@ -7,29 +8,33 @@ namespace Janus.Core;
 /// against the type its key was declared with and never branches on the value itself.
 /// </summary>
 /// <remarks>Implements REG-PREF-001.</remarks>
+[SuppressMessage(
+    "Naming",
+    "CA1720:Identifier contains type name",
+    Justification = "REG-PREF-001 names the four types string, boolean, integer and enum, and a host reads the declaration in those words.")]
 public enum PreferenceKind
 {
     /// <summary>
     /// Any text.
     /// </summary>
     [JsonStringEnumMemberName("string")]
-    Text = 0,
+    String = 0,
 
     /// <summary>
     /// True or false.
     /// </summary>
     [JsonStringEnumMemberName("boolean")]
-    Flag = 1,
+    Boolean = 1,
 
     /// <summary>
     /// A whole number.
     /// </summary>
     [JsonStringEnumMemberName("integer")]
-    Number = 2,
+    Integer = 2,
 
     /// <summary>
     /// One of the values the declaration names.
     /// </summary>
     [JsonStringEnumMemberName("enum")]
-    Choice = 3,
+    Enum = 3,
 }

@@ -63,8 +63,7 @@ internal sealed class AccessGate(
         ResourceReference resource,
         CancellationToken cancellationToken)
     {
-        if (await FollowsFromTheHostsDataAsync(resource.Type, [permission], cancellationToken)
-            .ConfigureAwait(false))
+        if (FollowsFromTheHostsData(resource.Type))
         {
             return Result.Failure(Error.From(ErrorCodes.DerivationSourcesMissing));
         }
@@ -87,7 +86,8 @@ internal sealed class AccessGate(
                 cancellationToken).ConfigureAwait(false);
         }
 
-        return await OutstandingAsync(context, permission, cancellationToken).ConfigureAwait(false);
+        return await OutstandingAsync(decided.Subject, permission, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -110,7 +110,8 @@ internal sealed class AccessGate(
 
         if (decided.Grant is { Deny: false })
         {
-            return await OutstandingAsync(context, permission, cancellationToken).ConfigureAwait(false);
+            return await OutstandingAsync(decided.Subject, permission, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         // AUTHZ-DERIVE-002 AC1: a deny defeats a derived grant as it defeats a stored
@@ -126,7 +127,8 @@ internal sealed class AccessGate(
                 [resource.Id],
                 cancellationToken).ConfigureAwait(false)).Contains(resource.Id.ToString()))
         {
-            return await OutstandingAsync(context, permission, cancellationToken).ConfigureAwait(false);
+            return await OutstandingAsync(decided.Subject, permission, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         return await RefusedAsync(
@@ -164,7 +166,10 @@ internal sealed class AccessGate(
                 cancellationToken).ConfigureAwait(false);
         }
 
-        return await OutstandingAsync(context, permission, cancellationToken).ConfigureAwait(false);
+        // An organization-wide check names no record, so it has no data subject; a
+        // consent-based purpose is refused rather than admitted on nobody's consent.
+        return await OutstandingAsync(dataSubject: null, permission, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -188,8 +193,7 @@ internal sealed class AccessGate(
         // AUTHZ-GATE-004, D-161: an explanation read from the stored grants alone would
         // say that no grant matched for a record the filter admits, so a type whose
         // access follows in part from the host's own data is not explained here.
-        if (await FollowsFromTheHostsDataAsync(resource.Type, [permission], cancellationToken)
-            .ConfigureAwait(false))
+        if (FollowsFromTheHostsData(resource.Type))
         {
             return Result.Failure<AccessExplanation>(
                 Error.From(ErrorCodes.DerivationSourcesMissing));
@@ -198,11 +202,39 @@ internal sealed class AccessGate(
         Decision decided = await DecideAsync(context, permission, resource, cancellationToken)
             .ConfigureAwait(false);
 
-        return Result.Success(new AccessExplanation(
-            decided.Grant is { Deny: false } ? AccessOutcome.Allowed : AccessOutcome.Denied,
-            permission,
-            new ExplainedPrincipal(context.Acting, context.Effective),
-            decided.Grant is null ? null : Explained(decided.Grant, resource)));
+        return Result.Success(Explanation(context, permission, resource, decided, derivedBy: null));
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result<AccessExplanation>> ExplainAsync<TResource>(
+        AccessContext context,
+        Permission permission,
+        ResourceReference resource,
+        FilterSources<TResource> sources,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(sources);
+
+        // AUTHZ-GATE-004: concealment is read first, so a concealing type answers one
+        // way whatever else is true of it (AUTHZ-CONCEAL-003).
+        if (Declared(resource.Type).Concealment is ConcealmentBehaviour.Conceal)
+        {
+            return Result.Failure<AccessExplanation>(Error.From(ErrorCodes.Denied));
+        }
+
+        Decision decided = await DecideAsync(context, permission, resource, cancellationToken)
+            .ConfigureAwait(false);
+
+        // AUTHZ-DERIVE-002 AC1: a deny defeats a derived grant as it defeats a stored
+        // one, so the host's relations are read only where nothing has decided yet.
+        ExplainedGrant? derivedGrant = decided.Grant is null
+            && decided.Organization is OrganizationId owner
+            ? await DerivedAsync(context, permission, resource, owner, sources, cancellationToken)
+                .ConfigureAwait(false)
+            : null;
+
+        return Result.Success(Explanation(context, permission, resource, decided, derivedGrant));
     }
 
     /// <inheritdoc/>
@@ -298,8 +330,7 @@ internal sealed class AccessGate(
         ArgumentNullException.ThrowIfNull(resources);
         ArgumentNullException.ThrowIfNull(permissions);
 
-        if (await FollowsFromTheHostsDataAsync(type, permissions, cancellationToken)
-            .ConfigureAwait(false))
+        if (FollowsFromTheHostsData(type))
         {
             return Result.Failure<IReadOnlyList<Capability>>(
                 Error.From(ErrorCodes.DerivationSourcesMissing));
@@ -332,8 +363,8 @@ internal sealed class AccessGate(
     }
 
     // AUTHZ-GATE-005 AC1: one query answers the whole page for the stored grants, and
-    // one further query per permission a derivation confers answers the rest, so the
-    // cost stands whatever the page's size.
+    // one further query over the host's rows answers what the derivations confer, so
+    // the cost stands whatever the page's size and however many permissions are asked.
     private async ValueTask<Result<IReadOnlyList<Capability>>> PageAsync(
         AccessContext context,
         ResourceType type,
@@ -350,11 +381,14 @@ internal sealed class AccessGate(
             return Nothing(resources);
         }
 
-        RegisteredResource? first = await records
-            .FindAsync(new ResourceReference(type, resources[0]), cancellationToken)
+        // PRIV-SENS-002 AC1: what a consent is outstanding for is the data subject's
+        // of each record, so the page is read here rather than only its first row.
+        IReadOnlyList<RegisteredResource> registered = await records
+            .FindManyAsync(type, resources, cancellationToken)
             .ConfigureAwait(false);
 
-        if (first is null)
+        if (registered.FirstOrDefault(row => row.Reference.Id == resources[0]) is not
+            RegisteredResource first)
         {
             return Nothing(resources);
         }
@@ -370,20 +404,50 @@ internal sealed class AccessGate(
         IReadOnlyDictionary<Permission, IReadOnlySet<string>> derivedRows =
             await derivedBy(first.Organization, cancellationToken).ConfigureAwait(false);
 
-        // AUTHZ-GATE-005 AC1: what a consent is outstanding for is the same answer for
-        // every record on the page, so it is read once for the page and not per row.
-        IReadOnlySet<Permission> unconsented =
-            await UnconsentedAsync(context, permissions, cancellationToken).ConfigureAwait(false);
+        // AUTHZ-GATE-005 AC1, PRIV-SENS-002 AC1: a consent belongs to the record's data
+        // subject, so it is read once for each subject on the page rather than once per
+        // row, and a record the library holds no row for has no subject to read.
+        var whose = new Dictionary<ResourceId, SubjectId?>();
+
+        foreach (RegisteredResource row in registered)
+        {
+            whose[row.Reference.Id] = row.Subject;
+        }
+
+        // A record the library holds no row for has no data subject, which reads no
+        // consent and so asks the same of every row that is in that position.
+        IReadOnlySet<Permission> nobody = await UnconsentedAsync(
+            dataSubject: null, permissions, cancellationToken).ConfigureAwait(false);
+
+        var unconsented = new Dictionary<SubjectId, IReadOnlySet<Permission>>();
+
+        foreach (ResourceId resource in resources)
+        {
+            if (Whose(whose, resource) is SubjectId subject && !unconsented.ContainsKey(subject))
+            {
+                unconsented[subject] = await UnconsentedAsync(
+                    subject, permissions, cancellationToken).ConfigureAwait(false);
+            }
+        }
 
         return Result.Success<IReadOnlyList<Capability>>(
         [
-            .. resources.Select(resource =>
-                Held(resource, conferred, derivedRows, set.Restricted, unconsented)),
+            .. resources.Select(resource => Held(
+                resource,
+                conferred,
+                derivedRows,
+                set.Restricted,
+                Whose(whose, resource) is SubjectId owner ? unconsented[owner] : nobody)),
         ]);
     }
 
+    private static SubjectId? Whose(
+        Dictionary<ResourceId, SubjectId?> held,
+        ResourceId resource) =>
+        held.TryGetValue(resource, out SubjectId? subject) ? subject : null;
+
     private async ValueTask<IReadOnlySet<Permission>> UnconsentedAsync(
-        AccessContext context,
+        SubjectId? dataSubject,
         IReadOnlyList<Permission> permissions,
         CancellationToken cancellationToken)
     {
@@ -391,8 +455,8 @@ internal sealed class AccessGate(
 
         foreach (Permission permission in permissions)
         {
-            if (await UnconsentedAsync(context, permission, cancellationToken).ConfigureAwait(false)
-                is not null)
+            if (await UnconsentedAsync(dataSubject, permission, cancellationToken)
+                .ConfigureAwait(false) is not null)
             {
                 _ = outstanding.Add(permission);
             }
@@ -401,8 +465,9 @@ internal sealed class AccessGate(
         return outstanding;
     }
 
-    // A derivation confers a role, and what that role allows is not what another
-    // allows, so each permission is asked for on its own.
+    // AUTHZ-GATE-005 AC1, D-162: the page is one query over the host's rows, carrying
+    // one clause per derivation reaching the type. What each derivation's role allows
+    // is model data and is mapped here, so no permission costs a query of its own.
     private async ValueTask<IReadOnlyDictionary<Permission, IReadOnlySet<string>>> DerivedAsync<TResource>(
         AccessContext context,
         ResourceType type,
@@ -412,26 +477,77 @@ internal sealed class AccessGate(
         FilterSources<TResource> sources,
         CancellationToken cancellationToken)
     {
-        var admitted = new Dictionary<Permission, IReadOnlySet<string>>();
+        IReadOnlyList<ConferredDerivation> conferring = await derived
+            .ConferringAsync(type, cancellationToken)
+            .ConfigureAwait(false);
 
-        foreach (Permission permission in permissions)
+        if (conferring.Count == 0)
         {
-            IReadOnlySet<string> records = await AdmittedAsync(
-                context,
-                [permission],
-                type,
-                organization,
-                sources,
-                resources,
-                cancellationToken).ConfigureAwait(false);
+            return new Dictionary<Permission, IReadOnlySet<string>>();
+        }
 
-            if (records.Count > 0)
+        var rule = new PermissionRule(
+            permissions,
+            type,
+            organization,
+            await subjects.OfAsync(context, cancellationToken).ConfigureAwait(false),
+            time.GetUtcNow(),
+            [.. conferring.Select(one => one.Relationship)]);
+
+        var admitted = new Dictionary<Permission, HashSet<string>>();
+
+        foreach (AdmittedRecord record in await RowsAsync(
+            rule.ToAdmittedRecords(sources, resources), cancellationToken).ConfigureAwait(false))
+        {
+            foreach (ConferredDerivation one in conferring.Where(one =>
+                string.Equals(one.Relationship.Name, record.Relationship, StringComparison.Ordinal)))
             {
-                admitted.Add(permission, records);
+                foreach (Permission permission in permissions.Where(one.Confers.Contains))
+                {
+                    if (!admitted.TryGetValue(permission, out HashSet<string>? records))
+                    {
+                        records = new HashSet<string>(StringComparer.Ordinal);
+                        admitted.Add(permission, records);
+                    }
+
+                    records.Add(record.Resource);
+                }
             }
         }
 
-        return admitted;
+        return admitted.ToDictionary(
+            entry => entry.Key,
+            entry => (IReadOnlySet<string>)entry.Value);
+    }
+
+    // LIB-HOST-002, D-161: the query was composed from the rows the host supplied and
+    // carries the host's own provider, so reading it issues nothing of the library's
+    // own against a host table and takes none of its connections.
+    private static async ValueTask<IReadOnlyList<AdmittedRecord>> RowsAsync(
+        IQueryable<AdmittedRecord>? admitted,
+        CancellationToken cancellationToken)
+    {
+        if (admitted is null)
+        {
+            return [];
+        }
+
+        if (admitted is not IAsyncEnumerable<AdmittedRecord> rows)
+        {
+            throw new InvalidOperationException(
+                "The rows the host supplied are not read asynchronously, which the contract tables mapped into the host's own context are.");
+        }
+
+        var records = new List<AdmittedRecord>();
+
+        await foreach (AdmittedRecord record in rows
+            .WithCancellation(cancellationToken)
+            .ConfigureAwait(false))
+        {
+            records.Add(record);
+        }
+
+        return records;
     }
 
     // The records of the page a derivation admits, read in one query over the rows the
@@ -478,15 +594,14 @@ internal sealed class AccessGate(
 
     // AUTHZ-DERIVE-001, D-161: what a path answers without the host's rows is what the
     // stored grants alone say, which on a type a derivation reaches is not the answer.
-    private async ValueTask<bool> FollowsFromTheHostsDataAsync(
-        ResourceType type,
-        IReadOnlyList<Permission> permissions,
-        CancellationToken cancellationToken)
+    // What the conferred role allows is not read here: a role is edited where it
+    // stands, so a call admitted today because the role allowed nothing asked for
+    // would fault on the next edit of the role instead of at the call site.
+    private bool FollowsFromTheHostsData(ResourceType type)
     {
         Declared(type);
 
-        return (await derived.ReachingAsync(type, permissions, cancellationToken)
-            .ConfigureAwait(false)).Count > 0;
+        return derived.Reaches(type);
     }
 
     private static ValueTask<IReadOnlyDictionary<Permission, IReadOnlySet<string>>> NoneAdmitted(
@@ -565,7 +680,7 @@ internal sealed class AccessGate(
     // those does not is refused with what it is waiting for rather than with a denial
     // (AUTH-STEP-001, PRIV-SENS-002).
     private async ValueTask<Result> OutstandingAsync(
-        AccessContext context,
+        SubjectId? dataSubject,
         Permission permission,
         CancellationToken cancellationToken)
     {
@@ -574,26 +689,34 @@ internal sealed class AccessGate(
             return Result.Failure(Error.From(code));
         }
 
-        return await UnconsentedAsync(context, permission, cancellationToken).ConfigureAwait(false)
-            is ErrorCode missing
+        return await UnconsentedAsync(dataSubject, permission, cancellationToken)
+            .ConfigureAwait(false) is ErrorCode missing
             ? Result.Failure(Error.From(missing))
             : Result.Success();
     }
 
-    // PRIV-SENS-002 AC1, PRIV-SENS-002a: the action is refused for the one purpose it
-    // is done for, and for no other purpose the record carries. A purpose resting on
+    // PRIV-SENS-002 AC1, PRIV-SENS-002a: the consent read is the record's data
+    // subject's, whoever the caller is, so staff and background work are gated exactly
+    // as the subject's own request is. The action is refused for the one purpose it is
+    // done for, and for no other purpose the record carries. A purpose resting on
     // another basis is nobody's to consent to, so it asks nothing here; the written
     // path admits no ordinary record.
     private async ValueTask<ErrorCode?> UnconsentedAsync(
-        AccessContext context,
+        SubjectId? dataSubject,
         Permission permission,
         CancellationToken cancellationToken)
     {
-        if (context.Effective is not SubjectId subject
-            || model.PurposeOf(permission) is not string purpose
+        if (model.PurposeOf(permission) is not string purpose
             || model.Processing.Find(purpose) is not { Consent: ConsentKind required })
         {
             return null;
+        }
+
+        // A check with no record in hand has no data subject, and an action admitted
+        // on nobody's consent is the one PRIV-SENS-002 AC1 forbids.
+        if (dataSubject is not SubjectId subject)
+        {
+            return ErrorCodes.ConsentRequired;
         }
 
         ConsentRecord? held = await consents
@@ -616,6 +739,88 @@ internal sealed class AccessGate(
             .. resources.Select(resource =>
                 new Capability(resource, new HashSet<Permission>(), NoResiduals)),
         ]);
+
+    // AUTHZ-GATE-004: one shape answers both paths, the derived grant being the one a
+    // fact in the host's data produced rather than one somebody wrote.
+    private static AccessExplanation Explanation(
+        AccessContext context,
+        Permission permission,
+        ResourceReference resource,
+        Decision decided,
+        ExplainedGrant? derivedBy)
+    {
+        ExplainedGrant? grant = decided.Grant is null
+            ? derivedBy
+            : Explained(decided.Grant, resource);
+
+        return new AccessExplanation(
+            grant is { Deny: false } ? AccessOutcome.Allowed : AccessOutcome.Denied,
+            permission,
+            new ExplainedPrincipal(context.Acting, context.Effective),
+            grant);
+    }
+
+    // AUTHZ-GATE-004, D-162: the grant a fact produced, as an explanation names it. It
+    // holds no identifier, because no row holds it; the role is the one the derivation
+    // confers, and the container is the one the relationship is declared on.
+    private async ValueTask<ExplainedGrant?> DerivedAsync<TResource>(
+        AccessContext context,
+        Permission permission,
+        ResourceReference resource,
+        OrganizationId organization,
+        FilterSources<TResource> sources,
+        CancellationToken cancellationToken)
+    {
+        if (context.Effective is not SubjectId subject)
+        {
+            return null;
+        }
+
+        IReadOnlyList<ConferredDerivation> conferring =
+        [
+            .. (await derived.ConferringAsync(resource.Type, cancellationToken).ConfigureAwait(false))
+                .Where(one => one.Confers.Contains(permission)),
+        ];
+
+        if (conferring.Count == 0)
+        {
+            return null;
+        }
+
+        var rule = new PermissionRule(
+            [permission],
+            resource.Type,
+            organization,
+            await subjects.OfAsync(context, cancellationToken).ConfigureAwait(false),
+            time.GetUtcNow(),
+            [.. conferring.Select(one => one.Relationship)]);
+
+        IReadOnlyList<AdmittedRecord> admitted = await RowsAsync(
+            rule.ToAdmittedRecords(sources, [resource.Id]), cancellationToken).ConfigureAwait(false);
+
+        if (admitted.Count == 0)
+        {
+            return null;
+        }
+
+        AdmittedRecord first = admitted[0];
+
+        ConferredDerivation deciding = conferring.First(one =>
+            string.Equals(one.Relationship.Name, first.Relationship, StringComparison.Ordinal));
+
+        var above = new ResourceReference(
+            deciding.Relationship.On,
+            ResourceId.Parse(first.Ancestor));
+
+        return new ExplainedGrant(
+            Id: null,
+            GrantKind.Derived,
+            SubjectType.User,
+            subject.Value,
+            deciding.Role,
+            Deny: false,
+            above == resource ? null : above);
+    }
 
     private static ExplainedGrant Explained(CandidateGrant decided, ResourceReference resource)
     {
@@ -642,9 +847,9 @@ internal sealed class AccessGate(
             $"The resource type '{type}' is not declared, so no policy governs it."));
 
     // AUTHZ-CONCEAL-004, CONV-LOG-005: one path answers every refusal, and the
-    // identifier it hands back is the row the refusal was recorded as. A context naming
-    // no account names nobody the trail can record the refusal against, both of its
-    // identity fields being accounts (IDN-AUD-001).
+    // identifier it hands back is the row the refusal was recorded as. A request made
+    // under no account is refused with an identifier like any other; the row names
+    // nobody, and that absence is the recorded fact.
     private async ValueTask<Result> RefusedAsync(
         AccessContext context,
         Permission permission,
@@ -654,19 +859,14 @@ internal sealed class AccessGate(
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (context.Acting is not SubjectId acting || context.Effective is not SubjectId effective)
-        {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
-        }
-
         var correlation = AuditRecordId.New(time);
 
         await audit
             .RecordAsync(
                 new DeniedAccess(
                     correlation,
-                    acting,
-                    effective,
+                    context.Acting,
+                    context.Effective,
                     organization,
                     permission,
                     type,
@@ -743,7 +943,7 @@ internal sealed class AccessGate(
 
         if (registered is null)
         {
-            return new Decision(Grant: null, Organization: null);
+            return new Decision(Grant: null, Organization: null, Subject: null);
         }
 
         var rule = new PermissionRule(
@@ -757,10 +957,16 @@ internal sealed class AccessGate(
             .CandidatesAsync(rule.ToCandidates(), resource.Id, cancellationToken)
             .ConfigureAwait(false);
 
-        return new Decision(PermissionRule.Decides(candidates), registered.Organization);
+        return new Decision(
+            PermissionRule.Decides(candidates),
+            registered.Organization,
+            registered.Subject);
     }
 
     // What an evaluation decided, and the organization it was scoped to, which is what
     // a refusal is recorded against.
-    private sealed record Decision(CandidateGrant? Grant, OrganizationId? Organization);
+    private sealed record Decision(
+        CandidateGrant? Grant,
+        OrganizationId? Organization,
+        SubjectId? Subject);
 }

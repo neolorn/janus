@@ -1,3 +1,5 @@
+using Janus.Core;
+
 namespace Janus.Hosting.Tests.Authorization;
 
 /// <summary>
@@ -15,4 +17,15 @@ public sealed class HostDocument
     /// A field of the host's that the library neither reads nor knows about.
     /// </summary>
     public required string Title { get; init; }
+
+    /// <summary>
+    /// The column naming the subject of the document's encrypted field, which is where
+    /// the host reads the data subject it registers the record under (PRIV-RIGHT-005a).
+    /// </summary>
+    public SubjectId? Owner { get; init; }
+
+    /// <summary>
+    /// A field held under the owner's key.
+    /// </summary>
+    public string Notes { get; init; } = string.Empty;
 }

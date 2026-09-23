@@ -35,4 +35,12 @@ public interface ISecretSource
     /// <param name="cancellationToken">Abandons the read.</param>
     /// <returns>The credential, as its UTF-8 bytes.</returns>
     ValueTask<ReadOnlyMemory<byte>> ReadMaintenanceCredentialAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads the secret this application presents at the provider's token endpoint
+    /// when it exchanges a sign-on code (BFF-SESS-006).
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    /// <returns>The secret, as its UTF-8 bytes.</returns>
+    ValueTask<ReadOnlyMemory<byte>> ReadSignOnSecretAsync(CancellationToken cancellationToken);
 }

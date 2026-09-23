@@ -14,14 +14,17 @@ namespace Janus.Core.Tests;
 [Trait("kind", "contract")]
 public sealed class SettingsCatalogueTests
 {
-    // Every key chapter 10 section 4 marks P: the nine of section 4.8 and the four
-    // more that are marked where they are declared, because they are facts about the
-    // deployment rather than runtime controls.
+    // Every key chapter 10 section 4 marks P: the nine of section 4.8 and the ones
+    // marked where they are declared, because they are facts about the deployment
+    // rather than runtime controls.
     private static readonly string[] Protected =
     [
         .. ProtectedBySectionFourEight,
         "hosting.crossborderbasis",
         "hosting.location",
+        "integration.mail.endpoint",
+        "integration.sms.endpoint",
+        "redirect.defaultclient",
         "webauthn.algorithms",
         "webauthn.origins",
     ];
@@ -41,6 +44,7 @@ public sealed class SettingsCatalogueTests
         "legal.governinglanguage",
         "notification.email.sendingdomain",
         "notification.languages",
+        "password.blocklist.selfhosted.address",
         "privacy.calendar.timezone",
         "service.name",
         "webauthn.origins",
@@ -130,7 +134,7 @@ public sealed class SettingsCatalogueTests
     {
         string[] declared = [.. Settings.Families.Select(family => family.Prefix).Order(StringComparer.Ordinal)];
 
-        Assert.Equal(["policy", "retention", "stepup.enforcement"], declared);
+        Assert.Equal(["photo.enabled", "policy", "retention", "stepup.enforcement"], declared);
     }
 
     /// <summary>

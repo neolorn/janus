@@ -18,7 +18,7 @@ namespace Janus.Authorization.Tests.Gate;
 [Trait("kind", "unit")]
 public sealed class PermissionRuleTests
 {
-    private static readonly ResourceType Document = ResourceType.Parse("document");
+    private static readonly ResourceType Article = ResourceType.Parse("article");
 
     // The clause that decides, in the words every rendering carries it in.
     private static readonly string[] Deciding =
@@ -249,8 +249,8 @@ public sealed class PermissionRuleTests
             restricted: false);
 
         return new PermissionRule(
-            [Permission.Parse("document:read"), Permission.Parse("document:edit")],
-            Document,
+            [Permission.Parse("article:read"), Permission.Parse("article:edit")],
+            Article,
             new OrganizationId(Guid.NewGuid()),
             subjects,
             DateTimeOffset.UnixEpoch,

@@ -15,6 +15,7 @@ using Janus.Identity.Preferences;
 using Janus.Identity.Profiles;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Authentication.Accounts;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Audit;
@@ -737,6 +738,52 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
+    /// <summary>
+    /// PRIV-RIGHT-005 AC4: the account directory the photo endpoint reads through
+    /// answers an erased subject as it answers one that never set a photo, so the row
+    /// that stays where it is is never met as a failure on bytes nothing can read
+    /// (D-157).
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_005_AC4_TheDirectoryShowsAnErasedSubjectAsOneWithNoPhotoAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        byte[] image = new byte[256];
+        _deployment.Randomness.GetBytes(image);
+
+        await using (JanusDbContext writing = database.Context())
+        {
+            await new ProfilePhotoStore(writing, _deployment.Keys, _deployment.Randomness)
+                .RecordAsync(ProfilePhoto.Of(subject, image, Noon), TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (JanusDbContext shown = database.Context())
+        {
+            Assert.Equal(
+                image,
+                (await Directory(shown).PhotoAsync(subject, TestContext.Current.CancellationToken)).ToArray());
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using JanusDbContext reading = database.Context();
+
+        Assert.True(await reading.ProfilePhotos
+            .AnyAsync(photo => photo.Subject == subject, TestContext.Current.CancellationToken));
+
+        Assert.True(
+            (await Directory(reading).PhotoAsync(subject, TestContext.Current.CancellationToken)).IsEmpty);
+    }
+
+    private AccountDirectory Directory(JanusDbContext context) => new(
+        new AccountStore(context),
+        new ProfileStore(context, _deployment.Keys, _deployment.Randomness),
+        new ProfilePhotoStore(context, _deployment.Keys, _deployment.Randomness),
+        new SubjectKeyStore(context, _deployment.Keys, _deployment.Randomness),
+        new PreferenceStore(context, _deployment.Keys, _deployment.Randomness),
+        PreferenceDeclarations.None);
+
     private static ErasureStore Store(JanusDbContext context) => new(context);
 
     private IdentifierStore Identifiers(JanusDbContext context) =>
@@ -775,10 +822,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
                     SessionId.New(TimeProvider.System),
                     subject,
                     new Assurance(AssuranceLevel.Aal1, PhishingResistant: false),
-                    new SessionOrigin(
-                        "198.51.100.7",
-                        new DeviceDescription("Firefox", "Linux"),
-                        null),
+                    new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")),
                     Noon,
                     TimeSpan.FromDays(1),
                     TimeSpan.FromDays(30),

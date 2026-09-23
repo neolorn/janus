@@ -14,13 +14,20 @@ namespace Janus.Authentication.Sending;
 internal interface ISendLedger
 {
     /// <summary>
-    /// What stands against each key a send would count under.
+    /// What stands against each key a send would count under. Every record whose
+    /// newest time is older than the given instant is deleted first, so a record that
+    /// decides nothing is never read and never stands in the table.
     /// </summary>
     /// <param name="keys">The keys.</param>
+    /// <param name="stale">
+    /// The instant before which a time decides nothing: the clock less the longest
+    /// interval any restriction now declares.
+    /// </param>
     /// <param name="cancellationToken">Abandons the read.</param>
     /// <returns>The counter of each key, absent where nothing has been counted.</returns>
     ValueTask<IReadOnlyDictionary<RestrictionKey, SendCounter>> CountersAsync(
         IReadOnlyCollection<RestrictionKey> keys,
+        DateTimeOffset stale,
         CancellationToken cancellationToken);
 
     /// <summary>

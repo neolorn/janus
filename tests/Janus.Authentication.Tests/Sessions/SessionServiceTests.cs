@@ -24,10 +24,8 @@ public sealed class SessionServiceTests : IAsyncDisposable
     private static readonly DateTimeOffset Noon =
         new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
-    private static readonly SessionOrigin Somewhere = new(
-        "198.51.100.7",
-        new DeviceDescription("Firefox", "Fedora"),
-        new SessionLocation("Alexandria", "EG"));
+    private static readonly SessionOrigin Somewhere =
+        new("198.51.100.7", new DeviceDescription("Firefox", "Fedora"));
 
     private readonly SessionStoreInMemory _sessions = new();
     private readonly SessionAuditInMemory _audit = new();
@@ -35,6 +33,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly AccessGateInMemory _gate = new();
+    private readonly LocationResolverInMemory _locations = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
@@ -46,6 +45,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
             new PolicyResolution(_memberships, _configuration, _raises),
             _configuration,
             _gate,
+            _locations,
             _work,
             _clock,
             _randomness);
@@ -513,12 +513,10 @@ public sealed class SessionServiceTests : IAsyncDisposable
         IssuedSession issued = await BegunAsync(subject, [Factor.Password]);
 
         _clock.Advance(TimeSpan.FromHours(3));
+        _locations.Holds("203.0.113.4", new SessionLocation("Cairo", "EG"));
         await Service.ResolveAsync(
             issued.Secret,
-            new SessionOrigin(
-                "203.0.113.4",
-                new DeviceDescription("Safari", "iOS"),
-                new SessionLocation("Cairo", "EG")),
+            new SessionOrigin("203.0.113.4", new DeviceDescription("Safari", "iOS")),
             TestContext.Current.CancellationToken);
 
         SessionSummary summary = Assert.Single(Value(await Service.ListAsync(
@@ -530,6 +528,71 @@ public sealed class SessionServiceTests : IAsyncDisposable
         Assert.Equal(Noon + TimeSpan.FromHours(3), summary.LastUsedAt);
         Assert.Equal(new DeviceDescription("Safari", "iOS"), summary.Device);
         Assert.Equal(new SessionLocation("Cairo", "EG"), summary.Location);
+    }
+
+    /// <summary>
+    /// INT-GEN-006 AC3: the city on an entry is what the local database made of the
+    /// address the session was used from, and a place written onto the origin by the
+    /// code that built it is not read.
+    /// </summary>
+    [Fact]
+    public async Task INT_GEN_006_AC3_TheCityIsWhatTheDatabaseMadeOfTheAddressAsync()
+    {
+        SubjectId subject = Subject();
+        _locations.Holds("198.51.100.7", new SessionLocation("Alexandria", "EG"));
+
+        IssuedSession issued = Value(await Service.BeginAsync(
+            subject,
+            [Factor.Password],
+            Somewhere with { Location = new SessionLocation("Reykjavik", "IS") },
+            TestContext.Current.CancellationToken));
+
+        SessionSummary summary = Assert.Single(Value(await Service.ListAsync(
+            AccessContext.Of(subject),
+            issued.Id,
+            TestContext.Current.CancellationToken)));
+
+        Assert.Equal(new SessionLocation("Alexandria", "EG"), summary.Location);
+        Assert.Contains("198.51.100.7", _locations.Asked, StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// INT-GEN-006 AC3: with no database to read, the session is listed without a
+    /// location and nothing else about it changes.
+    /// </summary>
+    [Fact]
+    public async Task INT_GEN_006_AC3_WithNoDatabaseTheSessionIsListedWithoutALocationAsync()
+    {
+        SubjectId subject = Subject();
+        IssuedSession issued = await BegunAsync(subject, [Factor.Password]);
+
+        SessionSummary summary = Assert.Single(Value(await Service.ListAsync(
+            AccessContext.Of(subject),
+            issued.Id,
+            TestContext.Current.CancellationToken)));
+
+        Assert.Null(summary.Location);
+        Assert.Equal(Noon, summary.SignedInAt);
+        Assert.Equal(new DeviceDescription("Firefox", "Fedora"), summary.Device);
+    }
+
+    /// <summary>
+    /// INT-GEN-006 and CONV-DESIGN-005 AC1: a resolver that could not report what it
+    /// had to report fails the sign-in, because the degradation it exists to raise is
+    /// the deployment's only sight of an absent database.
+    /// </summary>
+    [Fact]
+    public async Task INT_GEN_006_AResolverThatCouldNotReportFailsTheSignInAsync()
+    {
+        _locations.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            Refusal(await Service.BeginAsync(
+                Subject(),
+                [Factor.Password],
+                Somewhere,
+                TestContext.Current.CancellationToken)));
     }
 
     /// <summary>

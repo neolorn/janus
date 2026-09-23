@@ -54,10 +54,14 @@ public sealed class ApiConventionTests
         Assert.Equal(StatusCodes.Status404NotFound, elsewhere.Status);
 
         // The two documents of REG-PM-001 sit at the site root by definition, so the
-        // prefix does not move them.
+        // prefix does not move them: they answer there and not under it.
+        Assert.Equal(
+            StatusCodes.Status200OK,
+            (await browser.SendAsync("GET", "/.well-known/passkey-endpoints")).Status);
+
         Assert.Equal(
             StatusCodes.Status404NotFound,
-            (await browser.SendAsync("GET", "/.well-known/passkey-endpoints")).Status);
+            (await browser.SendAsync("GET", Prefix + "/.well-known/passkey-endpoints")).Status);
     }
 
     /// <summary>
@@ -233,13 +237,13 @@ public sealed class ApiConventionTests
     }
 
     /// <summary>
-    /// A body the reader cannot parse is answered with the status alone: chapter 10
-    /// names no code for it, and a code is the reference chapter's to give
-    /// (API-CONV-002, API-CONV-003).
+    /// API-CONV-002 AC2: a body the reader cannot parse is answered with the usual
+    /// body, so the 400 carries a code and a correlation identifier like every other
+    /// refusal, and its details name the member the reader stopped at.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task MapRegistration_ABodyThatDoesNotParse_AnswersTheStatusAloneAsync()
+    public async Task MapRegistration_ABodyThatDoesNotParse_AnswersTheUsualBodyAsync()
     {
         await using var deployment = new Deployment();
 
@@ -250,7 +254,36 @@ public sealed class ApiConventionTests
         Answer refused = await browser.SendAsync("PUT", "/register/age", "{\"dateOfBirth\":");
 
         Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
-        Assert.Equal(string.Empty, refused.Body);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), refused.Text("code"));
+        Assert.NotEmpty(refused.Text("correlationId"));
+        Assert.Contains(
+            "dateOfBirth",
+            refused.Json().GetProperty("details").GetProperty("member").GetString()!,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// API-CONV-002 AC2: a body that parses but leaves out a member the endpoint
+    /// requires is answered the same way, naming that member and nothing of its value.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task MapRegistration_ABodyMissingAMember_NamesTheMemberAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Flow.Prepare(deployment);
+
+        Browser browser = await Flow.BegunAsync(deployment);
+
+        Answer refused = await browser.SendAsync("PUT", "/register/email", ("value", string.Empty));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), refused.Text("code"));
+        Assert.NotEmpty(refused.Text("correlationId"));
+        Assert.Equal(
+            "value",
+            refused.Json().GetProperty("details").GetProperty("member").GetString());
     }
 
     /// <summary>

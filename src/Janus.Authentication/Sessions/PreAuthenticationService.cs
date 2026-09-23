@@ -49,18 +49,13 @@ internal sealed class PreAuthenticationService(
 
         var secret = OpaqueToken.Draw(randomness);
         var token = OpaqueToken.Draw(randomness);
+        var issued = PreAuthentication.Issue(secret, token, time.GetUtcNow(), lifetime);
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-
-        await store
-            .AddAsync(
-                PreAuthentication.Issue(secret, token, time.GetUtcNow(), lifetime),
-                cancellationToken)
-            .ConfigureAwait(false);
-
+        await store.AddAsync(issued, cancellationToken).ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-        return Result.Success(new IssuedPreAuthentication(secret, token));
+        return Result.Success(new IssuedPreAuthentication(secret, token, issued));
     }
 
     /// <summary>
@@ -123,6 +118,50 @@ internal sealed class PreAuthenticationService(
         ArgumentNullException.ThrowIfNull(preAuthentication);
 
         preAuthentication.Carry(enrolment, expiresAt);
+
+        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        await store.RecordAsync(preAuthentication, cancellationToken).ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Binds a sign-on to the browser that started it (BFF-SESS-006).
+    /// </summary>
+    /// <param name="preAuthentication">The browser's pre-authentication session.</param>
+    /// <param name="attempt">What the return is judged against.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of binding them.</returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    public async ValueTask CarryAsync(
+        PreAuthentication preAuthentication,
+        SignOnAttempt attempt,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(preAuthentication);
+        ArgumentNullException.ThrowIfNull(attempt);
+
+        preAuthentication.Carry(attempt);
+
+        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        await store.RecordAsync(preAuthentication, cancellationToken).ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Forgets the sign-on a browser had in flight, which every return ends with
+    /// whether it succeeded or not (BFF-SESS-006 AC3).
+    /// </summary>
+    /// <param name="preAuthentication">The browser's pre-authentication session.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of forgetting it.</returns>
+    /// <exception cref="ArgumentNullException">The session is absent.</exception>
+    public async ValueTask AbandonAsync(
+        PreAuthentication preAuthentication,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(preAuthentication);
+
+        preAuthentication.Abandon();
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await store.RecordAsync(preAuthentication, cancellationToken).ConfigureAwait(false);

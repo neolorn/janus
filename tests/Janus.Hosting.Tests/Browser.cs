@@ -42,6 +42,7 @@ internal sealed class Browser(Deployment deployment)
     /// <param name="header">Whether to set the custom request header.</param>
     /// <param name="origin">What to claim as the origin, or nothing to claim none.</param>
     /// <param name="token">Whether to present the synchronizer token it holds.</param>
+    /// <param name="contentType">What the body is sent as, where there is one.</param>
     /// <returns>What came back.</returns>
     public async Task<Answer> SendAsync(
         string method,
@@ -49,7 +50,8 @@ internal sealed class Browser(Deployment deployment)
         string? body = null,
         bool header = true,
         string? origin = Origin,
-        bool token = true)
+        bool token = true,
+        string contentType = "application/json")
     {
         var context = new DefaultHttpContext();
 
@@ -85,7 +87,7 @@ internal sealed class Browser(Deployment deployment)
 
         if (body is not null)
         {
-            context.Request.ContentType = "application/json";
+            context.Request.ContentType = contentType;
             context.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(body));
             context.Request.ContentLength = context.Request.Body.Length;
             context.Features.Set<IHttpRequestBodyDetectionFeature>(new RequestBodyPresent());
@@ -202,6 +204,12 @@ internal sealed class Browser(Deployment deployment)
             context.Response.StatusCode,
             written.Taken(),
             context.Response.Headers.Location.ToString() is { Length: > 0 } where ? where : null,
-            cookies);
+            cookies)
+        {
+            Headers = context.Response.Headers.ToDictionary(
+                written => written.Key,
+                written => written.Value.ToString(),
+                StringComparer.OrdinalIgnoreCase),
+        };
     }
 }

@@ -24,9 +24,8 @@ internal sealed class SendCounterConfiguration : IEntityTypeConfiguration<SendCo
             .HasMaxLength(Fingerprint.Length);
 
         builder.Property(counter => counter.SentAt).HasColumnName("sent_at");
-        builder.Property(counter => counter.SettlesAt).HasColumnName("settles_at");
 
-        // The aged out are swept, so a key sent to once does not stand for ever.
-        builder.HasIndex(counter => counter.SettlesAt).HasDatabaseName("ix_send_counters_settles_at");
+        // The sweep reads the newest of the times, which no model builder expresses as
+        // an index; the migration writes it over the same expression the delete uses.
     }
 }

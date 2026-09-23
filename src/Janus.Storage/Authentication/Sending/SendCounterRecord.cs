@@ -8,20 +8,19 @@ namespace Janus.Storage.Authentication.Sending;
 /// </summary>
 /// <remarks>
 /// Implements AUTH-ABUSE-004. The plain address is never here: the key is an HMAC of
-/// the restriction name and the value, so a dump of the table yields no address, and
-/// the row is deleted once its times have all aged out.
+/// the restriction name and the value, so a dump of the table yields no address. Nothing
+/// derived is held beside them: the row is deleted when its newest time is older than
+/// the longest interval any restriction now declares, so a tightened interval reaches
+/// the sends already counted.
 /// </remarks>
 internal sealed class SendCounterRecord
 {
     /// <summary>The <c>key</c> column, which is this table key.</summary>
     public byte[] Key { get; set; } = [];
 
-    /// <summary>The <c>sent_at</c> column.</summary>
-    public DateTimeOffset[] SentAt { get; set; } = [];
-
     /// <summary>
-    /// The <c>settles_at</c> column: when the last time counted here ages out of the
-    /// longest bucket it was counted against, after which the row holds nothing.
+    /// The <c>sent_at</c> column, oldest first, so the last of them is when the key
+    /// was last sent to and what the sweep reads.
     /// </summary>
-    public DateTimeOffset SettlesAt { get; set; }
+    public DateTimeOffset[] SentAt { get; set; } = [];
 }

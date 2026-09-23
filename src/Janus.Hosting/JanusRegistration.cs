@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
+using Janus.Authentication.Configuration;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
@@ -30,6 +31,8 @@ using Janus.Hosting.Passwords;
 using Janus.Hosting.Privacy;
 using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
+using Janus.Hosting.Sending;
+using Janus.Hosting.Sessions;
 using Janus.Privacy;
 using Janus.Privacy.Consents;
 using Janus.Privacy.Documents;
@@ -40,6 +43,8 @@ using Janus.Privacy.Policies;
 using Janus.Privacy.Records;
 using Janus.Privacy.Requests;
 using Janus.Storage;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -73,6 +78,11 @@ public static class JanusRegistration
     /// The key the searchable fingerprints are computed under, read from the same place
     /// and held outside the database (PRIV-RIGHT-005c).
     /// </param>
+    /// <param name="signOnSecret">
+    /// What this application presents at the provider's token endpoint when it
+    /// establishes its own session, read from the same place and never from
+    /// configuration (BFF-SESS-006, OPS-SEC-001).
+    /// </param>
     /// <param name="declaration">What the host declared about its own domain.</param>
     /// <param name="application">
     /// Which of the deployment's applications this process serves, which decides the
@@ -89,6 +99,7 @@ public static class JanusRegistration
         string connectionString,
         KeyEncryptionKeys keyEncryptionKeys,
         ReadOnlyMemory<byte> fingerprintKey,
+        ReadOnlyMemory<byte> signOnSecret,
         AuthorizationDeclaration declaration,
         JanusApplication application)
     {
@@ -98,7 +109,7 @@ public static class JanusRegistration
         // the library holds no fallback for either, so a deployment that reached
         // neither stops here with the code that names why, not at the first request
         // that would have read a person's field.
-        Present(keyEncryptionKeys, fingerprintKey);
+        Present(keyEncryptionKeys, fingerprintKey, signOnSecret);
 
         // CONV-DESIGN-007: time is injected, and a host that has its own clock keeps it.
         services.TryAddSingleton(TimeProvider.System);
@@ -116,10 +127,16 @@ public static class JanusRegistration
             services.GetRequiredService<AuthorizationModel>(),
             services.GetService<IAssuranceProvider>()));
 
+        // API-CONV-002: a body the reader could not parse is answered by the library
+        // with a code and a correlation identifier, so the reader raises the failure
+        // instead of writing a bare status the pipeline never sees.
+        _ = services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
+
         // BFF-OWN-001: the browser boundary is the library's, so what issues a cookie
         // and what validates a token are registered here and not left to the host.
         services.AddSingleton(new BrowserSessionCookies(application));
         services.AddScoped<SynchronizerTokens>();
+        services.AddScoped<MalformedRequest>();
         services.AddScoped<ResourceIsolation>();
         services.AddScoped<CustomRequestHeader>();
         services.AddScoped<OriginValidation>();
@@ -127,19 +144,36 @@ public static class JanusRegistration
         services.AddScoped<SessionResolution>();
         services.AddScoped<FirstContact>();
         services.AddScoped<SynchronizerToken>();
+        services.AddScoped<SessionRequirement>();
         services.AddScoped<MachineProfile>();
+
+        // BFF-SESS-006: the client half of the sign-on is the library's, so what it
+        // presents, where it presents it and the connection it presents it on are
+        // registered here and a host supplies none of them.
+        services.AddSingleton(new SignOnSecret(signOnSecret));
+        services.AddScoped<SignOn>();
+        _ = services.AddHttpClient(SignOn.Channel);
 
         // LIB-HOST-001: what the host declares about its own messaging is the host's.
         // A deployment that declares none of it starts, and the checks that would have
         // read a declaration find nothing to read.
         services.TryAddSingleton(RestrictionKeySuppliers.None);
-        services.TryAddSingleton(IntegrationEndpoints.None);
         services.TryAddSingleton(Recipients.Shipped);
 
         // AUTH-ABUSE-004, OPS-ALERT-001: the one path every message takes, and what
         // decides whether it goes.
         services.AddScoped<SmsBalance>();
         services.AddScoped<SendingService>();
+
+        // LIB-EXT-001: the shipped handler carries email and SMS; a deployment that
+        // registers its own before this runs keeps it.
+        services.TryAddScoped<INotificationHandler>(
+            provider => provider.GetRequiredService<SendingService>());
+
+        // LIB-EXT-001: the shipped catalogue words every message in the languages the
+        // library carries, and is likewise kept only where the deployment registered
+        // none of its own. A deployment that registers neither still starts.
+        services.TryAddSingleton<IMessageTemplates, DefaultMessageTemplates>();
         services.AddScoped(services => new PhoneSignals(
             services.GetService<PhoneSignalProvider>(),
             services.GetRequiredService<IPhoneSignalAudit>(),
@@ -147,9 +181,9 @@ public static class JanusRegistration
             services.GetRequiredService<TimeProvider>()));
         services.AddScoped(provider => new SendingValidation(
             provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetService<IMessageTemplates>(),
-            provider.GetRequiredService<RestrictionKeySuppliers>(),
-            provider.GetRequiredService<IntegrationEndpoints>()));
+            provider.GetRequiredService<IMessageTemplates>(),
+            provider.GetRequiredService<RestrictionKeySuppliers>()));
+        services.AddScoped<ConfigurationAdministration>();
         services.AddScoped<RestrictionAdministration>();
         services.AddScoped<ThrottleService>();
         services.AddScoped<NonExistenceNotice>();
@@ -174,8 +208,8 @@ public static class JanusRegistration
         services.AddSingleton<IWordList>(_ => new WordList(Corpus));
 
         // INT-PWD-001: the range API is reached over the framework's client, which
-        // rotates its connections; the corpus files beside the application answer
-        // when it cannot (INT-PWD-002).
+        // rotates its connections; the list the package carries answers when it
+        // cannot (INT-PWD-002).
         services.AddHttpClient<ILeakedPasswordCorpus, LeakedPasswordCorpus>((requests, provider) =>
         {
             requests.BaseAddress = LeakedPasswordCorpus.Provider;
@@ -184,12 +218,13 @@ public static class JanusRegistration
                 requests,
                 provider.GetRequiredService<IConfigurationStore>(),
                 provider.GetRequiredService<TimeProvider>(),
-                Corpus);
+                new OfflineCorpus());
         });
 
         services.AddScoped<PasswordScreening>();
         services.AddScoped<PasswordService>();
         services.AddScoped<PreAuthenticationService>();
+        services.AddScoped<ILocationResolver, LocationDatabase>();
         services.AddScoped<SessionService>();
         services.AddScoped<ISessions>(provider => provider.GetRequiredService<SessionService>());
         services.AddScoped<TotpService>();
@@ -202,9 +237,15 @@ public static class JanusRegistration
         services.TryAddSingleton(PreferenceDeclarations.None);
         services.TryAddSingleton(ReservedUsernames.Default);
 
-        // REG-PM-001: a deployment that declares no frontend addresses serves neither
-        // well-known document rather than pointing at a page that is not there.
-        services.TryAddSingleton(PasskeyAddresses.None);
+        // REG-PM-001, LIB-HOST-001: the frontend's pages are the host's to declare and
+        // the library has no address to fall back on, so a deployment that registered
+        // none is stopped at startup and none is registered here.
+        services.AddScoped(provider => new DeclarationCoverage(
+            provider.GetService<PasskeyAddresses>(),
+            provider.GetService<AuthenticationAddresses>(),
+            provider.GetService<SignOnClient>(),
+            provider.GetService<ImageCodec>(),
+            provider.GetRequiredService<IConfigurationStore>()));
 
         // CONV-DESIGN-006: every request and response of the library's endpoints is
         // read and written by the generated contexts, never by reflection.
@@ -227,9 +268,21 @@ public static class JanusRegistration
         services.AddScoped<IdentifierService>();
         services.AddScoped<IIdentifiers>(provider => provider.GetRequiredService<IdentifierService>());
         services.AddScoped<AccountLifecycle>();
+
+        // IDN-ATTR-002, LIB-HOST-001: the codec is the deployment's and may be absent,
+        // so what needs it takes it as it was registered and refuses without it.
+        services.AddScoped(provider => new ProfilePhotos(
+            provider.GetRequiredService<IAccountDirectory>(),
+            provider.GetRequiredService<Janus.Authentication.Policies.IMembershipLookup>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IAccountAudit>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetService<ImageCodec>(),
+            provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<AccountService>();
         services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
         services.AddScoped<SignInLinks>();
+        services.AddScoped<VerificationCodes>();
         services.AddScoped<AuthenticationService>();
         services.AddScoped<IAuthentication>(provider =>
             provider.GetRequiredService<AuthenticationService>());
@@ -239,7 +292,7 @@ public static class JanusRegistration
         services.AddScoped<IRecovery>(provider => provider.GetRequiredService<RecoveryService>());
         services.AddScoped<ICredentials, CredentialService>();
         services.AddScoped<SigningKeys>();
-        services.AddOidc();
+        services.AddOidc(keyEncryptionKeys);
         services.AddScoped<OidcService>();
         services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
 
@@ -261,6 +314,7 @@ public static class JanusRegistration
         services.AddScoped<DeadlineSweep>();
         services.AddScoped<IPrivacyRequests, PrivacyRequestService>();
         services.AddScoped<DeletionSweep>();
+        services.AddScoped<OrganizationErasureSweep>();
         services.AddScoped<IExports, ExportService>();
         services.AddScoped<IProcessingRecords, ProcessingRecordsService>();
         services.AddScoped<OutboxPublisher>();
@@ -275,26 +329,36 @@ public static class JanusRegistration
         services.AddScoped<IAccessGate, AccessGate>();
         services.AddScoped<IDerivationMaterialiser, DerivationMaterialiser>();
         services.AddScoped<ModelValidation>();
+        services.AddScoped<RedirectValidation>();
+        services.AddScoped<SchemaValidation>();
 
         // AUTHZ-MODEL-004 AC2 (D-160): what a hosted service starts before is what was
         // registered after it, and the web server is one, so the checks that read the
-        // database go at the head of the collection.
-        services.Insert(0, ServiceDescriptor.Singleton<IHostedService, ModelValidationService>());
-        services.Insert(1, ServiceDescriptor.Singleton<IHostedService, SendingValidationService>());
-        services.Insert(2, ServiceDescriptor.Singleton<IHostedService, HandlerValidationService>());
-        services.Insert(3, ServiceDescriptor.Singleton<IHostedService, ConfigurationValidationService>());
+        // database go at the head of the collection. OPS-MIG-002 leads them, because
+        // every one of the others reads a table.
+        services.Insert(0, ServiceDescriptor.Singleton<IHostedService, SchemaValidationService>());
+        services.Insert(1, ServiceDescriptor.Singleton<IHostedService, ModelValidationService>());
+        services.Insert(2, ServiceDescriptor.Singleton<IHostedService, SendingValidationService>());
+        services.Insert(3, ServiceDescriptor.Singleton<IHostedService, HandlerValidationService>());
+        services.Insert(4, ServiceDescriptor.Singleton<IHostedService, ConfigurationValidationService>());
+        services.Insert(5, ServiceDescriptor.Singleton<IHostedService, DeclarationValidationService>());
+        services.Insert(6, ServiceDescriptor.Singleton<IHostedService, RedirectValidationService>());
+        services.Insert(7, ServiceDescriptor.Singleton<IHostedService, SigningKeyValidationService>());
 
         return services;
     }
 
-    // The corpus and the word list are files a deployment holds beside the
-    // application (AUTH-PASS-004, INT-PWD-003).
+    // The word list is a file a deployment holds beside the application, where it
+    // rejects on one (AUTH-PASS-004).
     private static string Corpus =>
-        Path.Combine(AppContext.BaseDirectory, LeakedPasswordCorpus.Directory);
+        Path.Combine(AppContext.BaseDirectory, WordList.Directory);
 
     // The fingerprint key computes an HMAC-SHA256, so anything shorter than that hash
     // is a key that weakens the code it is used by and is not a key the library runs on.
-    private static void Present(KeyEncryptionKeys keyEncryptionKeys, ReadOnlyMemory<byte> fingerprintKey)
+    private static void Present(
+        KeyEncryptionKeys keyEncryptionKeys,
+        ReadOnlyMemory<byte> fingerprintKey,
+        ReadOnlyMemory<byte> signOnSecret)
     {
         if (keyEncryptionKeys is null)
         {
@@ -308,6 +372,16 @@ public static class JanusRegistration
             throw new StartupException(
                 "The fingerprint key was not supplied, or is shorter than the hash it computes.",
                 Error.From(ErrorCodes.StartupKeyUnavailable, "key", JsonSerializer.SerializeToElement("fingerprintKey")));
+        }
+
+        // BFF-SESS-006: an application that cannot authenticate itself at the token
+        // endpoint cannot establish a session at all, so it stops here rather than at
+        // the first person who arrives holding nothing.
+        if (signOnSecret.Length is 0)
+        {
+            throw new StartupException(
+                "The sign-on client secret was not supplied; the library reads it from the secrets manager and holds no fallback.",
+                Error.From(ErrorCodes.StartupKeyUnavailable, "key", JsonSerializer.SerializeToElement("signOnSecret")));
         }
     }
 

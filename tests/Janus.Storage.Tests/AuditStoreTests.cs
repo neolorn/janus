@@ -59,6 +59,21 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
     }
 
     /// <summary>
+    /// IDN-AUD-001 AC1: an event that is not an authorization refusal is refused by
+    /// the database without both identities, so the one action that may name nobody
+    /// is the only one that can (AUTHZ-CONCEAL-004).
+    /// </summary>
+    [Fact]
+    public async Task IDN_AUD_001_AC1_AnEventNamingNobodyIsRefusedByTheDatabaseAsync()
+    {
+        PostgresException refused = await Assert.ThrowsAsync<PostgresException>(
+            async () => await WriteAsync(Suspended.ToString()));
+
+        Assert.Equal("23514", refused.SqlState);
+        Assert.Equal(1, await WriteAsync("authz.access.denied"));
+    }
+
+    /// <summary>
     /// IDN-AUD-001: an event on a principal holding no membership carries no
     /// organization, and the absence is the recorded fact.
     /// </summary>
@@ -442,6 +457,21 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             "SELECT category, count(*) FROM janus.audit_records "
                 + "WHERE effective_subject = ANY(@subjects) GROUP BY category ORDER BY category",
             new { subjects })];
+
+    // One row written straight to the table, naming neither identity: what the
+    // constraint admits is read from the database and not from the store.
+    private async Task<int> WriteAsync(string action)
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        return await connection.ExecuteAsync(
+            """
+            INSERT INTO janus.audit_records
+                (id, category, occurred_at, action, details)
+            VALUES (@id, 'security', @at, @action, '{}'::jsonb);
+            """,
+            new { id = Guid.CreateVersion7(), at = Now(), action });
+    }
 
     private static AuditRecordId NewId() => new(Guid.CreateVersion7());
 

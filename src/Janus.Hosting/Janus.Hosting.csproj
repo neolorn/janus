@@ -30,6 +30,12 @@
                       ReferenceOutputAssembly="false" />
   </ItemGroup>
 
+  <!-- AUTH-PASS-004, INT-PWD-002: the offline list travels in the package, so the
+       fallback answers on a deployment that holds no file of its own. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Passwords\leaked-passwords.txt" />
+  </ItemGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="Janus.Hosting.Tests" />
   </ItemGroup>

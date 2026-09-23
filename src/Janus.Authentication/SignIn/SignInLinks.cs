@@ -26,6 +26,7 @@ namespace Janus.Authentication.SignIn;
 /// <param name="policies">What policy governs the account.</param>
 /// <param name="sending">Where a message goes out.</param>
 /// <param name="nonExistence">What answers an address no account holds.</param>
+/// <param name="signals">What is known about a number before a text leans on it.</param>
 /// <param name="throttle">The progressive delay.</param>
 /// <param name="configuration">Where the lifetimes and the limits come from.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
@@ -42,8 +43,9 @@ internal sealed class SignInLinks(
     IIdentifierDirectory identifiers,
     IAccountDirectory accounts,
     PolicyResolution policies,
-    SendingService sending,
+    INotificationHandler sending,
     NonExistenceNotice nonExistence,
+    PhoneSignals signals,
     ThrottleService throttle,
     IConfigurationStore configuration,
     IUnitOfWork work,
@@ -301,6 +303,19 @@ internal sealed class SignInLinks(
         if (channel is null)
         {
             return Result.Success();
+        }
+
+        // AUTH-FACT-002b: a sign-in link by text is the whole of the sign-in, so a
+        // number the carrier reports a recent change of SIM or of network for is
+        // refused rather than carrying it. The question is asked of the number and
+        // never of the account, so a number no account holds is answered the same way
+        // and nothing about existence is told either way (AUTH-ABUSE-003 AC1).
+        if (channel.Kind is IdentifierKind.Phone
+            && !await signals
+                .AllowsAsync(channel.Factor, channel.Canonical, owner, cancellationToken)
+                .ConfigureAwait(false))
+        {
+            return Result.Failure(Error.From(ErrorCodes.FactorRejected));
         }
 
         // Everything from here answers the caller the same way. What differs is what

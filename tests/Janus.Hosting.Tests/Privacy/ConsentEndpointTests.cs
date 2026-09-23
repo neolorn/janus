@@ -98,7 +98,8 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
 
         Answer refused = await browser.SendAsync("POST", "/privacy/consents/" + Fulfilment + "/grant");
 
-        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.PurposeNoConsent.ToString(), refused.Text("code"));
         Assert.Empty((await browser.SendAsync("GET", "/privacy/consents")).Json().EnumerateArray());
     }
 
@@ -144,6 +145,57 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-CONS-001 AC1, PRIV-CONS-007 AC4: the one dashboard endpoint serves the
+    /// first grant and the prompt a material revision raised, and the record says
+    /// which it answered.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_CONS_001_AC1_AGrantOverASupersededConsentIsRecordedAsReconsentAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _ = await browser.SendAsync("POST", "/privacy/consents/" + Marketing + "/grant");
+
+        Assert.Equal(
+            "dashboard",
+            Single(await browser.SendAsync("GET", "/privacy/consents"))
+                .GetProperty("mechanism").GetString());
+
+        await EndedAsync(Marketing, withdrawn: false);
+
+        _ = await browser.SendAsync("POST", "/privacy/consents/" + Marketing + "/grant");
+
+        Assert.Equal(
+            "reconsent",
+            Single(await browser.SendAsync("GET", "/privacy/consents"))
+                .GetProperty("mechanism").GetString());
+    }
+
+    /// <summary>
+    /// PRIV-CONS-001 AC1: a consent the subject took back before a revision ended it
+    /// raises no prompt to answer, so granting it again is the dashboard and not
+    /// re-consent.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_CONS_001_AC1_AGrantOverAWithdrawnConsentIsRecordedAsTheDashboardAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _ = await browser.SendAsync("POST", "/privacy/consents/" + Marketing + "/grant");
+
+        await EndedAsync(Marketing, withdrawn: true);
+
+        _ = await browser.SendAsync("POST", "/privacy/consents/" + Marketing + "/grant");
+
+        Assert.Equal(
+            "dashboard",
+            Single(await browser.SendAsync("GET", "/privacy/consents"))
+                .GetProperty("mechanism").GetString());
+    }
+
+    /// <summary>
     /// PRIV-CONS-011 AC1: the dashboard answers the subject it belongs to, so a
     /// browser with no session reads nobody's records.
     /// </summary>
@@ -154,6 +206,26 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
         Answer answered = await new Browser(_deployment).SendAsync("GET", "/privacy/consents");
 
         Assert.Equal(StatusCodes.Status401Unauthorized, answered.Status);
+    }
+
+    // PRIV-CONS-007: a material revision of the notice would end the consent where
+    // the subject had not already taken it back, which is the state the prompt is
+    // raised over.
+    private async Task EndedAsync(string purpose, bool withdrawn)
+    {
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        ConsentRecord held = (await _deployment.Consents
+                .ConsentsAsync(subject, TestContext.Current.CancellationToken))
+            .Single(record => string.Equals(record.Purpose, purpose, StringComparison.Ordinal));
+
+        await _deployment.Consents.RecordAsync(
+            subject,
+            held with
+            {
+                SupersededAt = Noon.AddDays(1),
+                WithdrawnAt = withdrawn ? Noon.AddHours(1) : null,
+            },
+            TestContext.Current.CancellationToken);
     }
 
     private static JsonElement Single(Answer answered)

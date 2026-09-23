@@ -42,7 +42,7 @@ internal sealed class FirstContact(
         {
             (await contacts.IssueAsync(context.RequestAborted).ConfigureAwait(false))
                 .Switch(
-                    issued => cookies.Write(context.Response, issued),
+                    issued => Given(context, issued),
                     error => BrowserProfileLog.FirstContactRefused(
                         log,
                         context.TraceIdentifier,
@@ -50,5 +50,13 @@ internal sealed class FirstContact(
         }
 
         await next(context).ConfigureAwait(false);
+    }
+
+    // BFF-SESS-006: the request that issued one goes on to bind a sign-on to it, so
+    // what was just written is carried forward rather than read back out of the store.
+    private void Given(HttpContext context, IssuedPreAuthentication issued)
+    {
+        cookies.Write(context.Response, issued);
+        resolved.Resolved(issued.Session, issued.Secret);
     }
 }

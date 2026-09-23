@@ -207,19 +207,18 @@ public interface IRegistration
     /// <param name="noticeVersion">The version of the privacy notice presented.</param>
     /// <param name="consents">The consent controls, by purpose.</param>
     /// <param name="device">What the registering browser says it is.</param>
-    /// <param name="location">
-    /// Where the request came from, no finer than a city, and absent where the local
-    /// database could not say.
-    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The account and the session it is signed in on, or the refusal.</returns>
+    /// <remarks>
+    /// INT-GEN-006: the city the session shows is resolved inside the library from the
+    /// address the session was opened on, so no caller says where it was.
+    /// </remarks>
     ValueTask<Result<RegistrationCompleted>> AcceptTermsAsync(
         RegistrationSessionId session,
         string termsVersion,
         string noticeVersion,
         IReadOnlyDictionary<string, bool> consents,
         DeviceDescription device,
-        SessionLocation? location,
         CancellationToken cancellationToken);
 
     /// <summary>

@@ -44,7 +44,7 @@ public sealed class DeclaredProcessingTests
             purpose => Assert.NotEmpty(purpose.DataCategories));
         Assert.Throws<StartupException>(
             () => AuthorizationModel.Of(
-                Declaring(document => document.Purpose("collaboration", "contract"))));
+                Declaring(article => article.Purpose("collaboration", "contract"))));
     }
 
     /// <summary>
@@ -56,7 +56,7 @@ public sealed class DeclaredProcessingTests
     {
         StartupException refused = Assert.Throws<StartupException>(
             () => AuthorizationModel.Of(
-                Declaring(document => document.Encrypted(item => item.Body, item => item.Author))));
+                Declaring(article => article.Encrypted(item => item.Body, item => item.Author))));
 
         Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
     }
@@ -70,7 +70,7 @@ public sealed class DeclaredProcessingTests
     public void PRIV_BASIS_001_AC1_APurposeOnAnUndeclaredBasisFailsStartup() =>
         Assert.Throws<StartupException>(
             () => AuthorizationModel.Of(
-                Declaring(document => document.Purpose("collaboration", "consent", data: ["identity"]))));
+                Declaring(article => article.Purpose("collaboration", "consent", data: ["identity"]))));
 
     /// <summary>
     /// PRIV-BASIS-001 AC3: a purpose resting on nothing is refused where it is
@@ -79,30 +79,83 @@ public sealed class DeclaredProcessingTests
     [Fact]
     public void PRIV_BASIS_001_AC3_APurposeWithoutABasisIsRefusedWhereItIsDeclared() =>
         Assert.Throws<ArgumentException>(
-            () => new AuthorizationDeclarationBuilder().Resource<HostDomain.Document>(
-                "document",
-                document => document.Purpose("collaboration", " ")));
+            () => new AuthorizationDeclarationBuilder().Resource<HostDomain.Article>(
+                "article",
+                article => article.Purpose("collaboration", " ")));
 
     /// <summary>
-    /// PRIV-BASIS-001 AC4: no library source carries a basis of the default
-    /// declaration as a value, which is the only form a conditional on one could
-    /// take. One file carries the word, as the wire name of a capability residual of
-    /// chapter 10 section 5.20, which is not a basis and is asserted to be what it is.
+    /// PRIV-BASIS-001 AC4: no library source chooses a path by a basis of the default
+    /// declaration, which is what a conditional on one is. Two files carry the words:
+    /// the declaration PRIV-BASIS-001 ships, which is the list itself, and the wire
+    /// name of a capability residual of chapter 10 section 5.20, which is not a basis
+    /// and is asserted to be what it is.
     /// </summary>
     [Fact]
     public void PRIV_BASIS_001_AC4_NoLibrarySourceNamesABasis()
     {
-        Assert.Equal(["CapabilityResidual.cs"], Naming(DefaultBases));
+        Assert.Empty(Branching(DefaultBases));
+        Assert.Equal(["CapabilityResidual.cs", "LawfulBases.cs"], Naming(DefaultBases));
         Assert.Equal("consent", Wire(CapabilityResidual.Consent));
+        Assert.Equal(DefaultBases, LawfulBases.Default.Select(basis => basis.Key));
+    }
+
+    /// <summary>
+    /// PRIV-BASIS-001: the shipped declaration carries the properties the item's table
+    /// gives each basis, which is the whole of what the library reads.
+    /// </summary>
+    [Fact]
+    public void PRIV_BASIS_001_TheShippedDeclarationCarriesTheDeclaredProperties()
+    {
+        Assert.Equal(
+            [
+                new LawfulBasisDeclaration("consent", true, true, false, false),
+                new LawfulBasisDeclaration("contractual-obligation", false, false, false, false),
+                new LawfulBasisDeclaration("legal-obligation", false, false, false, false),
+                new LawfulBasisDeclaration("legitimate-interest", false, false, true, true),
+                new LawfulBasisDeclaration("legal-right-claim-or-defence", false, false, false, false),
+                new LawfulBasisDeclaration("court-judgment-or-order", false, false, false, false),
+            ],
+            LawfulBases.Default);
     }
 
     /// <summary>
     /// PRIV-BASIS-004 AC1: the same search, stated for the two bases that exist for
-    /// record completeness alone and are cited rather than implemented.
+    /// record completeness alone and are cited rather than implemented. They are in
+    /// the shipped list, as the item requires, and in no other file at all.
     /// </summary>
     [Fact]
-    public void PRIV_BASIS_004_AC1_NoLibrarySourceNamesABasisWhosePropertiesAreAllUnset() =>
-        Assert.Empty(Naming(["legal-right-claim-or-defence", "court-judgment-or-order"]));
+    public void PRIV_BASIS_004_AC1_NoLibrarySourceNamesABasisWhosePropertiesAreAllUnset()
+    {
+        string[] cited = ["legal-right-claim-or-defence", "court-judgment-or-order"];
+
+        Assert.Empty(Branching(cited));
+        Assert.Equal(["LawfulBases.cs"], Naming(cited));
+    }
+
+    /// <summary>
+    /// PRIV-SENS-001: the shipped category list is the one chapter 10 section 5.9
+    /// gives, and no library source chooses a path by one of them but the children's
+    /// column of the register, which PRIV-ROPA-001 states by name.
+    /// </summary>
+    [Fact]
+    public void PRIV_SENS_001_TheShippedCategoriesAreLabelsNothingBranchesOn()
+    {
+        Assert.Equal(
+            [
+                "health",
+                "genetic",
+                "biometric",
+                "financial",
+                "religious-belief",
+                "political-view",
+                "criminal-record",
+                "children",
+            ],
+            SensitiveCategories.Default);
+
+        Assert.Equal(["SensitiveCategories.cs"], Naming(SensitiveCategories.Default));
+        Assert.Empty(Branching(SensitiveCategories.Default));
+    }
 
     /// <summary>
     /// PRIV-BASIS-001 AC5: a jurisdiction whose bases carry other properties declares
@@ -191,16 +244,16 @@ public sealed class DeclaredProcessingTests
     public void PRIV_SENS_001_AC1_SensitivityIsACategoryOfTheDeclaredList()
     {
         var model = AuthorizationModel.Of(
-            Declaring(document => document
+            Declaring(article => article
                 .Sensitive("financial")
                 .Purpose("collaboration", "contract", data: ["identity"])));
 
         Assert.Equal(
             ["financial"],
-            model.Find(ResourceType.Parse("document"))!.SensitiveCategories);
+            model.Find(ResourceType.Parse("article"))!.SensitiveCategories);
         Assert.Throws<StartupException>(
             () => AuthorizationModel.Of(
-                Declaring(document => document
+                Declaring(article => article
                     .Sensitive("health")
                     .Purpose("collaboration", "contract", data: ["identity"]))));
     }
@@ -220,12 +273,32 @@ public sealed class DeclaredProcessingTests
     [
         .. Directory
             .EnumerateFiles(Source(), "*.cs", SearchOption.AllDirectories)
-            .Where(file => File.ReadLines(file).Any(line =>
-                !line.TrimStart().StartsWith('/')
-                && keys.Any(key => line.Contains('"' + key + '"', StringComparison.Ordinal))))
+            .Where(file => File.ReadLines(file).Any(line => Names(line, keys)))
             .Select(file => Path.GetFileName(file)!)
             .Order(StringComparer.Ordinal),
     ];
+
+    // A construct that chooses between two paths, as the factor catalogue reads one.
+    private static readonly string[] Branches =
+    [
+        "if (", "case ", "switch", " is ", "==", "!=", "?",
+        "Contains(", "Any(", "All(", "Where(", "Exists(",
+    ];
+
+    private static IReadOnlyList<string> Branching(IReadOnlyList<string> keys) =>
+    [
+        .. Directory
+            .EnumerateFiles(Source(), "*.cs", SearchOption.AllDirectories)
+            .Where(file => File.ReadLines(file).Any(line =>
+                Names(line, keys)
+                && Array.Exists(Branches, branch => line.Contains(branch, StringComparison.Ordinal))))
+            .Select(file => Path.GetFileName(file)!)
+            .Order(StringComparer.Ordinal),
+    ];
+
+    private static bool Names(string line, IReadOnlyList<string> keys) =>
+        !line.TrimStart().StartsWith('/')
+        && keys.Any(key => line.Contains('"' + key + '"', StringComparison.Ordinal));
 
     // A deployment whose one purpose rests on consent over a basis that requires the
     // written path for sensitive data, the type being sensitive or not as the test
@@ -236,8 +309,11 @@ public sealed class DeclaredProcessingTests
             .SensitiveCategory("financial")
             .Resource<HostDomain.Workspace>("workspace", workspace =>
             {
+                // PRIV-SENS-002 AC1: a consent-based purpose needs a type whose
+                // encrypted fields name the column the data subject is read from.
                 _ = workspace
                     .BelongsToOrganization()
+                    .Encrypted(held => held.Title, held => held.Owner)
                     .Purpose("recommendations", "agreement", data: ["history"], consent: consent);
 
                 if (sensitive)
@@ -250,14 +326,14 @@ public sealed class DeclaredProcessingTests
     // One type of the host's, declared as the test needs it, with everything else the
     // model requires already in place.
     private static AuthorizationDeclaration Declaring(
-        Action<ResourceTypeDeclarationBuilder<HostDomain.Document>> declared) =>
+        Action<ResourceTypeDeclarationBuilder<HostDomain.Article>> declared) =>
         new AuthorizationDeclarationBuilder()
             .LawfulBasis(new LawfulBasisDeclaration("contract", false, false, false, false))
             .SensitiveCategory("financial")
-            .Resource<HostDomain.Document>("document", document =>
+            .Resource<HostDomain.Article>("article", article =>
             {
-                _ = document.BelongsToOrganization();
-                declared(document);
+                _ = article.BelongsToOrganization();
+                declared(article);
             })
             .Build();
 

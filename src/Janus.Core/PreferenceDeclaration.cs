@@ -38,9 +38,9 @@ public sealed record PreferenceDeclaration(
 
         return Kind switch
         {
-            PreferenceKind.Flag => value is "true" or "false",
-            PreferenceKind.Number => long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out _),
-            PreferenceKind.Choice => Choices is not null && Choices.Contains(value),
+            PreferenceKind.Boolean => value is "true" or "false",
+            PreferenceKind.Integer => long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out _),
+            PreferenceKind.Enum => Choices is not null && Choices.Contains(value),
             _ => true,
         };
     }

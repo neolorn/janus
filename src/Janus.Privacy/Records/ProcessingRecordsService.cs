@@ -37,6 +37,14 @@ internal sealed class ProcessingRecordsService(
     IConfigurationStore configuration,
     TimeProvider time) : IProcessingRecords
 {
+    // The three rows of the shipped register the library itself makes true, named as
+    // ProviderRegister ships them (PRIV-ROPA-002, chapter 05 section 8).
+    private const string MailServer = "mail server";
+
+    private const string HostingProvider = "hosting provider";
+
+    private const string PasswordScreening = "password screening";
+
     /// <summary>
     /// How the personal data is disposed of, which is one measure for the whole
     /// deployment because every personal field stands under one key (PRIV-RIGHT-005).
@@ -94,24 +102,44 @@ internal sealed class ProcessingRecordsService(
                 Settings.HostingCrossBorderBasis, string.Empty, cancellationToken)
             .ConfigureAwait(false);
 
-        // PRIV-MINOR-001: where the affirmation is required the service is 18+ only,
-        // so no row is in the children's column; where it is off any row may be.
+        // PRIV-MINOR-001: where the affirmation is required the service is adults
+        // only, so a deployment that declares no children's type is reporting the
+        // truth; where it is off and none is declared, the register says so rather
+        // than reporting no children's processing at all.
         bool minors = await ReadAsync(
                 Settings.RegistrationAdultAffirmation,
                 Settings.RegistrationAdultAffirmation.Default,
                 cancellationToken)
             .ConfigureAwait(false) is AttributeRequirement.Off;
 
-        IReadOnlyList<RecipientRecord> recipients = Reached(location, basis);
+        // PRIV-ROPA-002: whether the library itself calls a mail server and the
+        // screening service, which is what makes those two rows of the shipped
+        // register true of this deployment.
+        bool mail = (await ReadAsync(
+                Settings.IntegrationMailEndpoint, string.Empty, cancellationToken)
+            .ConfigureAwait(false)).Length is not 0;
+
+        bool screening = await ReadAsync(
+                Settings.PasswordBlocklistSource,
+                Settings.PasswordBlocklistSource.Default,
+                cancellationToken)
+            .ConfigureAwait(false) is BlocklistSource.RangeApi;
+
+        IReadOnlyList<RecipientRecord> recipients = Reached(location, basis, mail, screening);
         var flags = new List<RegisterFlag>();
 
         Missing(flags, supplied, recipients);
+
+        if (minors && !declaration.ResourceTypes.Any(Childrens))
+        {
+            flags.Add(new RegisterFlag(RegisterFinding.ChildrenUndeclared, string.Empty));
+        }
 
         var records = new List<ProcessingRecord>(processing.Purposes.Count);
 
         foreach (DeclaredPurpose purpose in processing.Purposes)
         {
-            records.Add(await RecordedAsync(purpose, recipients, minors, flags, cancellationToken)
+            records.Add(await RecordedAsync(purpose, recipients, flags, cancellationToken)
                 .ConfigureAwait(false));
         }
 
@@ -151,6 +179,12 @@ internal sealed class ProcessingRecordsService(
     }
 
     private static string? Stated(string basis) => basis.Length is 0 ? null : basis;
+
+    // PRIV-SENS-001: children's data is one of the declared sensitivity categories,
+    // and the register's children's column is that category and no other property of
+    // the deployment.
+    private static bool Childrens(ResourceTypeDeclaration type) =>
+        type.SensitiveCategories.Contains(SensitiveCategories.Children, StringComparer.Ordinal);
 
     // PRIV-SENS-001 AC2: sensitivity is a column and not a verdict on the purpose, so
     // a purpose declared on an ordinary type and a sensitive one is in both columns.
@@ -196,9 +230,13 @@ internal sealed class ProcessingRecordsService(
 
     // PRIV-ROPA-003: a recipient outside the country is a cross-border transfer, and
     // the basis it stands on is the deployment's declared one and never a consent.
-    private IReadOnlyList<RecipientRecord> Reached(HostingLocation hosting, string basis) =>
+    private IReadOnlyList<RecipientRecord> Reached(
+        HostingLocation hosting,
+        string basis,
+        bool mail,
+        bool screening) =>
     [
-        .. declaration.Recipients.Select(recipient =>
+        .. Recipients(mail, screening).Select(recipient =>
         {
             HostingLocation where = recipient.Location ?? hosting;
 
@@ -212,6 +250,30 @@ internal sealed class ProcessingRecordsService(
                 recipient.Callback);
         }),
     ];
+
+    // PRIV-ROPA-002: the rest of the shipped register is offered, because a generic
+    // library cannot know that a deployment takes payments or ships anything; the
+    // three rows it makes true itself are applied, because it does know that. A
+    // deployment that edited one of them has declared it, and its own row stands in
+    // place of the shipped default rather than beside it.
+    private IEnumerable<RecipientDeclaration> Recipients(bool mail, bool screening) =>
+    [
+        .. declaration.Recipients,
+        .. ProviderRegister.Default.Where(row =>
+            Made(row.Name, mail, screening) && !Declares(row.Name)),
+    ];
+
+    private static bool Made(string row, bool mail, bool screening) => row switch
+    {
+        HostingProvider => true,
+        MailServer => mail,
+        PasswordScreening => screening,
+        _ => false,
+    };
+
+    private bool Declares(string row) =>
+        declaration.Recipients.Any(recipient =>
+            string.Equals(recipient.Name, row, StringComparison.OrdinalIgnoreCase));
 
     // A key the deployment names has no default to fall back on, so the fallback is
     // the caller's: an unnamed one leaves the cell empty rather than stopping the
@@ -230,7 +292,6 @@ internal sealed class ProcessingRecordsService(
     private async ValueTask<ProcessingRecord> RecordedAsync(
         DeclaredPurpose purpose,
         IReadOnlyList<RecipientRecord> recipients,
-        bool minors,
         List<RegisterFlag> flags,
         CancellationToken cancellationToken)
     {
@@ -246,7 +307,7 @@ internal sealed class ProcessingRecordsService(
             purpose.Basis.Key,
             Ordinary(purpose),
             purpose.SensitiveCategories.Count > 0,
-            minors,
+            purpose.SensitiveCategories.Contains(SensitiveCategories.Children, StringComparer.Ordinal),
             purpose.SensitiveCategories,
             await KeptAsync(purpose, flags, cancellationToken).ConfigureAwait(false),
             [.. recipients.Select(recipient => recipient.Name)],
