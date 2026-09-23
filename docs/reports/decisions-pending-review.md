@@ -7365,6 +7365,17 @@ The subsection each row belongs in is named with it.
 | `privacy.request.notfound` | 1.4 | 404 | A decision is made on an identifier that names no privacy request, by a caller holding `privacyrequest:manage` (PRIV-RIGHT-001). |
 | `privacy.request.decided` | 1.4 | 409 | A decision is made on a privacy request that is already decided; the standing decision is not replaced (PRIV-RIGHT-002 AC5). |
 | `model.startup.redirectclient` | 1.5 | 500 | Startup: a registered client's return address is not an absolute address with a host, or `redirect.defaultclient` names no registered browser application. `details.client` names the client the bad address was read from; `details.key` names the setting where the configured default will not resolve (API-REDIR-001). |
+| `identity.identifier.invalid` | 1.1 | 422 | The value is not a well-formed identifier of its kind. (REG-IDENT-001, entry 40) |
+| `identity.identifier.locked` | 1.1 | 409 | The identifier is locked: an invitation bound it, or a provider operates the mailbox, so nothing about it is the person's to change. (REG-IDENT-010, entry 40) |
+| `identity.identifier.maximum` | 1.1 | 409 | The account or the registration already holds as many identifiers of the kind as it may; where the maximum is one, the change is a replace. (REG-IDENT-002, REG-IDENT-007) |
+| `identity.registration.incomplete` | 1.1 | 422 | The step a registration request is for is not the step the registration has reached: its predecessor is incomplete, or it is complete already. (REG-SESS-002, REG-SESS-004) |
+| `identity.profile.invalid` | 1.1 | 422 | A profile field is not one the library admits: a display name over its byte bound, or a legal name over its length. (REG-PROF-001, entry 40) |
+| `identity.profile.notaccepted` | 1.1 | 422 | The deployment does not take the field from the person: its key is off, or it is the date of birth, which is corrected through support. (REG-PROF-001, REG-IDENT-009, entry 40) |
+| `auth.credential.notfound` | 1.2 | 404 | The account holds no such credential. (AUTH-FACT-001, entry 40) |
+| `auth.credential.labelinvalid` | 1.2 | 422 | A credential label is empty, longer than the bound, or already held by another credential of the same kind on the account. (AUTH-FACT-001, REG-PM-002, entry 40) |
+| `auth.credential.notupgradable` | 1.2 | 409 | The credential named for an upgrade to a passkey is not a second-factor security key. (AUTH-FACT-002b) |
+| `authz.role.inuse` | 1.3 | 409 | A grant or a derivation names the role, so it cannot be removed; its permissions can be changed instead. (AUTHZ-GRANT-004, AUTHZ-GRANT-003 AC3, entry 189) |
+| `authz.group.inuse` | 1.3 | 409 | The group holds a member, belongs to a group, or was given a grant, so it cannot be removed. (AUTHZ-GROUP-001, AUTHZ-GRANT-003 AC3, entry 192) |
 
 ## LIB-HOST-001, host declarations
 
@@ -7477,6 +7488,12 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `auth.restriction.granted` | security | `AuditActions.RestrictionGranted` | A sending restriction was granted against an address or a number. (AUTH-ABUSE-005) |
 | `auth.session.presented` | security | `AuditActions.SessionPresented` | A session was presented, which is what a sign-in history is read from. (AUTH-SESS-010) |
 | `authz.access.denied` | security | `AuditActions.AccessDenied` | A permission was refused, which is the row the refusal's correlation identifier resolves to. (AUTHZ-CONCEAL-004) |
+| `authz.group.created` | security | `AuditActions.GroupCreated` | A group was created in an organization. Details carry `group`, `name` and `reason`; the row is filed under the group's organization. (AUTHZ-GROUP-001, entry 191) |
+| `authz.group.memberadded` | security | `AuditActions.GroupMemberAdded` | An account or a group was added to a group. Details carry `group`, `name`, `memberType`, `memberId` and `reason`. (AUTHZ-GROUP-001, OPS-CFG-007, entry 191) |
+| `authz.group.memberremoved` | security | `AuditActions.GroupMemberRemoved` | An account or a group was taken out of a group. Details carry `group`, `name`, `memberType`, `memberId` and `reason`. (AUTHZ-GROUP-001, OPS-CFG-007, entry 191) |
+| `authz.group.removed` | security | `AuditActions.GroupRemoved` | A group nothing named was removed. Details carry `group`, `name` and `reason`. (AUTHZ-GROUP-001, entries 191 and 192) |
+| `authz.role.defined` | security | `AuditActions.RoleDefined` | A role was created, or the permissions it bundles were changed. Details carry `role`, `before`, `after` and `reason`; the row names no organization. (AUTHZ-GRANT-004, OPS-CFG-007, entry 188) |
+| `authz.role.removed` | security | `AuditActions.RoleRemoved` | A role nothing named was removed. Details carry `role`, `before`, `after` (null) and `reason`. (AUTHZ-GRANT-004, entries 188 and 189) |
 | `identity.account.deactivated` | routine | `AuditActions.AccountDeactivated` | An account was deactivated by its own owner. (IDN-LIFE-013) |
 | `identity.account.reactivated` | routine | `AuditActions.AccountReactivated` | A deactivated account was stood back up. (IDN-LIFE-013) |
 | `identity.credential.labelled` | routine | `AuditActions.CredentialLabelled` | A credential was given or renamed a label by its holder. (REG-PM-002) |
