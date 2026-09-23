@@ -63,7 +63,7 @@ does for free.
 
 `Janus.Hosting` is public because the middleware pipeline and its ordering are part of
 the public contract (LIB-API-001, BFF-OWN-003) — a host must be able to mount it.
-Public in that project are exactly the mounting types, the `MapJanusAuthorization`
+Public in that project are exactly the mounting types, the `MapAuthorizationTables`
 model-builder extension (AUTHZ-GATE-002, D-159) and the `AddJanus` registration
 entry point (CONV-DESIGN-007); request and response DTOs are `internal sealed record`,
 their wire shape being the contract, not their type.
@@ -331,7 +331,7 @@ controllers, no reflection-based mapping.
 
 **CONV-DESIGN-007** — Dependency injection SHALL use the built-in container only.
 Each project exposes exactly one `internal static` registration method
-(`AddJanusIdentity(this IServiceCollection)`), called from the single public
+(`AddIdentityArea(this IServiceCollection)`), called from the single public
 `AddJanus` entry point in `Janus.Hosting`. Lifetimes: services and ports scoped;
 stateless helpers singleton; nothing transient without a recorded reason. Options
 SHALL be bound through `IOptions<T>` with `ValidateOnStart`; the runtime-changeable
@@ -395,8 +395,19 @@ suffix on asynchronous methods.
 The `I` prefix is retained deliberately. It is near-universal in .NET; departing
 costs readability for anyone joining later, including future maintainers.
 
+**The product name is not a naming element (D-163).** "Janus" appears in namespaces,
+project and package identifiers, and the single `AddJanus` entry point, because .NET
+convention ties those to the package and a package rename moves them together. It
+appears nowhere else: no type, member, table, schema, role, collation, cookie, header,
+DNS label, constant or test carries it. A name says what a thing is; the library's
+own identity is carried by the namespace. Where a prefix is needed to keep the
+library's artefacts apart from a host's (schema, roles, cookies, headers, the DNS
+record), the prefix is the neutral word `identity`.
+
 **Acceptance criteria**
 1. Analyzer rules enforce the standard set.
+2. A source scan finds the product name only in namespaces, project and package
+   identifiers and `AddJanus` (D-163).
 
 ---
 

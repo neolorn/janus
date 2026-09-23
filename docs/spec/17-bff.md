@@ -92,8 +92,8 @@ opaque identifier in a cookie and nothing else.
 **BFF-SESS-002** — The session cookie SHALL carry `httpOnly`, `Secure`, `SameSite`
 (per BFF-CSRF-005), and the `__Host-` prefix. These SHALL NOT be configurable.
 
-**Values (D-153).** The cookies the library sets are `__Host-janus-session`,
-`__Host-janus-preauth` (BFF-CSRF-005a) and `__Host-janus-csrf` (BFF-CSRF-006), one set
+**Values (D-153).** The cookies the library sets are `__Host-identity-session`,
+`__Host-identity-preauth` (BFF-CSRF-005a) and `__Host-identity-csrf` (BFF-CSRF-006), one set
 per application origin; the `__Host-` prefix already scopes them.
 
 *Source: AUTH-SESS-003, D-053*
@@ -233,7 +233,7 @@ treat absence as permission.
 **BFF-CSRF-003** — State-changing requests SHALL require a custom request header, and
 its absence SHALL reject.
 
-**Values (D-153).** The header is `X-Janus-Request`; its presence is checked and its value
+**Values (D-153).** The header is `X-Identity-Request`; its presence is checked and its value
 ignored. The frontend interceptor sets it on every request (FE-API-002).
 
 *Source: D-053*
@@ -353,7 +353,7 @@ what turns the press into the right person's intent.
 frontend without a separate authenticated round trip, and SHALL rotate with the
 session.
 
-**Values (D-153).** The token is a script-readable `__Host-janus-csrf` cookie set beside the
+**Values (D-153).** The token is a script-readable `__Host-identity-csrf` cookie set beside the
 session cookie and validated server side against the session.
 
 *Source: AUTH-SESS-006, D-053*

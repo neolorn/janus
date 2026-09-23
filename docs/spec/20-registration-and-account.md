@@ -698,8 +698,8 @@ OPS-CFG-002; removing one SHALL stop new sign-ins with addresses in it and SHALL
 an alert.
 
 **Values (D-153).** Re-verification runs every `domain.reverify.interval` on the sweep. The
-record is `_janus-verify.<domain>` TXT with value
-`janus-domain-verification=<32 random bytes, base64url>`, one token per organization
+record is `_identity-verify.<domain>` TXT with value
+`identity-domain-verification=<32 random bytes, base64url>`, one token per organization
 and domain, never reused.
 
 *Source: D-146*

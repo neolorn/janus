@@ -8096,9 +8096,9 @@ has a value. Seven were owner decisions; the rest are mechanical fills.
   them `system.fault` (500), `config.value.lastdestination`,
   `model.startup.declarationmissing` and three preference refusals. Three closed sets
   were added: capability residuals (5.20), consent mechanism (5.21), age group (5.22,
-  `minor` · `adult`). Cookies are `__Host-janus-session`, `-preauth`, `-csrf`, `-device`,
-  `-browser`; the CSRF header is `X-Janus-Request`. The DNS record is
-  `_janus-verify.<domain>`. The CLI verbs are `bootstrap`, `rotate-kek`,
+  `minor` · `adult`). Cookies are `__Host-identity-session`, `-preauth`, `-csrf`, `-device`,
+  `-browser` (D-163: the `identity-` prefix); the CSRF header is `X-Identity-Request`. The DNS record is
+  `_identity-verify.<domain>`. The CLI verbs are `bootstrap`, `rotate-kek`,
   `rotate-fingerprint-key`, `replay-erasures`.
 - *Shapes.* The registration state document, the SSE events, `policyRequirement`,
   `passwordChangeRequired`, the device description (`{ browser, os }` from the
@@ -8213,7 +8213,7 @@ field cipher runs.
    and third never overlap, a username must contain a letter; an all-digit choice is
    refused with `identity.username.invalid`, a code the profile's other refusals also
    use.
-3. **`janus_ci` applies to what is plaintext and spelled by a person**: organization
+3. **`identity_ci` applies to what is plaintext and spelled by a person**: organization
    names and locked domain names today. Identifiers are fingerprints and personal fields
    are ciphertext; a collation cannot see through either, and D-153's wording that named
    display names and usernames was wrong.
@@ -8266,7 +8266,7 @@ contradiction of my own making.
    exists; `Organization.IsAdministrative` is what IDN-ORG-004 checks. Rejected: a
    well-known fixed identifier (leaks structure into an opaque id) and a settings key
    (a domain invariant does not live in configuration).
-3. **Database roles** are `janus_migrate`, `janus_app`, `janus_maintenance`; the
+3. **Database roles** are `identity_migrate`, `identity_app`, `identity_maintenance`; the
    migration creates the runtime roles `NOLOGIN` if absent and the deployment attaches
    credentials.
 4. **`audit_drop_expired_partitions` takes the two retention periods as arguments**,
@@ -8316,8 +8316,8 @@ row: does a live, non-denied grant for this permission exist for one of those su
 on the resource or any ancestor. LINQ: `Expression<Func<TResource, bool>>` built from the
 host's identifier selector and the host's `IQueryable<AncestryEntry>` and
 `IQueryable<EffectiveGrant>` (public records in `Janus.Core`, mapped by
-`MapJanusAuthorization(ModelBuilder)` in `Janus.Hosting`). SQL: the same `EXISTS` over
-`janus.ancestry` and `janus.effective_grants` with alias and column from the caller and
+`MapAuthorizationTables(ModelBuilder)` in `Janus.Hosting`). SQL: the same `EXISTS` over
+`identity.ancestry` and `identity.effective_grants` with alias and column from the caller and
 everything else parameterised. Both derive from one rule object; the truth table runs
 through both.
 
@@ -8561,8 +8561,8 @@ type declares the `children` sensitivity category; when `registration.adultaffir
 `off` and no type declares it, the register carries the flag `children-undeclared`
 instead of an invented column.
 
-**Tier 1 reversals.** The `janus_ci` collation is created in the `janus` schema
-(`COLLATE janus.janus_ci` is valid; OPS-DB-002 applies). The grants of OPS-MIG-003a are
+**Tier 1 reversals.** The `identity_ci` collation is created in the `identity` schema
+(`COLLATE identity.identity_ci` is valid; OPS-DB-002 applies). The grants of OPS-MIG-003a are
 listed in the serialized model output (`artifacts/model.json`), not only in the
 migration. Every gate refusal carries `correlationId`, including one for an anonymous
 principal. `AuditAction` is a closed vocabulary: list every member in the ledger for a
@@ -8572,7 +8572,7 @@ spells its members as LIB-HOST-001 does: `string` · `boolean` · `integer` · `
 
 ### C. The fourteen open choices, settled
 
-**10.** The synchronizer token travels in `X-Janus-Csrf`; `X-Janus-Request` stays a
+**10.** The synchronizer token travels in `X-Identity-Csrf`; `X-Identity-Request` stays a
 presence check. D-153's sentence naming one header is corrected. **27.** The shipped
 default transports take `10` keys `integration.mail.endpoint` and
 `integration.sms.endpoint` (protected, required only when the default transport is used);
@@ -8638,6 +8638,28 @@ of the 68 kept decisions in the reconciliation pass that follows.
 
 **Propagated to:** `10` (sections 1, 4, 5), `07` LIB-HOST-001, and the chapters the kept
 and reversed entries name, in the reconciliation pass.
+
+---
+
+## D-163 — The product name is not a naming element
+
+**Date:** 2026-09-23 · **Status:** accepted · **Amends:** D-153 (cookie, header and DNS names), D-155 and D-157 (collation and roles), D-159 (`MapAuthorizationTables`), D-149 (`AddIdentityArea`)
+
+**TL;DR.** The code had taken to prefixing things with the product name: `JanusDbContext`,
+`JanusEvent`, `JanusApplication`, the `janus` schema, `janus_*` roles, `__Host-janus-*`
+cookies, `X-Janus-*` headers, `_janus-verify`. A name says what a thing is; the library's
+identity is already carried by the namespace, and a product rename would otherwise mean
+touching every one of these for no gain. The name stays only where .NET convention ties
+it to the package: namespaces, project and package identifiers, and `AddJanus`. Every
+other occurrence is renamed for what the thing is (`StoreContext`, `DomainEvent`, and so
+on), and where a prefix must separate the library's artefacts from a host's, the neutral
+word `identity` is used: schema `identity`, roles `identity_app`, `identity_migrate`,
+`identity_maintenance`, collation `identity_ci`, cookies `__Host-identity-*`, headers
+`X-Identity-Request` and `X-Identity-Csrf`, DNS `_identity-verify` with value
+`identity-domain-verification=`. CONV-NAME-001 gains the rule and a scan enforces it.
+
+**Propagated to:** `08` CONV-NAME-001, CONV-DESIGN-007, CONV-LAYOUT-002 · `02`, `03`,
+`06`, `07`, `09`, `17`, `20` where the renamed identifiers appear.
 
 ---
 
@@ -8813,6 +8835,7 @@ and reversed entries name, in the reconciliation pass.
 | Phase 2, second stop: host-supplied relations; reading vs modifying; gate binding; hosted-service validation | D-160 |
 | Phase 2, third stop: derived checks take sources; host-called refresh; the implementer decides alone through Milestone 1 | D-161 |
 | Review of the 109 absent-owner decisions: 27 reversed, 14 settled, trace removed | D-162 |
+| The product name is not a naming element; neutral `identity` prefix | D-163 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

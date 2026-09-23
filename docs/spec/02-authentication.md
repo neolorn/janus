@@ -487,7 +487,7 @@ whose `requiredAssurance` is below AAL2 MAY mark the browser as a **trusted devi
 second factor SHALL then be skipped on that browser for `factor.trusteddevice.lifetime`
 (default **30 days**, ceiling enforced). The primary factor is always still required.
 
-**Values (D-153).** The trust token lives in `__Host-janus-device`: 32 random bytes,
+**Values (D-153).** The trust token lives in `__Host-identity-device`: 32 random bytes,
 base64url, stored server side against the account.
 
 *Source: D-124*
@@ -545,7 +545,7 @@ reported as `auth.device.verificationrequired`; completion SHALL raise
 `DeviceVerified`.
 
 **Values (D-153).** A browser that passed the check is remembered by a
-`__Host-janus-browser` cookie: 32 random bytes, base64url, stored server side, valid
+`__Host-identity-browser` cookie: 32 random bytes, base64url, stored server side, valid
 for `device.verification.lifetime`.
 
 *Source: D-148; D-146; AUTH-FACT-004, AUTH-ABUSE-004*
