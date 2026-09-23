@@ -4,6 +4,7 @@ using Janus.Storage.Authentication.Alerting;
 using Janus.Storage.Authentication.Credentials;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Identifiers;
+using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Authentication.Mailboxes;
 using Janus.Storage.Authentication.Oidc;
 using Janus.Storage.Authentication.Organizations;
@@ -376,6 +377,11 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     public DbSet<MailboxRecord> Mailboxes => Set<MailboxRecord>();
 
     /// <summary>
+    /// The invitations organizations have issued into their membership.
+    /// </summary>
+    public DbSet<InvitationRecord> Invitations => Set<InvitationRecord>();
+
+    /// <summary>
     /// The recovery links that have gone out.
     /// </summary>
     public DbSet<RecoveryLinkRecord> RecoveryLinks => Set<RecoveryLinkRecord>();
@@ -482,6 +488,7 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new PolicyRaiseConfiguration());
         modelBuilder.ApplyConfiguration(new LockedDomainConfiguration());
         modelBuilder.ApplyConfiguration(new MailboxConfiguration());
+        modelBuilder.ApplyConfiguration(new InvitationConfiguration());
         modelBuilder.ApplyConfiguration(new RecoveryLinkConfiguration());
         modelBuilder.ApplyConfiguration(new RecoveryApprovalConfiguration());
         modelBuilder.ApplyConfiguration(new LossReportConfiguration());

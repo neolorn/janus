@@ -163,6 +163,21 @@ public static class AuditActions
         AuditAction.Parse("identity.organization.domainremoved");
 
     /// <summary>
+    /// An invitation into an organization was issued.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-009a, REG-INV-001 and IDN-AUD-001.</remarks>
+    public static AuditAction InvitationIssued { get; } =
+        AuditAction.Parse("identity.invitation.issued");
+
+    /// <summary>
+    /// An invitation nobody had acknowledged was revoked, or replaced by a later one
+    /// for the same corporate address.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-009a, REG-MAIL-001 and IDN-AUD-001.</remarks>
+    public static AuditAction InvitationRevoked { get; } =
+        AuditAction.Parse("identity.invitation.revoked");
+
+    /// <summary>
     /// A takedown was triggered, naming what raised it and the reason written for it.
     /// </summary>
     /// <remarks>Implements IDN-LIFE-003, chapter 10 section 5.</remarks>

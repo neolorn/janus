@@ -10,6 +10,7 @@ using Janus.Authentication.Configuration;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
+using Janus.Authentication.Invitations;
 using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Oidc;
 using Janus.Authentication.Organizations;
@@ -374,6 +375,26 @@ public static class HostingRegistration
             provider.GetService<IMailServer>(),
             provider.GetRequiredService<IEvents>(),
             provider.GetRequiredService<TimeProvider>()));
+
+        // REG-MAIL-001: an invitation reserves a mailbox only where there is a mail
+        // server to create it on.
+        services.AddScoped<IInvitations>(provider => new InvitationService(
+            provider.GetRequiredService<IAccessGate>(),
+            provider.GetRequiredService<Janus.Authentication.Policies.AdministrativeScope>(),
+            provider.GetRequiredService<StepUpGuard>(),
+            provider.GetRequiredService<IOrganizationDirectory>(),
+            provider.GetRequiredService<IRoleCatalogue>(),
+            provider.GetRequiredService<ILegalDocuments>(),
+            provider.GetRequiredService<DomainLock>(),
+            provider.GetRequiredService<IInvitationStore>(),
+            provider.GetRequiredService<IMailboxStore>(),
+            provider.GetService<IMailServer>(),
+            provider.GetRequiredService<INotificationHandler>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IOrganizationAudit>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IGroups, GroupService>();
         services.AddScoped<IDerivationMaterialiser, DerivationMaterialiser>();
         services.AddScoped<ModelValidation>();

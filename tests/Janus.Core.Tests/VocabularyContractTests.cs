@@ -287,6 +287,7 @@ public sealed class VocabularyContractTests
                 "identifier-detached",
                 "identifier-removed",
                 "identifier-settings-changed",
+                "invitation-link",
                 "no-account",
                 "privacy-request-lapsed",
                 "privacy-request-received",

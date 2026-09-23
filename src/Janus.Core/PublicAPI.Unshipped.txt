@@ -1123,6 +1123,9 @@ Janus.Core.IIdentifiers.SetBackupAsync(Janus.Core.AccessContext! context, Janus.
 Janus.Core.IIdentifiers.UndoAsync(string! linkToken, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IIdentifiers.VerifyAsync(Janus.Core.AccessContext! context, Janus.Core.IdentifierId identifier, string! code, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IIdentifiers.VerifyAsync(Janus.Core.EnrolmentSessionId enrolment, Janus.Core.IdentifierId identifier, string! code, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IInvitations
+Janus.Core.IInvitations.IssueAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, Janus.Core.InvitationRequest! request, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.IssuedInvitation!>>
+Janus.Core.IInvitations.RevokeAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, Janus.Core.InvitationId invitation, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.ILegalDocuments
 Janus.Core.ILegalDocuments.PublishAsync(Janus.Core.AccessContext! context, Janus.Core.DocumentPublication! publication, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.DocumentVersion!>>
 Janus.Core.ILegalDocuments.ReadAsync(string! document, string? version, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.DocumentVersion!>>
@@ -1280,6 +1283,48 @@ Janus.Core.ImageCodec.Equals(Janus.Core.ImageCodec? other) -> bool
 Janus.Core.ImageCodec.ImageCodec(System.Func<System.ReadOnlyMemory<byte>, int, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<System.ReadOnlyMemory<byte>?>>! Reencode) -> void
 Janus.Core.ImageCodec.Reencode.get -> System.Func<System.ReadOnlyMemory<byte>, int, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<System.ReadOnlyMemory<byte>?>>!
 Janus.Core.ImageCodec.Reencode.init -> void
+Janus.Core.InvitationDocument
+Janus.Core.InvitationDocument.<Clone>$() -> Janus.Core.InvitationDocument!
+Janus.Core.InvitationDocument.Deconstruct(out string! Document, out string! Version) -> void
+Janus.Core.InvitationDocument.Document.get -> string!
+Janus.Core.InvitationDocument.Document.init -> void
+Janus.Core.InvitationDocument.Equals(Janus.Core.InvitationDocument? other) -> bool
+Janus.Core.InvitationDocument.InvitationDocument(string! Document, string! Version) -> void
+Janus.Core.InvitationDocument.Version.get -> string!
+Janus.Core.InvitationDocument.Version.init -> void
+Janus.Core.InvitationId
+Janus.Core.InvitationId.Deconstruct(out System.Guid Value) -> void
+Janus.Core.InvitationId.Equals(Janus.Core.InvitationId other) -> bool
+Janus.Core.InvitationId.InvitationId() -> void
+Janus.Core.InvitationId.InvitationId(System.Guid Value) -> void
+Janus.Core.InvitationId.Value.get -> System.Guid
+Janus.Core.InvitationId.Value.init -> void
+Janus.Core.InvitationRequest
+Janus.Core.InvitationRequest.<Clone>$() -> Janus.Core.InvitationRequest!
+Janus.Core.InvitationRequest.CorporateEmail.get -> string?
+Janus.Core.InvitationRequest.CorporateEmail.init -> void
+Janus.Core.InvitationRequest.Deconstruct(out string? Email, out string? Phone, out string? CorporateEmail, out System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>! Roles, out System.Collections.Generic.IReadOnlyList<string!>! Documents) -> void
+Janus.Core.InvitationRequest.Documents.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Janus.Core.InvitationRequest.Documents.init -> void
+Janus.Core.InvitationRequest.Email.get -> string?
+Janus.Core.InvitationRequest.Email.init -> void
+Janus.Core.InvitationRequest.Equals(Janus.Core.InvitationRequest? other) -> bool
+Janus.Core.InvitationRequest.InvitationRequest(string? Email, string? Phone, string? CorporateEmail, System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>! Roles, System.Collections.Generic.IReadOnlyList<string!>! Documents) -> void
+Janus.Core.InvitationRequest.Phone.get -> string?
+Janus.Core.InvitationRequest.Phone.init -> void
+Janus.Core.InvitationRequest.Roles.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>!
+Janus.Core.InvitationRequest.Roles.init -> void
+Janus.Core.IssuedInvitation
+Janus.Core.IssuedInvitation.<Clone>$() -> Janus.Core.IssuedInvitation!
+Janus.Core.IssuedInvitation.Deconstruct(out Janus.Core.InvitationId Id, out System.DateTimeOffset ExpiresAt, out string? Token) -> void
+Janus.Core.IssuedInvitation.Equals(Janus.Core.IssuedInvitation? other) -> bool
+Janus.Core.IssuedInvitation.ExpiresAt.get -> System.DateTimeOffset
+Janus.Core.IssuedInvitation.ExpiresAt.init -> void
+Janus.Core.IssuedInvitation.Id.get -> Janus.Core.InvitationId
+Janus.Core.IssuedInvitation.Id.init -> void
+Janus.Core.IssuedInvitation.IssuedInvitation(Janus.Core.InvitationId Id, System.DateTimeOffset ExpiresAt, string? Token) -> void
+Janus.Core.IssuedInvitation.Token.get -> string?
+Janus.Core.IssuedInvitation.Token.init -> void
 Janus.Core.KeyEncryptionKeys
 Janus.Core.KeyEncryptionKeys.<Clone>$() -> Janus.Core.KeyEncryptionKeys!
 Janus.Core.KeyEncryptionKeys.Current.get -> System.ReadOnlyMemory<byte>
@@ -1390,6 +1435,7 @@ Janus.Core.MessageKind.IdentifierChangeConfirm = 13 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.IdentifierDetached = 10 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.IdentifierRemoved = 9 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.IdentifierSettingsChanged = 11 -> Janus.Core.MessageKind
+Janus.Core.MessageKind.InvitationLink = 19 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.NoAccount = 6 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.PrivacyRequestLapsed = 16 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.PrivacyRequestReceived = 15 -> Janus.Core.MessageKind
@@ -2734,6 +2780,17 @@ override Janus.Core.IdentifierSummary.ToString() -> string!
 override Janus.Core.ImageCodec.Equals(object? obj) -> bool
 override Janus.Core.ImageCodec.GetHashCode() -> int
 override Janus.Core.ImageCodec.ToString() -> string!
+override Janus.Core.InvitationDocument.Equals(object? obj) -> bool
+override Janus.Core.InvitationDocument.GetHashCode() -> int
+override Janus.Core.InvitationDocument.ToString() -> string!
+override Janus.Core.InvitationId.GetHashCode() -> int
+override Janus.Core.InvitationId.ToString() -> string!
+override Janus.Core.InvitationRequest.Equals(object? obj) -> bool
+override Janus.Core.InvitationRequest.GetHashCode() -> int
+override Janus.Core.InvitationRequest.ToString() -> string!
+override Janus.Core.IssuedInvitation.Equals(object? obj) -> bool
+override Janus.Core.IssuedInvitation.GetHashCode() -> int
+override Janus.Core.IssuedInvitation.ToString() -> string!
 override Janus.Core.KeyEncryptionKeys.Equals(object? obj) -> bool
 override Janus.Core.KeyEncryptionKeys.GetHashCode() -> int
 override Janus.Core.KeyEncryptionKeys.ToString() -> string!
@@ -3060,6 +3117,8 @@ static Janus.Core.AuditActions.GroupCreated.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.GroupMemberAdded.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.GroupMemberRemoved.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.GroupRemoved.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.InvitationIssued.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.InvitationRevoked.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ObjectionRecorded.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ObjectionWithdrawn.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.OrganizationCreated.get -> Janus.Core.AuditAction
@@ -3401,6 +3460,8 @@ static Janus.Core.ErrorCodes.IdentifierLocked.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierMaximum.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierMixedScript.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierPrimary.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.InvitationExpired.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.InvitationIdentifierMismatch.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.LossReportNotPermitted.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.LossReportPending.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.MembershipLimitReached.get -> Janus.Core.ErrorCode
@@ -3523,6 +3584,15 @@ static Janus.Core.IdentifierSummary.operator !=(Janus.Core.IdentifierSummary? le
 static Janus.Core.IdentifierSummary.operator ==(Janus.Core.IdentifierSummary? left, Janus.Core.IdentifierSummary? right) -> bool
 static Janus.Core.ImageCodec.operator !=(Janus.Core.ImageCodec? left, Janus.Core.ImageCodec? right) -> bool
 static Janus.Core.ImageCodec.operator ==(Janus.Core.ImageCodec? left, Janus.Core.ImageCodec? right) -> bool
+static Janus.Core.InvitationDocument.operator !=(Janus.Core.InvitationDocument? left, Janus.Core.InvitationDocument? right) -> bool
+static Janus.Core.InvitationDocument.operator ==(Janus.Core.InvitationDocument? left, Janus.Core.InvitationDocument? right) -> bool
+static Janus.Core.InvitationId.New(System.TimeProvider! time) -> Janus.Core.InvitationId
+static Janus.Core.InvitationId.operator !=(Janus.Core.InvitationId left, Janus.Core.InvitationId right) -> bool
+static Janus.Core.InvitationId.operator ==(Janus.Core.InvitationId left, Janus.Core.InvitationId right) -> bool
+static Janus.Core.InvitationRequest.operator !=(Janus.Core.InvitationRequest? left, Janus.Core.InvitationRequest? right) -> bool
+static Janus.Core.InvitationRequest.operator ==(Janus.Core.InvitationRequest? left, Janus.Core.InvitationRequest? right) -> bool
+static Janus.Core.IssuedInvitation.operator !=(Janus.Core.IssuedInvitation? left, Janus.Core.IssuedInvitation? right) -> bool
+static Janus.Core.IssuedInvitation.operator ==(Janus.Core.IssuedInvitation? left, Janus.Core.IssuedInvitation? right) -> bool
 static Janus.Core.KeyEncryptionKeys.operator !=(Janus.Core.KeyEncryptionKeys? left, Janus.Core.KeyEncryptionKeys? right) -> bool
 static Janus.Core.KeyEncryptionKeys.operator ==(Janus.Core.KeyEncryptionKeys? left, Janus.Core.KeyEncryptionKeys? right) -> bool
 static Janus.Core.LawfulBases.Default.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.LawfulBasisDeclaration!>!
@@ -3779,6 +3849,7 @@ virtual Janus.Core.SubjectEvent.Equals(Janus.Core.SubjectEvent? other) -> bool
 ~override Janus.Core.GrantSubject.Equals(object obj) -> bool
 ~override Janus.Core.GroupId.Equals(object obj) -> bool
 ~override Janus.Core.IdentifierId.Equals(object obj) -> bool
+~override Janus.Core.InvitationId.Equals(object obj) -> bool
 ~override Janus.Core.LegalName.Equals(object obj) -> bool
 ~override Janus.Core.MembershipId.Equals(object obj) -> bool
 ~override Janus.Core.OrganizationId.Equals(object obj) -> bool

@@ -336,6 +336,21 @@ public static class ErrorCodes
     public static ErrorCode IdentifierMixedScript { get; } = ErrorCode.Parse("identity.identifier.mixedscript");
 
     /// <summary>
+    /// The invitation link is past its lifetime, was revoked, or has been used. Ask
+    /// the organization for a new invitation.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-009a, REG-INV-001, chapter 10 section 1.1.</remarks>
+    public static ErrorCode InvitationExpired { get; } = ErrorCode.Parse("identity.invitation.expired");
+
+    /// <summary>
+    /// An identifier the invitation binds is not a verified identifier of the account
+    /// accepting it. Accept from the account that holds it.
+    /// </summary>
+    /// <remarks>Implements REG-INV-001, REG-INV-002, chapter 10 section 1.1.</remarks>
+    public static ErrorCode InvitationIdentifierMismatch { get; } =
+        ErrorCode.Parse("identity.invitation.identifiermismatch");
+
+    /// <summary>
     /// The step the request is for is not the step the registration has reached: its
     /// predecessor is incomplete, or it is complete already. Read the session's state
     /// and answer the step it names.

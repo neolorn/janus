@@ -289,6 +289,27 @@ public sealed class ModelTests
             "identifiers.subject",
             "identifiers.verified_at",
 
+            // Not an account field: an invitation into an organization, what it binds
+            // under a key of its own until it is revoked or acknowledged, and its link
+            // held by its fingerprint (IDN-LIFE-009a, REG-INV-001).
+            "invitations.acknowledged_at",
+            "invitations.attached_at",
+            "invitations.documents",
+            "invitations.enc_identifiers",
+            "invitations.expires_at",
+            "invitations.id",
+            "invitations.invitee",
+            "invitations.inviter",
+            "invitations.issued_at",
+            "invitations.key_version",
+            "invitations.mailbox",
+            "invitations.organization",
+            "invitations.revoked_at",
+            "invitations.roles",
+            "invitations.session",
+            "invitations.token",
+            "invitations.wrapped_key",
+
             // Not an account field: the creation ceremony one account has open, and
             // the value AUTH-FACT-014 has the authenticator sign over.
             "key_ceremonies.challenge",

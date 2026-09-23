@@ -86,6 +86,8 @@ public sealed class ErrorCodesTests
         "identity.identifier.maximum",
         "identity.identifier.mixedscript",
         "identity.identifier.primary",
+        "identity.invitation.expired",
+        "identity.invitation.identifiermismatch",
         "identity.membership.limitreached",
         "identity.organization.protected",
         "identity.photo.invalid",

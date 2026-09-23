@@ -6,10 +6,10 @@ using Janus.Core;
 namespace Janus.Authentication.Organizations;
 
 /// <summary>
-/// Where a change to an organization's lifecycle or to its domain lock is written
-/// down: who, which organization, what, when and why.
+/// Where a change to an organization's lifecycle, to its domain lock or to the
+/// invitations into it is written down: who, which organization, what, when and why.
 /// </summary>
-/// <remarks>Implements IDN-ORG-003, REG-DOM-001 and IDN-AUD-001.</remarks>
+/// <remarks>Implements IDN-ORG-003, REG-DOM-001, IDN-LIFE-009a and IDN-AUD-001.</remarks>
 internal interface IOrganizationAudit
 {
     /// <summary>
@@ -46,6 +46,26 @@ internal interface IOrganizationAudit
         OrganizationId organization,
         string domain,
         string reason,
+        SubjectId actor,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records an invitation issued into an organization, or one revoked. What the
+    /// invitation binds is someone's personal data before any account of theirs exists,
+    /// so the record names the invitation and nothing it binds.
+    /// </summary>
+    /// <param name="action">What changed.</param>
+    /// <param name="organization">Which organization.</param>
+    /// <param name="invitation">Which invitation.</param>
+    /// <param name="actor">Who made the change.</param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask InvitationChangedAsync(
+        AuditAction action,
+        OrganizationId organization,
+        InvitationId invitation,
         SubjectId actor,
         DateTimeOffset at,
         CancellationToken cancellationToken);

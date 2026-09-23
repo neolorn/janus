@@ -38,11 +38,8 @@ internal sealed class MailboxStore(
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<MailboxStanding>> AllAsync(CancellationToken cancellationToken)
     {
-        var rows = await context.Mailboxes
+        var rows = await Readable()
             .Where(mailbox => mailbox.ReleasedAt == null || mailbox.Pushed != MailboxState.Removed)
-            .Where(mailbox => mailbox.Holder == null
-                || context.SubjectKeys.Any(key =>
-                    key.Subject == mailbox.Holder && key.FormatMarker == PersonalDataFormat.Marker))
             .OrderBy(mailbox => mailbox.ReservedAt)
             .Select(mailbox => new
             {
@@ -69,6 +66,30 @@ internal sealed class MailboxStore(
         }
 
         return standing;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Mailbox?> FindAsync(string address, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(address);
+
+        byte[] fingerprint = Fingerprinted(address);
+
+        MailboxRecord? record = await Readable()
+            .FirstOrDefaultAsync(mailbox => mailbox.Fingerprint == fingerprint, cancellationToken)
+            .ConfigureAwait(false);
+
+        return record is null ? null : await ReadAsync(record, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Mailbox?> FindAsync(MailboxId id, CancellationToken cancellationToken)
+    {
+        MailboxRecord? record = await Readable()
+            .FirstOrDefaultAsync(mailbox => mailbox.Id == id.Value, cancellationToken)
+            .ConfigureAwait(false);
+
+        return record is null ? null : await ReadAsync(record, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -189,6 +210,13 @@ internal sealed class MailboxStore(
 
         return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, keyEncryptionKeys);
     }
+
+    // A row whose holder was erased has nothing left that reads its address.
+    private IQueryable<MailboxRecord> Readable() =>
+        context.Mailboxes
+            .Where(mailbox => mailbox.Holder == null
+                || context.SubjectKeys.Any(key =>
+                    key.Subject == mailbox.Holder && key.FormatMarker == PersonalDataFormat.Marker));
 
     private byte[] Fingerprinted(string address) =>
         Janus.Storage.Fingerprint.Compute(Encoding.UTF8.GetBytes(address), fingerprintKey.Span);

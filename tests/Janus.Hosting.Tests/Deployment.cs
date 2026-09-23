@@ -469,6 +469,26 @@ internal sealed class Deployment : IAsyncDisposable
     public Janus.Authentication.Tests.Organizations.OrganizationAuditInMemory OrganizationChanges { get; } = new();
 
     /// <summary>
+    /// The invitations the organizations issued.
+    /// </summary>
+    public Janus.Authentication.Tests.Invitations.InvitationStoreInMemory Invitations { get; } = new();
+
+    /// <summary>
+    /// The roles an invitation may name.
+    /// </summary>
+    public Janus.Authentication.Tests.Invitations.RoleCatalogueInMemory RoleCatalogue { get; } = new();
+
+    /// <summary>
+    /// The mailboxes the invitations reserved.
+    /// </summary>
+    public Janus.Authentication.Tests.Mailboxes.MailboxStoreInMemory Mailboxes { get; } = new();
+
+    /// <summary>
+    /// The mail server the administrative organization's mail is integrated with.
+    /// </summary>
+    public Janus.Authentication.Tests.Mailboxes.MailServerInMemory MailServer { get; } = new();
+
+    /// <summary>
     /// The domains organizations lock their members to.
     /// </summary>
     public Janus.Authentication.Tests.Organizations.DomainStoreInMemory Domains { get; } = new();
@@ -730,6 +750,11 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<Janus.Authentication.Organizations.DomainLock>();
         _ = services.AddScoped<Janus.Authentication.Organizations.DomainReverification>();
         _ = services.AddScoped<IOrganizationDomains, Janus.Authentication.Organizations.OrganizationDomainService>();
+        _ = services.AddSingleton<Janus.Authentication.Invitations.IInvitationStore>(Invitations);
+        _ = services.AddSingleton<Janus.Authentication.Invitations.IRoleCatalogue>(RoleCatalogue);
+        _ = services.AddSingleton<Janus.Authentication.Mailboxes.IMailboxStore>(Mailboxes);
+        _ = services.AddSingleton<IMailServer>(MailServer);
+        _ = services.AddScoped<IInvitations, Janus.Authentication.Invitations.InvitationService>();
         _ = services.AddScoped<SigningKeys>();
         _ = services.AddScoped<OidcService>();
         _ = services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());

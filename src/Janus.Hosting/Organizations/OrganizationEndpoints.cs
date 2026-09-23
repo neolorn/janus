@@ -16,13 +16,15 @@ namespace Janus.Hosting.Organizations;
 /// <summary>
 /// The organization administration of chapter 09 section 8a: creating an
 /// organization, requesting its deletion, cancelling the request, reading and
-/// replacing its policy, and the domains it locks its members to.
+/// replacing its policy, the domains it locks its members to, and the invitations
+/// into its membership.
 /// </summary>
 /// <remarks>
 /// Implements IDN-ORG-002, IDN-ORG-003, IDN-ORG-004, IDN-ORG-006, REG-DOM-001,
-/// AUTH-STEP-002a, LIB-API-005 and CONV-DESIGN-006.
-/// Each is one line to <see cref="IOrganizations"/> or <see cref="IOrganizationDomains"/>,
-/// which judge the permission, the step-up and the reason.
+/// IDN-LIFE-009a, REG-INV-001, AUTH-STEP-002a, LIB-API-005 and CONV-DESIGN-006.
+/// Each is one line to <see cref="IOrganizations"/>, <see cref="IOrganizationDomains"/>
+/// or <see cref="IInvitations"/>, which judge the permission, the step-up and the
+/// reason.
 /// </remarks>
 internal static class OrganizationEndpoints
 {
@@ -51,6 +53,10 @@ internal static class OrganizationEndpoints
         _ = SessionRequired.On(endpoints.MapDelete(
             "/admin/organizations/{id:guid}/domains/{domain}",
             RemoveDomainAsync));
+        _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id:guid}/invitations", InviteAsync));
+        _ = SessionRequired.On(endpoints.MapDelete(
+            "/admin/organizations/{id:guid}/invitations/{invitationId:guid}",
+            RevokeInvitationAsync));
 
         return endpoints;
     }
@@ -281,6 +287,64 @@ internal static class OrganizationEndpoints
                     new OrganizationId(id),
                     domain ?? string.Empty,
                     body.Reason ?? string.Empty,
+                    cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
+    }
+
+    private static async Task<IResult> InviteAsync(
+        InvitationBody body,
+        IInvitations invitations,
+        RequestSession browser,
+        HttpContext context,
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        ArgumentNullException.ThrowIfNull(invitations);
+        ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        (InvitationRequest? request, string member) = body.Read();
+
+        if (request is null)
+        {
+            return Answers.Malformed(member);
+        }
+
+        return Answers.Of(
+            await invitations
+                .IssueAsync(
+                    AccessContext.Of(browser.Required.Subject),
+                    browser.Required.Id,
+                    new OrganizationId(id),
+                    request,
+                    RequestOrigin.Source(context.Request),
+                    cancellationToken)
+                .ConfigureAwait(false),
+            issued => TypedResults.Json(
+                IssuedInvitationView.Of(issued),
+                OrganizationJson.Default.IssuedInvitationView,
+                contentType: null,
+                StatusCodes.Status201Created));
+    }
+
+    private static async Task<IResult> RevokeInvitationAsync(
+        IInvitations invitations,
+        RequestSession browser,
+        Guid id,
+        Guid invitationId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(invitations);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        return Answers.Of(
+            await invitations
+                .RevokeAsync(
+                    AccessContext.Of(browser.Required.Subject),
+                    new OrganizationId(id),
+                    new InvitationId(invitationId),
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);

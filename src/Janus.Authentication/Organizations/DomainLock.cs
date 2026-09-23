@@ -17,12 +17,14 @@ namespace Janus.Authentication.Organizations;
 /// <param name="configuration">Where each organization's list is read.</param>
 /// <param name="domains">Where each listed domain's verification stands.</param>
 /// <remarks>
-/// Implements REG-DOM-001, IDN-ORG-006 and REG-MAIL-003. The lock is the organization's,
-/// so it reaches an account through a current membership and through nothing else: it
-/// stops applying the moment the membership ends. Each organization's lock is judged on
-/// its own, so an account in two is held to both. A domain removed from a lock goes on
-/// refusing until it is listed anew, which is what stops new sign-ins with addresses in
-/// it even where the removal left the lock empty.
+/// Implements REG-DOM-001, IDN-ORG-006, REG-MAIL-001 and REG-MAIL-003. The lock is the
+/// organization's, so it reaches an account through a current membership and through
+/// nothing else: it stops applying the moment the membership ends. An invitation is
+/// judged against the lock of the organization it invites into, because the address it
+/// binds is a member's the moment the membership attaches. Each organization's lock is
+/// judged on its own, so an account in two is held to both. A domain removed from a lock
+/// goes on refusing until it is listed anew, which is what stops new sign-ins with
+/// addresses in it even where the removal left the lock empty.
 /// </remarks>
 internal sealed class DomainLock(
     IMembershipLookup memberships,
@@ -49,33 +51,56 @@ internal sealed class DomainLock(
             .OfAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        bool reads = DomainName.TryReadOf(address, out string domain);
-
         foreach (OrganizationId organization in organizations)
         {
-            Error? failure = null;
-
-            PolicyOverride stated = (await configuration
-                    .ReadAsync(Settings.OrganizationPolicy, organization.ToString(), cancellationToken)
-                    .ConfigureAwait(false))
-                .Match(value => value, error => Withheld<PolicyOverride>(error, ref failure));
-
-            if (failure is not null)
+            if (await RefusedInAsync(organization, address, cancellationToken).ConfigureAwait(false)
+                is Error refused)
             {
-                return failure;
-            }
-
-            IReadOnlyList<LockedDomain> held = await domains
-                .OfAsync(organization, cancellationToken)
-                .ConfigureAwait(false);
-
-            if (!Admits(stated.EmailDomains ?? [], held, reads ? domain : null))
-            {
-                return Error.From(ErrorCodes.IdentifierDomainNotAllowed);
+                return refused;
             }
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Judges one address against one organization's lock, for an address that will
+    /// be a member's once a membership attaches.
+    /// </summary>
+    /// <param name="organization">Whose lock.</param>
+    /// <param name="address">The address.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Nothing where the lock admits the address, or the refusal:
+    /// <c>identity.identifier.domainnotallowed</c>, or the failure that kept the lock
+    /// from being read.
+    /// </returns>
+    public async ValueTask<Error?> RefusedInAsync(
+        OrganizationId organization,
+        EmailAddress address,
+        CancellationToken cancellationToken)
+    {
+        Error? failure = null;
+
+        PolicyOverride stated = (await configuration
+                .ReadAsync(Settings.OrganizationPolicy, organization.ToString(), cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Withheld<PolicyOverride>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return failure;
+        }
+
+        IReadOnlyList<LockedDomain> held = await domains
+            .OfAsync(organization, cancellationToken)
+            .ConfigureAwait(false);
+
+        bool reads = DomainName.TryReadOf(address, out string domain);
+
+        return Admits(stated.EmailDomains ?? [], held, reads ? domain : null)
+            ? null
+            : Error.From(ErrorCodes.IdentifierDomainNotAllowed);
     }
 
     // An address whose domain does not read is admitted only where nothing locks it.

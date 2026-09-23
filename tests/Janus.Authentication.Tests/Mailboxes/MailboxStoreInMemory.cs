@@ -48,6 +48,14 @@ internal sealed class MailboxStoreInMemory : IMailboxStore
         ]);
 
     /// <inheritdoc/>
+    public ValueTask<Mailbox?> FindAsync(string address, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(Held.FirstOrDefault(mailbox => mailbox.Address == address));
+
+    /// <inheritdoc/>
+    public ValueTask<Mailbox?> FindAsync(MailboxId id, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(Held.FirstOrDefault(mailbox => mailbox.Id == id));
+
+    /// <inheritdoc/>
     public ValueTask AddAsync(Mailbox mailbox, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(mailbox);

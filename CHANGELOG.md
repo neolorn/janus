@@ -233,6 +233,23 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- An administrator holding `membership:manage` can invite a person into an
+  organization: `POST /admin/organizations/{id}/invitations` binds an `email`, a
+  `phone`, both or neither, and may attach `roles` (which also asks `grant:manage`) and
+  `documents` (fixed at their current version). It asks step-up and answers 201 with the
+  invitation's `id` and `expiresAt`; the link is sent to the bound email, and where no
+  email is bound the `token` is answered once for the administrator to hand over. An
+  invitation into the administrative organization of a deployment that registers
+  `IMailServer` needs both a personal `email` and a `corporateEmail`, and reserves that
+  mailbox disabled; inviting the address again replaces an expired invitation.
+  `DELETE .../invitations/{invitationId}` revokes an invitation nobody has acknowledged
+  (204, or 422 `identity.invitation.expired` once it is), and gives up a mailbox nobody
+  ever held. What an invitation binds is held encrypted and forgotten when it is
+  revoked; its link is held only as a fingerprint. A deployment applies one further
+  migration, which adds the invitation table; one that registers its own message
+  templates adds `invitation-link`. `IInvitations` is the same set of operations in
+  process.
+
 - Staff mailboxes are provisioned through `IMailServer`, which a deployment registers
   where its staff mail is hosted and which no package ships. A mailbox is owed
   `disabled` from its reservation, `enabled` while its holder is an active member of

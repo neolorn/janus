@@ -7872,13 +7872,16 @@ app-password operation is a JMAP request; no other management interface of the m
 server is called." INT-MAIL-008: "No library dependency SHALL be on a specific mail
 server", AC1 "No provider name appears in a core namespace". The plan, section 3:
 "What Milestone 1 does **not** touch: a real mail server, ... Each is met at its
-abstraction (LIB-EXT-001) with a fake that honours the contract". 08 names no project
-for a mail-server adapter.
+abstraction (LIB-EXT-001) with a fake that honours the contract". 08 places "the
+default mail and SMS transports and the mail-server adapter (chapter `05`, LIB-EXT-001
+defaults)" in `Janus.Hosting`. INT-MAIL-001 names "JMAP objects through the JMAP
+management API"; neither chapter `05` nor the decision log gives the objects (D-006
+says only "`stalwart-cli apply` or the JMAP management API").
 
 *The readings.*
 
-1. Write a JMAP adapter in phase 8, in a project of its own, tested against a fake
-   HTTP endpoint.
+1. Write the JMAP adapter in phase 8, in `Janus.Hosting` as 08 places it, tested
+   against a fake HTTP endpoint.
 2. Define the abstraction only: `IMailServer` in `Janus.Core` with
    `ProvisionAsync(MailboxPush, CancellationToken)` answering `ValueTask<Result>` and
    `MailboxesAsync(CancellationToken)` answering
@@ -7887,20 +7890,24 @@ for a mail-server adapter.
    `HostedMailbox(string Address, bool Enabled)`. The host registers it; the library
    ships none. Integration tests run against a fake that honours the contract.
 
-*Chosen: 2, the strictest reading.* A project 08 does not name is a structure choice
-no run may make, and the plan puts the real server out of Milestone 1. An absent
-registration is not a refusal at startup: nothing is pushed and nothing is compared,
-mailbox rows are still written, and the first pass after a registration pushes every
-state owed (INT-MAIL-009 AC1: hosting is a registration of its own, independent of
-outbound delivery). INT-MAIL-001 AC3 is verified by the adapter in Milestone 2 step 5,
-not by a test in this phase. The app-password members join the port with REG-MAIL-002.
+*Chosen: 2, the strictest reading.* The adapter would have to send objects whose shape
+no chapter states and no source in front of this run confirms, which is a claim about
+a product the working guide does not let a run make; a fake HTTP endpoint built to the
+same guess would test nothing. The plan puts the real server out of Milestone 1. An
+absent registration is not a refusal at startup: nothing is pushed and nothing is
+compared, mailbox rows are still written, and the first pass after a registration
+pushes every state owed (INT-MAIL-009 AC1: hosting is a registration of its own,
+independent of outbound delivery). INT-MAIL-001 AC3 is verified by the adapter in
+Milestone 2 step 5, not by a test in this phase. The app-password members join the
+port with REG-MAIL-002.
 
 *Tests that pin it.*
 `MailboxPublisherTests.INT_MAIL_009_AC1_MailboxHostingIsARegistrationOfItsOwnAsync`.
 
-*Chapter text that should change.* 08 could name the adapter's project and 07
-LIB-HOST-001 the declaration (row below); the plan's phase 8 line could say
-"provisioning through the mail-server abstraction".
+*Chapter text that should change.* `05` INT-MAIL-001 could give the JMAP objects and
+methods the adapter sends, and 07 LIB-HOST-001 the declaration (row below); the plan's
+phase 8 line could say "provisioning through the mail-server abstraction, the adapter
+in Milestone 2 step 5".
 
 ---
 
@@ -8144,6 +8151,377 @@ it as a row of its own (REG-MAIL-003).
 *Chapter text that should change.* PRIV-RIGHT-005a's list of personal fields could name
 the mailbox address.
 
+---
+
+## 223. The invitation names its corporate address as `corporateEmail`
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-INV-001, REG-MAIL-001, IDN-LIFE-009a**
+
+*The question.* 09 section 8a: "Where the mail server is integrated, the invitation
+names a personal `email` (required; the link goes to it and its press verifies it, so
+the account is created with a verified personal email), and a corporate `email` is
+asserted and its mailbox provisioned disabled (REG-MAIL-001, D-148)." and "An
+integrated-mail invitation without a personal `email` is refused as a validation error
+(**422**)." One body cannot hold two members named `email`, and chapter 10 holds no
+code for the validation error. REG-MAIL-001: "Where the organization runs its own mail,
+the corporate address SHALL be verified by the person like any other."
+
+*The readings.*
+
+1. `email` is the personal address, the one every invitation sends its link to, and
+   `corporateEmail` the asserted one.
+2. `email` is the corporate address and `personalEmail` the personal one.
+3. An `emails` object with two members.
+
+*Chosen: 1.* `email` keeps one meaning across every invitation: the address the link
+goes to. Where the mail is integrated (entry 216) both are required: a missing one is
+`422 identity.identifier.invalid` with `details.member` naming `email` or
+`corporateEmail`, the 422 code chapter 10 holds for an identifier that is not a
+well-formed identifier of its kind; a personal `email` equal to the corporate address
+is refused the same way naming `email`, since the link would go to a mailbox that is
+disabled. Where the mail is not integrated, `corporateEmail` is
+`400 api.request.malformed` naming it: there is nothing for an administrator to assert.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_001_AC4_AnIntegratedInvitationNeedsAPersonalEmailAsync`,
+`InvitationServiceTests.REG_MAIL_001_ACorporateAddressIsRefusedWhereTheMailIsNotIntegratedAsync`,
+`InvitationEndpointTests.REG_INV_001_AC4_AnIntegratedInvitationWithoutAPersonalEmailIsRefusedAsync`,
+`InvitationEndpointTests.IDN_LIFE_009a_WhatAnInvitationNamesMustBeReadableAsync`.
+
+*Chapter text that should change.* 09 section 8a could name the members `email`,
+`phone`, `corporateEmail`, `roles` and `documents`, and the 422 code.
+
+---
+
+## 224. Which address the domain lock judges at issue, and what a refusal names
+
+**Phase 8 · 2026-09-24 · Tier 3 · REG-DOM-001, REG-MAIL-001, REG-INV-001**
+
+*The question.* REG-DOM-001: "While the lock is on, every member's sign-in email and
+any open email chosen at invitation acceptance SHALL be in the list
+(`identity.identifier.domainnotallowed`)." REG-MAIL-001 of the personal email: "while
+the membership lasts the organization's domain lock (REG-DOM-001) prevents sign-in with
+it". Nothing says whether an address the invitation binds is judged when it is issued.
+Up to three identifiers are read from one body, and chapter 10's identifier codes carry
+no detail naming which.
+
+*The readings.*
+
+1. Issue judges nothing; the lock judges at registration and sign-in only.
+2. Issue judges the address the member will sign in with: the corporate address where
+   the mail is integrated, the bound `email` otherwise. The personal email of an
+   integrated invitation is not judged.
+3. Issue judges every bound email.
+
+*Chosen: 2, the strictest reading that can issue at all.* Reading 3 refuses every
+integrated invitation whose personal address lies outside the list, which REG-MAIL-001
+expects it to; reading 1 issues an invitation whose bound and locked email could never
+sign in. The lock's rule is read through `DomainLock.RefusedInAsync`, the same rule
+sign-in and registration apply. `identity.identifier.invalid` and
+`identity.identifier.mixedscript` carry `details.member` naming `email`, `phone` or
+`corporateEmail`; `identity.identifier.domainnotallowed` carries none, since one address
+alone is judged.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_DOM_001_TheLockJudgesTheAddressTheMemberWillSignInWithAsync`,
+`InvitationServiceTests.REG_INV_001_AnIdentifierThatDoesNotReadIsRefusedByMemberAsync`.
+
+*Chapter text that should change.* REG-DOM-001 could say a bound email is judged when
+the invitation is issued; chapter 10 could note the `member` detail of the two
+identifier codes.
+
+---
+
+## 225. A phone the deployment does not collect is not bound
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-INV-001, REG-MAIL-001**
+
+*The question.* REG-INV-001: "An invitation MAY name the email, the phone, both, or
+neither." REG-MAIL-001 AC3: "A bound phone is verified before the membership step can
+be reached." A registration where `registration.phone` is `off` collects no phone.
+
+*The readings.*
+
+1. Bind it anyway.
+2. Refuse it: `400 api.request.malformed` naming `phone`.
+
+*Chosen: 2.* A bound phone is one the registration must verify, and one that collects
+none never would, so the membership step would be unreachable.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_001_APhoneIsNotBoundWhereTheDeploymentCollectsNoneAsync`.
+
+*Chapter text that should change.* REG-INV-001 could say a phone is bound only where
+`registration.phone` is not `off`.
+
+---
+
+## 226. Where the link goes, and the token answered once where no email is bound
+
+**Phase 8 · 2026-09-24 · Tier 3 · IDN-LIFE-009a, REG-INV-001**
+
+*The question.* 09 section 8a: "Issues a time-boxed, single-use enrolment link
+(IDN-LIFE-009a). MAY bind `email`, `phone`, both or neither". REG-INV-001: "Binding the
+phone means the link alone is not enough to accept, and gives the invitation a second,
+personal channel." Nothing says where the link goes when no email is bound, and 09
+gives no response body.
+
+*The readings.*
+
+1. The link goes to the bound email; with none, to the bound phone by SMS; with
+   neither, the token is answered to the administrator.
+2. The link goes to the bound email alone. With no email bound the token is answered
+   once, in the `201`, for the administrator to hand over; the phone is never sent it.
+3. Refuse an invitation that binds no email.
+
+*Chosen: 2, the strictest reading.* Reading 1 carries the link on the channel binding
+the phone makes the second one, so the link alone would again be enough; reading 3
+forbids what REG-INV-001 allows. The `201` body is `id`, `expiresAt` and `token`, which
+is `null` wherever the link was sent. The token is held only as its fingerprint.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_001_TheLinkGoesToTheBoundEmailOrToTheAdministratorAsync`,
+`InvitationServiceTests.REG_MAIL_001_AC2_TheCorporateAddressIsSentNothingAsync`,
+`InvitationEndpointTests.IDN_LIFE_009a_AnInvitationIsIssuedAndItsLinkSentAsync`,
+`InvitationStoreTests.REG_INV_001_AnInvitationReadsBackAsItWasIssuedAsync`.
+
+*Chapter text that should change.* 09 section 8a could give the `201` body and say the
+link is sent to the bound email only.
+
+---
+
+## 227. How the link is sent, and a link that cannot be sent issues nothing
+
+**Phase 8 · 2026-09-24 · Tier 2 · IDN-LIFE-009a, REG-MAIL-001**
+
+*The question.* REG-MAIL-001: "the invitation SHALL name a **personal email**, to
+which the invitation link is sent". Nothing says under which purpose the sending
+restrictions judge the link, or what an unsent link does to the invitation. The
+invitee holds no account.
+
+*The readings.*
+
+1. Write the invitation, then send the link, and keep the invitation where the send
+   fails.
+2. Send the link before the transaction, as the recovery link is, and issue nothing
+   where the send is refused.
+
+*Chosen: 2.* An invitation whose link never left cannot be accepted and would hold
+its mailbox reserved for its whole lifetime. The link is sent as the message kind
+`invitation-link` (row below) with the purpose `notification` and no subject, so the
+restrictions a notification answers to judge it, as they judge a recovery link
+(chapter 10: "A recovery link carries the `notification` purpose").
+
+*Tests that pin it.*
+`InvitationServiceTests.IDN_LIFE_009a_ALinkThatCouldNotBeSentIssuesNothingAsync`.
+
+*Chapter text that should change.* Chapter 10 could list the message kind (row below).
+
+---
+
+## 228. The roles an invitation attaches ask what a grant asks
+
+**Phase 8 · 2026-09-24 · Tier 3 · REG-INV-001, AUTHZ-GRANT-004, IDN-LIFE-009a**
+
+*The question.* REG-INV-001: "At the membership step the person SHALL be shown who
+invited them, the organization, the roles and grants that will attach". Chapter 10
+gives `membership:manage` "Adding and removing members; issuing and revoking
+invitations, bound or open", and a grant is `grant:manage`. 09 names no member for the
+roles.
+
+*The readings.*
+
+1. `membership:manage` alone attaches any role.
+2. The body names organization-wide role names in `roles`. Naming any asks
+   `grant:manage` in the organization; a role carrying `system:administer` asks what a
+   grant of it asks, `system:administer` in the administrative organization; a role the
+   deployment does not define is `400 api.request.malformed` naming `roles`; a name
+   given twice counts once; no `roles` attaches none.
+3. Nothing attaches at issue; grants are made after acknowledgement.
+
+*Chosen: 2, the strictest reading.* Reading 1 lets a holder of `membership:manage`
+grant what `grant:manage` withholds; reading 3 contradicts "the roles and grants that
+will attach". The roles are read through a port of their own, `IRoleCatalogue`, which
+the store implements over the roles tables.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_001_TheRolesAttachedAskWhatAGrantAsksAsync`,
+`InvitationEndpointTests.IDN_LIFE_009a_WhatAnInvitationNamesMustBeReadableAsync`.
+
+*Chapter text that should change.* 09 section 8a could name `roles` and say that
+naming one asks `grant:manage`.
+
+---
+
+## 229. The documents an invitation attaches, at the version current when it is issued
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-INV-001**
+
+*The question.* REG-INV-001: "the documents the organization attached to the
+invitation, each with a version", and AC3 "The membership record carries the
+acknowledgement with the document versions shown." Nothing says whether the body names
+the version.
+
+*The readings.*
+
+1. The body names each document and its version.
+2. The body names each document; the version is the one current when the invitation
+   is issued, and is what is shown and recorded.
+
+*Chosen: 2.* What is shown is what the organization attached, not what was published
+after it. A document never published, or a blank name, is
+`400 api.request.malformed` naming `documents`; a name given twice counts once; no
+`documents` attaches none.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_001_TheInvitationKeepsWhatItBindsAndTheVersionsShownAsync`,
+`InvitationServiceTests.REG_INV_001_AnUnpublishedDocumentIsRefusedAsync`.
+
+*Chapter text that should change.* 09 section 8a could name `documents` and say the
+version is fixed at issue.
+
+---
+
+## 230. An organization on its way out takes no invitation
+
+**Phase 8 · 2026-09-24 · Tier 3 · IDN-ORG-003, IDN-LIFE-009a**
+
+*The question.* IDN-ORG-003: "Deletion requested | Organization suspends immediately;
+access stops". Nothing says whether an invitation is issued into it.
+
+*The readings.*
+
+1. Issue it; the membership fails when it would attach.
+2. Refuse it: `400 api.request.malformed` naming `id`, as an organization that does
+   not exist is.
+
+*Chosen: 2, the strictest reading.* A suspended organization admits nobody, and a
+link sent into it could not be kept.
+
+*Tests that pin it.*
+`InvitationServiceTests.IDN_LIFE_009a_IssuingIsGatedAndSteppedUpAsync`.
+
+*Chapter text that should change.* IDN-ORG-003 could say a suspended organization is
+invited into by nobody.
+
+---
+
+## 231. One standing invitation per mailbox, and re-inviting an expired one
+
+**Phase 8 · 2026-09-24 · Tier 3 · REG-MAIL-001, INT-MAIL-006**
+
+*The question.* REG-MAIL-001: "An expired invitation SHALL leave the mailbox reserved
+and disabled until the administrator re-invites or deletes it." Nothing says what an
+invitation over an address another invitation already reserves does, or what becomes
+of the expired invitation when the address is invited again.
+
+*The readings.*
+
+1. Several invitations may stand over one mailbox; the first acknowledged wins.
+2. One invitation stands over a mailbox at a time. An open one, or a mailbox a member
+   holds, refuses a second with `400 api.request.malformed` naming `corporateEmail`.
+   An expired one is revoked in the transaction that issues the new one, and audited as
+   revoked, and the mailbox is kept.
+
+*Chosen: 2, the strictest reading.* Two invitations over one mailbox would let two
+people race for one address. A partial unique index on the mailbox, over invitations
+neither revoked nor acknowledged, holds it whatever a service does.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_MAIL_001_AC1_ExpiryLeavesTheMailboxReservedUntilTheAddressIsInvitedAgainAsync`,
+`InvitationServiceTests.REG_MAIL_001_AnAddressAlreadyTakenIsRefusedAsync`,
+`InvitationStoreTests.REG_MAIL_001_OneInvitationStandsOverAMailboxAsync`.
+
+*Chapter text that should change.* REG-MAIL-001 could say re-inviting revokes the
+expired invitation.
+
+---
+
+## 232. Issuing says nothing about who holds an account
+
+**Phase 8 · 2026-09-24 · Tier 3 · REG-INV-001, REG-INV-002, D-076**
+
+*The question.* 09 section 8a: "The identifier-mismatch refusal belongs to acceptance
+(`POST /account/invitation/acknowledge`), not to issue". Nothing says whether issue
+checks a bound identifier against the accounts.
+
+*The readings.*
+
+1. Refuse at issue an identifier another account holds.
+2. Check nothing at issue; the mismatch is refused at acceptance.
+
+*Chosen: 2.* 09 places the refusal at acceptance, and an answer at issue would tell
+the administrator which addresses hold accounts, which D-076 closes everywhere else.
+
+*Tests that pin it.* None at issue: nothing is read, so nothing can be answered. The
+acceptance refusal is pinned with the acknowledgement endpoint.
+
+*Chapter text that should change.* None.
+
+---
+
+## 233. What revoking takes, and what an acknowledged invitation answers
+
+**Phase 8 · 2026-09-24 · Tier 3 · IDN-LIFE-009a, REG-MAIL-001**
+
+*The question.* 09 section 8a: "`DELETE /admin/organizations/{id}/invitations/{invitationId}`
+| Revokes an unused invitation". Nothing says when an invitation stops being unused,
+what a used one answers, or whether revoking is a step-up action; chapter 10's step-up
+table lists `invitation:issue` alone.
+
+*The readings.*
+
+1. Unused until its token attaches to a registration.
+2. Unused until it is acknowledged: an invitation attached but not acknowledged is
+   revoked, and the membership never attaches.
+
+*Chosen: 2, the strictest reading.* The administrator keeps the power to withdraw
+until the moment the membership exists. An acknowledged invitation answers
+`422 identity.invitation.expired` ("already used"); one of another organization, or
+none, is `400 api.request.malformed` naming `invitationId`; a second revoke answers
+`204` again. No step-up is asked: revoking takes access away and chapter 10 lists no
+action for it. What the invitation bound is forgotten, and its mailbox is released only
+where nobody ever held it (entry 221).
+
+*Tests that pin it.*
+`InvitationServiceTests.IDN_LIFE_009a_OnlyAnUnacknowledgedInvitationOfTheOrganizationIsRevokedAsync`,
+`InvitationServiceTests.REG_MAIL_001_RevokingGivesUpAMailboxNobodyHeldAsync`,
+`InvitationServiceTests.REG_MAIL_001_RevokingKeepsAMailboxSomeoneHeldAsync`,
+`InvitationEndpointTests.IDN_LIFE_009a_AnUnusedInvitationIsRevokedAsync`.
+
+*Chapter text that should change.* 09 section 8a could define unused as not yet
+acknowledged, and give the `204` and the refusals.
+
+---
+
+## 234. What an invitation row keeps, and for how long
+
+**Phase 8 · 2026-09-24 · Tier 3 · PRIV-RIGHT-005a, PRIV-RIGHT-005c, REG-INV-001, IDN-LIFE-009a**
+
+*The question.* An invitation binds a person's addresses before any account holds
+them, so no subject key exists to encrypt them under. PRIV-RIGHT-005a lists the
+personal fields that are encrypted; nothing says where an invitation's are held, or
+how long.
+
+*The readings.*
+
+1. Hold the bound identifiers in plaintext until the invitation is used.
+2. Hold them as one encrypted document under a key of the row's own, and forget the
+   document and the key when the invitation is revoked, acknowledged or swept after
+   expiry. The token is held only as its fingerprint. The audit record names the
+   invitation and not what it bound.
+
+*Chosen: 2, the strictest reading.* Nothing about a person survives an invitation that
+led nowhere, and what stays is who invited into what, and when.
+
+*Tests that pin it.*
+`InvitationStoreTests.REG_INV_001_AnInvitationReadsBackAsItWasIssuedAsync`,
+`InvitationStoreTests.REG_INV_001_ARevokedInvitationForgetsWhatItBoundAsync`,
+`ModelTests` (the `invitations` columns).
+
+*Chapter text that should change.* PRIV-RIGHT-005a could name an invitation's bound
+identifiers among the personal fields and when they are forgotten.
+
 
 # Rows for chapter 10
 
@@ -8305,6 +8683,8 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `identity.credential.labelled` | routine | `AuditActions.CredentialLabelled` | A credential was given or renamed a label by its holder. (REG-PM-002) |
 | `identity.deletion.cancelled` | routine | `AuditActions.DeletionCancelled` | A deletion was cancelled inside its grace window. (IDN-LIFE-014) |
 | `identity.deletion.requested` | routine | `AuditActions.DeletionRequested` | A deletion was requested, which opens the grace window it can be brought back from. (IDN-LIFE-014) |
+| `identity.invitation.issued` | security | `AuditActions.InvitationIssued` | An invitation into an organization was issued. Details carry `invitation` and nothing it binds; the row is filed under the organization. (IDN-LIFE-009a, REG-INV-001, entry 234) |
+| `identity.invitation.revoked` | security | `AuditActions.InvitationRevoked` | An invitation nobody had acknowledged was revoked, or replaced by a later one for the same corporate address. Details carry `invitation`. (IDN-LIFE-009a, REG-MAIL-001, entries 231 and 233) |
 | `identity.organization.created` | security | `AuditActions.OrganizationCreated` | An organization was created, with its policy key holding no override. Details carry `reason`; the row is filed under the organization. (IDN-ORG-002, entry 197) |
 | `identity.organization.deletioncancelled` | security | `AuditActions.OrganizationDeletionCancelled` | An organization's deletion request was cancelled inside its window, which gives back every grant it holds. Details carry `reason`. (IDN-ORG-003, entry 197) |
 | `identity.organization.deletionrequested` | security | `AuditActions.OrganizationDeletionRequested` | An organization's deletion was requested: it is suspended and every member session ended. Details carry `reason`. (IDN-ORG-003, entry 197) |
@@ -8352,6 +8732,7 @@ asks for it. The library never holds the words (CONV-CONTENT-001).
 | `identifier-detached` | `MessageKind.IdentifierDetached` | The identifier that was removed no longer reaches the account. It carries no link and no powers. |
 | `identifier-removed` | `MessageKind.IdentifierRemoved` | An identifier was removed, sent to the members of the security-notice set that remain and carrying the link that undoes it. |
 | `identifier-settings-changed` | `MessageKind.IdentifierSettingsChanged` | The primary identifier of a kind, or the kind's backup setting, changed. |
+| `invitation-link` | `MessageKind.InvitationLink` | The link an invitation into an organization carries, sent to the email the invitation binds and to nothing else; its place `token` carries the link (IDN-LIFE-009a, REG-MAIL-001, entries 226 and 227). |
 | `no-account` | `MessageKind.NoAccount` | The answer to a request made for an address no account holds. |
 | `privacy-request-lapsed` | `MessageKind.PrivacyRequestLapsed` | The honest word to a subject whose out-of-band erasure request reached its deadline undecided (PRIV-RIGHT-002). |
 | `privacy-request-received` | `MessageKind.PrivacyRequestReceived` | The automatic receipt a data subject request gets the moment it enters the queue, which is not a decision and starts nothing (PRIV-RIGHT-002). |

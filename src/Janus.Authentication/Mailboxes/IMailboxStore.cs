@@ -25,6 +25,25 @@ internal interface IMailboxStore
     ValueTask<IReadOnlyList<MailboxStanding>> AllAsync(CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads the mailbox of one address, whatever state it is in.
+    /// </summary>
+    /// <param name="address">The address, in its canonical form.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The mailbox, or nothing where the address never had one or its last holder was
+    /// erased.
+    /// </returns>
+    ValueTask<Mailbox?> FindAsync(string address, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads one mailbox, whatever state it is in.
+    /// </summary>
+    /// <param name="id">Which mailbox.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The mailbox, or nothing where no such row exists or its last holder was erased.</returns>
+    ValueTask<Mailbox?> FindAsync(MailboxId id, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Writes a newly reserved mailbox onto the transaction in progress.
     /// </summary>
     /// <param name="mailbox">The mailbox.</param>
