@@ -355,35 +355,45 @@ public sealed class ModelTests
             "objections.withdrawn_at",
 
             // Not an account field: the clients the deployment registered with the
-            // provider, the codes waiting to be exchanged and the refresh tokens of
-            // AUTH-OIDC-001, AUTH-OIDC-003 and AUTH-SESS-012.
+            // provider, and the authorizations, scopes and tokens the protocol server
+            // keeps in the library's tables (AUTH-OIDC-001 to AUTH-OIDC-004,
+            // AUTH-SESS-012).
+            "oidc_authorizations.application_id",
+            "oidc_authorizations.concurrency_token",
+            "oidc_authorizations.created_at",
+            "oidc_authorizations.id",
+            "oidc_authorizations.properties",
+            "oidc_authorizations.scopes",
+            "oidc_authorizations.status",
+            "oidc_authorizations.subject",
+            "oidc_authorizations.type",
             "oidc_clients.client_id",
             "oidc_clients.kind",
             "oidc_clients.name",
             "oidc_clients.redirect",
             "oidc_clients.scopes",
             "oidc_clients.secret",
-            "oidc_codes.challenge",
-            "oidc_codes.challenge_method",
-            "oidc_codes.client_id",
-            "oidc_codes.expires_at",
-            "oidc_codes.fingerprint",
-            "oidc_codes.issued_at",
-            "oidc_codes.nonce",
-            "oidc_codes.redirect",
-            "oidc_codes.scope",
-            "oidc_codes.session",
-            "oidc_codes.spent_at",
-            "oidc_codes.subject",
-            "oidc_refresh_tokens.client_id",
-            "oidc_refresh_tokens.consumed_at",
-            "oidc_refresh_tokens.expires_at",
-            "oidc_refresh_tokens.family",
-            "oidc_refresh_tokens.fingerprint",
-            "oidc_refresh_tokens.issued_at",
-            "oidc_refresh_tokens.scope",
-            "oidc_refresh_tokens.session",
-            "oidc_refresh_tokens.subject",
+            "oidc_scopes.description",
+            "oidc_scopes.descriptions",
+            "oidc_scopes.display_name",
+            "oidc_scopes.display_names",
+            "oidc_scopes.id",
+            "oidc_scopes.name",
+            "oidc_scopes.properties",
+            "oidc_scopes.resources",
+            "oidc_tokens.application_id",
+            "oidc_tokens.authorization_id",
+            "oidc_tokens.concurrency_token",
+            "oidc_tokens.created_at",
+            "oidc_tokens.expires_at",
+            "oidc_tokens.id",
+            "oidc_tokens.payload",
+            "oidc_tokens.properties",
+            "oidc_tokens.redeemed_at",
+            "oidc_tokens.reference_id",
+            "oidc_tokens.status",
+            "oidc_tokens.subject",
+            "oidc_tokens.type",
 
             // The organization of IDN-ORG-001, with the mark IDN-ORG-004 reads and
             // the deletion window of IDN-ORG-003.
@@ -427,14 +437,18 @@ public sealed class ModelTests
             "policy_raises.value",
 
             // Not an account field: what a browser carries before it holds a session,
-            // keyed as the session table is and carrying the registration session in
-            // flight (BFF-CSRF-005a, BFF-CSRF-005b).
+            // keyed as the session table is and carrying the registration session and
+            // the sign-on in flight (BFF-CSRF-005a, BFF-CSRF-005b, BFF-SESS-006).
             "preauthentication_sessions.created_at",
             "preauthentication_sessions.csrf_fingerprint",
             "preauthentication_sessions.enrolment",
             "preauthentication_sessions.expires_at",
             "preauthentication_sessions.fingerprint",
             "preauthentication_sessions.registration",
+            "preauthentication_sessions.signon_key_version",
+            "preauthentication_sessions.signon_return",
+            "preauthentication_sessions.signon_state",
+            "preauthentication_sessions.signon_verifier",
 
             // Not an account field: that an export was taken and when, which is what
             // the rate limit of D-086 counts and nothing more.
