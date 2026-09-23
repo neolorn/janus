@@ -1128,6 +1128,8 @@ Janus.Core.IOidc.KeysAsync(System.Threading.CancellationToken cancellationToken)
 Janus.Core.IOrganizations
 Janus.Core.IOrganizations.CancelDeletionAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IOrganizations.CreateAsync(Janus.Core.AccessContext! context, string! name, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.OrganizationId>>
+Janus.Core.IOrganizations.PolicyAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.OrganizationPolicy!>>
+Janus.Core.IOrganizations.ReplacePolicyAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, Janus.Core.PolicyOverride! replacement, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IOrganizations.RequestDeletionAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IPrivacyRequests
 Janus.Core.IPrivacyRequests.EnterAsync(Janus.Core.AccessContext! context, Janus.Core.PrivacyRequestEntry! entry, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.PrivacyRequestReceipt!>>
@@ -1455,6 +1457,15 @@ Janus.Core.OrganizationId.OrganizationId() -> void
 Janus.Core.OrganizationId.OrganizationId(System.Guid Value) -> void
 Janus.Core.OrganizationId.Value.get -> System.Guid
 Janus.Core.OrganizationId.Value.init -> void
+Janus.Core.OrganizationPolicy
+Janus.Core.OrganizationPolicy.<Clone>$() -> Janus.Core.OrganizationPolicy!
+Janus.Core.OrganizationPolicy.Deconstruct(out Janus.Core.Policy! Resolved, out Janus.Core.PolicyOverride! Overridden) -> void
+Janus.Core.OrganizationPolicy.Equals(Janus.Core.OrganizationPolicy? other) -> bool
+Janus.Core.OrganizationPolicy.OrganizationPolicy(Janus.Core.Policy! Resolved, Janus.Core.PolicyOverride! Overridden) -> void
+Janus.Core.OrganizationPolicy.Overridden.get -> Janus.Core.PolicyOverride!
+Janus.Core.OrganizationPolicy.Overridden.init -> void
+Janus.Core.OrganizationPolicy.Resolved.get -> Janus.Core.Policy!
+Janus.Core.OrganizationPolicy.Resolved.init -> void
 Janus.Core.PasskeyAddresses
 Janus.Core.PasskeyAddresses.<Clone>$() -> Janus.Core.PasskeyAddresses!
 Janus.Core.PasskeyAddresses.ChangePassword.get -> string!
@@ -2716,6 +2727,9 @@ override Janus.Core.OrganizationErased.GetHashCode() -> int
 override Janus.Core.OrganizationErased.ToString() -> string!
 override Janus.Core.OrganizationId.GetHashCode() -> int
 override Janus.Core.OrganizationId.ToString() -> string!
+override Janus.Core.OrganizationPolicy.Equals(object? obj) -> bool
+override Janus.Core.OrganizationPolicy.GetHashCode() -> int
+override Janus.Core.OrganizationPolicy.ToString() -> string!
 override Janus.Core.PasskeyAddresses.Equals(object? obj) -> bool
 override Janus.Core.PasskeyAddresses.GetHashCode() -> int
 override Janus.Core.PasskeyAddresses.ToString() -> string!
@@ -3476,6 +3490,8 @@ static Janus.Core.OrganizationErased.operator ==(Janus.Core.OrganizationErased? 
 static Janus.Core.OrganizationId.New(System.TimeProvider! time) -> Janus.Core.OrganizationId
 static Janus.Core.OrganizationId.operator !=(Janus.Core.OrganizationId left, Janus.Core.OrganizationId right) -> bool
 static Janus.Core.OrganizationId.operator ==(Janus.Core.OrganizationId left, Janus.Core.OrganizationId right) -> bool
+static Janus.Core.OrganizationPolicy.operator !=(Janus.Core.OrganizationPolicy? left, Janus.Core.OrganizationPolicy? right) -> bool
+static Janus.Core.OrganizationPolicy.operator ==(Janus.Core.OrganizationPolicy? left, Janus.Core.OrganizationPolicy? right) -> bool
 static Janus.Core.PasskeyAddresses.operator !=(Janus.Core.PasskeyAddresses? left, Janus.Core.PasskeyAddresses? right) -> bool
 static Janus.Core.PasskeyAddresses.operator ==(Janus.Core.PasskeyAddresses? left, Janus.Core.PasskeyAddresses? right) -> bool
 static Janus.Core.Permission.Parse(string! value) -> Janus.Core.Permission

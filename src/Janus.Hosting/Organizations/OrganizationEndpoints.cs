@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -10,11 +11,13 @@ using Microsoft.AspNetCore.Routing;
 namespace Janus.Hosting.Organizations;
 
 /// <summary>
-/// The organization lifecycle of chapter 09 section 8a: creating an organization,
-/// requesting its deletion and cancelling the request.
+/// The organization administration of chapter 09 section 8a: creating an
+/// organization, requesting its deletion, cancelling the request, and reading and
+/// replacing its policy.
 /// </summary>
 /// <remarks>
-/// Implements IDN-ORG-002, IDN-ORG-003, IDN-ORG-004, LIB-API-005 and CONV-DESIGN-006.
+/// Implements IDN-ORG-002, IDN-ORG-003, IDN-ORG-004, AUTH-STEP-002a, LIB-API-005 and
+/// CONV-DESIGN-006.
 /// Each is one line to <see cref="IOrganizations"/>, which judges the permission, the
 /// step-up and the reason.
 /// </remarks>
@@ -35,6 +38,8 @@ internal static class OrganizationEndpoints
         _ = SessionRequired.On(endpoints.MapPost("/admin/organizations", CreateAsync));
         _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id:guid}/delete", RequestDeletionAsync));
         _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id:guid}/delete/cancel", CancelDeletionAsync));
+        _ = SessionRequired.On(endpoints.MapGet("/admin/organizations/{id:guid}/policy", PolicyAsync));
+        _ = SessionRequired.On(endpoints.MapPut("/admin/organizations/{id:guid}/policy", ReplacePolicyAsync));
 
         return endpoints;
     }
@@ -108,5 +113,66 @@ internal static class OrganizationEndpoints
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
+    }
+
+    private static async Task<IResult> PolicyAsync(
+        IOrganizations organizations,
+        RequestSession browser,
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(organizations);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        return Answers.Of(
+            await organizations
+                .PolicyAsync(AccessContext.Of(browser.Required.Subject), new OrganizationId(id), cancellationToken)
+                .ConfigureAwait(false),
+            policy => TypedResults.Json(
+                OrganizationPolicyView.Of(policy),
+                OrganizationJson.Default.OrganizationPolicyView,
+                contentType: null,
+                StatusCodes.Status200OK));
+    }
+
+    private static async Task<IResult> ReplacePolicyAsync(
+        JsonElement body,
+        IOrganizations organizations,
+        RequestSession browser,
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(organizations);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        var organization = new OrganizationId(id);
+        Error? failure = null;
+        (PolicyOverride replacement, string reason) = OrganizationPolicyBody
+            .Read(body, organization)
+            .Match(read => read, error => Withheld<(PolicyOverride, string)>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Answers.Refused(failure);
+        }
+
+        return Answers.Of(
+            await organizations
+                .ReplacePolicyAsync(
+                    AccessContext.Of(browser.Required.Subject),
+                    browser.Required.Id,
+                    organization,
+                    replacement,
+                    reason,
+                    cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
+    }
+
+    private static TValue Withheld<TValue>(Error error, ref Error? failure)
+    {
+        failure = error;
+
+        return default!;
     }
 }

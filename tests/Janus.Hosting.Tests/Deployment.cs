@@ -212,6 +212,11 @@ internal sealed class Deployment : IAsyncDisposable
     public MembershipLookupInMemory Memberships { get; } = new();
 
     /// <summary>
+    /// What each policy has raised, by scope.
+    /// </summary>
+    public PolicyRaiseStoreInMemory Raises { get; } = new();
+
+    /// <summary>
     /// What an uploaded image is read and re-encoded by.
     /// </summary>
     public ImageCodecInMemory Codec { get; } = new();
@@ -556,7 +561,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<ISessionAudit, SessionAuditInMemory>();
         _ = services.AddSingleton<IMembershipLookup>(Memberships);
         _ = services.AddSingleton(Codec.Declared);
-        _ = services.AddSingleton<IPolicyRaiseStore, PolicyRaiseStoreInMemory>();
+        _ = services.AddSingleton<IPolicyRaiseStore>(Raises);
         _ = services.AddSingleton<IChallengeStore, ChallengeStoreInMemory>();
         _ = services.AddSingleton<IVerificationCodeStore, VerificationCodeStoreInMemory>();
         _ = services.AddSingleton<IPendingSignInStore, PendingSignInStoreInMemory>();

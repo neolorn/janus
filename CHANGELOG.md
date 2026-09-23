@@ -233,6 +233,17 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `GET /admin/organizations/{id}/policy` answers the policy an organization's members
+  resolve to, each field and each gate as `{ value, overridden }`, and
+  `PUT /admin/organizations/{id}/policy` replaces what the organization overrides.
+  Both ask `organization:manage` in the administrative organization; a replacement
+  also asks step-up under `policy:change` and a reason, and `system:administer` where
+  it loosens. A field looser than the system policy is refused with 422
+  `config.policy.belowsystem` naming it, the administrative organization cannot fall
+  below `aal2` (422 `config.value.belowfloor`), and `emailDomains` or an unknown member
+  is refused with 400. `IOrganizations.PolicyAsync` and `ReplacePolicyAsync` are the
+  same in process.
+
 - `POST /admin/organizations` creates an organization with its policy key holding no
   override; `POST /admin/organizations/{id}/delete` suspends one, ending every session
   of its members, and `POST /admin/organizations/{id}/delete/cancel` restores it inside

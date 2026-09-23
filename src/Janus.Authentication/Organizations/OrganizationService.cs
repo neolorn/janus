@@ -20,8 +20,9 @@ namespace Janus.Authentication.Organizations;
 /// <param name="directory">Where organizations are written and their members read.</param>
 /// <param name="sessions">What a deletion request ends for every member.</param>
 /// <param name="audit">Where every change is written down.</param>
-/// <param name="configuration">Where the grace window is read.</param>
-/// <param name="administration">Where a new organization's policy key is written and recorded.</param>
+/// <param name="configuration">Where the grace window and the policies are read.</param>
+/// <param name="administration">Where an organization's policy key is written and recorded.</param>
+/// <param name="policies">Where what a change of policy raised is recorded.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -38,6 +39,7 @@ internal sealed class OrganizationService(
     IOrganizationAudit audit,
     IConfigurationStore configuration,
     ConfigurationAdministration administration,
+    PolicyResolution policies,
     IUnitOfWork work,
     TimeProvider time) : IOrganizations
 {
@@ -251,6 +253,179 @@ internal sealed class OrganizationService(
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success();
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result<OrganizationPolicy>> PolicyAsync(
+        AccessContext context,
+        OrganizationId organization,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (await scope.RefusedAsync(context, Permissions.OrganizationManage, cancellationToken).ConfigureAwait(false)
+            is Error refused)
+        {
+            return Result.Failure<OrganizationPolicy>(refused);
+        }
+
+        if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false) is null)
+        {
+            return Result.Failure<OrganizationPolicy>(Malformed("id"));
+        }
+
+        Error? failure = null;
+
+        Policy system = (await configuration.ReadAsync(Settings.PolicyDefault, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<Policy>(error, ref failure));
+        PolicyOverride stated = (await configuration
+                .ReadAsync(Settings.OrganizationPolicy, organization.ToString(), cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<PolicyOverride>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<OrganizationPolicy>(failure);
+        }
+
+        Policy resolved = PolicyStrictness.Tighten(system, stated);
+
+        return Result.Success(
+            new OrganizationPolicy(resolved, PolicyStrictness.InForce(system, resolved, stated)));
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result> ReplacePolicyAsync(
+        AccessContext context,
+        SessionId session,
+        OrganizationId organization,
+        PolicyOverride replacement,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(replacement);
+
+        if (context.Acting is not SubjectId acting)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        if (await scope.RefusedAsync(context, Permissions.OrganizationManage, cancellationToken).ConfigureAwait(false)
+            is Error refused)
+        {
+            return Result.Failure(refused);
+        }
+
+        if (Stated(reason) is not string stated)
+        {
+            return Result.Failure(Malformed("reason"));
+        }
+
+        // Chapter 10 section 4.1a: the domain lock is written only through the domain
+        // operations, never through the policy.
+        if (replacement.EmailDomains is not null)
+        {
+            return Result.Failure(Malformed("emailDomains"));
+        }
+
+        if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false)
+            is not OrganizationStanding standing)
+        {
+            return Result.Failure(Malformed("id"));
+        }
+
+        Error? failure = null;
+
+        Policy system = (await configuration.ReadAsync(Settings.PolicyDefault, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<Policy>(error, ref failure));
+        PolicyOverride before = (await configuration
+                .ReadAsync(Settings.OrganizationPolicy, organization.ToString(), cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<PolicyOverride>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure(failure);
+        }
+
+        PolicyOverride after = replacement with { EmailDomains = before.EmailDomains };
+
+        // AUTH-STEP-002a: an organization may tighten any field and may not loosen one
+        // below the system policy.
+        if (PolicyStrictness.BelowSystem(system, after) is string looser)
+        {
+            return Result.Failure(Error.From(
+                ErrorCodes.ConfigurationPolicyBelowSystem,
+                "field",
+                JsonSerializer.SerializeToElement(looser)));
+        }
+
+        Policy was = PolicyStrictness.Tighten(system, before);
+        Policy becomes = PolicyStrictness.Tighten(system, after);
+
+        // AUTH-SESS-005b: the administrative organization is held to a stated floor of
+        // AAL2, which no change of its policy takes it below.
+        if (standing.IsAdministrative && becomes.RequiredAssurance < AssuranceLevel.Aal2)
+        {
+            return Result.Failure(Error.From(
+                ErrorCodes.ConfigurationValueBelowFloor,
+                "field",
+                JsonSerializer.SerializeToElement("requiredAssurance")));
+        }
+
+        bool loosening = PolicyStrictness.Loosens(was, becomes);
+
+        // OPS-CFG-002 and chapter 10 section 2.1: a loosening of runtime configuration
+        // also needs the permission to loosen the deployment.
+        if (loosening
+            && await scope.RefusedAsync(context, Permissions.SystemAdminister, cancellationToken).ConfigureAwait(false)
+                is Error withheld)
+        {
+            return Result.Failure(withheld);
+        }
+
+        if (await stepUp
+                .PassedAsync(acting, session, StepUpAction.PolicyChange, cancellationToken)
+                .ConfigureAwait(false)
+            is Error challenged)
+        {
+            return Result.Failure(challenged);
+        }
+
+        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await administration
+                .ChangeMemberAsync(
+                    Settings.OrganizationPolicy,
+                    organization.ToString(),
+                    after,
+                    loosening,
+                    stated,
+                    acting,
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error unwritten)
+        {
+            return Result.Failure(unwritten);
+        }
+
+        // AUTH-FACT-017: what the change raised is what a member's sign-in that does
+        // not yet meet it is held against.
+        _ = await policies
+            .RaisedAsync(organization, was, becomes, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
+
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        return Result.Success();
+    }
+
+    private static TValue Held<TValue>(Error error, ref Error? failure)
+    {
+        failure = error;
+
+        return default!;
     }
 
     // API-CONV-002: a free-text field is 1 to 1024 characters after trimming.

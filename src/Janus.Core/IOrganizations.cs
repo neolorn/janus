@@ -8,11 +8,12 @@ namespace Janus.Core;
 /// under <c>organization:manage</c> in the administrative organization.
 /// </summary>
 /// <remarks>
-/// Implements LIB-API-005, IDN-ORG-002, IDN-ORG-003, IDN-ORG-004 and chapter 09
-/// section 8a. Every change carries a reason and is audited. A deletion request is the
-/// <c>organization:delete</c> step-up action: it suspends the organization, so no grant
-/// of it confers anything, and ends every session of its members in the same
-/// transaction.
+/// Implements LIB-API-005, IDN-ORG-002, IDN-ORG-003, IDN-ORG-004, AUTH-STEP-002a and
+/// chapter 09 section 8a. Every change carries a reason and is audited. A deletion
+/// request and its cancellation are the <c>organization:delete</c> step-up action: the
+/// request suspends the organization, so no grant of it confers anything, and ends
+/// every session of its members in the same transaction. A change of policy is the
+/// <c>policy:change</c> step-up action.
 /// </remarks>
 public interface IOrganizations
 {
@@ -76,6 +77,48 @@ public interface IOrganizations
         AccessContext context,
         SessionId session,
         OrganizationId organization,
+        string reason,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads the policy an organization's members resolve to, with the fields and the
+    /// gates the organization's own value is in force for.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="organization">Which organization.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The policy, or the refusal: <c>api.request.malformed</c> naming <c>id</c> where
+    /// the deployment holds no such organization.
+    /// </returns>
+    ValueTask<Result<OrganizationPolicy>> PolicyAsync(
+        AccessContext context,
+        OrganizationId organization,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Replaces what an organization overrides of the system policy. A field the
+    /// replacement leaves absent inherits; the domain lock is kept, since it changes
+    /// only through the domain operations.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
+    /// <param name="organization">Which organization.</param>
+    /// <param name="replacement">What the organization overrides from now on.</param>
+    /// <param name="reason">Why.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal: <c>config.policy.belowsystem</c> where a field is looser
+    /// than the system policy, <c>config.value.belowfloor</c> where the administrative
+    /// organization would fall below its assurance floor, and
+    /// <c>api.request.malformed</c> naming <c>id</c>, <c>reason</c> or
+    /// <c>emailDomains</c>.
+    /// </returns>
+    ValueTask<Result> ReplacePolicyAsync(
+        AccessContext context,
+        SessionId session,
+        OrganizationId organization,
+        PolicyOverride replacement,
         string reason,
         CancellationToken cancellationToken);
 }

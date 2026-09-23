@@ -7344,6 +7344,197 @@ organization.
 `identity.deletion.windowelapsed` in 10 section 1.1 could add IDN-ORG-003, and 09
 section 8a could list it under `/delete/cancel`.
 
+---
+
+## 199. The resolved policy marks each field and each gate `{ value, overridden }`
+
+**Phase 8 · 2026-09-23 · Tier 2 · AUTH-STEP-002a, D-143, 09 section 8a, 10 section 4.1a**
+
+*The question.* 09 section 8a: "`GET` returns the resolved policy with each field
+marked inherited or overridden (D-143)". D-143 says the same, "each field marked
+inherited/overridden". Neither gives the shape of the mark, whether `gates` is marked
+as one field or per action, or what an override the system policy has since overtaken
+shows as.
+
+*The readings.*
+
+1. The resolved object as 10 section 4.1a writes it, beside a list of overridden
+   field names.
+2. Each field as `{ value, overridden }`, `value` in the form 10 section 4.1a writes
+   it; `gates` an object keyed by action name, each action `{ value, overridden }`
+   with `value` its `{ level, phishingResistant, maxAge }`. `overridden` is true where
+   the organization states the field (or the action) and the value in force is its
+   own: the value it stated, or one that differs from the system's. A stated value the
+   system policy has since raised past shows as inherited, since the system's is what
+   is in force.
+
+*Chosen: 2.* 10 section 4.1a stores gates per action ("an organization stores only
+what it overrides"), so a gate is overridden per action, and a mark that said
+"overridden" over a value the organization did not choose would mislead the reader
+about where the value comes from.
+
+*Tests that pin it.*
+`OrganizationPolicyEndpointTests.AUTH_STEP_002a_ThePolicyIsReadWithEachFieldMarkedAsync`,
+`OrganizationPolicyEndpointTests.AUTH_STEP_002a_AFieldTheSystemHasOvertakenIsInheritedAsync`,
+`PolicyStrictnessTests.AUTH_STEP_002a_AStatedFieldIsTheOrganizationsOwnWhileItIsInForce`.
+
+*Chapter text that should change.* 09 section 8a could give the response shape of
+`GET /admin/organizations/{id}/policy`.
+
+---
+
+## 200. Every change of an organization's policy is stepped up and reasoned
+
+**Phase 8 · 2026-09-23 · Tier 3 · OPS-CFG-002, AUTH-STEP-001, 09 section 8a, 10 section 5a**
+
+*The question.* OPS-CFG-002: "**Tightening** a security control at runtime is free.
+**Loosening** SHALL require step-up authentication, a written reason, and an audit
+entry." 09 section 8a: "loosening any field requires step-up and a reason
+(OPS-CFG-002)". 10 section 5a lists `policy:change`, "Change an organization's
+policy", against `PUT /admin/organizations/{id}/policy` with no direction.
+
+*The readings.*
+
+1. Only a loosening is stepped up and needs a reason; a tightening is free.
+2. Every replacement is the `policy:change` step-up action and carries a reason of 1
+   to 1024 characters (400 `api.request.malformed` naming `reason` otherwise); every
+   replacement is written down as `ops.configuration.changed` with its `loosening`
+   flag (OPS-CFG-005, entry 193).
+
+*Chosen: 2, the strictest reading.* The gate is a security control and the two
+chapters differ on whether a tightening passes it; the gate that asks is the one kept.
+The configuration route already takes a reason on every change (D-147).
+
+*Tests that pin it.*
+`OrganizationPolicyEndpointTests.AUTH_STEP_001_AChangeOfPolicyIsAStepUpActionAsync`,
+`OrganizationPolicyEndpointTests.AUTH_STEP_002a_ATighteningIsWrittenDownAsync`,
+`OrganizationPolicyEndpointTests.AUTH_STEP_002a_WhatAReplacementNamesMustBeReadableAsync`.
+
+*Chapter text that should change.* 09 section 8a could say whether a tightening is
+stepped up, in the same words as 10 section 5a.
+
+---
+
+## 201. A loosening of an organization's policy also needs `system:administer`
+
+**Phase 8 · 2026-09-23 · Tier 3 · OPS-CFG-002, 10 section 2.1, 10 section 4.1a**
+
+*The question.* 10 section 2.1 gives `organization:manage` "Organization lifecycle,
+policy, and deletion cancellation" and `system:administer` "**Loosening**
+configuration changes (OPS-CFG-002)". An organization's policy is the runtime key
+`policy.<organization>` (10 section 4.1). Nothing says whether the second row reaches
+it.
+
+*The readings.*
+
+1. `organization:manage` alone, in either direction.
+2. `organization:manage` in the administrative organization always, and
+   `system:administer` there as well where the replacement loosens. A replacement
+   loosens where the policy the organization's members resolve to after it grants
+   more on any field than before it, by the direction column of 10 section 4.1a;
+   sets compare without order, and dropping an override loosens where the value in
+   force falls. Refused 403 `authz.denied` before the step-up.
+
+*Chosen: 2, the strictest reading*, which is also the one the configuration route
+applies to every key.
+
+*Tests that pin it.*
+`OrganizationPolicyEndpointTests.OPS_CFG_002_ALooseningAlsoNeedsTheSystemPermissionAsync`,
+`OrganizationPolicyEndpointTests.AUTH_STEP_002a_ThePolicyIsGovernedFromTheAdministrativeOrganizationAsync`,
+`PolicyStrictnessTests.OPS_CFG_002_AChangeIsALooseningWhereAnyFieldGrantsMore`.
+
+*Chapter text that should change.* The `system:administer` row of 10 section 2.1
+could name `policy.<organization>`.
+
+---
+
+## 202. `config.policy.belowsystem` names the first looser field as `details.field`
+
+**Phase 8 · 2026-09-23 · Tier 2 · AUTH-STEP-002a, 09 section 8a, 10 section 1**
+
+*The question.* 09 section 8a: "**422** `config.policy.belowsystem` where a field is
+looser than the system default (AUTH-STEP-002a)". No detail is named, and nothing says
+whether the fields stated or the policy resolved are judged.
+
+*The readings.*
+
+1. The code alone.
+2. The code with `details.field`, the first field the replacement states looser than
+   the system policy, in the order of 10 section 4.1a (`requiredAssurance`,
+   `loginFactors`, `gates`, `credentialRedundancy`, `selfServiceRecovery`). What the
+   replacement states is judged; a field it leaves out inherits and cannot be looser.
+
+*Chosen: 2*, as `api.request.malformed` names its member; the name is the field's,
+never its value.
+
+*Tests that pin it.*
+`OrganizationPolicyEndpointTests.AUTH_STEP_002a_AFieldLooserThanTheSystemIsRefusedAsync`,
+`PolicyStrictnessTests.AUTH_STEP_002a_AFieldStatedLooserThanTheSystemIsNamed`,
+`PolicyStrictnessTests.AUTH_STEP_002a_AnOverrideNoLooserThanTheSystemIsAllowed`.
+
+*Chapter text that should change.* The row of `config.policy.belowsystem` in 10
+section 1 could name `details.field`.
+
+---
+
+## 203. The administrative organization's policy never resolves below `aal2`
+
+**Phase 8 · 2026-09-23 · Tier 3 · AUTH-SESS-005b, 10 section 4.1a**
+
+*The question.* AUTH-SESS-005b: "Administrative-organization sessions SHALL be held to
+a **stated assurance floor of AAL2**, the policy's `requiredAssurance` field ... set to
+`aal2` at bootstrap". A replacement "omitted fields inherit `policy.default`" (09
+section 8a), so a replacement of the administrative organization's policy that does
+not restate `requiredAssurance` would drop the floor to the system's `aal1`, and
+nothing forbids it.
+
+*The readings.*
+
+1. Allowed: the floor is stated at bootstrap and the administrator may change it.
+2. Refused: a replacement for the administrative organization under which its
+   members resolve below `aal2` is 422 `config.value.belowfloor` with
+   `details.field` `requiredAssurance`, before the step-up; nothing is written.
+
+*Chosen: 2, the strictest reading.* The requirement says the floor SHALL hold, not
+that it holds at bootstrap.
+
+*Tests that pin it.*
+`OrganizationPolicyEndpointTests.AUTH_SESS_005b_TheAdministrativeOrganizationKeepsItsFloorAsync`.
+
+*Chapter text that should change.* AUTH-SESS-005b or 10 section 4.1a could say that no
+change of the administrative organization's policy lowers `requiredAssurance` below
+`aal2`, and name the refusal.
+
+---
+
+## 204. A replacement names only the policy's fields, never `emailDomains`
+
+**Phase 8 · 2026-09-23 · Tier 2 · 10 section 4.1a, API-CONV-002, 09 section 8a**
+
+*The question.* 10 section 4.1a: `emailDomains` is "Written only through
+`/admin/organizations/{id}/domains`, never through `PUT .../policy`". 09 section 8a
+lists it among the body's fields "(managed through the domain endpoints below, never
+written here)". Neither says what a body carrying it, or carrying a member the object
+does not have, answers.
+
+*The readings.*
+
+1. Ignore both; the lock in force is kept.
+2. Refuse both with 400 `api.request.malformed` naming the member; a body that is no
+   object is the code alone; a field whose value the object does not take is 422
+   `config.value.notallowed`, as the configuration route answers. The lock in force
+   is carried into the new override unchanged.
+
+*Chosen: 2.* A misspelt tightening passed over would answer 204 and leave the
+organization under a looser policy than its administrator wrote; refusing it fails
+closed.
+
+*Tests that pin it.*
+`OrganizationPolicyEndpointTests.AUTH_STEP_002a_WhatAReplacementNamesMustBeReadableAsync`.
+
+*Chapter text that should change.* 09 section 8a could list the refusals of
+`PUT /admin/organizations/{id}/policy`.
+
 
 # Rows for chapter 10
 
