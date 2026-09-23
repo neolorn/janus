@@ -6669,6 +6669,78 @@ every other view writes an enum.
 *Chapter text that should change.* 09 section 8 could show one `GET` answer and name
 the spelling of `direction`.
 
+---
+
+## 182. A host key with no supplier is refused at the edit as a value the set does not admit
+
+**Phase 8 · 2026-09-23 · Tier 2 · 09 section 8, LIB-HOST-001, 10 section 1.5, AUTH-ABUSE-004**
+
+*The question.* 09 section 8 answers `PUT /admin/restrictions/{name}` with "**422**: a
+`host:<name>` key with no registered supplier (LIB-HOST-001); an empty bucket list" and
+names no code. The only code 10 gives the absence is `model.startup.declarationmissing`:
+"Startup: a required deployment value, subject-event handler or restriction key
+supplier is absent; `details.key`, `details.handler` or `details.supplier` names it",
+which the library answers 500 wherever a request meets it, since at request time it is
+a fault of the deployment.
+
+*The readings.*
+
+1. `model.startup.declarationmissing`, answered 422 on this route and 500 elsewhere.
+2. `model.startup.declarationmissing` as it stands, answered 500.
+3. `config.value.notallowed` (422), naming the key `restrictions` and the `supplier`.
+
+*Chosen: 3.* The status of a code is one status wherever it is raised, so reading 1
+would turn every request-time missing declaration into a 422 the caller is told to fix.
+Reading 2 answers what 09 gives as 422 with a server fault. At the edit the supplier's
+absence makes the restriction a value the set does not admit, which is what
+`config.value.notallowed` means; `details.supplier` names it as the startup code
+would. A send that meets a host key with no supplier is still refused with the startup
+code, because there the deployment is at fault.
+
+*Tests that pin it.*
+`RestrictionEndpointTests.LIB_HOST_001_AHostKeyWithNoSupplierIsRefusedAsync`.
+
+*Chapter text that should change.* The 422 row of `PUT /admin/restrictions/{name}`
+could name `config.value.notallowed` with `details.supplier`.
+
+---
+
+## 183. What the restriction routes read, and what they answer for a name the set does not hold
+
+**Phase 8 · 2026-09-23 · Tier 2 · 09 section 8, 10 section 4 `restrictions`, API-CONV-001**
+
+*The question.* 09 section 8 gives the body of `PUT /admin/restrictions/{name}` as
+`{ key, purpose, buckets }` and says a loosening "also requires a reason (OPS-CFG-002)",
+without a field for it; it mounts `DELETE /admin/restrictions/{name}`, which "is a
+loosening, not an error" for a shipped default and so needs a reason, without a body;
+10 section 4 calls the purpose optional. No answer is listed for a `GET` or a `DELETE`
+of a name the set does not hold.
+
+*The readings and the choices.*
+
+1. The reason travels as `reason` in the body of `PUT` and in a JSON body
+   `{ "reason": "..." }` of `DELETE`, not in the query, where free text would sit in
+   every access log. Chosen.
+2. An absent `purpose` reads as `any`, which is what an optional purpose means. Chosen.
+3. A `GET` or `DELETE` of a name the set does not hold answers 400
+   `api.request.malformed` naming `name`, as entry 180 answers a name outside the
+   configuration catalogue: no 404 is listed, and a deletion of nothing would otherwise
+   write down and announce a change that changed nothing. Chosen.
+4. A key or window outside the vocabulary, a negative `max`, or an `interval` that is
+   no positive ISO 8601 duration is malformed, naming `key`, `purpose` or `buckets`;
+   an empty bucket list is refused with `config.value.notallowed` (422) as 09 gives it.
+   Chosen.
+
+*Tests that pin it.*
+`RestrictionEndpointTests.AUTH_ABUSE_004_OneRestrictionReadsByItsNameAsync`,
+`RestrictionEndpointTests.AUTH_ABUSE_004_DeletingAShippedDefaultIsALooseningAsync`,
+`RestrictionEndpointTests.AUTH_ABUSE_004_DeletingAnUnknownNameIsMalformedAsync`,
+`RestrictionEndpointTests.AUTH_ABUSE_004_AnUnreadableRestrictionIsMalformedAsync`,
+`RestrictionEndpointTests.AUTH_ABUSE_004_AnEmptyBucketListIsRefusedAsync`.
+
+*Chapter text that should change.* 09 section 8 could show `reason` in the `PUT` body,
+give `DELETE` its body, and add the 400 for a name the set does not hold.
+
 
 # Rows for chapter 10
 

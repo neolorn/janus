@@ -1111,6 +1111,12 @@ Janus.Core.IRegistration.SkipPhoneAsync(Janus.Core.RegistrationSessionId session
 Janus.Core.IRegistration.StageAsync(Janus.Core.RegistrationSessionId session, Janus.Core.IdentifierKind kind, string! value, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationState!>>
 Janus.Core.IRegistration.StateAsync(Janus.Core.RegistrationSessionId session, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationState!>>
 Janus.Core.IRegistration.VerifyAsync(Janus.Core.RegistrationSessionId session, Janus.Core.IdentifierId identifier, string! code, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationState!>>
+Janus.Core.IRestrictionSet
+Janus.Core.IRestrictionSet.AllAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.Restriction!>!>>
+Janus.Core.IRestrictionSet.DeleteAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, string! name, string? reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IRestrictionSet.EditAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.Restriction! replacement, string? reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IRestrictionSet.GrantAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, string! name, string! keyValue, int credit, string? reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IRestrictionSet.ReadAsync(Janus.Core.AccessContext! context, string! name, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.Restriction!>>
 Janus.Core.ISecretSource
 Janus.Core.ISecretSource.ReadFingerprintKeyAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.ReadOnlyMemory<byte>>
 Janus.Core.ISecretSource.ReadKeyEncryptionKeysAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.KeyEncryptionKeys!>

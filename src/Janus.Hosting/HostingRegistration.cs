@@ -189,6 +189,7 @@ public static class HostingRegistration
             provider.GetRequiredService<RestrictionKeySuppliers>()));
         services.AddScoped<ConfigurationAdministration>();
         services.AddScoped<RestrictionAdministration>();
+        services.AddScoped<IRestrictionSet, RestrictionSetService>();
         services.AddScoped<ThrottleService>();
         services.AddScoped<NonExistenceNotice>();
         services.AddScoped<DeliveryReports>();
@@ -372,6 +373,7 @@ public static class HostingRegistration
         options.SerializerOptions.TypeInfoResolverChain.Add(WellKnownJson.Default);
         options.SerializerOptions.TypeInfoResolverChain.Add(PrivacyJson.Default);
         options.SerializerOptions.TypeInfoResolverChain.Add(ConfigurationJson.Default);
+        options.SerializerOptions.TypeInfoResolverChain.Add(SendingJson.Default);
     }
 
     // The word list is a file a deployment holds beside the application, where it

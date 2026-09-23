@@ -642,6 +642,9 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<AlertRouter>();
         _ = services.AddScoped<AlertDestinationChange>();
         _ = services.AddScoped<IConfigurationAdministration, ConfigurationService>();
+        _ = services.AddSingleton<ISendAudit, SendAuditInMemory>();
+        _ = services.AddScoped<RestrictionAdministration>();
+        _ = services.AddScoped<IRestrictionSet, RestrictionSetService>();
         _ = services.AddScoped<SigningKeys>();
         _ = services.AddScoped<OidcService>();
         _ = services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());

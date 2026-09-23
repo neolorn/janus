@@ -16,6 +16,10 @@ against the public contract of LIB-API-001.
 
 - `config.key.protected` answers 422 rather than 403.
 
+- A restriction keyed to a host supplier the deployment did not register is refused
+  where it is edited with `config.value.notallowed` naming the `supplier`, rather than
+  with the startup code.
+
 - `IAccessGate.ResolveAsync` no longer takes an organization: a refusal's correlation
   identifier resolves for a caller holding `audit:read` in the administrative
   organization, whichever organization the refusal was recorded in.
@@ -220,6 +224,14 @@ against the public contract of LIB-API-001.
   staged for it either way; the frontend navigates to the account application.
 
 ### Added
+
+- `GET /admin/restrictions` and `GET /admin/restrictions/{name}` read the named
+  restriction set under `restriction:edit`, the shipped defaults included;
+  `PUT /admin/restrictions/{name}` creates or replaces one and `DELETE` removes one,
+  each behind step-up, with a reason and an alert for a loosening; and
+  `POST /admin/restrictions/{name}/grant` adds credit to one key under
+  `restriction:grant`, behind step-up and with a reason. `IRestrictionSet` is the same
+  set of operations in process.
 
 - `GET /admin/config/{key}` reads one runtime key under `config:read`: its value in
   force and its default in the key's own JSON type, whether it is protected, and which

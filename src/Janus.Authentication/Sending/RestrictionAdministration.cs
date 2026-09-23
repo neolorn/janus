@@ -302,12 +302,18 @@ internal sealed class RestrictionAdministration(
             ["restriction"] = JsonSerializer.SerializeToElement(restriction),
         };
 
+    // Chapter 09 section 8: a host key no supplier answers for is a value the set does
+    // not admit, refused where it is edited (422) rather than as the startup fault the
+    // same absence is when a deployment declares it (LIB-HOST-001).
     private Error? Unsupplied(Restriction replacement) =>
         replacement.Key is RestrictionKeyKind.Host
         && (replacement.HostKeyName is null || !suppliers.TryFind(replacement.HostKeyName, out _))
-            ? Error.From(
-                ErrorCodes.StartupDeclarationMissing,
-                "supplier",
-                JsonSerializer.SerializeToElement(replacement.HostKeyName ?? string.Empty))
+            ? new Error(
+                ErrorCodes.ConfigurationValueNotAllowed,
+                new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
+                {
+                    ["key"] = JsonSerializer.SerializeToElement(Settings.Restrictions.Key.ToString()),
+                    ["supplier"] = JsonSerializer.SerializeToElement(replacement.HostKeyName ?? string.Empty),
+                })
             : null;
 }

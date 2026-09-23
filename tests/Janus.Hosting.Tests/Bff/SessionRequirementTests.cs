@@ -27,6 +27,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "DELETE /account/identifiers/{id:guid}",
         "DELETE /account/photo",
         "DELETE /account/sessions/{id:guid}",
+        "DELETE /admin/restrictions/{name}",
         "DELETE /privacy/objections/{purpose}",
         "GET /account/",
         "GET /account/credentials",
@@ -41,6 +42,8 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "GET /admin/explanations/{correlationId:guid}",
         "GET /admin/privacy/requests/",
         "GET /admin/ropa",
+        "GET /admin/restrictions/",
+        "GET /admin/restrictions/{name}",
         "GET /auth/session",
         "GET /privacy/consents",
         "GET /privacy/export",
@@ -59,6 +62,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "POST /admin/privacy/requests/{request:guid}/fulfil",
         "POST /admin/privacy/requests/{request:guid}/refuse",
         "POST /admin/recovery/approve",
+        "POST /admin/restrictions/{name}/grant",
         "POST /admin/sessions/revoke-all",
         "POST /auth/logout",
         "POST /auth/step-up",
@@ -74,6 +78,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "PUT /account/secondstep/preferred",
         "PUT /admin/compliance/assessments",
         "PUT /admin/config/{key}",
+        "PUT /admin/restrictions/{name}",
         "PUT /admin/documents/{document}/versions/{version}/translations/{language}",
     ];
 

@@ -8,6 +8,7 @@ using Janus.Hosting.Credentials;
 using Janus.Hosting.Privacy;
 using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
+using Janus.Hosting.Sending;
 using Janus.Hosting.Sessions;
 using Microsoft.AspNetCore.Routing;
 
@@ -48,6 +49,7 @@ public static class IdentityEndpoints
         _ = endpoints.MapAuditTrail();
         _ = endpoints.MapPublication();
         _ = endpoints.MapConfiguration();
+        _ = endpoints.MapRestrictions();
 
         return endpoints;
     }
