@@ -1,6 +1,6 @@
 # Corrections 2: D-163
 
-Status: complete, full gate pending.
+Status: complete, full gate green, no open question.
 
 D-163 keeps the product name in namespaces, project and package identifiers and
 `AddJanus`, and nowhere else. This branch renames every other type, member, table,
@@ -63,4 +63,12 @@ failing. The integration suites of `Janus.Storage.Tests` (252) and
 `Janus.Hosting.Tests` (126) were also run locally against the rewritten migrations,
 none failing.
 
-Full gate: pending.
+Full gate: GitHub Actions runs `35880448335` (push) and `35880456578` (pull request) on
+branch `corrections-2`, pull request #2, green on every job. The pipeline's counts:
+`Unit tests` 1545, `Contract tests` 66, `Integration tests` 378 and `Truth-table suite`
+49, none failing. `Integration tests`, `Double migration run`, `Destructive-operation
+detection report`, `Truth-table suite` and `Dependency vulnerability alerting` run on the
+pull-request event and `Secret scanning` on the push event, as CONV-GATE-002 states, so
+the two runs together are one pass of the table of CONV-GATE-001.
+
+The commit after the two runs above changes this section and the status line alone.
