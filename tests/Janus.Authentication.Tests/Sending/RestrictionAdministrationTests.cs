@@ -64,6 +64,7 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
                 _configuration,
                 _changes,
                 new AdministrativeScope(_gate, _administrative),
+                new PolicyResolution(new MembershipLookupInMemory(), _configuration, new PolicyRaiseStoreInMemory()),
                 _work,
                 _clock),
             _ledger,

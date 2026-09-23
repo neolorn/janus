@@ -16,6 +16,7 @@ namespace Janus.Authentication.Configuration;
 /// <param name="configuration">Where the settings are read and written.</param>
 /// <param name="audit">Where the change is written down.</param>
 /// <param name="scope">Whether the caller may loosen the deployment.</param>
+/// <param name="policies">Where what a change to the system policy raised is recorded.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -29,6 +30,7 @@ internal sealed class ConfigurationAdministration(
     IConfigurationStore configuration,
     IConfigurationAudit audit,
     AdministrativeScope scope,
+    PolicyResolution policies,
     IUnitOfWork work,
     TimeProvider time)
 {
@@ -98,6 +100,16 @@ internal sealed class ConfigurationAdministration(
         if (failure is not null)
         {
             return Result.Failure(failure);
+        }
+
+        // AUTH-FACT-017: the system policy is the one setting whose change can raise a
+        // requirement, and what it raised is what a sign-in that does not meet it is
+        // held against; a change that raises nothing clears what stood before.
+        if (before is Policy was && value is Policy becomes)
+        {
+            _ = await policies
+                .RaisedAsync(null, was, becomes, time.GetUtcNow(), cancellationToken)
+                .ConfigureAwait(false);
         }
 
         await audit

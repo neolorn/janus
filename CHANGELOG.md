@@ -1253,6 +1253,9 @@ against the public contract of LIB-API-001.
 
 ### Fixed
 
+- A change to `policy.default` records what it raised, so a sign-in that does not meet
+  a raised assurance floor or redundancy rule is held, or told its deadline, as
+  `policy.enforcement.grace` says. The raise was never recorded, and nobody was held.
 - Every request body is read through the library's generated serialization contexts
   and through nothing else. The reflection resolver the framework starts with answered
   before any context was asked, so every body was read by reflection, and the privacy

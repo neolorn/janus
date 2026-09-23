@@ -34,6 +34,7 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
     private readonly AccessGateInMemory _gate = new();
     private readonly AdministrativeOrganizationInMemory _administrative = new();
+    private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly OrganizationId _administering;
 
     /// <summary>
@@ -47,7 +48,13 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
     }
 
     private ConfigurationAdministration Administration =>
-        new(_configuration, _changes, new AdministrativeScope(_gate, _administrative), _work, _clock);
+        new(
+            _configuration,
+            _changes,
+            new AdministrativeScope(_gate, _administrative),
+            new PolicyResolution(new MembershipLookupInMemory(), _configuration, _raises),
+            _work,
+            _clock);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
@@ -282,6 +289,29 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
             changed.Match(() => throw new Xunit.Sdk.XunitException("The change was not refused."), error => error).Code);
 
         Assert.Empty(_changes.Written);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-017 AC1 and AC4: raising the system policy's assurance floor records
+    /// the raise a sign-in that does not meet it is held against, and lowering the floor
+    /// again clears it, so no hold outlives the requirement.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_017_AChangeToTheSystemPolicyRecordsWhatItRaisedAsync()
+    {
+        Policy raised = Janus.Core.Policies.SystemDefault with { RequiredAssurance = AssuranceLevel.Aal2 };
+
+        await ChangedAsync(Settings.PolicyDefault, raised, "a phishing campaign", Satisfied);
+
+        PolicyRaise raise = Assert.Single(await _raises.OfAsync(null, TestContext.Current.CancellationToken));
+
+        Assert.Equal(PolicyField.RequiredAssurance, raise.Field);
+        Assert.Equal(Noon, raise.At);
+
+        await ChangedAsync(Settings.PolicyDefault, Janus.Core.Policies.SystemDefault, "the campaign ended", Satisfied);
+
+        Assert.Empty(await _raises.OfAsync(null, TestContext.Current.CancellationToken));
     }
 
     /// <summary>

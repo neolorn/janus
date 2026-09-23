@@ -96,6 +96,7 @@ public sealed class SendingServiceTests : IAsyncDisposable
                 _configuration,
                 new ConfigurationAuditInMemory(),
                 new AdministrativeScope(_gate, _administrative),
+                new PolicyResolution(new MembershipLookupInMemory(), _configuration, new PolicyRaiseStoreInMemory()),
                 _work,
                 _clock),
             _ledger,
