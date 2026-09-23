@@ -7,6 +7,7 @@ using Janus.Authentication.Registration;
 using Janus.Core;
 using Janus.Identity.Accounts;
 using Janus.Identity.Identifiers;
+using Janus.Identity.Preferences;
 using Janus.Identity.Profiles;
 using Janus.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
@@ -21,17 +22,19 @@ namespace Janus.Storage.Authentication.Registration;
 /// <param name="identifiers">Where the account's identifiers are read and written.</param>
 /// <param name="profiles">Where the date of birth is written.</param>
 /// <param name="subjectKeys">Where the account's data key is drawn and written.</param>
+/// <param name="preferences">Where the account's language is written and read.</param>
 /// <remarks>
-/// Implements REG-SESS-001, REG-SESS-005 and REG-SESS-007. The account, its key, its
-/// identifiers and its profile are written inside the caller's transaction, so the
-/// whole of it commits or none of it does.
+/// Implements REG-SESS-001, REG-SESS-005, REG-SESS-007 and IDN-ATTR-001. The account,
+/// its key, its identifiers, its profile and its language are written inside the
+/// caller's transaction, so the whole of it commits or none of it does.
 /// </remarks>
 internal sealed class RegistrationDirectory(
     StoreContext context,
     IAccountStore accounts,
     IIdentifierStore identifiers,
     IProfileStore profiles,
-    ISubjectKeyStore subjectKeys) : IRegistrationDirectory
+    ISubjectKeyStore subjectKeys,
+    IPreferenceStore preferences) : IRegistrationDirectory
 {
     /// <inheritdoc/>
     public ValueTask<SubjectId?> OwnerAsync(
@@ -39,6 +42,13 @@ internal sealed class RegistrationDirectory(
         string canonical,
         CancellationToken cancellationToken) =>
         identifiers.FindOwnerAsync(kind, canonical, cancellationToken);
+
+    /// <inheritdoc/>
+    public async ValueTask<string?> LanguageAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken) =>
+        (await preferences.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false))
+            .Language;
 
     /// <inheritdoc/>
     public async ValueTask CreateAsync(NewAccount account, CancellationToken cancellationToken)
@@ -73,6 +83,17 @@ internal sealed class RegistrationDirectory(
             profile.RecordDateOfBirth(born);
 
             await profiles.RecordAsync(profile, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (account.Language is string language)
+        {
+            PreferenceSet settled = await preferences
+                .FindBySubjectAsync(account.Subject, cancellationToken)
+                .ConfigureAwait(false);
+
+            settled.SetLanguage(language);
+
+            await preferences.RecordAsync(settled, cancellationToken).ConfigureAwait(false);
         }
     }
 

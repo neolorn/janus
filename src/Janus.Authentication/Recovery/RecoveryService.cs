@@ -218,14 +218,12 @@ internal sealed class RecoveryService(
         SubjectId subject,
         string reason,
         string channelUsed,
-        string language,
         string source,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(reason);
         ArgumentNullException.ThrowIfNull(channelUsed);
-        ArgumentNullException.ThrowIfNull(language);
         ArgumentNullException.ThrowIfNull(source);
 
         if (context.Effective is not SubjectId approver)
@@ -277,7 +275,6 @@ internal sealed class RecoveryService(
                 subject,
                 reason.Trim(),
                 channel,
-                language,
                 source,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -470,6 +467,7 @@ internal sealed class RecoveryService(
         }
 
         var token = OpaqueToken.Draw(randomness);
+        string? recipient = await LanguageAsync(subject, language, cancellationToken).ConfigureAwait(false);
 
         _ = (await sending
                 .SendAsync(
@@ -478,7 +476,7 @@ internal sealed class RecoveryService(
                         MessageKind.RecoveryLink,
                         RestrictionPurpose.Notification,
                         source,
-                        language)
+                        recipient)
                     {
                         Subject = subject,
                         Values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)
@@ -576,7 +574,8 @@ internal sealed class RecoveryService(
         HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        string language = await LanguageAsync(subject, cancellationToken).ConfigureAwait(false);
+        string? language = await LanguageAsync(subject, requested: null, cancellationToken)
+            .ConfigureAwait(false);
 
         int told = 0;
 
@@ -623,21 +622,18 @@ internal sealed class RecoveryService(
             : null;
     }
 
-    private async ValueTask<string> LanguageAsync(
+    private async ValueTask<string?> LanguageAsync(
         SubjectId subject,
+        string? requested,
         CancellationToken cancellationToken)
     {
-        if (await identifiers.LanguageAsync(subject, cancellationToken).ConfigureAwait(false)
-            is string settled)
-        {
-            return settled;
-        }
+        string? settled = await identifiers.LanguageAsync(subject, cancellationToken).ConfigureAwait(false);
 
         IReadOnlyList<string> languages = (await configuration
                 .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
             .Match(read => read, _ => (IReadOnlyList<string>)[]);
 
-        return languages.Count > 0 ? languages[0] : string.Empty;
+        return RecipientLanguage.Of(settled, requested, languages);
     }
 
     // AUTH-RECOV-002: one approval is recorded, counted and alerted on; the link goes
@@ -647,7 +643,6 @@ internal sealed class RecoveryService(
         SubjectId subject,
         string reason,
         Channel channel,
-        string language,
         string source,
         CancellationToken cancellationToken)
     {
@@ -722,7 +717,6 @@ internal sealed class RecoveryService(
                 approver,
                 subject,
                 channel,
-                language,
                 source,
                 now,
                 lifetime,
@@ -734,7 +728,6 @@ internal sealed class RecoveryService(
         SubjectId approver,
         SubjectId subject,
         Channel channel,
-        string language,
         string source,
         DateTimeOffset now,
         TimeSpan lifetime,
@@ -742,6 +735,11 @@ internal sealed class RecoveryService(
     {
         Error? failure = null;
         var token = OpaqueToken.Draw(randomness);
+
+        // IDN-ATTR-001: the request is the approver's and says nothing of the language
+        // the person being recovered reads.
+        string? language = await LanguageAsync(subject, requested: null, cancellationToken)
+            .ConfigureAwait(false);
 
         _ = (await sending
                 .SendAsync(

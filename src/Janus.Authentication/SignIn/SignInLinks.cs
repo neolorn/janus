@@ -61,7 +61,10 @@ internal sealed class SignInLinks(
     /// kind.
     /// </summary>
     /// <param name="identifier">The email or phone as it was entered.</param>
-    /// <param name="language">The language the message goes out in.</param>
+    /// <param name="language">
+    /// The locale of the request, which the message goes out in where the account holds
+    /// no language of its own (IDN-ATTR-001).
+    /// </param>
     /// <param name="source">The address the request came from.</param>
     /// <param name="browser">What the asking browser carries, or nothing.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
@@ -79,7 +82,10 @@ internal sealed class SignInLinks(
     /// Asks for a one-time code by email.
     /// </summary>
     /// <param name="identifier">The email as it was entered.</param>
-    /// <param name="language">The language the message goes out in.</param>
+    /// <param name="language">
+    /// The locale of the request, which the message goes out in where the account holds
+    /// no language of its own (IDN-ATTR-001).
+    /// </param>
     /// <param name="source">The address the request came from.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Success, or the delay the source has earned.</returns>
@@ -429,6 +435,12 @@ internal sealed class SignInLinks(
                 : Result.Failure(locked);
         }
 
+        string? settled = await identifiers.LanguageAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        IReadOnlyList<string> languages = (await configuration
+                .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
+            .Match(read => read, _ => (IReadOnlyList<string>)[]);
+
         string code = VerificationCode.Draw(randomness);
         var token = OpaqueToken.Draw(randomness);
 
@@ -449,7 +461,7 @@ internal sealed class SignInLinks(
                         ask.Message,
                         RestrictionPurpose.SignIn,
                         source,
-                        language)
+                        RecipientLanguage.Of(settled, language, languages))
                     {
                         Subject = subject,
                         Values = values,

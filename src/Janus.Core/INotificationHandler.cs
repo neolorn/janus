@@ -22,7 +22,11 @@ public interface INotificationHandler
     /// </summary>
     /// <param name="request">What is to be sent.</param>
     /// <param name="cancellationToken">Abandons the send.</param>
-    /// <returns>The correlation reference it was taken under, or the failure.</returns>
+    /// <returns>
+    /// The correlation reference it was taken under, or the failure. A message that
+    /// goes out in every declared language is one message per language, each under a
+    /// reference of its own, and the reference returned is the first language's.
+    /// </returns>
     ValueTask<Result<SendReference>> SendAsync(
         SendRequest request,
         CancellationToken cancellationToken);

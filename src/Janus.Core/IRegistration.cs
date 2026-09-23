@@ -23,7 +23,10 @@ public interface IRegistration
     /// person came from.
     /// </summary>
     /// <param name="client">The originating application's client identifier.</param>
-    /// <param name="language">The language its messages go out in.</param>
+    /// <param name="language">
+    /// The locale of the request, which its messages go out in and which the account
+    /// keeps as its language preference (IDN-ATTR-001).
+    /// </param>
     /// <param name="source">
     /// The address the registration is started from, which the source restrictions
     /// count every message of this registration against.

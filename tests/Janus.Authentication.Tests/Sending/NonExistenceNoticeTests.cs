@@ -27,9 +27,14 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
     private readonly FixedClock _clock = new(Noon);
 
     /// <summary>
-    /// A deployment that has named the one key with no default.
+    /// A deployment that has named the keys with no default: the gateway's balance
+    /// floor and the languages it writes in.
     /// </summary>
-    public NonExistenceNoticeTests() => _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
+    public NonExistenceNoticeTests()
+    {
+        _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
+        _configuration.Set(Settings.NotificationLanguages, ["en", "ar"]);
+    }
 
     private NonExistenceNotice Notice =>
         new(_configuration, _notifications, _notices, _work, _events, _clock);

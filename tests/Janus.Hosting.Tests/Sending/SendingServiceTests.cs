@@ -25,8 +25,9 @@ namespace Janus.Hosting.Tests.Sending;
 /// The one path every message takes: what the named restrictions decide, what a
 /// refusal says, what a send counts against, and what a transport that would not
 /// take it leaves behind (AUTH-ABUSE-002, AUTH-ABUSE-004, AUTH-ABUSE-006,
-/// INT-SMS-001, INT-SMS-004, INT-GEN-005, OPS-ALERT-003), and what is considered
-/// about a number before a restricted factor goes to it (AUTH-FACT-002b).
+/// INT-SMS-001, INT-SMS-004, INT-GEN-005, OPS-ALERT-003), what is considered about
+/// a number before a restricted factor goes to it (AUTH-FACT-002b), and the languages
+/// a message goes out in (IDN-ATTR-001).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class SendingServiceTests : IAsyncDisposable
@@ -36,6 +37,8 @@ public sealed class SendingServiceTests : IAsyncDisposable
     private static readonly EmailAddress Mailbox = Address("someone@example.test");
 
     private static readonly PhoneNumber Phone = Number("+201001234567");
+
+    private static readonly string[] Declared = ["en", "ar"];
 
     private static readonly StepUpChallenge Satisfied =
         new(StepUpOutcome.Satisfied, AssuranceLevel.Aal2, PhishingResistant: false, [], null);
@@ -536,6 +539,81 @@ public sealed class SendingServiceTests : IAsyncDisposable
         SmsMessage carried = Assert.Single(_sms.Taken);
 
         Assert.Equal(new SmsMessage(Phone, "code 429184", reference.Value), carried);
+    }
+
+    /// <summary>
+    /// IDN-ATTR-001 AC3: a message to someone whose language nothing names goes out
+    /// in every language the deployment declares, each in the deployment's own
+    /// template for it. The restrictions judge the request once, and each language
+    /// carried is a message of its own (AUTH-ABUSE-004 AC1): its own reference, its
+    /// own announcement and its own count, so the next mail inside the minute is
+    /// refused and a report of one failed delivery releases that one alone.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ATTR_001_AC3_NoKnownLanguageGoesOutInEveryDeclaredOneAsync()
+    {
+        _configuration.Set(Settings.NotificationLanguages, Declared);
+        _templates.Set(MessageKind.VerificationCode, SendKind.Email, "en", new MessageTemplate("code", "english"));
+        _templates.Set(MessageKind.VerificationCode, SendKind.Email, "ar", new MessageTemplate("code", "arabic"));
+        var destination = new RestrictionKey("email.destination", Mailbox.Value);
+
+        SendReference reference = await SentAsync(Mailed() with { Language = null });
+
+        Assert.Equal(["english", "arabic"], _mail.Taken.Select(mail => mail.Body));
+        Assert.Equal(reference.Value, _mail.Taken[0].Reference);
+        Assert.NotEqual(_mail.Taken[0].Reference, _mail.Taken[1].Reference);
+        Assert.Equal(
+            _mail.Taken.Select(mail => mail.Reference),
+            _events.Of<NotificationRequested>().Select(announced => announced.IdempotencyKey));
+        Assert.Equal([Noon, Noon], _ledger.Sends(destination));
+        Assert.Empty(_outbox.Waiting);
+
+        Assert.Equal(
+            ErrorCodes.RestrictionExceeded,
+            Refusal(await Service.SendAsync(Mailed(), TestContext.Current.CancellationToken)));
+
+        Assert.True(
+            await _ledger.ReleaseAsync(
+                SendReferences.Of(_mail.Taken[1].Reference),
+                TestContext.Current.CancellationToken));
+        Assert.Single(_ledger.Sends(destination));
+    }
+
+    /// <summary>
+    /// IDN-ATTR-001 and AUTH-ABUSE-004 AC2: where a transport takes one language and
+    /// refuses the next, what it took counts, what it refused does not, and the
+    /// message stays recorded for the retry.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ATTR_001_ALanguageTheTransportRefusedLeavesTheMessageRecordedAsync()
+    {
+        _configuration.Set(Settings.NotificationLanguages, Declared);
+        _templates.Set(MessageKind.VerificationCode, SendKind.Email, "en", new MessageTemplate("code", "english"));
+        _templates.Set(MessageKind.VerificationCode, SendKind.Email, "ar", new MessageTemplate("code", "arabic"));
+        _mail.Takes = 1;
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            Refusal(await Service.SendAsync(Mailed() with { Language = null }, TestContext.Current.CancellationToken)));
+
+        Assert.Equal("english", Assert.Single(_mail.Taken).Body);
+        Assert.Single(_outbox.Waiting);
+        Assert.Single(_ledger.Sends(new RestrictionKey("email.destination", Mailbox.Value)));
+    }
+
+    /// <summary>
+    /// IDN-ATTR-001: a message whose language is known goes out in that language
+    /// alone.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ATTR_001_AKnownLanguageIsTheOnlyOneSentAsync()
+    {
+        _configuration.Set(Settings.NotificationLanguages, Declared);
+        _templates.Set(MessageKind.VerificationCode, SendKind.Email, "ar", new MessageTemplate("code", "arabic"));
+
+        _ = await SentAsync(Mailed() with { Language = "ar" });
+
+        Assert.Equal("arabic", Assert.Single(_mail.Taken).Body);
     }
 
     /// <summary>

@@ -1094,8 +1094,14 @@ internal sealed class AuthenticationService(
             return Result.Failure<SignInOutcome>(Error.From(ErrorCodes.FactorRejected));
         }
 
-        string language = await identifiers.LanguageAsync(subject, cancellationToken)
-            .ConfigureAwait(false) ?? string.Empty;
+        // IDN-ATTR-001: the step carries no locale of the request, so the code goes out
+        // in the account's language, or in every declared one where it holds none.
+        string? settled = await identifiers.LanguageAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        IReadOnlyList<string> languages = (await configuration
+                .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
+            .Match(read => read, _ => (IReadOnlyList<string>)[]);
 
         string code = (await codes.IssueAsync(open.Fingerprint, cancellationToken)
                 .ConfigureAwait(false))
@@ -1113,7 +1119,7 @@ internal sealed class AuthenticationService(
                         MessageKind.VerificationCode,
                         RestrictionPurpose.Verification,
                         primary.Canonical,
-                        language)
+                        RecipientLanguage.Of(settled, requested: null, languages))
                     {
                         Subject = subject,
                         Values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)

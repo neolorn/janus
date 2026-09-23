@@ -8522,6 +8522,81 @@ led nowhere, and what stays is who invited into what, and when.
 *Chapter text that should change.* PRIV-RIGHT-005a could name an invitation's bound
 identifiers among the personal fields and when they are forgotten.
 
+---
+
+## 235. Which language a message goes out in, and how a message in every language counts
+
+**Phase 8 · 2026-09-24 · Tier 3 · IDN-ATTR-001, AUTH-ABUSE-004, AUTH-ABUSE-005**
+
+*The question.* IDN-ATTR-001 gives the "Resolution order for any outbound message":
+"1. Stored account preference, where set 2. The current request's locale, where a
+request exists 3. **Every language in `notification.languages`** (the deployment
+declares them, D-153), only when there is neither", and "**Registration SHALL set the
+preference from the request locale**". AC2: "A background-triggered notification
+resolves language without a request." AC3: "An account with no preference and no
+request receives every declared language." Phase 1 sent every message in one
+language and fell back to the first declared one, so AC2 and AC3 were not met;
+registration settled no preference. Four points are open. Whose request step 2
+reads. How a request's tag meets the declared list. Whether the approval of a
+recovery carries the approver's locale. And how step 3 counts against the
+restrictions, where AUTH-ABUSE-004 AC1 counts messages: "a second email to one
+address inside 60 seconds is refused", and `email.destination` holds "1 per 60 s,
+fixed", which would refuse the second language of one message judged language by
+language.
+
+*The readings.*
+
+1. *Whose request.* (a) Any request in progress when the message is sent, including
+   an administrator's. (b) Only a request the recipient made: registration, an
+   anonymous sign-in link or code, a recovery request, the notice that no account
+   holds an address, and the notice to the holder of an address someone tried to
+   register (whose request is the registrant's, so the holder's stored preference
+   answers first and the registrant's locale second).
+2. *Matching.* (a) Exactly as written. (b) By the lookup of RFC 4647 section 3.4:
+   case-insensitive, truncating a subtag at a time and a trailing singleton with it,
+   so `en-GB` finds a declared `en`; what is found is always a declared tag, which
+   the catalogue then answers exactly as entry 123 decided.
+3. *Approval.* (a) `IRecovery.ApproveAsync` keeps its language argument. (b) It
+   loses it: the approver's locale says nothing of the person recovered.
+4. *Counting step 3.* (a) Judge and count each language as a send of its own, which
+   refuses the second language inside the minute and leaves AC3 unreachable for
+   mail. (b) Judge once and count once under one reference, which counts two mails
+   as one. (c) Judge the request once, then count each language a transport takes
+   as a message of its own, under its own reference and announcement, so a failed
+   delivery report releases that one alone; where a transport takes one language
+   and refuses the next, what it took counts and the row stays for the retry.
+
+*Chosen: 1b, 2b, 3b and 4c; 4c is the strictest reading AC3 leaves open.* An
+administrator's locale is not the recipient's, so it never decides the language, and
+the public surface is smaller for it. A signed-in person's own operations carry no
+locale either: registration settles the preference, so step 1 answers them. Exact
+matching would send a person whose browser says `ar-EG` every language instead of
+the Arabic declared. Counting once would let one request put two mails in a bucket
+that holds one; judging each language would make AC3 impossible for mail. Under 4c
+every message a transport took is in the buckets, and the next request inside the
+minute is refused. `SendRequest.Language` is nullable, and null means every declared
+language. Alerts, which were sent once per language, and an invitation link (entry
+227), which names no request of the invitee's, now take step 3.
+
+*Tests that pin it.*
+`RecipientLanguageTests.IDN_ATTR_001_ThePreferenceComesBeforeTheRequestAndEitherBeforeEveryLanguage`,
+`RecipientLanguageTests.IDN_ATTR_001_ATagFindsTheDeclaredLanguageItNarrows`,
+`SendingServiceTests.IDN_ATTR_001_AC3_NoKnownLanguageGoesOutInEveryDeclaredOneAsync`,
+`SendingServiceTests.IDN_ATTR_001_ALanguageTheTransportRefusedLeavesTheMessageRecordedAsync`,
+`SendingServiceTests.IDN_ATTR_001_AKnownLanguageIsTheOnlyOneSentAsync`,
+`LossReportsTests.IDN_ATTR_001_AC2_ANoticeTheSweepSendsResolvesItsLanguageWithoutARequestAsync`,
+`RegistrationServiceTests.IDN_ATTR_001_RegistrationSettlesTheLanguageItWasBegunInAsync`,
+`RegistrationServiceTests.IDN_ATTR_001_ALocaleTheDeploymentDoesNotWriteInSettlesNoneAsync`,
+`RegistrationServiceTests.IDN_ATTR_001_TheHolderIsToldInTheirOwnLanguageAsync`,
+`RegistrationDirectoryTests.IDN_ATTR_001_TheAccountKeepsTheLanguageItsRegistrationFoundAsync`,
+`SendOutboxTests.IDN_ATTR_001_AMessageInEveryLanguageReadsBackWithNoneAsync`.
+
+*Chapter text that should change.* IDN-ATTR-001 could say that step 2 reads only a
+request the recipient made, and that a tag is matched against
+`notification.languages` by RFC 4647 lookup. The `notification.languages` row in
+chapter 10 could say that step 3 is one message per language. AUTH-ABUSE-004 could
+say that such a request is judged once and each language counts as one send.
+
 
 # Rows for chapter 10
 

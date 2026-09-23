@@ -33,6 +33,8 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
     private const string Client = "web";
     private const string Registered = "https://app.example.test/welcome";
     private const string Language = "en";
+
+    private static readonly string[] Arabic = ["ar"];
     private const string Source = "198.51.100.7";
     private const string Address = "person@example.test";
     private const string Number = "+441632960011";
@@ -81,9 +83,14 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
 
     /// <summary>
-    /// A deployment that has named the one key with no default, and a catalogue whose
+    /// A deployment that has named the keys with no default: the gateway's balance
+    /// floor and the languages it writes in.
     /// </summary>
-    public RegistrationServiceTests() => _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
+    public RegistrationServiceTests()
+    {
+        _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
+        _configuration.Set(Settings.NotificationLanguages, [Language, "ar"]);
+    }
 
     private RegistrationService Service =>
         new(
@@ -1087,6 +1094,55 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
                 session,
                 Adult,
                 TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// IDN-ATTR-001: registration settles the account's language from the locale it
+    /// was begun under, and its codes go out in that language.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ATTR_001_RegistrationSettlesTheLanguageItWasBegunInAsync()
+    {
+        _ = Ok(await AcceptedAsync(await SecuredAsync()));
+
+        Assert.Equal(Language, Assert.Single(_directory.Created).Language);
+        Assert.All(_notifications.Sent, sent => Assert.Equal(Language, sent.Language));
+    }
+
+    /// <summary>
+    /// IDN-ATTR-001: a locale that finds no language the deployment writes in settles
+    /// none, and the codes go out in every declared language.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ATTR_001_ALocaleTheDeploymentDoesNotWriteInSettlesNoneAsync()
+    {
+        _configuration.Set(Settings.NotificationLanguages, Arabic);
+
+        _ = Ok(await AcceptedAsync(await SecuredAsync()));
+
+        Assert.Null(Assert.Single(_directory.Created).Language);
+        Assert.All(_notifications.Sent, sent => Assert.Null(sent.Language));
+    }
+
+    /// <summary>
+    /// IDN-ATTR-001 and REG-SESS-005: the holder of an address someone tried to
+    /// register is told in the language the holder settled on, not the one the person
+    /// registering reads.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ATTR_001_TheHolderIsToldInTheirOwnLanguageAsync()
+    {
+        var holder = SubjectId.New(_randomness);
+
+        _directory.Held(IdentifierKind.Email, Address, holder);
+        _directory.Reads(holder, "ar");
+
+        _ = await AwaitingAsync();
+
+        SendRequest told = Assert.Single(_notifications.Sent);
+
+        Assert.Equal(MessageKind.AccountExists, told.Message);
+        Assert.Equal("ar", told.Language);
     }
 
     /// <summary>

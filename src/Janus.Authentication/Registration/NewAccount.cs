@@ -21,7 +21,13 @@ namespace Janus.Authentication.Registration;
 /// <param name="NoticeVersion">The version of the privacy notice presented.</param>
 /// <param name="EmailMaximum">How many emails an account of this deployment holds.</param>
 /// <param name="PhoneMaximum">How many phones an account of this deployment holds.</param>
-/// <remarks>Implements REG-SESS-001, REG-SESS-007, REG-PROF-002 and REG-ACCT-001.</remarks>
+/// <param name="Language">
+/// The declared language the registration's request found, which the account keeps as
+/// its preference, or nothing where it found none.
+/// </param>
+/// <remarks>
+/// Implements REG-SESS-001, REG-SESS-007, REG-PROF-002, REG-ACCT-001 and IDN-ATTR-001.
+/// </remarks>
 internal sealed record NewAccount(
     SubjectId Subject,
     DateTimeOffset CreatedAt,
@@ -33,4 +39,5 @@ internal sealed record NewAccount(
     string TermsVersion,
     string NoticeVersion,
     int EmailMaximum,
-    int PhoneMaximum);
+    int PhoneMaximum,
+    string? Language);

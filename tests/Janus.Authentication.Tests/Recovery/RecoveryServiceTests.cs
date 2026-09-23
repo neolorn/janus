@@ -80,7 +80,11 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     /// <summary>
     /// A deployment that can send.
     /// </summary>
-    public RecoveryServiceTests() => _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
+    public RecoveryServiceTests()
+    {
+        _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
+        _configuration.Set(Settings.NotificationLanguages, [Language, "ar"]);
+    }
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
@@ -686,7 +690,6 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             subject,
             reason,
             channel,
-            Language,
             Source,
             TestContext.Current.CancellationToken);
 

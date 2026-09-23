@@ -102,11 +102,6 @@ internal sealed class AlertRouter(
                 .ConfigureAwait(false))
             .Match(value => value, error => Held<AlertSeverity>(error, ref failure));
 
-        IReadOnlyList<string> languages = (await configuration
-                .ReadAsync(Settings.NotificationLanguages, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(value => value, error => Held<IReadOnlyList<string>>(error, ref failure));
-
         if (failure is not null)
         {
             return Result.Failure<AlertDelivery>(failure);
@@ -121,10 +116,10 @@ internal sealed class AlertRouter(
 
         if (aboutMail)
         {
-            sms = await SmsAsync(raised, audience, languages, cancellationToken).ConfigureAwait(false);
+            sms = await SmsAsync(raised, audience, cancellationToken).ConfigureAwait(false);
         }
 
-        int email = await MailAsync(raised, audience, languages, cancellationToken).ConfigureAwait(false);
+        int email = await MailAsync(raised, audience, cancellationToken).ConfigureAwait(false);
 
         if (!aboutMail)
         {
@@ -134,7 +129,7 @@ internal sealed class AlertRouter(
 
             if (bySms)
             {
-                sms = await SmsAsync(raised, audience, languages, cancellationToken).ConfigureAwait(false);
+                sms = await SmsAsync(raised, audience, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -238,7 +233,6 @@ internal sealed class AlertRouter(
     private async ValueTask<int> MailAsync(
         AlertRaised raised,
         AlertAudience audience,
-        IReadOnlyList<string> languages,
         CancellationToken cancellationToken)
     {
         int reached = 0;
@@ -250,7 +244,7 @@ internal sealed class AlertRouter(
                 continue;
             }
 
-            if (await CarriedAsync(raised, SendDestination.Of(address), languages, cancellationToken)
+            if (await CarriedAsync(raised, SendDestination.Of(address), cancellationToken)
                 .ConfigureAwait(false))
             {
                 reached++;
@@ -263,7 +257,6 @@ internal sealed class AlertRouter(
     private async ValueTask<int> SmsAsync(
         AlertRaised raised,
         AlertAudience audience,
-        IReadOnlyList<string> languages,
         CancellationToken cancellationToken)
     {
         int reached = 0;
@@ -275,7 +268,7 @@ internal sealed class AlertRouter(
                 continue;
             }
 
-            if (await CarriedAsync(raised, SendDestination.Of(number), languages, cancellationToken)
+            if (await CarriedAsync(raised, SendDestination.Of(number), cancellationToken)
                 .ConfigureAwait(false))
             {
                 reached++;
@@ -288,32 +281,24 @@ internal sealed class AlertRouter(
     private async ValueTask<bool> CarriedAsync(
         AlertRaised raised,
         SendDestination destination,
-        IReadOnlyList<string> languages,
         CancellationToken cancellationToken)
     {
-        bool carried = false;
-
         // An operator destination belongs to no account, so the language resolves at
-        // step three: every language the deployment declared (IDN-ATTR-001).
-        foreach (string language in languages)
-        {
-            Result<SendReference> sent = await sending
-                .SendAsync(
-                    new SendRequest(
-                        destination,
-                        MessageKind.Alert,
-                        RestrictionPurpose.Notification,
-                        Operator,
-                        language)
-                    {
-                        Values = Values(raised),
-                    },
-                    cancellationToken)
-                .ConfigureAwait(false);
+        // step three: every language the deployment declared, as one send (IDN-ATTR-001).
+        Result<SendReference> sent = await sending
+            .SendAsync(
+                new SendRequest(
+                    destination,
+                    MessageKind.Alert,
+                    RestrictionPurpose.Notification,
+                    Operator,
+                    Language: null)
+                {
+                    Values = Values(raised),
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
 
-            carried = sent.Match(_ => true, _ => false) || carried;
-        }
-
-        return carried;
+        return sent.Match(_ => true, _ => false);
     }
 }

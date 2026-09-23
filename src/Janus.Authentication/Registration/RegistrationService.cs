@@ -736,6 +736,10 @@ internal sealed class RegistrationService(
                 .ReadAsync(Settings.IdentifiersPhoneMax, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Held<int>(error, ref failure));
 
+        IReadOnlyList<string> languages = (await configuration
+                .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<IReadOnlyList<string>>(error, ref failure));
+
         if (failure is not null)
         {
             return Result.Failure<RegistrationOutcome>(failure);
@@ -747,8 +751,12 @@ internal sealed class RegistrationService(
 
         live.AcceptTerms(termsVersion, noticeVersion);
 
+        // IDN-ATTR-001: registration settles the account's language from the locale
+        // it was begun under, so a later message finds a preference to go out in.
         await directory
-            .CreateAsync(Created(live, now, emails, phones), cancellationToken)
+            .CreateAsync(
+                Created(live, now, emails, phones, RecipientLanguage.Found(live.Language, languages)),
+                cancellationToken)
             .ConfigureAwait(false);
         await WriteCredentialsAsync(live, now, cancellationToken).ConfigureAwait(false);
 
@@ -993,7 +1001,8 @@ internal sealed class RegistrationService(
         RegistrationSession session,
         DateTimeOffset now,
         int emails,
-        int phones)
+        int phones,
+        string? language)
     {
         var identifiers = new List<NewIdentifier>(session.Identifiers.Count);
 
@@ -1019,7 +1028,8 @@ internal sealed class RegistrationService(
             session.TermsVersion ?? string.Empty,
             session.NoticeVersion ?? string.Empty,
             emails,
-            phones);
+            phones,
+            language);
     }
 
     private static RegistrationState State(
@@ -1230,6 +1240,10 @@ internal sealed class RegistrationService(
                 .ReadAsync(Settings.CodeVerificationLifetime, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Held<TimeSpan>(error, ref failure));
 
+        IReadOnlyList<string> languages = (await configuration
+                .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<IReadOnlyList<string>>(error, ref failure));
+
         if (failure is not null)
         {
             return failure;
@@ -1245,7 +1259,7 @@ internal sealed class RegistrationService(
                     MessageKind.VerificationCode,
                     RestrictionPurpose.Verification,
                     session.Source,
-                    session.Language)
+                    RecipientLanguage.Found(session.Language, languages))
                 {
                     Values = new Dictionary<string, string>(capacity: 2, StringComparer.Ordinal)
                     {
@@ -1278,6 +1292,10 @@ internal sealed class RegistrationService(
                 .ReadAsync(Settings.AbuseNonexistentWindow, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Held<TimeSpan>(error, ref failure));
 
+        IReadOnlyList<string> languages = (await configuration
+                .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<IReadOnlyList<string>>(error, ref failure));
+
         if (failure is not null)
         {
             return failure;
@@ -1290,6 +1308,8 @@ internal sealed class RegistrationService(
             return null;
         }
 
+        string? settled = await directory.LanguageAsync(holder, cancellationToken).ConfigureAwait(false);
+
         // The holder is told and the person registering is told nothing: the message
         // names no requester and carries neither a code nor a link (REG-SESS-005 AC2).
         Result<SendReference> sent = await sending
@@ -1299,7 +1319,7 @@ internal sealed class RegistrationService(
                     MessageKind.AccountExists,
                     RestrictionPurpose.Notification,
                     session.Source,
-                    session.Language)
+                    RecipientLanguage.Of(settled, session.Language, languages))
                 {
                     Subject = holder,
                 },

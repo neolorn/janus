@@ -7,13 +7,14 @@ using Janus.Core;
 namespace Janus.Authentication.Tests.Registration;
 
 /// <summary>
-/// What the registration flow asks the account tables: who holds an identifier, and
-/// the one write that creates an account.
+/// What the registration flow asks the account tables: who holds an identifier, the
+/// language its holder settled on, and the one write that creates an account.
 /// </summary>
 internal sealed class RegistrationDirectoryInMemory : IRegistrationDirectory
 {
     private readonly Dictionary<(IdentifierKind Kind, string Canonical), SubjectId> _owners = [];
     private readonly List<NewAccount> _created = [];
+    private readonly Dictionary<SubjectId, string> _languages = [];
 
     /// <summary>
     /// Every account the flow created, in the order it created them.
@@ -30,6 +31,13 @@ internal sealed class RegistrationDirectoryInMemory : IRegistrationDirectory
     public void Held(IdentifierKind kind, string canonical, SubjectId owner) =>
         _owners[(kind, canonical)] = owner;
 
+    /// <summary>
+    /// Settles the language an account reads.
+    /// </summary>
+    /// <param name="subject">The account.</param>
+    /// <param name="language">The language.</param>
+    public void Reads(SubjectId subject, string language) => _languages[subject] = language;
+
     /// <inheritdoc/>
     public ValueTask<SubjectId?> OwnerAsync(
         IdentifierKind kind,
@@ -40,9 +48,18 @@ internal sealed class RegistrationDirectoryInMemory : IRegistrationDirectory
             : (SubjectId?)null);
 
     /// <inheritdoc/>
+    public ValueTask<string?> LanguageAsync(SubjectId subject, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_languages.GetValueOrDefault(subject));
+
+    /// <inheritdoc/>
     public ValueTask CreateAsync(NewAccount account, CancellationToken cancellationToken)
     {
         _created.Add(account);
+
+        if (account.Language is string language)
+        {
+            _languages[account.Subject] = language;
+        }
 
         return ValueTask.CompletedTask;
     }

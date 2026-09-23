@@ -190,7 +190,8 @@ internal static class StorageRegistration
             provider.GetRequiredService<IAccountStore>(),
             provider.GetRequiredService<IIdentifierStore>(),
             provider.GetRequiredService<IProfileStore>(),
-            provider.GetRequiredService<ISubjectKeyStore>()));
+            provider.GetRequiredService<ISubjectKeyStore>(),
+            provider.GetRequiredService<IPreferenceStore>()));
         services.AddScoped<IPendingVerificationStore>(provider => new PendingVerificationStore(
             provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,

@@ -98,7 +98,10 @@ public interface IAuthentication
     /// kind.
     /// </summary>
     /// <param name="identifier">The email or phone as it was entered.</param>
-    /// <param name="language">The language the message goes out in.</param>
+    /// <param name="language">
+    /// The locale of the request, which the message goes out in where the account holds
+    /// no language of its own (IDN-ATTR-001).
+    /// </param>
     /// <param name="source">
     /// The address the request came from, which the source restrictions count it
     /// against.
@@ -124,7 +127,10 @@ public interface IAuthentication
     /// email code.
     /// </summary>
     /// <param name="identifier">The email as it was entered.</param>
-    /// <param name="language">The language the message goes out in.</param>
+    /// <param name="language">
+    /// The locale of the request, which the message goes out in where the account holds
+    /// no language of its own (IDN-ATTR-001).
+    /// </param>
     /// <param name="source">The address the request came from.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Success, whether or not the identifier resolves to an account.</returns>

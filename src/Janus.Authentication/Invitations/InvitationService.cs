@@ -544,11 +544,9 @@ internal sealed class InvitationService(
         string source,
         CancellationToken cancellationToken)
     {
-        // The person holds no account yet, so no language of theirs is known.
-        IReadOnlyList<string> languages = (await configuration
-                .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => (IReadOnlyList<string>)[]);
-
+        // IDN-ATTR-001: the person holds no account whose language is known, and the
+        // request is the administrator's, so the link goes out in every language the
+        // deployment declares.
         return (await sending
                 .SendAsync(
                     new SendRequest(
@@ -556,7 +554,7 @@ internal sealed class InvitationService(
                         MessageKind.InvitationLink,
                         RestrictionPurpose.Notification,
                         source,
-                        languages.Count > 0 ? languages[0] : string.Empty)
+                        Language: null)
                     {
                         Values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)
                         {

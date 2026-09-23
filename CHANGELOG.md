@@ -10,6 +10,22 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- A message goes out in the language its recipient's account settled on, else, where
+  it answers a registration, sign-in or recovery request, in the locale that request
+  carried, else in every language of `notification.languages`; a tag such as `en-GB`
+  finds a declared `en`. Registration now settles the account's language from the
+  locale it was begun under. The restrictions judge a message in every language
+  once, and each language is then a message of its own: announced, carried and
+  counted under its own reference, so a failed delivery report releases that one
+  alone and a mail restriction of one a minute refuses the next request rather than
+  the second language. Messages that used to fall back to the first declared
+  language, and alerts, which used to be sent once per language, now take this path.
+  `SendRequest.Language` is nullable, and null means every declared language.
+  `IRecovery.ApproveAsync` no longer takes a language: the approver's locale says
+  nothing of the person recovered. The holder of an address someone tried to register
+  is told in the holder's language, and an invitation link goes out in every declared
+  language.
+
 - A policy's gate is written with `level`, `phishingResistant` and `maxAge`, as
   chapter 10 names them, where the age was `maximumAge`. This is the form
   `GET|PUT /admin/config/policy.default` carries and the settings table stores.

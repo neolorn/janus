@@ -21,10 +21,15 @@ internal sealed class MailTransportInMemory : IMailTransport
     /// </summary>
     public bool Accepts { get; set; } = true;
 
+    /// <summary>
+    /// How many mails the transport takes before it refuses the rest.
+    /// </summary>
+    public int Takes { get; set; } = int.MaxValue;
+
     /// <inheritdoc/>
     public ValueTask<Result> SendAsync(MailMessage mail, CancellationToken cancellationToken)
     {
-        if (!Accepts)
+        if (!Accepts || Taken.Count >= Takes)
         {
             return ValueTask.FromResult(Result.Failure(Error.From(ErrorCodes.SystemFault)));
         }

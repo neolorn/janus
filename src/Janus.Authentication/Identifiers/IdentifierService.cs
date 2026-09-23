@@ -883,24 +883,19 @@ internal sealed class IdentifierService(
         return waiting is null ? null : (waiting, fingerprint);
     }
 
-    // IDN-ATTR-001: a message sent without a request in front of it goes out in the
-    // language the account settled on, and in the deployment's first where it has
-    // settled none.
-    private async ValueTask<string> LanguageAsync(SubjectId subject, CancellationToken cancellationToken)
+    // IDN-ATTR-001: a message goes out in the language the account settled on, and in
+    // every language the deployment declares where it has settled none; the operations
+    // here carry no locale of the person's request.
+    private async ValueTask<string?> LanguageAsync(SubjectId subject, CancellationToken cancellationToken)
     {
         string? settled = await directory.LanguageAsync(subject, cancellationToken)
             .ConfigureAwait(false);
-
-        if (settled is not null)
-        {
-            return settled;
-        }
 
         IReadOnlyList<string> languages = (await configuration
                 .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
             .Match(read => read, _ => (IReadOnlyList<string>)[]);
 
-        return languages.Count > 0 ? languages[0] : string.Empty;
+        return RecipientLanguage.Of(settled, requested: null, languages);
     }
 
     // Whether the kind would be left under the minimum the deployment asks of it. An
@@ -1181,7 +1176,7 @@ internal sealed class IdentifierService(
             return 0;
         }
 
-        string language = await LanguageAsync(subject, cancellationToken).ConfigureAwait(false);
+        string? language = await LanguageAsync(subject, cancellationToken).ConfigureAwait(false);
         int told = 0;
 
         foreach (HeldIdentifier identifier in reached)

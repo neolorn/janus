@@ -21,7 +21,10 @@ public interface IRecovery
     /// holds it (AUTH-ABUSE-003); what differs is what arrives at the channel.
     /// </summary>
     /// <param name="identifier">The email or phone as it was entered.</param>
-    /// <param name="language">The language the message goes out in.</param>
+    /// <param name="language">
+    /// The locale of the request, which the message goes out in where the account
+    /// holds no language of its own (IDN-ATTR-001).
+    /// </param>
     /// <param name="source">The address the request came from.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Success, or the delay the source has earned.</returns>
@@ -61,7 +64,6 @@ public interface IRecovery
     /// <param name="channelUsed">
     /// The channel the confirmation was made on, which SHALL be one the account holds.
     /// </param>
-    /// <param name="language">The language the message goes out in.</param>
     /// <param name="source">The address the request came from.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
@@ -75,7 +77,6 @@ public interface IRecovery
         SubjectId subject,
         string reason,
         string channelUsed,
-        string language,
         string source,
         CancellationToken cancellationToken);
 

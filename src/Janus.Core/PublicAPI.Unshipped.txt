@@ -1165,7 +1165,7 @@ Janus.Core.IProcessingRecords.GenerateAsync(Janus.Core.AccessContext! context, S
 Janus.Core.IPurposeHandler
 Janus.Core.IPurposeHandler.Purposes.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
 Janus.Core.IRecovery
-Janus.Core.IRecovery.ApproveAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, string! reason, string! channelUsed, string! language, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.ApprovedRecovery!>>
+Janus.Core.IRecovery.ApproveAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, string! reason, string! channelUsed, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.ApprovedRecovery!>>
 Janus.Core.IRecovery.BeginAsync(string! identifier, string! language, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IRecovery.BeginEnrolmentAsync(string! token, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.EnrolmentSession!>>
 Janus.Core.IRecovery.CancelLossAsync(Janus.Core.AccessContext? context, Janus.Core.AuthenticatorId credential, string? cancelToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -2185,19 +2185,19 @@ Janus.Core.SendReference.Value.get -> string!
 Janus.Core.SendRequest
 Janus.Core.SendRequest.<Clone>$() -> Janus.Core.SendRequest!
 Janus.Core.SendRequest.Context.get -> Janus.Core.SendContext!
-Janus.Core.SendRequest.Deconstruct(out Janus.Core.SendDestination! Destination, out Janus.Core.MessageKind Message, out Janus.Core.RestrictionPurpose Purpose, out string! Source, out string! Language) -> void
+Janus.Core.SendRequest.Deconstruct(out Janus.Core.SendDestination! Destination, out Janus.Core.MessageKind Message, out Janus.Core.RestrictionPurpose Purpose, out string! Source, out string? Language) -> void
 Janus.Core.SendRequest.Destination.get -> Janus.Core.SendDestination!
 Janus.Core.SendRequest.Destination.init -> void
 Janus.Core.SendRequest.Equals(Janus.Core.SendRequest? other) -> bool
 Janus.Core.SendRequest.IsAlert.get -> bool
 Janus.Core.SendRequest.Kind.get -> Janus.Core.SendKind
-Janus.Core.SendRequest.Language.get -> string!
+Janus.Core.SendRequest.Language.get -> string?
 Janus.Core.SendRequest.Language.init -> void
 Janus.Core.SendRequest.Message.get -> Janus.Core.MessageKind
 Janus.Core.SendRequest.Message.init -> void
 Janus.Core.SendRequest.Purpose.get -> Janus.Core.RestrictionPurpose
 Janus.Core.SendRequest.Purpose.init -> void
-Janus.Core.SendRequest.SendRequest(Janus.Core.SendDestination! Destination, Janus.Core.MessageKind Message, Janus.Core.RestrictionPurpose Purpose, string! Source, string! Language) -> void
+Janus.Core.SendRequest.SendRequest(Janus.Core.SendDestination! Destination, Janus.Core.MessageKind Message, Janus.Core.RestrictionPurpose Purpose, string! Source, string? Language) -> void
 Janus.Core.SendRequest.Source.get -> string!
 Janus.Core.SendRequest.Source.init -> void
 Janus.Core.SendRequest.Subject.get -> Janus.Core.SubjectId?
