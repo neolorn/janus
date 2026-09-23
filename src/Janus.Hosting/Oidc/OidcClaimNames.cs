@@ -13,10 +13,10 @@ namespace Janus.Hosting.Oidc;
 internal static class OidcClaimNames
 {
     /// <summary>The one-time code the authorization endpoint issued.</summary>
-    public const string Code = "janus_code";
+    public const string Code = "identity_code";
 
     /// <summary>The refresh token the token endpoint issued.</summary>
-    public const string RefreshToken = "janus_refresh";
+    public const string RefreshToken = "identity_refresh";
 
     /// <summary>The session record the tokens stand on.</summary>
     public const string Session = "sid";

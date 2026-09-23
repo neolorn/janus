@@ -320,7 +320,7 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status201Created, completed.Status);
         Assert.Empty(completed.Body);
         Assert.Null(completed.Location);
-        Assert.True(browser.Cookies.ContainsKey("__Host-janus-session"));
+        Assert.True(browser.Cookies.ContainsKey("__Host-identity-session"));
     }
 
     /// <summary>

@@ -10,6 +10,15 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- The names the library puts on the wire no longer carry the product's name. The
+  cookies are `__Host-identity-session`, `__Host-identity-preauth`,
+  `__Host-identity-csrf`, `__Host-identity-browser` and `__Host-identity-device`; a
+  frontend sends `X-Identity-Request` on every call and the synchronizer token in
+  `X-Identity-Csrf`. The client a host configures for the sign-on back channel is
+  `identity-signon`, and the directory beside the application that holds the word
+  lists is `identity-corpus`. A session, code or refresh token issued under the
+  earlier names does not survive the change.
+
 - The library's database objects no longer carry the product's name. The schema is
   `identity`, the case-insensitive collation `identity_ci`, the roles
   `identity_migrate`, `identity_app` and `identity_maintenance`, and the migrations

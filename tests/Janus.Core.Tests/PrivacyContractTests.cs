@@ -167,11 +167,11 @@ public sealed class PrivacyContractTests
     {
         Assert.Equal(
             [
-                "__Host-janus-browser",
-                "__Host-janus-csrf",
-                "__Host-janus-device",
-                "__Host-janus-preauth",
-                "__Host-janus-session",
+                "__Host-identity-browser",
+                "__Host-identity-csrf",
+                "__Host-identity-device",
+                "__Host-identity-preauth",
+                "__Host-identity-session",
             ],
             Cookies());
 

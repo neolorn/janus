@@ -114,8 +114,8 @@ public sealed class BrowserProfileTests : IDisposable
     [Fact]
     public void BFF_CSRF_003_AC1_TheTwoHeadersAreNamedAsTheFrontendWritesThem()
     {
-        Assert.Equal("X-Janus-Csrf", SynchronizerToken.Header);
-        Assert.Equal("X-Janus-Request", BrowserCookies.RequestHeader);
+        Assert.Equal("X-Identity-Csrf", SynchronizerToken.Header);
+        Assert.Equal("X-Identity-Request", BrowserCookies.RequestHeader);
     }
 
     /// <summary>

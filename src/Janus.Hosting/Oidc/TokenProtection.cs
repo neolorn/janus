@@ -27,7 +27,7 @@ internal static class TokenProtection
     // The purpose separates this key from every other use of the key-encryption key,
     // so that material derived here cannot unwrap a subject's data key and material
     // derived elsewhere cannot read a token.
-    private const string Purpose = "janus:oidc:token-protection:v1";
+    private const string Purpose = "identity:oidc:token-protection:v1";
 
     private const int Length = 32;
 

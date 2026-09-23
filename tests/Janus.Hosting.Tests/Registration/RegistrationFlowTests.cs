@@ -55,8 +55,8 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
 
         _ = await browser.SendAsync("GET", "/register");
 
-        Assert.True(browser.Cookies.ContainsKey("__Host-janus-preauth"));
-        Assert.True(browser.Cookies.ContainsKey("__Host-janus-csrf"));
+        Assert.True(browser.Cookies.ContainsKey("__Host-identity-preauth"));
+        Assert.True(browser.Cookies.ContainsKey("__Host-identity-csrf"));
         Assert.Single(_deployment.Contacts.All);
     }
 
@@ -166,8 +166,8 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
             ("noticeVersion", "notice-2"));
 
         Assert.Equal(StatusCodes.Status201Created, completed.Status);
-        Assert.True(browser.Cookies.ContainsKey("__Host-janus-session"));
-        Assert.False(browser.Cookies.ContainsKey("__Host-janus-preauth"));
+        Assert.True(browser.Cookies.ContainsKey("__Host-identity-session"));
+        Assert.False(browser.Cookies.ContainsKey("__Host-identity-preauth"));
         Assert.Empty(_deployment.Contacts.All);
         Assert.Single(_deployment.Sessions.All);
     }
@@ -370,7 +370,7 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
         return patterns;
     }
 
-    private static string Carried(Browser browser) => browser.Cookies["__Host-janus-preauth"];
+    private static string Carried(Browser browser) => browser.Cookies["__Host-identity-preauth"];
 
     // The stream's first reading, after which it is parked on its interval and the
     // fakes are the test's alone again.

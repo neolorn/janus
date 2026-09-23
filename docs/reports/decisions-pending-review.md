@@ -392,6 +392,8 @@ cross-origin without a preflight the browser will not grant.
 should name `X-Janus-Csrf` beside `X-Janus-Request`, and say that the first carries the
 token and the second is checked for presence only.
 
+**Superseded by D-163** as to the header names. Applied in entry 166.
+
 ---
 
 ## 11. A password above the maximum is refused as a value above a ceiling
@@ -4713,6 +4715,8 @@ against the name the frontend writes.
 *Chapter text that should change.* D-153's sentence naming one header, as D-162 says.
 `10` should carry both header names.
 
+**Superseded by D-163** as to the header names. Applied in entry 166.
+
 ---
 
 ## 140. The two endpoints the library calls are keys of its own
@@ -6045,6 +6049,57 @@ and the double-migration gate.
 
 *Chapter text that should change.* `06` OPS-DB-002 could name the history table beside
 the schema, since a deployment's database administrator sees it.
+
+---
+
+## 166. The names on the wire no chapter fixes take the prefix, as the ones D-163 fixes do
+
+**Corrections 2 · 2026-09-23 · Tier 2 · CONV-NAME-001, BFF-CSRF-001, BFF-CSRF-003, BFF-SESS-006, AUTH-OIDC-003, AUTH-PASS-004, D-163**
+
+*What D-163 decided, and what was built.* The five cookies are `__Host-identity-*` and
+the two headers `X-Identity-Request` and `X-Identity-Csrf`; the code carries them so,
+and the tests that hold each name against what the frontend writes were changed with
+them. The domain record `_identity-verify` and its value are not in the code yet: the
+domain lock (REG-DOM-001) is built in phase 8 and takes the names from `09` as they
+now stand.
+
+*The question.* Four more names outside the process carried the product name and no
+chapter names them: the two private claims the protocol server's principal carries the
+issued code and refresh token in, the named client of the sign-on back channel, the
+directory beside the application that holds the word lists, and the purpose the key
+protecting codes and refresh tokens is derived under.
+
+*The readings.*
+
+1. `identity` on each, as on the cookies and headers.
+2. The plain name of the thing, since none is a cookie, a header or the DNS record.
+
+*Chosen: 1.* Each of the four sits beside a host's own names in a space the host shares:
+the claims beside the host's and the protocol's claims, the named client in the host's
+client factory, the directory among the host's files, and the purpose in the host's key
+ring. That is the case CONV-NAME-001 gives the prefix for.
+
+| Was | Is |
+| --- | --- |
+| `janus_code`, `janus_refresh` | `identity_code`, `identity_refresh` |
+| `janus-signon` | `identity-signon` |
+| `janus-corpus` | `identity-corpus` |
+| `janus:oidc:token-protection:v1` | `identity:oidc:token-protection:v1` |
+
+Entries 10 and 139 chose and applied the two header names; both are marked. Entries
+143, 152, 157 and 159 name the registration channel, the event base type or the
+protection purpose in passing; what each decided stands.
+
+*Tests that pin it.*
+`BrowserProfileTests.BFF_CSRF_003_AC1_TheTwoHeadersAreNamedAsTheFrontendWritesThem`,
+`PrivacyContractTests.PRIV_CONS_006a_AC3_TheLibrarySetsOnlyTheFiveNecessaryCookies`,
+`BrowserCookieTests.BFF_SESS_002_AC1_EveryIssueCarriesTheFourAttributes`,
+`SignOnTests.BFF_SESS_006_AC2_TheExchangeIsServerToServerAndHandsTheBrowserNoTokenAsync`,
+`OidcFlowTests.AUTH_OIDC_003_AC1_ARefreshTokenRotatesAndTheOldOneIsSpentAsync`.
+
+*Chapter text that should change.* `07` LIB-HOST-001 could name `identity-signon` as the
+client a host configures, and `05` INT-PWD-003 or `10` `password.blocklist.sources` the
+`identity-corpus` directory, since a deployment has to put files there.
 
 
 # Rows for chapter 10

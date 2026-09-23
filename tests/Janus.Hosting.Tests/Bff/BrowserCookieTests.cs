@@ -20,8 +20,8 @@ namespace Janus.Hosting.Tests.Bff;
 [Trait("kind", "unit")]
 public sealed class BrowserCookieTests : IDisposable
 {
-    private const string SessionCookie = "__Host-janus-session";
-    private const string CsrfCookie = "__Host-janus-csrf";
+    private const string SessionCookie = "__Host-identity-session";
+    private const string CsrfCookie = "__Host-identity-csrf";
 
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
 
