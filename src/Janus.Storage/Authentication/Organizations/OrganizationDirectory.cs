@@ -29,7 +29,7 @@ internal sealed class OrganizationDirectory(StoreContext context, IOrganizationS
         OrganizationId organization,
         CancellationToken cancellationToken) =>
         await organizations.FindAsync(organization, cancellationToken).ConfigureAwait(false) is Organization found
-            ? new OrganizationStanding(found.Id, found.IsAdministrative, found.DeletionRequestedAt, found.ErasedAt)
+            ? new OrganizationStanding(found.Id, found.Name, found.IsAdministrative, found.DeletionRequestedAt, found.ErasedAt)
             : null;
 
     /// <inheritdoc/>

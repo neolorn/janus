@@ -77,4 +77,20 @@ public interface IInvitations
         AccessContext context,
         string token,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads the invitation attached to the signed-in person's account, which the
+    /// membership step shows before it is acknowledged (REG-INV-002): the one whose
+    /// link the account opened most recently, among those neither acknowledged nor
+    /// revoked, expired or not.
+    /// </summary>
+    /// <param name="context">Who is signed in.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The invitation, or the refusal: <c>identity.invitation.notfound</c> where none is
+    /// attached.
+    /// </returns>
+    ValueTask<Result<AttachedInvitation>> AttachedAsync(
+        AccessContext context,
+        CancellationToken cancellationToken);
 }

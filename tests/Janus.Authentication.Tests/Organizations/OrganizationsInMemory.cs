@@ -29,14 +29,18 @@ internal sealed class OrganizationsInMemory(MembershipLookupInMemory memberships
     /// <param name="administrative">Whether it is the administrative one.</param>
     /// <param name="deletionRequestedAt">When its deletion was requested, where it was.</param>
     /// <param name="erasedAt">When it was erased, where it was.</param>
+    /// <param name="name">What it is called, which is its identifier where a test names none.</param>
     public void Seed(
         OrganizationId organization,
         bool administrative = false,
         DateTimeOffset? deletionRequestedAt = null,
-        DateTimeOffset? erasedAt = null)
+        DateTimeOffset? erasedAt = null,
+        string? name = null)
     {
-        _held[organization] = new OrganizationStanding(organization, administrative, deletionRequestedAt, erasedAt);
-        _names[organization] = organization.ToString();
+        string called = name ?? organization.ToString();
+
+        _held[organization] = new OrganizationStanding(organization, called, administrative, deletionRequestedAt, erasedAt);
+        _names[organization] = called;
     }
 
     /// <summary>
@@ -59,8 +63,7 @@ internal sealed class OrganizationsInMemory(MembershipLookupInMemory memberships
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        Seed(organization);
-        _names[organization] = name;
+        Seed(organization, name: name);
 
         return ValueTask.CompletedTask;
     }

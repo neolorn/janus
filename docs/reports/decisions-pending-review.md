@@ -8813,6 +8813,48 @@ account's identifiers here: the mismatch is the acknowledgement's (09 section 8a
 /register` carrying `invitationToken` attaches the invitation to the account before it
 answers.
 
+---
+
+## 242. What the membership step reads, and the answer where nothing is attached
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-INV-002, REG-INV-001, chapter 09 section 6a**
+
+*The question.* 09 section 6a: `GET /account/invitation` "Returns, for the invitation
+attached to the signed-in person's registration or sign-in (REG-INV-001, REG-INV-002):
+who invited them, the organization, the roles and grants that will attach, and the
+documents attached to the invitation with their versions. **404** when no invitation
+is attached." No member names are given, no code for the 404 is named, nothing says
+which invitation is read where an account opened more than one link, or what "who
+invited them" carries.
+
+*The readings.*
+
+1. A bare 404, as the photo read answers, and the inviter's display name, else their
+   primary email.
+2. `identity.invitation.notfound` for the 404, as every other absent record of 09 is
+   answered (`identity.takedown.notfound`, `auth.credential.notfound`). The body is
+   `{ id, organization, organizationName, invitedBy, roles, documents: [{ document,
+   version }], expiresAt }`. `invitedBy` is the display name the inviter's account
+   shows, or null. The invitation read is the standing one (neither acknowledged nor
+   revoked) whose link the account opened last, expired or not.
+
+*Chosen: 2.* A code is how every other absent record is answered, and the in-process
+operation needs one to refuse with. The inviter's email is theirs and not the
+organization's, so nothing of the inviter is shown that their account does not
+already show others. An expired invitation is still read, so the frontend can say
+it expired rather than that there is none; the acknowledgement refuses it. The
+grants that attach are the roles, each granted across the organization, so `roles`
+carries both.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_002_TheMembershipStepReadsTheInvitationOpenedLastAsync`,
+`InvitationStoreTests.REG_INV_002_AnAccountReadsTheInvitationItOpenedLastAsync`,
+`InvitationAcknowledgementFlowTests.REG_INV_002_TheMembershipStepReadsTheAttachedInvitationAsync`.
+
+*Chapter text that should change.* 09 section 6a could give the body and the code
+`identity.invitation.notfound` for the 404, and say which invitation is read.
+Chapter 10 section 1.1 could add the row for `identity.invitation.notfound`.
+
 
 # Rows for chapter 10
 
@@ -8849,6 +8891,7 @@ The subsection each row belongs in is named with it.
 | `authz.role.inuse` | 1.3 | 409 | A grant or a derivation names the role, so it cannot be removed; its permissions can be changed instead. (AUTHZ-GRANT-004, AUTHZ-GRANT-003 AC3, entry 189) |
 | `authz.group.inuse` | 1.3 | 409 | The group holds a member, belongs to a group, or was given a grant, so it cannot be removed. (AUTHZ-GROUP-001, AUTHZ-GRANT-003 AC3, entry 192) |
 | `identity.domain.unverified` | 1.1 | 422 | A listed domain is verified and no TXT value at `_identity-verify.<domain>` is `identity-domain-verification=<token>`, or the lookup could not be made; nothing is written. (REG-DOM-001, entry 209) |
+| `identity.invitation.notfound` | 1.1 | 404 | `GET /account/invitation` or the acknowledgement is asked of an account no standing invitation is attached to: none of its links was opened by it, or each it opened was acknowledged or revoked. (REG-INV-002, entry 242) |
 
 ## LIB-HOST-001, host declarations
 

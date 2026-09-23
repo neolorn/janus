@@ -53,6 +53,20 @@ internal sealed class InvitationStore(
     }
 
     /// <inheritdoc/>
+    public async ValueTask<Invitation?> AttachedToAsync(SubjectId invitee, CancellationToken cancellationToken)
+    {
+        InvitationRecord? record = await context.Invitations
+            .Where(invitation => invitation.Invitee == invitee
+                && invitation.RevokedAt == null
+                && invitation.AcknowledgedAt == null)
+            .OrderByDescending(invitation => invitation.AttachedAt)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return record is null ? null : Read(record);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<Invitation>> ReservingAsync(
         MailboxId mailbox,
         CancellationToken cancellationToken)

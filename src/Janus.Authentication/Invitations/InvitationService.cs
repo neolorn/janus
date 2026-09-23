@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Organizations;
@@ -25,6 +26,7 @@ namespace Janus.Authentication.Invitations;
 /// <param name="legal">Where the documents an invitation names are resolved to a version.</param>
 /// <param name="locks">Whether the organization's domain lock admits an address.</param>
 /// <param name="invitations">Where invitations are kept.</param>
+/// <param name="accounts">Where the name of who issued an invitation is read.</param>
 /// <param name="mailboxes">Where the corporate mailboxes are reserved.</param>
 /// <param name="server">
 /// The mail server the administrative organization's mail is integrated with, absent
@@ -53,6 +55,7 @@ internal sealed class InvitationService(
     ILegalDocuments legal,
     DomainLock locks,
     IInvitationStore invitations,
+    IAccountDirectory accounts,
     IMailboxStore mailboxes,
     IMailServer? server,
     INotificationHandler sending,
@@ -554,6 +557,45 @@ internal sealed class InvitationService(
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success();
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="ArgumentNullException">The context is absent.</exception>
+    public async ValueTask<Result<AttachedInvitation>> AttachedAsync(
+        AccessContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context.Effective is not SubjectId invitee)
+        {
+            return Result.Failure<AttachedInvitation>(Error.From(ErrorCodes.Denied));
+        }
+
+        if (await invitations.AttachedToAsync(invitee, cancellationToken).ConfigureAwait(false)
+            is not Invitation invitation)
+        {
+            return Result.Failure<AttachedInvitation>(Error.From(ErrorCodes.InvitationNotFound));
+        }
+
+        OrganizationStanding standing = await directory
+                .FindAsync(invitation.Organization, cancellationToken)
+                .ConfigureAwait(false)
+            ?? throw new InvalidOperationException("The invitation's organization has no row.");
+
+        // The person is shown who invited them by the name that account shows, and by
+        // nothing of theirs the account does not show (REG-INV-002).
+        HeldProfile inviter = await accounts.ProfileAsync(invitation.Inviter, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Result.Success(new AttachedInvitation(
+            invitation.Id,
+            invitation.Organization,
+            standing.Name,
+            inviter.DisplayName?.Value,
+            invitation.Roles,
+            invitation.Documents,
+            invitation.ExpiresAt));
     }
 
     private async ValueTask WithdrawnAsync(

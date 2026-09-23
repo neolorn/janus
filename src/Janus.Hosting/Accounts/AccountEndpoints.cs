@@ -12,11 +12,11 @@ using Microsoft.AspNetCore.Routing;
 namespace Janus.Hosting.Accounts;
 
 /// <summary>
-/// The account endpoints of chapter 09 section 6.
+/// The account endpoints of chapter 09 sections 6 and 6a.
 /// </summary>
 /// <remarks>
 /// Implements CONV-DESIGN-006, API-CONV-001, REG-ACCT-001, REG-PROF-001,
-/// REG-PREF-001, REG-IDENT-002 to REG-IDENT-009 and IDN-ATTR-008. Who is asking is
+/// REG-PREF-001, REG-IDENT-002 to REG-IDENT-009, IDN-ATTR-008 and REG-INV-002. Who is asking is
 /// what the session resolution stage established and nothing an endpoint reads from
 /// the request; an endpoint that finds nobody there refuses rather than guessing.
 /// </remarks>
@@ -76,6 +76,8 @@ internal static class AccountEndpoints
         _ = group.MapPost("/reactivate", ReactivateAsync);
         _ = SessionRequired.On(group.MapPost("/delete", DeleteAsync));
         _ = group.MapPost("/delete/cancel", CancelDeletionAsync);
+
+        _ = SessionRequired.On(group.MapGet("/invitation", ReadInvitationAsync));
 
         return endpoints;
     }
@@ -176,6 +178,24 @@ internal static class AccountEndpoints
         return Answers.Of(
             await accounts.RemovePhotoAsync(holder, cancellationToken).ConfigureAwait(false),
             Nothing);
+    }
+
+    private static async Task<IResult> ReadInvitationAsync(
+        IInvitations invitations,
+        RequestSession browser,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(invitations);
+
+        AccessContext holder = Asking(browser);
+
+        return Answers.Of(
+            await invitations.AttachedAsync(holder, cancellationToken).ConfigureAwait(false),
+            attached => TypedResults.Json(
+                AttachedInvitationView.Of(attached),
+                AccountJson.Default.AttachedInvitationView,
+                contentType: null,
+                StatusCodes.Status200OK));
     }
 
     private static async Task<IResult> ReadPreferencesAsync(

@@ -4,12 +4,14 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Invitations;
 using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Organizations;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Sessions;
+using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Mailboxes;
 using Janus.Authentication.Tests.Organizations;
@@ -56,6 +58,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     private readonly LegalDocumentsInMemory _documents = new();
     private readonly DomainStoreInMemory _domains = new();
     private readonly InvitationStoreInMemory _invitations = new();
+    private readonly AccountDirectoryInMemory _accounts = new(PreferenceDeclarations.None);
     private readonly MailboxStoreInMemory _mailboxes = new();
     private readonly MailServerInMemory _server = new();
     private readonly NotificationHandlerInMemory _notifications = new();
@@ -75,7 +78,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     {
         _organizations = new OrganizationsInMemory(_memberships);
         _organizations.Seed(Staff, administrative: true);
-        _organizations.Seed(Customer);
+        _organizations.Seed(Customer, name: "Northern branch");
 
         _configuration.Set(Settings.NotificationLanguages, English);
         _configuration.Set(Settings.RegistrationPhone, AttributeRequirement.Optional);
@@ -559,6 +562,55 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.InvitationExpired, Failure(await OpenAsync(holder, lapsed)).Code);
     }
 
+    /// <summary>
+    /// REG-INV-002: the membership step reads the standing invitation the account
+    /// opened last: the organization by its name, who invited them by the name that
+    /// account shows and nothing else of theirs, the roles and the documents at their
+    /// versions; an account nothing stands attached to reads that none is.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_002_TheMembershipStepReadsTheInvitationOpenedLastAsync()
+    {
+        RoleName clerk = _roles.Define("clerk", Permissions.MembershipManage);
+
+        _gate.Grant(_inviter, Customer, Permissions.GrantManage);
+        _documents.Publish("staff-handbook", "2", Noon.AddDays(-1));
+        _accounts.Holds(_inviter, new HeldProfile(Named("Ada"), LegalName: null, DateOfBirth: null, PhotoUpdatedAt: null));
+
+        string earlier = Accepted(await IssueAsync(Customer, Request(phone: Number))).Token!;
+        string later = Accepted(await IssueAsync(
+            Customer,
+            Request(phone: "+441632960012", roles: [clerk], documents: ["staff-handbook"]))).Token!;
+        var holder = SubjectId.New(_randomness);
+
+        Assert.Equal(ErrorCodes.InvitationNotFound, Failure(await AttachedAsync(holder)).Code);
+
+        Accepted(await OpenAsync(holder, earlier));
+        _clock.Advance(TimeSpan.FromMinutes(1));
+        Accepted(await OpenAsync(holder, later));
+
+        AttachedInvitation read = Accepted(await AttachedAsync(holder));
+
+        Assert.Equal(_invitations.Held[1].Id, read.Id);
+        Assert.Equal(Customer, read.Organization);
+        Assert.Equal("Northern branch", read.OrganizationName);
+        Assert.Equal("Ada", read.InvitedBy);
+        Assert.Equal([clerk], read.Roles);
+        Assert.Equal([new InvitationDocument("staff-handbook", "2")], read.Documents);
+        Assert.Equal(_invitations.Held[1].ExpiresAt, read.ExpiresAt);
+
+        Accepted(await RevokeAsync(Customer, read.Id));
+        _accounts.Holds(_inviter, new HeldProfile(DisplayName: null, LegalName: null, DateOfBirth: null, PhotoUpdatedAt: null));
+
+        AttachedInvitation remaining = Accepted(await AttachedAsync(holder));
+
+        Assert.Equal(_invitations.Held[0].Id, remaining.Id);
+        Assert.Null(remaining.InvitedBy);
+        Assert.Equal(
+            ErrorCodes.InvitationNotFound,
+            Failure(await AttachedAsync(SubjectId.New(_randomness))).Code);
+    }
+
     private InvitationService Service => Serving(_server);
 
     private InvitationService ServiceWithout => Serving(server: null);
@@ -604,6 +656,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             _documents,
             new DomainLock(_memberships, _configuration, _domains),
             _invitations,
+            _accounts,
             _mailboxes,
             server,
             _notifications,
@@ -613,6 +666,14 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             _clock,
             _randomness);
     }
+
+    private static DisplayName Named(string name) =>
+        DisplayName.TryParse(name, out DisplayName named)
+            ? named
+            : throw new InvalidOperationException("The name does not parse.");
+
+    private ValueTask<Result<AttachedInvitation>> AttachedAsync(SubjectId holder) =>
+        Service.AttachedAsync(AccessContext.Of(holder), TestContext.Current.CancellationToken);
 
     private ValueTask<Result> OpenAsync(SubjectId holder, string token) =>
         Service.OpenAsync(AccessContext.Of(holder), token, TestContext.Current.CancellationToken);

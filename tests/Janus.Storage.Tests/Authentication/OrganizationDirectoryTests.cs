@@ -41,12 +41,13 @@ public sealed class OrganizationDirectoryTests(DatabaseFixture database)
     public async Task IDN_ORG_002_AnOrganizationCreatedIsFoundAsync()
     {
         var created = new OrganizationId(Guid.CreateVersion7());
+        string name = "Northern branch " + Guid.NewGuid().ToString("N");
 
         await using (StoreContext writing = database.Context())
         {
             await Directory(writing).CreateAsync(
                 created,
-                "Northern branch " + Guid.NewGuid().ToString("N"),
+                name,
                 Noon,
                 TestContext.Current.CancellationToken);
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -54,7 +55,7 @@ public sealed class OrganizationDirectoryTests(DatabaseFixture database)
 
         OrganizationStanding? found = await FoundAsync(created);
 
-        Assert.Equal(new OrganizationStanding(created, false, null, null), found);
+        Assert.Equal(new OrganizationStanding(created, name, false, null, null), found);
     }
 
     /// <summary>

@@ -351,6 +351,13 @@ public static class ErrorCodes
         ErrorCode.Parse("identity.invitation.identifiermismatch");
 
     /// <summary>
+    /// No invitation is attached to the account: its links were acknowledged or
+    /// revoked, or none was ever opened by it. Open the invitation link again.
+    /// </summary>
+    /// <remarks>Implements REG-INV-002, chapter 09 section 6a, chapter 10 section 1.1.</remarks>
+    public static ErrorCode InvitationNotFound { get; } = ErrorCode.Parse("identity.invitation.notfound");
+
+    /// <summary>
     /// The step the request is for is not the step the registration has reached: its
     /// predecessor is incomplete, or it is complete already. Read the session's state
     /// and answer the step it names.

@@ -387,6 +387,7 @@ public static class HostingRegistration
             provider.GetRequiredService<ILegalDocuments>(),
             provider.GetRequiredService<DomainLock>(),
             provider.GetRequiredService<IInvitationStore>(),
+            provider.GetRequiredService<IAccountDirectory>(),
             provider.GetRequiredService<IMailboxStore>(),
             provider.GetService<IMailServer>(),
             provider.GetRequiredService<INotificationHandler>(),

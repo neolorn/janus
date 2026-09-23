@@ -282,6 +282,14 @@ against the public contract of LIB-API-001.
   opens nothing answers 422 `identity.invitation.expired`. `IInvitations.OpenAsync` is
   the same operation in process.
 
+- `GET /account/invitation` reads the invitation attached to the signed-in account for
+  the membership step: its `id`, the `organization` and its `organizationName`, the
+  display name of who invited them as `invitedBy` (null where their account shows
+  none), the `roles`, the `documents` with their `version`s, and `expiresAt`. Where
+  the account opened several links, the last one still standing is read. An account
+  with none attached answers 404 `identity.invitation.notfound`.
+  `IInvitations.AttachedAsync` is the same operation in process.
+
 - Staff mailboxes are provisioned through `IMailServer`, which a deployment registers
   where its staff mail is hosted and which no package ships. A mailbox is owed
   `disabled` from its reservation, `enabled` while its holder is an active member of

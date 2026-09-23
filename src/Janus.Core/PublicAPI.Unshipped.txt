@@ -159,6 +159,25 @@ Janus.Core.AssuranceLevel.Aal1 = 1 -> Janus.Core.AssuranceLevel
 Janus.Core.AssuranceLevel.Aal2 = 2 -> Janus.Core.AssuranceLevel
 Janus.Core.AssuranceLevel.Aal3 = 3 -> Janus.Core.AssuranceLevel
 Janus.Core.AssuranceLevel.Delegated = 0 -> Janus.Core.AssuranceLevel
+Janus.Core.AttachedInvitation
+Janus.Core.AttachedInvitation.<Clone>$() -> Janus.Core.AttachedInvitation!
+Janus.Core.AttachedInvitation.AttachedInvitation(Janus.Core.InvitationId Id, Janus.Core.OrganizationId Organization, string! OrganizationName, string? InvitedBy, System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>! Roles, System.Collections.Generic.IReadOnlyList<Janus.Core.InvitationDocument!>! Documents, System.DateTimeOffset ExpiresAt) -> void
+Janus.Core.AttachedInvitation.Deconstruct(out Janus.Core.InvitationId Id, out Janus.Core.OrganizationId Organization, out string! OrganizationName, out string? InvitedBy, out System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>! Roles, out System.Collections.Generic.IReadOnlyList<Janus.Core.InvitationDocument!>! Documents, out System.DateTimeOffset ExpiresAt) -> void
+Janus.Core.AttachedInvitation.Documents.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.InvitationDocument!>!
+Janus.Core.AttachedInvitation.Documents.init -> void
+Janus.Core.AttachedInvitation.Equals(Janus.Core.AttachedInvitation? other) -> bool
+Janus.Core.AttachedInvitation.ExpiresAt.get -> System.DateTimeOffset
+Janus.Core.AttachedInvitation.ExpiresAt.init -> void
+Janus.Core.AttachedInvitation.Id.get -> Janus.Core.InvitationId
+Janus.Core.AttachedInvitation.Id.init -> void
+Janus.Core.AttachedInvitation.InvitedBy.get -> string?
+Janus.Core.AttachedInvitation.InvitedBy.init -> void
+Janus.Core.AttachedInvitation.Organization.get -> Janus.Core.OrganizationId
+Janus.Core.AttachedInvitation.Organization.init -> void
+Janus.Core.AttachedInvitation.OrganizationName.get -> string!
+Janus.Core.AttachedInvitation.OrganizationName.init -> void
+Janus.Core.AttachedInvitation.Roles.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>!
+Janus.Core.AttachedInvitation.Roles.init -> void
 Janus.Core.AuditAction
 Janus.Core.AuditAction.AuditAction() -> void
 Janus.Core.AuditAction.Equals(Janus.Core.AuditAction other) -> bool
@@ -1124,6 +1143,7 @@ Janus.Core.IIdentifiers.UndoAsync(string! linkToken, string! source, System.Thre
 Janus.Core.IIdentifiers.VerifyAsync(Janus.Core.AccessContext! context, Janus.Core.IdentifierId identifier, string! code, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IIdentifiers.VerifyAsync(Janus.Core.EnrolmentSessionId enrolment, Janus.Core.IdentifierId identifier, string! code, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IInvitations
+Janus.Core.IInvitations.AttachedAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AttachedInvitation!>>
 Janus.Core.IInvitations.IssueAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, Janus.Core.InvitationRequest! request, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.IssuedInvitation!>>
 Janus.Core.IInvitations.OpenAsync(Janus.Core.AccessContext! context, string! token, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IInvitations.RevokeAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, Janus.Core.InvitationId invitation, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -2560,6 +2580,9 @@ override Janus.Core.AncestryEntry.ToString() -> string!
 override Janus.Core.ApprovedRecovery.Equals(object? obj) -> bool
 override Janus.Core.ApprovedRecovery.GetHashCode() -> int
 override Janus.Core.ApprovedRecovery.ToString() -> string!
+override Janus.Core.AttachedInvitation.Equals(object? obj) -> bool
+override Janus.Core.AttachedInvitation.GetHashCode() -> int
+override Janus.Core.AttachedInvitation.ToString() -> string!
 override Janus.Core.AuditAction.GetHashCode() -> int
 override Janus.Core.AuditAction.ToString() -> string!
 override Janus.Core.AuditEntry.Equals(object? obj) -> bool
@@ -3090,6 +3113,8 @@ static Janus.Core.AncestryEntry.operator !=(Janus.Core.AncestryEntry? left, Janu
 static Janus.Core.AncestryEntry.operator ==(Janus.Core.AncestryEntry? left, Janus.Core.AncestryEntry? right) -> bool
 static Janus.Core.ApprovedRecovery.operator !=(Janus.Core.ApprovedRecovery? left, Janus.Core.ApprovedRecovery? right) -> bool
 static Janus.Core.ApprovedRecovery.operator ==(Janus.Core.ApprovedRecovery? left, Janus.Core.ApprovedRecovery? right) -> bool
+static Janus.Core.AttachedInvitation.operator !=(Janus.Core.AttachedInvitation? left, Janus.Core.AttachedInvitation? right) -> bool
+static Janus.Core.AttachedInvitation.operator ==(Janus.Core.AttachedInvitation? left, Janus.Core.AttachedInvitation? right) -> bool
 static Janus.Core.AuditAction.Parse(string! value) -> Janus.Core.AuditAction
 static Janus.Core.AuditAction.operator !=(Janus.Core.AuditAction left, Janus.Core.AuditAction right) -> bool
 static Janus.Core.AuditAction.operator ==(Janus.Core.AuditAction left, Janus.Core.AuditAction right) -> bool
@@ -3463,6 +3488,7 @@ static Janus.Core.ErrorCodes.IdentifierMixedScript.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierPrimary.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.InvitationExpired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.InvitationIdentifierMismatch.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.InvitationNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.LossReportNotPermitted.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.LossReportPending.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.MembershipLimitReached.get -> Janus.Core.ErrorCode

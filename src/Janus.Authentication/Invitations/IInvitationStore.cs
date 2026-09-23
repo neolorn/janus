@@ -34,6 +34,18 @@ internal interface IInvitationStore
     ValueTask<Invitation?> FindByTokenAsync(byte[] token, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads the invitation an account opened the link of most recently, among those
+    /// that still stand.
+    /// </summary>
+    /// <param name="invitee">The account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The invitation, neither revoked nor acknowledged, expired or not; nothing where
+    /// none is attached to the account.
+    /// </returns>
+    ValueTask<Invitation?> AttachedToAsync(SubjectId invitee, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Reads the invitations that still stand over one mailbox's reservation.
     /// </summary>
     /// <param name="mailbox">Which mailbox.</param>

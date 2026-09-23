@@ -33,6 +33,13 @@ internal sealed class InvitationStoreInMemory : IInvitationStore
         ValueTask.FromResult(Held.FirstOrDefault(invitation => invitation.Token.AsSpan().SequenceEqual(token)));
 
     /// <inheritdoc/>
+    public ValueTask<Invitation?> AttachedToAsync(SubjectId invitee, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(Held
+            .Where(invitation => invitation.Invitee == invitee && invitation.Stands)
+            .OrderByDescending(invitation => invitation.AttachedAt)
+            .FirstOrDefault());
+
+    /// <inheritdoc/>
     public ValueTask<IReadOnlyList<Invitation>> ReservingAsync(
         MailboxId mailbox,
         CancellationToken cancellationToken) =>

@@ -76,6 +76,34 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     /// <summary>
+    /// REG-INV-002: an account reads the standing invitation whose link it opened
+    /// last; a revoked one is not read, and an account nothing is attached to reads
+    /// nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_INV_002_AnAccountReadsTheInvitationItOpenedLastAsync()
+    {
+        Invitation first = await IssuedAsync("first@example.test");
+        Invitation second = await IssuedAsync("second@example.test");
+        Invitation revoked = await IssuedAsync("revoked@example.test");
+        SubjectId invitee = await _deployment.AccountAsync(Noon);
+        SubjectId nobody = await _deployment.AccountAsync(Noon);
+
+        await ChangeAsync(first.Id, held => held.AttachTo(invitee, Noon.AddHours(1)));
+        await ChangeAsync(second.Id, held => held.AttachTo(invitee, Noon.AddHours(2)));
+        await ChangeAsync(revoked.Id, held => held.AttachTo(invitee, Noon.AddHours(3)));
+        await ChangeAsync(revoked.Id, held => held.Revoke(Noon.AddHours(4)));
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Equal(
+            second.Id,
+            (await Store(reading).AttachedToAsync(invitee, TestContext.Current.CancellationToken))?.Id);
+        Assert.Null(await Store(reading).AttachedToAsync(nobody, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// REG-INV-001: a revoked invitation forgets what it bound: the document and the
     /// key that read it are gone from the row, and what stays is who invited into what.
     /// </summary>
@@ -227,6 +255,18 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         return invitation;
+    }
+
+    private async Task ChangeAsync(InvitationId id, Action<Invitation> change)
+    {
+        await using StoreContext writing = database.Context();
+
+        Invitation held = (await Store(writing).FindAsync(id, TestContext.Current.CancellationToken))!;
+
+        change(held);
+
+        await Store(writing).RecordAsync(held, TestContext.Current.CancellationToken);
+        await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
     private async Task AddAsync(Invitation invitation)
