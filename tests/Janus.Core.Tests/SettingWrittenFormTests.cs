@@ -168,6 +168,22 @@ public sealed class SettingWrittenFormTests
     }
 
     /// <summary>
+    /// Chapter 10 section 4.1a and D-151: the emergency credential cannot appear among an
+    /// organization's login factors, so an override naming it does not read.
+    /// </summary>
+    [Fact]
+    public void Read_AnOverrideNamingTheEmergencyCredential_IsNotAllowed()
+    {
+        ErrorCode? refused = null;
+
+        Settings.OrganizationPolicy
+            .Read("a", "{\"loginFactors\":[\"passkey\",\"breakGlass\"]}")
+            .Switch(_ => { }, error => refused = error.Code);
+
+        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, refused);
+    }
+
+    /// <summary>
     /// An organization's override survives the round trip with the fields it states
     /// and the absence of the fields it does not.
     /// </summary>

@@ -83,7 +83,9 @@ internal static class SettingForms
 
             foreach (string name in names)
             {
-                if (name is null || !SettingText.TryRead(name, out Factor factor))
+                // Chapter 10 section 4.1a: the emergency credential is no entry of any
+                // policy, an organization's no more than the system's.
+                if (name is null || !SettingText.TryRead(name, out Factor factor) || !Policy.Admits(factor))
                 {
                     return Result.Failure<PolicyOverride>(malformed);
                 }
