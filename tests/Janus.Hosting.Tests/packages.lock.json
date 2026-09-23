@@ -834,6 +834,13 @@
           "Janus.Core": "[1.0.0, )"
         }
       },
+      "janus.authorization.tests": {
+        "type": "Project",
+        "dependencies": {
+          "Janus.Authorization": "[1.0.0, )",
+          "xunit.v3": "[4.0.1, )"
+        }
+      },
       "janus.core": {
         "type": "Project"
       },

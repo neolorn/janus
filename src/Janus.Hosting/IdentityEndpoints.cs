@@ -50,6 +50,7 @@ public static class IdentityEndpoints
         _ = endpoints.MapPublication();
         _ = endpoints.MapConfiguration();
         _ = endpoints.MapRestrictions();
+        _ = endpoints.MapGrants();
 
         return endpoints;
     }

@@ -427,6 +427,31 @@ internal sealed class Deployment : IAsyncDisposable
     public AlertLedgerInMemory Alerts { get; } = new();
 
     /// <summary>
+    /// The stored grants the deployment holds.
+    /// </summary>
+    public Janus.Authorization.Tests.Gate.GrantsInMemory AccessGrants { get; } = new();
+
+    /// <summary>
+    /// The roles the deployment holds.
+    /// </summary>
+    public Janus.Authorization.Tests.Roles.RolesInMemory Roles { get; } = new();
+
+    /// <summary>
+    /// The groups the deployment holds.
+    /// </summary>
+    public Janus.Authorization.Tests.Gate.GroupsInMemory Groups { get; } = new();
+
+    /// <summary>
+    /// The records the host registered.
+    /// </summary>
+    public Janus.Authorization.Tests.Resources.ResourcesInMemory Resources { get; } = new();
+
+    /// <summary>
+    /// The administrative organization as the authorization area reads it.
+    /// </summary>
+    private Janus.Authorization.Tests.Gate.AdministrativeOrganizationInMemory GateAdministrative { get; } = new();
+
+    /// <summary>
     /// Names the organization that administers the deployment, as bootstrap does, so a
     /// permission granted there is one an administrative operation honours.
     /// </summary>
@@ -435,6 +460,7 @@ internal sealed class Deployment : IAsyncDisposable
     {
         Administrative.Organization = organization;
         PrivacyAdministrative.Organization = organization;
+        GateAdministrative.Organization = organization;
         Gate.Administrative = organization;
     }
 
@@ -645,6 +671,12 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<ISendAudit, SendAuditInMemory>();
         _ = services.AddScoped<RestrictionAdministration>();
         _ = services.AddScoped<IRestrictionSet, RestrictionSetService>();
+        _ = services.AddSingleton<Janus.Authorization.Gate.IAdministrativeOrganization>(GateAdministrative);
+        _ = services.AddSingleton<Janus.Authorization.Grants.IGrantStore>(AccessGrants);
+        _ = services.AddSingleton<Janus.Authorization.Roles.IRoleStore>(Roles);
+        _ = services.AddSingleton<Janus.Authorization.Groups.IGroupStore>(Groups);
+        _ = services.AddSingleton<Janus.Authorization.Resources.IResourceStore>(Resources);
+        _ = services.AddScoped<IGrants, Janus.Authorization.Grants.GrantService>();
         _ = services.AddScoped<SigningKeys>();
         _ = services.AddScoped<OidcService>();
         _ = services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());

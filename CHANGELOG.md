@@ -225,6 +225,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /admin/grants` writes a stored grant to an account or a group on one
+  registered record or, as `resourceType` `organization`, on a whole organization,
+  and `DELETE /admin/grants/{id}` revokes one; both ask `grant:manage` in the grant's
+  organization, step-up and a reason, and record who acted and when. A grant or
+  revocation of a role carrying `system:administer` also needs `system:administer`.
+  `IGrants` is the same pair of operations in process.
+
 - `GET /admin/restrictions` and `GET /admin/restrictions/{name}` read the named
   restriction set under `restriction:edit`, the shipped defaults included;
   `PUT /admin/restrictions/{name}` creates or replaces one and `DELETE` removes one,

@@ -18,12 +18,14 @@ using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.SignIn;
 using Janus.Authorization.Gate;
+using Janus.Authorization.Grants;
 using Janus.Authorization.Model;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Accounts;
 using Janus.Hosting.Alerting;
 using Janus.Hosting.Authentication;
+using Janus.Hosting.Authorization;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Configuration;
 using Janus.Hosting.Credentials;
@@ -321,6 +323,7 @@ public static class HostingRegistration
 
         services.AddScoped<Derivations>();
         services.AddScoped<IAccessGate, AccessGate>();
+        services.AddScoped<IGrants, GrantService>();
         services.AddScoped<IDerivationMaterialiser, DerivationMaterialiser>();
         services.AddScoped<ModelValidation>();
         services.AddScoped<RedirectValidation>();
@@ -364,6 +367,7 @@ public static class HostingRegistration
         options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<IdentifierKind>());
         options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<Factor>());
         options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<TakedownTrigger>());
+        options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<SubjectType>());
         options.SerializerOptions.TypeInfoResolverChain.Clear();
         options.SerializerOptions.TypeInfoResolverChain.Add(RegistrationJson.Default);
         options.SerializerOptions.TypeInfoResolverChain.Add(AuthenticationJson.Default);
@@ -374,6 +378,7 @@ public static class HostingRegistration
         options.SerializerOptions.TypeInfoResolverChain.Add(PrivacyJson.Default);
         options.SerializerOptions.TypeInfoResolverChain.Add(ConfigurationJson.Default);
         options.SerializerOptions.TypeInfoResolverChain.Add(SendingJson.Default);
+        options.SerializerOptions.TypeInfoResolverChain.Add(AuthorizationJson.Default);
     }
 
     // The word list is a file a deployment holds beside the application, where it

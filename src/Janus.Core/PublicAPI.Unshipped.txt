@@ -971,6 +971,23 @@ Janus.Core.GrantKind
 Janus.Core.GrantKind.Derived = 1 -> Janus.Core.GrantKind
 Janus.Core.GrantKind.Materialised = 2 -> Janus.Core.GrantKind
 Janus.Core.GrantKind.Stored = 0 -> Janus.Core.GrantKind
+Janus.Core.GrantRequest
+Janus.Core.GrantRequest.<Clone>$() -> Janus.Core.GrantRequest!
+Janus.Core.GrantRequest.Deconstruct(out Janus.Core.GrantSubject Subject, out Janus.Core.RoleName Role, out Janus.Core.ResourceReference On, out bool Deny, out System.DateTimeOffset? ExpiresAt, out string! Reason) -> void
+Janus.Core.GrantRequest.Deny.get -> bool
+Janus.Core.GrantRequest.Deny.init -> void
+Janus.Core.GrantRequest.Equals(Janus.Core.GrantRequest? other) -> bool
+Janus.Core.GrantRequest.ExpiresAt.get -> System.DateTimeOffset?
+Janus.Core.GrantRequest.ExpiresAt.init -> void
+Janus.Core.GrantRequest.GrantRequest(Janus.Core.GrantSubject Subject, Janus.Core.RoleName Role, Janus.Core.ResourceReference On, bool Deny, System.DateTimeOffset? ExpiresAt, string! Reason) -> void
+Janus.Core.GrantRequest.On.get -> Janus.Core.ResourceReference
+Janus.Core.GrantRequest.On.init -> void
+Janus.Core.GrantRequest.Reason.get -> string!
+Janus.Core.GrantRequest.Reason.init -> void
+Janus.Core.GrantRequest.Role.get -> Janus.Core.RoleName
+Janus.Core.GrantRequest.Role.init -> void
+Janus.Core.GrantRequest.Subject.get -> Janus.Core.GrantSubject
+Janus.Core.GrantRequest.Subject.init -> void
 Janus.Core.GrantSubject
 Janus.Core.GrantSubject.Deconstruct(out Janus.Core.SubjectType Type, out System.Guid Value) -> void
 Janus.Core.GrantSubject.Equals(Janus.Core.GrantSubject other) -> bool
@@ -1053,6 +1070,9 @@ Janus.Core.IEvents
 Janus.Core.IEvents.PublishAsync<TEvent>(TEvent! raised, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IExports
 Janus.Core.IExports.AssembleAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.SubjectExport!>>
+Janus.Core.IGrants
+Janus.Core.IGrants.GrantAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.GrantRequest! request, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.GrantId>>
+Janus.Core.IGrants.RevokeAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.GrantId grant, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IIdentifiers
 Janus.Core.IIdentifiers.AbandonAsync(string! linkToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IIdentifiers.AddAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.IdentifierKind kind, string! value, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -2578,6 +2598,9 @@ override Janus.Core.GeneratorEnrolment.GetHashCode() -> int
 override Janus.Core.GeneratorEnrolment.ToString() -> string!
 override Janus.Core.GrantId.GetHashCode() -> int
 override Janus.Core.GrantId.ToString() -> string!
+override Janus.Core.GrantRequest.Equals(object? obj) -> bool
+override Janus.Core.GrantRequest.GetHashCode() -> int
+override Janus.Core.GrantRequest.ToString() -> string!
 override Janus.Core.GrantSubject.GetHashCode() -> int
 override Janus.Core.GrantSubject.ToString() -> string!
 override Janus.Core.GroupId.GetHashCode() -> int
@@ -3337,6 +3360,8 @@ static Janus.Core.GeneratorEnrolment.operator ==(Janus.Core.GeneratorEnrolment? 
 static Janus.Core.GrantId.New(System.TimeProvider! time) -> Janus.Core.GrantId
 static Janus.Core.GrantId.operator !=(Janus.Core.GrantId left, Janus.Core.GrantId right) -> bool
 static Janus.Core.GrantId.operator ==(Janus.Core.GrantId left, Janus.Core.GrantId right) -> bool
+static Janus.Core.GrantRequest.operator !=(Janus.Core.GrantRequest? left, Janus.Core.GrantRequest? right) -> bool
+static Janus.Core.GrantRequest.operator ==(Janus.Core.GrantRequest? left, Janus.Core.GrantRequest? right) -> bool
 static Janus.Core.GrantSubject.Of(Janus.Core.GroupId group) -> Janus.Core.GrantSubject
 static Janus.Core.GrantSubject.Of(Janus.Core.SubjectId subject) -> Janus.Core.GrantSubject
 static Janus.Core.GrantSubject.operator !=(Janus.Core.GrantSubject left, Janus.Core.GrantSubject right) -> bool

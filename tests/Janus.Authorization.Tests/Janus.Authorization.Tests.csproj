@@ -4,4 +4,10 @@
     <ProjectReference Include="..\..\src\Janus.Authorization\Janus.Authorization.csproj" />
   </ItemGroup>
 
+  <!-- CONV-TEST-002: the browser boundary is tested against the same fakes the area
+       is, rather than against a second copy of them. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Janus.Hosting.Tests" />
+  </ItemGroup>
+
 </Project>

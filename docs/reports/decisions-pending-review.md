@@ -6741,6 +6741,128 @@ of a name the set does not hold.
 *Chapter text that should change.* 09 section 8 could show `reason` in the `PUT` body,
 give `DELETE` its body, and add the 400 for a name the set does not hold.
 
+---
+
+## 184. How a grant names the whole organization, and what else it must name
+
+**Phase 8 · 2026-09-23 · Tier 2 · 09 section 8, AUTHZ-GRANT-001, AUTHZ-SCOPE-001, API-CONV-001**
+
+*The question.* 09 section 8 gives the body of `POST /admin/grants` as `subjectType`,
+`subjectId`, `resourceType`, `resourceId`, `role`, `deny`, `expiresAt` and `reason`.
+AUTHZ-GRANT-001 AC2 says "A grant with a null resource scopes to the whole
+organization", and AUTHZ-SCOPE-001 that every evaluation is "scoped to the organization
+owning the resource, resolved from the resource and never from the session". The body
+has no member naming an organization, so a grant on the whole organization has no way
+to say which. No answer is listed for a role, record or group the deployment does not
+hold.
+
+*The readings and the choices.*
+
+1. A grant on the whole organization is written `resourceType: "organization"` and
+   `resourceId` the organization's identifier, the type the gate already asks an
+   organization-wide question under; it is stored with no resource. Chosen. The other
+   reading, an `organizationId` member beside absent resource members, adds a member 09
+   does not give.
+2. `grant:manage` is asked in the organization the grant is scoped to: the one a record
+   was registered in, or the one named. Chosen, as AUTHZ-SCOPE-001 reads; asking it in
+   the administrative organization instead would leave no organization able to manage
+   its own grants.
+3. A record that is not registered, or an organization identifier that is not one,
+   answers 400 `api.request.malformed` naming `resourceId`; a role the deployment does
+   not hold names `role`; a group that does not exist or belongs to another
+   organization names `subjectId`, since a group's members hold what it holds in its
+   own organization. Chosen, as entry 180 answers a name outside the catalogue.
+4. A user subject is taken as given. The area holds no port to accounts, and a grant to
+   an identifier no account carries reaches nobody. Chosen.
+
+*Tests that pin it.*
+`GrantEndpointTests.AUTHZ_GRANT_001_AC2_AnOrganizationWideGrantIsWrittenWithNoResourceAsync`,
+`GrantEndpointTests.AUTHZ_SCOPE_001_ARecordGrantIsScopedToTheRecordsOrganizationAsync`,
+`GrantEndpointTests.AUTHZ_SCOPE_001_GrantManageElsewhereDoesNotReachTheRecordAsync`,
+`GrantEndpointTests.AUTHZ_GRANT_001_WhatAGrantNamesMustExistAsync`.
+
+*Chapter text that should change.* 09 section 8 could say how the body names the whole
+organization, that `grant:manage` is asked in the grant's organization, and add the 400
+for a role, record or group the deployment does not hold.
+
+---
+
+## 185. Which grants of system administration need system administration
+
+**Phase 8 · 2026-09-23 · Tier 3 · OPS-CFG-007, 10 section 2.1, AUTHZ-GRANT-002**
+
+*The question.* OPS-CFG-007 says "Granting or revoking system administration SHALL
+require system administration", and 10 section 2.1 that `system:administer` governs
+"granting the seeded administrative role". Permissions reach a principal through
+roles, and a deny takes one away (AUTHZ-GRANT-002). Neither text says whether the rule
+covers a role other than the seeded one that carries the permission, a deny, or a
+grant in an organization other than the administrative one, where the permission is
+never asked.
+
+*The readings.*
+
+1. Only an allow of the seeded `system-administrator` role in the administrative
+   organization needs it.
+2. Any allow of a role carrying `system:administer`, in the administrative
+   organization.
+3. Any grant or revocation, allow or deny, in any organization, of a role carrying
+   `system:administer` needs that permission in the administrative organization; a
+   role that cannot be read counts as carrying it.
+
+*Chosen: 3, the strictest reading.* Reading 1 is the "one step removed" OPS-CFG-007
+exists to prevent, reached by copying the role under another name. A deny of it takes
+system administration away, which is the revocation the item names. A grant in
+another organization is still a record of the permission held, so no organization is
+left out. The check fails closed where the role cannot be read.
+
+*Tests that pin it.*
+`GrantEndpointTests.OPS_CFG_007_AC1_AGrantManagerWithoutSystemAdministerCannotConferItAsync`,
+`GrantEndpointTests.OPS_CFG_007_RevokingSystemAdministrationRequiresItAsync`.
+
+*Chapter text that should change.* OPS-CFG-007 could say that it covers every role
+carrying the permission, deny grants, and every organization.
+
+---
+
+## 186. What the grant routes answer beyond the rows 09 lists
+
+**Phase 8 · 2026-09-23 · Tier 2 · 09 section 8, 10 section 1.3, AUTHZ-GRANT-003, API-CONV-002**
+
+*The question.* 09 section 8 lists **201** / **204** and **409**
+`authz.grant.duplicate` for `POST /admin/grants` and `DELETE /admin/grants/{id}`, and
+says "`reason` is recorded. Revocation records the revoking actor", without a body for
+`DELETE`. 10 section 1.3 gives `authz.grant.expired` ("Grant past its expiry"),
+`authz.grant.notfound` ("No such grant") and `authz.grant.reasonrequired`, 422, and
+API-CONV-002 bounds every free-text field at 1 to 1024 characters after trimming.
+
+*The readings and the choices.*
+
+1. A grant whose `expiresAt` is at or before the present is refused with
+   `authz.grant.expired`, 409 as the status map already answers it, rather than written
+   as a row that confers nothing. Chosen.
+2. `DELETE` of an identifier that is unknown, already revoked, or a derived or
+   materialised grant answers 404 `authz.grant.notfound`: only a row someone wrote is
+   revoked by someone, and a derivation's refresh would write the other back. Chosen.
+3. The revocation's reason travels as `{ "reason": "..." }` in the body of `DELETE`, as
+   entry 183 carries a deletion's reason. Chosen.
+4. A blank reason is `authz.grant.reasonrequired` (422); one longer than 1024
+   characters is 400 `api.request.malformed` naming `reason`. Chosen.
+5. The 201 body is `{ "id": "..." }`, the camelCase noun API-CONV-002 gives. Chosen.
+6. The step-up is judged after everything else, so nobody is asked to prove themselves
+   for a request that would be refused. Chosen.
+
+*Tests that pin it.*
+`GrantEndpointTests.AUTHZ_GRANT_003_AnExpiryIsRecordedAndOneAlreadyPassedIsRefusedAsync`,
+`GrantEndpointTests.AUTHZ_GRANT_001_OnlyAnUnrevokedStoredGrantIsRevokedAsync`,
+`GrantEndpointTests.AUTHZ_GRANT_003_ABlankReasonIsRefusedAsync`,
+`GrantEndpointTests.API_CONV_002_AReasonPastTheLimitIsMalformedAsync`,
+`GrantEndpointTests.AUTHZ_GRANT_003_AC2_TheRevocationRecordsWhoWhenAndWhyAsync`,
+`GrantEndpointTests.AUTH_STEP_001_GrantingAndRevokingAreStepUpActionsAsync`.
+
+*Chapter text that should change.* 09 section 8 could list the 404, the 409
+`authz.grant.expired`, the 422 and the 400, show the 201 body, and give `DELETE` its
+body.
+
 
 # Rows for chapter 10
 
