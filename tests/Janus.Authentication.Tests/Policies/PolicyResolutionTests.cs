@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Janus.Authentication.Policies;
@@ -123,6 +124,31 @@ public sealed class PolicyResolutionTests : IDisposable
             null));
 
         Assert.False((await ResolvedAsync(subject)).SelfServiceRecovery);
+    }
+
+    /// <summary>
+    /// AUTH-STEP-002a and chapter 10 section 4.1a: an organization's gates name only the
+    /// actions it tightens, and every other action keeps the system's gate.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_STEP_002a_AnOverrideNamingSomeGatesKeepsTheSystemsForTheRestAsync()
+    {
+        var subject = SubjectId.New(_randomness);
+        OrganizationId organization = Organization();
+        var tightened = new Gate(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5));
+
+        _memberships.Place(subject, organization);
+        Override(organization, PolicyOverride.None with
+        {
+            Gates = new Dictionary<StepUpAction, Gate> { [StepUpAction.FactorRemove] = tightened },
+        });
+
+        Policy resolved = await ResolvedAsync(subject);
+
+        Assert.Equal(tightened, resolved.Gates[StepUpAction.FactorRemove]);
+        Assert.All(
+            SystemPolicy.Gates.Where(bound => bound.Key is not StepUpAction.FactorRemove),
+            bound => Assert.Equal(bound.Value, resolved.Gates[bound.Key]));
     }
 
     /// <summary>

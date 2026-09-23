@@ -17,7 +17,9 @@ internal static class PolicyStrictness
     /// <summary>
     /// The policy an organization's overrides produce over the system policy. A field
     /// the organization left absent inherits, and one that would loosen is ignored, so
-    /// a value written before the system default rose cannot take effect.
+    /// a value written before the system default rose cannot take effect. The gates are
+    /// overridden action by action: an action the organization does not name keeps the
+    /// system's gate.
     /// </summary>
     /// <param name="system">The system policy.</param>
     /// <param name="overrides">What the organization overrides.</param>
@@ -33,7 +35,7 @@ internal static class PolicyStrictness
             new Policy(
                 overrides.RequiredAssurance ?? system.RequiredAssurance,
                 overrides.LoginFactors ?? system.LoginFactors,
-                overrides.Gates ?? system.Gates,
+                Overridden(system.Gates, overrides.Gates),
                 overrides.CredentialRedundancy ?? system.CredentialRedundancy,
                 overrides.SelfServiceRecovery ?? system.SelfServiceRecovery,
                 overrides.EmailDomains ?? system.EmailDomains));
@@ -79,6 +81,18 @@ internal static class PolicyStrictness
         GateLevel.Reachable => 1,
         _ => 2,
     };
+
+    // Chapter 10 section 4.1a: an organization stores only what it overrides, so its
+    // gates name the actions it tightens and no others.
+    private static FrozenDictionary<StepUpAction, Gate> Overridden(
+        IReadOnlyDictionary<StepUpAction, Gate> system,
+        IReadOnlyDictionary<StepUpAction, Gate>? overrides) =>
+        Enum.GetValues<StepUpAction>()
+            .ToFrozenDictionary(
+                action => action,
+                action => overrides is not null && overrides.TryGetValue(action, out Gate? stated)
+                    ? stated
+                    : system[action]);
 
     // A locked list admits only what it names, so any lock beats no lock and two
     // locks admit only what both name.

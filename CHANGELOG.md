@@ -1257,6 +1257,9 @@ against the public contract of LIB-API-001.
 
 ### Fixed
 
+- An organization's policy that overrides the gates of some step-up actions resolves,
+  every other action keeping the system's gate. Such a policy failed to resolve for
+  every member of the organization.
 - A change to `policy.default` records what it raised, so a sign-in that does not meet
   a raised assurance floor or redundancy rule is held, or told its deadline, as
   `policy.enforcement.grace` says. The raise was never recorded, and nobody was held.
