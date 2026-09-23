@@ -278,7 +278,7 @@ public static class JanusRegistration
         services.AddScoped<IRecovery>(provider => provider.GetRequiredService<RecoveryService>());
         services.AddScoped<ICredentials, CredentialService>();
         services.AddScoped<SigningKeys>();
-        services.AddOidc();
+        services.AddOidc(keyEncryptionKeys);
         services.AddScoped<OidcService>();
         services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
 
@@ -329,6 +329,7 @@ public static class JanusRegistration
         services.Insert(4, ServiceDescriptor.Singleton<IHostedService, ConfigurationValidationService>());
         services.Insert(5, ServiceDescriptor.Singleton<IHostedService, DeclarationValidationService>());
         services.Insert(6, ServiceDescriptor.Singleton<IHostedService, RedirectValidationService>());
+        services.Insert(7, ServiceDescriptor.Singleton<IHostedService, SigningKeyValidationService>());
 
         return services;
     }

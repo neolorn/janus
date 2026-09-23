@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text.Json.Serialization;
+using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Accounts;
@@ -41,6 +42,7 @@ using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
 using Janus.Hosting.Sending;
 using Janus.Hosting.Tests.Bff;
+using Janus.Hosting.Tests.Oidc;
 using Janus.Privacy;
 using Janus.Privacy.Consents;
 using Janus.Privacy.Documents;
@@ -52,11 +54,13 @@ using Janus.Privacy.Tests.Documents;
 using Janus.Privacy.Tests.Exports;
 using Janus.Privacy.Tests.Outbox;
 using Janus.Privacy.Tests.Requests;
+using Janus.Storage.Authentication.Oidc;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using OpenIddict.Abstractions;
 
 namespace Janus.Hosting.Tests;
 
@@ -68,6 +72,12 @@ namespace Janus.Hosting.Tests;
 internal sealed class Deployment : IAsyncDisposable
 {
     private static readonly DateTimeOffset Noon = new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
+
+    // AUTH-KEY-002, OPS-SEC-001: what the codes and the refresh tokens the provider
+    // writes are encrypted under, which a deployment is handed and never generates.
+    private static readonly KeyEncryptionKeys Wrapping = new(
+        1,
+        new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] });
 
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
     private readonly WebApplication _application;
@@ -105,6 +115,7 @@ internal sealed class Deployment : IAsyncDisposable
         builder.Logging.ClearProviders();
 
         Signals = new RegistrationSignalsInMemory(Clock);
+        Grants = new OidcAuthorizationStoreInMemory(Tokens);
 
         Declared = preferences ?? PreferenceDeclarations.None;
         Accounts = new AccountDirectoryInMemory(Declared);
@@ -143,6 +154,21 @@ internal sealed class Deployment : IAsyncDisposable
         _ = ((IApplicationBuilder)_application).UseEndpoints(_ => { });
 
         _pipeline = ((IApplicationBuilder)_application).Build();
+
+        // AUTH-KEY-001: the server is put together with the key the store holds at
+        // startup, which is what the hosted service of the same name does in a
+        // deployment that a web server starts.
+        using (IServiceScope scope = _application.Services.CreateScope())
+        {
+            _ = _application.Services
+                .GetRequiredService<SigningCredentialSource>()
+                .CurrentAsync(
+                    scope.ServiceProvider.GetRequiredService<SigningKeys>(),
+                    CancellationToken.None)
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+        }
     }
 
     /// <summary>
@@ -306,14 +332,19 @@ internal sealed class Deployment : IAsyncDisposable
     public SubjectNoticesInMemory Notices { get; } = new();
 
     /// <summary>
-    /// The authorization codes outstanding.
+    /// The codes and tokens the provider issued.
     /// </summary>
-    public AuthorizationCodeStoreInMemory Codes { get; } = new();
+    public OidcTokenStoreInMemory Tokens { get; } = new();
 
     /// <summary>
-    /// The refresh tokens outstanding.
+    /// The grants the codes and tokens hang from.
     /// </summary>
-    public RefreshTokenStoreInMemory Tokens { get; } = new();
+    public OidcAuthorizationStoreInMemory Grants { get; }
+
+    /// <summary>
+    /// The scopes the deployment registered beyond the ones the provider is built with.
+    /// </summary>
+    public OidcScopeStoreInMemory Scopes { get; } = new();
 
     /// <summary>
     /// The signing keys the deployment holds.
@@ -326,9 +357,9 @@ internal sealed class Deployment : IAsyncDisposable
     public OidcAuditInMemory OidcAudit { get; } = new();
 
     /// <summary>
-    /// What the provider logged about a request it refused or corrected.
+    /// What the provider logged about a request it corrected.
     /// </summary>
-    public LogInMemory<AuthorizationValidation> OidcLog { get; } = new();
+    public LogInMemory<RegisteredDestination> OidcLog { get; } = new();
 
     /// <summary>
     /// Every endpoint the library mounted.
@@ -427,11 +458,18 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IRecoveryAudit, RecoveryAuditInMemory>();
         _ = services.AddSingleton<IKeyCeremonyStore, KeyCeremonyStoreInMemory>();
         _ = services.AddSingleton<IOidcClientStore>(Clients);
-        _ = services.AddSingleton<IAuthorizationCodeStore>(Codes);
-        _ = services.AddSingleton<IRefreshTokenStore>(Tokens);
         _ = services.AddSingleton<ISigningKeyStore>(Keys);
         _ = services.AddSingleton<IOidcAudit>(OidcAudit);
-        _ = services.AddSingleton<ILogger<AuthorizationValidation>>(OidcLog);
+        _ = services.AddSingleton<ILogger<RegisteredDestination>>(OidcLog);
+
+        // The records the protocol server keeps are the library's rows, so a
+        // deployment that runs over fakes holds them the way it holds every other
+        // table (D-162, CONV-TEST-002).
+        _ = services.AddSingleton<IOpenIddictApplicationStore<OidcClientRecord>>(
+            new OidcApplicationStoreInMemory(Clients));
+        _ = services.AddSingleton<IOpenIddictAuthorizationStore<OidcAuthorizationRecord>>(Grants);
+        _ = services.AddSingleton<IOpenIddictScopeStore<OidcScopeRecord>>(Scopes);
+        _ = services.AddSingleton<IOpenIddictTokenStore<OidcTokenRecord>>(Tokens);
 
         _ = services.AddSingleton(RestrictionKeySuppliers.None);
         _ = services.AddSingleton(Declared);
@@ -522,7 +560,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<SigningKeys>();
         _ = services.AddScoped<OidcService>();
         _ = services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
-        _ = services.AddOidc();
+        _ = services.AddOidc(Wrapping);
 
         _ = services.AddSingleton(new BrowserSessionCookies(application));
         _ = services.AddScoped<SynchronizerTokens>();

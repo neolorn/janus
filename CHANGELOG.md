@@ -10,6 +10,26 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- The OpenID Connect provider is now the protocol library's throughout. It validates
+  the clients, issues and rotates the codes and the tokens, proves the verifier and
+  catches a reuse, and it keeps its own records in three tables of the library's. What
+  the library still decides is what no protocol server can know: the session record
+  every token is minted from, the kind of client, the one destination a code returns
+  to, and the key that signs, which is the key the deployment's own store holds and
+  publishes. An upgrade runs a migration that drops `oidc_codes` and
+  `oidc_refresh_tokens` and creates `oidc_authorizations`, `oidc_tokens` and
+  `oidc_scopes`; a code or refresh token outstanding at the upgrade does not survive
+  it.
+
+- A browser application's own layer that asks for `offline_access` is now refused
+  where it asks, with the protocol's `invalid_request`, rather than issued a code and
+  handed nothing at the exchange. An authorization request naming a client the registry
+  does not hold is answered 400 rather than 401.
+
+- Codes and refresh tokens are encrypted under a key derived from the deployment's
+  key-encryption key, so every instance reads what any other wrote, a restart loses
+  nothing, and a key rotation leaves the ones already issued readable.
+
 - The records of processing now apply the three rows of the shipped provider register
   the library itself makes true: the hosting provider always, the mail server while the
   deployment uses the library's own mail transport, and the password screening service
@@ -1082,6 +1102,12 @@ against the public contract of LIB-API-001.
   the identifier began with a digit, which is about half of them.
 
 ### Removed
+
+- `IOidc.FindClientAsync`, `IOidc.MintAsync`, `IOidc.ReuseAsync` and `MintedSession`.
+  The contract now carries the two operations a host calls in process and the library
+  answers over HTTP, `ClaimsAsync` and `KeysAsync`; what the library holds of a session
+  while a token is minted is the provider's own work and never was an operation a host
+  called.
 
 - `alerting.destinationchange.notify`. The notice to the previous destinations is
   not suppressible, so no switch for it exists.

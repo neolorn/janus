@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Oidc;
@@ -25,20 +24,6 @@ internal sealed class OidcClientStore(JanusDbContext context) : IOidcClientStore
         OidcClientRecord? record = await HeldAsync(clientId, cancellationToken).ConfigureAwait(false);
 
         return record is null ? null : Client(record);
-    }
-
-    /// <inheritdoc/>
-    public async ValueTask<bool> AuthenticatesAsync(
-        string clientId,
-        byte[] fingerprint,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(fingerprint);
-
-        OidcClientRecord? record = await HeldAsync(clientId, cancellationToken).ConfigureAwait(false);
-
-        return record is not null
-            && CryptographicOperations.FixedTimeEquals(record.Secret, fingerprint);
     }
 
     /// <inheritdoc/>

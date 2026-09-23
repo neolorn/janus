@@ -1817,6 +1817,8 @@ library refuses. The protocol, the request shapes and the signatures stay the se
 taken in degraded mode and that the library holds the rows, so no later run reaches for
 its stores.
 
+**Superseded by D-162.** Applied in entry 158.
+
 ---
 
 ## 59. The server's own keys are ephemeral and protect nothing
@@ -1847,6 +1849,8 @@ validate offline (AUTH-OIDC-004 AC3).
 `OidcFlowTests.AUTH_OIDC_004_AC3_AnOfflineValidatorRefusesTheTokenAtItsExpiryAsync`.
 
 *Chapter text that should change.* None.
+
+**Superseded by D-162.** Applied in entry 158.
 
 ---
 
@@ -5675,6 +5679,206 @@ whole closed set, so no path can raise the retired code.
 request | IDN-ACCT-007 ``. D-162 retires it, and no code has ever raised it, so the row
 should be deleted or struck through in the way the chapter already strikes
 `identity.identifier.duplicate`, naming `authz.restricted` as its successor.
+
+---
+
+## 158. The protocol server owns the protocol, and the library's tables hold its records
+
+**Corrections 1 · 2026-09-23 · D-162 items 58 and 59 · AUTH-OIDC-001 to AUTH-OIDC-004,
+AUTH-SESS-012, AUTH-KEY-001, API-REDIR-001, CONV-DESIGN-008**
+
+D-162 reverses entries 58 and 59. Degraded mode is gone. The four store interfaces the
+server asks its questions through are hand-written in `Janus.Storage` over the library's
+own tables, the server's own handlers validate the clients and issue the codes and the
+tokens, and the library adds only what no protocol server can know.
+
+*What the library now holds.* `oidc_clients` as it always did, and three new tables:
+`oidc_authorizations` for the grant a code and its tokens hang from, `oidc_tokens` for
+every code, refresh token and reference the server issues, and `oidc_scopes` for the
+scopes a deployment registers beyond the four the server is built with. Each row hangs
+from the account it names and the client it belongs to by foreign key, and the grant and
+token rows carry a concurrency token, so two presentations of one row cannot both change
+it and the second is refused rather than lost. `OidcApplicationStore` and
+`OidcScopeStore` are read only: the registry is the deployment's and every write through
+them is refused where it arrives.
+
+*What the library still decides.* The session record every token is minted from
+(`OidcService.MintAsync`, AUTH-OIDC-004 AC1), the end of everything derived from a record
+whose token came back twice (`OidcService.ReuseAsync` through the `TokenReuse` handler,
+AUTH-OIDC-003 AC1 and AC2), the one destination a code returns to (`RegisteredDestination`,
+API-REDIR-001 AC1), the claims a scope names (`ClaimsAnswer`), the published key set
+(`KeySetAnswer`), and the kind of client, which is what the application store turns into
+the grant types the server admits (09 section 9).
+
+*The signing key.* There is no ephemeral pair. `SigningCredentialSource` holds the
+credentials the server signs with, primed at startup by `SigningKeyValidationService`
+from the deployment's own key store and replaced in process when the key rotates, so a
+rotation still needs no restart (AUTH-KEY-001 AC1) and the key that signs is the key the
+set publishes. A deployment whose key store cannot answer stops at startup with the
+refusal the store gave.
+
+*Tests that pin what is built.*
+`OidcStoreTests.AUTH_OIDC_001_AC2_TheRegistryHoldsWhatTheSecretHashesToAsync`,
+`OidcStoreTests.AUTH_OIDC_001_AC3_NoRequestWritesTheRegistryAsync`,
+`OidcStoreTests.AUTH_OIDC_002_AC1_OnlyAProtocolClientMayRefreshAsync`,
+`OidcStoreTests.AUTH_OIDC_003_AC1_RevokingAGrantTakesEveryTokenUnderItAsync`,
+`OidcStoreTests.AUTH_OIDC_003_AC1_TwoWritesOfOneRowCannotBothSucceedAsync`,
+`OidcStoreTests.AUTH_KEY_003_AC1_TheSweepTakesTheTokensThatCanNoLongerBePresentedAsync`,
+`OidcFlowTests.AUTH_KEY_001_AC2_TheKeyThatSignsIsTheKeyTheSetPublishesAsync`,
+`OidcFlowTests.AUTH_SESS_012_AC5_TheExchangeIsBackChannelAndNamesTheSessionAsync`,
+`OidcFlowTests.AUTH_OIDC_003_AC1_ARefreshTokenRotatesAndTheOldOneIsSpentAsync`,
+`OidcFlowTests.API_REDIR_001_AC1_AnUnknownDestinationIsReplacedAndLoggedAsync`,
+`OidcServiceTests.AUTH_OIDC_003_AC1_AReuseEndsEverythingDerivedFromTheRecordAsync`.
+
+*Chapter text that should change.* Chapter 07's list of library-owned tables names the
+one-time codes and the refresh-token families; those two tables are gone and the three
+named above take their place. `08` CONV-DESIGN-008 already carries the D-162 wording.
+
+---
+
+## 159. The codes and the refresh tokens are encrypted under a key derived from the key-encryption key
+
+**Corrections 1 · 2026-09-23 · Tier 2 · AUTH-KEY-002, AUTH-OIDC-002, OPS-SEC-001**
+
+*The question.* The server encrypts the codes and the refresh tokens it issues and
+refuses to start without a key to do it with. Entry 59 gave it an ephemeral pair because
+nothing it protected was real; now the codes and the refresh tokens are the server's own
+encrypted values, so the key is load bearing. No chapter names one.
+
+*The readings.*
+
+1. A key of the server's own, created per process. A code issued by one instance is then
+   unreadable by any other and by the same instance after a restart.
+2. A key of its own in a new table, with a ceremony and a rotation of its own.
+3. A key derived from the key-encryption key the secrets manager hands the deployment at
+   startup (OPS-SEC-001), under a purpose string of this use alone.
+
+*Chosen: 3.* Reading 1 breaks a deployment that runs more than one instance, which
+OPS-SEC-001 assumes. Reading 2 adds a second secret, a second ceremony and a second
+rotation for a value that lives for sixty seconds or for the life of a session record.
+Reading 3 gives every instance the same key without holding a second secret, and every
+version the deployment still holds is derived, current first, so a rotation of the
+key-encryption key leaves the codes and refresh tokens already issued readable. The
+purpose string `janus:oidc:token-protection:v1` separates this material from every other
+use of the same key, so what is derived here cannot unwrap a subject's data key and what
+is derived elsewhere cannot read a token.
+
+*Tests that pin what is built.*
+`OidcFlowTests.AUTH_SESS_012_AC5_TheExchangeIsBackChannelAndNamesTheSessionAsync`,
+`OidcFlowTests.AUTH_OIDC_003_AC1_ARefreshTokenRotatesAndTheOldOneIsSpentAsync`.
+
+*Chapter text that should change.* AUTH-KEY-002 could name this derivation beside the
+subject data keys, so no later run reaches for a key table of its own.
+
+---
+
+## 160. `IOidc` carries the two operations the contract exposes twice, and nothing else
+
+**Corrections 1 · 2026-09-23 · Tier 2 · LIB-API-005, CONV-DESIGN-005, AUTH-OIDC-001**
+
+*The question.* D-162 says `IOidc.FindClientAsync` no longer answers `authz.denied`
+because the protocol error is the server's. That leaves the member answering the client
+or nothing, which CONV-DESIGN-005 AC2 forbids on a contract, and `10` section 1 holds no
+code for "the registry holds no such client" to answer instead. `MintAsync` and
+`ReuseAsync` are in the same position: both exist for the provider's own handlers and
+neither is reachable over HTTP.
+
+*The readings.*
+
+1. Keep all three and invent a code, such as `auth.client.notfound`, for the lookup to
+   fail with, and give `ReuseAsync` a `Result` it can never fail with.
+2. Keep all three and let the lookup answer a nullable, against CONV-DESIGN-005 AC2.
+3. Read LIB-API-005 as it is written. Every library-owned operation exists once as a
+   contract and is exposed twice, in process and as an HTTP endpoint. The two members
+   that answer an endpoint stay; the three that are the provider's own working parts move
+   to `OidcService`, which is where the handlers reach them.
+
+*Chosen: 3.* Reading 1 invents vocabulary no chapter uses, which section 4 of the
+instructions forbids, and puts a `Result` on a method with no expected failure. Reading 2
+breaks a convention `08` states without qualification. Reading 3 breaks nothing: `IOidc`
+keeps `ClaimsAsync`, which answers `GET /oidc/userinfo`, and `KeysAsync`, which answers
+`GET /oidc/jwks`, and both return `Result<T>`. `RegisteredDestination` reads the registry
+through `IOidcClientStore`, the port that owns it. `MintedSession` moves to
+`Janus.Authentication.Oidc` and leaves the public surface with the members that carried
+it. The public contract gets smaller and nothing a host could call is lost, because
+nothing a host could call was ever among the three.
+
+*Tests that pin what is built.*
+`ResultContractTests.CONV_DESIGN_005_AC1_EveryContractMethodReturnsAnOutcome`,
+`ResultContractTests.CONV_DESIGN_005_AC2_NoContractReturnsNullForNotFound`,
+`OidcFlowTests.AUTH_OIDC_001_UserInfoAnswersWhatTheScopeNamesAsync`,
+`OidcFlowTests.AUTH_KEY_001_AC4_TheKeySetCarriesTheConfiguredAlgorithmAsync`.
+
+*Chapter text that should change.* D-162's sentence about `IOidc.FindClientAsync` should
+say the member is gone rather than that it answers something else.
+
+---
+
+## 161. A browser application asking to hold a refresh token is refused where it asks
+
+**Corrections 1 · 2026-09-23 · Tier 3 · AUTH-OIDC-002, AUTH-SESS-012, 09 section 9**
+
+*The question.* AUTH-OIDC-002 AC1 and AC2 say a browser application's own layer receives
+no refresh token and holds nothing after the exchange. The retired implementation issued
+the code anyway and quietly handed nothing back at the token endpoint. The server reads
+the same rule from the grant types the client holds and refuses the authorization
+request outright, because `offline_access` is governed by the refresh grant and a
+browser application does not hold it.
+
+*The readings.*
+
+1. Grant every client the refresh grant at the authorization endpoint and withhold the
+   refresh token at the token endpoint, which reproduces the old behaviour.
+2. Let the refusal stand where the client asks: a client that asks for what it may not
+   have is told so, with the protocol's own `invalid_request`.
+
+*Chosen: 2, as the strictest reading.* This is a question about what is refused, so it is
+Tier 3 and takes the reading that grants least. Reading 1 would have the deployment admit
+a request it intends to answer incompletely, and would put the same rule in two places,
+one of which could drift. Reading 2 keeps the rule in one place, the grant types the
+application store derives from the kind of client, and a relying party learns at once
+that it asked for something it cannot have. A browser application that asks only for what
+it may hold is unaffected.
+
+*Tests that pin what is built.*
+`OidcStoreTests.AUTH_OIDC_002_AC1_OnlyAProtocolClientMayRefreshAsync`,
+`OidcFlowTests.AUTH_OIDC_002_AC1_ABrowserApplicationAskingToHoldOneIsRefusedAsync`,
+`OidcFlowTests.AUTH_SESS_012_AC6_TheExchangeHandsABrowserApplicationNoRefreshTokenAsync`.
+
+*Chapter text that should change.* AUTH-OIDC-002 could say where the refusal falls, so a
+frontend knows to ask for `offline_access` only on behalf of a protocol client.
+
+---
+
+## 162. The two retired tables are dropped by the migration that creates their successors
+
+**Corrections 1 · 2026-09-23 · Tier 2 · OPS-MIG-005, OPS-MIG-001**
+
+*The question.* OPS-MIG-005 says every migration "SHALL work against the **previous**
+application version" and that "Renaming or dropping SHALL NOT occur in the same release
+that changes the code using it". `oidc_codes` and `oidc_refresh_tokens` are the tables of
+the implementation D-162 reverses, and nothing reads or writes them after this branch.
+
+*The readings.*
+
+1. Create the three new tables now and leave the two dead ones in place until a later
+   release drops them, which is expand and contract read literally.
+2. Drop them in the same migration, because there is no previous release to be compatible
+   with.
+
+*Chosen: 2.* The rule protects a deployment running the previous version against a schema
+the new one changed under it. No version has been released: `git tag --list 'v*'` is
+empty, and the double-migration gate says so itself, taking the previous schema to be the
+empty one when nothing is tagged. Leaving two dead tables in the schema for a
+compatibility window that has no other side would make the first release ship them and a
+second migration remove them. If a release is tagged before this branch merges, the drop
+must move to its own migration in the release after it.
+
+*Tests that pin what is built.* The double-migration gate of CONV-GATE-001, which applies
+the migrations twice over an empty database and compares the model against the schema.
+
+*Chapter text that should change.* None. OPS-MIG-005 is right; it simply has no previous
+version to bind here.
 
 
 # Rows for chapter 10

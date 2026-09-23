@@ -384,14 +384,19 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
     public DbSet<OidcClientRecord> OidcClients => Set<OidcClientRecord>();
 
     /// <summary>
-    /// The authorization codes waiting to be exchanged.
+    /// The grants the clients hold.
     /// </summary>
-    public DbSet<AuthorizationCodeRecord> AuthorizationCodes => Set<AuthorizationCodeRecord>();
+    public DbSet<OidcAuthorizationRecord> OidcAuthorizations => Set<OidcAuthorizationRecord>();
 
     /// <summary>
-    /// The refresh tokens, by family.
+    /// The codes and tokens issued under those grants.
     /// </summary>
-    public DbSet<RefreshTokenRecord> RefreshTokens => Set<RefreshTokenRecord>();
+    public DbSet<OidcTokenRecord> OidcTokens => Set<OidcTokenRecord>();
+
+    /// <summary>
+    /// The scopes the deployment registered beyond the ones the provider is built with.
+    /// </summary>
+    public DbSet<OidcScopeRecord> OidcScopes => Set<OidcScopeRecord>();
 
     /// <summary>
     /// The keys the provider signs tokens with.
@@ -468,8 +473,9 @@ internal sealed class JanusDbContext(DbContextOptions<JanusDbContext> options) :
         modelBuilder.ApplyConfiguration(new LossReportConfiguration());
         modelBuilder.ApplyConfiguration(new LifecycleLinkConfiguration());
         modelBuilder.ApplyConfiguration(new OidcClientConfiguration());
-        modelBuilder.ApplyConfiguration(new AuthorizationCodeConfiguration());
-        modelBuilder.ApplyConfiguration(new RefreshTokenConfiguration());
+        modelBuilder.ApplyConfiguration(new OidcAuthorizationConfiguration());
+        modelBuilder.ApplyConfiguration(new OidcTokenConfiguration());
+        modelBuilder.ApplyConfiguration(new OidcScopeConfiguration());
         modelBuilder.ApplyConfiguration(new SigningKeyConfiguration());
         modelBuilder.ApplyConfiguration(new DocumentVersionConfiguration());
         modelBuilder.ApplyConfiguration(new DocumentTranslationConfiguration());

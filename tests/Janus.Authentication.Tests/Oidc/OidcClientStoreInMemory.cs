@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Oidc;
@@ -17,21 +16,18 @@ internal sealed class OidcClientStoreInMemory : IOidcClientStore
     private readonly Dictionary<string, (OidcClient Client, byte[] Secret)> _clients =
         new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// The clients as they were registered, with what each one's secret hashes to,
+    /// for a caller that reads the registry as the protocol server reads it.
+    /// </summary>
+    public IReadOnlyList<(OidcClient Client, byte[] Secret)> Registered => [.. _clients.Values];
+
     /// <inheritdoc/>
     public ValueTask<OidcClient?> FindAsync(string clientId, CancellationToken cancellationToken) =>
         ValueTask.FromResult(
             _clients.TryGetValue(clientId, out (OidcClient Client, byte[] Secret) held)
                 ? held.Client
                 : null);
-
-    /// <inheritdoc/>
-    public ValueTask<bool> AuthenticatesAsync(
-        string clientId,
-        byte[] fingerprint,
-        CancellationToken cancellationToken) =>
-        ValueTask.FromResult(
-            _clients.TryGetValue(clientId, out (OidcClient Client, byte[] Secret) held)
-            && CryptographicOperations.FixedTimeEquals(held.Secret, fingerprint));
 
     /// <inheritdoc/>
     public ValueTask<IReadOnlyList<OidcClient>> AllAsync(CancellationToken cancellationToken) =>

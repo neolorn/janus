@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using Janus.Authentication.Oidc;
 using Janus.Authentication.Sessions;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Http;
@@ -14,22 +16,26 @@ using OpenIddict.Server.AspNetCore;
 namespace Janus.Hosting.Oidc;
 
 /// <summary>
-/// The answer to an authorization request: a one-time code where the browser holds a
-/// session, and otherwise the authentication application or the refusal a silent
-/// request asked for.
+/// The answer to an authorization request: a code against the session the browser
+/// holds, and otherwise the authentication application or the refusal a silent request
+/// asked for.
 /// </summary>
-/// <param name="oidc">Where the code is issued.</param>
+/// <param name="oidc">Where the session record is read.</param>
 /// <param name="browser">What the browser carried.</param>
 /// <param name="addresses">Where a browser holding no session is sent.</param>
+/// <param name="configuration">Where the code's lifetime comes from.</param>
 /// <remarks>
-/// Implements AUTH-SESS-012, AUTH-OIDC-002 and API-LAND-001. The endpoint forwards a
-/// browser and never renders a page, so a person who holds no session is sent to the
-/// authentication application's own route and the library writes no sentence.
+/// Implements AUTH-SESS-012, AUTH-OIDC-002, AUTH-OIDC-004 and API-LAND-001. The
+/// endpoint forwards a browser and never renders a page, so a person who holds no
+/// session is sent to the authentication application's own route and the library
+/// writes no sentence. The code stands on the session record, which the token endpoint
+/// reads again before it mints anything.
 /// </remarks>
 internal sealed class AuthorizationIssue(
-    IOidc oidc,
+    OidcService oidc,
     RequestSession browser,
-    AuthenticationAddresses addresses)
+    AuthenticationAddresses addresses,
+    IConfigurationStore configuration)
     : IOpenIddictServerHandler<OpenIddictServerEvents.HandleAuthorizationRequestContext>
 {
     /// <inheritdoc/>
@@ -38,37 +44,39 @@ internal sealed class AuthorizationIssue(
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        var intent = new AuthorizationIntent(
-            context.Request.ClientId ?? string.Empty,
-            context.Request.RedirectUri ?? string.Empty,
-            context.Request.Scope ?? string.Empty,
-            context.Request.CodeChallenge ?? string.Empty,
-            context.Request.CodeChallengeMethod ?? string.Empty,
-            context.Request.Nonce,
-            context.Request.HasPromptValue(OpenIddictConstants.PromptValues.None));
+        bool silent = context.Request.HasPromptValue(OpenIddictConstants.PromptValues.None);
 
-        Error? failure = null;
-
-        IssuedCode issued = (await oidc
-                .IssueCodeAsync(intent, browser.Live?.Id, context.CancellationToken)
-                .ConfigureAwait(false))
-            .Match(code => code, error => Withheld(error, ref failure));
-
-        if (failure is Error refusal)
+        // AUTH-OIDC-004 AC1: the record the code will stand on has to answer now, not
+        // only when the cookie was resolved.
+        if (browser.Live is not Session live
+            || (await oidc.MintAsync(live.Spine, context.CancellationToken).ConfigureAwait(false))
+                .Match(_ => false, _ => true))
         {
-            Refuse(context, refusal, intent.Silent);
+            Refuse(context, silent);
 
             return;
         }
 
-        context.SignIn(Principal(intent, issued));
+        Error? failure = null;
+
+        TimeSpan lifetime = (await configuration
+                .ReadAsync(Settings.OidcCodeLifetime, context.CancellationToken)
+                .ConfigureAwait(false))
+            .Match(read => read, error => Withheld(error, ref failure));
+
+        if (failure is not null)
+        {
+            throw new InvalidOperationException("The code lifetime could not be read.");
+        }
+
+        context.SignIn(Principal(context, live, lifetime));
     }
 
-    private static IssuedCode Withheld(Error error, ref Error? failure)
+    private static TimeSpan Withheld(Error error, ref Error? failure)
     {
         failure = error;
 
-        return default!;
+        return default;
     }
 
     private static IEnumerable<string> Destinations(Claim claim) =>
@@ -82,22 +90,23 @@ internal sealed class AuthorizationIssue(
             _ => [],
         };
 
-    private ClaimsPrincipal Principal(AuthorizationIntent intent, IssuedCode issued)
+    private static ClaimsPrincipal Principal(
+        OpenIddictServerEvents.HandleAuthorizationRequestContext context,
+        Session live,
+        TimeSpan lifetime)
     {
         var identity = new ClaimsIdentity(
             OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
             OpenIddictConstants.Claims.Name,
             OpenIddictConstants.Claims.Role);
 
-        Session live = browser.Live!;
-
         identity.AddClaim(new Claim(OpenIddictConstants.Claims.Subject, live.Subject.ToString()));
         identity.AddClaim(new Claim(OidcClaimNames.Session, live.Spine.ToString()));
-        identity.AddClaim(new Claim(OidcClaimNames.Code, issued.Code));
 
         var principal = new ClaimsPrincipal(identity);
 
-        principal.SetScopes(intent.Scope.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        principal.SetScopes(context.Request.GetScopes());
+        principal.SetAuthorizationCodeLifetime(lifetime);
         principal.SetDestinations(Destinations);
 
         return principal;
@@ -105,14 +114,11 @@ internal sealed class AuthorizationIssue(
 
     private void Refuse(
         OpenIddictServerEvents.HandleAuthorizationRequestContext context,
-        Error refusal,
         bool silent)
     {
         // AUTH-SESS-012 AC3: a request that is not silent is sent where a person can
         // sign in, which the deployment declared or it did not start.
-        if (!silent
-            && refusal.Code == ErrorCodes.SessionExpired
-            && context.Transaction.GetHttpRequest() is HttpRequest request)
+        if (!silent && context.Transaction.GetHttpRequest() is HttpRequest request)
         {
             request.HttpContext.Response.Redirect(addresses.SignIn);
             context.HandleRequest();
@@ -124,7 +130,7 @@ internal sealed class AuthorizationIssue(
         // `prompt=none` asks to be told, and a request that did not ask to be told it
         // was forwarded instead.
         context.Reject(
-            silent && refusal.Code == ErrorCodes.SessionExpired
+            silent
                 ? OpenIddictConstants.Errors.LoginRequired
                 : OpenIddictConstants.Errors.AccessDenied,
             description: null,

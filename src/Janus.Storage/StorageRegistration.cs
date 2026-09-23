@@ -74,6 +74,7 @@ using Janus.Storage.Privacy.SubjectKeys;
 using Janus.Storage.Settings;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using OpenIddict.Abstractions;
 
 namespace Janus.Storage;
 
@@ -213,8 +214,10 @@ internal static class StorageRegistration
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IOidcClientStore, OidcClientStore>();
-        services.AddScoped<IAuthorizationCodeStore, AuthorizationCodeStore>();
-        services.AddScoped<IRefreshTokenStore, RefreshTokenStore>();
+        services.AddScoped<IOpenIddictApplicationStore<OidcClientRecord>, OidcApplicationStore>();
+        services.AddScoped<IOpenIddictAuthorizationStore<OidcAuthorizationRecord>, OidcAuthorizationStore>();
+        services.AddScoped<IOpenIddictScopeStore<OidcScopeRecord>, OidcScopeStore>();
+        services.AddScoped<IOpenIddictTokenStore<OidcTokenRecord>, OidcTokenStore>();
         services.AddScoped<ISigningKeyStore>(provider => new SigningKeyStore(
             provider.GetRequiredService<JanusDbContext>(),
             keyEncryptionKeys));
