@@ -50,5 +50,8 @@ public sealed class ChoiceSetting<TValue> : Setting<TValue>
     }
 
     /// <inheritdoc />
+    /// <inheritdoc />
+    private protected override bool Textual => true;
+
     private protected override string Render(TValue value) => SettingText.Of(value);
 }

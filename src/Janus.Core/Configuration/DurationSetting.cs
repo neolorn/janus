@@ -27,6 +27,9 @@ public sealed class DurationSetting : BoundedSetting<TimeSpan>
     {
     }
 
+    /// <inheritdoc />
+    private protected override bool Textual => true;
+
     private protected override string Render(TimeSpan value) => XmlConvert.ToString(value);
 
     /// <inheritdoc />

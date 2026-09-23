@@ -64,7 +64,40 @@ internal sealed class StepUpGuard(
         CancellationToken cancellationToken) =>
         JudgedAsync(subject, session, action, enrolling, cancellationToken);
 
+    /// <summary>
+    /// What a session's proof amounts to against an action's gate, for an operation
+    /// that decides for itself whether the gate applies, as a configuration change does
+    /// by its direction.
+    /// </summary>
+    /// <param name="subject">Whose account the action is on.</param>
+    /// <param name="session">The session the request arrived on.</param>
+    /// <param name="action">Which action.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The challenge, met or not, or the refusal where the session is not the
+    /// account's or the policy names no such gate.
+    /// </returns>
+    public ValueTask<Result<StepUpChallenge>> ChallengeAsync(
+        SubjectId subject,
+        SessionId session,
+        StepUpAction action,
+        CancellationToken cancellationToken) =>
+        ChallengedAsync(subject, session, action, enrolling: null, cancellationToken);
+
     private async ValueTask<Error?> JudgedAsync(
+        SubjectId subject,
+        SessionId session,
+        StepUpAction action,
+        Factor? enrolling,
+        CancellationToken cancellationToken) =>
+        (await ChallengedAsync(subject, session, action, enrolling, cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(
+                challenge => challenge.Outcome is StepUpOutcome.Satisfied
+                    ? null
+                    : Error.From(ErrorCodes.StepUpRequired),
+                error => error);
+
+    private async ValueTask<Result<StepUpChallenge>> ChallengedAsync(
         SubjectId subject,
         SessionId session,
         StepUpAction action,
@@ -75,7 +108,7 @@ internal sealed class StepUpGuard(
 
         if (live is null || live.Subject != subject)
         {
-            return Error.From(ErrorCodes.StepUpRequired);
+            return Result.Failure<StepUpChallenge>(Error.From(ErrorCodes.StepUpRequired));
         }
 
         Error? failure = null;
@@ -85,12 +118,12 @@ internal sealed class StepUpGuard(
 
         if (failure is not null)
         {
-            return failure;
+            return Result.Failure<StepUpChallenge>(failure);
         }
 
         if (!policy.Gates.TryGetValue(action, out Gate? gate))
         {
-            return Error.From(ErrorCodes.StepUpRequired);
+            return Result.Failure<StepUpChallenge>(Error.From(ErrorCodes.StepUpRequired));
         }
 
         IReadOnlyList<Authenticator> enrolled = await authenticators
@@ -103,13 +136,9 @@ internal sealed class StepUpGuard(
         var held = HeldFactors.Of(enrolled, password is not null);
         DateTimeOffset now = time.GetUtcNow();
 
-        StepUpChallenge challenge = enrolling is Factor creating
+        return Result.Success(enrolling is Factor creating
             ? StepUp.ToEnrol(live, gate, held, creating, now)
-            : StepUp.On(live, gate, held, now);
-
-        return challenge.Outcome is StepUpOutcome.Satisfied
-            ? null
-            : Error.From(ErrorCodes.StepUpRequired);
+            : StepUp.On(live, gate, held, now));
     }
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)

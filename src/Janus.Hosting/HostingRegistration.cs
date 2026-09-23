@@ -25,6 +25,7 @@ using Janus.Hosting.Accounts;
 using Janus.Hosting.Alerting;
 using Janus.Hosting.Authentication;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Configuration;
 using Janus.Hosting.Credentials;
 using Janus.Hosting.Oidc;
 using Janus.Hosting.Passwords;
@@ -201,6 +202,7 @@ public static class HostingRegistration
         services.AddScoped<AlertRouter>();
         services.AddScoped<AlertDestinationChange>();
         services.AddScoped<IAlertLog, AlertLog>();
+        services.AddScoped<IConfigurationAdministration, ConfigurationService>();
 
         // AUTH-SESS-001, AUTH-PASS-004, AUTH-FACT-005: the authentication services,
         // each of which reads the settings table for what it enforces.
@@ -266,6 +268,7 @@ public static class HostingRegistration
             options.SerializerOptions.TypeInfoResolverChain.Add(RecoveryJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(CredentialsJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(WellKnownJson.Default);
+            options.SerializerOptions.TypeInfoResolverChain.Add(ConfigurationJson.Default);
         });
         services.AddScoped<RegistrationService>();
         services.AddScoped<IRegistration>(provider => provider.GetRequiredService<RegistrationService>());

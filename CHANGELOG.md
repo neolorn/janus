@@ -14,6 +14,8 @@ against the public contract of LIB-API-001.
   destinations included, is refused unless the caller also holds `system:administer`
   in the administrative organization. A tightening asks nothing more.
 
+- `config.key.protected` answers 422 rather than 403.
+
 - `IAccessGate.ResolveAsync` no longer takes an organization: a refusal's correlation
   identifier resolves for a caller holding `audit:read` in the administrative
   organization, whichever organization the refusal was recorded in.
@@ -218,6 +220,13 @@ against the public contract of LIB-API-001.
   staged for it either way; the frontend navigates to the account application.
 
 ### Added
+
+- `GET /admin/config/{key}` reads one runtime key under `config:read`: its value in
+  force and its default in the key's own JSON type, whether it is protected, and which
+  way it loosens. `PUT /admin/config/{key}` changes it under `config:manage` with a
+  reason on every change; a loosening also needs `system:administer` and step-up, a
+  protected key is refused, and the alert destination keys tell the destinations they
+  replace. `IConfigurationAdministration` is the same operation in process.
 
 - `POST /admin/notices` and `POST /admin/documents/{document}/versions` publish a
   version under `notice:publish`, with its governing text, its governing language and

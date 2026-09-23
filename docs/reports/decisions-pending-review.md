@@ -6570,6 +6570,106 @@ the restriction set, the widest loosening a send can meet, to `restriction:edit`
 *Chapter text that should change.* The `restriction:edit` row of 10 section 2.1 could
 say that a loosening also needs `system:administer`, or say that it does not.
 
+---
+
+## 179. A change through the configuration route carries a reason whichever way it moves
+
+**Phase 8 · 2026-09-23 · Tier 2 · 09 section 8, OPS-CFG-002, OPS-CFG-005, D-147**
+
+*The question.* 09 section 8 says of `PUT /admin/config/{key}` that "`reason` is
+required on every change and recorded in the audit entry (OPS-CFG-005, OPS-CFG-008;
+D-147)". Its 422 row lists "`auth.restriction.reasonrequired` where a loosening arrives
+without a reason", and the closing paragraph says "Tightening requires no step-up.
+Loosening requires step-up, a reason, and produces an audit entry."
+
+*The readings.*
+
+1. A reason only on a loosening; a tightening may arrive without one.
+2. A reason on every change through the route; the 422 row names the case where it
+   costs most.
+
+*Chosen: 2.* The request shape states it for every change and the audit entry records
+it; a tightening that carries no reason is a record that answers "why" with nothing.
+The route refuses a blank or missing reason with `auth.restriction.reasonrequired`
+(422) naming the key, before the value is read. The one operation underneath still
+asks a reason only of a loosening, because the restriction set, which 09 section 8
+asks a reason of only on a loosening, goes through it too.
+
+*Tests that pin it.*
+`ConfigurationEndpointTests.OPS_CFG_005_EveryChangeCarriesAReasonAsync`.
+
+*Chapter text that should change.* The 422 row of `GET|PUT /admin/config/{key}` could
+read "`auth.restriction.reasonrequired` where a change arrives without a reason".
+
+---
+
+## 180. The configuration route serves the deployment's own keys, the restriction set excepted
+
+**Phase 8 · 2026-09-23 · Tier 2 · 09 section 8, 10 section 4, AUTH-ABUSE-004, D-151**
+
+*The question.* 09 section 8 mounts `GET|PUT /admin/config/{key}` and says "`value`
+takes the key's type (`10` section 4)". 10 section 4 holds keys that exist once for the
+deployment, the named restriction set (`restrictions`, which 09 section 8 edits through
+`/admin/restrictions` under `restriction:edit`), and keys that exist once per
+organization or per declared category (D-151: `policy.{organization}`,
+`photo.enabled.{organization}`, `stepup.enforcement.{organization}`,
+`retention.{category}`). The route lists no answer for a name that is no key.
+
+*The readings.*
+
+1. Every key of 10 section 4 through this route, the restriction set and the family
+   members included.
+2. The keys that exist once for the deployment, less the restriction set; any other
+   name is not a key of this route.
+
+*Chosen: 2, the smaller surface.* Serving the restriction set here would let a holder
+of `config:manage` edit it round `restriction:edit` and round the alert its loosening
+raises. A family member belongs to its organization or category, and the organization
+policy has its own route under `organization:manage`. A name the route does not serve,
+and a name outside the catalogue, answer 400 `api.request.malformed` naming `key`: the
+route lists no 404, and the name is part of the request.
+
+*Tests that pin it.*
+`ConfigurationEndpointTests.AUTH_ABUSE_004_TheRestrictionSetIsNoKeyOfTheConfigurationRouteAsync`,
+`ConfigurationEndpointTests.LIB_API_005_ANameOutsideTheCatalogueIsMalformedAsync`.
+
+*Chapter text that should change.* 09 section 8 could say which keys the route serves
+and add the 400 for a name that is not one of them.
+
+---
+
+## 181. A configuration value crosses the interface in its own JSON type
+
+**Phase 8 · 2026-09-23 · Tier 2 · 09 section 8, 10 section 4, 10 section 1.5, D-153**
+
+*The question.* 09 section 8 says `GET` returns "`{ key, value, default, protected,
+direction }` (D-153)" and that "`value` takes the key's type (`10` section 4)". The
+chapters do not say how each type is written in JSON, what `default` is for a key the
+deployment names, or how `direction` is spelled.
+
+*The readings.*
+
+1. Every value as the text the settings table stores, in a JSON string.
+2. Every value in its own JSON type: text, durations and enum members as strings in the
+   form 10 section 4 writes them; flags as booleans; numbers as numbers; lists and sets
+   as arrays; a policy as its object.
+
+*Chosen: 2.* "Takes the key's type" is a type, not a string holding one. A value of
+another JSON type is refused with `config.value.notallowed` naming the key, which 10
+section 1.5 gives for a value "of the wrong type": a number for a duration, a string
+for a number. `default` is null for a key the deployment names (LIB-HOST-001), since
+it has none. `direction` is the member name (`Increase`, `Decrease`, `AnyChange`), as
+every other view writes an enum.
+
+*Tests that pin it.*
+`ConfigurationEndpointTests.OPS_CFG_004_AKeyReadsWithItsDefaultAndWhetherItIsProtectedAsync`,
+`ConfigurationEndpointTests.OPS_CFG_008_AChangedKeyReadsBackBesideItsDefaultAsync`,
+`ConfigurationEndpointTests.OPS_CFG_003_AValueOfTheWrongTypeIsNotAllowedAsync`.
+
+*Chapter text that should change.* 09 section 8 could show one `GET` answer and name
+the spelling of `direction`.
+
+
 # Rows for chapter 10
 
 D-162 section E names codes, keys, declarations and vocabularies the library now

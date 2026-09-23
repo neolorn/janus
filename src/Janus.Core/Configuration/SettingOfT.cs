@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 
 namespace Janus.Core.Configuration;
 
@@ -84,6 +85,69 @@ public abstract class Setting<TValue> : Setting
     /// <returns>The text to store.</returns>
     /// <remarks>Implements OPS-CFG-008.</remarks>
     public string Write(TValue value) => Render(value);
+
+    /// <summary>
+    /// Hands the setting, typed, to an operation that works on any key.
+    /// </summary>
+    /// <typeparam name="TResult">What the operation answers.</typeparam>
+    /// <param name="operation">The operation.</param>
+    /// <returns>What it answered.</returns>
+    /// <remarks>Implements CONV-CODE-004: a generic serves where reflection would.</remarks>
+    internal sealed override TResult Apply<TResult>(ISettingOperation<TResult> operation)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
+        return operation.On(this);
+    }
+
+    /// <summary>
+    /// The value in the key's own type as JSON, as the administration interface writes
+    /// it (chapter 09 section 8, chapter 10 section 4 value types).
+    /// </summary>
+    /// <param name="value">The value.</param>
+    /// <returns>The JSON value.</returns>
+    internal JsonElement Json(TValue value)
+    {
+        string written = Render(value);
+
+        if (Textual)
+        {
+            return JsonSerializer.SerializeToElement(written);
+        }
+
+        using var document = JsonDocument.Parse(written);
+
+        return document.RootElement.Clone();
+    }
+
+    /// <summary>
+    /// Reads a JSON value the administration interface received, refusing one of
+    /// another JSON type as it refuses one the constraints do not admit.
+    /// </summary>
+    /// <param name="value">The JSON value.</param>
+    /// <returns>The value, or the failure naming the key.</returns>
+    /// <remarks>
+    /// Implements chapter 10 section 1.5: <c>config.value.notallowed</c> is also the
+    /// answer to a value of the wrong type. A key written as text takes a JSON string
+    /// and no other key does, so a number is never read as a name.
+    /// </remarks>
+    internal Result<TValue> Received(JsonElement value) => (Textual, value.ValueKind) switch
+    {
+        (true, JsonValueKind.String) => Read(value.GetString()!),
+        (false, not (JsonValueKind.String or JsonValueKind.Null or JsonValueKind.Undefined)) =>
+            Read(value.GetRawText()),
+        _ => Result.Failure<TValue>(
+            Error.From(
+                ErrorCodes.ConfigurationValueNotAllowed,
+                "key",
+                JsonSerializer.SerializeToElement(Key.ToString()))),
+    };
+
+    /// <summary>
+    /// Gets a value indicating whether the key writes its value as plain text rather
+    /// than as JSON: a string, a duration or a member of an enum.
+    /// </summary>
+    private protected virtual bool Textual => false;
 
     /// <summary>
     /// Reads the key's own written form, before the constraints are applied to it.

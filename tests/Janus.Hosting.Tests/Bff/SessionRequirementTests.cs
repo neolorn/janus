@@ -37,6 +37,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "GET /account/sessions",
         "GET /admin/accounts/{subject:guid}/takedown/",
         "GET /admin/audit",
+        "GET /admin/config/{key}",
         "GET /admin/explanations/{correlationId:guid}",
         "GET /admin/privacy/requests/",
         "GET /admin/ropa",
@@ -72,6 +73,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "PUT /account/identifiers/backup",
         "PUT /account/secondstep/preferred",
         "PUT /admin/compliance/assessments",
+        "PUT /admin/config/{key}",
         "PUT /admin/documents/{document}/versions/{version}/translations/{language}",
     ];
 

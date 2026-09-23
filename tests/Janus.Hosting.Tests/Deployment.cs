@@ -7,6 +7,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Accounts;
+using Janus.Authentication.Alerting;
+using Janus.Authentication.Configuration;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
@@ -20,6 +22,8 @@ using Janus.Authentication.Sessions;
 using Janus.Authentication.SignIn;
 using Janus.Authentication.Tests;
 using Janus.Authentication.Tests.Accounts;
+using Janus.Authentication.Tests.Alerting;
+using Janus.Authentication.Tests.Configuration;
 using Janus.Authentication.Tests.Credentials;
 using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Identifiers;
@@ -34,8 +38,10 @@ using Janus.Authentication.Tests.SignIn;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Accounts;
+using Janus.Hosting.Alerting;
 using Janus.Hosting.Authentication;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Configuration;
 using Janus.Hosting.Credentials;
 using Janus.Hosting.Oidc;
 using Janus.Hosting.Privacy;
@@ -411,6 +417,16 @@ internal sealed class Deployment : IAsyncDisposable
     public AuditTrailStoreInMemory Trail { get; } = new();
 
     /// <summary>
+    /// The record of every runtime configuration change.
+    /// </summary>
+    public ConfigurationAuditInMemory Changes { get; } = new();
+
+    /// <summary>
+    /// The alerts the deployment raised.
+    /// </summary>
+    public AlertLedgerInMemory Alerts { get; } = new();
+
+    /// <summary>
     /// Names the organization that administers the deployment, as bootstrap does, so a
     /// permission granted there is one an administrative operation honours.
     /// </summary>
@@ -619,6 +635,13 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IProcessingRecords, ProcessingRecordsService>();
         _ = services.AddSingleton<IAuditTrailStore>(Trail);
         _ = services.AddScoped<IAuditTrail, AuditTrailService>();
+        _ = services.AddSingleton<IConfigurationAudit>(Changes);
+        _ = services.AddScoped<ConfigurationAdministration>();
+        _ = services.AddSingleton<IAlertLedger>(Alerts);
+        _ = services.AddSingleton<IAlertLog, AlertLogInMemory>();
+        _ = services.AddScoped<AlertRouter>();
+        _ = services.AddScoped<AlertDestinationChange>();
+        _ = services.AddScoped<IConfigurationAdministration, ConfigurationService>();
         _ = services.AddScoped<SigningKeys>();
         _ = services.AddScoped<OidcService>();
         _ = services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());

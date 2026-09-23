@@ -3,6 +3,7 @@ using Janus.Hosting.Accounts;
 using Janus.Hosting.Authentication;
 using Janus.Hosting.Authorization;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Configuration;
 using Janus.Hosting.Credentials;
 using Janus.Hosting.Privacy;
 using Janus.Hosting.Recovery;
@@ -46,6 +47,7 @@ public static class IdentityEndpoints
         _ = endpoints.MapExplanations();
         _ = endpoints.MapAuditTrail();
         _ = endpoints.MapPublication();
+        _ = endpoints.MapConfiguration();
 
         return endpoints;
     }

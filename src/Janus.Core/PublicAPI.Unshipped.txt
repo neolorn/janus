@@ -390,6 +390,21 @@ Janus.Core.Configuration.ChoiceSetting<TValue>.Allowed.get -> System.Collections
 Janus.Core.Configuration.ConfigurationKey
 Janus.Core.Configuration.ConfigurationKey.ConfigurationKey() -> void
 Janus.Core.Configuration.ConfigurationKey.Equals(Janus.Core.Configuration.ConfigurationKey other) -> bool
+Janus.Core.Configuration.ConfiguredSetting
+Janus.Core.Configuration.ConfiguredSetting.<Clone>$() -> Janus.Core.Configuration.ConfiguredSetting!
+Janus.Core.Configuration.ConfiguredSetting.ConfiguredSetting(Janus.Core.Configuration.ConfigurationKey Key, System.Text.Json.JsonElement Value, System.Text.Json.JsonElement? Default, bool Protected, Janus.Core.Configuration.SettingDirection Direction) -> void
+Janus.Core.Configuration.ConfiguredSetting.Deconstruct(out Janus.Core.Configuration.ConfigurationKey Key, out System.Text.Json.JsonElement Value, out System.Text.Json.JsonElement? Default, out bool Protected, out Janus.Core.Configuration.SettingDirection Direction) -> void
+Janus.Core.Configuration.ConfiguredSetting.Default.get -> System.Text.Json.JsonElement?
+Janus.Core.Configuration.ConfiguredSetting.Default.init -> void
+Janus.Core.Configuration.ConfiguredSetting.Direction.get -> Janus.Core.Configuration.SettingDirection
+Janus.Core.Configuration.ConfiguredSetting.Direction.init -> void
+Janus.Core.Configuration.ConfiguredSetting.Equals(Janus.Core.Configuration.ConfiguredSetting? other) -> bool
+Janus.Core.Configuration.ConfiguredSetting.Key.get -> Janus.Core.Configuration.ConfigurationKey
+Janus.Core.Configuration.ConfiguredSetting.Key.init -> void
+Janus.Core.Configuration.ConfiguredSetting.Protected.get -> bool
+Janus.Core.Configuration.ConfiguredSetting.Protected.init -> void
+Janus.Core.Configuration.ConfiguredSetting.Value.get -> System.Text.Json.JsonElement
+Janus.Core.Configuration.ConfiguredSetting.Value.init -> void
 Janus.Core.Configuration.DateListSetting
 Janus.Core.Configuration.DecimalSetting
 Janus.Core.Configuration.DurationSetting
@@ -397,6 +412,9 @@ Janus.Core.Configuration.FlagSetting
 Janus.Core.Configuration.HostingLocation
 Janus.Core.Configuration.HostingLocation.Inside = 0 -> Janus.Core.Configuration.HostingLocation
 Janus.Core.Configuration.HostingLocation.Outside = 1 -> Janus.Core.Configuration.HostingLocation
+Janus.Core.Configuration.IConfigurationAdministration
+Janus.Core.Configuration.IConfigurationAdministration.ChangeAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.Configuration.ConfigurationKey key, System.Text.Json.JsonElement value, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.Configuration.IConfigurationAdministration.ReadAsync(Janus.Core.AccessContext! context, Janus.Core.Configuration.ConfigurationKey key, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.Configuration.ConfiguredSetting!>>
 Janus.Core.Configuration.IConfigurationStore
 Janus.Core.Configuration.IConfigurationStore.ReadAsync<TValue>(Janus.Core.Configuration.Setting<TValue>! setting, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<TValue>>
 Janus.Core.Configuration.IConfigurationStore.ReadAsync<TValue>(Janus.Core.Configuration.SettingFamily<TValue>! family, string! parameter, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<TValue>>
@@ -2415,6 +2433,9 @@ override Janus.Core.Configuration.BoundedSetting<TValue>.Accept(TValue value) ->
 override Janus.Core.Configuration.ChoiceSetting<TValue>.Accept(TValue value) -> Janus.Core.Result<TValue>
 override Janus.Core.Configuration.ConfigurationKey.GetHashCode() -> int
 override Janus.Core.Configuration.ConfigurationKey.ToString() -> string!
+override Janus.Core.Configuration.ConfiguredSetting.Equals(object? obj) -> bool
+override Janus.Core.Configuration.ConfiguredSetting.GetHashCode() -> int
+override Janus.Core.Configuration.ConfiguredSetting.ToString() -> string!
 override Janus.Core.Configuration.DateListSetting.Accept(System.Collections.Generic.IReadOnlyList<System.DateOnly>! value) -> Janus.Core.Result<System.Collections.Generic.IReadOnlyList<System.DateOnly>!>
 override Janus.Core.Configuration.FlagSetting.Accept(bool value) -> Janus.Core.Result<bool>
 override Janus.Core.Configuration.IntegerListSetting.Accept(System.Collections.Generic.IReadOnlyList<int>! value) -> Janus.Core.Result<System.Collections.Generic.IReadOnlyList<int>!>
@@ -2944,6 +2965,8 @@ static Janus.Core.Configuration.Argon2StrengthClass.operator ==(Janus.Core.Confi
 static Janus.Core.Configuration.ConfigurationKey.Parse(string! value) -> Janus.Core.Configuration.ConfigurationKey
 static Janus.Core.Configuration.ConfigurationKey.operator !=(Janus.Core.Configuration.ConfigurationKey left, Janus.Core.Configuration.ConfigurationKey right) -> bool
 static Janus.Core.Configuration.ConfigurationKey.operator ==(Janus.Core.Configuration.ConfigurationKey left, Janus.Core.Configuration.ConfigurationKey right) -> bool
+static Janus.Core.Configuration.ConfiguredSetting.operator !=(Janus.Core.Configuration.ConfiguredSetting? left, Janus.Core.Configuration.ConfiguredSetting? right) -> bool
+static Janus.Core.Configuration.ConfiguredSetting.operator ==(Janus.Core.Configuration.ConfiguredSetting? left, Janus.Core.Configuration.ConfiguredSetting? right) -> bool
 static Janus.Core.Configuration.RestrictionSetSetting.Loosens(Janus.Core.Restriction? before, Janus.Core.Restriction? after) -> bool
 static Janus.Core.Configuration.Settings.AbuseBotDefenceRepeatedAttempts.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.AbuseBotDefenceSignals.get -> Janus.Core.Configuration.MultipleChoiceSetting<Janus.Core.Configuration.BotDefenceSignal>!
