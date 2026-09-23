@@ -42,6 +42,8 @@ public sealed class AuditActionsTests
         "identity.preferences.changed",
         "identity.profile.changed",
         "identity.secondstep.preferred",
+        "identity.takedown.executed",
+        "identity.takedown.reversed",
         "identity.username.changed",
         "ops.configuration.changed",
         "privacy.consent.granted",

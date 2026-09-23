@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Identity.Accounts;
 using Janus.Privacy.Erasures;
@@ -15,12 +16,13 @@ namespace Janus.Storage.Privacy.Requests;
 /// the identity area.
 /// </summary>
 /// <param name="accounts">Where accounts are read and their transitions carried.</param>
+/// <param name="sessions">What a takedown ends in the transaction that makes it.</param>
 /// <remarks>
-/// Implements PRIV-RIGHT-004, IDN-LIFE-003 and CONV-DESIGN-003. The transitions are
-/// the account aggregate's, so a state this adapter cannot reach from is refused
-/// there and answered here as no change.
+/// Implements PRIV-RIGHT-004, IDN-LIFE-003, AUTH-SESS-010 and CONV-DESIGN-003. The
+/// transitions are the account aggregate's, so a state this adapter cannot reach from
+/// is refused there and answered here as no change.
 /// </remarks>
-internal sealed class AccountStates(IAccountStore accounts) : IAccountStates
+internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessions) : IAccountStates
 {
     /// <inheritdoc/>
     public async ValueTask<bool> RestrictAsync(
@@ -78,5 +80,52 @@ internal sealed class AccountStates(IAccountStore accounts) : IAccountStates
                     account.DeletingBy!.Value,
                     account.DeletingSince!.Value)),
         ];
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<AccountStanding?> StandingAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken) =>
+        await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
+            is Account account
+            ? new AccountStanding(account.State, account.DeletingBy, account.DeletingSince)
+            : null;
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> TakeDownAsync(
+        SubjectId subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        if (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
+            is not { State: AccountState.Active or AccountState.Restricted or AccountState.Suspended } account)
+        {
+            return false;
+        }
+
+        account.Takedown(at);
+
+        await accounts.RecordTransitionAsync(account, cancellationToken).ConfigureAwait(false);
+        await sessions.EndAccountAsync(subject, at, cancellationToken).ConfigureAwait(false);
+
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> ReverseTakedownAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        if (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
+            is not { State: AccountState.Deleting, DeletingBy: DeletionOrigin.Takedown } account)
+        {
+            return false;
+        }
+
+        account.ReverseTakedown();
+
+        await accounts.RecordTransitionAsync(account, cancellationToken).ConfigureAwait(false);
+
+        return true;
     }
 }

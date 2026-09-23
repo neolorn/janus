@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Core;
 using Janus.Privacy.Outbox;
 
 namespace Janus.Privacy.Tests.Outbox;
@@ -13,6 +14,7 @@ namespace Janus.Privacy.Tests.Outbox;
 internal sealed class OutboxStoreInMemory : IOutboxStore
 {
     private readonly List<Delivery> _deliveries = [];
+    private readonly Dictionary<(DeliveryId, string), DateTimeOffset> _confirmedAt = [];
 
     /// <summary>
     /// What is on the outbox.
@@ -54,5 +56,40 @@ internal sealed class OutboxStoreInMemory : IOutboxStore
         }
 
         return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// Records a subscriber's confirmation of a delivery at an instant, as the worker
+    /// does when the subscriber answers.
+    /// </summary>
+    /// <param name="delivery">Which delivery.</param>
+    /// <param name="subscriber">What the subscriber is called.</param>
+    /// <param name="at">When it confirmed.</param>
+    public void Confirms(Delivery delivery, string subscriber, DateTimeOffset at)
+    {
+        delivery.Confirm(subscriber);
+        _confirmedAt[(delivery.Id, subscriber)] = at;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<DeliveryProgress?> LatestAsync(
+        SubjectId subject,
+        SubjectEventKind kind,
+        CancellationToken cancellationToken)
+    {
+        Delivery? latest = _deliveries
+            .Where(delivery => delivery.Subject == subject && delivery.Kind == kind)
+            .OrderByDescending(delivery => delivery.RaisedAt)
+            .FirstOrDefault();
+
+        return ValueTask.FromResult(
+            latest is null
+                ? null
+                : new DeliveryProgress(
+                    latest,
+                    latest.Confirmed.ToDictionary(
+                        subscriber => subscriber,
+                        subscriber => _confirmedAt[(latest.Id, subscriber)],
+                        StringComparer.Ordinal)));
     }
 }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Core;
 
 namespace Janus.Privacy.Outbox;
 
@@ -50,4 +51,17 @@ internal interface IOutboxStore
     /// <returns>The work of recording it.</returns>
     /// <exception cref="InvalidOperationException">No such row exists.</exception>
     ValueTask RecordAsync(Delivery delivery, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The latest delivery of one kind about one subject, with when each subscriber
+    /// confirmed it.
+    /// </summary>
+    /// <param name="subject">Whose fact it is.</param>
+    /// <param name="kind">Which fact it is.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The delivery and its confirmations, or nothing where none exists.</returns>
+    ValueTask<DeliveryProgress?> LatestAsync(
+        SubjectId subject,
+        SubjectEventKind kind,
+        CancellationToken cancellationToken);
 }

@@ -16,6 +16,7 @@ internal sealed class AccountStatesInMemory : IAccountStates
 {
     private readonly Dictionary<SubjectId, AccountState> _states = [];
     private readonly Dictionary<SubjectId, PendingDeletion> _deletions = [];
+    private readonly Dictionary<SubjectId, DateTimeOffset> _sessionsEnded = [];
 
     /// <summary>
     /// Puts an account in a state, as a deployment has one.
@@ -88,6 +89,68 @@ internal sealed class AccountStatesInMemory : IAccountStates
     {
         _states[subject] = AccountState.Active;
         _ = _deletions.Remove(subject);
+    }
+
+    /// <summary>
+    /// Marks an account erased, as the sweep does at the end of its window.
+    /// </summary>
+    /// <param name="subject">Whose.</param>
+    public void Erases(SubjectId subject) => _states[subject] = AccountState.Deleted;
+
+    /// <summary>
+    /// When every session of the account was ended by a transition, where one was.
+    /// </summary>
+    /// <param name="subject">Whose.</param>
+    /// <returns>The instant, or nothing.</returns>
+    public DateTimeOffset? SessionsEndedAt(SubjectId subject) =>
+        _sessionsEnded.TryGetValue(subject, out DateTimeOffset at) ? at : null;
+
+    /// <inheritdoc/>
+    public ValueTask<AccountStanding?> StandingAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        if (!_states.TryGetValue(subject, out AccountState state))
+        {
+            return ValueTask.FromResult<AccountStanding?>(null);
+        }
+
+        PendingDeletion? deletion = _deletions.GetValueOrDefault(subject);
+
+        return ValueTask.FromResult<AccountStanding?>(
+            new AccountStanding(state, deletion?.By, deletion?.Since));
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<bool> TakeDownAsync(
+        SubjectId subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        if (Of(subject) is not (AccountState.Active or AccountState.Restricted or AccountState.Suspended))
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        Deletes(subject, DeletionOrigin.Takedown, at);
+        Deleting = DeletionOrigin.Takedown;
+        _sessionsEnded[subject] = at;
+
+        return ValueTask.FromResult(true);
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<bool> ReverseTakedownAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        if (Of(subject) is not AccountState.Deleting
+            || _deletions.GetValueOrDefault(subject)?.By is not DeletionOrigin.Takedown)
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        Cancels(subject);
+
+        return ValueTask.FromResult(true);
     }
 
     /// <summary>

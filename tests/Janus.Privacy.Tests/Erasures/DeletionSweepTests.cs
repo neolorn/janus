@@ -127,6 +127,29 @@ public sealed class DeletionSweepTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-003 AC5: a takedown is erased when <c>takedown.grace</c> elapses, not
+    /// when the ordinary deletion window would, and an ordinary window begun at the
+    /// same instant is left running.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_AC5_ATakedownIsErasedWhenItsOwnWindowElapsesAsync()
+    {
+        _accounts.Deletes(Ahmed, DeletionOrigin.Takedown, Noon);
+        _accounts.Deletes(Noura, DeletionOrigin.Self, Noon);
+
+        _clock.Advance(Settings.TakedownGrace.Default - TimeSpan.FromMinutes(1));
+
+        Assert.Equal(0, await Sweep.SweepAsync(TestContext.Current.CancellationToken));
+
+        _clock.Advance(TimeSpan.FromMinutes(1));
+
+        Assert.Equal(1, await Sweep.SweepAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(Ahmed, Assert.Single(_eraser.Erased).Subject);
+        Assert.Equal(AccountState.Deleting, _accounts.Of(Noura));
+    }
+
+    /// <summary>
     /// IDN-AUD-001: what the pass did is written down against the account it was
     /// done to, with no acting person, because nobody acted.
     /// </summary>

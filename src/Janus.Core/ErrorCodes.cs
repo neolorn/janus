@@ -250,6 +250,20 @@ public static class ErrorCodes
     public static ErrorCode TakedownActive { get; } = ErrorCode.Parse("identity.takedown.active");
 
     /// <summary>
+    /// The takedown's grace window has closed, so the erasure has run or is due and
+    /// there is nothing left to reverse. The person registers again.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-003, chapter 10 section 1.1.</remarks>
+    public static ErrorCode TakedownWindowElapsed { get; } = ErrorCode.Parse("identity.takedown.windowelapsed");
+
+    /// <summary>
+    /// The account was never taken down, so there is no progress to read. Read the
+    /// account the takedown was triggered on.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-003, chapter 10 section 1.1.</remarks>
+    public static ErrorCode TakedownNotFound { get; } = ErrorCode.Parse("identity.takedown.notfound");
+
+    /// <summary>
     /// The reactivation link is unknown, has lapsed with the state it belonged to, or
     /// has already been used. Where the notice carrying it is lost, ordinary recovery
     /// restores the account instead.

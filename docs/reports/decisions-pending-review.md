@@ -6153,6 +6153,246 @@ requires, is unchanged); and the double-migration gate's worktree folder, now
 reads, and that the solution file and the lock files' lower-case identifiers count as
 project and package identifiers.
 
+---
+
+## 168. A takedown is identified by the outbox record its trigger writes
+
+**Phase 8 · 2026-09-23 · Tier 2 · IDN-LIFE-003, 09 section 8a**
+
+*The question.* 09 section 8a answers the trigger with "**202** `{ takedownId,
+erasureDue }`". No chapter says what a `takedownId` identifies. IDN-LIFE-003 names one
+record the trigger writes for the takedown: "That outbox record is the per-subscriber
+completion record of the cancellation: it is written in the trigger transaction, the
+worker delivers it and each required subscriber confirms against it (IDN-LIFE-003a),
+and it is what the takedown screen reads during the window (D-148). No erasures row
+exists yet".
+
+*The readings.*
+
+1. A takedowns table of its own, keyed by a new identifier.
+2. The identifier of the `TakedownExecuted` outbox record written in the trigger
+   transaction.
+
+*Chosen: 2.* The chapter names that record as the takedown's record during the window
+and names no other. A table of its own would be a second record of the same fact and a
+schema no chapter describes.
+
+*Tests that pin it.*
+`TakedownServiceTests.IDN_LIFE_003_AC4_TheTriggerTakesTheAccountIntoItsWindowInOneTransactionAsync`,
+`TakedownEndpointTests.IDN_LIFE_003_TheTriggerIsAnsweredWithTheTakedownAndItsErasureDueAsync`.
+
+*Chapter text that should change.* 09 section 8a could say that `takedownId` is the
+identifier of the outbox record the trigger writes.
+
+---
+
+## 169. The takedown screen reads the latest takedown at `GET /admin/accounts/{subject}/takedown`
+
+**Phase 8 · 2026-09-23 · Tier 2 · IDN-LIFE-003 AC2, PRIV-MINOR-002 AC2, 09 section 8a**
+
+*The question.* IDN-LIFE-003 AC2 requires "per-subscriber completion visible" and says
+"the cancellation's completion is read from its outbox record from the moment of
+trigger, the erasure's from the erasures row once phase two has run." The chapter
+speaks of "the takedown screen". 09 section 8a lists the trigger and the reversal and
+no read, and `GET /admin/erasures` reads the erasures table, which holds no row until
+phase two.
+
+*The readings.*
+
+1. No read: the cancellation's completion is not visible through the library until
+   phase two.
+2. A read beside the trigger, `GET /admin/accounts/{subject}/takedown`, under the same
+   `takedown:execute`, answering the account's latest takedown from its outbox record.
+3. The erasures listing extended to outbox records of kind `takedown-executed`.
+
+*Chosen: 2.* Reading 1 fails AC2 as written. Reading 3 widens an endpoint over a table
+the chapter keeps separate (IDN-LIFE-003b). Reading 2 adds one read, gated by the
+permission that already sees the takedown, and nothing else. It answers **200**
+`{ takedownId, subject, triggeredAt, erasureDue, status, attempts, subscribers: [{
+name, required, confirmedAt }] }`, one line per registered subject-event subscriber,
+`confirmedAt` absent where that subscriber has not confirmed; `status` is spelled as
+`10` section 5.12 spells erasure status. An account never taken down answers **404**
+`identity.takedown.notfound`, a new code, because no existing code says that the
+account holds no takedown.
+
+*Tests that pin it.*
+`TakedownServiceTests.IDN_LIFE_003_AC2_TheHostsProgressIsReadableFromTheTriggerAsync`,
+`TakedownServiceTests.IDN_LIFE_003_AnAccountNeverTakenDownHasNoProgressAsync`,
+`TakedownServiceTests.IDN_LIFE_003_TakedownExecuteIsRequiredForEveryOperationAsync`,
+`TakedownEndpointTests.IDN_LIFE_003_TheTriggerIsAnsweredWithTheTakedownAndItsErasureDueAsync`,
+`OutboxStoreTests.IDN_LIFE_003_AC2_TheLatestTakedownIsReadWithItsConfirmationsAsync`,
+`OutboxStoreTests.IDN_LIFE_003_AnAccountNeverTakenDownHasNoTakedownToReadAsync`.
+
+*Chapter text that should change.* 09 section 8a gains the row for
+`GET /admin/accounts/{subject}/takedown`; 10 section 1.1 gains
+`identity.takedown.notfound` (404), listed below under the rows for chapter 10.
+
+---
+
+## 170. A takedown starts from active, restricted or suspended, and from nothing else
+
+**Phase 8 · 2026-09-23 · Tier 3 · IDN-LIFE-003, IDN-LIFE-003b**
+
+*The question.* IDN-LIFE-003 gives the "State sequence: `active → suspended → deleting
+→ deleted`, the first two transitions in the trigger transaction", and IDN-LIFE-003b
+says access stopped "for a takedown from `suspended` (IDN-LIFE-003)". No chapter says
+what a trigger does on an account that is restricted, already taken down, in a
+deletion window of another origin, or deleted. `10` section 1.1 gives
+`identity.takedown.active` for "Deletion cancellation attempted on a
+takedown-originated `deleting`; use `/takedown/reverse`", which is not a second
+trigger.
+
+*The readings.*
+
+1. Only from `active`.
+2. From `active`, `restricted` and `suspended`; a second trigger refused; an account
+   deleting by another origin or deleted refused.
+3. As 2, and an account deleting by `self` or `oob-request` converted into a takedown.
+4. As 2, and a second trigger answered with the running takedown as a success.
+
+*Chosen: 2, the strictest reading.* A restricted or suspended account is still an
+account whose data the takedown must stop and remove, so refusing it (reading 1) would
+leave a minor's account outside the procedure. Converting a running deletion
+(reading 3) rewrites why the account is leaving and its clock, which is more than any
+chapter grants a trigger. A second trigger writes nothing and answers **409**
+`identity.takedown.active`, the code that already names a takedown-originated
+`deleting`. An account deleting by another origin, or deleted, answers **403**
+`authz.denied` and nothing is written. The aggregate enforces the same three states.
+
+*Tests that pin it.*
+`TakedownServiceTests.IDN_LIFE_003_AnAccountIsTakenDownFromWhereverItStandsAsync`,
+`TakedownServiceTests.IDN_LIFE_003_ASecondTriggerAnswersTakedownActiveAsync`,
+`TakedownServiceTests.IDN_LIFE_003_AnAccountAlreadyLeavingIsNotTakenDownAsync`,
+`AccountStatesTests.IDN_LIFE_003_AnAccountInItsOwnWindowIsNotTakenDownAsync`.
+
+*Chapter text that should change.* IDN-LIFE-003 could name the states a takedown
+starts from, and `10` section 1.1 could widen `identity.takedown.active` to a second
+trigger.
+
+---
+
+## 171. `AccountSuspended` is published after the trigger commits, and `TakedownExecuted` travels on the outbox
+
+**Phase 8 · 2026-09-23 · Tier 2 · IDN-LIFE-003 AC6, IDN-LIFE-003a, CONV-DESIGN-002**
+
+*The question.* IDN-LIFE-003 says "`AccountSuspended` and `TakedownExecuted` fire at
+trigger; no `AccountDeletionRequested` fires", and `10` section 5b says
+`TakedownExecuted` "fires with `AccountSuspended`; `AccountDeletionRequested` does
+**not** fire for a takedown". IDN-LIFE-003a delivers the cancellation through the
+outbox. No chapter says how the two travel or what the caller is told when the
+publication of the first is refused after the commit.
+
+*The readings.*
+
+1. Both on the outbox.
+2. `TakedownExecuted` on the outbox, written in the trigger transaction (it is a
+   subject event the hosts confirm); `AccountSuspended` published through `IEvents`
+   after the commit, as every other state change is (CONV-DESIGN-002: commit, then
+   publish), with a refused publication answered to the caller while the takedown
+   stands.
+3. As 2, with a refused publication swallowed and the trigger answered 202.
+
+*Chosen: 2.* `AccountSuspended` is not a subject event and carries no per-subscriber
+confirmation, so it travels as the library's other domain events do. The takedown has
+committed by the time the publication is refused; undoing it is not possible and
+hiding the refusal would tell the operator that everything was announced. The
+refusal is answered, the account stays taken down and the progress read (entry 169)
+shows the delivery.
+
+*Tests that pin it.*
+`TakedownServiceTests.IDN_LIFE_003_AC6_TheSuspensionIsAnnouncedAndNoDeletionIsAsync`,
+`TakedownServiceTests.IDN_LIFE_003_AC4_NoErasureIsRequestedAtTheTriggerAsync`,
+`TakedownServiceTests.IDN_LIFE_003_AnUnannouncedTriggerStillStandsAsync`.
+
+*Chapter text that should change.* IDN-LIFE-003 could say that `TakedownExecuted` is
+the outbox record and `AccountSuspended` follows the commit.
+
+---
+
+## 172. A reversal publishes `TakedownReversed` and nothing else
+
+**Phase 8 · 2026-09-23 · Tier 2 · IDN-LIFE-003 AC5, 10 section 5b**
+
+*The question.* `10` section 5b raises `TakedownReversed` when "A takedown reversed
+inside its window", and `AccountSuspended` · `AccountReactivated` when "State enters or
+leaves `suspended`, by the subject or an administrator". A reversal moves the account
+from `deleting` to `active`.
+
+*The readings.*
+
+1. `TakedownReversed` only.
+2. `TakedownReversed` and `AccountReactivated`.
+
+*Chosen: 1.* The reversal leaves `deleting`, not `suspended`, and `10` names the one
+event for it. A consumer that acted on `AccountSuspended` at the trigger, such as mail
+provisioning, undoes it on `TakedownReversed`; the library's own mail provisioning,
+when it is built in this phase, consumes it so.
+
+*Tests that pin it.*
+`TakedownServiceTests.IDN_LIFE_003_AC5_AReversalInsideTheWindowRestoresActiveAsync`.
+
+*Chapter text that should change.* `10` section 5b could add mail provisioning to the
+consumers of `TakedownReversed`.
+
+---
+
+## 173. The reversal window closes at the start of the window plus `takedown.grace`, whether or not the sweep has run
+
+**Phase 8 · 2026-09-23 · Tier 3 · IDN-LIFE-003 AC5, 09 section 8a**
+
+*The question.* 09 section 8a answers a reversal after the window with "**422**
+`identity.takedown.windowelapsed`", and `10` section 4 gives `takedown.grace` "`P7D` |
+R, floor `P7D`". The erasure runs when the sweep reaches the account. No chapter says
+whether a reversal between the end of the window and the sweep is honoured.
+
+*The readings.*
+
+1. Honoured until the sweep has erased the account.
+2. Refused from the instant the window ends, measured from when the account entered
+   `deleting` with the `takedown.grace` in force when the reversal is asked.
+
+*Chosen: 2, the strictest reading.* The window is what the chapters grant; a reversal
+after it would race the erasure the chapter says is due. The deletion sweep measures a
+takedown by the same `takedown.grace`, and the progress read (entry 169) reports the
+same instant as `erasureDue`. An erased account answers the same code.
+
+*Tests that pin it.*
+`TakedownServiceTests.IDN_LIFE_003_AC5_AReversalAfterTheWindowIsRefusedAsync`,
+`TakedownEndpointTests.IDN_LIFE_003_AC5_TheReversalIsAnsweredInsideAndAfterItsWindowAsync`,
+`DeletionSweepTests.IDN_LIFE_003_AC5_ATakedownIsErasedWhenItsOwnWindowElapsesAsync`.
+
+*Chapter text that should change.* IDN-LIFE-003 could say that the window ends at the
+trigger plus `takedown.grace` whatever the sweep has done.
+
+---
+
+## 174. A trigger and a reversal carry a reason, and the trigger one of the four spellings
+
+**Phase 8 · 2026-09-23 · Tier 2 · IDN-LIFE-003, 09 section 8a, 10 section 5.12d**
+
+*The question.* 09 section 8a says the trigger "records `reason` and `trigger`", and
+IDN-LIFE-003 says the only way back is the reversal "under `takedown:execute`, with a
+reason." Neither says what a body without a reason, or with a trigger outside `10`
+section 5.12d, is answered.
+
+*The readings.*
+
+1. An absent or blank reason accepted and recorded empty; an unknown trigger refused.
+2. Both refused with **400** `api.request.malformed`, `details.member` naming the member.
+
+*Chosen: 2, the smaller surface.* A takedown recorded without its reason fails
+IDN-LIFE-003 AC3. The reason is recorded trimmed; the trigger is recorded in the
+spelling of `10` section 5.12d.
+
+*Tests that pin it.*
+`TakedownServiceTests.IDN_LIFE_003_ATriggerWithoutAReasonIsMalformedAsync`,
+`TakedownServiceTests.IDN_LIFE_003_AReversalWithoutAReasonIsMalformedAsync`,
+`TakedownServiceTests.IDN_LIFE_003_AC3_TheTriggerIsAuditedWithItsReasonAsync`,
+`TakedownEndpointTests.IDN_LIFE_003_ATriggerOutsideTheFourSpellingsIsMalformedAsync`.
+
+*Chapter text that should change.* 09 section 8a could mark `reason` required on both
+endpoints.
+
 
 # Rows for chapter 10
 
@@ -6170,6 +6410,7 @@ The subsection each row belongs in is named with it.
 | `api.request.malformed` | 1.5 | 400 | The request could not be read: its body is not the shape the endpoint takes, or a member it requires is absent or empty. `details.member` names the member the reader stopped at, or the one the endpoint required, and carries nothing of its value; where the body failed before any member, the refusal carries the code alone (API-CONV-002). |
 | `identity.registration.signedin` | 1.1 | 409 | `POST /register` arrives from a browser holding a live session. Nothing is staged and no account document is answered; the frontend navigates to the account application (REG-SESS-002). |
 | `auth.password.toolong` | 1.2 | 422 | A password longer than `password.maximum` is set, at registration, at a password change or at a reset. Nothing is truncated. |
+| `identity.takedown.notfound` | 1.1 | 404 | The takedown of an account is read at `GET /admin/accounts/{subject}/takedown`, by a caller holding `takedown:execute`, and the account was never taken down (IDN-LIFE-003 AC2, entry 169). |
 | `privacy.document.notfound` | 1.4 | 404 | A legal document, or a named version of one, that does not exist or was never published is read, or a translation is filed against one. |
 | `privacy.notice.unpublished` | 1.4 | 409 | A consent is granted before any privacy-notice version has been published, so there is no version for it to stand against (PRIV-CONS-005). |
 | `privacy.purpose.noconsent` | 1.4 | 422 | A consent is granted or withdrawn on a purpose the deployment did not declare, or one that rests on a basis other than consent, so it is not the subject's to agree to (PRIV-CONS-008a). |
@@ -6297,6 +6538,8 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `identity.preferences.changed` | routine | `AuditActions.PreferencesChanged` | The account's preference values were changed, recorded by key and never by value. (REG-PREF-001) |
 | `identity.profile.changed` | routine | `AuditActions.ProfileChanged` | A profile attribute of the account was changed. (IDN-ATTR-001) |
 | `identity.secondstep.preferred` | routine | `AuditActions.SecondStepPreferred` | The account's preferred second step was changed. (AUTH-FACT-007) |
+| `identity.takedown.executed` | security | `AuditActions.TakedownExecuted` | Phase one of a takedown committed: the account entered its window, its sessions ended and the hosts' delivery was written. Details carry `takedown`, `trigger` (spelled as `10` section 5.12d), `reason` and `erasureDue`. (IDN-LIFE-003) |
+| `identity.takedown.reversed` | security | `AuditActions.TakedownReversed` | A takedown was reversed inside its window and the account restored to active. Details carry `reason`. (IDN-LIFE-003) |
 | `identity.username.changed` | routine | `AuditActions.UsernameChanged` | The account's username was changed, which holds the old one for as long as the retention says. (REG-IDENT-009) |
 | `ops.configuration.changed` | security | `AuditActions.ConfigurationChanged` | A runtime setting is put in force through the one configuration operation. Details carry `key`, `before`, `after`, `loosening` and, where the change is a loosening, `reason`. (OPS-CFG-002, OPS-CFG-005) |
 | `privacy.consent.granted` | security | `AuditActions.ConsentGranted` | A consent was granted for a purpose, naming the document version it was given against. (PRIV-CONS-004) |

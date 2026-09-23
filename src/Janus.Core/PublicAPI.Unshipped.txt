@@ -796,6 +796,15 @@ Janus.Core.ErrorCode
 Janus.Core.ErrorCode.Equals(Janus.Core.ErrorCode other) -> bool
 Janus.Core.ErrorCode.ErrorCode() -> void
 Janus.Core.ErrorCodes
+Janus.Core.ExecutedTakedown
+Janus.Core.ExecutedTakedown.<Clone>$() -> Janus.Core.ExecutedTakedown!
+Janus.Core.ExecutedTakedown.Deconstruct(out Janus.Core.TakedownId Id, out System.DateTimeOffset ErasureDue) -> void
+Janus.Core.ExecutedTakedown.Equals(Janus.Core.ExecutedTakedown? other) -> bool
+Janus.Core.ExecutedTakedown.ErasureDue.get -> System.DateTimeOffset
+Janus.Core.ExecutedTakedown.ErasureDue.init -> void
+Janus.Core.ExecutedTakedown.ExecutedTakedown(Janus.Core.TakedownId Id, System.DateTimeOffset ErasureDue) -> void
+Janus.Core.ExecutedTakedown.Id.get -> Janus.Core.TakedownId
+Janus.Core.ExecutedTakedown.Id.init -> void
 Janus.Core.ExplainedGrant
 Janus.Core.ExplainedGrant.<Clone>$() -> Janus.Core.ExplainedGrant!
 Janus.Core.ExplainedGrant.Deconstruct(out Janus.Core.GrantId? Id, out Janus.Core.GrantKind Kind, out Janus.Core.SubjectType SubjectType, out System.Guid SubjectId, out Janus.Core.RoleName Role, out bool Deny, out Janus.Core.ResourceReference? InheritedFrom) -> void
@@ -1082,6 +1091,10 @@ Janus.Core.ISubjectEventSubscriber.Covers.get -> System.Collections.Generic.IRea
 Janus.Core.ISubjectEventSubscriber.HandleAsync(Janus.Core.SubjectEvent! raised, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.ISubjectEventSubscriber.Name.get -> string!
 Janus.Core.ISubjectEventSubscriber.Required.get -> bool
+Janus.Core.ITakedowns
+Janus.Core.ITakedowns.ExecuteAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, Janus.Core.TakedownTrigger trigger, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.ExecutedTakedown!>>
+Janus.Core.ITakedowns.ReadAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.TakedownProgress!>>
+Janus.Core.ITakedowns.ReverseAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IUnitOfWork
 Janus.Core.IUnitOfWork.BeginAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 Janus.Core.IUnitOfWork.CommitAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
@@ -2199,6 +2212,17 @@ Janus.Core.SubjectId.Value.init -> void
 Janus.Core.SubjectType
 Janus.Core.SubjectType.Group = 1 -> Janus.Core.SubjectType
 Janus.Core.SubjectType.User = 0 -> Janus.Core.SubjectType
+Janus.Core.SubscriberConfirmation
+Janus.Core.SubscriberConfirmation.<Clone>$() -> Janus.Core.SubscriberConfirmation!
+Janus.Core.SubscriberConfirmation.ConfirmedAt.get -> System.DateTimeOffset?
+Janus.Core.SubscriberConfirmation.ConfirmedAt.init -> void
+Janus.Core.SubscriberConfirmation.Deconstruct(out string! Name, out bool Required, out System.DateTimeOffset? ConfirmedAt) -> void
+Janus.Core.SubscriberConfirmation.Equals(Janus.Core.SubscriberConfirmation? other) -> bool
+Janus.Core.SubscriberConfirmation.Name.get -> string!
+Janus.Core.SubscriberConfirmation.Name.init -> void
+Janus.Core.SubscriberConfirmation.Required.get -> bool
+Janus.Core.SubscriberConfirmation.Required.init -> void
+Janus.Core.SubscriberConfirmation.SubscriberConfirmation(string! Name, bool Required, System.DateTimeOffset? ConfirmedAt) -> void
 Janus.Core.SuspensionOrigin
 Janus.Core.SuspensionOrigin.Administrator = 1 -> Janus.Core.SuspensionOrigin
 Janus.Core.SuspensionOrigin.Self = 0 -> Janus.Core.SuspensionOrigin
@@ -2215,6 +2239,40 @@ Janus.Core.SystemPrincipal.Name.get -> string!
 Janus.Core.SystemPrincipal.Operations.get -> System.Collections.Generic.IReadOnlySet<Janus.Core.SystemOperation>!
 Janus.Core.SystemPrincipal.Organization.get -> Janus.Core.OrganizationId?
 Janus.Core.SystemPrincipal.Reason.get -> string!
+Janus.Core.TakedownExecuted
+Janus.Core.TakedownExecuted.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey) -> void
+Janus.Core.TakedownExecuted.Equals(Janus.Core.TakedownExecuted? other) -> bool
+Janus.Core.TakedownExecuted.TakedownExecuted(System.DateTimeOffset RaisedAt, string! IdempotencyKey) -> void
+Janus.Core.TakedownId
+Janus.Core.TakedownId.Deconstruct(out System.Guid Value) -> void
+Janus.Core.TakedownId.Equals(Janus.Core.TakedownId other) -> bool
+Janus.Core.TakedownId.TakedownId() -> void
+Janus.Core.TakedownId.TakedownId(System.Guid Value) -> void
+Janus.Core.TakedownId.Value.get -> System.Guid
+Janus.Core.TakedownId.Value.init -> void
+Janus.Core.TakedownProgress
+Janus.Core.TakedownProgress.<Clone>$() -> Janus.Core.TakedownProgress!
+Janus.Core.TakedownProgress.Attempts.get -> int
+Janus.Core.TakedownProgress.Attempts.init -> void
+Janus.Core.TakedownProgress.Deconstruct(out Janus.Core.TakedownId Id, out Janus.Core.SubjectId Subject, out System.DateTimeOffset TriggeredAt, out System.DateTimeOffset ErasureDue, out Janus.Core.ErasureStatus Status, out int Attempts, out System.Collections.Generic.IReadOnlyList<Janus.Core.SubscriberConfirmation!>! Subscribers) -> void
+Janus.Core.TakedownProgress.Equals(Janus.Core.TakedownProgress? other) -> bool
+Janus.Core.TakedownProgress.ErasureDue.get -> System.DateTimeOffset
+Janus.Core.TakedownProgress.ErasureDue.init -> void
+Janus.Core.TakedownProgress.Id.get -> Janus.Core.TakedownId
+Janus.Core.TakedownProgress.Id.init -> void
+Janus.Core.TakedownProgress.Status.get -> Janus.Core.ErasureStatus
+Janus.Core.TakedownProgress.Status.init -> void
+Janus.Core.TakedownProgress.Subject.get -> Janus.Core.SubjectId
+Janus.Core.TakedownProgress.Subject.init -> void
+Janus.Core.TakedownProgress.Subscribers.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.SubscriberConfirmation!>!
+Janus.Core.TakedownProgress.Subscribers.init -> void
+Janus.Core.TakedownProgress.TakedownProgress(Janus.Core.TakedownId Id, Janus.Core.SubjectId Subject, System.DateTimeOffset TriggeredAt, System.DateTimeOffset ErasureDue, Janus.Core.ErasureStatus Status, int Attempts, System.Collections.Generic.IReadOnlyList<Janus.Core.SubscriberConfirmation!>! Subscribers) -> void
+Janus.Core.TakedownProgress.TriggeredAt.get -> System.DateTimeOffset
+Janus.Core.TakedownProgress.TriggeredAt.init -> void
+Janus.Core.TakedownReversed
+Janus.Core.TakedownReversed.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey) -> void
+Janus.Core.TakedownReversed.Equals(Janus.Core.TakedownReversed? other) -> bool
+Janus.Core.TakedownReversed.TakedownReversed(System.DateTimeOffset RaisedAt, string! IdempotencyKey) -> void
 Janus.Core.TakedownTrigger
 Janus.Core.TakedownTrigger.AuthorityRequest = 3 -> Janus.Core.TakedownTrigger
 Janus.Core.TakedownTrigger.AutomatedSignal = 2 -> Janus.Core.TakedownTrigger
@@ -2435,6 +2493,9 @@ override Janus.Core.Error.GetHashCode() -> int
 override Janus.Core.Error.ToString() -> string!
 override Janus.Core.ErrorCode.GetHashCode() -> int
 override Janus.Core.ErrorCode.ToString() -> string!
+override Janus.Core.ExecutedTakedown.Equals(object? obj) -> bool
+override Janus.Core.ExecutedTakedown.GetHashCode() -> int
+override Janus.Core.ExecutedTakedown.ToString() -> string!
 override Janus.Core.ExplainedGrant.Equals(object? obj) -> bool
 override Janus.Core.ExplainedGrant.GetHashCode() -> int
 override Janus.Core.ExplainedGrant.ToString() -> string!
@@ -2702,6 +2763,22 @@ override Janus.Core.SubjectExport.GetHashCode() -> int
 override Janus.Core.SubjectExport.ToString() -> string!
 override Janus.Core.SubjectId.GetHashCode() -> int
 override Janus.Core.SubjectId.ToString() -> string!
+override Janus.Core.SubscriberConfirmation.Equals(object? obj) -> bool
+override Janus.Core.SubscriberConfirmation.GetHashCode() -> int
+override Janus.Core.SubscriberConfirmation.ToString() -> string!
+override Janus.Core.TakedownExecuted.<Clone>$() -> Janus.Core.TakedownExecuted!
+override Janus.Core.TakedownExecuted.Equals(object? obj) -> bool
+override Janus.Core.TakedownExecuted.GetHashCode() -> int
+override Janus.Core.TakedownExecuted.ToString() -> string!
+override Janus.Core.TakedownId.GetHashCode() -> int
+override Janus.Core.TakedownId.ToString() -> string!
+override Janus.Core.TakedownProgress.Equals(object? obj) -> bool
+override Janus.Core.TakedownProgress.GetHashCode() -> int
+override Janus.Core.TakedownProgress.ToString() -> string!
+override Janus.Core.TakedownReversed.<Clone>$() -> Janus.Core.TakedownReversed!
+override Janus.Core.TakedownReversed.Equals(object? obj) -> bool
+override Janus.Core.TakedownReversed.GetHashCode() -> int
+override Janus.Core.TakedownReversed.ToString() -> string!
 override Janus.Core.Username.GetHashCode() -> int
 override Janus.Core.Username.ToString() -> string!
 override Janus.Core.WebAuthnChallenge.Equals(object? obj) -> bool
@@ -2733,6 +2810,8 @@ override sealed Janus.Core.RestrictionChanged.Equals(Janus.Core.SubjectEvent? ot
 override sealed Janus.Core.SendingRestrictionChanged.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.SendingRestrictionGranted.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.SubjectEvent.Equals(Janus.Core.DomainEvent? other) -> bool
+override sealed Janus.Core.TakedownExecuted.Equals(Janus.Core.SubjectEvent? other) -> bool
+override sealed Janus.Core.TakedownReversed.Equals(Janus.Core.DomainEvent? other) -> bool
 static Janus.Core.AccessContext.Of(Janus.Core.SubjectId acting, Janus.Core.SubjectId effective) -> Janus.Core.AccessContext!
 static Janus.Core.AccessContext.Of(Janus.Core.SubjectId subject) -> Janus.Core.AccessContext!
 static Janus.Core.AccessContext.Of(Janus.Core.SystemPrincipal! principal) -> Janus.Core.AccessContext!
@@ -2799,6 +2878,8 @@ static Janus.Core.AuditActions.RestrictionEdited.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RestrictionGranted.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.SecondStepPreferred.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.SessionPresented.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.TakedownExecuted.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.TakedownReversed.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.UsernameChanged.get -> Janus.Core.AuditAction
 static Janus.Core.AuditRecordId.New(System.TimeProvider! time) -> Janus.Core.AuditRecordId
 static Janus.Core.AuditRecordId.operator !=(Janus.Core.AuditRecordId left, Janus.Core.AuditRecordId right) -> bool
@@ -3164,6 +3245,8 @@ static Janus.Core.ErrorCodes.StepUpRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StepUpUnavailable.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.SystemFault.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.TakedownActive.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.TakedownNotFound.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.TakedownWindowElapsed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.Throttled.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.UsernameCoolingOff.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.UsernameInvalid.get -> Janus.Core.ErrorCode
@@ -3173,6 +3256,8 @@ static Janus.Core.ErrorCodes.WebAuthnAlgorithmNotAllowed.get -> Janus.Core.Error
 static Janus.Core.ErrorCodes.WebAuthnCounterMismatch.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.WebAuthnRelyingPartyChanged.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.WebAuthnUserVerificationRequired.get -> Janus.Core.ErrorCode
+static Janus.Core.ExecutedTakedown.operator !=(Janus.Core.ExecutedTakedown? left, Janus.Core.ExecutedTakedown? right) -> bool
+static Janus.Core.ExecutedTakedown.operator ==(Janus.Core.ExecutedTakedown? left, Janus.Core.ExecutedTakedown? right) -> bool
 static Janus.Core.ExplainedGrant.operator !=(Janus.Core.ExplainedGrant? left, Janus.Core.ExplainedGrant? right) -> bool
 static Janus.Core.ExplainedGrant.operator ==(Janus.Core.ExplainedGrant? left, Janus.Core.ExplainedGrant? right) -> bool
 static Janus.Core.ExplainedPrincipal.operator !=(Janus.Core.ExplainedPrincipal left, Janus.Core.ExplainedPrincipal right) -> bool
@@ -3427,8 +3512,18 @@ static Janus.Core.SubjectExport.operator ==(Janus.Core.SubjectExport? left, Janu
 static Janus.Core.SubjectId.New(System.Security.Cryptography.RandomNumberGenerator! randomness) -> Janus.Core.SubjectId
 static Janus.Core.SubjectId.operator !=(Janus.Core.SubjectId left, Janus.Core.SubjectId right) -> bool
 static Janus.Core.SubjectId.operator ==(Janus.Core.SubjectId left, Janus.Core.SubjectId right) -> bool
+static Janus.Core.SubscriberConfirmation.operator !=(Janus.Core.SubscriberConfirmation? left, Janus.Core.SubscriberConfirmation? right) -> bool
+static Janus.Core.SubscriberConfirmation.operator ==(Janus.Core.SubscriberConfirmation? left, Janus.Core.SubscriberConfirmation? right) -> bool
 static Janus.Core.SystemPrincipal.ForDeployment(string! name, string! reason, params System.Collections.Generic.IReadOnlyList<Janus.Core.SystemOperation>! operations) -> Janus.Core.SystemPrincipal!
 static Janus.Core.SystemPrincipal.ForOrganization(string! name, string! reason, Janus.Core.OrganizationId organization) -> Janus.Core.SystemPrincipal!
+static Janus.Core.TakedownExecuted.operator !=(Janus.Core.TakedownExecuted? left, Janus.Core.TakedownExecuted? right) -> bool
+static Janus.Core.TakedownExecuted.operator ==(Janus.Core.TakedownExecuted? left, Janus.Core.TakedownExecuted? right) -> bool
+static Janus.Core.TakedownId.operator !=(Janus.Core.TakedownId left, Janus.Core.TakedownId right) -> bool
+static Janus.Core.TakedownId.operator ==(Janus.Core.TakedownId left, Janus.Core.TakedownId right) -> bool
+static Janus.Core.TakedownProgress.operator !=(Janus.Core.TakedownProgress? left, Janus.Core.TakedownProgress? right) -> bool
+static Janus.Core.TakedownProgress.operator ==(Janus.Core.TakedownProgress? left, Janus.Core.TakedownProgress? right) -> bool
+static Janus.Core.TakedownReversed.operator !=(Janus.Core.TakedownReversed? left, Janus.Core.TakedownReversed? right) -> bool
+static Janus.Core.TakedownReversed.operator ==(Janus.Core.TakedownReversed? left, Janus.Core.TakedownReversed? right) -> bool
 static Janus.Core.Username.TryParse(string! entered, out Janus.Core.Username username) -> bool
 static Janus.Core.Username.operator !=(Janus.Core.Username left, Janus.Core.Username right) -> bool
 static Janus.Core.Username.operator ==(Janus.Core.Username left, Janus.Core.Username right) -> bool
@@ -3474,4 +3569,5 @@ virtual Janus.Core.SubjectEvent.Equals(Janus.Core.SubjectEvent? other) -> bool
 ~override Janus.Core.SendReference.Equals(object obj) -> bool
 ~override Janus.Core.SessionId.Equals(object obj) -> bool
 ~override Janus.Core.SubjectId.Equals(object obj) -> bool
+~override Janus.Core.TakedownId.Equals(object obj) -> bool
 ~override Janus.Core.Username.Equals(object obj) -> bool

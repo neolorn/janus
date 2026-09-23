@@ -203,6 +203,26 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The minor takedown, as `ITakedowns` and `POST /admin/accounts/{subject}/takedown`:
+  under `takedown:execute` and step-up, one transaction suspends the account into its
+  `takedown.grace` window, ends every session of it, records the trigger and the
+  reason, and writes the `TakedownExecuted` delivery the host confirms order
+  cancellation against. The answer carries `takedownId` and `erasureDue`.
+  `AccountSuspended` follows the commit; no deletion notice and no
+  `AccountDeletionRequested` do.
+
+- `GET /admin/accounts/{subject}/takedown` reads the latest takedown of an account:
+  when it was triggered, when its erasure runs, and which registered subscriber has
+  confirmed it and when. An account never taken down answers 404
+  `identity.takedown.notfound`.
+
+- `POST /admin/accounts/{subject}/takedown/reverse` restores a taken down account to
+  active inside its window, with a reason, and publishes `TakedownReversed`. After the
+  window it answers 422 `identity.takedown.windowelapsed`.
+
+- The deletion sweep erases a taken down account when `takedown.grace` elapses, and an
+  account in its own deletion window when `account.deletion.grace` does.
+
 - `MembershipChanged` announces a membership beginning or ending, naming the
   membership, its organization and whose it is. The erasure at the end of an
   organization's deletion window raises one for every membership it ends, alongside

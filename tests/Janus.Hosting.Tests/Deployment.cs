@@ -586,6 +586,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IExportSource>(ExportSource);
         _ = services.AddSingleton<IExportLedger>(ExportLedger);
         _ = services.AddScoped<IExports, ExportService>();
+        _ = services.AddScoped<ITakedowns, Janus.Privacy.Takedowns.TakedownService>();
         _ = services.AddSingleton(Janus.Privacy.Tests.Declaration.Reaching);
         _ = services.AddSingleton<Janus.Privacy.Records.IComplianceStore>(Compliance);
         _ = services.AddSingleton<Janus.Privacy.Records.IRegisterRoles>(RegisterRoles);
@@ -617,6 +618,7 @@ internal sealed class Deployment : IAsyncDisposable
             // converter stands here (API-CONV-002).
             options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<IdentifierKind>());
             options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<Factor>());
+            options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<TakedownTrigger>());
             options.SerializerOptions.TypeInfoResolverChain.Add(RegistrationJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(AuthenticationJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(AccountJson.Default);

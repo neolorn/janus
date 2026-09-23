@@ -42,6 +42,7 @@ using Janus.Privacy.Outbox;
 using Janus.Privacy.Policies;
 using Janus.Privacy.Records;
 using Janus.Privacy.Requests;
+using Janus.Privacy.Takedowns;
 using Janus.Storage;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -256,6 +257,7 @@ public static class HostingRegistration
             // converter stands here (API-CONV-002).
             options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<IdentifierKind>());
             options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<Factor>());
+            options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<TakedownTrigger>());
             options.SerializerOptions.TypeInfoResolverChain.Add(RegistrationJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(AuthenticationJson.Default);
             options.SerializerOptions.TypeInfoResolverChain.Add(AccountJson.Default);
@@ -313,6 +315,7 @@ public static class HostingRegistration
         services.AddScoped<RestrictionGrant>();
         services.AddScoped<DeadlineSweep>();
         services.AddScoped<IPrivacyRequests, PrivacyRequestService>();
+        services.AddScoped<ITakedowns, TakedownService>();
         services.AddScoped<DeletionSweep>();
         services.AddScoped<OrganizationErasureSweep>();
         services.AddScoped<IExports, ExportService>();

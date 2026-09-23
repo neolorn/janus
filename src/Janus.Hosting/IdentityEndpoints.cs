@@ -39,6 +39,7 @@ public static class IdentityEndpoints
         _ = endpoints.MapCredentials();
         _ = endpoints.MapRecovery();
         _ = endpoints.MapPrivacy();
+        _ = endpoints.MapTakedowns();
 
         return endpoints;
     }

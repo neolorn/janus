@@ -19,4 +19,6 @@ namespace Janus.Hosting.Privacy;
 [JsonSerializable(typeof(ExportView))]
 [JsonSerializable(typeof(PortableExportView))]
 [JsonSerializable(typeof(ProcessingRegisterView))]
+[JsonSerializable(typeof(ExecutedTakedownView))]
+[JsonSerializable(typeof(TakedownProgressView))]
 internal sealed partial class PrivacyJson : JsonSerializerContext;

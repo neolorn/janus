@@ -18,14 +18,15 @@ namespace Janus.Privacy.Erasures;
 /// <param name="eraser">What makes the personal fields unrecoverable.</param>
 /// <param name="outbox">Where the erasure is announced to the subscribers.</param>
 /// <param name="audit">Where the erasure is written down.</param>
-/// <param name="configuration">Where the window's length is read.</param>
+/// <param name="configuration">Where the lengths of the two windows are read.</param>
 /// <param name="work">The one transaction each account is carried in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements IDN-LIFE-014, IDN-ACCT-007 and PRIV-RIGHT-005. Nothing here waits on a
-/// human: the window is the whole of the decision, and an account that reaches its
-/// end without a cancellation is erased. One account per transaction, so a deployment
-/// that falls over mid-pass has erased whole accounts and begun none.
+/// Implements IDN-LIFE-014, IDN-LIFE-003, IDN-ACCT-007 and PRIV-RIGHT-005. Nothing
+/// here waits on a human: the window is the whole of the decision, and an account that
+/// reaches its end without a cancellation or a reversal is erased. One account per
+/// transaction, so a deployment that falls over mid-pass has erased whole accounts and
+/// begun none.
 /// </remarks>
 internal sealed class DeletionSweep(
     IAccountStates accounts,
@@ -47,18 +48,26 @@ internal sealed class DeletionSweep(
     {
         DateTimeOffset now = time.GetUtcNow();
 
-        TimeSpan grace = (await configuration
-                .ReadAsync(Settings.AccountDeletionGrace, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => Settings.AccountDeletionGrace.Default);
+        TimeSpan grace = await ReadAsync(Settings.AccountDeletionGrace, cancellationToken)
+            .ConfigureAwait(false);
+        TimeSpan takedown = await ReadAsync(Settings.TakedownGrace, cancellationToken)
+            .ConfigureAwait(false);
 
         IReadOnlyList<PendingDeletion> elapsed = await accounts
-            .DeletingSinceAsync(now - grace, cancellationToken)
+            .DeletingSinceAsync(now - (grace < takedown ? grace : takedown), cancellationToken)
             .ConfigureAwait(false);
 
         int erased = 0;
 
         foreach (PendingDeletion deletion in elapsed)
         {
+            // IDN-LIFE-003: a takedown borrows the deletion timer and not its length,
+            // so each window is measured by its own key.
+            if (deletion.Since > now - (deletion.By is DeletionOrigin.Takedown ? takedown : grace))
+            {
+                continue;
+            }
+
             await ErasedAsync(deletion, now, cancellationToken).ConfigureAwait(false);
 
             erased++;
@@ -66,6 +75,12 @@ internal sealed class DeletionSweep(
 
         return erased;
     }
+
+    private async ValueTask<TimeSpan> ReadAsync(
+        DurationSetting setting,
+        CancellationToken cancellationToken) =>
+        (await configuration.ReadAsync(setting, cancellationToken).ConfigureAwait(false))
+            .Match(read => read, _ => setting.Default);
 
     // IDN-LIFE-003: a takedown ends in the same erasure as a request, and the
     // subscribers are told which of the two reached them.

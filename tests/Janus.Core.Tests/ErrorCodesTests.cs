@@ -98,6 +98,8 @@ public sealed class ErrorCodesTests
         "identity.registration.incomplete",
         "identity.registration.signedin",
         "identity.takedown.active",
+        "identity.takedown.notfound",
+        "identity.takedown.windowelapsed",
         "identity.username.coolingoff",
         "identity.username.invalid",
         "identity.username.reserved",

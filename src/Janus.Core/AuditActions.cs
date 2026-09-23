@@ -118,6 +118,18 @@ public static class AuditActions
     public static AuditAction OrganizationErased { get; } = AuditAction.Parse("identity.organization.erased");
 
     /// <summary>
+    /// A takedown was triggered, naming what raised it and the reason written for it.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-003, chapter 10 section 5.</remarks>
+    public static AuditAction TakedownExecuted { get; } = AuditAction.Parse("identity.takedown.executed");
+
+    /// <summary>
+    /// A takedown was reversed inside its window, with the reason written for it.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-003, chapter 10 section 5.</remarks>
+    public static AuditAction TakedownReversed { get; } = AuditAction.Parse("identity.takedown.reversed");
+
+    /// <summary>
     /// A version of a legal document was published in the governing language.
     /// </summary>
     /// <remarks>Implements PRIV-CONS-005, chapter 10 section 5.</remarks>

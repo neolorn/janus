@@ -67,6 +67,7 @@ internal static class ApiStatus
         [ErrorCodes.GrantNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.DocumentNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.RequestNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.TakedownNotFound] = StatusCodes.Status404NotFound,
 
         // A conflict with what is already there, or a precondition the state fails.
         [ErrorCodes.ChangePending] = StatusCodes.Status409Conflict,
@@ -148,6 +149,7 @@ internal static class ApiStatus
         [ErrorCodes.ConsentSuperseded] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ConsentWrittenRequired] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.DeletionWindowElapsed] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.TakedownWindowElapsed] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ReactivationTokenInvalid] = StatusCodes.Status422UnprocessableEntity,
 
         // What 10 section 1.2 calls a status and not a refusal: the removal is
