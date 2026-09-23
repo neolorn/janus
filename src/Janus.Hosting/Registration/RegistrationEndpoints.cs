@@ -105,6 +105,7 @@ internal static class RegistrationEndpoints
                     client,
                     RequestOrigin.Language(context.Request),
                     RequestOrigin.Source(context.Request),
+                    request.InvitationToken,
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match(begun => begun, error => Withheld<RegistrationSessionId>(error, ref failure));

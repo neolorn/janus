@@ -252,7 +252,8 @@ internal sealed class RegistrationSessionStore(
             session.PasswordStandsAlone,
             session.RecoveryCodes?.Select(hash => hash.Encoded).ToArray(),
             [.. session.Identifiers.Select(Written)],
-            [.. session.Credentials.Select(Written)]);
+            [.. session.Credentials.Select(Written)],
+            session.Invitation?.Value);
 
         return PersonalFieldCipher.Encrypt(
             dataKey,
@@ -308,7 +309,8 @@ internal sealed class RegistrationSessionStore(
             document.PhoneSkipped,
             document.RecoveryCodes?.Select(PasswordHash.Parse).ToArray(),
             termsVersion: null,
-            noticeVersion: null);
+            noticeVersion: null,
+            document.Invitation is Guid invitation ? new InvitationId(invitation) : null);
 
         return session;
     }

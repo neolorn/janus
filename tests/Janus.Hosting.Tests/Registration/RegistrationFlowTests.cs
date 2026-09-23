@@ -86,6 +86,30 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-009a AC2 and API-LAND-001 AC2: an invitation token that opens no
+    /// invitation begins no registration, and the landing is answered with the code
+    /// it renders.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_009a_AC2_AnInvitationTokenThatOpensNothingIsRefusedAsync()
+    {
+        var browser = new Browser(_deployment);
+
+        _ = await browser.SendAsync("GET", "/register");
+
+        Answer refused = await browser.SendAsync(
+            "POST",
+            "/register",
+            ("clientId", "web"),
+            ("invitationToken", "no-such-invitation"));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.InvitationExpired.ToString(), refused.Text("code"));
+        Assert.Empty(_deployment.Registrations.All);
+    }
+
+    /// <summary>
     /// BFF-CSRF-005a AC4: a first contact is not a sign-in, so nothing that needs an
     /// account answers to a browser that carries only one.
     /// </summary>

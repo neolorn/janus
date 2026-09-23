@@ -26,6 +26,14 @@ internal interface IInvitationStore
     ValueTask<Invitation?> FindAsync(InvitationId id, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads the invitation a link's token opens.
+    /// </summary>
+    /// <param name="token">What is stored against the token.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The invitation, or nothing where no invitation was issued with it.</returns>
+    ValueTask<Invitation?> FindByTokenAsync(byte[] token, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Reads the invitations that still stand over one mailbox's reservation.
     /// </summary>
     /// <param name="mailbox">Which mailbox.</param>

@@ -5,13 +5,17 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Invitations;
+using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests.Factors;
+using Janus.Authentication.Tests.Invitations;
 using Janus.Authentication.Tests.Oidc;
+using Janus.Authentication.Tests.Organizations;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
 using Janus.Authentication.Tests.Sending;
@@ -25,7 +29,8 @@ namespace Janus.Authentication.Tests.Registration;
 /// <summary>
 /// The registration session and the six steps that run against it: what each one
 /// admits, what the terms step writes, and what is left behind when nothing is
-/// written at all (REG-SESS-001 to REG-SESS-008, REG-PROF-002).
+/// written at all (REG-SESS-001 to REG-SESS-008, REG-PROF-002), and a registration an
+/// invitation opens (REG-INV-001, REG-MAIL-001, REG-DOM-001, IDN-LIFE-009a).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class RegistrationServiceTests : IAsyncDisposable
@@ -71,6 +76,8 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
     private readonly SessionStoreInMemory _live = new();
     private readonly SessionAuditInMemory _audit = new();
     private readonly MembershipLookupInMemory _memberships = new();
+    private readonly InvitationStoreInMemory _invitations = new();
+    private readonly DomainStoreInMemory _domains = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly AccessGateInMemory _gate = new();
     private readonly AdministrativeOrganizationInMemory _administrative = new();
@@ -117,6 +124,8 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
             _authenticators,
             _clients,
             new PolicyResolution(_memberships, _configuration, _raises),
+            _invitations,
+            new DomainLock(_memberships, _configuration, _domains),
             new SessionService(
                 _live,
                 _audit,
@@ -1345,6 +1354,273 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
         Assert.False(changed.IsVerified);
     }
 
+    /// <summary>
+    /// REG-MAIL-001 AC4: the press on the invitation link that opens the registration
+    /// is what verifies the email the invitation bound, and no code is sent to it; its
+    /// step has nothing left to collect.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_001_AC4_ThePressVerifiesTheBoundEmailWithoutACodeAsync()
+    {
+        RegistrationSessionId session = Ok(await InvitedAsync(Issued(email: Address)));
+
+        StagedIdentity email = Identity(session, IdentifierKind.Email);
+
+        Assert.True(email.IsVerified);
+        Assert.True(email.IsLocked);
+        Assert.Empty(_notifications.Mail);
+
+        _ = Ok(await Service.RecordAgeAsync(session, Adult, TestContext.Current.CancellationToken));
+
+        Assert.Equal(RegistrationStep.Phone, Live(session).Step);
+        Assert.Equal(session, _invitations.Held.Single().Session);
+    }
+
+    /// <summary>
+    /// REG-INV-001 AC1 and REG-IDENT-010: an identifier the invitation binds is taken
+    /// at its step only as it was bound and cannot be changed, while one it leaves open
+    /// is the person's to choose and change.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_001_AC1_ABoundIdentifierCannotBeChangedAndAnOpenOneCanAsync()
+    {
+        RegistrationSessionId bound = Ok(await InvitedAsync(Issued(email: Address, phone: Number)));
+
+        _ = Ok(await Service.RecordAgeAsync(bound, Adult, TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            ErrorCodes.IdentifierLocked,
+            Refused(await Service.ChangeAsync(
+                bound,
+                Identity(bound, IdentifierKind.Email).Id,
+                "other@example.test",
+                TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            ErrorCodes.IdentifierLocked,
+            Refused(await Service.StageAsync(
+                bound,
+                IdentifierKind.Phone,
+                Mistyped,
+                TestContext.Current.CancellationToken)));
+
+        RegistrationState taken = Ok(await Service.StageAsync(
+            bound,
+            IdentifierKind.Phone,
+            Number,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(RegistrationStep.Confirm, taken.Step);
+        Assert.All(taken.Identifiers, identifier => Assert.True(identifier.Locked));
+        Assert.Equal(Number, Assert.Single(_notifications.Texts).Destination.Canonical);
+
+        RegistrationSessionId open = Ok(await InvitedAsync(Issued(email: "other@example.test")));
+
+        _ = Ok(await Service.RecordAgeAsync(open, Adult, TestContext.Current.CancellationToken));
+        _ = Ok(await Service.StageAsync(open, IdentifierKind.Phone, Mistyped, TestContext.Current.CancellationToken));
+        _ = Ok(await Service.ChangeAsync(
+            open,
+            Identity(open, IdentifierKind.Phone).Id,
+            Number,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(Number, Identity(open, IdentifierKind.Phone).Canonical);
+        Assert.False(Identity(open, IdentifierKind.Phone).IsLocked);
+    }
+
+    /// <summary>
+    /// REG-MAIL-001 AC3: a phone the invitation binds is verified before the
+    /// registration goes on: its step cannot be passed over, and the confirm step
+    /// waits for its code.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_001_AC3_ABoundPhoneIsVerifiedBeforeTheRegistrationGoesOnAsync()
+    {
+        _configuration.Set(Settings.RegistrationPhone, AttributeRequirement.Optional);
+
+        RegistrationSessionId session = Ok(await InvitedAsync(Issued(email: Address, phone: Number)));
+
+        _ = Ok(await Service.RecordAgeAsync(session, Adult, TestContext.Current.CancellationToken));
+
+        _ = Refused(await Service.SkipPhoneAsync(session, TestContext.Current.CancellationToken));
+
+        _ = Ok(await Service.StageAsync(session, IdentifierKind.Phone, Number, TestContext.Current.CancellationToken));
+
+        _ = Refused(await Service.ConfirmAsync(session, TestContext.Current.CancellationToken));
+
+        await VerifiedAsync(session, IdentifierKind.Phone);
+
+        _ = Ok(await Service.ConfirmAsync(session, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-009a AC2: the link opens its invitation once and only within its
+    /// lifetime; a token that opens nothing, one already used, one expired and one
+    /// revoked are refused alike.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_009a_AC2_TheLinkOpensItsInvitationOnceAndInTimeAsync()
+    {
+        string used = Issued(email: Address);
+        string lapsed = Issued(email: "late@example.test");
+        string revoked = Issued(email: "gone@example.test");
+
+        _invitations.Held.Last().Revoke(_clock.GetUtcNow());
+
+        _ = Ok(await InvitedAsync(used));
+
+        Assert.Equal(ErrorCodes.InvitationExpired, Refused(await InvitedAsync(used)));
+        Assert.Equal(ErrorCodes.InvitationExpired, Refused(await InvitedAsync(revoked)));
+        Assert.Equal(ErrorCodes.InvitationExpired, Refused(await InvitedAsync("no-such-token")));
+
+        _clock.Advance(Settings.LinkInvitationLifetime.Default);
+
+        Assert.Equal(ErrorCodes.InvitationExpired, Refused(await InvitedAsync(lapsed)));
+    }
+
+    /// <summary>
+    /// REG-INV-002: an email the invitation binds that an account holds already is
+    /// refused, so its holder accepts by signing in; the invitation is not spent and
+    /// no registration is opened.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_002_ABoundEmailAnAccountHoldsOpensNoRegistrationAsync()
+    {
+        _directory.Held(IdentifierKind.Email, Address, SubjectId.New(_randomness));
+
+        string token = Issued(email: Address);
+
+        Assert.Equal(ErrorCodes.InvitationIdentifierMismatch, Refused(await InvitedAsync(token)));
+        Assert.Empty(_sessions.All);
+        Assert.True(_invitations.Held.Single().Opens(_clock.GetUtcNow()));
+    }
+
+    /// <summary>
+    /// REG-DOM-001 AC2: an email the person chooses at an invitation, where the
+    /// invitation left the email open, is refused outside the inviting organization's
+    /// verified domains.
+    /// </summary>
+    [Fact]
+    public async Task REG_DOM_001_AC2_AnOpenEmailOutsideTheListIsRefusedAsync()
+    {
+        var organization = OrganizationId.New(_clock);
+
+        await LockedAsync(organization, "example.test");
+
+        RegistrationSessionId session = Ok(await InvitedAsync(Issued(organization, email: null)));
+
+        _ = Ok(await Service.RecordAgeAsync(session, Adult, TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            ErrorCodes.IdentifierDomainNotAllowed,
+            Refused(await Service.StageAsync(
+                session,
+                IdentifierKind.Email,
+                "person@elsewhere.test",
+                TestContext.Current.CancellationToken)));
+
+        _ = Ok(await Service.StageAsync(session, IdentifierKind.Email, Address, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-009a: from the moment the token attaches, the inviting organization's
+    /// policy governs the registration, so a password its policy does not admit
+    /// completes nothing where a public registration would go on.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_009a_TheInvitingOrganizationsPolicyGovernsTheRegistrationAsync()
+    {
+        var organization = OrganizationId.New(_clock);
+
+        _configuration.Set(
+            Settings.OrganizationPolicy,
+            organization.ToString(),
+            PolicyOverride.None with { LoginFactors = new[] { Factor.Passkey }.ToFrozenSet() });
+
+        RegistrationSessionId invited = Ok(await InvitedAsync(Issued(organization, email: Address, phone: Number)));
+
+        _ = Ok(await Service.RecordAgeAsync(invited, Adult, TestContext.Current.CancellationToken));
+        _ = Ok(await Service.StageAsync(invited, IdentifierKind.Phone, Number, TestContext.Current.CancellationToken));
+        await VerifiedAsync(invited, IdentifierKind.Phone);
+        _ = Ok(await Service.ConfirmAsync(invited, TestContext.Current.CancellationToken));
+
+        RegistrationState held = Ok(await Service.SetPasswordAsync(invited, Chosen, TestContext.Current.CancellationToken));
+
+        Assert.Equal(RegistrationStep.Security, held.Step);
+
+        Later();
+
+        RegistrationSessionId open = await SecuredAsync();
+
+        Assert.Equal(RegistrationStep.Terms, Live(open).Step);
+    }
+
+    /// <summary>
+    /// REG-INV-001 AC2: the account a registration through an invitation creates holds
+    /// the invitation and nothing of its organization: no membership until the person
+    /// acknowledges it.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_001_AC2_TheAccountHoldsTheInvitationAndNoMembershipAsync()
+    {
+        await RegisteredAsync();
+
+        RegistrationSessionId session = Ok(await InvitedAsync(Issued(email: Address, phone: Number)));
+
+        _ = Ok(await Service.RecordAgeAsync(session, Adult, TestContext.Current.CancellationToken));
+        _ = Ok(await Service.StageAsync(session, IdentifierKind.Phone, Number, TestContext.Current.CancellationToken));
+        await VerifiedAsync(session, IdentifierKind.Phone);
+        _ = Ok(await Service.ConfirmAsync(session, TestContext.Current.CancellationToken));
+        _ = Ok(await Service.SetPasswordAsync(session, Chosen, TestContext.Current.CancellationToken));
+
+        SubjectId subject = Ok(await AcceptedAsync(session)).Subject;
+
+        Invitation invitation = _invitations.Held.Single();
+
+        Assert.Equal(subject, invitation.Invitee);
+        Assert.Null(invitation.Session);
+        Assert.False(invitation.IsAcknowledged);
+        Assert.Empty(await _memberships.OfAsync(subject, TestContext.Current.CancellationToken));
+    }
+
+    // An invitation into an organization, issued now, binding what it is given; the
+    // token is what its link carries.
+    private string Issued(OrganizationId? organization = null, string? email = null, string? phone = null)
+    {
+        var token = OpaqueToken.Draw(_randomness);
+
+        _invitations.Held.Add(Invitation.Issued(
+            InvitationId.New(_clock),
+            organization ?? OrganizationId.New(_clock),
+            SubjectId.New(_randomness),
+            new InvitedIdentifiers(email, phone, CorporateEmail: null),
+            roles: [],
+            documents: [],
+            mailbox: null,
+            token.Fingerprint(),
+            _clock.GetUtcNow(),
+            Settings.LinkInvitationLifetime.Default));
+
+        return token.Value;
+    }
+
+    private async Task<Result<RegistrationSessionId>> InvitedAsync(string token) =>
+        await Service.BeginAsync(Client, Language, Source, token, TestContext.Current.CancellationToken);
+
+    // An organization locked to one domain, verified.
+    private async Task LockedAsync(OrganizationId organization, string domain)
+    {
+        _configuration.Set(
+            Settings.OrganizationPolicy,
+            organization.ToString(),
+            PolicyOverride.None with { EmailDomains = [domain] });
+
+        var listed = LockedDomain.Listed(organization, domain, _randomness, Noon);
+
+        listed.Checked(passed: true, Noon);
+
+        await _domains.AddAsync(listed, TestContext.Current.CancellationToken);
+    }
+
     // The steps a test is not about, run the way a browser runs them, so that each
     // test says only what it is checking.
     private Task RegisteredAsync() => _clients
@@ -1357,7 +1633,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
     private async Task<RegistrationSessionId> StartedAsync()
     {
         Result<RegistrationSessionId> begun = await Service
-            .BeginAsync(Client, Language, Source, TestContext.Current.CancellationToken);
+            .BeginAsync(Client, Language, Source, invitationToken: null, TestContext.Current.CancellationToken);
 
         return begun.Match(session => session, Throw<RegistrationSessionId>);
     }

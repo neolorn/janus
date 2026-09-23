@@ -29,6 +29,10 @@ internal sealed class InvitationStoreInMemory : IInvitationStore
         ValueTask.FromResult(Held.FirstOrDefault(invitation => invitation.Id == id));
 
     /// <inheritdoc/>
+    public ValueTask<Invitation?> FindByTokenAsync(byte[] token, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(Held.FirstOrDefault(invitation => invitation.Token.AsSpan().SequenceEqual(token)));
+
+    /// <inheritdoc/>
     public ValueTask<IReadOnlyList<Invitation>> ReservingAsync(
         MailboxId mailbox,
         CancellationToken cancellationToken) =>

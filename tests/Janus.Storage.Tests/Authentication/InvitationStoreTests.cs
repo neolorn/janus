@@ -56,6 +56,26 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     /// <summary>
+    /// IDN-LIFE-009a: the invitation a link's token opens is found by what is stored
+    /// against the token, and a token nobody issued finds nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_LIFE_009a_AnInvitationIsFoundByItsTokenAsync()
+    {
+        Invitation issued = await IssuedAsync("token@example.test");
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Equal(
+            issued.Id,
+            (await Store(reading).FindByTokenAsync(issued.Token, TestContext.Current.CancellationToken))?.Id);
+        Assert.Null(await Store(reading).FindByTokenAsync(
+            OpaqueToken.Of("nobody issued this").Fingerprint(),
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// REG-INV-001: a revoked invitation forgets what it bound: the document and the
     /// key that read it are gone from the row, and what stays is who invited into what.
     /// </summary>

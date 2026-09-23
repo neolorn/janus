@@ -8597,6 +8597,185 @@ request the recipient made, and that a tag is matched against
 chapter 10 could say that step 3 is one message per language. AUTH-ABUSE-004 could
 say that such a request is judged once and each language counts as one send.
 
+---
+
+## 236. The token a registration is begun with travels as `invitationToken`
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-INV-001, REG-SESS-001**
+
+*The question.* 09 section 3: "A staff invitation token is not an enrolment token: it
+opens a registration session (`POST /register` with the token, REG-INV-001)". The
+body 09 section 2 gives `POST /register` is `{ "clientId": "..." }` and names no member
+for the token. REG-SESS-001 lists "the invitation token" among what the session
+stages.
+
+*The readings.*
+
+1. A member `token`.
+2. A member `invitationToken`, as `POST /register/verify/{id}` names its token
+   `linkToken`.
+3. An endpoint of its own.
+
+*Chosen: 2.* It names what the token is and adds no endpoint. The session stages the
+invitation it opened, never the token: the token is a credential and the session
+document outlives the request.
+
+*Tests that pin it.*
+`RegistrationFlowTests.IDN_LIFE_009a_AC2_AnInvitationTokenThatOpensNothingIsRefusedAsync`,
+`RegistrationSessionStoreTests.IDN_LIFE_009a_ARegistrationKeepsTheInvitationThatOpenedItAsync`.
+
+*Chapter text that should change.* 09 section 2 could add `invitationToken` to the
+`POST /register` body.
+
+---
+
+## 237. What the press on the link verifies, and a bound email an account holds
+
+**Phase 8 · 2026-09-24 · Tier 3 · REG-INV-001, REG-MAIL-001, REG-INV-002, REG-SESS-005, D-076**
+
+*The question.* REG-MAIL-001: "the press on the invitation link in the registering
+browser (REG-SESS-003) is the verification, and the person does nothing further for
+it". REG-INV-002: "A person who already holds an account SHALL accept an invitation by
+**signing in**". REG-SESS-005 answers a registration identically whether an
+identifier is held. Nothing says what a registration begun with a link whose bound
+email an account already holds does: the press verifies the address, so the terms
+step would create a second holder of it.
+
+*The readings.*
+
+1. Stage the bound email verified and let the terms step fail.
+2. Refuse at `POST /register` with `identity.invitation.identifiermismatch`, before
+   the invitation is spent. Check the bound phone the same way.
+3. As 2 for the email only. The phone is staged locked and goes through its step as
+   any phone does, so where an account holds it the holder is told instead of sent a
+   code (REG-SESS-005).
+
+*Chosen: 3, the strictest reading.* `POST /register` with the token is the press: it
+comes from the browser the session is then bound to, and a plain open of the landing
+does nothing. The link went to the bound email alone (entry 226), so only that
+mailbox can learn that an account holds the address, and it learns it in the code
+chapter 10 gives for "An identifier bound to the invitation is verified on a different
+account than the one accepting". Where no email is bound the administrator holds the
+token (entry 226), so checking the phone would answer the administrator whether a
+number holds an account, which entry 232 refuses.
+
+*Tests that pin it.*
+`RegistrationServiceTests.REG_MAIL_001_AC4_ThePressVerifiesTheBoundEmailWithoutACodeAsync`,
+`RegistrationServiceTests.REG_INV_002_ABoundEmailAnAccountHoldsOpensNoRegistrationAsync`.
+
+*Chapter text that should change.* REG-INV-001 could say that beginning a
+registration with the token is the press, and that a bound email an account holds is
+refused there with the mismatch code.
+
+---
+
+## 238. A token that opens nothing, and a link spent by a registration never finished
+
+**Phase 8 · 2026-09-24 · Tier 3 · IDN-LIFE-009a, REG-INV-001, REG-SESS-001**
+
+*The question.* IDN-LIFE-009a AC2: "The enrolment link is time-boxed and single-use."
+Chapter 10: `identity.invitation.expired` is "Invitation link past its lifetime or
+already used". Nothing names the answer to a token nobody issued or one revoked, or
+says whether a registration abandoned or swept gives its link back. REG-SESS-001: an
+expired or abandoned session "SHALL leave nothing behind".
+
+*The readings.*
+
+1. Distinguish an unknown token from a spent one.
+2. Answer every token that opens nothing `identity.invitation.expired`. The press
+   spends the link, and a registration that never finishes does not give it back.
+3. As 2, but an abandoned or swept registration releases its invitation.
+
+*Chosen: 2, the strictest reading.* One answer tells a guesser nothing, and a link
+that could be used again after its registration ended would not be single use. What
+the abandoned registration leaves is the invitation's own record that its link was
+used, not anything of the person. The administrator revokes it and invites again
+(entries 231 and 233).
+
+*Tests that pin it.*
+`RegistrationServiceTests.IDN_LIFE_009a_AC2_TheLinkOpensItsInvitationOnceAndInTimeAsync`,
+`RegistrationFlowTests.IDN_LIFE_009a_AC2_AnInvitationTokenThatOpensNothingIsRefusedAsync`.
+
+*Chapter text that should change.* Chapter 10's row for `identity.invitation.expired`
+could add a token that opens no invitation, and IDN-LIFE-009a could say the press
+spends the link.
+
+---
+
+## 239. A bound phone at its step
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-INV-001, REG-IDENT-010, REG-MAIL-001, REG-SESS-002**
+
+*The question.* REG-INV-001: "A named identifier SHALL be pre-filled and locked at
+registration". REG-MAIL-001 AC3: "A bound phone is verified before the membership step
+can be reached." REG-IDENT-010 gives every other identifier "its own Change". Nothing
+says how the code reaches a bound phone, or how a new one is asked for when Change is
+what asks for one and a locked identifier has none.
+
+*The readings.*
+
+1. Send the code when the token is pressed.
+2. Stage the phone locked at the press. `PUT /register/phone` at the phone step takes
+   the bound number and no other, and sends the code. Change on it takes its own
+   number and no other, and sends a new code while it is unverified. Anything else is
+   `identity.identifier.locked`. The phone step cannot be skipped.
+
+*Chosen: 2.* Nothing goes to an identifier before its step (REG-PROF-002 AC1), the
+person asks for each code as for any other, and the lock refuses every other value.
+An email the invitation bound was verified by the press, so the age step leads past
+the email step.
+
+*Tests that pin it.*
+`RegistrationServiceTests.REG_INV_001_AC1_ABoundIdentifierCannotBeChangedAndAnOpenOneCanAsync`,
+`RegistrationServiceTests.REG_MAIL_001_AC3_ABoundPhoneIsVerifiedBeforeTheRegistrationGoesOnAsync`.
+
+*Chapter text that should change.* 09 section 2 could say `PUT /register/phone` and
+Change take a bound phone's own number and send its code.
+
+---
+
+## 240. What of the inviting organization's policy governs the registration
+
+**Phase 8 · 2026-09-24 · Tier 3 · IDN-LIFE-009a, REG-INV-001, REG-INV-002, REG-DOM-001, REG-SESS-001**
+
+*The question.* REG-INV-001: "The organization's policy SHALL govern every step from
+the moment the token attaches (IDN-LIFE-009a)." REG-SESS-001 AC4: "no account exists in
+a state that is not `active` immediately after creation, save where an invitation's
+policy holds it at enrolment (AUTH-RECOV-001 enforced)". 09 section 6a gives the
+acknowledgement "**403** `auth.stepup.required` with outcome `enrol` when the account
+does not yet satisfy the organization's `requiredAssurance` or
+`credentialRedundancy`". REG-DOM-001: "any open email chosen at invitation acceptance
+SHALL be in the list". Nothing says which fields a registration step reads.
+
+*The readings.*
+
+1. Only the acknowledgement reads the policy.
+2. Every field at the step it bears on: the security step refuses to complete below
+   `requiredAssurance`.
+3. The policy in force for the registration is the one a member of the inviting
+   organization resolves to. It decides which login factors complete the security
+   step and which addresses the lock admits: every email the person chooses at step
+   2, among the extras of step 4, or by a Change. `requiredAssurance` and
+   `credentialRedundancy` are judged at the acknowledgement, which 09 gives the refusal
+   for, and the membership attaches only once they are met.
+
+*Chosen: 3, the strictest reading the chapters leave consistent.* Reading 1 lets a
+registration finish on a factor the organization forbids. Reading 2 contradicts
+REG-SESS-001 AC4, which lets an invitation's policy hold a created account at
+enrolment. Under 3 nothing of the organization is granted before the acknowledgement,
+and the acknowledgement grants nothing below the policy. An email the invitation bound
+is not held to the lock at registration: it was judged at issue where it is the
+sign-in address (entry 224).
+
+*Tests that pin it.*
+`RegistrationServiceTests.IDN_LIFE_009a_TheInvitingOrganizationsPolicyGovernsTheRegistrationAsync`,
+`RegistrationServiceTests.REG_DOM_001_AC2_AnOpenEmailOutsideTheListIsRefusedAsync`,
+`RegistrationServiceTests.REG_INV_001_AC2_TheAccountHoldsTheInvitationAndNoMembershipAsync`.
+
+*Chapter text that should change.* REG-INV-001 could list which policy fields a
+registration step reads and leave `requiredAssurance` and `credentialRedundancy` to the
+acknowledgement.
+
 
 # Rows for chapter 10
 

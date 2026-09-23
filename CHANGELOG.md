@@ -266,6 +266,16 @@ against the public contract of LIB-API-001.
   templates adds `invitation-link`. `IInvitations` is the same set of operations in
   process.
 
+- A registration can be begun from an invitation link: `POST /register` takes an
+  `invitationToken`, which spends the link. The email the invitation bound is verified
+  by that press and locked, a bound phone is locked, taken at its step only as bound,
+  and cannot be skipped, and the inviting organization's login factors and domain lock
+  govern the steps. The account the terms step creates holds the invitation and no
+  membership. A token that opens nothing answers 422 `identity.invitation.expired`, and
+  a bound email an account already holds answers 422
+  `identity.invitation.identifiermismatch`, so its holder signs in instead.
+  `IRegistration.BeginAsync` takes the token as a new argument.
+
 - Staff mailboxes are provisioned through `IMailServer`, which a deployment registers
   where its staff mail is hosted and which no package ships. A mailbox is owed
   `disabled` from its reservation, `enabled` while its holder is an active member of
