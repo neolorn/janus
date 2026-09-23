@@ -225,6 +225,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `GET /admin/roles` reads every role with its permissions, `POST /admin/roles`
+  creates a role or gives an existing one the permissions stated, and
+  `DELETE /admin/roles/{name}` removes one no grant or derivation names (409
+  `authz.role.inuse` otherwise). All ask `role:manage` in the administrative
+  organization; changes need step-up and a reason, are recorded in the audit trail
+  with the permissions before and after, and need `system:administer` where the role
+  carries it before or after. `IRoles` is the same set of operations in process.
+
 - `POST /admin/grants` writes a stored grant to an account or a group on one
   registered record or, as `resourceType` `organization`, on a whole organization,
   and `DELETE /admin/grants/{id}` revokes one; both ask `grant:manage` in the grant's

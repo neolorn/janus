@@ -6863,6 +6863,123 @@ API-CONV-002 bounds every free-text field at 1 to 1024 characters after trimming
 `authz.grant.expired`, the 422 and the 400, show the 201 body, and give `DELETE` its
 body.
 
+---
+
+## 187. What the role routes carry, and where `role:manage` is asked
+
+**Phase 8 · 2026-09-23 · Tier 2 · 09 section 8, AUTHZ-GRANT-004, 10 section 2.1, API-CONV-001**
+
+*The question.* 09 section 8 gives `GET|POST|DELETE /admin/roles` as "Runtime role
+management" with no body, no answers and no path for one role. 10 section 2.1 gives
+`role:manage` as governing "Creating and changing roles", and 10 section 3 says the
+seeded roles are "editable after bootstrap". No route changes a role that stands, and
+no chapter says where the permission is asked for a role, which belongs to no
+organization.
+
+*The readings and the choices.*
+
+1. `role:manage` is asked in the administrative organization, for reading as well as
+   for changing: a role is the deployment's, as the restriction set is (entry 175).
+   Chosen. Reading the roles under `grant:read` was the other reading; it lets the
+   auditor read what only role managers change, and 10 does not name it.
+2. `POST /admin/roles` carries `{ name, permissions, reason }` and either creates the
+   role (201) or gives the one by that name the permissions stated (204). Chosen, as
+   the only way to change a role within the three methods 09 lists; a `PUT` route would
+   add one 09 does not have.
+3. `DELETE /admin/roles/{name}` names the role in the path, as `DELETE /admin/grants/{id}`
+   does, and carries `{ "reason": "..." }` in its body (entry 183). Chosen.
+4. A name that is not a role name, or a role the deployment does not hold, answers 400
+   `api.request.malformed` naming `name`; a permission neither the library nor the
+   host declares names `permissions` (AUTHZ-MODEL-004), where startup would refuse the
+   same role with `model.role.undeclaredpermission`. Chosen, as entry 182 keeps the
+   startup code for a fault of the deployment.
+
+*Tests that pin it.*
+`RoleEndpointTests.AUTHZ_GRANT_004_AC1_ARoleIsCreatedWithItsPermissionsWithoutARestartAsync`,
+`RoleEndpointTests.AUTHZ_GRANT_004_ARoleIsChangedInPlaceAsync`,
+`RoleEndpointTests.AUTHZ_MODEL_004_ARoleNamesOnlyDeclaredPermissionsAsync`,
+`RoleEndpointTests.AUTHZ_CONCEAL_005_AC1_RoleManageIsAskedInTheAdministrativeOrganizationAsync`,
+`RoleEndpointTests.AUTHZ_GRANT_004_OnlyARoleNothingNamesIsRemovedAsync`.
+
+*Chapter text that should change.* 09 section 8 could give the body of `POST`, its 201
+and 204, the path and body of `DELETE`, the 400s, and say that `role:manage` is asked
+in the administrative organization.
+
+---
+
+## 188. A change to a role is reasoned, audited, and guarded as a grant of what it carries
+
+**Phase 8 · 2026-09-23 · Tier 3 · AUTHZ-GRANT-004, OPS-CFG-007, OPS-CFG-005, IDN-AUD-001, 10 section 5a**
+
+*The question.* 10 section 5a makes `/admin/roles/*` the `grant:manage` step-up
+action. No chapter says whether a change to a role needs a reason or is audited, though
+AUTHZ-GRANT-003 requires both of a grant and OPS-CFG-005 describes grants as audited
+"who, what, from, to, when, why". OPS-CFG-007 says granting or revoking system
+administration requires it; adding `system:administer` to a role, or taking it out of
+one, confers or removes it for every holder at once.
+
+*The readings.*
+
+1. A role change is stepped up and nothing more: no reason, no record, and
+   `role:manage` alone suffices whatever the role carries.
+2. A role change is stepped up and audited, with no reason.
+3. A role change is stepped up, carries a reason of 1 to 1024 characters (400
+   `api.request.malformed` naming `reason` otherwise, as the takedown's does), and is
+   audited as `authz.role.defined` or `authz.role.removed` with the role, its
+   permissions before and after, the reason and the actor; a change to a role that
+   carries `system:administer` before or after the change also needs that permission
+   in the administrative organization.
+
+*Chosen: 3, the strictest reading.* A role change moves what every holder may do in
+one write, which is a grant in all but name, so it keeps what a grant keeps. Reading 1
+lets a role manager make any grant-holder a system administrator by editing their role,
+which is the "one step removed" OPS-CFG-007 exists to prevent, and would let the seeded
+`system-administrator` role be narrowed by someone who does not hold it.
+
+*Tests that pin it.*
+`RoleEndpointTests.OPS_CFG_007_AC1_ARoleCarryingSystemAdministrationNeedsItAsync`,
+`RoleEndpointTests.AUTH_STEP_001_DefiningAndRemovingARoleAreStepUpActionsAsync`,
+`RoleEndpointTests.AUTHZ_MODEL_004_ARoleNamesOnlyDeclaredPermissionsAsync`,
+`RoleAuditTests.AUTHZ_GRANT_004_ADefinitionRecordsWhatTheRoleWasAndBecameAsync`,
+`RoleAuditTests.AUTHZ_GRANT_004_ARemovalRecordsWhatTheRolePermittedAsync`.
+
+*Chapter text that should change.* AUTHZ-GRANT-004 could require the reason and the
+audit record of a role change, and OPS-CFG-007 could name role changes.
+
+---
+
+## 189. A role a grant or a derivation names is not removed, and the refusal has a code of its own
+
+**Phase 8 · 2026-09-23 · Tier 2 · AUTHZ-GRANT-004, AUTHZ-GRANT-003 AC3, AUTHZ-DERIVE-001, 10 section 1.3**
+
+*The question.* 09 section 8 mounts `DELETE /admin/roles` and says nothing of a role in
+use. Every grant row names its role and keeps it after revocation, since AUTHZ-GRANT-003
+AC3 asks that "who granted this and when" stay answerable by query, and the schema
+holds the reference; a derivation confers a role from the host's data. 10 section 1.3
+has no code for a role that cannot be removed.
+
+*The readings.*
+
+1. Removing a role revokes its live grants and deletes every row that names it.
+2. Removing a role that anything names is refused as a malformed request.
+3. Removing a role that a grant (live, expired or revoked) or a declared derivation
+   names is refused with a new code `authz.role.inuse`, 409; the way to take its access
+   away is to change its permissions or revoke its grants.
+
+*Chosen: 3.* Reading 1 destroys the grant history AUTHZ-GRANT-003 keeps. Reading 2 tells
+the caller the request was unreadable when it was read and refused. A removed role a
+derivation still names would make that derivation confer nothing without any error,
+so it is in use as much as one a grant names. The code is new and follows the shape of
+the others in 10 section 1.3.
+
+*Tests that pin it.*
+`RoleEndpointTests.AUTHZ_GRANT_004_OnlyARoleNothingNamesIsRemovedAsync`,
+`GrantStoreTests.AUTHZ_GRANT_004_ARoleAnyGrantConfersIsNamedAsync`.
+
+*Chapter text that should change.* 10 section 1.3 could add
+`authz.role.inuse`: "A grant or a derivation names the role, so it cannot be removed;
+409", and 09 section 8 could list it under `DELETE /admin/roles`.
+
 
 # Rows for chapter 10
 

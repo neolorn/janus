@@ -739,6 +739,13 @@ public static class ErrorCodes
     public static ErrorCode Restricted { get; } = ErrorCode.Parse("authz.restricted");
 
     /// <summary>
+    /// A grant or a derivation still names the role, so removing it would take away
+    /// what they record. Change the permissions it carries instead.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-004 and AUTHZ-GRANT-003 AC3.</remarks>
+    public static ErrorCode RoleInUse { get; } = ErrorCode.Parse("authz.role.inuse");
+
+    /// <summary>
     /// The change would leave an alert destination list empty. Add a destination
     /// before removing the last one.
     /// </summary>

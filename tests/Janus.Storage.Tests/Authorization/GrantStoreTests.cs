@@ -336,6 +336,37 @@ public sealed class GrantStoreTests(DatabaseFixture database)
             TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// AUTHZ-GRANT-004 and AUTHZ-GRANT-003 AC3: a role any grant confers is named, the
+    /// grant revoked or not, and a role no grant confers is not.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_004_ARoleAnyGrantConfersIsNamedAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId account = await _deployment.AccountAsync(Noon);
+        SubjectId administrator = await _deployment.AccountAsync(Noon);
+        GrantId id = await WriteAsync(GrantSubject.Of(account), organization, on: null);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await using var transaction = new UnitOfWork(writing);
+            await transaction.BeginAsync(TestContext.Current.CancellationToken);
+
+            Grant grant = (await Store(writing).FindAsync(id, TestContext.Current.CancellationToken))!;
+
+            _ = grant.Revoke(administrator, Noon.AddDays(1), "Taken back.");
+            await Store(writing).RecordAsync(grant, TestContext.Current.CancellationToken);
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        Assert.True(await Store(reading).NamesAsync(RoleName.Parse("editor"), TestContext.Current.CancellationToken));
+        Assert.False(await Store(reading).NamesAsync(RoleName.Parse("nobody-holds-this"), TestContext.Current.CancellationToken));
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 

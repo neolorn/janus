@@ -51,6 +51,7 @@ public static class IdentityEndpoints
         _ = endpoints.MapConfiguration();
         _ = endpoints.MapRestrictions();
         _ = endpoints.MapGrants();
+        _ = endpoints.MapRoles();
 
         return endpoints;
     }

@@ -64,6 +64,7 @@ public sealed class ErrorCodesTests
         "authz.group.cycle",
         "authz.policy.unregistered",
         "authz.restricted",
+        "authz.role.inuse",
         "config.change.stepuprequired",
         "config.key.protected",
         "config.policy.belowsystem",

@@ -238,6 +238,18 @@ public static class AuditActions
     public static AuditAction RestrictionGranted { get; } = AuditAction.Parse("auth.restriction.granted");
 
     /// <summary>
+    /// A role was created, or the permissions it bundles were changed.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-004 and OPS-CFG-007.</remarks>
+    public static AuditAction RoleDefined { get; } = AuditAction.Parse("authz.role.defined");
+
+    /// <summary>
+    /// A role nothing named was removed.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-004 and OPS-CFG-007.</remarks>
+    public static AuditAction RoleRemoved { get; } = AuditAction.Parse("authz.role.removed");
+
+    /// <summary>
     /// The account's preferred second step was changed.
     /// </summary>
     /// <remarks>Implements AUTH-FACT-007, chapter 10 section 5.</remarks>

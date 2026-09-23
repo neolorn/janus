@@ -103,6 +103,12 @@ internal sealed class GrantStore(StoreContext context, DataConnections connectio
     }
 
     /// <inheritdoc/>
+    public async ValueTask<bool> NamesAsync(RoleName role, CancellationToken cancellationToken) =>
+        await context.Grants
+            .AnyAsync(row => row.Role == role, cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<Grant>> HeldByAsync(
         IReadOnlyList<GrantSubject> holders,
         OrganizationId organization,

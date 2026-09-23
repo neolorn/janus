@@ -20,6 +20,7 @@ using Janus.Authentication.SignIn;
 using Janus.Authorization.Gate;
 using Janus.Authorization.Grants;
 using Janus.Authorization.Model;
+using Janus.Authorization.Roles;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Accounts;
@@ -323,7 +324,9 @@ public static class HostingRegistration
 
         services.AddScoped<Derivations>();
         services.AddScoped<IAccessGate, AccessGate>();
+        services.AddScoped<Janus.Authorization.Gate.AdministrativeScope>();
         services.AddScoped<IGrants, GrantService>();
+        services.AddScoped<IRoles, RoleService>();
         services.AddScoped<IDerivationMaterialiser, DerivationMaterialiser>();
         services.AddScoped<ModelValidation>();
         services.AddScoped<RedirectValidation>();

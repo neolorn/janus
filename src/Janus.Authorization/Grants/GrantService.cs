@@ -14,7 +14,7 @@ namespace Janus.Authorization.Grants;
 /// Stored grants, written and revoked by an administrator.
 /// </summary>
 /// <param name="gate">Whether the caller may manage grants where the grant is scoped.</param>
-/// <param name="administrative">Where system administration is held.</param>
+/// <param name="scope">Whether the caller holds system administration.</param>
 /// <param name="stepUp">What granting and revoking ask of the caller's session.</param>
 /// <param name="grants">Where grants are read and written.</param>
 /// <param name="roles">Where the role a grant names is read.</param>
@@ -31,7 +31,7 @@ namespace Janus.Authorization.Grants;
 /// </remarks>
 internal sealed class GrantService(
     IAccessGate gate,
-    IAdministrativeOrganization administrative,
+    AdministrativeScope scope,
     IStepUpGate stepUp,
     IGrantStore grants,
     IRoleStore roles,
@@ -243,24 +243,12 @@ internal sealed class GrantService(
     private async ValueTask<Error?> AdministeringRefusedAsync(
         AccessContext context,
         Role? role,
-        CancellationToken cancellationToken)
-    {
-        if (role is not null && !role.Allows(Permissions.SystemAdminister))
-        {
-            return null;
-        }
-
-        if (await administrative.FindAsync(cancellationToken).ConfigureAwait(false)
-            is not OrganizationId organization)
-        {
-            return Error.From(ErrorCodes.Denied);
-        }
-
-        return (await gate
-                .RequireAsync(context, Permissions.SystemAdminister, organization, cancellationToken)
-                .ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error);
-    }
+        CancellationToken cancellationToken) =>
+        role is not null && !role.Allows(Permissions.SystemAdminister)
+            ? null
+            : await scope
+                .RefusedAsync(context, Permissions.SystemAdminister, cancellationToken)
+                .ConfigureAwait(false);
 
     private async ValueTask<Result<GrantId>> WrittenAsync(
         Grant grant,

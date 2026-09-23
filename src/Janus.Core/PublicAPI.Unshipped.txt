@@ -614,6 +614,15 @@ Janus.Core.DeclaredPurpose.SubjectCategories.get -> System.Collections.Generic.I
 Janus.Core.DeclaredPurpose.SubjectCategories.init -> void
 Janus.Core.DeclaredPurpose.Types.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.ResourceType>!
 Janus.Core.DeclaredPurpose.Types.init -> void
+Janus.Core.DefinedRole
+Janus.Core.DefinedRole.<Clone>$() -> Janus.Core.DefinedRole!
+Janus.Core.DefinedRole.Deconstruct(out Janus.Core.RoleName Name, out System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions) -> void
+Janus.Core.DefinedRole.DefinedRole(Janus.Core.RoleName Name, System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>! Permissions) -> void
+Janus.Core.DefinedRole.Equals(Janus.Core.DefinedRole? other) -> bool
+Janus.Core.DefinedRole.Name.get -> Janus.Core.RoleName
+Janus.Core.DefinedRole.Name.init -> void
+Janus.Core.DefinedRole.Permissions.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Permission>!
+Janus.Core.DefinedRole.Permissions.init -> void
 Janus.Core.DeletionOrigin
 Janus.Core.DeletionOrigin.OutOfBandRequest = 2 -> Janus.Core.DeletionOrigin
 Janus.Core.DeletionOrigin.Self = 0 -> Janus.Core.DeletionOrigin
@@ -1137,6 +1146,10 @@ Janus.Core.IRestrictionSet.DeleteAsync(Janus.Core.AccessContext! context, Janus.
 Janus.Core.IRestrictionSet.EditAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.Restriction! replacement, string? reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IRestrictionSet.GrantAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, string! name, string! keyValue, int credit, string? reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IRestrictionSet.ReadAsync(Janus.Core.AccessContext! context, string! name, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.Restriction!>>
+Janus.Core.IRoles
+Janus.Core.IRoles.AllAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.DefinedRole!>!>>
+Janus.Core.IRoles.DefineAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.DefinedRole! role, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<bool>>
+Janus.Core.IRoles.RemoveAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.RoleName role, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.ISecretSource
 Janus.Core.ISecretSource.ReadFingerprintKeyAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.ReadOnlyMemory<byte>>
 Janus.Core.ISecretSource.ReadKeyEncryptionKeysAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.KeyEncryptionKeys!>
@@ -2510,6 +2523,9 @@ override Janus.Core.CredentialSuspended.ToString() -> string!
 override Janus.Core.DeclaredPurpose.Equals(object? obj) -> bool
 override Janus.Core.DeclaredPurpose.GetHashCode() -> int
 override Janus.Core.DeclaredPurpose.ToString() -> string!
+override Janus.Core.DefinedRole.Equals(object? obj) -> bool
+override Janus.Core.DefinedRole.GetHashCode() -> int
+override Janus.Core.DefinedRole.ToString() -> string!
 override Janus.Core.DerivationDeclaration.Equals(object? obj) -> bool
 override Janus.Core.DerivationDeclaration.GetHashCode() -> int
 override Janus.Core.DerivationDeclaration.ToString() -> string!
@@ -2953,6 +2969,8 @@ static Janus.Core.AuditActions.RequestRefused.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RequestSubmitted.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RestrictionEdited.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RestrictionGranted.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.RoleDefined.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.RoleRemoved.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.SecondStepPreferred.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.SessionPresented.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.TakedownExecuted.get -> Janus.Core.AuditAction
@@ -3171,6 +3189,8 @@ static Janus.Core.CredentialSuspended.operator ==(Janus.Core.CredentialSuspended
 static Janus.Core.DeclaredProcessing.Of(Janus.Core.AuthorizationDeclaration! declaration) -> Janus.Core.DeclaredProcessing!
 static Janus.Core.DeclaredPurpose.operator !=(Janus.Core.DeclaredPurpose? left, Janus.Core.DeclaredPurpose? right) -> bool
 static Janus.Core.DeclaredPurpose.operator ==(Janus.Core.DeclaredPurpose? left, Janus.Core.DeclaredPurpose? right) -> bool
+static Janus.Core.DefinedRole.operator !=(Janus.Core.DefinedRole? left, Janus.Core.DefinedRole? right) -> bool
+static Janus.Core.DefinedRole.operator ==(Janus.Core.DefinedRole? left, Janus.Core.DefinedRole? right) -> bool
 static Janus.Core.DerivationDeclaration.operator !=(Janus.Core.DerivationDeclaration? left, Janus.Core.DerivationDeclaration? right) -> bool
 static Janus.Core.DerivationDeclaration.operator ==(Janus.Core.DerivationDeclaration? left, Janus.Core.DerivationDeclaration? right) -> bool
 static Janus.Core.DerivationRefresh.operator !=(Janus.Core.DerivationRefresh? left, Janus.Core.DerivationRefresh? right) -> bool
@@ -3303,6 +3323,7 @@ static Janus.Core.ErrorCodes.RequestReceivedFuture.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.Restricted.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RestrictionExceeded.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RestrictionReasonRequired.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.RoleInUse.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ScreeningUnavailable.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.SessionCsrfInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.SessionExpired.get -> Janus.Core.ErrorCode

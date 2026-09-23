@@ -33,6 +33,8 @@ public sealed class AuditActionsTests
         "auth.restriction.granted",
         "auth.session.presented",
         "authz.access.denied",
+        "authz.role.defined",
+        "authz.role.removed",
         "identity.account.deactivated",
         "identity.account.reactivated",
         "identity.credential.labelled",
