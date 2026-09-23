@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- The library's database objects no longer carry the product's name. The schema is
+  `identity`, the case-insensitive collation `identity_ci`, the roles
+  `identity_migrate`, `identity_app` and `identity_maintenance`, and the migrations
+  history table `__migrations_history`. The migrations were rewritten rather than
+  extended, so a database created by an earlier build of them is dropped and created
+  again, not upgraded.
+
 - The public types a host names are called for what they are, and only the namespaces,
   the package identifiers and `AddJanus` carry the product's name. `AddJanus` is on
   `HostingRegistration`; the endpoints mount with `MapIdentityEndpoints` and
@@ -883,9 +890,9 @@ against the public contract of LIB-API-001.
   exactly one organization. Requesting its deletion is refused with
   `identity.organization.protected`; every other organization takes the window as
   before.
-- The three database roles the deployment attaches credentials to. `janus_migrate`
-  owns the schema and is the only role that alters it, `janus_app` reads and writes
-  rows, and `janus_maintenance` executes the two audit partition functions and reads
+- The three database roles the deployment attaches credentials to. `identity_migrate`
+  owns the schema and is the only role that alters it, `identity_app` reads and writes
+  rows, and `identity_maintenance` executes the two audit partition functions and reads
   and updates the wrapped keys. The migration creates the two runtime roles where they
   are absent and writes every grant, so an audit row cannot be updated or deleted by
   the application at all, and no credential that alters schema reaches the running

@@ -13,7 +13,7 @@ internal sealed partial class AddConsents : Migration
     {
         migrationBuilder.CreateTable(
             name: "consents",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 subject = table.Column<Guid>(type: "uuid", nullable: false),
@@ -34,7 +34,7 @@ internal sealed partial class AddConsents : Migration
                 table.ForeignKey(
                     name: "fk_consents_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
@@ -42,7 +42,7 @@ internal sealed partial class AddConsents : Migration
 
         migrationBuilder.CreateTable(
             name: "objections",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 subject = table.Column<Guid>(type: "uuid", nullable: false),
@@ -60,7 +60,7 @@ internal sealed partial class AddConsents : Migration
                 table.ForeignKey(
                     name: "fk_objections_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
@@ -68,7 +68,7 @@ internal sealed partial class AddConsents : Migration
 
         migrationBuilder.CreateIndex(
             name: "ix_consents_live",
-            schema: "janus",
+            schema: "identity",
             table: "consents",
             column: "notice_version",
             filter: "withdrawn_at IS NULL AND superseded_at IS NULL");
@@ -79,10 +79,10 @@ internal sealed partial class AddConsents : Migration
     {
         migrationBuilder.DropTable(
             name: "consents",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "objections",
-            schema: "janus");
+            schema: "identity");
     }
 }

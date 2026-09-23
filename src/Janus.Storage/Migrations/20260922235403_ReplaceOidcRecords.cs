@@ -13,15 +13,15 @@ internal sealed partial class ReplaceOidcRecords : Migration
     {
         migrationBuilder.DropTable(
             name: "oidc_codes",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "oidc_refresh_tokens",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.CreateTable(
             name: "oidc_authorizations",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -40,14 +40,14 @@ internal sealed partial class ReplaceOidcRecords : Migration
                 table.ForeignKey(
                     name: "fk_oidc_authorizations_application_id",
                     column: x => x.application_id,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "oidc_clients",
                     principalColumn: "client_id",
                     onDelete: ReferentialAction.Cascade);
                 table.ForeignKey(
                     name: "fk_oidc_authorizations_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Cascade);
@@ -55,7 +55,7 @@ internal sealed partial class ReplaceOidcRecords : Migration
 
         migrationBuilder.CreateTable(
             name: "oidc_scopes",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -71,7 +71,7 @@ internal sealed partial class ReplaceOidcRecords : Migration
 
         migrationBuilder.CreateTable(
             name: "oidc_tokens",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -94,21 +94,21 @@ internal sealed partial class ReplaceOidcRecords : Migration
                 table.ForeignKey(
                     name: "fk_oidc_tokens_application_id",
                     column: x => x.application_id,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "oidc_clients",
                     principalColumn: "client_id",
                     onDelete: ReferentialAction.Cascade);
                 table.ForeignKey(
                     name: "fk_oidc_tokens_authorization_id",
                     column: x => x.authorization_id,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "oidc_authorizations",
                     principalColumn: "id",
                     onDelete: ReferentialAction.Cascade);
                 table.ForeignKey(
                     name: "fk_oidc_tokens_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Cascade);
@@ -116,56 +116,56 @@ internal sealed partial class ReplaceOidcRecords : Migration
 
         migrationBuilder.CreateIndex(
             name: "ix_oidc_authorizations_application_id",
-            schema: "janus",
+            schema: "identity",
             table: "oidc_authorizations",
             column: "application_id");
 
         migrationBuilder.CreateIndex(
             name: "ix_oidc_authorizations_created_at",
-            schema: "janus",
+            schema: "identity",
             table: "oidc_authorizations",
             column: "created_at");
 
         migrationBuilder.CreateIndex(
             name: "ix_oidc_authorizations_subject",
-            schema: "janus",
+            schema: "identity",
             table: "oidc_authorizations",
             column: "subject");
 
         migrationBuilder.CreateIndex(
             name: "ux_oidc_scopes_name",
-            schema: "janus",
+            schema: "identity",
             table: "oidc_scopes",
             column: "name",
             unique: true);
 
         migrationBuilder.CreateIndex(
             name: "ix_oidc_tokens_application_id",
-            schema: "janus",
+            schema: "identity",
             table: "oidc_tokens",
             column: "application_id");
 
         migrationBuilder.CreateIndex(
             name: "ix_oidc_tokens_authorization_id",
-            schema: "janus",
+            schema: "identity",
             table: "oidc_tokens",
             column: "authorization_id");
 
         migrationBuilder.CreateIndex(
             name: "ix_oidc_tokens_expires_at",
-            schema: "janus",
+            schema: "identity",
             table: "oidc_tokens",
             column: "expires_at");
 
         migrationBuilder.CreateIndex(
             name: "ix_oidc_tokens_subject",
-            schema: "janus",
+            schema: "identity",
             table: "oidc_tokens",
             column: "subject");
 
         migrationBuilder.CreateIndex(
             name: "ux_oidc_tokens_reference_id",
-            schema: "janus",
+            schema: "identity",
             table: "oidc_tokens",
             column: "reference_id",
             unique: true);
@@ -176,19 +176,19 @@ internal sealed partial class ReplaceOidcRecords : Migration
     {
         migrationBuilder.DropTable(
             name: "oidc_scopes",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "oidc_tokens",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "oidc_authorizations",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.CreateTable(
             name: "oidc_codes",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 fingerprint = table.Column<byte[]>(type: "bytea", nullable: false),
@@ -212,21 +212,21 @@ internal sealed partial class ReplaceOidcRecords : Migration
                 table.ForeignKey(
                     name: "fk_oidc_codes_client_id",
                     column: x => x.client_id,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "oidc_clients",
                     principalColumn: "client_id",
                     onDelete: ReferentialAction.Cascade);
                 table.ForeignKey(
                     name: "fk_oidc_codes_session",
                     column: x => x.session,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "sessions",
                     principalColumn: "id",
                     onDelete: ReferentialAction.Cascade);
                 table.ForeignKey(
                     name: "fk_oidc_codes_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Cascade);
@@ -234,7 +234,7 @@ internal sealed partial class ReplaceOidcRecords : Migration
 
         migrationBuilder.CreateTable(
             name: "oidc_refresh_tokens",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 fingerprint = table.Column<byte[]>(type: "bytea", nullable: false),
@@ -254,21 +254,21 @@ internal sealed partial class ReplaceOidcRecords : Migration
                 table.ForeignKey(
                     name: "fk_oidc_refresh_tokens_client_id",
                     column: x => x.client_id,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "oidc_clients",
                     principalColumn: "client_id",
                     onDelete: ReferentialAction.Cascade);
                 table.ForeignKey(
                     name: "fk_oidc_refresh_tokens_session",
                     column: x => x.session,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "sessions",
                     principalColumn: "id",
                     onDelete: ReferentialAction.Cascade);
                 table.ForeignKey(
                     name: "fk_oidc_refresh_tokens_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Cascade);
@@ -276,55 +276,55 @@ internal sealed partial class ReplaceOidcRecords : Migration
 
         migrationBuilder.CreateIndex(
             name: "ix_oidc_codes_client_id",
-            schema: "janus",
+            schema: "identity",
             table: "oidc_codes",
             column: "client_id");
 
         migrationBuilder.CreateIndex(
             name: "ix_oidc_codes_expires_at",
-            schema: "janus",
+            schema: "identity",
             table: "oidc_codes",
             column: "expires_at");
 
         migrationBuilder.CreateIndex(
             name: "ix_oidc_codes_session",
-            schema: "janus",
+            schema: "identity",
             table: "oidc_codes",
             column: "session");
 
         migrationBuilder.CreateIndex(
             name: "ix_oidc_codes_subject",
-            schema: "janus",
+            schema: "identity",
             table: "oidc_codes",
             column: "subject");
 
         migrationBuilder.CreateIndex(
             name: "ix_oidc_refresh_tokens_client_id",
-            schema: "janus",
+            schema: "identity",
             table: "oidc_refresh_tokens",
             column: "client_id");
 
         migrationBuilder.CreateIndex(
             name: "ix_oidc_refresh_tokens_expires_at",
-            schema: "janus",
+            schema: "identity",
             table: "oidc_refresh_tokens",
             column: "expires_at");
 
         migrationBuilder.CreateIndex(
             name: "ix_oidc_refresh_tokens_family",
-            schema: "janus",
+            schema: "identity",
             table: "oidc_refresh_tokens",
             column: "family");
 
         migrationBuilder.CreateIndex(
             name: "ix_oidc_refresh_tokens_session",
-            schema: "janus",
+            schema: "identity",
             table: "oidc_refresh_tokens",
             column: "session");
 
         migrationBuilder.CreateIndex(
             name: "ix_oidc_refresh_tokens_subject",
-            schema: "janus",
+            schema: "identity",
             table: "oidc_refresh_tokens",
             column: "subject");
     }

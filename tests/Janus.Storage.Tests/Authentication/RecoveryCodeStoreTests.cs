@@ -46,7 +46,7 @@ public sealed class RecoveryCodeStoreTests(DatabaseFixture database)
             """
             SELECT column_name
             FROM information_schema.columns
-            WHERE table_schema = 'janus' AND table_name = 'recovery_codes'
+            WHERE table_schema = 'identity' AND table_name = 'recovery_codes'
             """);
 
         Assert.Equal(["hash", "ordinal", "subject", "used_at"], columns.Order());
@@ -67,7 +67,7 @@ public sealed class RecoveryCodeStoreTests(DatabaseFixture database)
         await using NpgsqlConnection connection = await database.OpenAsync();
 
         IEnumerable<string> stored = await connection.QueryAsync<string>(
-            "SELECT hash FROM janus.recovery_codes WHERE subject = @subject",
+            "SELECT hash FROM identity.recovery_codes WHERE subject = @subject",
             new { subject = subject.Value });
 
         foreach (string hash in stored)

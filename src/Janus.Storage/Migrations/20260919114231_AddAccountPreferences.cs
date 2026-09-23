@@ -13,7 +13,7 @@ internal sealed partial class AddAccountPreferences : Migration
     {
         migrationBuilder.CreateTable(
             name: "account_preferences",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 subject = table.Column<Guid>(type: "uuid", nullable: false),
@@ -27,7 +27,7 @@ internal sealed partial class AddAccountPreferences : Migration
                 table.ForeignKey(
                     name: "fk_account_preferences_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
@@ -39,6 +39,6 @@ internal sealed partial class AddAccountPreferences : Migration
     {
         migrationBuilder.DropTable(
             name: "account_preferences",
-            schema: "janus");
+            schema: "identity");
     }
 }

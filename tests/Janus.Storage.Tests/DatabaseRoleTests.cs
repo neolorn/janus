@@ -35,17 +35,17 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
     [Fact]
     public async Task PRIV_RET_002_AC1_TheApplicationCannotUpdateOrDeleteAnAuditRowAsync()
     {
-        await using NpgsqlConnection connection = await AsAsync("janus_app");
+        await using NpgsqlConnection connection = await AsAsync("identity_app");
 
         await Assert.ThrowsAsync<PostgresException>(async () =>
-            await connection.ExecuteAsync("UPDATE janus.audit_records SET action = 'a.b'"));
+            await connection.ExecuteAsync("UPDATE identity.audit_records SET action = 'a.b'"));
 
         PostgresException refused = await Assert.ThrowsAsync<PostgresException>(async () =>
-            await connection.ExecuteAsync("DELETE FROM janus.audit_records"));
+            await connection.ExecuteAsync("DELETE FROM identity.audit_records"));
 
         Assert.Equal(InsufficientPrivilege, refused.SqlState);
         Assert.Equal(0, await connection.ExecuteScalarAsync<int>(
-            "SELECT count(*)::int FROM janus.audit_records"));
+            "SELECT count(*)::int FROM identity.audit_records"));
     }
 
     /// <summary>
@@ -60,19 +60,19 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
 
         await connection.ExecuteAsync(
             """
-            CREATE TABLE janus.audit_records_routine_2020_01
-                PARTITION OF janus.audit_records_routine
+            CREATE TABLE identity.audit_records_routine_2020_01
+                PARTITION OF identity.audit_records_routine
                 FOR VALUES FROM ('2020-01-01 00:00:00+00') TO ('2020-02-01 00:00:00+00');
             """);
 
         int standing = await PartitionsAsync(connection);
         int dropped = await connection.ExecuteScalarAsync<int>(
-            "SELECT janus.audit_drop_expired_partitions(" + Retentions + ")");
+            "SELECT identity.audit_drop_expired_partitions(" + Retentions + ")");
 
         Assert.Equal(1, dropped);
         Assert.Equal(standing - 1, await PartitionsAsync(connection));
         Assert.Null(await connection.ExecuteScalarAsync<string>(
-            "SELECT to_regclass('janus.audit_records_routine_2020_01')::text"));
+            "SELECT to_regclass('identity.audit_records_routine_2020_01')::text"));
     }
 
     /// <summary>
@@ -82,17 +82,17 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
     [Fact]
     public async Task PRIV_RET_002_AC5_OnlyTheMaintenanceRoleExecutesTheDropAsync()
     {
-        await using (NpgsqlConnection maintenance = await AsAsync("janus_maintenance"))
+        await using (NpgsqlConnection maintenance = await AsAsync("identity_maintenance"))
         {
             Assert.Equal(0, await maintenance.ExecuteScalarAsync<int>(
-                "SELECT janus.audit_drop_expired_partitions(" + Retentions + ")"));
+                "SELECT identity.audit_drop_expired_partitions(" + Retentions + ")"));
         }
 
-        await using NpgsqlConnection application = await AsAsync("janus_app");
+        await using NpgsqlConnection application = await AsAsync("identity_app");
 
         PostgresException refused = await Assert.ThrowsAsync<PostgresException>(async () =>
             await application.ExecuteScalarAsync<int>(
-                "SELECT janus.audit_drop_expired_partitions(" + Retentions + ")"));
+                "SELECT identity.audit_drop_expired_partitions(" + Retentions + ")"));
 
         Assert.Equal(InsufficientPrivilege, refused.SqlState);
     }
@@ -104,16 +104,16 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
     [Fact]
     public async Task OPS_MIG_003a_AC1_TheMaintenanceRoleAltersNoSchemaAsync()
     {
-        await using NpgsqlConnection connection = await AsAsync("janus_maintenance");
+        await using NpgsqlConnection connection = await AsAsync("identity_maintenance");
 
         await Assert.ThrowsAsync<PostgresException>(async () =>
-            await connection.ExecuteAsync("DROP TABLE janus.accounts"));
+            await connection.ExecuteAsync("DROP TABLE identity.accounts"));
 
         await Assert.ThrowsAsync<PostgresException>(async () =>
-            await connection.ExecuteAsync("ALTER TABLE janus.accounts ADD COLUMN spare integer"));
+            await connection.ExecuteAsync("ALTER TABLE identity.accounts ADD COLUMN spare integer"));
 
         PostgresException refused = await Assert.ThrowsAsync<PostgresException>(async () =>
-            await connection.ExecuteAsync("CREATE TABLE janus.spare (id integer)"));
+            await connection.ExecuteAsync("CREATE TABLE identity.spare (id integer)"));
 
         Assert.Equal(InsufficientPrivilege, refused.SqlState);
     }
@@ -138,7 +138,7 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
                 SELECT proowner::regrole::text, prosecdef, proconfig
                 FROM pg_proc
                 JOIN pg_namespace ON pg_namespace.oid = pg_proc.pronamespace
-                WHERE nspname = 'janus' AND proname = @name
+                WHERE nspname = 'identity' AND proname = @name
                 """,
                 new { name });
 
@@ -156,10 +156,10 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
     [Fact]
     public async Task OPS_MIG_003a_AC3_TheApplicationExecutesNoMaintenanceFunctionAsync()
     {
-        await using NpgsqlConnection connection = await AsAsync("janus_app");
+        await using NpgsqlConnection connection = await AsAsync("identity_app");
 
         PostgresException refused = await Assert.ThrowsAsync<PostgresException>(async () =>
-            await connection.ExecuteScalarAsync<int>("SELECT janus.audit_ensure_partitions()"));
+            await connection.ExecuteScalarAsync<int>("SELECT identity.audit_ensure_partitions()"));
 
         Assert.Equal(InsufficientPrivilege, refused.SqlState);
     }
@@ -171,15 +171,15 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
     [Fact]
     public async Task OPS_MIG_003a_AC4_TheMaintenanceRoleReachesTheKeysAndNoOtherTableAsync()
     {
-        await using NpgsqlConnection connection = await AsAsync("janus_maintenance");
+        await using NpgsqlConnection connection = await AsAsync("identity_maintenance");
 
         Assert.Equal(0, await connection.ExecuteScalarAsync<int>(
-            "SELECT count(*)::int FROM janus.subject_keys"));
+            "SELECT count(*)::int FROM identity.subject_keys"));
         Assert.Equal(0, await connection.ExecuteAsync(
-            "UPDATE janus.subject_keys SET key_version = key_version"));
+            "UPDATE identity.subject_keys SET key_version = key_version"));
 
         PostgresException refused = await Assert.ThrowsAsync<PostgresException>(async () =>
-            await connection.ExecuteScalarAsync<int>("SELECT count(*)::int FROM janus.accounts"));
+            await connection.ExecuteScalarAsync<int>("SELECT count(*)::int FROM identity.accounts"));
 
         Assert.Equal(InsufficientPrivilege, refused.SqlState);
     }
@@ -199,23 +199,23 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
             SELECT 'SCHEMA ' || nspname || ' ' || right_held
             FROM pg_namespace,
                  unnest(ARRAY['USAGE', 'CREATE']) AS right_held
-            WHERE nspname = 'janus'
-              AND has_schema_privilege('janus_maintenance', oid, right_held)
+            WHERE nspname = 'identity'
+              AND has_schema_privilege('identity_maintenance', oid, right_held)
             UNION ALL
-            SELECT 'TABLE janus.' || relname || ' ' || right_held
+            SELECT 'TABLE identity.' || relname || ' ' || right_held
             FROM pg_class
             JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace,
                  unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE']) AS right_held
-            WHERE nspname = 'janus'
+            WHERE nspname = 'identity'
               AND relkind IN ('r', 'p')
-              AND has_table_privilege('janus_maintenance', pg_class.oid, right_held)
+              AND has_table_privilege('identity_maintenance', pg_class.oid, right_held)
             UNION ALL
-            SELECT 'FUNCTION janus.' || proname || '('
+            SELECT 'FUNCTION identity.' || proname || '('
                    || pg_get_function_identity_arguments(pg_proc.oid) || ') EXECUTE'
             FROM pg_proc
             JOIN pg_namespace ON pg_namespace.oid = pg_proc.pronamespace
-            WHERE nspname = 'janus'
-              AND has_function_privilege('janus_maintenance', pg_proc.oid, 'EXECUTE')
+            WHERE nspname = 'identity'
+              AND has_function_privilege('identity_maintenance', pg_proc.oid, 'EXECUTE')
             ORDER BY 1
             """);
 
@@ -228,13 +228,13 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
     [Fact]
     public async Task OPS_MIG_003_AC1_TheApplicationAltersNoSchemaAsync()
     {
-        await using NpgsqlConnection connection = await AsAsync("janus_app");
+        await using NpgsqlConnection connection = await AsAsync("identity_app");
 
         await Assert.ThrowsAsync<PostgresException>(async () =>
-            await connection.ExecuteAsync("ALTER TABLE janus.accounts ADD COLUMN spare integer"));
+            await connection.ExecuteAsync("ALTER TABLE identity.accounts ADD COLUMN spare integer"));
 
         PostgresException refused = await Assert.ThrowsAsync<PostgresException>(async () =>
-            await connection.ExecuteAsync("DROP TABLE janus.accounts"));
+            await connection.ExecuteAsync("DROP TABLE identity.accounts"));
 
         Assert.Equal(InsufficientPrivilege, refused.SqlState);
     }
@@ -250,11 +250,11 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
     public async Task AuditDropExpiredPartitions_ARetentionBelowItsFloor_IsRefusedAsync(
         string arguments)
     {
-        await using NpgsqlConnection connection = await AsAsync("janus_maintenance");
+        await using NpgsqlConnection connection = await AsAsync("identity_maintenance");
 
         await Assert.ThrowsAsync<PostgresException>(async () =>
             await connection.ExecuteScalarAsync<int>(
-                "SELECT janus.audit_drop_expired_partitions(" + arguments + ")"));
+                "SELECT identity.audit_drop_expired_partitions(" + arguments + ")"));
     }
 
     private static async Task<int> PartitionsAsync(NpgsqlConnection connection) =>

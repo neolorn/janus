@@ -19,7 +19,7 @@ internal sealed partial class AddAuditRecordCorrelation : Migration
         // its own index.
         migrationBuilder.Sql(
             """
-            CREATE INDEX ix_audit_records_id ON janus.audit_records (id);
+            CREATE INDEX ix_audit_records_id ON identity.audit_records (id);
             """);
     }
 
@@ -28,6 +28,6 @@ internal sealed partial class AddAuditRecordCorrelation : Migration
     {
         ArgumentNullException.ThrowIfNull(migrationBuilder);
 
-        migrationBuilder.Sql("DROP INDEX janus.ix_audit_records_id;");
+        migrationBuilder.Sql("DROP INDEX identity.ix_audit_records_id;");
     }
 }

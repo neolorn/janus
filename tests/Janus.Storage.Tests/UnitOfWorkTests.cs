@@ -23,10 +23,10 @@ public sealed class UnitOfWorkTests(DatabaseFixture database) : IClassFixture<Da
     private const int WrappedKeyLength = 40;
 
     private const string CountAccounts =
-        "SELECT count(*) FROM janus.accounts WHERE subject = @subject";
+        "SELECT count(*) FROM identity.accounts WHERE subject = @subject";
 
     private const string CountKeys =
-        "SELECT count(*) FROM janus.subject_keys WHERE subject = @subject";
+        "SELECT count(*) FROM identity.subject_keys WHERE subject = @subject";
 
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
 

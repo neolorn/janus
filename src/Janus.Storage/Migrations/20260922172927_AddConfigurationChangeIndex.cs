@@ -17,7 +17,7 @@ internal sealed partial class AddConfigurationChangeIndex : Migration
         migrationBuilder.Sql(
             """
             CREATE INDEX ix_audit_records_configuration_key
-                ON janus.audit_records USING gin (details jsonb_path_ops)
+                ON identity.audit_records USING gin (details jsonb_path_ops)
                 WHERE action = 'ops.configuration.changed';
             """);
 
@@ -27,14 +27,14 @@ internal sealed partial class AddConfigurationChangeIndex : Migration
         migrationBuilder.Sql(
             """
             CREATE INDEX ix_audit_records_acting_subject
-                ON janus.audit_records (acting_subject, occurred_at);
+                ON identity.audit_records (acting_subject, occurred_at);
             """);
     }
 
     /// <inheritdoc />
     protected override void Down(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.Sql("DROP INDEX janus.ix_audit_records_acting_subject;");
-        migrationBuilder.Sql("DROP INDEX janus.ix_audit_records_configuration_key;");
+        migrationBuilder.Sql("DROP INDEX identity.ix_audit_records_acting_subject;");
+        migrationBuilder.Sql("DROP INDEX identity.ix_audit_records_configuration_key;");
     }
 }

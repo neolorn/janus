@@ -77,7 +77,7 @@ public sealed class HostFixture : IAsyncLifetime
             // reads them.
             await connection.ExecuteAsync(
                 """
-                INSERT INTO janus.settings (key, value)
+                INSERT INTO identity.settings (key, value)
                 VALUES
                     ('notification.languages', '["en"]'),
                     ('retention.identity', 'P7Y'),

@@ -13,7 +13,7 @@ internal sealed partial class AddPrivacyRequests : Migration
     {
         migrationBuilder.CreateTable(
             name: "privacy_requests",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -41,7 +41,7 @@ internal sealed partial class AddPrivacyRequests : Migration
                 table.ForeignKey(
                     name: "fk_privacy_requests_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
@@ -49,14 +49,14 @@ internal sealed partial class AddPrivacyRequests : Migration
 
         migrationBuilder.CreateIndex(
             name: "ix_privacy_requests_open",
-            schema: "janus",
+            schema: "identity",
             table: "privacy_requests",
             column: "warn_at",
             filter: "status = 'open'");
 
         migrationBuilder.CreateIndex(
             name: "ix_privacy_requests_subject",
-            schema: "janus",
+            schema: "identity",
             table: "privacy_requests",
             column: "subject");
     }
@@ -66,6 +66,6 @@ internal sealed partial class AddPrivacyRequests : Migration
     {
         migrationBuilder.DropTable(
             name: "privacy_requests",
-            schema: "janus");
+            schema: "identity");
     }
 }

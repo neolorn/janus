@@ -12,7 +12,7 @@ internal sealed partial class AddPreferredSecondStep : Migration
     {
         migrationBuilder.AddColumn<bool>(
             name: "is_preferred",
-            schema: "janus",
+            schema: "identity",
             table: "authenticators",
             type: "boolean",
             nullable: false,
@@ -20,7 +20,7 @@ internal sealed partial class AddPreferredSecondStep : Migration
 
         migrationBuilder.CreateIndex(
             name: "ux_authenticators_preferred",
-            schema: "janus",
+            schema: "identity",
             table: "authenticators",
             column: "subject",
             unique: true,
@@ -32,12 +32,12 @@ internal sealed partial class AddPreferredSecondStep : Migration
     {
         migrationBuilder.DropIndex(
             name: "ux_authenticators_preferred",
-            schema: "janus",
+            schema: "identity",
             table: "authenticators");
 
         migrationBuilder.DropColumn(
             name: "is_preferred",
-            schema: "janus",
+            schema: "identity",
             table: "authenticators");
     }
 }

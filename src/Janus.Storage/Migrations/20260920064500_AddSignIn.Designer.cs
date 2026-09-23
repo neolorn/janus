@@ -20,8 +20,8 @@ partial class AddSignIn
     {
 #pragma warning disable 612, 618
         modelBuilder
-            .HasDefaultSchema("janus")
-            .HasAnnotation("Npgsql:CollationDefinition:public.janus_ci", "und-u-ks-level2,und-u-ks-level2,icu,False")
+            .HasDefaultSchema("identity")
+            .HasAnnotation("Npgsql:CollationDefinition:public.identity_ci", "und-u-ks-level2,und-u-ks-level2,icu,False")
             .HasAnnotation("ProductVersion", "10.0.4")
             .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
@@ -41,7 +41,7 @@ partial class AddSignIn
                 b.HasKey("Key")
                     .HasName("pk_alerts");
 
-                b.ToTable("alerts", "janus");
+                b.ToTable("alerts", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Factors.AuthenticatorRecord", b =>
@@ -143,7 +143,7 @@ partial class AddSignIn
                     .IsUnique()
                     .HasDatabaseName("ux_authenticators_label");
 
-                b.ToTable("authenticators", "janus", t =>
+                b.ToTable("authenticators", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_authenticators_factor", "factor IN ('apple', 'breakGlass', 'emailCode', 'emailLink', 'google', 'passkey', 'password', 'phoneCode', 'phoneLink', 'recoveryCodes', 'securityKey', 'totp')");
 
@@ -212,7 +212,7 @@ partial class AddSignIn
                     .IsUnique()
                     .HasDatabaseName("ux_devices_token_fingerprint");
 
-                b.ToTable("devices", "janus", t =>
+                b.ToTable("devices", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_devices_kind", "kind IN ('remembered', 'trusted')");
                     });
@@ -240,7 +240,7 @@ partial class AddSignIn
                 b.HasKey("Subject", "Ordinal")
                     .HasName("pk_recovery_codes");
 
-                b.ToTable("recovery_codes", "janus");
+                b.ToTable("recovery_codes", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Factors.RecoveryCodeSetRecord", b =>
@@ -268,7 +268,7 @@ partial class AddSignIn
                 b.HasKey("Subject")
                     .HasName("pk_recovery_code_sets");
 
-                b.ToTable("recovery_code_sets", "janus");
+                b.ToTable("recovery_code_sets", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Identifiers.PendingVerificationRecord", b =>
@@ -335,7 +335,7 @@ partial class AddSignIn
                 b.HasIndex("Subject")
                     .HasDatabaseName("ix_identifier_verifications_subject");
 
-                b.ToTable("identifier_verifications", "janus", t =>
+                b.ToTable("identifier_verifications", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_identifier_verifications_link", "link IS NULL OR octet_length(link) = 32");
 
@@ -367,7 +367,7 @@ partial class AddSignIn
                 b.HasKey("Subject")
                     .HasName("pk_passwords");
 
-                b.ToTable("passwords", "janus");
+                b.ToTable("passwords", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Policies.PolicyRaiseRecord", b =>
@@ -408,7 +408,7 @@ partial class AddSignIn
                     .HasDatabaseName("ux_policy_raises_organization_field")
                     .HasFilter("organization IS NOT NULL");
 
-                b.ToTable("policy_raises", "janus", t =>
+                b.ToTable("policy_raises", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_policy_raises_field", "field IN ('credentialRedundancy', 'requiredAssurance')");
                     });
@@ -431,7 +431,7 @@ partial class AddSignIn
                 b.HasIndex("Session")
                     .HasDatabaseName("ix_registration_links_session");
 
-                b.ToTable("registration_links", "janus");
+                b.ToTable("registration_links", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Registration.RegistrationSessionRecord", b =>
@@ -468,7 +468,7 @@ partial class AddSignIn
                 b.HasIndex("ExpiresAt")
                     .HasDatabaseName("ix_registration_sessions_expires_at");
 
-                b.ToTable("registration_sessions", "janus");
+                b.ToTable("registration_sessions", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.BalanceReadingRecord", b =>
@@ -485,7 +485,7 @@ partial class AddSignIn
                 b.HasKey("ReadAt")
                     .HasName("pk_sms_balance_readings");
 
-                b.ToTable("sms_balance_readings", "janus");
+                b.ToTable("sms_balance_readings", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.CallbackRecord", b =>
@@ -515,7 +515,7 @@ partial class AddSignIn
                 b.HasIndex("Source", "At")
                     .HasDatabaseName("ix_callbacks_source_at");
 
-                b.ToTable("callbacks", "janus");
+                b.ToTable("callbacks", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.NoticeRecord", b =>
@@ -541,7 +541,7 @@ partial class AddSignIn
                 b.HasIndex("Destination", "At")
                     .HasDatabaseName("ix_nonexistence_notices_destination_at");
 
-                b.ToTable("nonexistence_notices", "janus");
+                b.ToTable("nonexistence_notices", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.RegistrationSourceRecord", b =>
@@ -567,7 +567,7 @@ partial class AddSignIn
                 b.HasIndex("Source", "At")
                     .HasDatabaseName("ix_registration_sources_source_at");
 
-                b.ToTable("registration_sources", "janus");
+                b.ToTable("registration_sources", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.SendCounterRecord", b =>
@@ -592,7 +592,7 @@ partial class AddSignIn
                 b.HasIndex("SettlesAt")
                     .HasDatabaseName("ix_send_counters_settles_at");
 
-                b.ToTable("send_counters", "janus");
+                b.ToTable("send_counters", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.SendGrantRecord", b =>
@@ -609,7 +609,7 @@ partial class AddSignIn
                 b.HasKey("Key")
                     .HasName("pk_send_grants");
 
-                b.ToTable("send_grants", "janus", t =>
+                b.ToTable("send_grants", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_send_grants_credit", "credit > 0");
                     });
@@ -641,7 +641,7 @@ partial class AddSignIn
                 b.HasIndex("SettlesAt")
                     .HasDatabaseName("ix_sends_settles_at");
 
-                b.ToTable("sends", "janus");
+                b.ToTable("sends", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.ThrottleRecord", b =>
@@ -666,7 +666,7 @@ partial class AddSignIn
                 b.HasKey("Scope", "Key")
                     .HasName("pk_throttle_counters");
 
-                b.ToTable("throttle_counters", "janus", t =>
+                b.ToTable("throttle_counters", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_throttle_counters_scope", "scope IN ('account', 'identifier', 'source')");
                     });
@@ -708,7 +708,7 @@ partial class AddSignIn
                     .HasDatabaseName("ux_preauthentication_sessions_registration")
                     .HasFilter("registration IS NOT NULL");
 
-                b.ToTable("preauthentication_sessions", "janus", t =>
+                b.ToTable("preauthentication_sessions", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_preauthentication_sessions_expires_at", "expires_at > created_at");
 
@@ -835,7 +835,7 @@ partial class AddSignIn
                 b.HasIndex("Subject", "EndedAt")
                     .HasDatabaseName("ix_sessions_subject");
 
-                b.ToTable("sessions", "janus", t =>
+                b.ToTable("sessions", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_sessions_attained", "attained IN ('aal1', 'aal2', 'aal3', 'delegated')");
 
@@ -891,7 +891,7 @@ partial class AddSignIn
                 b.HasIndex("Subject")
                     .HasDatabaseName("ix_signin_challenges_subject");
 
-                b.ToTable("signin_challenges", "janus", t =>
+                b.ToTable("signin_challenges", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_signin_challenges_device_attempts", "device_attempts >= 0 AND (device_code IS NOT NULL OR device_attempts = 0)");
 
@@ -947,7 +947,7 @@ partial class AddSignIn
                     .IsUnique()
                     .HasDatabaseName("ux_signin_links_subject_factor");
 
-                b.ToTable("signin_links", "janus", t =>
+                b.ToTable("signin_links", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_signin_links_browser", "browser IS NULL OR octet_length(browser) = 32");
 
@@ -1043,7 +1043,7 @@ partial class AddSignIn
                     .HasDatabaseName("ix_grants_live_holder")
                     .HasFilter("revoked_at IS NULL");
 
-                b.ToTable("grants", "janus", t =>
+                b.ToTable("grants", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_grants_kind", "kind IN ('derived', 'materialised', 'stored')");
 
@@ -1070,7 +1070,7 @@ partial class AddSignIn
                 b.HasKey("Subject")
                     .HasName("pk_grant_versions");
 
-                b.ToTable("grant_versions", "janus", t =>
+                b.ToTable("grant_versions", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_grant_versions_version", "version >= 0");
                     });
@@ -1100,7 +1100,7 @@ partial class AddSignIn
                 b.HasIndex("MemberType", "MemberId")
                     .HasDatabaseName("ix_group_closure_member");
 
-                b.ToTable("group_closure", "janus", t =>
+                b.ToTable("group_closure", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_group_closure_depth", "depth >= 1");
 
@@ -1128,7 +1128,7 @@ partial class AddSignIn
                 b.HasIndex("MemberType", "MemberId")
                     .HasDatabaseName("ix_group_members_member");
 
-                b.ToTable("group_members", "janus", t =>
+                b.ToTable("group_members", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_group_members_member_type", "member_type IN ('group', 'user')");
                     });
@@ -1155,7 +1155,7 @@ partial class AddSignIn
                 b.HasIndex("Organization")
                     .HasDatabaseName("ix_groups_organization");
 
-                b.ToTable("groups", "janus");
+                b.ToTable("groups", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authorization.Resources.AncestryRecord", b =>
@@ -1190,7 +1190,7 @@ partial class AddSignIn
                 b.HasIndex("AncestorType", "AncestorId")
                     .HasDatabaseName("ix_ancestry_ancestor");
 
-                b.ToTable("ancestry", "janus", t =>
+                b.ToTable("ancestry", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_ancestry_depth", "depth >= 0");
                     });
@@ -1227,7 +1227,7 @@ partial class AddSignIn
                 b.HasIndex("ContainedInType", "ContainedInId")
                     .HasDatabaseName("ix_resources_contained_in");
 
-                b.ToTable("resources", "janus", t =>
+                b.ToTable("resources", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_resources_contained_in", "(contained_in_type IS NULL) = (contained_in_id IS NULL)");
                     });
@@ -1246,7 +1246,7 @@ partial class AddSignIn
                 b.HasKey("Role", "Permission")
                     .HasName("pk_role_permissions");
 
-                b.ToTable("role_permissions", "janus");
+                b.ToTable("role_permissions", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authorization.Roles.RoleRecord", b =>
@@ -1258,7 +1258,7 @@ partial class AddSignIn
                 b.HasKey("Name")
                     .HasName("pk_roles");
 
-                b.ToTable("roles", "janus");
+                b.ToTable("roles", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Identity.Accounts.AccountRecord", b =>
@@ -1317,7 +1317,7 @@ partial class AddSignIn
                     .HasDatabaseName("ix_accounts_deleting_since")
                     .HasFilter("deleting_since IS NOT NULL");
 
-                b.ToTable("accounts", "janus", t =>
+                b.ToTable("accounts", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_accounts_age_answer", "adult_affirmed IS NULL OR age_group IS NULL");
 
@@ -1383,7 +1383,7 @@ partial class AddSignIn
                 b.HasIndex("EffectiveSubject", "OccurredAt")
                     .HasDatabaseName("ix_audit_records_effective_subject");
 
-                b.ToTable("audit_records", "janus", t =>
+                b.ToTable("audit_records", "identity", t =>
                     {
                         t.ExcludeFromMigrations();
                     });
@@ -1413,7 +1413,7 @@ partial class AddSignIn
                 b.HasIndex("Named")
                     .HasDatabaseName("ix_identifier_backup_settings_named");
 
-                b.ToTable("identifier_backup_settings", "janus", t =>
+                b.ToTable("identifier_backup_settings", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_identifier_backup_settings_kind", "kind IN ('email', 'phone', 'username')");
 
@@ -1485,7 +1485,7 @@ partial class AddSignIn
                 b.HasIndex("Subject", "Kind")
                     .HasDatabaseName("ix_identifiers_subject");
 
-                b.ToTable("identifiers", "janus", t =>
+                b.ToTable("identifiers", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_identifiers_fingerprint", "octet_length(fingerprint) = 32");
 
@@ -1567,7 +1567,7 @@ partial class AddSignIn
                     .IsUnique()
                     .HasDatabaseName("ux_identifier_removals_fingerprint");
 
-                b.ToTable("identifier_removals", "janus", t =>
+                b.ToTable("identifier_removals", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_identifier_removals_fingerprint", "octet_length(fingerprint) = 32");
 
@@ -1597,7 +1597,7 @@ partial class AddSignIn
                 b.HasIndex("ReleasesAt")
                     .HasDatabaseName("ix_username_holds_releases_at");
 
-                b.ToTable("username_holds", "janus", t =>
+                b.ToTable("username_holds", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_username_holds_fingerprint", "octet_length(fingerprint) = 32");
                     });
@@ -1634,7 +1634,7 @@ partial class AddSignIn
                 b.HasIndex("Subject")
                     .HasDatabaseName("ix_memberships_subject");
 
-                b.ToTable("memberships", "janus", t =>
+                b.ToTable("memberships", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_memberships_ended", "ended_at IS NULL OR ended_at >= created_at");
                     });
@@ -1668,7 +1668,7 @@ partial class AddSignIn
                     .IsRequired()
                     .HasColumnType("text")
                     .HasColumnName("name")
-                    .UseCollation("janus_ci");
+                    .UseCollation("identity_ci");
 
                 b.HasKey("Id")
                     .HasName("pk_organizations");
@@ -1682,7 +1682,7 @@ partial class AddSignIn
                     .HasDatabaseName("ux_organizations_administrative")
                     .HasFilter("administrative");
 
-                b.ToTable("organizations", "janus", t =>
+                b.ToTable("organizations", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_organizations_erased", "erased_at IS NULL OR deletion_requested_at IS NOT NULL");
                     });
@@ -1709,7 +1709,7 @@ partial class AddSignIn
                 b.HasKey("Subject")
                     .HasName("pk_account_preferences");
 
-                b.ToTable("account_preferences", "janus");
+                b.ToTable("account_preferences", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Identity.Profiles.ProfilePhotoRecord", b =>
@@ -1730,7 +1730,7 @@ partial class AddSignIn
                 b.HasKey("Subject")
                     .HasName("pk_profile_photos");
 
-                b.ToTable("profile_photos", "janus");
+                b.ToTable("profile_photos", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Identity.Profiles.ProfileRecord", b =>
@@ -1754,7 +1754,7 @@ partial class AddSignIn
                 b.HasKey("Subject")
                     .HasName("pk_profiles");
 
-                b.ToTable("profiles", "janus");
+                b.ToTable("profiles", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Privacy.Erasures.ErasureRecord", b =>
@@ -1788,7 +1788,7 @@ partial class AddSignIn
                     .HasDatabaseName("ix_erasures_outstanding")
                     .HasFilter("status <> 'complete'");
 
-                b.ToTable("erasures", "janus", t =>
+                b.ToTable("erasures", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_erasures_attempts", "attempts >= 0");
 
@@ -1823,7 +1823,7 @@ partial class AddSignIn
                 b.HasIndex("KeyVersion")
                     .HasDatabaseName("ix_subject_keys_key_version");
 
-                b.ToTable("subject_keys", "janus", t =>
+                b.ToTable("subject_keys", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_subject_keys_format", "(format_marker = 1 AND octet_length(wrapped_key) = 40) OR (format_marker = 0 AND wrapped_key = decode(repeat('00', 32), 'hex'))");
 
@@ -1845,7 +1845,7 @@ partial class AddSignIn
                 b.HasKey("Key")
                     .HasName("pk_settings");
 
-                b.ToTable("settings", "janus");
+                b.ToTable("settings", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Factors.AuthenticatorRecord", b =>

@@ -13,7 +13,7 @@ internal sealed partial class AddComplianceRecords : Migration
     {
         migrationBuilder.CreateTable(
             name: "compliance_records",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 id = table.Column<int>(type: "integer", nullable: false),
@@ -34,6 +34,6 @@ internal sealed partial class AddComplianceRecords : Migration
     {
         migrationBuilder.DropTable(
             name: "compliance_records",
-            schema: "janus");
+            schema: "identity");
     }
 }

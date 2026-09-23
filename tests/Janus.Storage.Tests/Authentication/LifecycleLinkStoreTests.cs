@@ -49,13 +49,13 @@ public sealed class LifecycleLinkStoreTests(DatabaseFixture database)
             """
             SELECT column_name
             FROM information_schema.columns
-            WHERE table_schema = 'janus' AND table_name = 'lifecycle_links'
+            WHERE table_schema = 'identity' AND table_name = 'lifecycle_links'
             """);
 
         Assert.Equal(["issued_at", "kind", "subject", "token"], columns.Order());
 
         byte[] held = await connection.QuerySingleAsync<byte[]>(
-            "SELECT token FROM janus.lifecycle_links WHERE subject = @subject",
+            "SELECT token FROM identity.lifecycle_links WHERE subject = @subject",
             new { subject = subject.Value });
 
         Assert.Equal(token.Fingerprint(), held);

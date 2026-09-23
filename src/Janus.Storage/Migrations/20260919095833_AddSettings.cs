@@ -12,7 +12,7 @@ internal sealed partial class AddSettings : Migration
     {
         migrationBuilder.CreateTable(
             name: "settings",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 key = table.Column<string>(type: "text", nullable: false),
@@ -26,6 +26,6 @@ internal sealed partial class AddSettings : Migration
     {
         migrationBuilder.DropTable(
             name: "settings",
-            schema: "janus");
+            schema: "identity");
     }
 }

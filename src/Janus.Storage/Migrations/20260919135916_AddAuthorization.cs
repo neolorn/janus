@@ -21,7 +21,7 @@ internal sealed partial class AddAuthorization : Migration
 
         migrationBuilder.CreateTable(
             name: "ancestry",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 resource_type = table.Column<string>(type: "text", nullable: false),
@@ -39,7 +39,7 @@ internal sealed partial class AddAuthorization : Migration
 
         migrationBuilder.CreateTable(
             name: "grant_versions",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 subject = table.Column<Guid>(type: "uuid", nullable: false),
@@ -52,7 +52,7 @@ internal sealed partial class AddAuthorization : Migration
                 table.ForeignKey(
                     name: "fk_grant_versions_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Cascade);
@@ -60,7 +60,7 @@ internal sealed partial class AddAuthorization : Migration
 
         migrationBuilder.CreateTable(
             name: "groups",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -73,7 +73,7 @@ internal sealed partial class AddAuthorization : Migration
                 table.ForeignKey(
                     name: "fk_groups_organization",
                     column: x => x.organization,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "organizations",
                     principalColumn: "id",
                     onDelete: ReferentialAction.Restrict);
@@ -81,7 +81,7 @@ internal sealed partial class AddAuthorization : Migration
 
         migrationBuilder.CreateTable(
             name: "resources",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 resource_type = table.Column<string>(type: "text", nullable: false),
@@ -97,7 +97,7 @@ internal sealed partial class AddAuthorization : Migration
                 table.ForeignKey(
                     name: "fk_resources_organization",
                     column: x => x.organization,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "organizations",
                     principalColumn: "id",
                     onDelete: ReferentialAction.Restrict);
@@ -105,7 +105,7 @@ internal sealed partial class AddAuthorization : Migration
 
         migrationBuilder.CreateTable(
             name: "roles",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 name = table.Column<string>(type: "text", nullable: false)
@@ -114,7 +114,7 @@ internal sealed partial class AddAuthorization : Migration
 
         migrationBuilder.CreateTable(
             name: "group_closure",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 group_id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -130,7 +130,7 @@ internal sealed partial class AddAuthorization : Migration
                 table.ForeignKey(
                     name: "fk_group_closure_group",
                     column: x => x.group_id,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "groups",
                     principalColumn: "id",
                     onDelete: ReferentialAction.Cascade);
@@ -138,7 +138,7 @@ internal sealed partial class AddAuthorization : Migration
 
         migrationBuilder.CreateTable(
             name: "group_members",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 group_id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -152,7 +152,7 @@ internal sealed partial class AddAuthorization : Migration
                 table.ForeignKey(
                     name: "fk_group_members_group",
                     column: x => x.group_id,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "groups",
                     principalColumn: "id",
                     onDelete: ReferentialAction.Cascade);
@@ -160,7 +160,7 @@ internal sealed partial class AddAuthorization : Migration
 
         migrationBuilder.CreateTable(
             name: "grants",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -191,14 +191,14 @@ internal sealed partial class AddAuthorization : Migration
                 table.ForeignKey(
                     name: "fk_grants_organization",
                     column: x => x.organization,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "organizations",
                     principalColumn: "id",
                     onDelete: ReferentialAction.Restrict);
                 table.ForeignKey(
                     name: "fk_grants_role",
                     column: x => x.role,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "roles",
                     principalColumn: "name",
                     onDelete: ReferentialAction.Restrict);
@@ -206,7 +206,7 @@ internal sealed partial class AddAuthorization : Migration
 
         migrationBuilder.CreateTable(
             name: "role_permissions",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 role = table.Column<string>(type: "text", nullable: false),
@@ -218,7 +218,7 @@ internal sealed partial class AddAuthorization : Migration
                 table.ForeignKey(
                     name: "fk_role_permissions_role",
                     column: x => x.role,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "roles",
                     principalColumn: "name",
                     onDelete: ReferentialAction.Cascade);
@@ -226,57 +226,57 @@ internal sealed partial class AddAuthorization : Migration
 
         migrationBuilder.CreateIndex(
             name: "ix_ancestry_ancestor",
-            schema: "janus",
+            schema: "identity",
             table: "ancestry",
             columns: AncestorTypeAndId);
 
         migrationBuilder.CreateIndex(
             name: "ix_grants_live_holder",
-            schema: "janus",
+            schema: "identity",
             table: "grants",
             columns: OrganizationAndSubject,
             filter: "revoked_at IS NULL");
 
         migrationBuilder.CreateIndex(
             name: "ix_grants_live_resource",
-            schema: "janus",
+            schema: "identity",
             table: "grants",
             columns: ResourceTypeAndId,
             filter: "revoked_at IS NULL");
 
         migrationBuilder.CreateIndex(
             name: "ix_grants_role",
-            schema: "janus",
+            schema: "identity",
             table: "grants",
             column: "role");
 
         migrationBuilder.CreateIndex(
             name: "ix_group_closure_member",
-            schema: "janus",
+            schema: "identity",
             table: "group_closure",
             columns: MemberTypeAndId);
 
         migrationBuilder.CreateIndex(
             name: "ix_group_members_member",
-            schema: "janus",
+            schema: "identity",
             table: "group_members",
             columns: MemberTypeAndId);
 
         migrationBuilder.CreateIndex(
             name: "ix_groups_organization",
-            schema: "janus",
+            schema: "identity",
             table: "groups",
             column: "organization");
 
         migrationBuilder.CreateIndex(
             name: "ix_resources_contained_in",
-            schema: "janus",
+            schema: "identity",
             table: "resources",
             columns: ContainedInTypeAndId);
 
         migrationBuilder.CreateIndex(
             name: "ix_resources_organization",
-            schema: "janus",
+            schema: "identity",
             table: "resources",
             column: "organization");
 
@@ -285,7 +285,7 @@ internal sealed partial class AddAuthorization : Migration
         // editing a role takes effect at once and nothing is stored twice.
         migrationBuilder.Sql(
             """
-            CREATE VIEW janus.effective_grants AS
+            CREATE VIEW identity.effective_grants AS
             SELECT g.id            AS grant_id,
                    g.subject_type  AS subject_type,
                    g.subject_id    AS subject_id,
@@ -298,8 +298,8 @@ internal sealed partial class AddAuthorization : Migration
                    g.organization  AS organization,
                    g.expires_at    AS expires_at,
                    g.revoked_at    AS revoked_at
-            FROM janus.grants AS g
-            JOIN janus.role_permissions AS p ON p.role = g.role;
+            FROM identity.grants AS g
+            JOIN identity.role_permissions AS p ON p.role = g.role;
             """);
 
         // OPS-MIG-003 AC1: the application reads and writes these rows and alters
@@ -307,19 +307,19 @@ internal sealed partial class AddAuthorization : Migration
         migrationBuilder.Sql(
             """
             GRANT SELECT, INSERT, UPDATE, DELETE ON
-                janus.ancestry,
-                janus.grants,
-                janus.grant_versions,
-                janus.group_closure,
-                janus.group_members,
-                janus.groups,
-                janus.resources,
-                janus.role_permissions,
-                janus.roles
-            TO janus_app;
+                identity.ancestry,
+                identity.grants,
+                identity.grant_versions,
+                identity.group_closure,
+                identity.group_members,
+                identity.groups,
+                identity.resources,
+                identity.role_permissions,
+                identity.roles
+            TO identity_app;
             """);
 
-        migrationBuilder.Sql("GRANT SELECT ON janus.effective_grants TO janus_app;");
+        migrationBuilder.Sql("GRANT SELECT ON identity.effective_grants TO identity_app;");
     }
 
     /// <inheritdoc />
@@ -327,42 +327,42 @@ internal sealed partial class AddAuthorization : Migration
     {
         ArgumentNullException.ThrowIfNull(migrationBuilder);
 
-        migrationBuilder.Sql("DROP VIEW janus.effective_grants;");
+        migrationBuilder.Sql("DROP VIEW identity.effective_grants;");
 
         migrationBuilder.DropTable(
             name: "ancestry",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "grant_versions",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "grants",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "group_closure",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "group_members",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "resources",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "role_permissions",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "groups",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "roles",
-            schema: "janus");
+            schema: "identity");
     }
 }

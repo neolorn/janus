@@ -15,7 +15,7 @@ internal sealed partial class AddPrivacyExports : Migration
     {
         migrationBuilder.CreateTable(
             name: "privacy_exports",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -28,7 +28,7 @@ internal sealed partial class AddPrivacyExports : Migration
                 table.ForeignKey(
                     name: "fk_privacy_exports_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
@@ -36,7 +36,7 @@ internal sealed partial class AddPrivacyExports : Migration
 
         migrationBuilder.CreateIndex(
             name: "ix_privacy_exports_subject",
-            schema: "janus",
+            schema: "identity",
             table: "privacy_exports",
             columns: SubjectAndAssembledAt);
     }
@@ -46,6 +46,6 @@ internal sealed partial class AddPrivacyExports : Migration
     {
         migrationBuilder.DropTable(
             name: "privacy_exports",
-            schema: "janus");
+            schema: "identity");
     }
 }

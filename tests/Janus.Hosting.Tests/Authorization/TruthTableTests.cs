@@ -186,7 +186,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 HostPermissions.Read,
                 Document,
                 written.Deployment.Organization,
-                "janus_authz_row",
+                "identity_authz_row",
                 "id",
                 TestContext.Current.CancellationToken));
 
@@ -197,8 +197,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             fragment.Text,
             StringComparison.OrdinalIgnoreCase);
 
-        Assert.Contains("@janus_authz_permissions", fragment.Text, StringComparison.Ordinal);
-        Assert.Contains("janus_authz_row.id", fragment.Text, StringComparison.Ordinal);
+        Assert.Contains("@identity_authz_permissions", fragment.Text, StringComparison.Ordinal);
+        Assert.Contains("identity_authz_row.id", fragment.Text, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -209,7 +209,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     /// <param name="column">The column the caller offered.</param>
     /// <returns>The work of running it.</returns>
     [Theory]
-    [InlineData("row; DROP TABLE janus.grants --", "id")]
+    [InlineData("row; DROP TABLE identity.grants --", "id")]
     [InlineData("row", "id) OR (1=1")]
     [InlineData("Row", "id")]
     [InlineData("1row", "id")]
@@ -250,8 +250,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         string sql = listing.ToQueryString();
 
         Assert.Contains("EXISTS (", sql, StringComparison.Ordinal);
-        Assert.Contains("janus.ancestry", sql, StringComparison.Ordinal);
-        Assert.Contains("janus.effective_grants", sql, StringComparison.Ordinal);
+        Assert.Contains("identity.ancestry", sql, StringComparison.Ordinal);
+        Assert.Contains("identity.effective_grants", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("RECURSIVE", sql, StringComparison.OrdinalIgnoreCase);
 
         // The grant sits on the container, so both records beneath it come back, and
@@ -368,7 +368,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                     HostPermissions.Read,
                     Document,
                     written.Deployment.Organization,
-                    "janus_authz_row",
+                    "identity_authz_row",
                     "id",
                     TestContext.Current.CancellationToken));
         }
@@ -390,8 +390,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 $"""
                 SELECT EXISTS (
                     SELECT 1
-                    FROM host.documents AS janus_authz_row
-                    WHERE janus_authz_row.id = @record AND {fragment.Text});
+                    FROM host.documents AS identity_authz_row
+                    WHERE identity_authz_row.id = @record AND {fragment.Text});
                 """),
             arguments,
             cancellationToken: TestContext.Current.CancellationToken));
@@ -679,7 +679,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
         await connection.ExecuteAsync(new CommandDefinition(
             """
-            UPDATE janus.grants
+            UPDATE identity.grants
             SET revoked_by = subject_id, revoked_at = @at, revocation_reason = @reason
             WHERE id = @id;
             """,

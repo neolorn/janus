@@ -153,12 +153,12 @@ public sealed class ApiConventionTests
 
         context.Request.Method = "GET";
         context.Request.Scheme = "https";
-        context.Request.Host = new HostString("janus.example.test");
+        context.Request.Host = new HostString("identity.example.test");
         context.Request.Path = new PathString("/account");
         context.Request.Headers["Sec-Fetch-Site"] = "same-origin";
         context.Request.Headers.AcceptLanguage = "en";
         context.Request.Headers[BrowserCookies.RequestHeader] = "1";
-        context.Request.Headers.Origin = "https://janus.example.test";
+        context.Request.Headers.Origin = "https://identity.example.test";
 
         var written = new ResponseBody();
 

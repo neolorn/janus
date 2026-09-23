@@ -480,7 +480,7 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
         await using NpgsqlConnection connection = await host.OpenAsync();
 
         return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
-            "SELECT count(*) FROM janus.audit_records WHERE id = @id AND action = @action;",
+            "SELECT count(*) FROM identity.audit_records WHERE id = @id AND action = @action;",
             new { id = correlation.Value, action = "authz.access.denied" },
             cancellationToken: TestContext.Current.CancellationToken));
     }
@@ -492,7 +492,7 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
         return await connection.QuerySingleAsync<Identified>(new CommandDefinition(
             """
             SELECT acting_subject AS "Acting", effective_subject AS "Effective"
-            FROM janus.audit_records
+            FROM identity.audit_records
             WHERE id = @id;
             """,
             new { id = correlation.Value },

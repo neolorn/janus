@@ -74,7 +74,7 @@ internal sealed class Machine(Deployment deployment)
 
         context.Request.Method = fields is null ? "GET" : "POST";
         context.Request.Scheme = "https";
-        context.Request.Host = new HostString("janus.example.test");
+        context.Request.Host = new HostString("identity.example.test");
         context.Request.Path = Path(path, out QueryString query);
         context.Request.QueryString = query;
 

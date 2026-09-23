@@ -45,7 +45,7 @@ public sealed class PasswordStoreTests(DatabaseFixture database)
             """
             SELECT column_name
             FROM information_schema.columns
-            WHERE table_schema = 'janus' AND table_name = 'passwords'
+            WHERE table_schema = 'identity' AND table_name = 'passwords'
             """);
 
         Assert.Equal(
@@ -164,7 +164,7 @@ public sealed class PasswordStoreTests(DatabaseFixture database)
         await using NpgsqlConnection connection = await database.OpenAsync();
 
         string stored = await connection.ExecuteScalarAsync<string>(
-            "SELECT hash FROM janus.passwords WHERE subject = @subject",
+            "SELECT hash FROM identity.passwords WHERE subject = @subject",
             new { subject = subject.Value })
             ?? throw new Xunit.Sdk.XunitException("The password was written.");
 

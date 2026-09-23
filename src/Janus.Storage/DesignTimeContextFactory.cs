@@ -15,7 +15,7 @@ internal sealed class DesignTimeContextFactory : IDesignTimeDbContextFactory<Sto
     public StoreContext CreateDbContext(string[] args) =>
         new(new DbContextOptionsBuilder<StoreContext>()
             .UseNpgsql(
-                "Host=design-time;Database=janus",
+                "Host=design-time;Database=identity",
                 npgsql => npgsql.MigrationsHistoryTable(
                     StoreContext.MigrationsHistoryTable,
                     StoreContext.Schema))

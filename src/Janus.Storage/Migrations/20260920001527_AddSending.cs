@@ -18,7 +18,7 @@ internal sealed partial class AddSending : Migration
 
         migrationBuilder.CreateTable(
             name: "alerts",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 key = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
@@ -28,7 +28,7 @@ internal sealed partial class AddSending : Migration
 
         migrationBuilder.CreateTable(
             name: "callbacks",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -40,7 +40,7 @@ internal sealed partial class AddSending : Migration
 
         migrationBuilder.CreateTable(
             name: "nonexistence_notices",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -51,7 +51,7 @@ internal sealed partial class AddSending : Migration
 
         migrationBuilder.CreateTable(
             name: "registration_sources",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -62,7 +62,7 @@ internal sealed partial class AddSending : Migration
 
         migrationBuilder.CreateTable(
             name: "send_counters",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 key = table.Column<byte[]>(type: "bytea", maxLength: 32, nullable: false),
@@ -73,7 +73,7 @@ internal sealed partial class AddSending : Migration
 
         migrationBuilder.CreateTable(
             name: "send_grants",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 key = table.Column<byte[]>(type: "bytea", maxLength: 32, nullable: false),
@@ -87,7 +87,7 @@ internal sealed partial class AddSending : Migration
 
         migrationBuilder.CreateTable(
             name: "sends",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 reference = table.Column<byte[]>(type: "bytea", maxLength: 32, nullable: false),
@@ -99,7 +99,7 @@ internal sealed partial class AddSending : Migration
 
         migrationBuilder.CreateTable(
             name: "sms_balance_readings",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 read_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
@@ -109,7 +109,7 @@ internal sealed partial class AddSending : Migration
 
         migrationBuilder.CreateTable(
             name: "throttle_counters",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 scope = table.Column<string>(type: "text", nullable: false),
@@ -125,31 +125,31 @@ internal sealed partial class AddSending : Migration
 
         migrationBuilder.CreateIndex(
             name: "ix_callbacks_source_at",
-            schema: "janus",
+            schema: "identity",
             table: "callbacks",
             columns: SourceAndAt);
 
         migrationBuilder.CreateIndex(
             name: "ix_nonexistence_notices_destination_at",
-            schema: "janus",
+            schema: "identity",
             table: "nonexistence_notices",
             columns: DestinationAndAt);
 
         migrationBuilder.CreateIndex(
             name: "ix_registration_sources_source_at",
-            schema: "janus",
+            schema: "identity",
             table: "registration_sources",
             columns: SourceAndAt);
 
         migrationBuilder.CreateIndex(
             name: "ix_send_counters_settles_at",
-            schema: "janus",
+            schema: "identity",
             table: "send_counters",
             column: "settles_at");
 
         migrationBuilder.CreateIndex(
             name: "ix_sends_settles_at",
-            schema: "janus",
+            schema: "identity",
             table: "sends",
             column: "settles_at");
     }
@@ -161,38 +161,38 @@ internal sealed partial class AddSending : Migration
 
         migrationBuilder.DropTable(
             name: "alerts",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "callbacks",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "nonexistence_notices",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "registration_sources",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "send_counters",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "send_grants",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "sends",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "sms_balance_readings",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "throttle_counters",
-            schema: "janus");
+            schema: "identity");
     }
 }

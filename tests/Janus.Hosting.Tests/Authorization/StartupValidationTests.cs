@@ -30,17 +30,17 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         Settings.OrganizationPhoto.For("2f8d4c1e-0000-7000-8000-000000000001").ToString();
 
     private static readonly string Forgotten =
-        "DELETE FROM janus.settings WHERE key = '" + Showing + "';";
+        "DELETE FROM identity.settings WHERE key = '" + Showing + "';";
 
     private static readonly string Defaulting =
-        "INSERT INTO janus.settings (key, value) VALUES ('"
+        "INSERT INTO identity.settings (key, value) VALUES ('"
         + Settings.RedirectDefaultClient.Key
         + "', 'nobody');";
 
     private const string Unmigrated = "behind";
 
     private static readonly string Undefaulted =
-        "DELETE FROM janus.settings WHERE key = '"
+        "DELETE FROM identity.settings WHERE key = '"
         + Settings.RedirectDefaultClient.Key
         + "';";
 
@@ -74,8 +74,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
 
         await WriteAsync(
             """
-            INSERT INTO janus.roles (name) VALUES ('forger');
-            INSERT INTO janus.role_permissions (role, permission)
+            INSERT INTO identity.roles (name) VALUES ('forger');
+            INSERT INTO identity.role_permissions (role, permission)
             VALUES ('forger', 'document:forge');
             """,
             cancellationToken);
@@ -91,7 +91,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         }
         finally
         {
-            await WriteAsync("DELETE FROM janus.roles WHERE name = 'forger';", cancellationToken);
+            await WriteAsync("DELETE FROM identity.roles WHERE name = 'forger';", cancellationToken);
         }
     }
 
@@ -411,7 +411,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     // and nothing the declaration can carry.
     private async Task ShowingPhotosAsync(CancellationToken cancellationToken) =>
         await WriteAsync(
-            "INSERT INTO janus.settings (key, value) VALUES ('" + Showing + "', 'true');",
+            "INSERT INTO identity.settings (key, value) VALUES ('" + Showing + "', 'true');",
             cancellationToken);
 
     private async Task WriteAsync(string statement, CancellationToken cancellationToken)

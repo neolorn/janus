@@ -38,7 +38,7 @@ internal sealed class ResourceStore(StoreContext context, DataConnections connec
     // above its container is one step further above it.
     private const string Write =
         """
-        INSERT INTO janus.ancestry
+        INSERT INTO identity.ancestry
             (resource_type, resource_id, ancestor_type, ancestor_id, depth, organization)
         SELECT CAST(@type AS text), CAST(@id AS text),
                CAST(@type AS text), CAST(@id AS text), 0, CAST(@organization AS uuid)
@@ -46,7 +46,7 @@ internal sealed class ResourceStore(StoreContext context, DataConnections connec
         SELECT CAST(@type AS text), CAST(@id AS text),
                above.ancestor_type, above.ancestor_id, above.depth + 1,
                CAST(@organization AS uuid)
-        FROM janus.ancestry AS above
+        FROM identity.ancestry AS above
         WHERE above.resource_type = CAST(@containerType AS text)
           AND above.resource_id = CAST(@containerId AS text)
         ON CONFLICT (resource_type, resource_id, ancestor_type, ancestor_id)
@@ -59,18 +59,18 @@ internal sealed class ResourceStore(StoreContext context, DataConnections connec
         """
         WITH above AS (
             SELECT entry.ancestor_type, entry.ancestor_id
-            FROM janus.ancestry AS entry
+            FROM identity.ancestry AS entry
             WHERE entry.resource_type = CAST(@type AS text)
               AND entry.resource_id = CAST(@id AS text)
               AND entry.depth > 0
         ),
         beneath AS (
             SELECT entry.resource_type, entry.resource_id
-            FROM janus.ancestry AS entry
+            FROM identity.ancestry AS entry
             WHERE entry.ancestor_type = CAST(@type AS text)
               AND entry.ancestor_id = CAST(@id AS text)
         )
-        DELETE FROM janus.ancestry AS target
+        DELETE FROM identity.ancestry AS target
         USING above, beneath
         WHERE target.resource_type = beneath.resource_type
           AND target.resource_id = beneath.resource_id
@@ -82,14 +82,14 @@ internal sealed class ResourceStore(StoreContext context, DataConnections connec
     // above it, each descendant keeping its own remove from the record that moved.
     private const string Attach =
         """
-        INSERT INTO janus.ancestry
+        INSERT INTO identity.ancestry
             (resource_type, resource_id, ancestor_type, ancestor_id, depth, organization)
         SELECT beneath.resource_type, beneath.resource_id,
                above.ancestor_type, above.ancestor_id,
                beneath.depth + 1 + above.depth,
                beneath.organization
-        FROM janus.ancestry AS beneath
-        CROSS JOIN janus.ancestry AS above
+        FROM identity.ancestry AS beneath
+        CROSS JOIN identity.ancestry AS above
         WHERE beneath.ancestor_type = CAST(@type AS text)
           AND beneath.ancestor_id = CAST(@id AS text)
           AND above.resource_type = CAST(@containerType AS text)

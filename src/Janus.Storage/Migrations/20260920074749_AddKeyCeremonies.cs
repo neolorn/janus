@@ -13,7 +13,7 @@ internal sealed partial class AddKeyCeremonies : Migration
     {
         migrationBuilder.CreateTable(
             name: "key_ceremonies",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 subject = table.Column<Guid>(type: "uuid", nullable: false),
@@ -31,14 +31,14 @@ internal sealed partial class AddKeyCeremonies : Migration
                 table.ForeignKey(
                     name: "fk_key_ceremonies_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Cascade);
                 table.ForeignKey(
                     name: "fk_key_ceremonies_upgrading",
                     column: x => x.upgrading,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "authenticators",
                     principalColumn: "id",
                     onDelete: ReferentialAction.Cascade);
@@ -46,13 +46,13 @@ internal sealed partial class AddKeyCeremonies : Migration
 
         migrationBuilder.CreateIndex(
             name: "ix_key_ceremonies_expires_at",
-            schema: "janus",
+            schema: "identity",
             table: "key_ceremonies",
             column: "expires_at");
 
         migrationBuilder.CreateIndex(
             name: "ix_key_ceremonies_upgrading",
-            schema: "janus",
+            schema: "identity",
             table: "key_ceremonies",
             column: "upgrading");
     }
@@ -62,6 +62,6 @@ internal sealed partial class AddKeyCeremonies : Migration
     {
         migrationBuilder.DropTable(
             name: "key_ceremonies",
-            schema: "janus");
+            schema: "identity");
     }
 }

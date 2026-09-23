@@ -12,16 +12,16 @@ internal sealed partial class AddOrganizations : Migration
     protected override void Up(MigrationBuilder migrationBuilder)
     {
         migrationBuilder.AlterDatabase()
-            .Annotation("Npgsql:CollationDefinition:public.janus_ci", "und-u-ks-level2,und-u-ks-level2,icu,False")
-            .OldAnnotation("Npgsql:CollationDefinition:janus.janus_ci", "und-u-ks-level2,und-u-ks-level2,icu,False");
+            .Annotation("Npgsql:CollationDefinition:public.identity_ci", "und-u-ks-level2,und-u-ks-level2,icu,False")
+            .OldAnnotation("Npgsql:CollationDefinition:identity.identity_ci", "und-u-ks-level2,und-u-ks-level2,icu,False");
 
         migrationBuilder.CreateTable(
             name: "organizations",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 id = table.Column<Guid>(type: "uuid", nullable: false),
-                name = table.Column<string>(type: "text", nullable: false, collation: "janus_ci"),
+                name = table.Column<string>(type: "text", nullable: false, collation: "identity_ci"),
                 created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                 deletion_requested_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                 erased_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
@@ -34,7 +34,7 @@ internal sealed partial class AddOrganizations : Migration
 
         migrationBuilder.CreateTable(
             name: "memberships",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -50,14 +50,14 @@ internal sealed partial class AddOrganizations : Migration
                 table.ForeignKey(
                     name: "fk_memberships_organization",
                     column: x => x.organization,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "organizations",
                     principalColumn: "id",
                     onDelete: ReferentialAction.Restrict);
                 table.ForeignKey(
                     name: "fk_memberships_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
@@ -65,19 +65,19 @@ internal sealed partial class AddOrganizations : Migration
 
         migrationBuilder.CreateIndex(
             name: "ix_memberships_organization",
-            schema: "janus",
+            schema: "identity",
             table: "memberships",
             column: "organization");
 
         migrationBuilder.CreateIndex(
             name: "ix_memberships_subject",
-            schema: "janus",
+            schema: "identity",
             table: "memberships",
             column: "subject");
 
         migrationBuilder.CreateIndex(
             name: "ix_organizations_deletion_requested_at",
-            schema: "janus",
+            schema: "identity",
             table: "organizations",
             column: "deletion_requested_at",
             filter: "deletion_requested_at IS NOT NULL AND erased_at IS NULL");
@@ -88,14 +88,14 @@ internal sealed partial class AddOrganizations : Migration
     {
         migrationBuilder.DropTable(
             name: "memberships",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "organizations",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.AlterDatabase()
-            .Annotation("Npgsql:CollationDefinition:janus.janus_ci", "und-u-ks-level2,und-u-ks-level2,icu,False")
-            .OldAnnotation("Npgsql:CollationDefinition:public.janus_ci", "und-u-ks-level2,und-u-ks-level2,icu,False");
+            .Annotation("Npgsql:CollationDefinition:identity.identity_ci", "und-u-ks-level2,und-u-ks-level2,icu,False")
+            .OldAnnotation("Npgsql:CollationDefinition:public.identity_ci", "und-u-ks-level2,und-u-ks-level2,icu,False");
     }
 }

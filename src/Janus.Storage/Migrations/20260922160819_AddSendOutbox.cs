@@ -13,7 +13,7 @@ internal sealed partial class AddSendOutbox : Migration
     {
         migrationBuilder.CreateTable(
             name: "send_outbox",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -27,7 +27,7 @@ internal sealed partial class AddSendOutbox : Migration
 
         migrationBuilder.CreateIndex(
             name: "ix_send_outbox_recorded_at",
-            schema: "janus",
+            schema: "identity",
             table: "send_outbox",
             column: "recorded_at");
     }
@@ -37,6 +37,6 @@ internal sealed partial class AddSendOutbox : Migration
     {
         migrationBuilder.DropTable(
             name: "send_outbox",
-            schema: "janus");
+            schema: "identity");
     }
 }

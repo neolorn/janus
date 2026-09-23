@@ -49,7 +49,7 @@ public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<Databa
         await using NpgsqlConnection connection = await database.OpenAsync();
 
         bool same = await connection.ExecuteScalarAsync<bool>(
-            "SELECT 'Ahmed' = 'ahmed' COLLATE janus.janus_ci");
+            "SELECT 'Ahmed' = 'ahmed' COLLATE identity.identity_ci");
 
         Assert.True(same);
     }
@@ -131,7 +131,7 @@ public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<Databa
 
     private static async Task<int> AppliedAsync(NpgsqlConnection connection) =>
         await connection.ExecuteScalarAsync<int>(
-            "SELECT count(*) FROM janus.\"" + StoreContext.MigrationsHistoryTable + "\"");
+            "SELECT count(*) FROM identity.\"" + StoreContext.MigrationsHistoryTable + "\"");
 
     /// <summary>
     /// CONV-ENUM-001 AC1: a value the code does not branch on is refused by the
@@ -144,7 +144,7 @@ public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<Databa
 
         PostgresException refusal = await Assert.ThrowsAsync<PostgresException>(async () =>
             await connection.ExecuteAsync(
-                "INSERT INTO janus.accounts (subject, created_at, state) VALUES (@subject, now(), 'pending')",
+                "INSERT INTO identity.accounts (subject, created_at, state) VALUES (@subject, now(), 'pending')",
                 new { subject = Guid.NewGuid() }));
 
         Assert.Equal("ck_accounts_state", refusal.ConstraintName);
@@ -178,7 +178,7 @@ public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<Databa
 
         PostgresException refusal = await Assert.ThrowsAsync<PostgresException>(async () =>
             await connection.ExecuteAsync(
-                "INSERT INTO janus.subject_keys (subject, format_marker, key_version, wrapped_key) "
+                "INSERT INTO identity.subject_keys (subject, format_marker, key_version, wrapped_key) "
                     + "VALUES (@subject, 1, 1, @key)",
                 new { subject = Guid.NewGuid(), key = new byte[32] }));
 

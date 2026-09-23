@@ -43,7 +43,7 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
             """
             SELECT column_name
             FROM information_schema.columns
-            WHERE table_schema = 'janus' AND table_name = 'send_counters'
+            WHERE table_schema = 'identity' AND table_name = 'send_counters'
             ORDER BY column_name
             """);
 

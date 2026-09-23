@@ -13,7 +13,7 @@ internal sealed partial class AddProfiles : Migration
     {
         migrationBuilder.CreateTable(
             name: "profiles",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 subject = table.Column<Guid>(type: "uuid", nullable: false),
@@ -27,7 +27,7 @@ internal sealed partial class AddProfiles : Migration
                 table.ForeignKey(
                     name: "fk_profiles_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
@@ -39,6 +39,6 @@ internal sealed partial class AddProfiles : Migration
     {
         migrationBuilder.DropTable(
             name: "profiles",
-            schema: "janus");
+            schema: "identity");
     }
 }

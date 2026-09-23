@@ -13,7 +13,7 @@ internal sealed partial class AddIdentifierVerifications : Migration
     {
         migrationBuilder.CreateTable(
             name: "identifier_verifications",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 identifier_id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -36,7 +36,7 @@ internal sealed partial class AddIdentifierVerifications : Migration
                 table.ForeignKey(
                     name: "fk_identifier_verifications_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
@@ -44,19 +44,19 @@ internal sealed partial class AddIdentifierVerifications : Migration
 
         migrationBuilder.CreateIndex(
             name: "ix_identifier_verifications_staged_at",
-            schema: "janus",
+            schema: "identity",
             table: "identifier_verifications",
             column: "staged_at");
 
         migrationBuilder.CreateIndex(
             name: "ix_identifier_verifications_subject",
-            schema: "janus",
+            schema: "identity",
             table: "identifier_verifications",
             column: "subject");
 
         migrationBuilder.CreateIndex(
             name: "ux_identifier_verifications_link",
-            schema: "janus",
+            schema: "identity",
             table: "identifier_verifications",
             column: "link",
             unique: true,
@@ -64,7 +64,7 @@ internal sealed partial class AddIdentifierVerifications : Migration
 
         migrationBuilder.CreateIndex(
             name: "ux_identifier_verifications_old_link",
-            schema: "janus",
+            schema: "identity",
             table: "identifier_verifications",
             column: "old_link",
             unique: true,
@@ -76,6 +76,6 @@ internal sealed partial class AddIdentifierVerifications : Migration
     {
         migrationBuilder.DropTable(
             name: "identifier_verifications",
-            schema: "janus");
+            schema: "identity");
     }
 }

@@ -17,7 +17,7 @@ public static class AuthorizationTables
 {
     /// <summary>
     /// Maps <see cref="AncestryEntry"/> and <see cref="EffectiveGrant"/> onto
-    /// <c>janus.ancestry</c> and <c>janus.effective_grants</c>.
+    /// <c>identity.ancestry</c> and <c>identity.effective_grants</c>.
     /// </summary>
     /// <param name="builder">The host's model.</param>
     /// <returns>The same model, for chaining.</returns>
@@ -28,7 +28,7 @@ public static class AuthorizationTables
 
         builder.Entity<AncestryEntry>(entry =>
         {
-            entry.ToView("ancestry", "janus");
+            entry.ToView("ancestry", "identity");
             entry.HasKey(
                 row => new { row.ResourceType, row.ResourceId, row.AncestorType, row.AncestorId });
             entry.Property(row => row.ResourceType).HasColumnName("resource_type");
@@ -41,7 +41,7 @@ public static class AuthorizationTables
 
         builder.Entity<EffectiveGrant>(grant =>
         {
-            grant.ToView("effective_grants", "janus");
+            grant.ToView("effective_grants", "identity");
             grant.HasKey(row => new { row.GrantId, row.Permission });
             grant.Property(row => row.GrantId).HasColumnName("grant_id");
             grant.Property(row => row.SubjectType).HasColumnName("subject_type");

@@ -12,14 +12,14 @@ internal sealed partial class InitialSchema : Migration
     protected override void Up(MigrationBuilder migrationBuilder)
     {
         migrationBuilder.EnsureSchema(
-            name: "janus");
+            name: "identity");
 
         migrationBuilder.AlterDatabase()
-            .Annotation("Npgsql:CollationDefinition:janus.janus_ci", "und-u-ks-level2,und-u-ks-level2,icu,False");
+            .Annotation("Npgsql:CollationDefinition:identity.identity_ci", "und-u-ks-level2,und-u-ks-level2,icu,False");
 
         migrationBuilder.CreateTable(
             name: "accounts",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 subject = table.Column<Guid>(type: "uuid", nullable: false),
@@ -40,7 +40,7 @@ internal sealed partial class InitialSchema : Migration
 
         migrationBuilder.CreateTable(
             name: "subject_keys",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 subject = table.Column<Guid>(type: "uuid", nullable: false),
@@ -57,14 +57,14 @@ internal sealed partial class InitialSchema : Migration
 
         migrationBuilder.CreateIndex(
             name: "ix_accounts_deleting_since",
-            schema: "janus",
+            schema: "identity",
             table: "accounts",
             column: "deleting_since",
             filter: "deleting_since IS NOT NULL");
 
         migrationBuilder.CreateIndex(
             name: "ix_subject_keys_key_version",
-            schema: "janus",
+            schema: "identity",
             table: "subject_keys",
             column: "key_version");
     }
@@ -74,10 +74,10 @@ internal sealed partial class InitialSchema : Migration
     {
         migrationBuilder.DropTable(
             name: "accounts",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "subject_keys",
-            schema: "janus");
+            schema: "identity");
     }
 }

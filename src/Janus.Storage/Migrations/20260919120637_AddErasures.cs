@@ -13,7 +13,7 @@ internal sealed partial class AddErasures : Migration
     {
         migrationBuilder.CreateTable(
             name: "erasures",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 subject = table.Column<Guid>(type: "uuid", nullable: false),
@@ -31,7 +31,7 @@ internal sealed partial class AddErasures : Migration
                 table.ForeignKey(
                     name: "fk_erasures_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
@@ -39,7 +39,7 @@ internal sealed partial class AddErasures : Migration
 
         migrationBuilder.CreateIndex(
             name: "ix_erasures_outstanding",
-            schema: "janus",
+            schema: "identity",
             table: "erasures",
             column: "requested_at",
             filter: "status <> 'complete'");
@@ -50,6 +50,6 @@ internal sealed partial class AddErasures : Migration
     {
         migrationBuilder.DropTable(
             name: "erasures",
-            schema: "janus");
+            schema: "identity");
     }
 }

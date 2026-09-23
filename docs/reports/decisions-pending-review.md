@@ -6002,6 +6002,50 @@ host maps the tables with `MapAuthorizationTables`.
 `MapIdentityEndpoints`, `MapIdentityWellKnown`, `UseBrowserProfile` and
 `UseMachineProfile` as the mounting calls, so the chapters name what a host writes.
 
+---
+
+## 165. The database names no chapter fixes take the prefix only where they meet a host's
+
+**Corrections 2 · 2026-09-23 · Tier 2 · CONV-NAME-001, OPS-DB-002, OPS-MIG-007, AUTHZ-GATE-002, D-163**
+
+*The question.* D-163 fixes the schema, the collation and the three roles. Four more
+database names carried the product name and no chapter names them: the migrations
+history table, the channel a registration wizard's stream listens on, the identifiers
+the permission rule writes into the SQL it renders, and the names of the databases the
+tests, the design-time factory and the double-migration gate create.
+
+*The readings.*
+
+1. `identity` on each, as on the schema.
+2. `identity` only where the name shares a namespace with a host's, and the plain name of
+   the thing elsewhere.
+
+*Chosen: 2.* The prefix exists to keep the library's artefacts apart from a host's
+(CONV-NAME-001), so it goes where they meet and nowhere else.
+
+| Was | Is | Why |
+| --- | --- | --- |
+| `__janus_migrations_history` | `__migrations_history` | The table is in the `identity` schema, which already keeps it apart from the host's history (OPS-DB-002). |
+| `janus_registration` | `identity_registration` | A notification channel is named per database, beside any channel the host listens on. |
+| `janus_authz_*` | `identity_authz_*` | The fragment is composed into the host's own query, beside the host's aliases and parameters (AUTHZ-GATE-002). |
+| `janus` (test and design-time database) | `identity` | The library's database. |
+| `janus_from_empty`, `janus_from_previous` | `migrated_from_empty`, `migrated_from_previous` | Throwaway databases on the gate's own server, named for the run each holds (OPS-MIG-007). |
+
+Entries 55, 134, 135 and 136 name the schema, the collation or the maintenance role in
+passing; what each decided stands, and each name reads as renamed.
+
+*Tests that pin it.*
+`SchemaTests.OPS_DB_002_AC1_TheLibraryKeepsItsOwnMigrationHistoryAsync`,
+`SchemaTests.OPS_DB_002_AC1_TheCollationLivesInTheLibrarysSchemaAsync`,
+`DatabaseRoleTests.OPS_MIG_003a_AC1_TheMaintenanceRoleAltersNoSchemaAsync`,
+`RegistrationSignalsTests.REG_SESS_003_AWaitHearsTheCommittedAnnouncementAndNoOtherAsync`,
+`PermissionRuleTests.LIB_HOST_002_AC1_NoRenderingReadsATableTheHostOwns`,
+`PermissionRuleTests.LIB_HOST_002_AC1_OnlyWhatTheHostRunsNamesTheRelationItDeclared`,
+and the double-migration gate.
+
+*Chapter text that should change.* `06` OPS-DB-002 could name the history table beside
+the schema, since a deployment's database administrator sees it.
+
 
 # Rows for chapter 10
 

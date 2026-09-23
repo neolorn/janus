@@ -18,7 +18,7 @@ public sealed class VolumeTests(VolumeFixture volume) : IClassFixture<VolumeFixt
     private const int Page = 50;
 
     // The two tables the predicate reads by, and the only two the criterion is about.
-    // janus.role_permissions holds three rows here and is correctly read whole; reading
+    // identity.role_permissions holds three rows here and is correctly read whole; reading
     // it by index would be the slower plan, so it is not asked for.
     private static readonly string[] Scanned =
     [
@@ -42,11 +42,11 @@ public sealed class VolumeTests(VolumeFixture volume) : IClassFixture<VolumeFixt
 
         Counted counted = await connection.QuerySingleAsync<Counted>(new CommandDefinition(
             """
-            SELECT (SELECT count(*) FROM janus.resources) AS "Resources",
-                   (SELECT count(*) FROM janus.grants) AS "Grants",
-                   (SELECT count(*) FROM janus.grants WHERE revoked_at IS NOT NULL) AS "Revoked",
-                   (SELECT count(*) FROM janus.accounts) AS "Principals",
-                   (SELECT count(*) FROM janus.groups) AS "Groups",
+            SELECT (SELECT count(*) FROM identity.resources) AS "Resources",
+                   (SELECT count(*) FROM identity.grants) AS "Grants",
+                   (SELECT count(*) FROM identity.grants WHERE revoked_at IS NOT NULL) AS "Revoked",
+                   (SELECT count(*) FROM identity.accounts) AS "Principals",
+                   (SELECT count(*) FROM identity.groups) AS "Groups",
                    (SELECT count(*) FROM host.reviewers) AS "Reviewers";
             """,
             commandTimeout: 600,
@@ -63,7 +63,7 @@ public sealed class VolumeTests(VolumeFixture volume) : IClassFixture<VolumeFixt
             counted);
 
         Assert.Equal(Page, volume.Page);
-        Assert.Contains("documents janus_authz_row", volume.Plan, StringComparison.Ordinal);
+        Assert.Contains("documents identity_authz_row", volume.Plan, StringComparison.Ordinal);
     }
 
     /// <summary>

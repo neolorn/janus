@@ -16,7 +16,7 @@ internal sealed partial class AddSignIn : Migration
     {
         migrationBuilder.CreateTable(
             name: "policy_raises",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -32,7 +32,7 @@ internal sealed partial class AddSignIn : Migration
                 table.ForeignKey(
                     name: "fk_policy_raises_organization",
                     column: x => x.organization,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "organizations",
                     principalColumn: "id",
                     onDelete: ReferentialAction.Restrict);
@@ -40,7 +40,7 @@ internal sealed partial class AddSignIn : Migration
 
         migrationBuilder.CreateTable(
             name: "signin_challenges",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 handle = table.Column<byte[]>(type: "bytea", maxLength: 32, nullable: false),
@@ -60,7 +60,7 @@ internal sealed partial class AddSignIn : Migration
                 table.ForeignKey(
                     name: "fk_signin_challenges_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
@@ -68,7 +68,7 @@ internal sealed partial class AddSignIn : Migration
 
         migrationBuilder.CreateTable(
             name: "signin_links",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 token = table.Column<byte[]>(type: "bytea", maxLength: 32, nullable: false),
@@ -90,7 +90,7 @@ internal sealed partial class AddSignIn : Migration
                 table.ForeignKey(
                     name: "fk_signin_links_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
@@ -98,7 +98,7 @@ internal sealed partial class AddSignIn : Migration
 
         migrationBuilder.CreateIndex(
             name: "ux_policy_raises_field",
-            schema: "janus",
+            schema: "identity",
             table: "policy_raises",
             column: "field",
             unique: true,
@@ -106,7 +106,7 @@ internal sealed partial class AddSignIn : Migration
 
         migrationBuilder.CreateIndex(
             name: "ux_policy_raises_organization_field",
-            schema: "janus",
+            schema: "identity",
             table: "policy_raises",
             columns: OrganizationAndField,
             unique: true,
@@ -114,25 +114,25 @@ internal sealed partial class AddSignIn : Migration
 
         migrationBuilder.CreateIndex(
             name: "ix_signin_challenges_expires_at",
-            schema: "janus",
+            schema: "identity",
             table: "signin_challenges",
             column: "expires_at");
 
         migrationBuilder.CreateIndex(
             name: "ix_signin_challenges_subject",
-            schema: "janus",
+            schema: "identity",
             table: "signin_challenges",
             column: "subject");
 
         migrationBuilder.CreateIndex(
             name: "ix_signin_links_expires_at",
-            schema: "janus",
+            schema: "identity",
             table: "signin_links",
             column: "expires_at");
 
         migrationBuilder.CreateIndex(
             name: "ux_signin_links_subject_factor",
-            schema: "janus",
+            schema: "identity",
             table: "signin_links",
             columns: SubjectAndFactor,
             unique: true);
@@ -143,14 +143,14 @@ internal sealed partial class AddSignIn : Migration
     {
         migrationBuilder.DropTable(
             name: "policy_raises",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "signin_challenges",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "signin_links",
-            schema: "janus");
+            schema: "identity");
     }
 }

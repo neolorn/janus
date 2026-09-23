@@ -13,7 +13,7 @@ internal sealed partial class AddResourceSubject : Migration
     {
         migrationBuilder.AddColumn<Guid>(
             name: "subject",
-            schema: "janus",
+            schema: "identity",
             table: "resources",
             type: "uuid",
             nullable: true);
@@ -24,7 +24,7 @@ internal sealed partial class AddResourceSubject : Migration
     {
         migrationBuilder.DropColumn(
             name: "subject",
-            schema: "janus",
+            schema: "identity",
             table: "resources");
     }
 }

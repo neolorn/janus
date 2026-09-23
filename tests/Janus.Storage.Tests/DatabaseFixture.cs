@@ -19,7 +19,7 @@ namespace Janus.Storage.Tests;
 /// </remarks>
 public sealed class DatabaseFixture : IAsyncLifetime
 {
-    private const string Database = "janus";
+    private const string Database = "identity";
 
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:17-alpine").Build();
 

@@ -21,7 +21,7 @@ namespace Janus.Storage.Tests;
 [Trait("kind", "integration")]
 public sealed class DataConnectionsTests(DatabaseFixture database) : IClassFixture<DatabaseFixture>
 {
-    private const string Read = "SELECT value FROM janus.settings WHERE key = @key";
+    private const string Read = "SELECT value FROM identity.settings WHERE key = @key";
 
     /// <summary>
     /// OPS-DATA-002 AC1 and AC3: a value written through the context inside the

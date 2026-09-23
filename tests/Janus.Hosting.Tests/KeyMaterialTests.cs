@@ -16,7 +16,7 @@ namespace Janus.Hosting.Tests;
 [Trait("kind", "unit")]
 public sealed class KeyMaterialTests
 {
-    private const string Connection = "Host=nowhere;Database=janus";
+    private const string Connection = "Host=nowhere;Database=identity";
 
     /// <summary>
     /// AUTH-KEY-002 AC2: without the key-encryption key the library does not start,

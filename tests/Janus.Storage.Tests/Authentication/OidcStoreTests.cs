@@ -50,7 +50,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
         await using NpgsqlConnection connection = await database.OpenAsync();
 
         byte[] stored = await connection.QuerySingleAsync<byte[]>(
-            "SELECT secret FROM janus.oidc_clients WHERE client_id = @clientId",
+            "SELECT secret FROM identity.oidc_clients WHERE client_id = @clientId",
             new { clientId = ClientId });
 
         Assert.Equal(OpaqueToken.Of(Secret).Fingerprint(), stored);
@@ -141,7 +141,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
         await using NpgsqlConnection connection = await database.OpenAsync();
 
         (byte[] Stored, int Version) held = await connection.QuerySingleAsync<(byte[], int)>(
-            "SELECT private_key, key_version FROM janus.signing_keys WHERE key_id = @keyId",
+            "SELECT private_key, key_version FROM identity.signing_keys WHERE key_id = @keyId",
             new { keyId = key.KeyId });
 
         Assert.NotEqual(privateKey, held.Stored);

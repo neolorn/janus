@@ -31,7 +31,7 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
 
     private const string Append =
         """
-        INSERT INTO janus.audit_records
+        INSERT INTO identity.audit_records
             (id, category, occurred_at, action, acting_subject, effective_subject,
              organization, details)
         VALUES (@id, @category, @at, @action, @acting, @effective, @organization,
@@ -45,7 +45,7 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
                organization AS "Organization",
                occurred_at AS "At",
                details AS "Details"
-        FROM janus.audit_records
+        FROM identity.audit_records
         WHERE id = @id AND action = @action;
         """;
 

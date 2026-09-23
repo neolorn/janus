@@ -32,7 +32,7 @@ internal sealed class GroupStore(StoreContext context, DataConnections connectio
         """
         edges AS (
             SELECT member.group_id, member.member_type, member.member_id
-            FROM janus.group_members AS member
+            FROM identity.group_members AS member
             WHERE NOT (member.group_id = CAST(@group AS uuid)
                 AND member.member_type = CAST(@memberType AS text)
                 AND member.member_id = CAST(@member AS uuid))
@@ -43,7 +43,7 @@ internal sealed class GroupStore(StoreContext context, DataConnections connectio
         """;
 
     private const string Clear =
-        "DELETE FROM janus.group_closure WHERE group_id = ANY(CAST(@affected AS uuid[]));";
+        "DELETE FROM identity.group_closure WHERE group_id = ANY(CAST(@affected AS uuid[]));";
 
     // AUTHZ-GROUP-001, AUTHZ-INHERIT-002 AC4: the closure is rewritten here, by a
     // recursion that runs once per membership change, so that the question "which
@@ -62,7 +62,7 @@ internal sealed class GroupStore(StoreContext context, DataConnections connectio
             JOIN edges ON edges.group_id = reach.member_id
             WHERE reach.member_type = 'group' AND reach.depth < 64
         )
-        INSERT INTO janus.group_closure (group_id, member_type, member_id, depth)
+        INSERT INTO identity.group_closure (group_id, member_type, member_id, depth)
         SELECT root, member_type, member_id, MIN(depth)
         FROM reach
         GROUP BY root, member_type, member_id;
@@ -75,24 +75,24 @@ internal sealed class GroupStore(StoreContext context, DataConnections connectio
         """
         WITH reached AS (
             SELECT closure.member_id AS subject
-            FROM janus.group_closure AS closure
+            FROM identity.group_closure AS closure
             WHERE closure.member_type = 'user'
               AND closure.group_id = ANY(CAST(@affected AS uuid[]))
             UNION
             SELECT CAST(@member AS uuid) WHERE CAST(@memberType AS text) = 'user'
             UNION
             SELECT closure.member_id
-            FROM janus.group_closure AS closure
+            FROM identity.group_closure AS closure
             WHERE closure.member_type = 'user'
               AND CAST(@memberType AS text) = 'group'
               AND closure.group_id = CAST(@member AS uuid)
         )
-        INSERT INTO janus.grant_versions (subject, version)
+        INSERT INTO identity.grant_versions (subject, version)
         SELECT reached.subject, 1
         FROM reached
         WHERE EXISTS (
-            SELECT 1 FROM janus.accounts AS account WHERE account.subject = reached.subject)
-        ON CONFLICT (subject) DO UPDATE SET version = janus.grant_versions.version + 1;
+            SELECT 1 FROM identity.accounts AS account WHERE account.subject = reached.subject)
+        ON CONFLICT (subject) DO UPDATE SET version = identity.grant_versions.version + 1;
         """;
 
     /// <inheritdoc/>

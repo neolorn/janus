@@ -13,7 +13,7 @@ internal sealed partial class AddSubjectEventOutbox : Migration
     {
         migrationBuilder.CreateTable(
             name: "outbox",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -36,7 +36,7 @@ internal sealed partial class AddSubjectEventOutbox : Migration
                 table.ForeignKey(
                     name: "fk_outbox_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
@@ -44,7 +44,7 @@ internal sealed partial class AddSubjectEventOutbox : Migration
 
         migrationBuilder.CreateTable(
             name: "outbox_confirmations",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 delivery = table.Column<Guid>(type: "uuid", nullable: false),
@@ -58,7 +58,7 @@ internal sealed partial class AddSubjectEventOutbox : Migration
                 table.ForeignKey(
                     name: "fk_outbox_confirmations_delivery",
                     column: x => x.delivery,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "outbox",
                     principalColumn: "id",
                     onDelete: ReferentialAction.Cascade);
@@ -66,14 +66,14 @@ internal sealed partial class AddSubjectEventOutbox : Migration
 
         migrationBuilder.CreateIndex(
             name: "ix_outbox_due",
-            schema: "janus",
+            schema: "identity",
             table: "outbox",
             column: "next_attempt_at",
             filter: "status = 'awaiting-subscribers'");
 
         migrationBuilder.CreateIndex(
             name: "ix_outbox_subject",
-            schema: "janus",
+            schema: "identity",
             table: "outbox",
             column: "subject");
     }
@@ -83,10 +83,10 @@ internal sealed partial class AddSubjectEventOutbox : Migration
     {
         migrationBuilder.DropTable(
             name: "outbox_confirmations",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "outbox",
-            schema: "janus");
+            schema: "identity");
     }
 }

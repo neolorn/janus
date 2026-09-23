@@ -167,8 +167,8 @@ public sealed class OidcFlowTests
     {
         await using var deployment = new Deployment(
             signIn: new AuthenticationAddresses(
-                "https://janus.example.test/signin",
-                "https://janus.example.test"));
+                "https://identity.example.test/signin",
+                "https://identity.example.test"));
 
         await RegisteredAsync(deployment);
 
@@ -177,7 +177,7 @@ public sealed class OidcFlowTests
 
         Assert.Equal(StatusCodes.Status302Found, answered.Status);
         Assert.StartsWith(
-            "https://janus.example.test/signin",
+            "https://identity.example.test/signin",
             Where(answered),
             StringComparison.Ordinal);
 

@@ -51,7 +51,7 @@ public sealed class PreAuthenticationStoreTests(DatabaseFixture database)
         await using NpgsqlConnection connection = await database.OpenAsync();
 
         byte[] stored = await connection.QuerySingleAsync<byte[]>(
-            "SELECT signon_verifier FROM janus.preauthentication_sessions "
+            "SELECT signon_verifier FROM identity.preauthentication_sessions "
                 + "WHERE fingerprint = @Fingerprint;",
             new { Fingerprint = secret.Fingerprint() });
 

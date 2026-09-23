@@ -49,19 +49,19 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     /// <summary>
     /// The schema the library owns. Nothing of the host's lives in it.
     /// </summary>
-    public const string Schema = "janus";
+    public const string Schema = "identity";
 
     /// <summary>
     /// The library's own migration history, separate from the host's.
     /// </summary>
-    public const string MigrationsHistoryTable = "__janus_migrations_history";
+    public const string MigrationsHistoryTable = "__migrations_history";
 
     /// <summary>
     /// The case-insensitive collation the plaintext columns a person spells carry,
     /// created in the schema the library owns like everything else of the library's
     /// (OPS-DB-002).
     /// </summary>
-    public const string CaseInsensitiveCollation = "janus_ci";
+    public const string CaseInsensitiveCollation = "identity_ci";
 
     /// <summary>
     /// The accounts.

@@ -306,13 +306,13 @@ internal sealed class AuthorizationModel
     private static readonly SerializedModel.MaintenanceGrant[] MaintenanceGrants =
     [
         new(
-            "FUNCTION janus.audit_drop_expired_partitions("
+            "FUNCTION identity.audit_drop_expired_partitions("
             + "security_retention interval, routine_retention interval)",
             "EXECUTE"),
-        new("FUNCTION janus.audit_ensure_partitions()", "EXECUTE"),
-        new("SCHEMA janus", "USAGE"),
-        new("TABLE janus.subject_keys", "SELECT"),
-        new("TABLE janus.subject_keys", "UPDATE"),
+        new("FUNCTION identity.audit_ensure_partitions()", "EXECUTE"),
+        new("SCHEMA identity", "USAGE"),
+        new("TABLE identity.subject_keys", "SELECT"),
+        new("TABLE identity.subject_keys", "UPDATE"),
     ];
 
     private static SerializedModel.Type Serialized(ResourceTypeDeclaration type) =>

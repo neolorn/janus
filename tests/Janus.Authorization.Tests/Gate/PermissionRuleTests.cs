@@ -23,12 +23,12 @@ public sealed class PermissionRuleTests
     // The clause that decides, in the words every rendering carries it in.
     private static readonly string[] Deciding =
     [
-        ".permission = ANY(@janus_authz_permissions)",
-        ".organization = @janus_authz_organization",
+        ".permission = ANY(@identity_authz_permissions)",
+        ".organization = @identity_authz_organization",
         ".revoked_at IS NULL",
-        ".expires_at > @janus_authz_at",
-        ".subject_id = ANY(@janus_authz_accounts)",
-        ".subject_id = ANY(@janus_authz_groups)",
+        ".expires_at > @identity_authz_at",
+        ".subject_id = ANY(@identity_authz_accounts)",
+        ".subject_id = ANY(@identity_authz_groups)",
     ];
 
     /// <summary>
@@ -45,7 +45,7 @@ public sealed class PermissionRuleTests
 
         Assert.Equal(1, page.Text.Count(character => character == ';'));
         Assert.Contains(
-            "unnest(CAST(@janus_authz_page_ids AS text[]))",
+            "unnest(CAST(@identity_authz_page_ids AS text[]))",
             page.Text,
             StringComparison.Ordinal);
         Assert.DoesNotContain("UNION", page.Text, StringComparison.OrdinalIgnoreCase);
@@ -79,7 +79,7 @@ public sealed class PermissionRuleTests
         foreach (string text in Renderings(rule))
         {
             Assert.DoesNotContain("RECURSIVE", text, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("janus.ancestry", text, StringComparison.Ordinal);
+            Assert.Contains("identity.ancestry", text, StringComparison.Ordinal);
         }
     }
 
@@ -100,10 +100,10 @@ public sealed class PermissionRuleTests
 
         SqlFilter candidates = rule.ToOrganizationCandidates();
 
-        Assert.DoesNotContain("janus.ancestry", candidates.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("identity.ancestry", candidates.Text, StringComparison.Ordinal);
         Assert.Contains("resource_type IS NULL", candidates.Text, StringComparison.Ordinal);
-        Assert.DoesNotContain("janus_authz_type", candidates.Text, StringComparison.Ordinal);
-        Assert.DoesNotContain("janus_authz_type", candidates.Parameters.Keys);
+        Assert.DoesNotContain("identity_authz_type", candidates.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("identity_authz_type", candidates.Parameters.Keys);
     }
 
     /// <summary>
@@ -115,7 +115,7 @@ public sealed class PermissionRuleTests
     {
         PermissionRule rule = Rule();
 
-        IReadOnlyDictionary<string, object> fragment = rule.ToFragment("janus_authz_row", "id").Parameters;
+        IReadOnlyDictionary<string, object> fragment = rule.ToFragment("identity_authz_row", "id").Parameters;
 
         Assert.Equal(fragment.Keys.Order(StringComparer.Ordinal), rule.ToCandidates().Parameters.Keys.Order(StringComparer.Ordinal));
         Assert.Equal(fragment.Keys.Order(StringComparer.Ordinal), rule.ToPage().Parameters.Keys.Order(StringComparer.Ordinal));
@@ -161,10 +161,10 @@ public sealed class PermissionRuleTests
         {
             Assert.All(
                 Relations(text),
-                relation => Assert.StartsWith("janus.", relation, StringComparison.Ordinal));
+                relation => Assert.StartsWith("identity.", relation, StringComparison.Ordinal));
         }
 
-        Assert.Contains("janus_authz_row.id", rule.ToFragment("janus_authz_row", "id").Text, StringComparison.Ordinal);
+        Assert.Contains("identity_authz_row.id", rule.ToFragment("identity_authz_row", "id").Text, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -180,11 +180,11 @@ public sealed class PermissionRuleTests
 
         Assert.All(
             Relations(rule.ToCandidates().Text).Concat(Relations(rule.ToPage().Text)),
-            relation => Assert.StartsWith("janus.", relation, StringComparison.Ordinal));
+            relation => Assert.StartsWith("identity.", relation, StringComparison.Ordinal));
 
         Assert.All(
-            Relations(rule.ToFragment("janus_authz_row", "id").Text)
-                .Where(relation => !relation.StartsWith("janus.", StringComparison.Ordinal)),
+            Relations(rule.ToFragment("identity_authz_row", "id").Text)
+                .Where(relation => !relation.StartsWith("identity.", StringComparison.Ordinal)),
             relation => Assert.Equal("host.folders", relation));
     }
 
@@ -198,21 +198,21 @@ public sealed class PermissionRuleTests
     {
         PermissionRule rule = Rule(Reviewer());
 
-        SqlFilter fragment = rule.ToFragment("janus_authz_row", "id");
+        SqlFilter fragment = rule.ToFragment("identity_authz_row", "id");
 
         Assert.Contains(
-            "FROM host.folders AS janus_authz_derived0",
+            "FROM host.folders AS identity_authz_derived0",
             fragment.Text,
             StringComparison.Ordinal);
         Assert.Contains(
-            "janus_authz_derived0.reviewer = ANY(@janus_authz_accounts)",
+            "identity_authz_derived0.reviewer = ANY(@identity_authz_accounts)",
             fragment.Text,
             StringComparison.Ordinal);
         Assert.Contains(
-            "ancestor_id = janus_authz_derived0.id",
+            "ancestor_id = identity_authz_derived0.id",
             fragment.Text,
             StringComparison.Ordinal);
-        Assert.Equal("folder", Assert.IsType<string>(fragment.Parameters["janus_authz_derived0_on"]));
+        Assert.Equal("folder", Assert.IsType<string>(fragment.Parameters["identity_authz_derived0_on"]));
     }
 
     // What a rendering reads from, in the two words a statement names it by.
@@ -235,7 +235,7 @@ public sealed class PermissionRuleTests
 
     private static string[] Renderings(PermissionRule rule) =>
     [
-        rule.ToFragment("janus_authz_row", "id").Text,
+        rule.ToFragment("identity_authz_row", "id").Text,
         rule.ToCandidates().Text,
         rule.ToPage().Text,
     ];

@@ -13,7 +13,7 @@ internal sealed partial class AddLifecycleLinks : Migration
     {
         migrationBuilder.CreateTable(
             name: "lifecycle_links",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 token = table.Column<byte[]>(type: "bytea", maxLength: 32, nullable: false),
@@ -29,7 +29,7 @@ internal sealed partial class AddLifecycleLinks : Migration
                 table.ForeignKey(
                     name: "fk_lifecycle_links_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
@@ -37,7 +37,7 @@ internal sealed partial class AddLifecycleLinks : Migration
 
         migrationBuilder.CreateIndex(
             name: "ux_lifecycle_links_subject",
-            schema: "janus",
+            schema: "identity",
             table: "lifecycle_links",
             column: "subject",
             unique: true);
@@ -48,6 +48,6 @@ internal sealed partial class AddLifecycleLinks : Migration
     {
         migrationBuilder.DropTable(
             name: "lifecycle_links",
-            schema: "janus");
+            schema: "identity");
     }
 }

@@ -87,8 +87,8 @@ internal sealed class Deployment : IAsyncDisposable
     // LIB-HOST-001: where a browser holding no session is sent is a declaration no
     // deployment starts without, so every deployment here carries one (AUTH-SESS-012).
     private static readonly AuthenticationAddresses Screen = new(
-        "https://janus.example.test/signin",
-        "https://janus.example.test");
+        "https://identity.example.test/signin",
+        "https://identity.example.test");
 
     // LIB-HOST-001, BFF-SESS-006: which client of the provider this application is
     // is a declaration no deployment starts without either.
@@ -131,8 +131,8 @@ internal sealed class Deployment : IAsyncDisposable
 
         // Two of the keys a deployment names or does not start, which a ceremony and
         // the challenge every sign-in carries are read from (OPS-CFG-001).
-        Configuration.Set(Settings.WebAuthnRelyingPartyId, "janus.example.test");
-        Configuration.Set(Settings.WebAuthnOrigins, ["https://janus.example.test"]);
+        Configuration.Set(Settings.WebAuthnRelyingPartyId, "identity.example.test");
+        Configuration.Set(Settings.WebAuthnOrigins, ["https://identity.example.test"]);
 
         Register(
             builder.Services,

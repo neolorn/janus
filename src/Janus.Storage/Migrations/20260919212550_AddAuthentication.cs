@@ -18,7 +18,7 @@ internal sealed partial class AddAuthentication : Migration
 
         migrationBuilder.CreateTable(
             name: "authenticators",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -50,7 +50,7 @@ internal sealed partial class AddAuthentication : Migration
                 table.ForeignKey(
                     name: "fk_authenticators_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
@@ -58,7 +58,7 @@ internal sealed partial class AddAuthentication : Migration
 
         migrationBuilder.CreateTable(
             name: "devices",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -79,7 +79,7 @@ internal sealed partial class AddAuthentication : Migration
                 table.ForeignKey(
                     name: "fk_devices_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
@@ -87,7 +87,7 @@ internal sealed partial class AddAuthentication : Migration
 
         migrationBuilder.CreateTable(
             name: "passwords",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 subject = table.Column<Guid>(type: "uuid", nullable: false),
@@ -101,7 +101,7 @@ internal sealed partial class AddAuthentication : Migration
                 table.ForeignKey(
                     name: "fk_passwords_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
@@ -109,7 +109,7 @@ internal sealed partial class AddAuthentication : Migration
 
         migrationBuilder.CreateTable(
             name: "recovery_code_sets",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 subject = table.Column<Guid>(type: "uuid", nullable: false),
@@ -124,7 +124,7 @@ internal sealed partial class AddAuthentication : Migration
                 table.ForeignKey(
                     name: "fk_recovery_code_sets_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
@@ -132,7 +132,7 @@ internal sealed partial class AddAuthentication : Migration
 
         migrationBuilder.CreateTable(
             name: "sessions",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -166,7 +166,7 @@ internal sealed partial class AddAuthentication : Migration
                 table.ForeignKey(
                     name: "fk_sessions_subject",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "accounts",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Restrict);
@@ -174,7 +174,7 @@ internal sealed partial class AddAuthentication : Migration
 
         migrationBuilder.CreateTable(
             name: "recovery_codes",
-            schema: "janus",
+            schema: "identity",
             columns: table => new
             {
                 subject = table.Column<Guid>(type: "uuid", nullable: false),
@@ -188,7 +188,7 @@ internal sealed partial class AddAuthentication : Migration
                 table.ForeignKey(
                     name: "fk_recovery_codes_set",
                     column: x => x.subject,
-                    principalSchema: "janus",
+                    principalSchema: "identity",
                     principalTable: "recovery_code_sets",
                     principalColumn: "subject",
                     onDelete: ReferentialAction.Cascade);
@@ -196,7 +196,7 @@ internal sealed partial class AddAuthentication : Migration
 
         migrationBuilder.CreateIndex(
             name: "ux_authenticators_credential_id",
-            schema: "janus",
+            schema: "identity",
             table: "authenticators",
             column: "credential_id",
             unique: true,
@@ -204,39 +204,39 @@ internal sealed partial class AddAuthentication : Migration
 
         migrationBuilder.CreateIndex(
             name: "ux_authenticators_label",
-            schema: "janus",
+            schema: "identity",
             table: "authenticators",
             columns: SubjectFactorAndLabel,
             unique: true);
 
         migrationBuilder.CreateIndex(
             name: "ix_devices_subject",
-            schema: "janus",
+            schema: "identity",
             table: "devices",
             column: "subject");
 
         migrationBuilder.CreateIndex(
             name: "ux_devices_token_fingerprint",
-            schema: "janus",
+            schema: "identity",
             table: "devices",
             column: "token_fingerprint",
             unique: true);
 
         migrationBuilder.CreateIndex(
             name: "ix_sessions_spine",
-            schema: "janus",
+            schema: "identity",
             table: "sessions",
             column: "spine");
 
         migrationBuilder.CreateIndex(
             name: "ix_sessions_subject",
-            schema: "janus",
+            schema: "identity",
             table: "sessions",
             columns: SubjectAndEndedAt);
 
         migrationBuilder.CreateIndex(
             name: "ux_sessions_secret_fingerprint",
-            schema: "janus",
+            schema: "identity",
             table: "sessions",
             column: "secret_fingerprint",
             unique: true);
@@ -249,26 +249,26 @@ internal sealed partial class AddAuthentication : Migration
 
         migrationBuilder.DropTable(
             name: "authenticators",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "devices",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "passwords",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "recovery_codes",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "sessions",
-            schema: "janus");
+            schema: "identity");
 
         migrationBuilder.DropTable(
             name: "recovery_code_sets",
-            schema: "janus");
+            schema: "identity");
     }
 }

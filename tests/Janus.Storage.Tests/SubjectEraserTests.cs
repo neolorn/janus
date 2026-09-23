@@ -219,13 +219,13 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         Assert.Equal(
             1,
             await connection.ExecuteScalarAsync<int>(
-                "SELECT count(*) FROM janus.accounts WHERE subject = @subject",
+                "SELECT count(*) FROM identity.accounts WHERE subject = @subject",
                 new { subject = subject.Value }));
 
         Assert.Equal(
             1,
             await connection.ExecuteScalarAsync<int>(
-                "SELECT count(*) FROM janus.subject_keys WHERE subject = @subject",
+                "SELECT count(*) FROM identity.subject_keys WHERE subject = @subject",
                 new { subject = subject.Value }));
     }
 
@@ -314,7 +314,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         PostgresException refusal = await Assert.ThrowsAsync<PostgresException>(async () =>
             await connection.ExecuteAsync(
-                "UPDATE janus.erasures SET status = 'half-done' WHERE subject = @subject",
+                "UPDATE identity.erasures SET status = 'half-done' WHERE subject = @subject",
                 new { subject = subject.Value }));
 
         Assert.Equal("ck_erasures_status", refusal.ConstraintName);
@@ -331,7 +331,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         IEnumerable<string> columns = await connection.QueryAsync<string>(
             "SELECT column_name FROM information_schema.columns "
-                + "WHERE table_schema = 'janus' AND table_name = 'accounts'");
+                + "WHERE table_schema = 'identity' AND table_name = 'accounts'");
 
         Assert.All(columns, column =>
         {
@@ -503,7 +503,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         Assert.Equal(
             deactivated.ToString(),
             await connection.ExecuteScalarAsync<string>(
-                "SELECT action FROM janus.audit_records WHERE effective_subject = @subject",
+                "SELECT action FROM identity.audit_records WHERE effective_subject = @subject",
                 new { subject = subject.Value }));
     }
 
@@ -522,7 +522,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         PostgresException refusal = await Assert.ThrowsAsync<PostgresException>(async () =>
             await connection.ExecuteAsync(
-                "INSERT INTO janus.accounts (subject, state, created_at) "
+                "INSERT INTO identity.accounts (subject, state, created_at) "
                     + "VALUES (@subject, 'active', @at)",
                 new { subject = subject.Value, at = Noon }));
 
@@ -612,7 +612,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         Assert.Equal(
             1,
             await connection.ExecuteScalarAsync<int>(
-                "SELECT count(*) FROM janus.audit_records WHERE organization = @organization",
+                "SELECT count(*) FROM identity.audit_records WHERE organization = @organization",
                 new { organization = organization.Value }));
 
         await using StoreContext reading = database.Context();
@@ -925,11 +925,11 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await using NpgsqlConnection connection = await database.OpenAsync();
 
         string? action = await connection.ExecuteScalarAsync<string>(
-            "SELECT action FROM janus.audit_records WHERE effective_subject = @subject",
+            "SELECT action FROM identity.audit_records WHERE effective_subject = @subject",
             new { subject = subject.Value });
 
         DateTime at = await connection.ExecuteScalarAsync<DateTime>(
-            "SELECT occurred_at FROM janus.audit_records WHERE effective_subject = @subject",
+            "SELECT occurred_at FROM identity.audit_records WHERE effective_subject = @subject",
             new { subject = subject.Value });
 
         Assert.Equal(suspended.ToString(), action);
@@ -955,7 +955,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         PostgresException refusal = await Assert.ThrowsAsync<PostgresException>(async () =>
             await connection.ExecuteAsync(
-                "INSERT INTO janus.accounts (subject, state, created_at) "
+                "INSERT INTO identity.accounts (subject, state, created_at) "
                     + "VALUES (@subject, 'active', @at)",
                 new { subject = subject.Value, at = Noon }));
 

@@ -25,23 +25,23 @@ apply() {
 }
 
 echo "Run one: from empty."
-create janus_from_empty
-apply "$storage" janus_from_empty
+create migrated_from_empty
+apply "$storage" migrated_from_empty
 
 previous=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
 
 echo "Run two: from the previous release's schema."
-create janus_from_previous
+create migrated_from_previous
 
 if [ -n "$previous" ]; then
   release=${RUNNER_TEMP:-/tmp}/janus-${previous}
   git worktree add --detach "$release" "$previous"
-  apply "${release}/${storage}" janus_from_previous
+  apply "${release}/${storage}" migrated_from_previous
   git worktree remove --force "$release"
 else
   echo "No release is tagged yet, so the previous schema is the empty one."
 fi
 
-apply "$storage" janus_from_previous
+apply "$storage" migrated_from_previous
 
 echo "Both runs applied."
