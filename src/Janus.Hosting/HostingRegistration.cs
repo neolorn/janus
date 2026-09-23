@@ -34,6 +34,7 @@ using Janus.Hosting.Registration;
 using Janus.Hosting.Sending;
 using Janus.Hosting.Sessions;
 using Janus.Privacy;
+using Janus.Privacy.Breaches;
 using Janus.Privacy.Consents;
 using Janus.Privacy.Documents;
 using Janus.Privacy.Erasures;
@@ -321,6 +322,7 @@ public static class HostingRegistration
         services.AddScoped<OrganizationErasureSweep>();
         services.AddScoped<IExports, ExportService>();
         services.AddScoped<IProcessingRecords, ProcessingRecordsService>();
+        services.AddScoped<IAuditTrail, AuditTrailService>();
         services.AddScoped<OutboxPublisher>();
 
         // AUTHZ-MODEL-001: what may be processed for what is part of the one

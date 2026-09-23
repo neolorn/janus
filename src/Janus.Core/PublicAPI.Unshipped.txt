@@ -166,6 +166,27 @@ Janus.Core.AuditActions
 Janus.Core.AuditCategory
 Janus.Core.AuditCategory.Routine = 1 -> Janus.Core.AuditCategory
 Janus.Core.AuditCategory.Security = 0 -> Janus.Core.AuditCategory
+Janus.Core.AuditEntry
+Janus.Core.AuditEntry.<Clone>$() -> Janus.Core.AuditEntry!
+Janus.Core.AuditEntry.Acting.get -> Janus.Core.SubjectId
+Janus.Core.AuditEntry.Acting.init -> void
+Janus.Core.AuditEntry.Action.get -> Janus.Core.AuditAction
+Janus.Core.AuditEntry.Action.init -> void
+Janus.Core.AuditEntry.AuditEntry(Janus.Core.AuditRecordId Id, Janus.Core.AuditCategory Category, Janus.Core.AuditAction Action, System.DateTimeOffset OccurredAt, Janus.Core.SubjectId Acting, Janus.Core.SubjectId Effective, Janus.Core.OrganizationId? Organization, System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.JsonElement>! Details) -> void
+Janus.Core.AuditEntry.Category.get -> Janus.Core.AuditCategory
+Janus.Core.AuditEntry.Category.init -> void
+Janus.Core.AuditEntry.Deconstruct(out Janus.Core.AuditRecordId Id, out Janus.Core.AuditCategory Category, out Janus.Core.AuditAction Action, out System.DateTimeOffset OccurredAt, out Janus.Core.SubjectId Acting, out Janus.Core.SubjectId Effective, out Janus.Core.OrganizationId? Organization, out System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.JsonElement>! Details) -> void
+Janus.Core.AuditEntry.Details.get -> System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.JsonElement>!
+Janus.Core.AuditEntry.Details.init -> void
+Janus.Core.AuditEntry.Effective.get -> Janus.Core.SubjectId
+Janus.Core.AuditEntry.Effective.init -> void
+Janus.Core.AuditEntry.Equals(Janus.Core.AuditEntry? other) -> bool
+Janus.Core.AuditEntry.Id.get -> Janus.Core.AuditRecordId
+Janus.Core.AuditEntry.Id.init -> void
+Janus.Core.AuditEntry.OccurredAt.get -> System.DateTimeOffset
+Janus.Core.AuditEntry.OccurredAt.init -> void
+Janus.Core.AuditEntry.Organization.get -> Janus.Core.OrganizationId?
+Janus.Core.AuditEntry.Organization.init -> void
 Janus.Core.AuditRecordId
 Janus.Core.AuditRecordId.AuditRecordId() -> void
 Janus.Core.AuditRecordId.AuditRecordId(System.Guid Value) -> void
@@ -977,6 +998,8 @@ Janus.Core.IAccount.SetPhotoAsync(Janus.Core.AccessContext! context, System.Read
 Janus.Core.IAccount.SetPreferencesAsync(Janus.Core.AccessContext! context, string? language, string? timeZone, System.Collections.Generic.IReadOnlyDictionary<string!, string!>! declared, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAssuranceProvider
 Janus.Core.IAssuranceProvider.LevelAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AssuranceLevel>>
+Janus.Core.IAuditTrail
+Janus.Core.IAuditTrail.OfSubjectAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.AuditEntry!>!>>
 Janus.Core.IAuthentication
 Janus.Core.IAuthentication.AbandonLinkAsync(string! linkToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAuthentication.BeginAsync(string! identifier, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.SignInChallenge!>>
@@ -2348,6 +2371,9 @@ override Janus.Core.ApprovedRecovery.GetHashCode() -> int
 override Janus.Core.ApprovedRecovery.ToString() -> string!
 override Janus.Core.AuditAction.GetHashCode() -> int
 override Janus.Core.AuditAction.ToString() -> string!
+override Janus.Core.AuditEntry.Equals(object? obj) -> bool
+override Janus.Core.AuditEntry.GetHashCode() -> int
+override Janus.Core.AuditEntry.ToString() -> string!
 override Janus.Core.AuditRecordId.GetHashCode() -> int
 override Janus.Core.AuditRecordId.ToString() -> string!
 override Janus.Core.AuthenticationAddresses.Equals(object? obj) -> bool
@@ -2882,6 +2908,8 @@ static Janus.Core.AuditActions.SessionPresented.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.TakedownExecuted.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.TakedownReversed.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.UsernameChanged.get -> Janus.Core.AuditAction
+static Janus.Core.AuditEntry.operator !=(Janus.Core.AuditEntry? left, Janus.Core.AuditEntry? right) -> bool
+static Janus.Core.AuditEntry.operator ==(Janus.Core.AuditEntry? left, Janus.Core.AuditEntry? right) -> bool
 static Janus.Core.AuditRecordId.New(System.TimeProvider! time) -> Janus.Core.AuditRecordId
 static Janus.Core.AuditRecordId.operator !=(Janus.Core.AuditRecordId left, Janus.Core.AuditRecordId right) -> bool
 static Janus.Core.AuditRecordId.operator ==(Janus.Core.AuditRecordId left, Janus.Core.AuditRecordId right) -> bool

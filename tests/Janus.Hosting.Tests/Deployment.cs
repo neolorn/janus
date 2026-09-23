@@ -45,11 +45,13 @@ using Janus.Hosting.Sending;
 using Janus.Hosting.Tests.Bff;
 using Janus.Hosting.Tests.Oidc;
 using Janus.Privacy;
+using Janus.Privacy.Breaches;
 using Janus.Privacy.Consents;
 using Janus.Privacy.Documents;
 using Janus.Privacy.Exports;
 using Janus.Privacy.Records;
 using Janus.Privacy.Requests;
+using Janus.Privacy.Tests.Breaches;
 using Janus.Privacy.Tests.Consents;
 using Janus.Privacy.Tests.Documents;
 using Janus.Privacy.Tests.Exports;
@@ -404,6 +406,11 @@ internal sealed class Deployment : IAsyncDisposable
     public EventsInMemory Events { get; } = new();
 
     /// <summary>
+    /// The audit trail as the privacy area reads it by subject.
+    /// </summary>
+    public AuditTrailStoreInMemory Trail { get; } = new();
+
+    /// <summary>
     /// Names the organization that administers the deployment, as bootstrap does, so a
     /// permission granted there is one an administrative operation honours.
     /// </summary>
@@ -610,6 +617,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<Janus.Privacy.Records.IComplianceStore>(Compliance);
         _ = services.AddSingleton<Janus.Privacy.Records.IRegisterRoles>(RegisterRoles);
         _ = services.AddScoped<IProcessingRecords, ProcessingRecordsService>();
+        _ = services.AddSingleton<IAuditTrailStore>(Trail);
+        _ = services.AddScoped<IAuditTrail, AuditTrailService>();
         _ = services.AddScoped<SigningKeys>();
         _ = services.AddScoped<OidcService>();
         _ = services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());

@@ -10,6 +10,7 @@ using Janus.Core;
 using Janus.Identity.Audit;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Identity.Audit;
+using Janus.Storage.Privacy.Breaches;
 using Npgsql;
 using Xunit;
 
@@ -357,6 +358,43 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
     }
 
     /// <summary>
+    /// PRIV-BREACH-002 AC2: the trail the privacy area reads by subject carries each
+    /// record's codes and never what it holds under the key, so it answers the same
+    /// before and after the subject is erased.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_BREACH_002_AC2_TheTrailReadsTheSameBeforeAndAfterErasureAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Now());
+
+        await AppendAsync(AuditRecord.Of(
+            NewId(),
+            AuditCategory.Security,
+            Suspended,
+            Now(),
+            subject,
+            subject,
+            organization: null,
+            details: Fields(("trigger", "staff-report")),
+            personalDetails: Fields(("reason", "ahmed@example.com"))));
+
+        IReadOnlyList<AuditEntry> before = await TrailAsync(subject);
+
+        await _deployment.EraseAsync(subject);
+
+        IReadOnlyList<AuditEntry> after = await TrailAsync(subject);
+
+        AuditEntry entry = Assert.Single(before);
+
+        Assert.Equal(Suspended, entry.Action);
+        Assert.Equal("staff-report", entry.Details["trigger"].GetString());
+        Assert.False(entry.Details.ContainsKey("reason"));
+        Assert.Equal(
+            before.Select(read => (read.Id, read.Action, string.Join(',', read.Details.Keys))),
+            after.Select(read => (read.Id, read.Action, string.Join(',', read.Details.Keys))));
+    }
+
+    /// <summary>
     /// PRIV-RET-002: the row goes to the partition of its retention category, so a
     /// month of one category is dropped without touching the other.
     /// </summary>
@@ -491,6 +529,15 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
 
     private AuditStore Store(StoreContext context) =>
         new(context, _deployment.Keys, _deployment.Randomness);
+
+    private async ValueTask<IReadOnlyList<AuditEntry>> TrailAsync(SubjectId subject)
+    {
+        await using StoreContext reading = database.Context();
+
+        return await new AuditTrailStore(Store(reading)).OfSubjectAsync(
+            subject,
+            TestContext.Current.CancellationToken);
+    }
 
     private async ValueTask AppendAsync(AuditRecord record)
     {

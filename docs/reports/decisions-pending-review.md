@@ -6495,6 +6495,41 @@ organization, and `IAccessGate.ResolveOwnAsync` is added.
 is held in the administrative organization, and that the self-service route resolves a
 refusal of the caller acting as themselves.
 
+---
+
+## 177. The audit trail read by subject carries each record's codes and never what it holds under the subject's key
+
+**Phase 8 · 2026-09-23 · Tier 3 · PRIV-BREACH-002, IDN-AUD-001, 09 section 8a**
+
+*The question.* 09 section 8a mounts `GET /admin/audit?subject=...` under `audit:read`:
+"Every audit record for one subject, without a full scan (PRIV-BREACH-002)."
+PRIV-BREACH-002 AC2 says "The query works after erasure, returning anonymised records."
+An audit record holds its codes and references in the clear and, where an event has to
+carry a personal value, holds that value under the subject's key (IDN-AUD-001). No
+chapter says whether the read hands the personal values to the reader while the key
+still exists.
+
+*The readings.*
+
+1. Every field of the record, the personal values included while the key exists.
+2. The codes, identities, organization and plain details only; the values held under
+   the key never cross into the answer.
+
+*Chosen: 2, the strictest reading.* The read serves "who was affected", which the codes
+and identities answer. Reading 1 hands a person holding `audit:read` personal values the
+operation does not need, and makes the same query answer differently before and after
+erasure. Reading 2 grants least, and an entry reads the same either side of erasure, so
+AC2 holds by construction. The contract is `IAuditTrail.OfSubjectAsync`, asked in the
+administrative organization as entry 175 places the audit trail.
+
+*Tests that pin it.*
+`AuditStoreTests.PRIV_BREACH_002_AC2_TheTrailReadsTheSameBeforeAndAfterErasureAsync`,
+`AuditTrailServiceTests` (both),
+`AuditTrailEndpointTests` (all three).
+
+*Chapter text that should change.* 09 section 8a could say that the entries carry the
+record's codes and plain details and not the values held under the subject's key.
+
 
 # Rows for chapter 10
 
