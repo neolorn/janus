@@ -50,6 +50,7 @@ public static class IdentityEndpoints
         _ = endpoints.MapErasures();
         _ = endpoints.MapSessionRevocation();
         _ = endpoints.MapExplanations();
+        _ = endpoints.MapAccess();
         _ = endpoints.MapAuditTrail();
         _ = endpoints.MapPublication();
         _ = endpoints.MapConfiguration();

@@ -9807,6 +9807,91 @@ the same widening for the listing). Under this:
 refusals; IDN-LIFE-003a could say whether a takedown's or a restriction's failed
 delivery has a manual path; chapter 10 could hold the rows below.
 
+---
+
+## 265. What the "who can access this?" view reads, whom it answers, and what it answers over HTTP
+
+**Phase 8 · 2026-09-24 · Tier 3 · AUTHZ-DERIVE-007, AUTHZ-GATE-004, chapter 09 section 8, chapter 10 sections 3 and 4.5a, D-161, D-162, entry 196**
+
+*The question.* Chapter 09 section 8 answers `GET /admin/access?resourceType=...&resourceId=...`
+with **200**, "who can access this resource, and through which grant or container", and
+"Stored and derived grants are reported **distinctly**", with `partial: true` and
+`unevaluated` past `authz.reverselookup.budget`. AUTHZ-DERIVE-007 (D-161) says it
+"answers stored grants by query, materialised derived grants by query (they are rows),
+and unmaterialised derivations by evaluating each declared derivation over the
+host-supplied relation for the resource and its ancestors". Chapter 10 section 3 gives
+`grant:read` as "Viewing grants and the \"who can access this?\" view". No chapter says:
+in which organization `grant:read` is asked; what each grant in the answer carries;
+whether a grant that confers nothing (a suspended organization's, a role allowing
+nothing) is reported; what `unevaluated` names; or how the HTTP view reaches the
+host-supplied relation, since the library holds no host rows and a request carries none.
+
+*The readings.*
+
+1. Over HTTP, answer the stored and materialised grants and mark every unmaterialised
+   derivation reaching the record as `unevaluated`, with `partial: true`.
+2. Over HTTP, answer only the stored grants, silently.
+3. Over HTTP, refuse a record a non-materialised derivation reaches with
+   `authz.derivation.sourcesmissing`, as every other path without the host's rows is
+   refused (D-162), and answer it in full through the library call the host makes with
+   its rows.
+
+*Chosen: 3, the strictest reading.* Reading 2 is the silent partial answer AC2
+forbids. Reading 1 widens `partial` and `unevaluated`, which the chapter ties to the
+budget alone, to a second meaning, and hands an administrator a list that looks
+complete for every host that never mounts its own call. D-162: "No path answers from
+stored grants alone." Under this:
+
+- `IAccessGate.WhoCanAccessAsync(context, resource)` and
+  `WhoCanAccessAsync<TResource>(context, resource, sources)` answer `ResourceAccess
+  { Resource, Grants, Partial, Unevaluated }`, each grant in the `ExplainedGrant` shape
+  an explanation carries (AUTHZ-GATE-004): identifier (none for a derived one), kind,
+  subject type and identifier, role, deny, and the container it sits on (none where it
+  sits on the record itself or on the whole organization).
+- The view is `grant:read` in the organization the record sits in, read from the
+  registry; `resourceType` `organization` with the organization's identifier asks for
+  the whole of it. A caller without it is refused **403** `authz.denied` with the
+  refusal recorded as every refusal is; nothing is concealed (AUTHZ-CONCEAL-005). A type
+  the host did not declare, or a record the registry does not hold, is **400**
+  `api.request.malformed` naming `resourceType` or `resourceId`.
+- Without the host's rows, a record a non-materialised derivation reaches is refused
+  **500** `authz.derivation.sourcesmissing`; the whole organization, which no derivation
+  reaches, and a type no such derivation reaches are answered. `GET /admin/access` has
+  no rows to give, so it answers those and refuses the rest; a host wanting the full
+  view on a derived type makes the library call with its `FilterSources`.
+- Stored grants, materialised ones among them, are read in one query, as the effective
+  grants view confers them (entry 196): live, not revoked, of a role that allows
+  something, in an organization whose deletion is not requested. They are ordered: on
+  the record, then on each container nearest first, then on the whole organization.
+- Each non-materialised derivation reaching the record is evaluated over the host's
+  relation for the record and each container of the type the relationship is declared
+  on, and each holder is reported as a derived grant of the role the derivation
+  confers. The bound is `authz.reverselookup.budget`, read on the injected clock across
+  all derivations and checked between rows; a derivation it stops contributes nothing
+  and its relationship's name is added once to `unevaluated`, with `partial: true`.
+- The HTTP answer is `{ resource: { resourceType, resourceId }, grants: [ { id, kind,
+  subjectType, subjectId, role, deny, inheritedFrom } ], partial, unevaluated }`.
+
+*Tests that pin it.*
+`ReverseLookupTests.AUTHZ_DERIVE_007_AC1_StoredAndDerivedGrantsAreReportedDistinctlyAsync`,
+`ReverseLookupTests.AUTHZ_DERIVE_007_AC2_PastTheBudgetTheAnswerIsPartialAndNamesWhatWentUnevaluatedAsync`,
+`ReverseLookupTests.AUTHZ_DERIVE_007_WithoutTheHostsRowsARecordADerivationReachesIsRefusedAsync`,
+`ReverseLookupTests.AUTHZ_DERIVE_007_TheViewRequiresGrantReadInTheRecordsOrganizationAsync`,
+`ReverseLookupTests.AUTHZ_DERIVE_007_AGrantThatConfersNothingIsNotReportedAsync`,
+`ReverseLookupTests.AUTHZ_DERIVE_007_AnUnknownRecordOrTypeIsRefusedAsMalformedAsync`,
+`MaterialisationTests.AUTHZ_DERIVE_007_AMaterialisedGrantIsReportedAsARowAsync`,
+`GrantStoreTests.AUTHZ_DERIVE_007_ASuspendedOrganizationsGrantsAreNotReadOnARecordAsync`,
+`AccessEndpointTests.AUTHZ_DERIVE_007_TheViewAnswersTheRecordItsGrantsAndWhatWentUnevaluatedAsync`,
+`AccessEndpointTests.AUTHZ_DERIVE_007_ARecordNotNamedIsRefusedAsMalformedAsync`,
+`AccessEndpointTests.AUTHZ_DERIVE_007_TheViewIsRefusedWithoutGrantReadAsync`,
+`SessionRequirementTests` (the list of session routes).
+
+*Chapter text that should change.* Chapter 09 section 8 could give the response shape
+above, the permission and the organization it is asked in, the 400 and 500 refusals,
+and say how the HTTP view reaches the host's relation, or that it does not and the
+view on a derived type is the host's own call; AUTHZ-DERIVE-007 could say that a grant
+conferring nothing is not reported and that `unevaluated` names relationships.
+
 
 # Rows for chapter 10
 

@@ -23,13 +23,14 @@ namespace Janus.Authorization.Gate;
 /// <param name="subjects">Who the principal is, resolved once per operation.</param>
 /// <param name="gates">What an action's step-up gate still asks of the session.</param>
 /// <param name="derived">Which of the host's relationships confer what is being asked.</param>
+/// <param name="lookup">Who can access a record, for the view that asks.</param>
 /// <param name="consents">What the caller has consented to, for the purpose the action serves.</param>
 /// <param name="administrative">Which organization a support role resolves a refusal in.</param>
 /// <param name="time">The clock liveness is read against.</param>
 /// <remarks>
 /// Implements AUTHZ-SEAM-001, AUTHZ-PRIN-001, AUTHZ-PRIN-003, AUTHZ-GATE-002,
-/// AUTHZ-GATE-004, AUTHZ-GATE-005, AUTHZ-SCOPE-001, AUTHZ-CONCEAL-004, PRIV-SENS-002,
-/// PRIV-SENS-002a and LIB-SEAM-001.
+/// AUTHZ-GATE-004, AUTHZ-GATE-005, AUTHZ-SCOPE-001, AUTHZ-CONCEAL-004, AUTHZ-DERIVE-007,
+/// PRIV-SENS-002, PRIV-SENS-002a and LIB-SEAM-001.
 /// A check and a filter are the one rule rendered two ways, so neither can come to
 /// answer what the other would refuse. Every path that cannot resolve what it needs
 /// denies.
@@ -42,6 +43,7 @@ internal sealed class AccessGate(
     SubjectSets subjects,
     StepUpGates gates,
     Derivations derived,
+    ReverseLookup lookup,
     IRecordedConsents consents,
     IAdministrativeOrganization administrative,
     TimeProvider time) : IAccessGate
@@ -237,6 +239,27 @@ internal sealed class AccessGate(
             : null;
 
         return Result.Success(Explanation(context, permission, resource, decided, derivedGrant));
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result<ResourceAccess>> WhoCanAccessAsync(
+        AccessContext context,
+        ResourceReference resource,
+        CancellationToken cancellationToken) =>
+        await LookedUpAsync(context, resource, relationships: null, cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async ValueTask<Result<ResourceAccess>> WhoCanAccessAsync<TResource>(
+        AccessContext context,
+        ResourceReference resource,
+        FilterSources<TResource> sources,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+
+        return await LookedUpAsync(context, resource, sources.Relationships, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -774,6 +797,61 @@ internal sealed class AccessGate(
             .. resources.Select(resource =>
                 new Capability(resource, new HashSet<Permission>(), NoResiduals)),
         ]);
+
+    // AUTHZ-SCOPE-001, AUTHZ-CONCEAL-005, AUTHZ-DERIVE-007: the view is the grant:read
+    // permission's in the organization the record sits in, read from the record, and
+    // nothing is concealed from a caller without it. Without the host's rows, a type a
+    // derivation reaches is refused as every other path refuses it, since the stored
+    // grants alone are not who can access it (D-161, D-162).
+    private async ValueTask<Result<ResourceAccess>> LookedUpAsync(
+        AccessContext context,
+        ResourceReference resource,
+        IReadOnlyDictionary<string, RelationshipRows>? relationships,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        bool organizationWide = resource.Type == OrganizationWide;
+
+        if (!organizationWide && model.Find(resource.Type) is null)
+        {
+            return Result.Failure<ResourceAccess>(Malformed("resourceType"));
+        }
+
+        if (await ScopeOfAsync(resource, organizationWide, cancellationToken).ConfigureAwait(false)
+            is not OrganizationId organization)
+        {
+            return Result.Failure<ResourceAccess>(Malformed("resourceId"));
+        }
+
+        Result held = await RequireAsync(context, Permissions.GrantRead, organization, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (held.Match(() => (Error?)null, error => error) is Error refused)
+        {
+            return Result.Failure<ResourceAccess>(refused);
+        }
+
+        if (relationships is null && !organizationWide && derived.Reaches(resource.Type))
+        {
+            return Result.Failure<ResourceAccess>(Error.From(ErrorCodes.DerivationSourcesMissing));
+        }
+
+        return Result.Success(await lookup
+            .LookedUpAsync(resource, organization, relationships, cancellationToken)
+            .ConfigureAwait(false));
+    }
+
+    private async ValueTask<OrganizationId?> ScopeOfAsync(
+        ResourceReference resource,
+        bool organizationWide,
+        CancellationToken cancellationToken) =>
+        organizationWide
+            ? Guid.TryParse(resource.Id.ToString(), out Guid organization) ? new OrganizationId(organization) : null
+            : (await records.FindAsync(resource, cancellationToken).ConfigureAwait(false))?.Organization;
+
+    private static Error Malformed(string member) =>
+        Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
 
     // AUTHZ-GATE-004: one shape answers both paths, the derived grant being the one a
     // fact in the host's data produced rather than one somebody wrote.

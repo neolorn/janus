@@ -136,6 +136,33 @@ public sealed class GrantStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// AUTHZ-DERIVE-007, IDN-ORG-003 AC1: the grants on a record are read as the
+    /// effective grants view confers them, so none is read while the organization's
+    /// deletion is requested.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_DERIVE_007_ASuspendedOrganizationsGrantsAreNotReadOnARecordAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId account = await _deployment.AccountAsync(Noon);
+        ResourceReference record = await RegisterAsync(organization, containedIn: null);
+
+        await WriteAsync(GrantSubject.Of(account), organization, record);
+        await WriteAsync(GrantSubject.Of(account), organization, on: null);
+
+        Assert.Equal(2, (await OnAsync(record, organization)).Count);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await writing.Database.ExecuteSqlAsync(
+                $"UPDATE identity.organizations SET deletion_requested_at = {Noon} WHERE id = {organization.Value};",
+                TestContext.Current.CancellationToken);
+        }
+
+        Assert.Empty(await OnAsync(record, organization));
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-003 AC1: a grant past its expiry confers nothing, with no sweep
     /// having run over the table.
     /// </summary>

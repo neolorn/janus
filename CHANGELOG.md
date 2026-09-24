@@ -392,6 +392,17 @@ against the public contract of LIB-API-001.
   identifier naming no erasure is 404 `privacy.erasure.notfound`. All three need
   `privacyrequest:manage`. `IErasures` is the same operations in process.
 
+- `GET /admin/access?resourceType=...&resourceId=...` answers who can access a record:
+  every live grant on it, on what contains it and on the whole organization, nearest
+  first, each with its kind, holder, role, whether it denies and the container it sits
+  on. It needs `grant:read` in the record's organization; `resourceType`
+  `organization` asks for the whole of one. `IAccessGate.WhoCanAccessAsync` is the
+  same in process, and given the host's `FilterSources` it also reports each holder a
+  derivation confers the record on as a derived grant; where
+  `authz.reverselookup.budget` runs out first the answer carries `partial: true` and
+  the relationships left unevaluated. Without those rows, a record a derivation
+  reaches is refused with `authz.derivation.sourcesmissing`, over HTTP included.
+
 - Staff mailboxes are provisioned through `IMailServer`, which a deployment registers
   where its staff mail is hosted and which no package ships. A mailbox is owed
   `disabled` from its reservation, `enabled` while its holder is an active member of

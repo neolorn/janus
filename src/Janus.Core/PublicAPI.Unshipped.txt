@@ -1102,6 +1102,8 @@ Janus.Core.IAccessGate.RequireAsync(Janus.Core.AccessContext! context, Janus.Cor
 Janus.Core.IAccessGate.RequireAsync<TResource>(Janus.Core.AccessContext! context, Janus.Core.Permission permission, Janus.Core.ResourceReference resource, Janus.Core.FilterSources<TResource>! sources, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAccessGate.ResolveAsync(Janus.Core.AccessContext! context, Janus.Core.AuditRecordId correlation, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AccessExplanation!>>
 Janus.Core.IAccessGate.ResolveOwnAsync(Janus.Core.AccessContext! context, Janus.Core.AuditRecordId correlation, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AccessExplanation!>>
+Janus.Core.IAccessGate.WhoCanAccessAsync(Janus.Core.AccessContext! context, Janus.Core.ResourceReference resource, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.ResourceAccess!>>
+Janus.Core.IAccessGate.WhoCanAccessAsync<TResource>(Janus.Core.AccessContext! context, Janus.Core.ResourceReference resource, Janus.Core.FilterSources<TResource>! sources, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.ResourceAccess!>>
 Janus.Core.IAccount
 Janus.Core.IAccount.CancelDeletionAsync(string! linkToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAccount.DeactivateAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -2143,6 +2145,19 @@ Janus.Core.RelationshipRows.HeldBy(System.Linq.Expressions.LambdaExpression! pre
 Janus.Core.ReservedUsernames
 Janus.Core.ReservedUsernames.All.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
 Janus.Core.ReservedUsernames.Holds(Janus.Core.Username username) -> bool
+Janus.Core.ResourceAccess
+Janus.Core.ResourceAccess.<Clone>$() -> Janus.Core.ResourceAccess!
+Janus.Core.ResourceAccess.Deconstruct(out Janus.Core.ResourceReference Resource, out System.Collections.Generic.IReadOnlyList<Janus.Core.ExplainedGrant!>! Grants, out bool Partial, out System.Collections.Generic.IReadOnlyList<string!>! Unevaluated) -> void
+Janus.Core.ResourceAccess.Equals(Janus.Core.ResourceAccess? other) -> bool
+Janus.Core.ResourceAccess.Grants.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.ExplainedGrant!>!
+Janus.Core.ResourceAccess.Grants.init -> void
+Janus.Core.ResourceAccess.Partial.get -> bool
+Janus.Core.ResourceAccess.Partial.init -> void
+Janus.Core.ResourceAccess.Resource.get -> Janus.Core.ResourceReference
+Janus.Core.ResourceAccess.Resource.init -> void
+Janus.Core.ResourceAccess.ResourceAccess(Janus.Core.ResourceReference Resource, System.Collections.Generic.IReadOnlyList<Janus.Core.ExplainedGrant!>! Grants, bool Partial, System.Collections.Generic.IReadOnlyList<string!>! Unevaluated) -> void
+Janus.Core.ResourceAccess.Unevaluated.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Janus.Core.ResourceAccess.Unevaluated.init -> void
 Janus.Core.ResourceId
 Janus.Core.ResourceId.Equals(Janus.Core.ResourceId other) -> bool
 Janus.Core.ResourceId.ResourceId() -> void
@@ -3042,6 +3057,9 @@ override Janus.Core.RegistrationState.ToString() -> string!
 override Janus.Core.RelationshipDeclaration.Equals(object? obj) -> bool
 override Janus.Core.RelationshipDeclaration.GetHashCode() -> int
 override Janus.Core.RelationshipDeclaration.ToString() -> string!
+override Janus.Core.ResourceAccess.Equals(object? obj) -> bool
+override Janus.Core.ResourceAccess.GetHashCode() -> int
+override Janus.Core.ResourceAccess.ToString() -> string!
 override Janus.Core.ResourceId.GetHashCode() -> int
 override Janus.Core.ResourceId.ToString() -> string!
 override Janus.Core.ResourceReference.GetHashCode() -> int
@@ -3864,6 +3882,8 @@ static Janus.Core.RelationshipDeclaration.operator !=(Janus.Core.RelationshipDec
 static Janus.Core.RelationshipDeclaration.operator ==(Janus.Core.RelationshipDeclaration? left, Janus.Core.RelationshipDeclaration? right) -> bool
 static Janus.Core.ReservedUsernames.Default.get -> Janus.Core.ReservedUsernames!
 static Janus.Core.ReservedUsernames.Of(System.Collections.Generic.IEnumerable<string!>! added) -> Janus.Core.ReservedUsernames!
+static Janus.Core.ResourceAccess.operator !=(Janus.Core.ResourceAccess? left, Janus.Core.ResourceAccess? right) -> bool
+static Janus.Core.ResourceAccess.operator ==(Janus.Core.ResourceAccess? left, Janus.Core.ResourceAccess? right) -> bool
 static Janus.Core.ResourceId.Parse(string! value) -> Janus.Core.ResourceId
 static Janus.Core.ResourceId.operator !=(Janus.Core.ResourceId left, Janus.Core.ResourceId right) -> bool
 static Janus.Core.ResourceId.operator ==(Janus.Core.ResourceId left, Janus.Core.ResourceId right) -> bool

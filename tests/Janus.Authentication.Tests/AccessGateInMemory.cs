@@ -149,6 +149,35 @@ internal sealed class AccessGateInMemory : IAccessGate
         ExplainAsync(context, permission, resource, cancellationToken);
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Nothing is granted on a record here, so only the whole of an organization is
+    /// answered, to a principal holding <c>grant:read</c> in it, and with no grant.
+    /// </remarks>
+    public ValueTask<Result<ResourceAccess>> WhoCanAccessAsync(
+        AccessContext context,
+        ResourceReference resource,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return ValueTask.FromResult(
+            resource.Type == ResourceType.Parse("organization")
+            && Guid.TryParse(resource.Id.ToString(), out Guid organization)
+            && context.Effective is SubjectId subject
+            && _granted.Contains((subject, new OrganizationId(organization), Permissions.GrantRead))
+                ? Result.Success(new ResourceAccess(resource, [], Partial: false, Unevaluated: []))
+                : Result.Failure<ResourceAccess>(Error.From(ErrorCodes.Denied)));
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<Result<ResourceAccess>> WhoCanAccessAsync<TResource>(
+        AccessContext context,
+        ResourceReference resource,
+        FilterSources<TResource> sources,
+        CancellationToken cancellationToken) =>
+        WhoCanAccessAsync(context, resource, cancellationToken);
+
+    /// <inheritdoc/>
     public ValueTask<Result<AccessExplanation>> ResolveAsync(
         AccessContext context,
         AuditRecordId correlation,

@@ -119,14 +119,15 @@ internal interface IGrantStore
 
     /// <summary>
     /// The live grants on one record, on anything containing it, or on the whole
-    /// organization, whoever holds them. This is what the "who can access this?" view
-    /// reads for stored grants.
+    /// organization, whoever holds them, as the effective grants view confers them: none
+    /// while the organization's deletion is requested, and none of a role that allows
+    /// nothing. This is what the "who can access this?" view reads for stored grants.
     /// </summary>
     /// <param name="reference">The record in question.</param>
     /// <param name="organization">The organization the record belongs to.</param>
     /// <param name="at">The instant liveness is read at.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The grants, nearest container first.</returns>
+    /// <returns>The grants, oldest first.</returns>
     ValueTask<IReadOnlyList<Grant>> OnAsync(
         ResourceReference reference,
         OrganizationId organization,

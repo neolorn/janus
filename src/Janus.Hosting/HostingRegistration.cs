@@ -333,6 +333,7 @@ public static class HostingRegistration
             provider.GetRequiredService<AuthorizationModel>().Processing);
 
         services.AddScoped<Derivations>();
+        services.AddScoped<ReverseLookup>();
         services.AddScoped<IAccessGate, AccessGate>();
         services.AddScoped<Janus.Authorization.Gate.AdministrativeScope>();
         services.AddScoped<IGrants, GrantService>();
