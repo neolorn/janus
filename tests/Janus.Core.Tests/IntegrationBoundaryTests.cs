@@ -2,14 +2,16 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using Xunit;
 
 namespace Janus.Core.Tests;
 
 /// <summary>
-/// The line between the library and the systems it talks to: no gateway is named in
-/// the source, and an outbound payload is built in one place (INT-SMS-006,
-/// INT-GEN-005, CONV-DESIGN-002).
+/// The line between the library and the systems it talks to: no gateway or mail
+/// server is named in the source, an outbound payload is built in one place, and the
+/// one database the library reaches is its own (INT-SMS-006, INT-GEN-005,
+/// CONV-DESIGN-002, INT-MAIL-001, INT-MAIL-003, INT-MAIL-008, INT-MAIL-009).
 /// </summary>
 [Trait("kind", "contract")]
 public sealed class IntegrationBoundaryTests
@@ -36,6 +38,27 @@ public sealed class IntegrationBoundaryTests
         "Postmark",
         "Mailchimp",
     ];
+
+    // The mail servers a deployment might host its staff mailboxes on. The library
+    // reaches one through IMailServer and names none.
+    private static readonly string[] MailServers =
+    [
+        "Stalwart",
+        "Postfix",
+        "Dovecot",
+        "Zimbra",
+        "Mailcow",
+    ];
+
+    // The one schema the library owns, and the catalogue PostgreSQL answers its own
+    // questions from.
+    private static readonly string[] OwnSchemas = ["identity", "pg_catalog"];
+
+    // A relation named in a statement, schema first.
+    private static readonly Regex Relation = new(
+        @"\b(?:FROM|JOIN|INTO|UPDATE|TABLE|REFERENCES)\s+""?([a-z_]+)""?\.""?[a-z_]+",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(1));
 
     // The payloads that cross an outbound boundary, each built at the one mapping
     // site and nowhere else.
@@ -71,6 +94,81 @@ public sealed class IntegrationBoundaryTests
 
         Assert.Empty(building);
     }
+
+    /// <summary>
+    /// INT-MAIL-008 AC1: no mail server is named anywhere in the library, so the one
+    /// hosting the staff mailboxes is a deployment's registration.
+    /// </summary>
+    [Fact]
+    public void INT_MAIL_008_AC1_NoMailServerIsNamedInTheLibrary()
+    {
+        IEnumerable<string> naming = Sources()
+            .Where(file => MailServers.Any(server =>
+                File.ReadAllText(file).Contains(server, StringComparison.OrdinalIgnoreCase)));
+
+        Assert.Empty(naming);
+    }
+
+    /// <summary>
+    /// INT-MAIL-001 AC1: the library opens one database, the one the host names when
+    /// it registers the library: one context, configured in the registration and in
+    /// the design-time factory the migration tooling uses, and nowhere else.
+    /// </summary>
+    [Fact]
+    public void INT_MAIL_001_AC1_NoCodeOpensADatabaseButTheLibrarysOwn()
+    {
+        Assert.Equal(
+            ["DesignTimeContextFactory.cs", "StorageRegistration.cs"],
+            Naming("UseNpgsql("));
+        Assert.Equal(["StoreContext.cs"], Naming(": DbContext("));
+        Assert.Empty(Naming("NpgsqlDataSource"));
+    }
+
+    /// <summary>
+    /// INT-MAIL-003 AC1: every relation a statement of the library names is in the
+    /// library's own schema or PostgreSQL's catalogue; a host's relation reaches a
+    /// statement only from the host's declaration, and a mail server's never does.
+    /// </summary>
+    [Fact]
+    public void INT_MAIL_003_AC1_NoStatementNamesARelationOutsideTheLibrarysSchema()
+    {
+        string[] schemas =
+        [
+            .. Sources()
+                .SelectMany(file => Relation.Matches(File.ReadAllText(file)))
+                .Select(match => match.Groups[1].Value)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Order(StringComparer.OrdinalIgnoreCase),
+        ];
+
+        Assert.NotEmpty(schemas);
+        Assert.All(schemas, schema => Assert.Contains(schema, OwnSchemas, StringComparer.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// INT-MAIL-009 AC2: no source reaches both mailbox hosting and outbound delivery,
+    /// so replacing the one leaves every user of the other as it was.
+    /// </summary>
+    [Fact]
+    public void INT_MAIL_009_AC2_NoSourceReachesBothMailboxHostingAndDelivery()
+    {
+        string[] hosting = Naming("IMailServer");
+        string[] delivery = Naming("IMailTransport");
+
+        Assert.NotEmpty(hosting);
+        Assert.NotEmpty(delivery);
+        Assert.Empty(hosting.Intersect(delivery, StringComparer.Ordinal));
+    }
+
+    private static string[] Naming(string text) =>
+    [
+        .. Sources()
+            .Where(file => File.ReadAllText(file).Contains(text, StringComparison.Ordinal))
+            .Where(file => !file.Contains(Path.DirectorySeparatorChar + "Migrations" + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            .Select(Path.GetFileName)
+            .Select(name => name!)
+            .Order(StringComparer.Ordinal),
+    ];
 
     private static IEnumerable<string> Sources() =>
         Directory

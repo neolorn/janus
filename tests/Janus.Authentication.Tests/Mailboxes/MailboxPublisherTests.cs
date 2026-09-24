@@ -242,6 +242,26 @@ public sealed class MailboxPublisherTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// INT-MAIL-008 AC2: another mail server is another registration of the same port,
+    /// and the publisher pushes to whichever the deployment registered, unchanged.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_008_AC2_AnotherMailServerIsARegistrationAndNoCodeChangeAsync()
+    {
+        var another = new MailServerInMemory();
+        Mailbox reserved = await ReservedAsync();
+
+        int pushed = (await Built(another).PublishAsync(TestContext.Current.CancellationToken))
+            .Match(count => count, _ => -1);
+
+        Assert.Equal(1, pushed);
+        Assert.Single(another.Received);
+        Assert.Empty(_server.Received);
+        Assert.Equal(MailboxState.Disabled, reserved.Pushed);
+    }
+
+    /// <summary>
     /// A settled mailbox is not written again, so a pass over a quiet directory costs
     /// one read.
     /// </summary>
