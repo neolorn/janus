@@ -484,11 +484,10 @@ internal sealed class CredentialService(
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await authenticators.RemoveAsync(credential, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
         await audit
             .RecordedAsync(Removed, acting.Subject, credential, now, cancellationToken)
             .ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         _ = await TellAsync(acting.Subject, MessageKind.SecurityNotice, source, cancellationToken)
             .ConfigureAwait(false);

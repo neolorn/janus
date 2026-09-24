@@ -1606,6 +1606,11 @@ against the public contract of LIB-API-001.
   account, the invalidation of a lost credential, the erasures the sweep executes, and
   an assembled export. A record is now written through the operation's own
   connection: inside a transaction it is part of it, and outside one it stands alone.
+- An action and its audit record commit together: the deactivation, reactivation and
+  deletion of an account and the cancellation of a deletion, the removal of a
+  credential, each step of a loss report, a recovery approval, an export and the
+  erasures the sweeps execute. Each record was written after its transaction had
+  committed, so a failure between the two left the action unrecorded.
 - Every alert condition the library raises reaches the alert destinations. It is
   written in the transaction that raised it and carried by the alert channels after
   that transaction commits, oldest first and once, so a condition raised by an

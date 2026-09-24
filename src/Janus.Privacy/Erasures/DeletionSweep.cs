@@ -110,8 +110,6 @@ internal sealed class DeletionSweep(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
         await audit
             .RecordedAsync(
                 Erased,
@@ -121,6 +119,7 @@ internal sealed class DeletionSweep(
                 Named(deletion, reason),
                 cancellationToken)
             .ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static Dictionary<string, JsonElement> Named(

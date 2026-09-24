@@ -99,11 +99,10 @@ internal sealed class ExportService(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
         await audit
             .RecordedAsync(Assembled, subject, subject, now, Named(export), cancellationToken)
             .ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success(export);
     }

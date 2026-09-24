@@ -84,8 +84,6 @@ internal sealed class OrganizationErasureSweep(
             .EraseAsync(deletion.Organization, now, grace, cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
         await audit
             .RecordedAsync(
                 AuditActions.OrganizationErased,
@@ -95,6 +93,7 @@ internal sealed class OrganizationErasureSweep(
                 Named(deletion, ended.Count),
                 cancellationToken)
             .ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         // The erasure has committed, so the announcements are the outstanding work and
         // a consumer that refuses one stops the pass rather than the erasure.

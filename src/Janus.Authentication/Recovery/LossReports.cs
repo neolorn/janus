@@ -174,6 +174,9 @@ internal sealed class LossReports(
 
         await authenticators.RecordAsync(held, cancellationToken).ConfigureAwait(false);
         await reports.AddAsync(report, cancellationToken).ConfigureAwait(false);
+        await audit
+            .RecordedAsync(Reported, held.Subject, held.Id, now, cancellationToken)
+            .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         report.Notified(
@@ -183,10 +186,6 @@ internal sealed class LossReports(
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await reports.RecordAsync(report, cancellationToken).ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
-        await audit
-            .RecordedAsync(Reported, held.Subject, held.Id, now, cancellationToken)
-            .ConfigureAwait(false);
 
         if (await AnnouncedAsync(
                 new CredentialSuspended(
@@ -254,11 +253,10 @@ internal sealed class LossReports(
         }
 
         await reports.RemoveAsync(credential, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
         await audit
             .RecordedAsync(Cancelled, report.Subject, credential, now, cancellationToken)
             .ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         // AUTH-RECOV-007: a report is cancelled whether or not the credential is
         // still there to restore, and the event states what was restored.
@@ -346,11 +344,10 @@ internal sealed class LossReports(
 
             await work.BeginAsync(cancellationToken).ConfigureAwait(false);
             await reports.RecordAsync(report, cancellationToken).ConfigureAwait(false);
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
             await audit
                 .RecordedAsync(Held, report.Subject, report.Credential, now, cancellationToken)
                 .ConfigureAwait(false);
+            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
             return Result.Success(1);
         }
@@ -421,11 +418,10 @@ internal sealed class LossReports(
         }
 
         await reports.RemoveAsync(report.Credential, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
         await audit
             .RecordedAsync(Invalidated, report.Subject, report.Credential, now, cancellationToken)
             .ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         // AUTH-RECOV-007: invalidation is the one point at which the account's
         // reachable assurance is recomputed, so it is the one a consumer hears about.

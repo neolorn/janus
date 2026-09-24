@@ -687,11 +687,10 @@ internal sealed class RecoveryService(
         await approvals
             .AddAsync(new RecoveryApproval(subject, approver, channel.Canonical, now), cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
         await audit
             .ApprovedAsync(approver, subject, reason, channel.Kind, now, cancellationToken)
             .ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         Result raised = await RaiseAsync(
                 subject,
