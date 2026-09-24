@@ -1740,6 +1740,9 @@ against the public contract of LIB-API-001.
 
 ### Fixed
 
+- An account that was restricted when its deletion was requested is erased when its
+  grace window ends. The erasure had been refused by the database at every attempt,
+  because the restriction held through the window was never released with it.
 - A host's action bound to a step-up gate can be performed once the person has stepped
   up. The gate is judged against the acting person's own session, a gate named in the
   step-up catalogue costs what the person's policy states for it, and a gate the host

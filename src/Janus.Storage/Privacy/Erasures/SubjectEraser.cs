@@ -98,6 +98,7 @@ internal sealed class SubjectEraser(
         account.MarkErased();
 
         record.State = account.State;
+        record.RestrictionHeld = account.RestrictionHeld;
     }
 
     private async ValueTask DestroyKeyAsync(SubjectId subject, CancellationToken cancellationToken)

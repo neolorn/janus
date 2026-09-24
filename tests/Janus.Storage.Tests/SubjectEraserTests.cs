@@ -80,6 +80,36 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     }
 
     /// <summary>
+    /// PRIV-RIGHT-004, IDN-LIFE-003b AC4: a restricted account that asked for its
+    /// deletion holds its restriction through the window, and its erasure commits with
+    /// the restriction let go, as a deleted account holds none.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_004_AnErasedAccountHoldsNoRestrictionAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+
+        await using (StoreContext holding = database.Context())
+        {
+            AccountRecord record = await holding.Accounts
+                .SingleAsync(row => row.Subject == subject, TestContext.Current.CancellationToken);
+
+            record.RestrictionHeld = true;
+
+            await holding.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using StoreContext reading = database.Context();
+        AccountRecord account = await reading.Accounts
+            .SingleAsync(row => row.Subject == subject, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AccountState.Deleted, account.State);
+        Assert.False(account.RestrictionHeld);
+    }
+
+    /// <summary>
     /// IDN-LIFE-003b AC4: a transaction that does not commit leaves no row and erases
     /// nothing. There is no third state in which the row is absent and the key is gone.
     /// </summary>
