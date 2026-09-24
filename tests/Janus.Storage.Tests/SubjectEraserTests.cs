@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Dapper;
 using Janus.Authentication;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Invitations;
 using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Sessions;
 using Janus.Core;
@@ -17,6 +18,7 @@ using Janus.Identity.Profiles;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Accounts;
+using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Authentication.Mailboxes;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Identity.Accounts;
@@ -772,6 +774,43 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await reading.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
+    /// <summary>
+    /// PRIV-RIGHT-005a: what an invitation attached to the subject binds is forgotten
+    /// with the rest of their fields, while the row still names who invited into what;
+    /// an invitation attached to nobody keeps what it binds until it is used or expires.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_005a_WhatAnAttachedInvitationBindsGoesWithTheSubjectAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId inviter = await _deployment.AccountAsync(Noon);
+        Invitation attached = Invited(organization, inviter);
+        Invitation standing = Invited(organization, inviter);
+
+        attached.AttachTo(subject, Noon);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await Invitations(writing).AddAsync(attached, TestContext.Current.CancellationToken);
+            await Invitations(writing).AddAsync(standing, TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using StoreContext reading = database.Context();
+
+        InvitationRecord forgotten = await reading.Invitations
+            .SingleAsync(row => row.Id == attached.Id, TestContext.Current.CancellationToken);
+        InvitationRecord kept = await reading.Invitations
+            .SingleAsync(row => row.Id == standing.Id, TestContext.Current.CancellationToken);
+
+        Assert.Equal((null, null, null), (forgotten.EncryptedIdentifiers, forgotten.WrappedKey, forgotten.KeyVersion));
+        Assert.Equal((subject, inviter, organization), (forgotten.Invitee, forgotten.Inviter, forgotten.Organization));
+        Assert.NotNull(kept.EncryptedIdentifiers);
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
@@ -825,6 +864,22 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
     private IdentifierStore Identifiers(StoreContext context) =>
         new(context, _deployment.Keys, Deployment.FingerprintKey, _deployment.Randomness);
+
+    private static Invitation Invited(OrganizationId organization, SubjectId inviter) =>
+        Invitation.Issued(
+            InvitationId.New(TimeProvider.System),
+            organization,
+            inviter,
+            new InvitedIdentifiers("invited@example.test", Phone: null, CorporateEmail: null),
+            [],
+            [],
+            mailbox: null,
+            OpaqueToken.Of(Guid.NewGuid().ToString("N")).Fingerprint(),
+            Noon,
+            TimeSpan.FromDays(7));
+
+    private InvitationStore Invitations(StoreContext context) =>
+        new(context, _deployment.Keys, _deployment.Randomness);
 
     private MailboxStore Mailboxes(StoreContext context) =>
         new(context, _deployment.Keys, Deployment.FingerprintKey, _deployment.Randomness);

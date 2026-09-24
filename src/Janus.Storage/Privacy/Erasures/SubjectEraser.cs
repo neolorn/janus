@@ -9,6 +9,7 @@ using Janus.Core.Configuration;
 using Janus.Identity.Accounts;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Authentication.Mailboxes;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Identifiers;
@@ -192,6 +193,21 @@ internal sealed class SubjectEraser(
         foreach (MailboxRecord mailbox in mailboxes)
         {
             mailbox.Fingerprint = Fingerprint.Neutralised();
+        }
+
+        // PRIV-RIGHT-005a: what an invitation attached to the subject still binds is
+        // their addresses, held under a key of the invitation's own, so the document and
+        // its key are forgotten here rather than when the invitation expires.
+        List<InvitationRecord> invitations = await context.Invitations
+            .Where(invitation => invitation.Invitee == subject && invitation.EncryptedIdentifiers != null)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (InvitationRecord invitation in invitations)
+        {
+            invitation.KeyVersion = null;
+            invitation.WrappedKey = null;
+            invitation.EncryptedIdentifiers = null;
         }
     }
 }

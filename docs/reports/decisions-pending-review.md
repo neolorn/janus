@@ -9236,6 +9236,35 @@ pins everything the end writes.
 not remove the account's grants in the organization, pointing at chapter 16 step 4, or
 the owner could decide that it does and reorder chapter 16.
 
+---
+
+## 253. What an erasure does to an invitation attached to the subject
+
+**Phase 8 · 2026-09-24 · Tier 3 · PRIV-RIGHT-005, PRIV-RIGHT-005a, REG-INV-001**
+
+*The question.* Entry 234 holds what an invitation binds under a key of the row's own
+and forgets it when the invitation is revoked, acknowledged or swept after expiry. An
+invitation attached to an account that is erased before any of those happens still
+holds the person's addresses, readable, until it expires. PRIV-RIGHT-005 has an erasure
+leave nothing of the subject readable; nothing names the invitation.
+
+*The readings.*
+
+1. Leave the invitation to the expiry sweep.
+2. Forget what every invitation attached to the subject binds, and its key, in the
+   erasure's own transaction, keeping the row that names who invited into what.
+
+*Chosen: 2, the strictest reading.* The addresses are the subject's, and under reading 1
+they outlive the erasure by up to `link.invitation.lifetime`. An invitation attached to
+nobody cannot be tied to the subject and keeps what it binds until it is used or expires,
+as entry 234 has it.
+
+*Tests that pin it.*
+`SubjectEraserTests.PRIV_RIGHT_005a_WhatAnAttachedInvitationBindsGoesWithTheSubjectAsync`.
+
+*Chapter text that should change.* PRIV-RIGHT-005a could name the identifiers an
+attached invitation binds among what an erasure makes unreadable.
+
 
 # Rows for chapter 10
 

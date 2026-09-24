@@ -317,6 +317,9 @@ against the public contract of LIB-API-001.
 - An invitation that expires unused forgets what it bound when the invitation sweep
   runs; the row keeps who invited into what and when, and its mailbox stays reserved.
 
+- Erasing a subject also forgets what an invitation attached to their account binds,
+  in the same transaction, instead of when the invitation expires.
+
 - `DELETE /admin/organizations/{id}/memberships/{subject}` ends a membership under
   `membership:manage` (204); the account, its state, its grants and the organization
   persist, and the audit trail records `identity.membership.ended`. An account holding
