@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
+using Janus.Core;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Xunit;
 
@@ -796,6 +799,52 @@ public sealed class ModelTests
     [Fact]
     public void REG_MAIL_002_AC1_NoTableHoldsAnAppPassword() =>
         RefuseColumnsNamedAfter(["apppassword", "app_password", "mailcredential", "mail_credential"]);
+
+    /// <summary>
+    /// INT-MAIL-001 AC2: a credential's type is a catalogue entry, which the
+    /// authenticators table admits by name, and no entry is a mail app password; the
+    /// mail server stores those (REG-MAIL-002).
+    /// </summary>
+    [Fact]
+    public void INT_MAIL_001_AC2_NoCredentialTypeIsAMailAppPassword()
+    {
+        using StoreContext context = new DesignTimeContextFactory().CreateDbContext([]);
+
+        string check = context
+            .GetService<IDesignTimeModel>()
+            .Model
+            .GetEntityTypes()
+            .Single(entity => entity.GetTableName() == "authenticators")
+            .GetCheckConstraints()
+            .Single(constraint => constraint.Name == "ck_authenticators_factor")
+            .Sql;
+
+        string[] admitted =
+        [
+            .. Regex
+                .Matches(check, "'([^']+)'", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1))
+                .Select(match => match.Groups[1].Value),
+        ];
+
+        Assert.Equal(Enum.GetValues<Factor>().Length, admitted.Length);
+        Assert.DoesNotContain(
+            admitted,
+            name => Regex.IsMatch(
+                name,
+                "app.?password|mail.?(password|credential)",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+                TimeSpan.FromSeconds(1)));
+    }
+
+    /// <summary>
+    /// INT-MAIL-002 AC2: every relation the library maps is in its own schema, so no
+    /// query it builds can join the mail server's store, which is another database.
+    /// </summary>
+    [Fact]
+    public void INT_MAIL_002_AC2_NoQueryOfTheLibraryCanJoinAnotherStore() =>
+        Assert.All(
+            Model().GetEntityTypes(),
+            entity => Assert.Equal(StoreContext.Schema, entity.GetSchema() ?? entity.GetViewSchema()));
 
     private static void RefuseColumnsNamedAfter(string[] forbidden) =>
         Assert.All(Columns(), column => Assert.DoesNotContain(
