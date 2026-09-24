@@ -10667,6 +10667,60 @@ sends the code nowhere but the registered destination. Under it:
 spent by the first answer it is given; 09 section 9 could say that API-REDIR-001's
 replacement applies at `POST /oidc/par`.
 
+---
+
+## 280. What the provider's conformance suite is and what it asserts
+
+**Corrections 3 · 2026-09-24 · Tier 2 · AUTH-OIDC-006 AC1, CONV-TEST-002, LIB-TEST-001, API-REDIR-001**
+
+*The question.* AUTH-OIDC-006 AC1: "A conformance suite asserts each refusal named
+above and the exact-match rule." CONV-TEST-002 gives "conformance" as the kind that
+runs against a host's own configuration and ships per LIB-TEST-001, whose package is
+built in phase 10 and whose criteria name the model and the permission checks only.
+The item names the implicit, password and plain-PKCE forms and public clients without
+saying which requests each of them covers.
+
+*The readings.*
+
+1. The suite is a suite of the library's own tests over its provider, written now.
+2. The suite is part of the `Janus.Conformance` package a host runs, written in phase
+   10 with that package.
+
+*Chosen: 1, and phase 10 carries the same assertions into the package.* The criterion
+is D-164's and belongs to this correction; the behaviour it asserts is set by the
+library's configuration of its provider, which the tests exercise through the real
+`AddJanus`. So that a host can also prove it against its own deployment, phase 10's
+host-run suite runs the same refusals. Each named form is read at its widest:
+
+- Implicit: every response type but `code`, the hybrid ones included, is refused at the
+  push with `unsupported_response_type`.
+- Password: that grant and every grant but the code and the refresh (client
+  credentials, device code, token exchange) is refused with `unsupported_grant_type`.
+- Plain PKCE: the plain method and a challenge that names no method, which RFC 7636
+  reads as plain, are refused with `invalid_request`, and so is a request with no
+  proof key. The discovery document lists S256 alone.
+- Exact match: a destination differing from the registered one in any character
+  (trailing slash, query, path, case of the host, scheme, port, suffix) never receives
+  the code, which API-REDIR-001 sends to the registered one; and a code is exchanged
+  only by naming its destination exactly.
+- Public clients: none exists, since a client that does not authenticate is refused
+  at the push and at the exchange with `invalid_client`; the one kind that
+  authenticates and holds nothing, a browser application's own layer, is handed no
+  refresh token.
+
+*Tests that pin it.*
+`ProviderConformanceTests.AUTH_OIDC_006_AC1_TheImplicitFormsAreRefusedAsync`,
+`ProviderConformanceTests.AUTH_OIDC_006_AC1_EveryOtherGrantIsRefusedAsync`,
+`ProviderConformanceTests.AUTH_OIDC_006_AC1_OnlyTheS256ProofKeyIsTakenAsync`,
+`ProviderConformanceTests.AUTH_OIDC_006_AC1_OnlyTheExactRegisteredDestinationReceivesTheCodeAsync`,
+`ProviderConformanceTests.AUTH_OIDC_006_AC1_ACodeIsNotExchangedForAnotherDestinationAsync`,
+`ProviderConformanceTests.AUTH_OIDC_006_AC1_NoPublicClientReceivesARefreshTokenAsync`,
+`ProviderConformanceTests.AUTH_OIDC_006_AC1_TheDocumentNamesOnlyWhatIsAdmittedAsync`.
+
+*Chapter text that should change.* 02 AUTH-OIDC-006 AC1 could say whether the suite is
+the library's own or part of LIB-TEST-001's package; 07 LIB-TEST-001 could name the
+provider's refusals among what the host-run suite verifies.
+
 
 # Rows for chapter 10
 

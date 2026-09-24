@@ -99,6 +99,12 @@ internal static class OidcRegistration
                 _ = options.AllowAuthorizationCodeFlow().AllowRefreshTokenFlow();
                 _ = options.RequireProofKeyForCodeExchange();
 
+                // AUTH-OIDC-006 AC1: the proof key is by S256 alone. The plain method is
+                // refused, and so is a challenge that names no method, which the
+                // protocol reads as plain.
+                _ = options.Configure(server => server.CodeChallengeMethods.Remove(
+                    OpenIddictConstants.CodeChallengeMethods.Plain));
+
                 // AUTH-OIDC-006 AC2: every authorization request is pushed over the
                 // back channel first, so the browser carries a reference and none of
                 // the parameters, and the reference lapses a minute after it is issued.

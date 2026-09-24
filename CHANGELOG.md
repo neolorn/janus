@@ -21,6 +21,10 @@ against the public contract of LIB-API-001.
   names `pushed_authorization_request_endpoint` and
   `require_pushed_authorization_requests`.
 
+- The provider takes a proof key by S256 alone. A request naming the plain method,
+  or carrying a challenge that names no method, is refused with `invalid_request`,
+  and the discovery document no longer lists `plain`.
+
 - `ISmsTransport` has a new member, `ReadReport`, which reads a delivery report from
   the parameters the gateway puts in the query string. Every transport implements it.
 
