@@ -487,6 +487,12 @@ internal sealed class Deployment : IAsyncDisposable
     public RaisedAlertsInMemory Raised { get; } = new();
 
     /// <summary>
+    /// The compromised-password corpora screening asks, which a test can make
+    /// unreachable.
+    /// </summary>
+    public LeakedPasswordCorpusInMemory Corpus { get; } = new();
+
+    /// <summary>
     /// The sends counted against the restrictions, which a delivery report can release.
     /// </summary>
     public SendLedgerInMemory SendLedger { get; } = new();
@@ -704,7 +710,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<ISendOutbox, SendOutboxInMemory>();
         _ = services.AddSingleton<INoticeLedger, NoticeLedgerInMemory>();
         _ = services.AddSingleton<ISmsBalanceLedger, SmsBalanceLedgerInMemory>();
-        _ = services.AddSingleton<ILeakedPasswordCorpus, LeakedPasswordCorpusInMemory>();
+        _ = services.AddSingleton<ILeakedPasswordCorpus>(Corpus);
         _ = services.AddSingleton<IWordList, WordListInMemory>();
         _ = services.AddSingleton<IScreeningLog, ScreeningLogInMemory>();
         _ = services.AddSingleton<IRecoveryCodeStore, RecoveryCodeStoreInMemory>();
