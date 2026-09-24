@@ -369,6 +369,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- More permission refusals than `alerting.denials.threshold` against one actor inside
+  one fixed ten-minute window raise `denial-spike` for that actor. The refusals of
+  requests that name no acting subject are counted together and raised with no scope.
 - The library now carries the events it emits. An operation writes each event onto its
   own transaction, and the `events` job offers it, once that transaction has committed,
   to every `IEventConsumer<TEvent>` the host registered for its kind. A consumer that

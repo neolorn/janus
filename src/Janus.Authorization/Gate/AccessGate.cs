@@ -20,6 +20,7 @@ namespace Janus.Authorization.Gate;
 /// <param name="records">Where a record's organization is read from.</param>
 /// <param name="evaluator">Where a rendered rule is run.</param>
 /// <param name="audit">Where a refusal is recorded and read back.</param>
+/// <param name="spikes">Where each recorded refusal is counted against its actor.</param>
 /// <param name="subjects">Who the principal is, resolved once per operation.</param>
 /// <param name="gates">What an action's step-up gate still asks of the session.</param>
 /// <param name="derived">Which of the host's relationships confer what is being asked.</param>
@@ -40,6 +41,7 @@ internal sealed class AccessGate(
     IResourceStore records,
     IAccessEvaluator evaluator,
     IAccessAudit audit,
+    DenialSpikes spikes,
     SubjectSets subjects,
     StepUpGates gates,
     Derivations derived,
@@ -960,7 +962,8 @@ internal sealed class AccessGate(
             $"The resource type '{type}' is not declared, so no policy governs it."));
 
     // AUTHZ-CONCEAL-004, CONV-LOG-005: one path answers every refusal, and the
-    // identifier it hands back is the row the refusal was recorded as. A request made
+    // identifier it hands back is the row the refusal was recorded as. The same path
+    // counts it towards its actor's denial spike (AUTHZ-GATE-004, OPS-ALERT-001). A request made
     // under no account is refused with an identifier like any other; the row names
     // nobody, and that absence is the recorded fact.
     private async ValueTask<Result> RefusedAsync(
@@ -974,18 +977,17 @@ internal sealed class AccessGate(
 
         var correlation = AuditRecordId.New(time);
 
-        await audit
-            .RecordAsync(
-                new DeniedAccess(
-                    correlation,
-                    context.Acting,
-                    context.Effective,
-                    organization,
-                    permission,
-                    type,
-                    time.GetUtcNow()),
-                cancellationToken)
-            .ConfigureAwait(false);
+        var denial = new DeniedAccess(
+            correlation,
+            context.Acting,
+            context.Effective,
+            organization,
+            permission,
+            type,
+            time.GetUtcNow());
+
+        await audit.RecordAsync(denial, cancellationToken).ConfigureAwait(false);
+        await spikes.WatchAsync(denial, cancellationToken).ConfigureAwait(false);
 
         return Result.Failure(Error.From(
             ErrorCodes.Denied,

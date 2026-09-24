@@ -370,6 +370,8 @@ public static class HostingRegistration
 
         services.AddScoped<Derivations>();
         services.AddScoped<ReverseLookup>();
+        services.AddScoped<IAccessAlerts, AccessAlerts>();
+        services.AddScoped<DenialSpikes>();
         services.AddScoped<IAccessGate, AccessGate>();
         services.AddScoped<Janus.Authorization.Gate.AdministrativeScope>();
         services.AddScoped<IGrants, GrantService>();

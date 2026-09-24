@@ -12552,6 +12552,51 @@ registering `IEventConsumer<TEvent>`; INF-BG-001 should name the event publisher
 the outbox publisher; chapter 10 should name a retention for a marked row, or say that
 a marked row is removed.
 
+---
+
+## 321. What a denial spike counts, and when it is raised
+
+**Phase 9 · 2026-09-24 · Tier 2 · AUTHZ-GATE-004, OPS-ALERT-001, OPS-ALERT-002, chapter 10 section 4.5 (`alerting.denials.threshold`)**
+
+*The question.* Chapter 10 gives `alerting.denials.threshold` as "50 per `PT10M`",
+"integer denials per actor in a fixed ten-minute window". Nothing says where a fixed
+window begins, who the actor is for a refusal that names no one (a request under no
+account, or a system principal), or whether the condition is raised at the number or
+above it. The gate had no alert port, so the condition was raised nowhere.
+
+*The readings.*
+
+1. Windows begin at the first refusal counted; refusals naming no actor are not
+   counted; the condition is raised at the number.
+2. Windows are fixed on the clock; refusals naming no actor are counted together; the
+   condition is raised above the number.
+
+*Chosen: 2.* The windows are ten minutes long and counted from the Unix epoch in UTC,
+so every instance of the library places a refusal in the same window, which "fixed"
+asks. The actor is the acting subject the refusal records; under impersonation that is
+the person acting, not the account whose authority is used. Every refusal that names no
+acting subject is counted together, raised with no scope, so a run of refusals to
+requests under no account is raised like anyone's; leaving them out would make the one
+run never raised the one a probe produces, and counting them raises more. The
+condition is raised once the window holds more refusals than the threshold, as the
+key's own description reads it, on each refusal past it, and OPS-ALERT-002 keeps that
+to one alert per actor inside `alerting.dedupe.window`; the details carry the count.
+The count is read from the audit trail the refusal has just been written to, so it
+needs no counter of its own. The gate reaches the alert router through a port of its
+own (`IAccessAlerts`), as the privacy area does, because an area project reaches no
+other area project (CONV-LAYOUT-001).
+
+A refusal recorded inside a transaction that then rolls back is neither kept nor
+counted nor raised; this is the lost-audit-row defect the phase 9 report names, not a
+choice made here.
+
+*Tests that pin it.*
+`GateBehaviourTests.OPS_ALERT_001_AC1_ADenialSpikeOfOneActorIsRaisedAsync`.
+
+*Chapter text that should change.* Chapter 10 section 4.5 should say where a fixed
+window begins, who the actor is for a refusal that names no one, and whether the
+condition is raised at the number or above it.
+
 
 # Rows for chapter 10
 

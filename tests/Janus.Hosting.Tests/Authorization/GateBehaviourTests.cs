@@ -4,9 +4,13 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Dapper;
+using Janus.Authentication.Alerting;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Authorization;
@@ -376,6 +380,61 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             HostPermissions.Read,
             Reference(ResourceType.Parse("ledger")),
             TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-004, OPS-ALERT-001 AC1: the refusals of one actor inside one fixed
+    /// ten-minute window raise <c>denial-spike</c> for that actor once there are more of
+    /// them than <c>alerting.denials.threshold</c>, and not before.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_ALERT_001_AC1_ADenialSpikeOfOneActorIsRaisedAsync()
+    {
+        Nested nested = await NestAsync();
+
+        for (int each = 0; each < Settings.AlertingDenialsThreshold.Default; each++)
+        {
+            Assert.False(await ChecksAsync(nested.Account, nested.Record));
+        }
+
+        Assert.Equal(0, await SpikesAsync(nested.Account));
+
+        Assert.False(await ChecksAsync(nested.Account, nested.Record));
+
+        Assert.Equal(1, await SpikesAsync(nested.Account));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-004, OPS-ALERT-001 AC1: the refusals that name no acting subject are
+    /// counted together, so a run of them raises <c>denial-spike</c> with no scope.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_ALERT_001_AC1_ARunOfRefusalsNamingNoOneIsRaisedAsync()
+    {
+        Nested nested = await NestAsync();
+
+        for (int each = 0; each <= Settings.AlertingDenialsThreshold.Default; each++)
+        {
+            await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+            await using HostContext reading = host.Context();
+
+            Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .RequireAsync(
+                    AccessContext.Of(SystemPrincipal.ForOrganization(
+                        "import",
+                        "the nightly import",
+                        nested.Deployment.Organization)),
+                    HostPermissions.Read,
+                    nested.Record,
+                    Sources(reading),
+                    TestContext.Current.CancellationToken);
+
+            Assert.Equal(ErrorCodes.Denied, outcome.Match(() => ErrorCodes.SystemFault, error => error.Code));
+        }
+
+        Assert.NotEqual(0, await SpikesAsync(null));
     }
 
     /// <summary>
@@ -1182,6 +1241,18 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
                 TestContext.Current.CancellationToken);
 
         return outcome.Match(() => (ErrorCode?)null, error => error.Code);
+    }
+
+    private async Task<int> SpikesAsync(SubjectId? account)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(
+            """
+            SELECT count(*)::int FROM identity.raised_alerts
+            WHERE condition = 'denial-spike' AND idempotency_key LIKE @key
+            """,
+            new { key = Alerts.Key(AlertCondition.DenialSpike, account?.ToString()) + "@%" });
     }
 
     private async Task<bool> ChecksAsync(

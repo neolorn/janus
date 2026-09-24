@@ -49,6 +49,22 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
         WHERE id = @id AND action = @action;
         """;
 
+    private const string ByActor =
+        """
+        SELECT count(*)::int
+        FROM identity.audit_records
+        WHERE category = @category AND action = @action AND acting_subject = @acting
+          AND occurred_at >= @from AND occurred_at < @until;
+        """;
+
+    private const string ByNobody =
+        """
+        SELECT count(*)::int
+        FROM identity.audit_records
+        WHERE category = @category AND action = @action AND acting_subject IS NULL
+          AND occurred_at >= @from AND occurred_at < @until;
+        """;
+
     /// <inheritdoc/>
     public async ValueTask RecordAsync(DeniedAccess denial, CancellationToken cancellationToken)
     {
@@ -93,6 +109,31 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
         RecordedDenial? row = rows.FirstOrDefault();
 
         return row is null ? null : Read(correlation, row);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<int> CountAsync(
+        SubjectId? acting,
+        DateTimeOffset from,
+        DateTimeOffset until,
+        CancellationToken cancellationToken)
+    {
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        return await ambient.Connection
+            .ExecuteScalarAsync<int>(new CommandDefinition(
+                acting is null ? ByNobody : ByActor,
+                new
+                {
+                    category = VocabularyConverter<AuditCategory>.Write(AuditCategory.Security),
+                    action = Denied.ToString(),
+                    acting = acting?.Value,
+                    from = from.ToUniversalTime(),
+                    until = until.ToUniversalTime(),
+                },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
     }
 
     private static string Written(DeniedAccess denial) => JsonSerializer.Serialize(
