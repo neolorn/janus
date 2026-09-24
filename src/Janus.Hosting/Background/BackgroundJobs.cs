@@ -20,6 +20,7 @@ using Janus.Core.Configuration;
 using Janus.Hosting.Alerting;
 using Janus.Hosting.Events;
 using Janus.Hosting.Sending;
+using Janus.Hosting.Sessions;
 using Janus.Identity.Identifiers;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.Outbox;
@@ -197,6 +198,14 @@ internal static class BackgroundJobs
                 await services.GetRequiredService<MailboxReconciliation>()
                     .ReconcileAsync(cancellationToken)
                     .ConfigureAwait(false))),
+        BackgroundJob.Every(
+            "location-database",
+            "INT-GEN-006",
+            SystemOperation.Monitoring,
+            Settings.LocationDatabaseRefresh,
+            async (services, _, cancellationToken) => await services.GetRequiredService<LocationDatabase>()
+                .RefreshAsync(cancellationToken)
+                .ConfigureAwait(false)),
         BackgroundJob.Every(
             "holiday-list",
             "PRIV-RIGHT-002",

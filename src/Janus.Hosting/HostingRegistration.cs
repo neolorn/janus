@@ -281,7 +281,17 @@ public static class HostingRegistration
         services.AddScoped<PasswordScreening>();
         services.AddScoped<PasswordService>();
         services.AddScoped<PreAuthenticationService>();
-        services.AddScoped<ILocationResolver, LocationDatabase>();
+
+        // INT-GEN-006: one copy of the location file for the process, read from the
+        // file the deployment supplies, where it supplies one.
+        services.AddSingleton<LocationCopy>();
+        services.AddScoped(provider => new LocationDatabase(
+            provider.GetRequiredService<LocationCopy>(),
+            provider.GetService<ILocationSource>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<TimeProvider>()));
+        services.AddScoped<ILocationResolver>(provider => provider.GetRequiredService<LocationDatabase>());
         services.AddScoped<SessionService>();
         services.AddScoped<ISessions>(provider => provider.GetRequiredService<SessionService>());
         services.AddScoped<TotpService>();

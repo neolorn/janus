@@ -24,10 +24,10 @@ internal interface ILocationResolver
     /// <param name="ipAddress">The IP address the request came from.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// The location, nothing where the database could not say, or the failure where
-    /// the resolver could not report what it had to report.
+    /// The location and where its city lies, nothing where the database could not say,
+    /// or the failure where the resolver could not report what it had to report.
     /// </returns>
-    ValueTask<Result<SessionLocation?>> ResolveAsync(
+    ValueTask<Result<ResolvedLocation?>> ResolveAsync(
         string ipAddress,
         CancellationToken cancellationToken);
 }

@@ -675,7 +675,7 @@ internal sealed class SessionService(
         CancellationToken cancellationToken) =>
         (await locations.ResolveAsync(origin.Address, cancellationToken).ConfigureAwait(false))
             .Match(
-                place => Result.Success(origin with { Location = place }),
+                place => Result.Success(origin with { Location = place?.Location }),
                 Result.Failure<SessionOrigin>);
 
     private async ValueTask<Result<IssuedSession>> BeginAsync(

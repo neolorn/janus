@@ -369,6 +369,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A deployment can supply its IP-to-city file through `ILocationSource`, in the format
+  the interface documents. Sessions then show the city and country each was used from,
+  resolved in process against a copy read on first use and refreshed by the
+  `location-database` job every `location.database.refresh`. A file that cannot be read
+  whole is refused and the copy held before it kept; a missing, refused or stale file
+  raises `degradation` and the session is shown without a location.
 - The daily `holiday-list` job raises `holiday-list-exhausted` when no date in
   `privacy.holidays` falls beyond `maintenance.expiry.warninglead`, an empty list
   included. Deadlines are counted as before; the alert only asks for the next dates.

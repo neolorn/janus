@@ -12776,6 +12776,78 @@ an empty list is raised and that "beyond" is judged by calendar day in
 `privacy.calendar.timezone`; INF-BG-001 could name the holiday-list look among the
 jobs.
 
+---
+
+## 325. Where the IP-to-city file comes from, what it looks like, and how a process holds it
+
+**Phase 9 · 2026-09-24 · Tier 2 · INT-GEN-006, AUTH-SESS-013, LIB-EXT-001, INF-BG-001, D-162 section B (entry 117)**
+
+*The question.* INT-GEN-006 resolves the city on a session from "a local IP-to-city
+database: a file bundled with the library or supplied by the host, read in process,
+never a call to a third party", refreshed every `location.database.refresh` by a
+background job, stale beyond `location.database.maxage`. No chapter names the file's
+format, how a host supplies it, where a refresh reads it from, or how a process that
+has just started resolves an address before the job next runs. CONV-DESIGN-008 names
+no package that reads any published database format.
+
+*The readings.*
+
+1. The library bundles a database and a reader for a published format.
+2. The host supplies the file through a public port, in a format the library defines;
+   the library reads it whole into memory and resolves against the copy.
+3. The host supplies a path through a new setting.
+
+*Chosen: 2.* Reading 1 needs a data licence and a package neither the chapters nor
+CONV-DESIGN-008 give; reading 3 adds a key to `10`. Reading 2 is the shape the library
+already gives the deployment's DNS (`IDnsResolver`): one public interface,
+`ILocationSource`, with one method that opens the file as it now stands and answers a
+`Result<Stream>`. It is optional; with none registered no session carries a location
+and `degradation` is raised, as before. Opening it reads a file the deployment holds
+and reaches no network; keeping that file current is the deployment's.
+
+The format is documented on the interface: UTF-8 text, a line `# YYYY-MM-DD` giving
+the date the data was produced, and one tab-separated range per line (first address,
+last address, country as ISO 3166-1 alpha-2 or nothing, city or nothing, latitude and
+longitude of the city present exactly where the city is). A file is taken whole or not
+at all: no date, a line that cannot be read, ranges of mixed family or reversed, or two
+ranges that overlap refuse it, because a file read in part would resolve some
+addresses and silently not others. Its age is judged from its own date, not from when
+it was read.
+
+A process holds one parsed copy for every scope. It reads the file the first time it
+resolves an address, so a restart does not wait for the next refresh, and after that
+only the job `location-database` (INF-BG-001, every `location.database.refresh`, a
+monitoring operation) reads it again and replaces the copy whole. A refresh that could
+not open or read the file raises `degradation` under `location.database.refresh` and
+keeps the copy it had, until that copy is stale; a stale copy answers no location and
+raises under `location.database.stale`; no copy at all raises under
+`location.database.absent`. A failed refresh is surfaced by that alert and the run
+counts as run, so `background-job-failed` stays the signal of a job that could not run.
+The copy is per process; a deployment runs the worker in the process that serves
+requests.
+
+The internal resolver port of entry 117 now answers the city and country and, beside
+them, where the city lies, which OPS-ALERT-007 measures by; the location a session
+shows is still `{ city, country }` and no public signature carries a place.
+
+*Tests that pin it.*
+`LocationDatabaseTests.INT_GEN_006_AC1_TheResolverHoldsNothingItCouldCallOutWith`,
+`LocationDatabaseTests.INT_GEN_006_AC1_EveryAddressIsResolvedAgainstTheCopyHeldAsync`,
+`LocationDatabaseTests.INT_GEN_006_AC3_TheCityIsWhatTheFileSaysOfTheAddressAsync`,
+`LocationDatabaseTests.INT_GEN_006_AC3_WithNoFileAvailableNoLocationIsAnsweredAsync`,
+`LocationDatabaseTests.INT_GEN_006_AC2_TheMissingFileSurfacesAsADegradationAsync`,
+`LocationDatabaseTests.INT_GEN_006_AC2_AFailedRefreshSurfacesAsADegradationAsync`,
+`LocationDatabaseTests.INT_GEN_006_AC2_ARefreshReplacesTheCopyHeldAsync`,
+`LocationDatabaseTests.INT_GEN_006_AFileThatCannotBeReadWholeIsRefusedAsync` (seven cases),
+`LocationDatabaseTests.INT_GEN_006_AFileWithNoDateIsRefusedAsync`,
+`LocationDatabaseTests.INT_GEN_006_AStaleFileAnswersNoLocationAndIsRaisedAsync`,
+`BackgroundJobsTests.INF_BG_001_AC1_EveryJobRunsWithoutAPersonAsync`.
+
+*Chapter text that should change.* INT-GEN-006 could name `ILocationSource` and the
+file's format, and say that a refused file is refused whole; LIB-HOST-001 could list
+the location file among the optional host declarations; `10` section 4 could say that
+the file's age is judged from its own date.
+
 
 # Rows for chapter 10
 

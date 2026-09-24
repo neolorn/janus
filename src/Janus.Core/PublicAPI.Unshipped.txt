@@ -1245,6 +1245,8 @@ Janus.Core.ILegalDocuments
 Janus.Core.ILegalDocuments.PublishAsync(Janus.Core.AccessContext! context, Janus.Core.DocumentPublication! publication, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.DocumentVersion!>>
 Janus.Core.ILegalDocuments.ReadAsync(string! document, string? version, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.DocumentVersion!>>
 Janus.Core.ILegalDocuments.TranslateAsync(Janus.Core.AccessContext! context, string! document, string! version, Janus.Core.DocumentTranslation! translation, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.ILocationSource
+Janus.Core.ILocationSource.OpenAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.IO.Stream!>>
 Janus.Core.IMailServer
 Janus.Core.IMailServer.AppPasswordsAsync(string! accessToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.AppPassword!>!>>
 Janus.Core.IMailServer.CreateAppPasswordAsync(string! accessToken, string! label, System.DateTimeOffset? expiresAt, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.IssuedAppPassword!>>
