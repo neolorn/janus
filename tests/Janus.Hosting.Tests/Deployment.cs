@@ -572,6 +572,36 @@ internal sealed class Deployment : IAsyncDisposable
     private Janus.Authorization.Tests.Gate.AdministrativeOrganizationInMemory GateAdministrative { get; } = new();
 
     /// <summary>
+    /// The issues of the break-glass credential and the attempts at it.
+    /// </summary>
+    public Janus.Authentication.Tests.BreakGlass.BreakGlassStoreInMemory BreakGlass { get; } = new();
+
+    /// <summary>
+    /// What was written down about the break-glass credential.
+    /// </summary>
+    public Janus.Authentication.Tests.BreakGlass.BreakGlassAuditInMemory BreakGlassAudit { get; } = new();
+
+    /// <summary>
+    /// The reserved emergency account as the authentication area reads it.
+    /// </summary>
+    private Janus.Authentication.Tests.BreakGlass.EmergencyAccountInMemory Emergency { get; } = new();
+
+    /// <summary>
+    /// The reserved emergency account as the authorization area reads it.
+    /// </summary>
+    private Janus.Authorization.Tests.Grants.EmergencyAccountInMemory GrantEmergency { get; } = new();
+
+    /// <summary>
+    /// Names the account the break-glass session belongs to, as bootstrap does.
+    /// </summary>
+    /// <param name="account">The reserved emergency account.</param>
+    public void Reserves(SubjectId account)
+    {
+        Emergency.Account = account;
+        GrantEmergency.Account = account;
+    }
+
+    /// <summary>
     /// Names the organization that administers the deployment, as bootstrap does, so a
     /// permission granted there is one an administrative operation honours.
     /// </summary>
@@ -829,12 +859,17 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IAlertChannels, AlertChannels>();
         _ = services.AddSingleton<IRaisedAlerts>(Raised);
         _ = services.AddScoped<AlertDispatch>();
+        _ = services.AddSingleton<Janus.Authentication.BreakGlass.IEmergencyAccount>(Emergency);
+        _ = services.AddSingleton<Janus.Authentication.BreakGlass.IBreakGlassStore>(BreakGlass);
+        _ = services.AddSingleton<Janus.Authentication.BreakGlass.IBreakGlassAudit>(BreakGlassAudit);
+        _ = services.AddScoped<Janus.Authentication.BreakGlass.BreakGlassService>();
         _ = services.AddScoped<AlertDestinationChange>();
         _ = services.AddScoped<IConfigurationAdministration, ConfigurationService>();
         _ = services.AddSingleton<ISendAudit, SendAuditInMemory>();
         _ = services.AddScoped<RestrictionAdministration>();
         _ = services.AddScoped<IRestrictionSet, RestrictionSetService>();
         _ = services.AddSingleton<Janus.Authorization.Gate.IAdministrativeOrganization>(GateAdministrative);
+        _ = services.AddSingleton<Janus.Authorization.Grants.IEmergencyAccount>(GrantEmergency);
         _ = services.AddSingleton<Janus.Authorization.Grants.IGrantStore>(AccessGrants);
         _ = services.AddSingleton<Janus.Authorization.Roles.IRoleStore>(Roles);
         _ = services.AddSingleton<Janus.Authorization.Groups.IGroupStore>(Groups);

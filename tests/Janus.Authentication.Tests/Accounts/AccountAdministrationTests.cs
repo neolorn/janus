@@ -7,6 +7,7 @@ using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Sessions;
+using Janus.Authentication.Tests.BreakGlass;
 using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
@@ -34,6 +35,7 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
     private static readonly PreferenceDeclarations Declared = PreferenceDeclarations.Of([]);
 
     private readonly AccountDirectoryInMemory _directory = new(Declared);
+    private readonly EmergencyAccountInMemory _emergency = new();
     private readonly SessionStoreInMemory _sessions = new();
     private readonly LifecycleLinkStoreInMemory _links = new();
     private readonly AccountAuditInMemory _audit = new();
@@ -79,6 +81,7 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
                 new PolicyResolution(_memberships, _configuration, _raises),
                 _clock),
             _directory,
+            _emergency,
             _sessions,
             _links,
             _configuration,
@@ -122,6 +125,21 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
             new RecordedChange(AuditActions.AccountSuspended, _administrator, _member, Noon),
             Assert.Single(_audit.Administered));
         Assert.Equal(1, _work.Committed);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002: the account the break-glass session belongs to is never suspended,
+    /// by any administrator, and nothing is announced for the refusal.
+    /// </summary>
+    [Fact]
+    public async Task OPS_BOOT_002_TheEmergencyAccountIsNeverSuspendedAsync()
+    {
+        _emergency.Account = _member;
+
+        Assert.Equal(ErrorCodes.Denied, Refused(await SuspendAsync(_member)));
+        Assert.Equal(AccountState.Active, await StateAsync(_member));
+        Assert.Empty(_events.Of<AccountSuspended>());
+        Assert.Empty(_audit.Administered);
     }
 
     /// <summary>

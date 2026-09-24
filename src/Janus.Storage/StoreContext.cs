@@ -1,6 +1,7 @@
 using System;
 using Janus.Storage.Authentication.Accounts;
 using Janus.Storage.Authentication.Alerting;
+using Janus.Storage.Authentication.BreakGlass;
 using Janus.Storage.Authentication.Callbacks;
 using Janus.Storage.Authentication.Credentials;
 using Janus.Storage.Authentication.Factors;
@@ -302,6 +303,16 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     public DbSet<CallbackEventRecord> CallbackEvents => Set<CallbackEventRecord>();
 
     /// <summary>
+    /// The issues of the break-glass credential, of which at most one stands.
+    /// </summary>
+    public DbSet<BreakGlassCredentialRecord> BreakGlassCredentials => Set<BreakGlassCredentialRecord>();
+
+    /// <summary>
+    /// The attempts at the break-glass credential, from any source.
+    /// </summary>
+    public DbSet<BreakGlassAttemptRecord> BreakGlassAttempts => Set<BreakGlassAttemptRecord>();
+
+    /// <summary>
     /// The correlation references issued for a host's unsigned callbacks.
     /// </summary>
     public DbSet<CallbackReferenceRecord> CallbackReferences => Set<CallbackReferenceRecord>();
@@ -491,6 +502,8 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new NoticeConfiguration());
         modelBuilder.ApplyConfiguration(new CallbackConfiguration());
         modelBuilder.ApplyConfiguration(new CallbackEventConfiguration());
+        modelBuilder.ApplyConfiguration<BreakGlassCredentialRecord>(new BreakGlassConfiguration());
+        modelBuilder.ApplyConfiguration<BreakGlassAttemptRecord>(new BreakGlassConfiguration());
         modelBuilder.ApplyConfiguration(new CallbackReferenceConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationSourceConfiguration());
         modelBuilder.ApplyConfiguration(new AlertConfiguration());

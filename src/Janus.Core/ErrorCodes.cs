@@ -599,6 +599,21 @@ public static class ErrorCodes
         ErrorCode.Parse("auth.enrolment.tokeninvalid");
 
     /// <summary>
+    /// The emergency credential was rejected: it is not the one that stands, or a group
+    /// of it does not hold its check symbol. Type it again exactly as the sealed page
+    /// prints it; a replaced credential opens nothing.
+    /// </summary>
+    /// <remarks>Implements OPS-BOOT-002, OPS-BOOT-004, chapter 10 section 1.2.</remarks>
+    public static ErrorCode BreakGlassInvalid { get; } = ErrorCode.Parse("auth.breakglass.invalid");
+
+    /// <summary>
+    /// The emergency credential was already used, and it opens one session and no
+    /// second. Generate a new one from the management application.
+    /// </summary>
+    /// <remarks>Implements OPS-BOOT-002, chapter 10 section 1.2.</remarks>
+    public static ErrorCode BreakGlassConsumed { get; } = ErrorCode.Parse("auth.breakglass.consumed");
+
+    /// <summary>
     /// The password matched one of the sources the deployment rejects on. Choose
     /// another; length does not excuse a match.
     /// </summary>

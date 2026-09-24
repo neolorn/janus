@@ -21,6 +21,7 @@ namespace Janus.Authorization.Groups;
 /// <param name="groups">Where groups and their members are read and written.</param>
 /// <param name="grants">What a group holds, and whether any grant was given to it.</param>
 /// <param name="roles">Where the roles a group holds are read.</param>
+/// <param name="emergency">Which account joins no group.</param>
 /// <param name="audit">Where every change is written down.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
@@ -37,6 +38,7 @@ internal sealed class GroupService(
     IGroupStore groups,
     IGrantStore grants,
     IRoleStore roles,
+    IEmergencyAccount emergency,
     IGroupAudit audit,
     IUnitOfWork work,
     TimeProvider time) : IGroups
@@ -187,6 +189,14 @@ internal sealed class GroupService(
         if (!await JoinableAsync(member, held.Organization, cancellationToken).ConfigureAwait(false))
         {
             return Result.Failure(Malformed("subjectId"));
+        }
+
+        // OPS-BOOT-002: a group's grants would be something further granted to the
+        // break-glass session's account.
+        if (await emergency.FindAsync(cancellationToken).ConfigureAwait(false) is SubjectId reserved
+            && member == GrantSubject.Of(reserved))
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
         if (Stated(reason) is not string stated)

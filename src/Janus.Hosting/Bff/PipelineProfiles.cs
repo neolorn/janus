@@ -60,14 +60,22 @@ public static class PipelineProfiles
         ArgumentNullException.ThrowIfNull(application);
 
         // BFF-MACH-001: which routes this profile governs is the library's, so a host
-        // mounts the profile and chooses nothing about what it covers.
-        return application.UseWhen(
-            context => MachineRoutes.Governs(context.Request.Path),
-            branch =>
-            {
-                Machine(branch);
-                _ = branch.UseAuthentication();
-            });
+        // mounts the profile and chooses nothing about what it covers. Chapter 09
+        // section 8: the emergency credential is presented from a browser that may
+        // still hold a stale session for the domain, so there the cookie is ignored
+        // rather than refused.
+        return application
+            .UseWhen(
+                context => MachineRoutes.Governs(context.Request.Path)
+                    && !MachineRoutes.IgnoresCookie(context.Request.Path),
+                branch =>
+                {
+                    Machine(branch);
+                    _ = branch.UseAuthentication();
+                })
+            .UseWhen(
+                context => MachineRoutes.IgnoresCookie(context.Request.Path),
+                Marked);
     }
 
     /// <summary>
@@ -171,9 +179,16 @@ public static class PipelineProfiles
         _ = application.UseAuthentication();
     }
 
-    // The stages every route on the machine profile passes, the first of which marks
-    // the request as governed here.
+    // The stages every route on the machine profile passes.
     private static void Machine(IApplicationBuilder branch)
+    {
+        Marked(branch);
+        _ = branch.UseMiddleware<MachineProfile>();
+    }
+
+    // What a route on the machine profile passes before its cookie is looked at: the
+    // mark that keeps the browser profile off it, then the malformed body.
+    private static void Marked(IApplicationBuilder branch)
     {
         _ = branch.Use((context, next) =>
         {
@@ -182,7 +197,6 @@ public static class PipelineProfiles
             return next(context);
         });
         _ = branch.UseMiddleware<MalformedRequest>();
-        _ = branch.UseMiddleware<MachineProfile>();
     }
 
     private static void Mountable(PathString path, string name)

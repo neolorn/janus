@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -30,6 +31,20 @@ internal sealed class StepUpGuard(
     PolicyResolution policies,
     TimeProvider time)
 {
+    // OPS-BOOT-002: what would give the break-glass session's account a sign-in method
+    // or a mailbox, or end it. The session passes every gate, and these it never passes.
+    private static readonly FrozenSet<StepUpAction> Unavailable = new[]
+    {
+        StepUpAction.PasswordSet,
+        StepUpAction.IdentifierAdd,
+        StepUpAction.UsernameChange,
+        StepUpAction.FactorEnrol,
+        StepUpAction.RecoveryCodesGenerate,
+        StepUpAction.MailCredentialCreate,
+        StepUpAction.AccountDeactivate,
+        StepUpAction.AccountDelete,
+    }.ToFrozenSet();
+
     /// <summary>
     /// Whether a session has proved what an action costs.
     /// </summary>
@@ -109,6 +124,11 @@ internal sealed class StepUpGuard(
         if (live is null || live.Subject != subject)
         {
             return Result.Failure<StepUpChallenge>(Error.From(ErrorCodes.StepUpRequired));
+        }
+
+        if (live.SatisfiesEveryGate && Unavailable.Contains(action))
+        {
+            return Result.Failure<StepUpChallenge>(Error.From(ErrorCodes.Denied));
         }
 
         Error? failure = null;

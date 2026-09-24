@@ -11165,6 +11165,433 @@ that can raise. Under it:
 after the transaction that raised it commits, and chapter 10 section 5b that the alert
 channels read it from the committed row.
 
+---
+
+## 291. Generating the break-glass credential raises the break-glass alert
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-BOOT-004 AC2, OPS-ALERT-001, OPS-ALERT-002**
+
+*The question.* OPS-BOOT-004 AC2: "Generation is audited and alerted, to the owner
+regardless of `alerting.owner.enabled` (OPS-BOOT-002)." OPS-ALERT-001 has a row for
+"Break-glass credential used" and none for generation, and chapter 10 section 5.23 has
+no identifier for it. OPS-ALERT-002 deduplicates on the identifier and what it fired
+about.
+
+*The readings.*
+
+1. Raise nothing on generation, since no row names it.
+2. Raise `breakglass-used` on generation as well as on use, told apart by the details.
+3. Raise a new condition for generation.
+
+*Chosen: 2.* AC2 requires the alert and the third reading adds an identifier chapter
+10 does not hold. `breakglass-used` is the one condition the router always sends to
+the owner (OPS-ALERT-004), which is what AC2 asks. Under it:
+
+- The details carry `event`: `generated` or `used`.
+- The deduplication scope is `generated:<issue>` or `used:<issue>`, so the use of an
+  issue is never folded into the alert its generation raised inside the window, and
+  each issue alerts once for each.
+
+*Tests that pin it.*
+`BreakGlassEndpointTests.OPS_BOOT_004_AC2_GenerationIsAuditedAndReachesTheOwnerAsync`,
+`BreakGlassEndpointTests.OPS_BOOT_002_AC3_UseReachesTheOwnerWithOwnerAlertsOffAsync`.
+
+*Chapter text that should change.* OPS-ALERT-001's break-glass row could read "used or
+generated", and chapter 10 section 5.23 could name the `event` detail.
+
+---
+
+## 292. Every attempt at the break-glass credential counts against the global limit
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-BOOT-004 AC7, AUTH-ABUSE-001**
+
+*The question.* OPS-BOOT-004: attempts "SHALL be source-throttled per AUTH-ABUSE-001
+and, in addition, limited to at most 5 attempts per hour globally across all sources.
+With 128 bits behind it, the global limit exists to make the attack loud, not to make
+it infeasible." AC7: "A sixth attempt within one hour ... from any source, is refused".
+Nothing says whether a refused attempt counts, which of the two limits is applied
+first, or what time a refusal promises.
+
+*The readings.*
+
+1. Count only the attempts that reached the code (a sliding window of five).
+2. Count every arrival, the refused ones included, before anything else is looked at.
+
+*Chosen: 2*, the reading that refuses more. Under it:
+
+- The attempt is counted in a transaction of its own before the per-source delay, the
+  check symbols or any hash, so a refused attempt is counted as surely as one that
+  succeeds, and concurrent attempts are counted one at a time.
+- The sixth arrival within the hour, and every one after it, is answered 429
+  `auth.throttled` with `retryAt` an hour after the refused attempt. A sustained attack
+  therefore keeps the credential closed while it lasts; that is the loudness the item
+  asks for, and each refusal is an attempt the alerting sees.
+- The per-source delay of AUTH-ABUSE-001 then applies as for sign-in, keyed on the
+  source alone.
+- Attempts older than the window are forgotten by a sweep.
+
+*Tests that pin it.*
+`BreakGlassEndpointTests.OPS_BOOT_004_AC7_TheSixthAttemptInAnHourIsRefusedFromAnySourceAsync`,
+`BreakGlassStoreTests.OPS_BOOT_004_AC7_EveryAttemptIsCountedWithinTheWindowAsync`.
+
+*Chapter text that should change.* OPS-BOOT-004 could say that every attempt counts,
+refused ones included, and what `retryAt` a refusal carries.
+
+---
+
+## 293. What a refused break-glass code is answered
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-BOOT-002 AC1, OPS-BOOT-004 AC3, AC6**
+
+*The question.* Chapter 09 answers `POST /auth/break-glass` with 422
+`auth.breakglass.invalid` and 409 `auth.breakglass.consumed`. OPS-BOOT-002
+AC1: "Use consumes it; a second attempt fails." OPS-BOOT-004 AC6: "a group with a
+wrong check character is refused before the hash is compared." Nothing says which
+codes are "consumed" rather than "invalid": a code already used, one replaced, or one
+that never existed.
+
+*The readings.*
+
+1. Answer `consumed` for any code that was ever issued and no longer stands.
+2. Answer `consumed` only for the issue most recently used, and `invalid` for
+   everything else.
+
+*Chosen: 2.* It tells the least: only the person who just used the envelope learns
+the code was good, and a replaced issue reveals nothing about itself. Under it:
+
+- A code that is not 36 symbols of the alphabet, hyphens and spaces aside, or whose
+  groups do not all hold their check symbol, is answered 422 `auth.breakglass.invalid`
+  before any issue is read.
+- A code that matches the standing issue opens the session and spends it; the record
+  of the use is written only while the issue still stands, so of two concurrent uses
+  one opens a session and the other is answered 409 `auth.breakglass.consumed`.
+- A code that matches the issue last used is answered 409 `auth.breakglass.consumed`.
+- Any other code, a replaced one included, is answered 422 `auth.breakglass.invalid`.
+- Every refusal counts against the source's delay (entry 292).
+
+*Tests that pin it.*
+`BreakGlassEndpointTests.OPS_BOOT_002_AC1_UseConsumesTheCredentialAsync`,
+`BreakGlassEndpointTests.OPS_BOOT_004_AC3_ASecondGenerationInvalidatesTheFirstAsync`,
+`BreakGlassEndpointTests.OPS_BOOT_004_AC6_AWrongCheckIsRefusedBeforeAnyHashIsComparedAsync`,
+`BreakGlassStoreTests.OPS_BOOT_002_AC1_AnIssueIsSpentOnceAsync`, `BreakGlassCodeTests`.
+
+*Chapter text that should change.* Chapter 09 could say that 409 answers the issue
+last used and 422 every other code, a replaced one included.
+
+---
+
+## 294. How the reserved `emergency` account is marked and found
+
+**Phase 9 · 2026-09-24 · Tier 2 · OPS-BOOT-001, OPS-BOOT-002, REG-ACCT-001**
+
+*The question.* OPS-BOOT-002: "**The session belongs to a reserved account,
+`emergency`**", created at bootstrap (OPS-BOOT-001), "with **no sign-in method of any
+kind**". An account holds no name the library could look it up by, and this one has no
+identifier to be found through. Nothing says how the library knows which account it
+is.
+
+*The readings.*
+
+1. Keep its subject in a configuration key written by bootstrap.
+2. Mark the account row itself, and let the database hold at most one marked row.
+
+*Chosen: 2.* A configuration key is a value an administrator can change, which would
+move the break-glass session onto another account; a mark on the row is written once,
+by bootstrap alone. Under it:
+
+- `accounts.emergency`, a boolean that is false on every account but the one, with a
+  unique partial index (`ux_accounts_emergency`) over the marked row.
+- `Account.CreateEmergency` is the only way to set it; it is carried through erasure
+  and read back unchanged.
+- The authentication and authorization areas read it through a port each, so neither
+  learns the other's types.
+
+*Tests that pin it.*
+`AccountStatesTests.OPS_BOOT_002_TheReservedAccountIsNeverTakenDownAsync`,
+`AccountTests.OPS_BOOT_002_TheEmergencyAccountIsNeverSuspendedOrDeleted`,
+`ModelTests.REG_ACCT_001_AC2_NoFieldExistsOutsideTheGroupsTheTableNames`.
+
+*Chapter text that should change.* OPS-BOOT-002 could name the mark and say the
+database holds at most one such account.
+
+---
+
+## 295. What the reserved account is refused, and with which code
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-BOOT-002, AUTH-STEP-004**
+
+*The question.* OPS-BOOT-002: the `emergency` account has "**no sign-in method of any
+kind** ... no factor can be enrolled on it ... it appears in no device list, holds no
+mailbox, and cannot be granted anything further, suspended, or deleted." AUTH-STEP-004:
+"A **break-glass session SHALL satisfy the step-up requirement** for the duration of
+its lifetime." No chapter names the refusal, and the session that satisfies every gate
+is itself the only session the account has.
+
+*The readings.*
+
+1. Refuse only through the absence of any flow that reaches the account.
+2. Refuse each operation named, explicitly, wherever it could reach the account, and
+   refuse the gated actions of the session that would give it a way in or end it.
+
+*Chosen: 2*, which refuses in more places. Under it, each is answered 403
+`authz.denied`, the refusal the caller would see for an operation it may not perform:
+
+- suspension by an administrator, and a takedown;
+- a grant to the account, and its addition to a group, whose grants would be
+  something further granted;
+- from the break-glass session, the step-up actions `password:set`,
+  `identifier:add`, `username:change`, `factor:enrol`, `recoverycodes:generate`,
+  `mailcredential:create`, `account:deactivate` and `account:delete`, which it
+  passes no gate for although it passes every other.
+- The domain refuses the same transitions itself (`Account` throws on suspension,
+  deactivation, takedown and deletion of the reserved account), so a path this list
+  missed faults rather than succeeds.
+- The session never passes through device trust, so it appears in no device list.
+
+*Tests that pin it.*
+`AccountAdministrationTests.OPS_BOOT_002_TheEmergencyAccountIsNeverSuspendedAsync`,
+`AccountTests.OPS_BOOT_002_TheEmergencyAccountIsNeverSuspendedOrDeleted`,
+`AccountStatesTests.OPS_BOOT_002_TheReservedAccountIsNeverTakenDownAsync`,
+`GrantEndpointTests.OPS_BOOT_002_TheReservedAccountIsGrantedNothingAsync`,
+`GroupEndpointTests.OPS_BOOT_002_TheReservedAccountJoinsNoGroupAsync`,
+`BreakGlassEndpointTests.OPS_BOOT_002_NoSignInMethodIsGivenToTheReservedAccountAsync`.
+
+*Chapter text that should change.* OPS-BOOT-002 could name `authz.denied` as the
+refusal and list the gated actions the session does not pass.
+
+---
+
+## 296. How long the break-glass session lives
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-BOOT-002 AC2, AUTH-STEP-004 AC3, AUTH-SESS-005b**
+
+*The question.* OPS-BOOT-002: "The session SHALL satisfy step-up for its lifetime
+(AUTH-STEP-004). Lifetime is configurable with an enforced ceiling (D-138)." Chapter 10
+section 4: `breakglass.session.lifetime`, "4 hours, ceiling 12". AC2: "The session
+expires automatically at a configured lifetime within the ceiling." Nothing says
+whether the session also ends when idle, and under which inactivity window.
+
+*The readings.*
+
+1. The lifetime is the only limit; an idle session lives to it.
+2. The lifetime is the absolute limit, and the account's policy's inactivity window
+   applies as well, never longer than the lifetime.
+
+*Chosen: 2*, which ends the session sooner. An unattended emergency session is the
+case the idle window exists for. Under it:
+
+- The absolute expiry is `breakglass.session.lifetime` from the moment of use,
+  whatever the policy's absolute lifetime says.
+- The inactivity window is the one the policy gives the session's assurance, cut to
+  the lifetime where it is longer.
+- The session satisfies every gate (entry 295 excepted) until it ends, and the
+  exception ends with it.
+
+*Tests that pin it.*
+`BreakGlassEndpointTests.OPS_BOOT_002_AC2_TheSessionExpiresAtTheConfiguredLifetimeAsync`,
+`StepUpTests.AUTH_STEP_004_AC3_TheExceptionDoesNotOutliveTheSession`.
+
+*Chapter text that should change.* OPS-BOOT-002 could say that the session's idle
+window is the policy's, bounded by the lifetime.
+
+---
+
+## 297. Break-glass has no service contract in `Janus.Core`
+
+**Phase 9 · 2026-09-24 · Tier 2 · LIB-API-001, LIB-API-005, CONV-DESIGN-002**
+
+*The question.* CONV-DESIGN-002: the unit of application logic is "a **service class
+per operation group**, implementing the corresponding contract from `Janus.Core`
+(LIB-API-005)". The two break-glass endpoints are the library's own and chapter 07
+names no contract a host calls for them.
+
+*The readings.*
+
+1. Publish an `IBreakGlass` contract in `Janus.Core` and implement it.
+2. Keep the service internal, reached only through the two endpoints.
+
+*Chosen: 2*, the smaller public surface. A host has no business presenting or
+generating the credential except through the frontend route and the management
+application, and a public contract would be a second way in that the endpoints'
+throttle and profile do not guard. The service is `internal sealed`, constructed by
+dependency injection and ordered as CONV-DESIGN-002 orders every operation; the only
+additions to the public surface are the two error codes and the two audit actions.
+
+*Tests that pin it.* The public-surface file (`PublicAPI.Unshipped.txt`) and its
+analyser; `BreakGlassEndpointTests`.
+
+*Chapter text that should change.* Chapter 07 could say that the break-glass
+operations are reached through the endpoints alone.
+
+---
+
+## 298. The address the generated page carries
+
+**Phase 9 · 2026-09-24 · Tier 2 · OPS-BOOT-004, FE-BG-001, LIB-HOST-001**
+
+*The question.* OPS-BOOT-004: the page shows "the `/break-glass` address". Chapter 09
+answers `POST /admin/break-glass/generate` with `{ "credential": "...", "address":
+"...", "issuedAt": "..." }`. FE-BG-001: "The authentication application SHALL provide
+a route `/break-glass`". Nothing says where the absolute address comes from.
+
+*The readings.*
+
+1. Answer the path alone and let the frontend make it absolute.
+2. Answer the absolute address: the authentication application's origin, which the
+   host already declares (`AuthenticationAddresses.Provider`), and `/break-glass`.
+
+*Chosen: 2.* The envelope is printed from this answer and read years later by someone
+who is not technical, so what it prints has to be complete; and the origin is a value
+the host has declared once already, not a new one. The address is composed in the
+service, from the declaration, and never from the request.
+
+*Tests that pin it.*
+`BreakGlassEndpointTests.OPS_BOOT_004_AC1_ABreakGlassSessionGeneratesAReplacementAsync`.
+
+*Chapter text that should change.* Chapter 09 could say `address` is absolute and
+built from the authentication application's declared origin.
+
+---
+
+## 299. One break-glass issue stands at a time
+
+**Phase 9 · 2026-09-24 · Tier 2 · OPS-BOOT-004 AC3, CONV-DESIGN-003**
+
+*The question.* OPS-BOOT-004 AC3: "a second request generates a new credential and
+invalidates the previous one." Two generations, or a generation and a use, can run at
+once, and nothing says what keeps two issues from standing together.
+
+*The readings.*
+
+1. Rely on the service reading what stands before it writes.
+2. Serialize every operation that reads what stands, and let the database refuse a
+   second standing issue as well.
+
+*Chosen: 2.* Under it:
+
+- Generation and use take a transaction-scoped advisory lock before they read what
+  stands, so a crashed operation releases it with its transaction.
+- A unique index over a constant (`ux_break_glass_credentials_standing`, on rows
+  neither used nor replaced) refuses a second standing issue whatever reaches the
+  table, and a check constraint refuses an issue both used and replaced.
+- The record of a use or a replacement is written only where the issue still stands,
+  and says whether it was.
+- An issue keeps `issued_by`, the account that generated it, and never its code.
+
+*Tests that pin it.*
+`BreakGlassStoreTests.OPS_BOOT_004_OneIssueStandsAtATimeAsync`,
+`BreakGlassStoreTests.OPS_BOOT_004_AnIssueEndsOnceAsync`,
+`BreakGlassStoreTests.OPS_BOOT_004_AC3_AReplacementStandsInThePreviousPlaceAsync`,
+`BreakGlassEndpointTests.OPS_BOOT_004_AC3_ASecondGenerationInvalidatesTheFirstAsync`.
+
+*Chapter text that should change.* None; this is how the requirement is held.
+
+---
+
+## 300. How the break-glass code is hashed
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-BOOT-004 AC4, INT-PWD**
+
+*The question.* OPS-BOOT-004: "The system stores **only a hash**". AC4: "No plaintext
+break-glass credential exists in the database, the secrets manager, logs, mail, or any
+file." Nothing names the hash. The code carries 135 bits, so a fast hash would already
+resist guessing; a slow one costs time at every use.
+
+*The readings.*
+
+1. A keyed or plain fast hash, which 135 bits make safe against guessing.
+2. Argon2id with the password parameters of chapter 10 section 4.
+
+*Chosen: 2*, the one that keeps most in reserve. The code is used a handful of times
+in the life of a deployment, so the cost is paid rarely, and a slow hash protects the
+code if the entropy of the draw is ever less than the item promises. Under it:
+
+- The code is hashed in its canonical form (case folded, the check symbols kept,
+  hyphens and spaces dropped), under `password.argon2.memory`, `.iterations` and
+  `.parallelism`, and the hash carries its parameters, so a later change of them
+  still verifies an issue made before it.
+- The bytes of the code are cleared once hashed or compared, and the code is marked
+  never to be logged.
+
+*Tests that pin it.*
+`BreakGlassStoreTests.OPS_BOOT_004_AC4_OnlyAHashOfTheCodeIsHeldAsync`,
+`BreakGlassEndpointTests.OPS_BOOT_004_AC3_ASecondGenerationInvalidatesTheFirstAsync`,
+`NeverLoggedTests.CONV_LOG_003_AC1_EveryMemberCarryingAForbiddenValueIsMarked` (the
+authentication and hosting ones).
+
+*Chapter text that should change.* OPS-BOOT-004 could name the hash.
+
+---
+
+## 301. What "any cookie present is ignored" does at `/auth/break-glass`
+
+**Phase 9 · 2026-09-24 · Tier 3 · FE-BG-001 AC3, BFF-MACH-001, BFF-CSRF**
+
+*The question.* Chapter 09: `POST /auth/break-glass` is "**Mounted on the machine
+profile** (BFF-MACH-001): no session, outside the session-bound CSRF layer,
+source-throttled. **Any cookie present is ignored rather than refused**". The machine
+profile refuses a request that carries the session cookie. FE-BG-001 AC3: "The page
+works with a stale session cookie present for the domain."
+
+*The readings.*
+
+1. Exempt the route from the machine profile altogether.
+2. Keep the route on the machine profile, marked as machine-governed and held to the
+   malformed-request answer, but without the refusal of a cookie, and never resolve
+   the session the cookie names.
+
+*Chosen: 2*, the one that exempts the least. Under it:
+
+- The route is one of the machine routes, and the only one listed as ignoring the
+  cookie; everything else the profile does to it stays.
+- No session is read from the cookie, so nothing the stale session holds reaches the
+  operation.
+- Success writes the new session's cookie over the stale one and clears the
+  first-contact cookie, so nothing of the browser's earlier state survives.
+
+*Tests that pin it.*
+`BreakGlassEndpointTests.FE_BG_001_AC3_AStaleSessionCookieIsIgnoredAsync`.
+
+*Chapter text that should change.* BFF-MACH-001 could list `/auth/break-glass` as
+the machine route that ignores a cookie.
+
+---
+
+## 302. The owner's stated reason has nowhere to be stated
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-BOOT-002, FE-BG-001, AUTHZ-IMP-001**
+
+*The question.* OPS-BOOT-002: "Every action in a break-glass session is audited with
+`emergency` as acting and effective identity (AUTHZ-IMP-001) and the owner's stated
+reason". Chapter 09 gives the request as `{ "credential": "..." }` and nothing else,
+and FE-BG-001: "one field for the sealed credential, one button, no other controls."
+The two chapters contradict each other: there is no place for the owner to state a
+reason once for the session.
+
+*The readings.*
+
+1. Add a `reason` member to `POST /auth/break-glass`, and a control to the page.
+2. Keep the shape chapter 09 gives, and record for each action in the session the
+   reason its own request carries.
+
+*Chosen: 2.* Chapters 09 and 10 are authoritative for shapes, and a second control on
+a page for someone who is not technical is what FE-BG-001 forbids. Under it:
+
+- Every action of the session is audited with `emergency` as acting and effective
+  identity, which no other session can be.
+- An action whose request carries a reason (a grant, a recovery approval, a
+  configuration change, a takedown) records it as it would for anyone; the use itself
+  records none.
+- The alert the use raises is the control that asks the owner why.
+
+*Tests that pin it.*
+`BreakGlassEndpointTests.AUTH_STEP_004_AC2_AnActionInTheSessionIsAuditedAsTheReservedAccountAsync`,
+`BreakGlassEndpointTests.OPS_BOOT_002_AC4_TheSessionGrantsSystemAdministrationAsync`.
+
+*Chapter text that should change.* Either OPS-BOOT-002 drops "and the owner's stated
+reason", or chapter 09 and FE-BG-001 gain the member and the control; the owner
+decides which.
+
 
 # Rows for chapter 10
 
@@ -11305,6 +11732,8 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | Action | Category | Catalogue member | Written when |
 | --- | --- | --- | --- |
 | `auth.botdefence.signalled` | security | `AuditActions.BotDefenceSignalled` | The bot defence answered a send with a signal, which is recorded without the signal's own detail. (AUTH-ABUSE-009) |
+| `auth.breakglass.generated` | security | `AuditActions.BreakGlassGenerated` | The break-glass credential was generated, a first issue or a replacement. The acting and effective subject is who generated it: a system administrator, or the reserved account from a break-glass session; `details.credential` names the issue and `details.replaced` the one it replaced, where there was one. The row names no organization. (OPS-BOOT-004, entry 291) |
+| `auth.breakglass.used` | security | `AuditActions.BreakGlassUsed` | The break-glass credential was used and opened the emergency session. The acting and effective subject is the reserved account; `details.credential` names the issue and `details.session` the session it opened. The row names no organization. (OPS-BOOT-002) |
 | `auth.credential.countermismatch` | security | `AuditActions.CredentialCounterMismatch` | An authenticator presented a signature counter that did not advance, which is what a cloned credential looks like. (AUTH-FACT-002) |
 | `auth.credential.enrolled` | security | `AuditActions.CredentialEnrolled` | A credential was enrolled on an account. (AUTH-FACT-001) |
 | `auth.credential.invalidated` | security | `AuditActions.CredentialInvalidated` | A credential was invalidated by a loss report that took effect. (AUTH-REC-004) |

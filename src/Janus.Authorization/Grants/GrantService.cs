@@ -23,6 +23,7 @@ namespace Janus.Authorization.Grants;
 /// <param name="roles">Where the role a grant names is read.</param>
 /// <param name="groups">Where a group a grant is given to is read.</param>
 /// <param name="resources">Where the record a grant is on, and its organization, are read.</param>
+/// <param name="emergency">Which account is granted nothing further.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -40,6 +41,7 @@ internal sealed class GrantService(
     IRoleStore roles,
     IGroupStore groups,
     IResourceStore resources,
+    IEmergencyAccount emergency,
     IUnitOfWork work,
     TimeProvider time) : IGrants
 {
@@ -90,6 +92,14 @@ internal sealed class GrantService(
         if (!await HolderAsync(request.Subject, organization, cancellationToken).ConfigureAwait(false))
         {
             return Result.Failure<GrantId>(Malformed("subjectId"));
+        }
+
+        // OPS-BOOT-002: the break-glass session's account holds what bootstrap gave it
+        // and cannot be granted anything further.
+        if (await emergency.FindAsync(cancellationToken).ConfigureAwait(false) is SubjectId reserved
+            && request.Subject == GrantSubject.Of(reserved))
+        {
+            return Result.Failure<GrantId>(Error.From(ErrorCodes.Denied));
         }
 
         if (Unstated(request.Reason) is Error unstated)

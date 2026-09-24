@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -43,6 +44,7 @@ internal sealed class Browser(Deployment deployment)
     /// <param name="origin">What to claim as the origin, or nothing to claim none.</param>
     /// <param name="token">Whether to present the synchronizer token it holds.</param>
     /// <param name="contentType">What the body is sent as, where there is one.</param>
+    /// <param name="source">The address the connection arrives from, or nothing for none.</param>
     /// <returns>What came back.</returns>
     public async Task<Answer> SendAsync(
         string method,
@@ -51,10 +53,12 @@ internal sealed class Browser(Deployment deployment)
         bool header = true,
         string? origin = Origin,
         bool token = true,
-        string contentType = "application/json")
+        string contentType = "application/json",
+        IPAddress? source = null)
     {
         var context = new DefaultHttpContext();
 
+        context.Connection.RemoteIpAddress = source;
         context.Request.Method = method;
         context.Request.Scheme = "https";
         context.Request.Host = new HostString("identity.example.test");

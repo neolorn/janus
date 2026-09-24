@@ -6,6 +6,7 @@ using Janus.Core;
 using Janus.Hosting.Accounts;
 using Janus.Hosting.Authentication;
 using Janus.Hosting.Bff;
+using Janus.Hosting.BreakGlass;
 using Janus.Hosting.Credentials;
 using Janus.Hosting.Organizations;
 using Janus.Hosting.Recovery;
@@ -63,6 +64,8 @@ public sealed class NeverLoggedTests
             Member<GeneratorEnrolmentView>(nameof(GeneratorEnrolmentView.Uri)),
             Member<IssuedInvitationView>(nameof(IssuedInvitationView.Token)),
             Member<IssuedAppPasswordView>(nameof(IssuedAppPasswordView.Secret)),
+            Member<PresentBreakGlassRequest>(nameof(PresentBreakGlassRequest.Credential)),
+            Member<GeneratedBreakGlassView>(nameof(GeneratedBreakGlassView.Credential)),
         ]));
 
     private static PropertyInfo Member<T>(string name) =>

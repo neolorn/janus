@@ -4,6 +4,7 @@ using Janus.Hosting.Accounts;
 using Janus.Hosting.Authentication;
 using Janus.Hosting.Authorization;
 using Janus.Hosting.Bff;
+using Janus.Hosting.BreakGlass;
 using Janus.Hosting.Configuration;
 using Janus.Hosting.Credentials;
 using Janus.Hosting.Organizations;
@@ -48,6 +49,7 @@ public static class IdentityEndpoints
 
         _ = library.MapRegistration();
         _ = library.MapAuthentication();
+        _ = library.MapBreakGlass();
         _ = library.MapSignOn();
         _ = library.MapAccount();
         _ = library.MapAccountAdministration();

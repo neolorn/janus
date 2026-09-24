@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
+using Janus.Authentication.BreakGlass;
 using Janus.Authentication.Callbacks;
 using Janus.Authentication.Configuration;
 using Janus.Authentication.Credentials;
@@ -34,6 +35,7 @@ using Janus.Hosting.Alerting;
 using Janus.Hosting.Authentication;
 using Janus.Hosting.Authorization;
 using Janus.Hosting.Bff;
+using Janus.Hosting.BreakGlass;
 using Janus.Hosting.Configuration;
 using Janus.Hosting.Credentials;
 using Janus.Hosting.Oidc;
@@ -230,6 +232,9 @@ public static class HostingRegistration
         services.AddScoped<AlertRouter>();
         services.AddScoped<IAlertChannels, AlertChannels>();
         services.AddScoped<AlertDispatch>();
+
+        // OPS-BOOT-002, OPS-BOOT-004: the sealed emergency credential.
+        services.AddScoped<BreakGlassService>();
         services.AddScoped<AlertDestinationChange>();
         services.AddScoped<IAlertLog, AlertLog>();
         services.AddScoped<IConfigurationAdministration, ConfigurationService>();
@@ -500,6 +505,7 @@ public static class HostingRegistration
         options.SerializerOptions.TypeInfoResolverChain.Clear();
         options.SerializerOptions.TypeInfoResolverChain.Add(RegistrationJson.Default);
         options.SerializerOptions.TypeInfoResolverChain.Add(AuthenticationJson.Default);
+        options.SerializerOptions.TypeInfoResolverChain.Add(BreakGlassJson.Default);
         options.SerializerOptions.TypeInfoResolverChain.Add(AccountJson.Default);
         options.SerializerOptions.TypeInfoResolverChain.Add(RecoveryJson.Default);
         options.SerializerOptions.TypeInfoResolverChain.Add(CredentialsJson.Default);

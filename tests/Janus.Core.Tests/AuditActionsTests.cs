@@ -19,6 +19,8 @@ public sealed class AuditActionsTests
     private static readonly string[] Catalogue =
     [
         "auth.botdefence.signalled",
+        "auth.breakglass.generated",
+        "auth.breakglass.used",
         "auth.credential.countermismatch",
         "auth.credential.enrolled",
         "auth.credential.invalidated",

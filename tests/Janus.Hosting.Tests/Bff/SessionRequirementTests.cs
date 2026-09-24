@@ -81,6 +81,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "POST /admin/accounts/{subject:guid}/takedown/",
         "POST /admin/accounts/{subject:guid}/takedown/reverse",
         "POST /admin/accounts/{subject:guid}/sessions/revoke",
+        "POST /admin/break-glass/generate",
         "POST /admin/documents/{document}/versions",
         "POST /admin/erasures/{id:guid}/complete",
         "POST /admin/grants",

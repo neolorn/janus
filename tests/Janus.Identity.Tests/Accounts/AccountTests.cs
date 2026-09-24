@@ -30,6 +30,24 @@ public sealed class AccountTests
     }
 
     /// <summary>
+    /// OPS-BOOT-002: the reserved emergency account is created active and is never
+    /// suspended, deactivated, taken down or put into a deletion window.
+    /// </summary>
+    [Fact]
+    public void OPS_BOOT_002_TheEmergencyAccountIsNeverSuspendedOrDeleted()
+    {
+        var account = Account.CreateEmergency(Ahmed, Noon);
+
+        Assert.True(account.IsEmergency);
+        Assert.False(Account.Create(Ahmed, Noon).IsEmergency);
+        Assert.Throws<InvalidOperationException>(account.Suspend);
+        Assert.Throws<InvalidOperationException>(account.Deactivate);
+        Assert.Throws<InvalidOperationException>(() => account.Takedown(Noon));
+        Assert.Throws<InvalidOperationException>(() => account.RequestDeletion(DeletionOrigin.Self, Noon));
+        Assert.Equal(AccountState.Active, account.State);
+    }
+
+    /// <summary>
     /// IDN-ACCT-007 AC4: the grace window is cancellable throughout, and cancelling
     /// restores the account to active.
     /// </summary>

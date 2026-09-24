@@ -89,13 +89,15 @@ public sealed class ModelTests
 
             // Standing: the state and the two windows `01` section 4 gives it, with
             // what the terms step wrote down of the age answer, the affirmation
-            // derived from it and the versions accepted (REG-PROF-002, REG-SESS-007).
+            // derived from it and the versions accepted (REG-PROF-002, REG-SESS-007),
+            // and the mark of the one reserved account (OPS-BOOT-002).
             "accounts.adult_affirmed",
             "accounts.age_group",
             "accounts.answered_age_at",
             "accounts.created_at",
             "accounts.deleting_by",
             "accounts.deleting_since",
+            "accounts.emergency",
             "accounts.notice_version",
             "accounts.restriction_held",
             "accounts.state",
@@ -153,6 +155,20 @@ public sealed class ModelTests
             "authenticators.subject",
             "authenticators.totp_consumed_step",
             "authenticators.totp_secret",
+
+            // Not an account field: the attempts at the break-glass credential from any
+            // source, counted against the global limit of OPS-BOOT-004.
+            "break_glass_attempts.attempted_at",
+            "break_glass_attempts.id",
+
+            // Not an account field: each issue of the break-glass credential, of which
+            // only a hash is kept (OPS-BOOT-002, OPS-BOOT-004).
+            "break_glass_credentials.consumed_at",
+            "break_glass_credentials.hash",
+            "break_glass_credentials.id",
+            "break_glass_credentials.issued_at",
+            "break_glass_credentials.issued_by",
+            "break_glass_credentials.replaced_at",
 
             // Not an account field: a host callback's provider events, each claimed once
             // by the hash of the provider's identifier (BFF-MACH-002).

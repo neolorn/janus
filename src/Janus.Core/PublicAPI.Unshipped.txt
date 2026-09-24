@@ -3263,6 +3263,8 @@ static Janus.Core.AuditActions.AccountDeactivated.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.AccountReactivated.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.AccountSuspended.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.BotDefenceSignalled.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.BreakGlassGenerated.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.BreakGlassUsed.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ConfigurationChanged.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ConsentGranted.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ConsentWithdrawn.get -> Janus.Core.AuditAction
@@ -3623,6 +3625,8 @@ static Janus.Core.ErrorCodes.DocumentNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.DomainUnverified.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.EndpointInsecure.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.EnrolmentTokenInvalid.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.BreakGlassInvalid.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.BreakGlassConsumed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ErasureNotFailed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ErasureNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.FactorNotPermitted.get -> Janus.Core.ErrorCode

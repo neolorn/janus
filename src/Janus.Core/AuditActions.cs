@@ -40,6 +40,19 @@ public static class AuditActions
     public static AuditAction BotDefenceSignalled { get; } = AuditAction.Parse("auth.botdefence.signalled");
 
     /// <summary>
+    /// The break-glass credential was generated, a first issue or a replacement that
+    /// invalidated the one before it.
+    /// </summary>
+    /// <remarks>Implements OPS-BOOT-004, chapter 10 section 5.</remarks>
+    public static AuditAction BreakGlassGenerated { get; } = AuditAction.Parse("auth.breakglass.generated");
+
+    /// <summary>
+    /// The break-glass credential was used and opened the emergency session.
+    /// </summary>
+    /// <remarks>Implements OPS-BOOT-002, chapter 10 section 5.</remarks>
+    public static AuditAction BreakGlassUsed { get; } = AuditAction.Parse("auth.breakglass.used");
+
+    /// <summary>
     /// A configuration key was changed, with the key, the old value and the new one.
     /// </summary>
     /// <remarks>Implements OPS-CFG-005, chapter 10 section 5.</remarks>

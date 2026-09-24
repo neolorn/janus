@@ -92,7 +92,8 @@ internal sealed class SubjectEraser(
             record.RestrictionHeld,
             record.DeletingBy,
             record.DeletingSince,
-            registration: null);
+            registration: null,
+            record.IsEmergency);
 
         account.MarkErased();
 

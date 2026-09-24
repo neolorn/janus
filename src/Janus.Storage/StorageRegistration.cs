@@ -2,6 +2,7 @@ using System;
 using System.Security.Cryptography;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
+using Janus.Authentication.BreakGlass;
 using Janus.Authentication.Callbacks;
 using Janus.Authentication.Configuration;
 using Janus.Authentication.Credentials;
@@ -42,6 +43,7 @@ using Janus.Privacy.Requests;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Accounts;
 using Janus.Storage.Authentication.Alerting;
+using Janus.Storage.Authentication.BreakGlass;
 using Janus.Storage.Authentication.Callbacks;
 using Janus.Storage.Authentication.Configuration;
 using Janus.Storage.Authentication.Credentials;
@@ -208,6 +210,9 @@ internal static class StorageRegistration
         services.AddScoped<IDeviceStore, DeviceStore>();
         services.AddScoped<IMembershipLookup, MembershipLookup>();
         services.AddScoped<Janus.Authentication.Policies.IAdministrativeOrganization, AdministrativeOrganization>();
+        services.AddScoped<Janus.Authentication.BreakGlass.IEmergencyAccount, EmergencyAccount>();
+        services.AddScoped<IBreakGlassStore, BreakGlassStore>();
+        services.AddScoped<IBreakGlassAudit, BreakGlassAudit>();
         services.AddScoped<IPreAuthenticationStore, PreAuthenticationStore>();
         services.AddScoped<IChallengeStore, ChallengeStore>();
         services.AddScoped<IVerificationCodeStore, VerificationCodeStore>();
@@ -273,6 +278,7 @@ internal static class StorageRegistration
         services.AddScoped<IRecordedConsents, RecordedConsents>();
         services.AddScoped<IAccessAudit, AccessAudit>();
         services.AddScoped<Janus.Authorization.Gate.IAdministrativeOrganization, GateAdministrativeOrganization>();
+        services.AddScoped<Janus.Authorization.Grants.IEmergencyAccount, GrantEmergencyAccount>();
 
         services.AddScoped<ISendOutbox>(provider => new SendDeliveryStore(
             provider.GetRequiredService<StoreContext>(),

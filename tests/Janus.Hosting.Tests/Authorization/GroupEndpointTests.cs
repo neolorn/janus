@@ -305,6 +305,29 @@ public sealed class GroupEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// OPS-BOOT-002: the reserved account the break-glass session belongs to cannot be
+    /// granted anything further, a group's grants included, so it is made a member of
+    /// no group and the refusal records nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_TheReservedAccountJoinsNoGroupAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
+        GroupId tellers = Id(await CreatedAsync(administrator, "Tellers"));
+        int recorded = _deployment.GroupChanges.Changes.Count;
+
+        _deployment.Reserves(new SubjectId(Holder));
+
+        Answer refused = await AddedAsync(administrator, tellers, User);
+
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), refused.Text("code"));
+        Assert.Empty(await _deployment.Groups.MembersAsync(tellers, CancellationToken.None));
+        Assert.Equal(recorded, _deployment.GroupChanges.Changes.Count);
+    }
+
+    /// <summary>
     /// AUTHZ-GROUP-001 and API-CONV-002: a change names an organization, a name and a
     /// reason of 1 to 1024 characters, a group the deployment holds, and a member group
     /// of the same organization; anything else is a malformed request naming the field.

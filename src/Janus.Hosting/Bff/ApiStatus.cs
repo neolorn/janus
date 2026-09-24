@@ -126,6 +126,8 @@ internal static class ApiStatus
         [ErrorCodes.FactorRequired] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.CredentialSuspended] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.EnrolmentTokenInvalid] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.BreakGlassInvalid] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.BreakGlassConsumed] = StatusCodes.Status409Conflict,
         [ErrorCodes.RecoveryTokenInvalid] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.RecoveryTokenExpired] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.RecoveryReasonRequired] = StatusCodes.Status422UnprocessableEntity,

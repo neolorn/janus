@@ -108,6 +108,65 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.ToTable("raised_alerts", "identity");
             });
 
+        modelBuilder.Entity("Janus.Storage.Authentication.BreakGlass.BreakGlassAttemptRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<DateTimeOffset>("AttemptedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("attempted_at");
+
+                b.HasKey("Id")
+                    .HasName("pk_break_glass_attempts");
+
+                b.HasIndex("AttemptedAt")
+                    .HasDatabaseName("ix_break_glass_attempts_attempted_at");
+
+                b.ToTable("break_glass_attempts", "identity");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.BreakGlass.BreakGlassCredentialRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<DateTimeOffset?>("ConsumedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("consumed_at");
+
+                b.Property<string>("Hash")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("hash");
+
+                b.Property<DateTimeOffset>("IssuedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("issued_at");
+
+                b.Property<Guid>("IssuedBy")
+                    .HasColumnType("uuid")
+                    .HasColumnName("issued_by");
+
+                b.Property<DateTimeOffset?>("ReplacedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("replaced_at");
+
+                b.HasKey("Id")
+                    .HasName("pk_break_glass_credentials");
+
+                b.HasIndex("IssuedBy")
+                    .HasDatabaseName("ix_break_glass_credentials_issued_by");
+
+                b.ToTable("break_glass_credentials", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_break_glass_credentials_ended", "consumed_at IS NULL OR replaced_at IS NULL");
+                    });
+            });
+
         modelBuilder.Entity("Janus.Storage.Authentication.Callbacks.CallbackEventRecord", b =>
             {
                 b.Property<string>("Callback")
@@ -2247,6 +2306,12 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("deleting_since");
 
+                b.Property<bool>("IsEmergency")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(false)
+                    .HasColumnName("emergency");
+
                 b.Property<string>("NoticeVersion")
                     .HasMaxLength(64)
                     .HasColumnType("character varying(64)")
@@ -2276,6 +2341,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasIndex("DeletingSince")
                     .HasDatabaseName("ix_accounts_deleting_since")
                     .HasFilter("deleting_since IS NOT NULL");
+
+                b.HasIndex("IsEmergency")
+                    .IsUnique()
+                    .HasDatabaseName("ux_accounts_emergency")
+                    .HasFilter("emergency");
 
                 b.ToTable("accounts", "identity", t =>
                     {
@@ -3225,6 +3295,16 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .OnDelete(DeleteBehavior.Restrict)
                     .IsRequired()
                     .HasConstraintName("fk_lifecycle_links_subject");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.BreakGlass.BreakGlassCredentialRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
+                    .WithMany()
+                    .HasForeignKey("IssuedBy")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_break_glass_credentials_issued_by");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Credentials.KeyCeremonyRecord", b =>

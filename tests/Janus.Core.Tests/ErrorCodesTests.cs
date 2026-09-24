@@ -18,6 +18,8 @@ public sealed class ErrorCodesTests
     private static readonly string[] Catalogue =
     [
         "api.request.malformed",
+        "auth.breakglass.consumed",
+        "auth.breakglass.invalid",
         "auth.challenge.required",
         "auth.code.expired",
         "auth.code.invalid",

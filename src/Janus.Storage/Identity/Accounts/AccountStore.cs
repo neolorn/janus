@@ -35,7 +35,8 @@ internal sealed class AccountStore(StoreContext context) : IAccountStore
             record.RestrictionHeld,
             record.DeletingBy,
             record.DeletingSince,
-            Registered(record));
+            Registered(record),
+            record.IsEmergency);
     }
 
     /// <inheritdoc/>
@@ -59,6 +60,7 @@ internal sealed class AccountStore(StoreContext context) : IAccountStore
                     AnsweredAgeAt = account.Registration?.AnsweredAgeAt,
                     TermsVersion = account.Registration?.TermsVersion,
                     NoticeVersion = account.Registration?.NoticeVersion,
+                    IsEmergency = account.IsEmergency,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -101,7 +103,8 @@ internal sealed class AccountStore(StoreContext context) : IAccountStore
                 record.RestrictionHeld,
                 record.DeletingBy,
                 record.DeletingSince,
-                Registered(record))),
+                Registered(record),
+                record.IsEmergency)),
         ];
     }
 

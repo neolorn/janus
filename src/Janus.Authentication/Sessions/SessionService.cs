@@ -71,7 +71,8 @@ internal sealed class SessionService(
     /// which the emergency path uses and nothing else does. The floor does not hold
     /// it, because the credential behind it is one printed secret and enforcing the
     /// floor would refuse the session the emergency exists for; the compensating
-    /// control is the alerting.
+    /// control is the alerting. It lives for <c>breakglass.session.lifetime</c>, not
+    /// for the policy's lifetimes.
     /// </summary>
     /// <param name="subject">Who signed in.</param>
     /// <param name="presented">What they presented.</param>
@@ -648,6 +649,19 @@ internal sealed class SessionService(
             await ReadAsync(absolute, cancellationToken).ConfigureAwait(false));
     }
 
+    // OPS-BOOT-002 AC2: the emergency session ends at a lifetime of its own, within the
+    // ceiling the setting enforces, and is never idle for longer than it lives.
+    private async ValueTask<(TimeSpan Inactivity, TimeSpan Absolute)> EmergencyLifetimesAsync(
+        Policy policy,
+        CancellationToken cancellationToken)
+    {
+        (TimeSpan inactivity, TimeSpan _) = await LifetimesAsync(policy, cancellationToken).ConfigureAwait(false);
+        TimeSpan lifetime = await ReadAsync(Settings.BreakGlassSessionLifetime, cancellationToken)
+            .ConfigureAwait(false);
+
+        return (inactivity < lifetime ? inactivity : lifetime, lifetime);
+    }
+
     private async ValueTask<TimeSpan> ReadAsync(
         DurationSetting setting,
         CancellationToken cancellationToken) =>
@@ -702,8 +716,9 @@ internal sealed class SessionService(
             return Result.Failure<IssuedSession>(Error.From(ErrorCodes.FactorRequired));
         }
 
-        (TimeSpan inactivity, TimeSpan absolute) =
-            await LifetimesAsync(policy, cancellationToken).ConfigureAwait(false);
+        (TimeSpan inactivity, TimeSpan absolute) = satisfiesEveryGate
+            ? await EmergencyLifetimesAsync(policy, cancellationToken).ConfigureAwait(false)
+            : await LifetimesAsync(policy, cancellationToken).ConfigureAwait(false);
 
         DateTimeOffset now = time.GetUtcNow();
 
