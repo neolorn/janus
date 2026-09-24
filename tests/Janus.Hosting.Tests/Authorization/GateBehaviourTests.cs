@@ -107,6 +107,40 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
+    /// IDN-ORG-003 AC1 and AC2, AUTHZ-TEST-001 AC3 (entry 266): a derivation confers
+    /// nothing in an organization whose deletion was requested, on the check, the filter
+    /// and the capability page alike, as a materialised one would not, and confers again
+    /// once the request is cancelled, the host's fact untouched.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_ORG_003_AC1_ASuspendedOrganizationsDerivationsConferNothingAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+
+        await nested.Deployment.NamedRoleAsync(Reviewer, [HostPermissions.Read], cancellationToken);
+        await nested.Deployment.ReviewAsync(nested.Bottom, nested.Account, cancellationToken);
+
+        await using HostContext reading = host.Context();
+
+        Assert.True(await ChecksAsync(nested.Account, nested.Record));
+        Assert.NotEmpty(await ListedAsync(nested, reading));
+        Assert.Contains(HostPermissions.Read, await ConferredAsync(nested));
+
+        await nested.Deployment.SuspendAsync(cancellationToken);
+
+        Assert.False(await ChecksAsync(nested.Account, nested.Record));
+        Assert.Empty(await ListedAsync(nested, reading));
+        Assert.Empty(await ConferredAsync(nested));
+
+        await nested.Deployment.RestoreAsync(cancellationToken);
+
+        Assert.True(await ChecksAsync(nested.Account, nested.Record));
+        Assert.NotEmpty(await ListedAsync(nested, reading));
+    }
+
+    /// <summary>
     /// AUTHZ-CACHE-001 AC5, AUTHZ-GRANT-004 AC1: what a role allows is read where a
     /// grant naming it is read, so editing the role decides the next request without a
     /// counter moving and without a restart.

@@ -9892,6 +9892,57 @@ and say how the HTTP view reaches the host's relation, or that it does not and t
 view on a derived type is the host's own call; AUTHZ-DERIVE-007 could say that a grant
 conferring nothing is not reported and that `unevaluated` names relationships.
 
+---
+
+## 266. A derivation confers nothing in a suspended organization
+
+**Phase 8 · 2026-09-24 · Tier 3 · IDN-ORG-003 AC1 and AC2, AUTHZ-TEST-001 AC3, AUTHZ-DERIVE-001, entry 196**
+
+*The question.* IDN-ORG-003 gives the stage "Deletion requested | Organization suspends
+immediately; access stops". Entry 196 stopped the organization's grants by leaving
+them out of `identity.effective_grants`, which also stops a materialised derivation,
+whose grants are rows there. A derivation evaluated per request has no row: its clause
+reads the host's relation and the ancestry and nothing of the organization, so a
+holder of the host's fact kept access to a suspended organization's records.
+AUTHZ-TEST-001 AC3: "Where a derivation is materialised, the same cases pass
+identically before and after materialisation." No chapter says whether a derived grant
+confers while the organization is suspended.
+
+*The readings.*
+
+1. A derivation confers as before; only written and materialised grants stop.
+2. A derivation reaching a record of a suspended organization confers nothing, on the
+   check, the filter, the fragment, the capability page and the explanation, and
+   confers again once the request is cancelled.
+
+*Chosen: 2, the strictest reading.* Reading 1 leaves access running after "access
+stops", and makes materialising a derivation change who gets in, which AC3 forbids.
+Under this:
+
+- The gate reads the organization's `deletion_requested_at` through a port of its own,
+  `IOrganizationSuspensions`, as it reads a restriction (CONV-DESIGN-003), since the
+  organization is another area's aggregate.
+- It is read where the derivations reaching a type are gathered for one organization,
+  once per operation and only where a non-materialised derivation reaches the type, so
+  a type no derivation reaches costs no query. While the organization is suspended no
+  derivation is gathered, and every path built on them admits nothing through one.
+- A path still refuses a type a derivation reaches without the host's rows
+  (`authz.derivation.sourcesmissing`, D-162); suspension does not excuse the sources.
+- The host's fact is untouched; cancelling the request (AC2) restores the access with
+  nothing to rebuild.
+- The "who can access this?" view needs `grant:read` in the organization, which a
+  suspended organization's grants do not confer, so it is refused there before any
+  derivation is evaluated (entry 265).
+
+*Tests that pin it.*
+`GateBehaviourTests.IDN_ORG_003_AC1_ASuspendedOrganizationsDerivationsConferNothingAsync`,
+`GateBehaviourTests.IDN_ORG_003_AC1_ASuspendedOrganizationConfersNothingAsync` (the
+written grants, unchanged).
+
+*Chapter text that should change.* IDN-ORG-003 could say that a suspended
+organization's records admit no one through any grant, derived ones included, and that
+cancellation restores derived access with the host's facts as they stand.
+
 
 # Rows for chapter 10
 

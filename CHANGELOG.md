@@ -450,7 +450,9 @@ against the public contract of LIB-API-001.
   recorded in the audit trail; the deletion and its cancellation also need step-up
   under the new gate `organization:delete`, and the administrative organization is
   refused with 409 `identity.organization.protected`. `IOrganizations` is the same set
-  of operations in process.
+  of operations in process. While an organization is suspended nothing in it is
+  reached through any grant, a derivation over the host's own rows included, and the
+  host's facts are left as they stand for a cancellation to restore.
 
 - `IConfigurationStore.WriteAsync` for one member of a key that exists once per
   organization or once per declared category: it puts the value in force for the next

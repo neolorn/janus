@@ -536,7 +536,7 @@ internal sealed class AccessGate(
         CancellationToken cancellationToken)
     {
         IReadOnlyList<ConferredDerivation> conferring = await derived
-            .ConferringAsync(type, cancellationToken)
+            .ConferringAsync(type, organization, cancellationToken)
             .ConfigureAwait(false);
 
         if (conferring.Count == 0)
@@ -891,7 +891,7 @@ internal sealed class AccessGate(
 
         IReadOnlyList<ConferredDerivation> conferring =
         [
-            .. (await derived.ConferringAsync(resource.Type, cancellationToken).ConfigureAwait(false))
+            .. (await derived.ConferringAsync(resource.Type, organization, cancellationToken).ConfigureAwait(false))
                 .Where(one => one.Confers.Contains(permission)),
         ];
 
@@ -1017,7 +1017,7 @@ internal sealed class AccessGate(
             organization,
             await subjects.OfAsync(context, cancellationToken).ConfigureAwait(false),
             time.GetUtcNow(),
-            await derived.ReachingAsync(type, permissions, cancellationToken).ConfigureAwait(false));
+            await derived.ReachingAsync(type, organization, permissions, cancellationToken).ConfigureAwait(false));
     }
 
     private async ValueTask<CandidateGrant?> HoldsAsync(
