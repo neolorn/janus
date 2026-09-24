@@ -16,6 +16,7 @@ using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Invitations;
 using Janus.Authentication.Mailboxes;
+using Janus.Authentication.Maintenance;
 using Janus.Authentication.Oidc;
 using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
@@ -42,6 +43,7 @@ using Janus.Hosting.BreakGlass;
 using Janus.Hosting.Configuration;
 using Janus.Hosting.Credentials;
 using Janus.Hosting.Events;
+using Janus.Hosting.Maintenance;
 using Janus.Hosting.Oidc;
 using Janus.Hosting.Organizations;
 using Janus.Hosting.Passwords;
@@ -246,6 +248,10 @@ public static class HostingRegistration
 
         // OPS-BOOT-002, OPS-BOOT-004: the sealed emergency credential.
         services.AddScoped<BreakGlassService>();
+
+        // OPS-MAINT-001: the licences and permits warned of, and the maintenance log.
+        services.AddScoped<MaintenanceRecords>();
+        services.AddScoped<LicenceExpiry>();
         services.AddScoped<AlertDestinationChange>();
         services.AddScoped<IAlertLog, AlertLog>();
         services.AddScoped<IConfigurationAdministration, ConfigurationService>();
@@ -527,6 +533,7 @@ public static class HostingRegistration
         options.SerializerOptions.TypeInfoResolverChain.Add(RegistrationJson.Default);
         options.SerializerOptions.TypeInfoResolverChain.Add(AuthenticationJson.Default);
         options.SerializerOptions.TypeInfoResolverChain.Add(BreakGlassJson.Default);
+        options.SerializerOptions.TypeInfoResolverChain.Add(MaintenanceJson.Default);
         options.SerializerOptions.TypeInfoResolverChain.Add(AccountJson.Default);
         options.SerializerOptions.TypeInfoResolverChain.Add(RecoveryJson.Default);
         options.SerializerOptions.TypeInfoResolverChain.Add(CredentialsJson.Default);

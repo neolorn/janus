@@ -407,6 +407,14 @@ public sealed class ModelTests
             "legal_document_versions.published_at",
             "legal_document_versions.version",
 
+            // Not an account field: the licences and permits whose expiry is warned of
+            // (OPS-MAINT-001).
+            "licences.expires_at",
+            "licences.id",
+            "licences.kind",
+            "licences.name",
+            "licences.renewed_at",
+
             // Not an account field: the one link an account's own deactivation or
             // deletion notice carried, held by its fingerprint (IDN-LIFE-013,
             // IDN-LIFE-014).
@@ -447,6 +455,14 @@ public sealed class ModelTests
             "mailboxes.reserved_at",
             "mailboxes.retired_at",
             "mailboxes.wrapped_key",
+
+            // Not an account field: the maintenance log, each entry naming the subject
+            // who performed the task by identifier alone (OPS-MAINT-001).
+            "maintenance_log.actor",
+            "maintenance_log.id",
+            "maintenance_log.note",
+            "maintenance_log.performed_at",
+            "maintenance_log.task",
 
             // Standing: the membership record of IDN-MEM-001, with its own beginning
             // and end.

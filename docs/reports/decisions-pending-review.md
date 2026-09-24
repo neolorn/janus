@@ -12670,6 +12670,72 @@ again; chapter 10 section 4 could name send delivery beside IDN-LIFE-003a on the
 `outbox.*` rows and say that a spent send is removed and raises `degradation` per
 channel.
 
+---
+
+## 323. The licence and maintenance log endpoints, and who may use them
+
+**Phase 9 · 2026-09-24 · Tier 2 · OPS-MAINT-001, OPS-ALERT-001, OPS-ALERT-002, OPS-MIG-003, `09` section 8a**
+
+*The question.* OPS-MAINT-001 has the system store licence and permit expiry dates,
+warn `maintenance.expiry.warninglead` ahead, and keep a maintenance log "in the
+management application" whose entries "cannot be deleted through the application".
+Chapter 09 section 8a lists only `PUT /admin/compliance/licences` under
+`compliance:manage`. It does not say how the management application reads the
+licences back, how an entry reaches the log or is read, who may record one, where a
+licence's identifier comes from, whether a licence that has lapsed unrenewed is still
+warned of, or what runs the warning.
+
+*The readings.*
+
+1. Only the listed route exists; the log and the reads are left to a later chapter.
+2. The listed route, a read of the licences, and a read and an append of the log, all
+   under the permission the section names.
+
+*Chosen: 2.* AC1 has the dates "surfaced" and AC3 has the log "in the management
+application", and neither can be met without a way to read and to append. The routes
+are `GET` and `PUT /admin/compliance/licences` and `GET` and `POST
+/admin/compliance/maintenance`, each under `compliance:manage` and a session, the
+narrowest permission the section names; no route changes or removes an entry, and the
+application's database role holds `SELECT, INSERT` only on the log table, as on the
+audit records (OPS-MIG-003), so AC3's "cannot be deleted" holds below the endpoint as
+well.
+
+`PUT` replaces the whole list and is idempotent: the identifier is the caller's, and
+two licences under one identifier are refused as `api.request.malformed` at
+`licences` rather than one chosen. A log entry's actor is the signed-in subject, never
+a value the body names, and an entry dated after now has not been performed and is
+refused as malformed at `performedAt`. The views carry the D-153 value shapes and
+nothing more: an entry is read without its storage identifier.
+
+The warning is the job `licence-expiry`, run daily as a monitoring operation. Every
+licence whose expiry lies within the lead raises `expiry-approaching` under the scope
+`licence:<id>`, a lapsed one included, so the warning does not stop when the date
+passes unrenewed; OPS-ALERT-002 keeps each licence to one alert inside
+`alerting.dedupe.window`. The details carry the identifier, kind, name and expiry. The
+feature sits in `Janus.Authentication` beside the alerting it raises on.
+
+*Tests that pin it.*
+`MaintenanceRecordsTests.OPS_MAINT_001_EveryOperationAnswersToComplianceManageAsync`,
+`MaintenanceRecordsTests.OPS_MAINT_001_AC1_TheExpiryDatesAreStoredAndReadBackAsync`,
+`MaintenanceRecordsTests.OPS_MAINT_001_TwoLicencesUnderOneIdentifierAreRefusedAsync`,
+`MaintenanceRecordsTests.OPS_MAINT_001_AC3_AnEntryIsDatedAndCarriesThePersonAskingAsync`,
+`MaintenanceRecordsTests.OPS_MAINT_001_AC3_ATaskDatedAfterNowIsRefusedAsync`,
+`LicenceExpiryTests.OPS_MAINT_001_AC2_ALicenceInsideTheLeadRaisesExpiryApproachingAsync`,
+`LicenceExpiryTests.OPS_MAINT_001_AC2_ALicenceThatLapsedUnrenewedIsStillRaisedAsync`,
+`LicenceExpiryTests.OPS_MAINT_001_AC2_TheLeadIsTheConfiguredOneAsync`,
+`MaintenanceEndpointTests.OPS_MAINT_001_AC1_TheExpiryDatesAreStoredAndReadBackAsync`,
+`MaintenanceEndpointTests.OPS_MAINT_001_AC3_ARecordedTaskIsDatedAndCarriesThePersonAskingAsync`,
+`MaintenanceEndpointTests.OPS_MAINT_001_ABodyThatCannotBeReadIsMalformedAsync`,
+`MaintenanceEndpointTests.OPS_MAINT_001_AnAccountWithoutComplianceManageIsRefusedAsync`,
+`MaintenanceStoreTests.OPS_MAINT_001_AC1_TheExpiryDatesReadBackAsTheyWereReplacedAsync`,
+`MaintenanceStoreTests.OPS_MAINT_001_AC3_AnEntryReadsBackDatedAndWithItsActorAsync`,
+`DatabaseRoleTests.OPS_MAINT_001_AC3_TheApplicationCannotChangeOrRemoveALogEntryAsync`.
+
+*Chapter text that should change.* Chapter 09 section 8a could list `GET
+/admin/compliance/licences` and `GET` and `POST /admin/compliance/maintenance` beside
+the `PUT`; OPS-MAINT-001 could say that the log is append-only at the database role and
+that a lapsed licence stays warned of.
+
 
 # Rows for chapter 10
 

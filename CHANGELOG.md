@@ -369,6 +369,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Licence and permit expiry dates are kept and read at `/admin/compliance/licences`,
+  and the daily `licence-expiry` job raises `expiry-approaching` for each one within
+  `maintenance.expiry.warninglead`, a lapsed one included. The maintenance log is read
+  and appended at `/admin/compliance/maintenance`, each entry carrying the person who
+  recorded it; no route changes or removes an entry and the database role cannot. Both
+  answer to `compliance:manage`.
 - A message no transport took is now carried again. The `sends` job retries it under
   `outbox.retry.*` in the languages still owed, judged by the restrictions and held by
   the gateway floor as any send is, and counts it only once a transport takes it. Once

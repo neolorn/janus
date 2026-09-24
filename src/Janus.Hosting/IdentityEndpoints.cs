@@ -7,6 +7,7 @@ using Janus.Hosting.Bff;
 using Janus.Hosting.BreakGlass;
 using Janus.Hosting.Configuration;
 using Janus.Hosting.Credentials;
+using Janus.Hosting.Maintenance;
 using Janus.Hosting.Organizations;
 using Janus.Hosting.Privacy;
 using Janus.Hosting.Recovery;
@@ -57,6 +58,7 @@ public static class IdentityEndpoints
         _ = library.MapCredentials();
         _ = library.MapRecovery();
         _ = library.MapPrivacy();
+        _ = library.MapMaintenance();
         _ = library.MapTakedowns();
         _ = library.MapErasures();
         _ = library.MapSessionRevocation();

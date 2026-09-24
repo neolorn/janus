@@ -7,6 +7,7 @@ using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Invitations;
 using Janus.Authentication.Mailboxes;
+using Janus.Authentication.Maintenance;
 using Janus.Authentication.Oidc;
 using Janus.Authentication.Organizations;
 using Janus.Authentication.Recovery;
@@ -194,6 +195,15 @@ internal static class BackgroundJobs
             async (services, _, cancellationToken) => Done(
                 await services.GetRequiredService<MailboxReconciliation>()
                     .ReconcileAsync(cancellationToken)
+                    .ConfigureAwait(false))),
+        BackgroundJob.Every(
+            "licence-expiry",
+            "OPS-MAINT-001",
+            SystemOperation.Monitoring,
+            Daily,
+            async (services, _, cancellationToken) => Done(
+                await services.GetRequiredService<LicenceExpiry>()
+                    .WarnAsync(cancellationToken)
                     .ConfigureAwait(false))),
         BackgroundJob.Every(
             "sms-balance",

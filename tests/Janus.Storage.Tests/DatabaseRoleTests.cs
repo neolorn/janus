@@ -50,6 +50,27 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
     }
 
     /// <summary>
+    /// OPS-MAINT-001 AC3: an entry of the maintenance log cannot be changed or removed
+    /// through the application, whose credential appends and reads and does no more.
+    /// </summary>
+    [Fact]
+    public async Task OPS_MAINT_001_AC3_TheApplicationCannotChangeOrRemoveALogEntryAsync()
+    {
+        await using NpgsqlConnection connection = await AsAsync("identity_app");
+
+        PostgresException changed = await Assert.ThrowsAsync<PostgresException>(async () =>
+            await connection.ExecuteAsync("UPDATE identity.maintenance_log SET note = 'altered'"));
+
+        PostgresException removed = await Assert.ThrowsAsync<PostgresException>(async () =>
+            await connection.ExecuteAsync("DELETE FROM identity.maintenance_log"));
+
+        Assert.Equal(InsufficientPrivilege, changed.SqlState);
+        Assert.Equal(InsufficientPrivilege, removed.SqlState);
+        Assert.Equal(0, await connection.ExecuteScalarAsync<int>(
+            "SELECT count(*)::int FROM identity.maintenance_log"));
+    }
+
+    /// <summary>
     /// PRIV-RET-002 AC3: a partition whose end has passed its category's retention is
     /// dropped without the application taking any part, and the months in retention are
     /// left where they are.
@@ -298,10 +319,10 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
 
     /// <summary>
     /// OPS-MIG-003: the application reaches the rows of every table the library holds,
-    /// the audit trail only to read and append (PRIV-RET-002), the migration history
-    /// and the views only to read, and every sequence it draws from. A table a migration
-    /// adds without granting it fails here rather than under the application's own
-    /// credential. The key rotation's progress is the maintenance credential's alone
+    /// the audit trail (PRIV-RET-002) and the maintenance log (OPS-MAINT-001) only to
+    /// read and append, the migration history and the views only to read, and every
+    /// sequence it draws from. A table a migration adds without granting it fails here
+    /// rather than under the application's own credential. The key rotation's progress is the maintenance credential's alone
     /// (OPS-MIG-003a AC4).
     /// </summary>
     [Fact]
@@ -316,7 +337,7 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
             JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace,
                  unnest(CASE
                      WHEN relkind = 'v' OR relname = '__migrations_history' THEN ARRAY['SELECT']
-                     WHEN relname = 'audit_records' THEN ARRAY['SELECT', 'INSERT']
+                     WHEN relname IN ('audit_records', 'maintenance_log') THEN ARRAY['SELECT', 'INSERT']
                      WHEN relkind = 'S' THEN ARRAY['USAGE']
                      ELSE ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE'] END) AS right_held
             WHERE nspname = 'identity'
