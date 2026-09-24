@@ -326,12 +326,12 @@ public sealed class ProcessingRecordsTests
                 "DPA-7",
                 Callback: true))
             .Recipient(new RecipientDeclaration(
-                "shipping provider",
+                "archive service",
                 RecipientCharacterisation.Processor,
-                ["name", "phone", "address"],
+                ["name", "phone"],
                 Location: null,
                 AgreementReference: null,
-                Callback: true))
+                Callback: false))
             .Build();
 
         ProcessingRegister register = Generated(await Records(declared)
@@ -339,9 +339,10 @@ public sealed class ProcessingRecordsTests
 
         // The hosting provider is applied beside the two declared rows because every
         // deployment is hosted somewhere; the screening service is applied because
-        // the shipped default screens passwords online.
+        // the shipped default screens passwords online; the declared gateway stands
+        // in place of the shipped one.
         Assert.Equal(
-            ["sms gateway", "shipping provider", "hosting provider", "password screening"],
+            ["sms gateway", "archive service", "hosting provider", "password screening"],
             register.Recipients.Select(recipient => recipient.Name));
 
         Assert.All(
@@ -353,7 +354,7 @@ public sealed class ProcessingRecordsTests
         Assert.Equal("DPA-7", register.Recipients[0].AgreementReference);
 
         Assert.Equal(
-            ["shipping provider", "hosting provider"],
+            ["archive service", "hosting provider"],
             register.Flags
                 .Where(flag => flag.Finding is RegisterFinding.AgreementMissing)
                 .Select(flag => flag.Subject));
@@ -361,14 +362,44 @@ public sealed class ProcessingRecordsTests
         Assert.All(
             register.Records,
             record => Assert.Equal(
-                ["sms gateway", "shipping provider", "hosting provider", "password screening"],
+                ["sms gateway", "archive service", "hosting provider", "password screening"],
                 record.Recipients));
+    }
+
+    /// <summary>
+    /// INT-GEN-004 AC1: a provider the deployment adds without an agreement reference
+    /// is flagged in the generated records, and one added with a reference is not.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_GEN_004_AC1_AProviderAddedWithoutAnAgreementReferenceIsFlaggedAsync()
+    {
+        AuthorizationDeclaration declared = Declaration.Declared()
+            .Recipient(Processor("archive service", agreement: null))
+            .Recipient(Processor("translation service", agreement: "  "))
+            .Recipient(Processor("scanning service", agreement: "DPA-2026-11"))
+            .Build();
+
+        ProcessingRegister register = Generated(await Records(declared)
+            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
+
+        IReadOnlyList<string> flagged =
+        [
+            .. register.Flags
+                .Where(flag => flag.Finding is RegisterFinding.AgreementMissing)
+                .Select(flag => flag.Subject),
+        ];
+
+        Assert.Contains("archive service", flagged);
+        Assert.Contains("translation service", flagged);
+        Assert.DoesNotContain("scanning service", flagged);
     }
 
     /// <summary>
     /// PRIV-ROPA-002: the rows the library itself makes true are in the register of a
     /// deployment that declared no recipient at all, because the library calls the
-    /// mail server and the screening service and the deployment is hosted somewhere.
+    /// mail server, the SMS gateway and the screening service and the deployment is
+    /// hosted somewhere.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -380,40 +411,33 @@ public sealed class ProcessingRecordsTests
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
 
         Assert.Equal(
-            ["mail server", "hosting provider", "password screening"],
+            ["mail server", "sms gateway", "hosting provider", "password screening"],
             register.Recipients.Select(recipient => recipient.Name));
 
         // Each ships with no agreement reference, so each processor among them is
         // flagged until the deployment gives it one.
         Assert.Equal(
-            ["mail server", "hosting provider"],
+            ["mail server", "sms gateway", "hosting provider"],
             register.Flags
                 .Where(flag => flag.Finding is RegisterFinding.AgreementMissing)
                 .Select(flag => flag.Subject));
     }
 
     /// <summary>
-    /// PRIV-ROPA-002: the rest of the shipped register is offered and not applied,
-    /// because a generic library cannot know that a deployment takes payments, ships
-    /// anything or sends its own text messages.
+    /// PRIV-ROPA-002, D-165: the shipped register is the four rows the library's own
+    /// processing makes true, in the order chapter 05 section 6 gives them, and no row
+    /// of a host's business.
     /// </summary>
-    /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task PRIV_ROPA_002_TheRestOfTheShippedRegisterIsOfferedAndNotAppliedAsync()
-    {
-        ProcessingRegister register = Generated(await Records(Declaration.Declared().Build())
-            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
-
-        Assert.DoesNotContain(
-            register.Recipients.Select(recipient => recipient.Name),
-            name => name is "payment provider" or "shipping provider" or "sms gateway"
-                or "developer");
-    }
+    public void PRIV_ROPA_002_TheShippedRegisterIsTheFourRowsTheLibraryMakesTrue() =>
+        Assert.Equal(
+            ["mail server", "sms gateway", "hosting provider", "password screening"],
+            ProviderRegister.Default.Select(row => row.Name));
 
     /// <summary>
-    /// PRIV-ROPA-002: a deployment that calls neither the library's own mail
-    /// transport nor the online screening service reports neither of them, so the
-    /// register states what is true of that deployment and not of a shipped list.
+    /// PRIV-ROPA-002: a deployment that calls neither a mail server nor the online
+    /// screening service reports neither of them, so the register states what is true
+    /// of that deployment and not of a shipped list.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -425,7 +449,7 @@ public sealed class ProcessingRecordsTests
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
 
         Assert.Equal(
-            ["hosting provider"],
+            ["sms gateway", "hosting provider"],
             register.Recipients.Select(recipient => recipient.Name));
     }
 
@@ -454,11 +478,11 @@ public sealed class ProcessingRecordsTests
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
 
         Assert.Equal(
-            ["Mail server", "hosting provider", "password screening"],
+            ["Mail server", "sms gateway", "hosting provider", "password screening"],
             register.Recipients.Select(recipient => recipient.Name));
 
         Assert.Equal(
-            ["hosting provider"],
+            ["sms gateway", "hosting provider"],
             register.Flags
                 .Where(flag => flag.Finding is RegisterFinding.AgreementMissing)
                 .Select(flag => flag.Subject));
@@ -684,6 +708,15 @@ public sealed class ProcessingRecordsTests
 
     private static ProcessingRecord Row(ProcessingRegister register, string purpose) =>
         Assert.Single(register.Records, record => record.Purpose == purpose);
+
+    private static RecipientDeclaration Processor(string name, string? agreement) =>
+        new(
+            name,
+            RecipientCharacterisation.Processor,
+            ["name"],
+            Location: null,
+            agreement,
+            Callback: false);
 
     private ProcessingRecordsService Records(AuthorizationDeclaration declaration) =>
         new(

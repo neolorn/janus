@@ -171,7 +171,6 @@ public static class HostingRegistration
         // A deployment that declares none of it starts, and the checks that would have
         // read a declaration find nothing to read.
         services.TryAddSingleton(RestrictionKeySuppliers.None);
-        services.TryAddSingleton(Recipients.Shipped);
 
         // AUTH-ABUSE-004, OPS-ALERT-001: the one path every message takes, and what
         // decides whether it goes.

@@ -225,8 +225,8 @@ public sealed class AuthorizationDeclarationBuilder
     /// </summary>
     /// <param name="recipient">
     /// The recipient and the six columns the records of processing report for it.
-    /// <see cref="ProviderRegister.Default"/> ships the rows of chapter 05 section 8
-    /// to edit rather than write.
+    /// <see cref="ProviderRegister.Default"/> ships the rows of chapter 05 section 6,
+    /// which a row declared under the same name replaces.
     /// </param>
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentNullException">The recipient is absent.</exception>

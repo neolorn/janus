@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- The shipped provider register, `ProviderRegister.Default`, is now the four rows the
+  library's own processing makes true: the mail server, the SMS gateway, the hosting
+  provider and password screening. The SMS gateway is now applied to every
+  deployment's records of processing, as the hosting provider is, because every
+  deployment sends its text messages through a transport it registers. The payment,
+  shipping and developer rows are gone; a host declares every processor of its own
+  business on the model builder.
+
 - A message goes out in the language its recipient's account settled on, else, where
   it answers a registration, sign-in or recovery request, in the locale that request
   carried, else in every language of `notification.languages`; a tag such as `en-GB`
@@ -1505,6 +1513,11 @@ against the public contract of LIB-API-001.
   the identifier began with a digit, which is about half of them.
 
 ### Removed
+
+- `Recipients`, `Recipient` and `RecipientLocation`, a second shipped register that
+  nothing read. The records of processing are generated from the recipients declared
+  on the model builder and `ProviderRegister.Default`, and flag a missing agreement
+  reference there.
 
 - `IOidc.FindClientAsync`, `IOidc.MintAsync`, `IOidc.ReuseAsync` and `MintedSession`.
   The contract now carries the two operations a host calls in process and the library

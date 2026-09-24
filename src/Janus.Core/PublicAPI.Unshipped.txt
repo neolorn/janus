@@ -2000,23 +2000,6 @@ Janus.Core.PurposeDeclaration.SubjectCategories.init -> void
 Janus.Core.ReauthenticationKind
 Janus.Core.ReauthenticationKind.Full = 0 -> Janus.Core.ReauthenticationKind
 Janus.Core.ReauthenticationKind.SingleFactor = 1 -> Janus.Core.ReauthenticationKind
-Janus.Core.Recipient
-Janus.Core.Recipient.<Clone>$() -> Janus.Core.Recipient!
-Janus.Core.Recipient.AgreementReference.get -> string?
-Janus.Core.Recipient.AgreementReference.init -> void
-Janus.Core.Recipient.Callback.get -> bool
-Janus.Core.Recipient.Callback.init -> void
-Janus.Core.Recipient.Characterisation.get -> Janus.Core.RecipientCharacterisation
-Janus.Core.Recipient.Characterisation.init -> void
-Janus.Core.Recipient.DataReceived.get -> System.Collections.Generic.IReadOnlyList<string!>!
-Janus.Core.Recipient.DataReceived.init -> void
-Janus.Core.Recipient.Deconstruct(out string! Name, out Janus.Core.RecipientCharacterisation Characterisation, out System.Collections.Generic.IReadOnlyList<string!>! DataReceived, out Janus.Core.RecipientLocation Location, out string? AgreementReference, out bool Callback) -> void
-Janus.Core.Recipient.Equals(Janus.Core.Recipient? other) -> bool
-Janus.Core.Recipient.Location.get -> Janus.Core.RecipientLocation
-Janus.Core.Recipient.Location.init -> void
-Janus.Core.Recipient.Name.get -> string!
-Janus.Core.Recipient.Name.init -> void
-Janus.Core.Recipient.Recipient(string! Name, Janus.Core.RecipientCharacterisation Characterisation, System.Collections.Generic.IReadOnlyList<string!>! DataReceived, Janus.Core.RecipientLocation Location, string? AgreementReference, bool Callback) -> void
 Janus.Core.RecipientCharacterisation
 Janus.Core.RecipientCharacterisation.Processor = 0 -> Janus.Core.RecipientCharacterisation
 Janus.Core.RecipientCharacterisation.Recipient = 1 -> Janus.Core.RecipientCharacterisation
@@ -2037,9 +2020,6 @@ Janus.Core.RecipientDeclaration.Location.init -> void
 Janus.Core.RecipientDeclaration.Name.get -> string!
 Janus.Core.RecipientDeclaration.Name.init -> void
 Janus.Core.RecipientDeclaration.RecipientDeclaration(string! Name, Janus.Core.RecipientCharacterisation Characterisation, System.Collections.Generic.IReadOnlyList<string!>! DataReceived, Janus.Core.Configuration.HostingLocation? Location, string? AgreementReference, bool Callback) -> void
-Janus.Core.RecipientLocation
-Janus.Core.RecipientLocation.Inside = 0 -> Janus.Core.RecipientLocation
-Janus.Core.RecipientLocation.Outside = 1 -> Janus.Core.RecipientLocation
 Janus.Core.RecipientRecord
 Janus.Core.RecipientRecord.<Clone>$() -> Janus.Core.RecipientRecord!
 Janus.Core.RecipientRecord.AgreementReference.get -> string?
@@ -2059,9 +2039,6 @@ Janus.Core.RecipientRecord.Location.init -> void
 Janus.Core.RecipientRecord.Name.get -> string!
 Janus.Core.RecipientRecord.Name.init -> void
 Janus.Core.RecipientRecord.RecipientRecord(string! Name, Janus.Core.RecipientCharacterisation Characterisation, System.Collections.Generic.IReadOnlyList<string!>! DataReceived, Janus.Core.Configuration.HostingLocation Location, string? AgreementReference, string? CrossBorderBasis, bool Callback) -> void
-Janus.Core.Recipients
-Janus.Core.Recipients.All.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Recipient!>!
-Janus.Core.Recipients.Unreferenced.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Recipient!>!
 Janus.Core.RecoveryCodeStatus
 Janus.Core.RecoveryCodeStatus.<Clone>$() -> Janus.Core.RecoveryCodeStatus!
 Janus.Core.RecoveryCodeStatus.Deconstruct(out int Remaining, out System.DateTimeOffset GeneratedAt, out System.DateTimeOffset? ViewedAt, out System.DateTimeOffset? ExportedAt) -> void
@@ -3057,9 +3034,6 @@ override Janus.Core.PublishedSigningKey.ToString() -> string!
 override Janus.Core.PurposeDeclaration.Equals(object? obj) -> bool
 override Janus.Core.PurposeDeclaration.GetHashCode() -> int
 override Janus.Core.PurposeDeclaration.ToString() -> string!
-override Janus.Core.Recipient.Equals(object? obj) -> bool
-override Janus.Core.Recipient.GetHashCode() -> int
-override Janus.Core.Recipient.ToString() -> string!
 override Janus.Core.RecipientDeclaration.Equals(object? obj) -> bool
 override Janus.Core.RecipientDeclaration.GetHashCode() -> int
 override Janus.Core.RecipientDeclaration.ToString() -> string!
@@ -3888,14 +3862,10 @@ static Janus.Core.PublishedSigningKey.operator !=(Janus.Core.PublishedSigningKey
 static Janus.Core.PublishedSigningKey.operator ==(Janus.Core.PublishedSigningKey? left, Janus.Core.PublishedSigningKey? right) -> bool
 static Janus.Core.PurposeDeclaration.operator !=(Janus.Core.PurposeDeclaration? left, Janus.Core.PurposeDeclaration? right) -> bool
 static Janus.Core.PurposeDeclaration.operator ==(Janus.Core.PurposeDeclaration? left, Janus.Core.PurposeDeclaration? right) -> bool
-static Janus.Core.Recipient.operator !=(Janus.Core.Recipient? left, Janus.Core.Recipient? right) -> bool
-static Janus.Core.Recipient.operator ==(Janus.Core.Recipient? left, Janus.Core.Recipient? right) -> bool
 static Janus.Core.RecipientDeclaration.operator !=(Janus.Core.RecipientDeclaration? left, Janus.Core.RecipientDeclaration? right) -> bool
 static Janus.Core.RecipientDeclaration.operator ==(Janus.Core.RecipientDeclaration? left, Janus.Core.RecipientDeclaration? right) -> bool
 static Janus.Core.RecipientRecord.operator !=(Janus.Core.RecipientRecord? left, Janus.Core.RecipientRecord? right) -> bool
 static Janus.Core.RecipientRecord.operator ==(Janus.Core.RecipientRecord? left, Janus.Core.RecipientRecord? right) -> bool
-static Janus.Core.Recipients.Of(System.Collections.Generic.IEnumerable<Janus.Core.Recipient!>! declared) -> Janus.Core.Recipients!
-static Janus.Core.Recipients.Shipped.get -> Janus.Core.Recipients!
 static Janus.Core.RecoveryCodeStatus.operator !=(Janus.Core.RecoveryCodeStatus? left, Janus.Core.RecoveryCodeStatus? right) -> bool
 static Janus.Core.RecoveryCodeStatus.operator ==(Janus.Core.RecoveryCodeStatus? left, Janus.Core.RecoveryCodeStatus? right) -> bool
 static Janus.Core.RegisterFlag.operator !=(Janus.Core.RegisterFlag? left, Janus.Core.RegisterFlag? right) -> bool
