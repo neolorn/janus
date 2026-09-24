@@ -12,7 +12,8 @@ namespace Janus.Authentication.Tests.Oidc;
 
 /// <summary>
 /// The keys the provider signs with: how one takes over from another, how long the one
-/// before it stays published, and what leaves the set (AUTH-KEY-001, AUTH-KEY-003).
+/// before it stays published, and what leaves the set (AUTH-KEY-001, AUTH-KEY-003,
+/// OPS-SEC-002).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class SigningKeysTests : IAsyncDisposable
@@ -145,6 +146,61 @@ public sealed class SigningKeysTests : IAsyncDisposable
         Assert.Equal(1, await Keys.SweepAsync(TestContext.Current.CancellationToken));
         Assert.Equal(1, _store.Count);
     }
+
+    /// <summary>
+    /// OPS-SEC-002 AC1: one running instance, never restarted, signs with a new key once
+    /// the cadence has passed, and nobody asked for the key.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_002_AC1_TheRunningInstanceRotatesWithoutRestartOrAPersonAsync()
+    {
+        SigningKeys running = Keys;
+        SigningMaterial first = Material(await running.SigningAsync(TestContext.Current.CancellationToken));
+
+        _clock.Advance(TimeSpan.FromDays(91));
+
+        SigningMaterial second = Material(await running.SigningAsync(TestContext.Current.CancellationToken));
+
+        Assert.NotEqual(first.KeyId, second.KeyId);
+        Assert.Equal(2, _store.Count);
+    }
+
+    /// <summary>
+    /// OPS-SEC-002 AC2: what was signed under the previous key still verifies against the
+    /// published set through the overlap after the next key took over.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_002_AC2_WhatThePreviousKeySignedVerifiesThroughTheOverlapAsync()
+    {
+        byte[] payload = RandomNumberGenerator.GetBytes(64);
+        SigningMaterial previous = Material(await Keys.SigningAsync(TestContext.Current.CancellationToken));
+        byte[] signature;
+
+        using (var signer = ECDsa.Create())
+        {
+            signer.ImportPkcs8PrivateKey(previous.PrivateKey, out _);
+            signature = signer.SignData(payload, HashAlgorithmName.SHA256);
+        }
+
+        _clock.Advance(TimeSpan.FromDays(91));
+        _ = await SigningAsync();
+        _clock.Advance(TimeSpan.FromMinutes(14));
+
+        PublishedSigningKey published = (await Keys.PublishedAsync(TestContext.Current.CancellationToken))
+            .Match(keys => keys, error => throw new InvalidOperationException(error.Code.ToString()))
+            .Single(key => key.KeyId == previous.KeyId);
+
+        using var verifier = ECDsa.Create();
+
+        verifier.ImportSubjectPublicKeyInfo(published.PublicKey.Span, out _);
+
+        Assert.True(verifier.VerifyData(payload, signature, HashAlgorithmName.SHA256));
+    }
+
+    private static SigningMaterial Material(Result<SigningMaterial> signing) =>
+        signing.Match(material => material, error => throw new InvalidOperationException(error.Code.ToString()));
 
     private SigningKeys Keys => new(_store, _configuration, _work, _clock);
 
