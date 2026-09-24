@@ -16,6 +16,7 @@ internal static class MachineRoutes
     [
         new("/oidc/token"),
         new("/oidc/userinfo"),
+        new("/callbacks/sms/dlr"),
     ];
 
     /// <summary>

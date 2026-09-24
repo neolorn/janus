@@ -10558,6 +10558,52 @@ what it reports. Under it:
 is checked against the send it names and is rejected where no send holds its
 reference.
 
+---
+
+## 278. How the delivery report is read and what it answers
+
+**Corrections 3 · 2026-09-24 · Tier 2 · INT-SMS-005, 09 section 10, LIB-EXT-001, CONV-DESIGN-005, BFF-MACH-001**
+
+*The question.* D-165 keeps `GET /callbacks/sms/dlr`, and INT-SMS-005 says the
+gateway "calls over plain HTTP with parameters in the query string". No chapter names
+those parameters, which are each gateway's own, nor what a report taken is answered.
+
+*The readings.*
+
+1. The library fixes the parameter names, and a host whose gateway uses others adapts
+   them in front of the endpoint.
+2. The transport the host registers reads the report, since it is the one component
+   that knows the gateway's scheme.
+
+*Chosen: 2.* Reading 1 writes one gateway's scheme into the library, which LIB-EXT-001
+AC3 keeps out, and puts host code ahead of the machine profile. Under it:
+
+- `ISmsTransport.ReadReport(parameters)` returns `Result<SmsDeliveryReport>`, the
+  reference the send was given and whether it was delivered; a failure is a report
+  that cannot be read (CONV-DESIGN-005). Every transport implements it.
+- The endpoint passes the query string one value a name; a name the gateway repeated
+  is not passed.
+- A report that cannot be read is rejected as one carrying a guessed reference is:
+  429 `integration.callback.rejected`, recorded against its source and counted toward
+  the alert.
+- A report taken answers 200 with no body.
+- The path is one of the machine profile's routes, so a request carrying the browser
+  session cookie is refused 403 (BFF-MACH-001 AC2) and the browser profile never runs
+  for it.
+- `ISmsTransport` is a required registration (entry 270), so the endpoint's transport
+  is always resolvable when the host's endpoints are built.
+
+*Tests that pin it.*
+`DeliveryReportEndpointTests.BFF_MACH_001_AC3_TheDeliveryReportIsCarriedOnTheMachineProfileAsync`,
+`DeliveryReportEndpointTests.INT_GEN_003_AC1_AForgedOrUnreadableReportIsRejectedAsync`,
+`DeliveryReportEndpointTests.BFF_MACH_001_AC2_ADeliveryReportCarryingASessionCookieIsRefusedAsync`,
+`SensitiveBodyLoggingTests.BFF_LOG_002_AC1_EveryEndpointTheLibraryMapsIsMarked`,
+`ResultContractTests.CONV_DESIGN_005_AC1_EveryContractMethodReturnsAnOutcome`.
+
+*Chapter text that should change.* 05 INT-SMS-005 could say that the registered
+transport reads the report; 09 section 10 could give the answer to a report taken (200,
+no body) and the status of a refused one.
+
 
 # Rows for chapter 10
 

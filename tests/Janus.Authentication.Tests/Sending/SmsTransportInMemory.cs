@@ -51,4 +51,16 @@ internal sealed class SmsTransportInMemory : ISmsTransport
 
         return ValueTask.FromResult(Result.Success(Balance));
     }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The gateway this fake stands for names the reference <c>reference</c> and the
+    /// outcome <c>status</c>, <c>delivered</c> or <c>failed</c>.
+    /// </remarks>
+    public Result<SmsDeliveryReport> ReadReport(IReadOnlyDictionary<string, string> parameters) =>
+        parameters.TryGetValue("reference", out string? reference)
+            && parameters.TryGetValue("status", out string? status)
+            && status is "delivered" or "failed"
+            ? Result.Success(new SmsDeliveryReport(reference, status == "delivered"))
+            : Result.Failure<SmsDeliveryReport>(Error.From(ErrorCodes.CallbackRejected));
 }

@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
+using Janus.Authentication.Callbacks;
 using Janus.Authentication.Configuration;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
@@ -23,6 +24,7 @@ using Janus.Authentication.SignIn;
 using Janus.Authentication.Tests;
 using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Alerting;
+using Janus.Authentication.Tests.Callbacks;
 using Janus.Authentication.Tests.Configuration;
 using Janus.Authentication.Tests.Credentials;
 using Janus.Authentication.Tests.Factors;
@@ -456,6 +458,11 @@ internal sealed class Deployment : IAsyncDisposable
     public AlertLedgerInMemory Alerts { get; } = new();
 
     /// <summary>
+    /// The sends counted against the restrictions, which a delivery report can release.
+    /// </summary>
+    public SendLedgerInMemory SendLedger { get; } = new();
+
+    /// <summary>
     /// The stored grants the deployment holds.
     /// </summary>
     public Janus.Authorization.Tests.Gate.GrantsInMemory AccessGrants { get; } = new();
@@ -612,7 +619,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IAuthenticatorStore>(Authenticators);
         _ = services.AddSingleton<IPasswordStore>(Passwords);
 
-        _ = services.AddSingleton<ISendLedger, SendLedgerInMemory>();
+        _ = services.AddSingleton<ISendLedger>(SendLedger);
         _ = services.AddSingleton<ISendOutbox, SendOutboxInMemory>();
         _ = services.AddSingleton<INoticeLedger, NoticeLedgerInMemory>();
         _ = services.AddSingleton<ISmsBalanceLedger, SmsBalanceLedgerInMemory>();
@@ -669,6 +676,10 @@ internal sealed class Deployment : IAsyncDisposable
             .ConfigurePrimaryHttpMessageHandler(() => Provider);
 
         _ = services.AddScoped<SmsBalance>();
+        _ = services.AddSingleton<ICallbackLedger, CallbackLedgerInMemory>();
+        _ = services.AddSingleton<ICallbackEvents, CallbackEventsInMemory>();
+        _ = services.AddScoped<CallbackAdmission>();
+        _ = services.AddScoped<DeliveryReports>();
         _ = services.AddScoped<RelayRegistration>();
         _ = services.AddScoped<SendingService>();
         _ = services.AddScoped<INotificationHandler>(

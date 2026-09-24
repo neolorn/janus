@@ -1317,6 +1317,7 @@ Janus.Core.ISessions.RevokeAccountAsync(Janus.Core.AccessContext! context, Janus
 Janus.Core.ISessions.RevokeEveryAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.ISmsTransport
 Janus.Core.ISmsTransport.BalanceAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<decimal>>
+Janus.Core.ISmsTransport.ReadReport(System.Collections.Generic.IReadOnlyDictionary<string!, string!>! parameters) -> Janus.Core.Result<Janus.Core.SmsDeliveryReport!>
 Janus.Core.ISmsTransport.SendAsync(Janus.Core.SmsMessage! message, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IStepUpGate
 Janus.Core.IStepUpGate.RequireAsync(Janus.Core.SubjectId subject, Janus.Core.SessionId session, Janus.Core.StepUpAction action, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -2444,6 +2445,15 @@ Janus.Core.SignOnClient.ClientId.init -> void
 Janus.Core.SignOnClient.Deconstruct(out string! ClientId) -> void
 Janus.Core.SignOnClient.Equals(Janus.Core.SignOnClient? other) -> bool
 Janus.Core.SignOnClient.SignOnClient(string! ClientId) -> void
+Janus.Core.SmsDeliveryReport
+Janus.Core.SmsDeliveryReport.<Clone>$() -> Janus.Core.SmsDeliveryReport!
+Janus.Core.SmsDeliveryReport.Deconstruct(out string! Reference, out bool Delivered) -> void
+Janus.Core.SmsDeliveryReport.Delivered.get -> bool
+Janus.Core.SmsDeliveryReport.Delivered.init -> void
+Janus.Core.SmsDeliveryReport.Equals(Janus.Core.SmsDeliveryReport? other) -> bool
+Janus.Core.SmsDeliveryReport.Reference.get -> string!
+Janus.Core.SmsDeliveryReport.Reference.init -> void
+Janus.Core.SmsDeliveryReport.SmsDeliveryReport(string! Reference, bool Delivered) -> void
 Janus.Core.SmsMessage
 Janus.Core.SmsMessage.<Clone>$() -> Janus.Core.SmsMessage!
 Janus.Core.SmsMessage.Deconstruct(out Janus.Core.PhoneNumber Destination, out string! Text, out string! Reference) -> void
@@ -3131,6 +3141,9 @@ override Janus.Core.SignInProgress.ToString() -> string!
 override Janus.Core.SignOnClient.Equals(object? obj) -> bool
 override Janus.Core.SignOnClient.GetHashCode() -> int
 override Janus.Core.SignOnClient.ToString() -> string!
+override Janus.Core.SmsDeliveryReport.Equals(object? obj) -> bool
+override Janus.Core.SmsDeliveryReport.GetHashCode() -> int
+override Janus.Core.SmsDeliveryReport.ToString() -> string!
 override Janus.Core.SmsMessage.Equals(object? obj) -> bool
 override Janus.Core.SmsMessage.GetHashCode() -> int
 override Janus.Core.SmsMessage.ToString() -> string!
@@ -3954,6 +3967,8 @@ static Janus.Core.SignInProgress.operator !=(Janus.Core.SignInProgress? left, Ja
 static Janus.Core.SignInProgress.operator ==(Janus.Core.SignInProgress? left, Janus.Core.SignInProgress? right) -> bool
 static Janus.Core.SignOnClient.operator !=(Janus.Core.SignOnClient? left, Janus.Core.SignOnClient? right) -> bool
 static Janus.Core.SignOnClient.operator ==(Janus.Core.SignOnClient? left, Janus.Core.SignOnClient? right) -> bool
+static Janus.Core.SmsDeliveryReport.operator !=(Janus.Core.SmsDeliveryReport? left, Janus.Core.SmsDeliveryReport? right) -> bool
+static Janus.Core.SmsDeliveryReport.operator ==(Janus.Core.SmsDeliveryReport? left, Janus.Core.SmsDeliveryReport? right) -> bool
 static Janus.Core.SmsMessage.operator !=(Janus.Core.SmsMessage? left, Janus.Core.SmsMessage? right) -> bool
 static Janus.Core.SmsMessage.operator ==(Janus.Core.SmsMessage? left, Janus.Core.SmsMessage? right) -> bool
 static Janus.Core.SqlFilter.operator !=(Janus.Core.SqlFilter? left, Janus.Core.SqlFilter? right) -> bool

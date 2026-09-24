@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Tests.Authorization;
@@ -157,6 +158,10 @@ public sealed class SensitiveBodyLoggingTests : IDisposable
             Encoding.UTF8.GetBytes("the secret this application presents"),
             HostFixture.Declaration(),
             ApplicationKind.Public);
+
+        // The transport every host registers, which the delivery report reads the
+        // gateway's parameters through.
+        _ = builder.Services.AddSingleton<ISmsTransport, SmsTransportInMemory>();
 
         return builder.Build();
     }

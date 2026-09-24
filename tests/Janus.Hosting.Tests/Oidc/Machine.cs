@@ -48,6 +48,25 @@ internal sealed class Machine(Deployment deployment)
     public Task<Answer> GetAsync(string path, string bearer) =>
         SendAsync(path, fields: null, cookie: null, bearer);
 
+    /// <summary>
+    /// Reads one of the library's machine routes as a provider's callback does: with
+    /// its parameters in the query string and nothing else.
+    /// </summary>
+    /// <param name="path">The path, with its query string.</param>
+    /// <returns>What came back.</returns>
+    public Task<Answer> CallAsync(string path) =>
+        SendAsync(path, fields: null, cookie: null, bearer: null);
+
+    /// <summary>
+    /// Reads one of the library's machine routes while carrying a browser's session
+    /// cookie, which is what a machine route refuses (BFF-MACH-001 AC2).
+    /// </summary>
+    /// <param name="path">The path, with its query string.</param>
+    /// <param name="cookie">The cookie header to carry.</param>
+    /// <returns>What came back.</returns>
+    public Task<Answer> CallCarryingAsync(string path, string cookie) =>
+        SendAsync(path, fields: null, cookie, bearer: null);
+
     private static PathString Path(string path, out QueryString query)
     {
         int at = path.IndexOf('?', StringComparison.Ordinal);

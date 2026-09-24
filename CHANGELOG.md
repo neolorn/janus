@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- `ISmsTransport` has a new member, `ReadReport`, which reads a delivery report from
+  the parameters the gateway puts in the query string. Every transport implements it.
+
 - A form another site posts as the whole page, with no session cookie on it, is no
   longer refused by the browser profile: it is answered 303 with its own address, so
   the browser reads that address with the session and the host's GET route there
@@ -355,6 +358,11 @@ against the public contract of LIB-API-001.
 
 - `ICallbackReferences.IssueAsync` issues the correlation reference an unsigned
   callback carries: 128 random bits in base64url, of which only the hash is kept.
+
+- `GET /callbacks/sms/dlr` takes the SMS gateway's delivery report on the machine
+  profile. A report of failed delivery for a send the library made releases that send
+  from its restrictions and nothing else; a report carrying an unknown reference, or
+  one the transport cannot read, is refused 429 `integration.callback.rejected`.
 
 - `SensitiveBodyAttribute` marks an endpoint whose request and response bodies never
   reach the framework's request logging, whatever fields the deployment or the
