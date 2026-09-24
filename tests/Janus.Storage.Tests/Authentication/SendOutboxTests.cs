@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Janus.Authentication.Sending;
@@ -23,6 +24,8 @@ public sealed class SendOutboxTests(DatabaseFixture database)
     : IClassFixture<DatabaseFixture>, IDisposable
 {
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
+
+    private static readonly TimeSpan Held = TimeSpan.FromSeconds(30);
 
     private readonly Deployment _deployment = new(database);
 
@@ -122,10 +125,73 @@ public sealed class SendOutboxTests(DatabaseFixture database)
         Assert.Null(await Outbox(reading).FindAsync(undertaken.Id, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// D-022: what an attempt made of a message reads back as it was recorded, so a
+    /// retry waits as long as the schedule said and carries only the languages still
+    /// owed.
+    /// </summary>
+    [Fact]
+    public async Task D_022_AnAttemptReadsBackAsItWasRecordedAsync()
+    {
+        SendDelivery undertaken = Delivery("fourth@example.test", subject: null, language: null);
+        DateTimeOffset attempted = Noon.AddSeconds(5);
+
+        await WrittenAsync(undertaken);
+
+        SendDelivery refused = undertaken
+            .Carried(["en"])
+            .Refused(attempted, TimeSpan.FromSeconds(30), 2.0m, jitter: 0.5);
+
+        await using (StoreContext recording = database.Context())
+        {
+            await Outbox(recording).RecordAsync(refused, TestContext.Current.CancellationToken);
+            await recording.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        SendDelivery held = await Outbox(reading)
+            .FindAsync(undertaken.Id, TestContext.Current.CancellationToken)
+            ?? throw new Xunit.Sdk.XunitException("The message was not written.");
+
+        Assert.Equal(1, held.Attempts);
+        Assert.Equal(attempted.AddSeconds(15), held.NextAttemptAt);
+        Assert.Equal(["en"], held.Taken);
+    }
+
+    /// <summary>
+    /// D-022, INF-BG-001: the publisher reads a message once its next attempt is due
+    /// and not before, so the path that undertook it is left to carry it first.
+    /// </summary>
+    [Fact]
+    public async Task D_022_OnlyAMessageWhoseAttemptIsDueIsReadAsync()
+    {
+        SendDelivery due = Delivery("fifth@example.test", subject: null, held: TimeSpan.Zero);
+        SendDelivery waiting = Delivery("sixth@example.test", subject: null);
+
+        await WrittenAsync(due);
+        await WrittenAsync(waiting);
+
+        await using StoreContext reading = database.Context();
+
+        IReadOnlyList<SendDelivery> read = await Outbox(reading)
+            .DueAsync(Noon.AddSeconds(1), count: 100, TestContext.Current.CancellationToken);
+
+        Assert.Contains(due.Id, read.Select(one => one.Id));
+        Assert.DoesNotContain(waiting.Id, read.Select(one => one.Id));
+        Assert.Equal(
+            "fifth@example.test",
+            read.Single(one => one.Id == due.Id).Requested.Destination.Canonical);
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
-    private static SendDelivery Delivery(string address, SubjectId? subject, string? language = "ar")
+    private static SendDelivery Delivery(
+        string address,
+        SubjectId? subject,
+        string? language = "ar",
+        TimeSpan? held = null)
     {
         if (!EmailAddress.TryParse(address, out EmailAddress destination))
         {
@@ -143,7 +209,8 @@ public sealed class SendOutboxTests(DatabaseFixture database)
                 Subject = subject,
                 Values = new Dictionary<string, string>(StringComparer.Ordinal) { ["code"] = "482913" },
             },
-            Noon);
+            Noon,
+            held ?? Held);
     }
 
     private async Task WrittenAsync(SendDelivery delivery)

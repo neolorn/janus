@@ -110,6 +110,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
                     new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
                     _work,
                     _events,
+                    _events,
                     _clock,
                     _randomness),
                 _alerts,

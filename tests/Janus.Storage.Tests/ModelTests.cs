@@ -714,11 +714,14 @@ public sealed class ModelTests
             // The messages undertaken and not yet carried (D-022), each the whole of
             // what is to be sent under a key of the row's own, so that removing the row
             // removes the message with it (IDN-PRIN-003, PRIV-RIGHT-005a).
+            "send_outbox.attempts",
             "send_outbox.enc_message",
             "send_outbox.id",
             "send_outbox.key_version",
+            "send_outbox.next_attempt_at",
             "send_outbox.recorded_at",
             "send_outbox.subject",
+            "send_outbox.taken_languages",
             "send_outbox.wrapped_key",
 
             // Not an account field: the message a transport took (AUTH-ABUSE-004,

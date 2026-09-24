@@ -12597,6 +12597,77 @@ choice made here.
 window begins, who the actor is for a refusal that names no one, and whether the
 condition is raised at the number or above it.
 
+---
+
+## 322. How a message no transport took is carried again
+
+**Phase 9 · 2026-09-24 · Tier 2 · D-022, INF-BG-001, AUTH-ABUSE-004, INT-SMS-004, IDN-ATTR-001, IDN-PRIN-003, D-162 item 23**
+
+*The question.* D-162 item 23 has every send written to the library's outbox and
+"delivered by the worker under `outbox.retry.*` with status recorded", and says that
+until the publisher exists the send path attempts once and leaves the row as recorded.
+It does not say whether the send path still makes the first attempt once the worker
+exists, what a retry counts against or whether the restrictions judge it again, which
+languages a retry carries where a transport took some of them, what becomes of the row
+when the budget is spent, or what the `degradation` alert is raised under.
+
+*The readings.*
+
+1. The send path only writes the row and answers at once; the worker makes every
+   attempt.
+2. The send path makes the first attempt once its row is written and answers with its
+   outcome; the worker makes the rest.
+
+*Chosen: 2.* Every caller acts on the answer: the alert router moves to the next
+destination when a transport refuses, the loss report records whether anyone was told,
+and a refusal by a restriction has to reach the person with its `retryAt`. Reading 1
+would answer success for a message no transport has taken. The row is written before
+the attempt with its next attempt set one `outbox.retry.initial` ahead, so the worker
+does not carry a message the send path is carrying; an attempt that leaves a language
+untaken is the first of `outbox.retry.maxattempts`, scheduled as the event outbox is
+(initial times factor per further attempt, full jitter).
+
+A retry is judged by the restrictions again, as they stand when it is made, and one
+they refuse waits as any refused attempt does. A refused delivery counts against no
+bucket (AUTH-ABUSE-004 AC2), so while a transport is down every send is admitted; not
+judging retries again would let a transport that comes back carry at once everything
+the restrictions would have held. What a carried retry counts against is read the same
+way. The gateway floor holds a retried text message as it holds any; an alert is
+exempt, as on the send path (OPS-ALERT-003).
+
+A retry carries only the languages no transport has taken; the row keeps them, outside
+the encrypted column, because a row holds more than one language only where the
+message goes out in every language the deployment declares, which says nothing of the
+recipient.
+
+When the budget is spent the row is removed and `degradation` is raised under the
+scope `send:<channel>`, so OPS-ALERT-002 keeps a failing transport to one alert per
+channel inside `alerting.dedupe.window`. The details name the message by its
+identifier, its message kind, its channel and the attempts, never its destination.
+Removing rather than marking the row keeps no record of where somebody was written to
+(IDN-PRIN-003): the alert, not the row, is the signal. The job is `sends`, run every
+`outbox.poll.interval`.
+
+Where a caller undertakes a send inside its own transaction, the row, and the first
+attempt with it, precede that transaction's commit; this is the observation the
+phase 9 report names, not a choice made here.
+
+*Tests that pin it.*
+`SendingServiceTests.D_022_ATransportRefusalLeavesTheMessageRecordedAsync`,
+`SendingServiceTests.D_022_ARefusedMessageIsCarriedOnceItsRetryIsDueAsync`,
+`SendingServiceTests.AUTH_ABUSE_004_AC2_ARetryIsJudgedByTheRestrictionsAgainAsync`,
+`SendingServiceTests.IDN_ATTR_001_ARetryCarriesOnlyTheLanguagesStillOwedAsync`,
+`SendingServiceTests.D_022_AMessageWhoseBudgetIsSpentIsRemovedAndRaisesDegradationAsync`,
+`SendingServiceTests.INT_SMS_004_AC2_ARetryIsHeldBelowTheFloorAsync`,
+`SendOutboxTests.D_022_AnAttemptReadsBackAsItWasRecordedAsync`,
+`SendOutboxTests.D_022_OnlyAMessageWhoseAttemptIsDueIsReadAsync`.
+
+*Chapter text that should change.* INF-BG-001 could say that the send path makes the
+first attempt and the worker the rest; AUTH-ABUSE-004 could say that a retry is judged
+again; chapter 10 section 4 could name send delivery beside IDN-LIFE-003a on the
+`outbox.*` rows and say that a spent send is removed and raises `degradation` per
+channel.
+
 
 # Rows for chapter 10
 

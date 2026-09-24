@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.Configuration;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Policies;
@@ -26,8 +27,9 @@ namespace Janus.Hosting.Tests.Sending;
 /// refusal says, what a send counts against, and what a transport that would not
 /// take it leaves behind (AUTH-ABUSE-002, AUTH-ABUSE-004, AUTH-ABUSE-006,
 /// INT-SMS-001, INT-SMS-004, INT-GEN-005, OPS-ALERT-003), what is considered about
-/// a number before a restricted factor goes to it (AUTH-FACT-002b), and the languages
-/// a message goes out in (IDN-ATTR-001).
+/// a number before a restricted factor goes to it (AUTH-FACT-002b), the languages a
+/// message goes out in (IDN-ATTR-001), and how a message no transport took is carried
+/// again (D-022, INF-BG-001).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class SendingServiceTests : IAsyncDisposable
@@ -88,6 +90,7 @@ public sealed class SendingServiceTests : IAsyncDisposable
             new PhoneSignals(_provider, _signals, _work, _clock),
             new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
             _work,
+            _events,
             _events,
             _clock,
             _randomness);
@@ -280,9 +283,9 @@ public sealed class SendingServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// D-022: a transport that would not take the message leaves it in the outbox as
-    /// it was recorded, which is what a publisher retries from; a refused delivery
-    /// counts against no bucket (AUTH-ABUSE-004 AC2).
+    /// D-022: a transport that would not take the message leaves it in the outbox with
+    /// the attempt counted, which is what the publisher retries from; a refused
+    /// delivery counts against no bucket (AUTH-ABUSE-004 AC2).
     /// </summary>
     [Fact]
     public async Task D_022_ATransportRefusalLeavesTheMessageRecordedAsync()
@@ -296,7 +299,113 @@ public sealed class SendingServiceTests : IAsyncDisposable
         SendDelivery waiting = Assert.Single(_outbox.Waiting);
 
         Assert.Equal(Mailbox.Value, waiting.Requested.Destination.Canonical);
+        Assert.Equal(1, waiting.Attempts);
         Assert.Empty(_ledger.Keys);
+    }
+
+    /// <summary>
+    /// D-022, INF-BG-001: a message no transport took is carried by the publisher once
+    /// its next attempt is due, counted once it is taken, and removed.
+    /// </summary>
+    [Fact]
+    public async Task D_022_ARefusedMessageIsCarriedOnceItsRetryIsDueAsync()
+    {
+        _mail.Accepts = false;
+
+        _ = await Service.SendAsync(Mailed(), TestContext.Current.CancellationToken);
+
+        _mail.Accepts = true;
+        _clock.Advance(TimeSpan.FromSeconds(30));
+
+        Assert.Equal(1, await RetriedAsync());
+        Assert.Single(_mail.Taken);
+        Assert.Empty(_outbox.Waiting);
+        Assert.Single(_ledger.Sends(new RestrictionKey("email.destination", Mailbox.Value)));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC1 and AC2: two mails a transport refused counted nothing, so
+    /// the restrictions admitted both; carried again, they are judged again, and the
+    /// second inside the minute waits rather than going out with the first.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC2_ARetryIsJudgedByTheRestrictionsAgainAsync()
+    {
+        _mail.Accepts = false;
+
+        _ = await Service.SendAsync(Mailed(), TestContext.Current.CancellationToken);
+        _ = await Service.SendAsync(Mailed(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, _outbox.Waiting.Count);
+
+        _mail.Accepts = true;
+        _clock.Advance(TimeSpan.FromSeconds(30));
+
+        Assert.Equal(1, await RetriedAsync());
+        Assert.Single(_mail.Taken);
+        Assert.Equal(2, Assert.Single(_outbox.Waiting).Attempts);
+    }
+
+    /// <summary>
+    /// IDN-ATTR-001, D-022: a retry carries only the languages no transport has taken,
+    /// so the recipient is not sent again the one they already have.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ATTR_001_ARetryCarriesOnlyTheLanguagesStillOwedAsync()
+    {
+        _configuration.Set(Settings.NotificationLanguages, Declared);
+        _templates.Set(MessageKind.VerificationCode, SendKind.Email, "en", new MessageTemplate("code", "english"));
+        _templates.Set(MessageKind.VerificationCode, SendKind.Email, "ar", new MessageTemplate("code", "arabic"));
+        _mail.Takes = 1;
+
+        _ = await Service.SendAsync(Mailed() with { Language = null }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(["en"], Assert.Single(_outbox.Waiting).Taken);
+
+        // The language taken counted against the destination's one mail a minute.
+        _mail.Takes = int.MaxValue;
+        _clock.Advance(TimeSpan.FromMinutes(1));
+
+        Assert.Equal(1, await RetriedAsync());
+        Assert.Equal(["english", "arabic"], _mail.Taken.Select(mail => mail.Body));
+        Assert.Empty(_outbox.Waiting);
+        Assert.Equal(2, _ledger.Sends(new RestrictionKey("email.destination", Mailbox.Value)).Count);
+    }
+
+    /// <summary>
+    /// D-022, INF-BG-001: a message still refused when <c>outbox.retry.maxattempts</c>
+    /// is spent is removed and raises <c>degradation</c> for its channel, naming the
+    /// message by its identifier and never by where it was going; nothing is counted.
+    /// </summary>
+    [Fact]
+    public async Task D_022_AMessageWhoseBudgetIsSpentIsRemovedAndRaisesDegradationAsync()
+    {
+        _configuration.Set(Settings.OutboxRetryMaxAttempts, 2);
+        _mail.Accepts = false;
+
+        _ = await Service.SendAsync(Mailed(), TestContext.Current.CancellationToken);
+
+        SendDelivery waiting = Assert.Single(_outbox.Waiting);
+
+        Assert.Empty(_events.Of<AlertRaised>());
+
+        _clock.Advance(TimeSpan.FromHours(1));
+
+        Assert.Equal(0, await RetriedAsync());
+        Assert.Empty(_outbox.Waiting);
+        Assert.Empty(_ledger.Keys);
+
+        AlertRaised raised = Assert.Single(_events.Of<AlertRaised>());
+
+        Assert.Equal(AlertCondition.Degradation, raised.Condition);
+        Assert.StartsWith(
+            Alerts.Key(AlertCondition.Degradation, "send:email") + "@",
+            raised.IdempotencyKey,
+            StringComparison.Ordinal);
+        Assert.Equal(waiting.Id.ToString(), raised.Details["delivery"].GetString());
+        Assert.Equal("email", raised.Details["channel"].GetString());
+        Assert.Equal(2, raised.Details["attempts"].GetInt32());
+        Assert.DoesNotContain(Mailbox.Value, JsonSerializer.Serialize(raised.Details), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -455,6 +564,27 @@ public sealed class SendingServiceTests : IAsyncDisposable
             Refusal(await Service.SendAsync(Texted(), TestContext.Current.CancellationToken)));
 
         Assert.Empty(_sms.Taken);
+    }
+
+    /// <summary>
+    /// INT-SMS-004 AC2: a text message carried again is held below the floor as any
+    /// ordinary send is, and the attempt counts against its budget.
+    /// </summary>
+    [Fact]
+    public async Task INT_SMS_004_AC2_ARetryIsHeldBelowTheFloorAsync()
+    {
+        _sms.Accepts = false;
+
+        _ = await Service.SendAsync(Texted(), TestContext.Current.CancellationToken);
+
+        _sms.Accepts = true;
+        _configuration.Set(Settings.AbuseSmsBalanceFloor, 50m);
+        _sms.Balance = 40m;
+        _clock.Advance(TimeSpan.FromHours(1));
+
+        Assert.Equal(0, await RetriedAsync());
+        Assert.Empty(_sms.Taken);
+        Assert.Equal(2, Assert.Single(_outbox.Waiting).Attempts);
     }
 
     /// <summary>
@@ -801,6 +931,11 @@ public sealed class SendingServiceTests : IAsyncDisposable
             ?? throw new Xunit.Sdk.XunitException("The refusal carries no retryAt."),
             CultureInfo.InvariantCulture,
             DateTimeStyles.RoundtripKind);
+
+    private async Task<int> RetriedAsync() =>
+        (await Service.RetryAsync(TestContext.Current.CancellationToken)).Match(
+            carried => carried,
+            error => throw new Xunit.Sdk.XunitException($"The pass failed: {error.Code}."));
 
     private async Task<SendReference> SentAsync(SendRequest request) =>
         (await Service.SendAsync(request, TestContext.Current.CancellationToken)).Match(

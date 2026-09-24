@@ -18,6 +18,7 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Alerting;
 using Janus.Hosting.Events;
+using Janus.Hosting.Sending;
 using Janus.Identity.Identifiers;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.Outbox;
@@ -157,6 +158,15 @@ internal static class BackgroundJobs
             async (services, _, cancellationToken) => Done(
                 await services.GetRequiredService<EventPublisher>()
                     .PublishAsync(cancellationToken)
+                    .ConfigureAwait(false))),
+        BackgroundJob.Every(
+            "sends",
+            "INF-BG-001",
+            SystemOperation.Delivery,
+            Settings.OutboxPollInterval,
+            async (services, _, cancellationToken) => Done(
+                await services.GetRequiredService<SendingService>()
+                    .RetryAsync(cancellationToken)
                     .ConfigureAwait(false))),
         BackgroundJob.Every(
             "mailbox-provisioning",

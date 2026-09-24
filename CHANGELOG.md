@@ -369,6 +369,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A message no transport took is now carried again. The `sends` job retries it under
+  `outbox.retry.*` in the languages still owed, judged by the restrictions and held by
+  the gateway floor as any send is, and counts it only once a transport takes it. Once
+  the budget is spent the message is removed and `degradation` is raised for its
+  channel, naming the message and never where it was going.
 - More permission refusals than `alerting.denials.threshold` against one actor inside
   one fixed ten-minute window raise `denial-spike` for that actor. The refusals of
   requests that name no acting subject are counted together and raised with no scope.
