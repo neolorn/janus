@@ -3283,6 +3283,7 @@ static Janus.Core.AuditAction.Parse(string! value) -> Janus.Core.AuditAction
 static Janus.Core.AuditAction.operator !=(Janus.Core.AuditAction left, Janus.Core.AuditAction right) -> bool
 static Janus.Core.AuditAction.operator ==(Janus.Core.AuditAction left, Janus.Core.AuditAction right) -> bool
 static Janus.Core.AuditActions.AccessDenied.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.AccessExported.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.AccountDeactivated.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.AccountReactivated.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.AccountSuspended.get -> Janus.Core.AuditAction

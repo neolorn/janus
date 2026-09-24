@@ -15,6 +15,13 @@ public static class AuditActions
     public static AuditAction AccessDenied { get; } = AuditAction.Parse("authz.access.denied");
 
     /// <summary>
+    /// An export operation was admitted: who exported, which operation, over which kind
+    /// of record and within which organization, and when.
+    /// </summary>
+    /// <remarks>Implements OPS-ALERT-006, D-045, chapter 10 section 5.</remarks>
+    public static AuditAction AccessExported { get; } = AuditAction.Parse("authz.access.exported");
+
+    /// <summary>
     /// An account was deactivated by its own owner.
     /// </summary>
     /// <remarks>Implements IDN-LIFE-013, chapter 10 section 5.</remarks>

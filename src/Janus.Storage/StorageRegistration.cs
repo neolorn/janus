@@ -290,6 +290,7 @@ internal static class StorageRegistration
         services.AddScoped<IRecordedConsents, RecordedConsents>();
         services.AddScoped<IAccessAudit, AccessAudit>();
         services.AddScoped<IReadVolumeStore, ReadVolumeStore>();
+        services.AddScoped<IBulkExportLedger, BulkExportLedger>();
         services.AddScoped<Janus.Authorization.Gate.IAdministrativeOrganization, GateAdministrativeOrganization>();
         services.AddScoped<Janus.Authorization.Grants.IEmergencyAccount, GrantEmergencyAccount>();
 

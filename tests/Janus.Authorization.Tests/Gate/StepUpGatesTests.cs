@@ -30,7 +30,7 @@ public sealed class StepUpGatesTests
     [Fact]
     public async Task AUTH_STEP_001_AC1_ExercisingABoundPermissionAsksForStepUpAsync()
     {
-        var gates = new StepUpGates(Model(), sessions: null, new AssuranceProviderInMemory(AssuranceLevel.Aal1));
+        var gates = new StepUpGates(sessions: null, new AssuranceProviderInMemory(AssuranceLevel.Aal1));
 
         Assert.Equal(ErrorCodes.StepUpRequired, await OutstandingAsync(gates, Bound));
         Assert.Null(await OutstandingAsync(gates, Unbound));
@@ -44,8 +44,8 @@ public sealed class StepUpGatesTests
     [Fact]
     public async Task AUTH_STEP_001_AC2_SplittingAnApplicationChangesNothingAsync()
     {
-        var one = new StepUpGates(Model(), sessions: null, new AssuranceProviderInMemory(AssuranceLevel.Aal1));
-        var other = new StepUpGates(Model(), sessions: null, new AssuranceProviderInMemory(AssuranceLevel.Aal1));
+        var one = new StepUpGates(sessions: null, new AssuranceProviderInMemory(AssuranceLevel.Aal1));
+        var other = new StepUpGates(sessions: null, new AssuranceProviderInMemory(AssuranceLevel.Aal1));
 
         Assert.Equal(await OutstandingAsync(one, Bound), await OutstandingAsync(other, Bound));
         Assert.Equal(await OutstandingAsync(one, Unbound), await OutstandingAsync(other, Unbound));
@@ -62,11 +62,11 @@ public sealed class StepUpGatesTests
     public async Task AUTH_STEP_002_AC3_ASessionThatMeetsAHostsGateIsNotChallengedAsync()
     {
         var sessions = new SessionGatesInMemory(_holder);
-        var gates = new StepUpGates(Model(), sessions, assurance: null);
+        var gates = new StepUpGates(sessions, assurance: null);
 
         Error refused = Assert.IsType<Error>(await gates.OutstandingAsync(
             AccessContext.Of(_holder),
-            Bound,
+            Model().GateOf(Bound),
             TestContext.Current.CancellationToken));
 
         Assert.Equal(ErrorCodes.StepUpRequired, refused.Code);
@@ -90,7 +90,7 @@ public sealed class StepUpGatesTests
         var sessions = new SessionGatesInMemory(Identifiers.Subject());
         sessions.Meets(Gate);
 
-        var gates = new StepUpGates(Model(), sessions, assurance: null);
+        var gates = new StepUpGates(sessions, assurance: null);
 
         Assert.Equal(ErrorCodes.StepUpUnavailable, await OutstandingAsync(gates, Bound));
         Assert.Empty(sessions.Asked);
@@ -103,7 +103,7 @@ public sealed class StepUpGatesTests
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task AUTH_STEP_003_AC1_WithNoAssuranceProviderABoundPermissionIsDeniedAsync() =>
-        Assert.NotNull(await OutstandingAsync(new StepUpGates(Model(), sessions: null, assurance: null), Bound));
+        Assert.NotNull(await OutstandingAsync(new StepUpGates(sessions: null, assurance: null), Bound));
 
     /// <summary>
     /// AUTH-STEP-003 AC2: the denial carries its own code, so a deployment that
@@ -116,11 +116,11 @@ public sealed class StepUpGatesTests
     {
         Assert.Equal(
             ErrorCodes.StepUpUnavailable,
-            await OutstandingAsync(new StepUpGates(Model(), sessions: null, assurance: null), Bound));
+            await OutstandingAsync(new StepUpGates(sessions: null, assurance: null), Bound));
         Assert.Equal(
             ErrorCodes.StepUpRequired,
             await OutstandingAsync(
-                new StepUpGates(Model(), sessions: null, new AssuranceProviderInMemory(AssuranceLevel.Aal1)),
+                new StepUpGates(sessions: null, new AssuranceProviderInMemory(AssuranceLevel.Aal1)),
                 Bound));
     }
 
@@ -128,6 +128,10 @@ public sealed class StepUpGatesTests
         .StepUpGate(Bound.ToString(), Gate)
         .Build());
 
+    // The gate the host bound the permission to, as the access gate reads it.
     private async Task<ErrorCode?> OutstandingAsync(StepUpGates gates, Permission permission) =>
-        (await gates.OutstandingAsync(AccessContext.Of(_holder), permission, TestContext.Current.CancellationToken))?.Code;
+        (await gates.OutstandingAsync(
+            AccessContext.Of(_holder),
+            Model().GateOf(permission),
+            TestContext.Current.CancellationToken))?.Code;
 }

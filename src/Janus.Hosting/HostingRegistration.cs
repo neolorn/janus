@@ -150,9 +150,12 @@ public static class HostingRegistration
         // request (AUTH-STEP-002).
         services.AddScoped<ISessionGates, RequestGates>();
         services.AddScoped(services => new StepUpGates(
-            services.GetRequiredService<AuthorizationModel>(),
             services.GetRequiredService<ISessionGates>(),
             services.GetService<IAssuranceProvider>()));
+
+        // OPS-ALERT-006: an export is gated, limited and recorded inside the gate, so no
+        // host path exercises one around it.
+        services.AddScoped<ExportOperations>();
 
         // API-CONV-002: a body the reader could not parse is answered by the library
         // with a code and a correlation identifier, so the reader raises the failure

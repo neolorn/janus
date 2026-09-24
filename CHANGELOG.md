@@ -369,6 +369,15 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A permission a host declares with the action `export` is an export operation. While
+  `exfiltration.export.stepuprequired` is on, exercising one asks the session for
+  step-up even where the host bound it to no gate, so a system principal cannot export
+  until the deployment turns the flag off. Each person or principal is admitted
+  `exfiltration.export.ratelimit` exports in any rolling hour, and the next is refused
+  with `auth.throttled` and `retryAt`. Every admitted export is recorded as
+  `authz.access.exported`, naming who exported, the operation, the kind of record and
+  the one record a check named. A check, a list filter and an SQL fragment exercising
+  the permission each count as one export; a capability page does not.
 - A host reports through `IReadVolume` how many records each gate-filtered query or
   export returned to a person. Each person's count for the day in
   `privacy.calendar.timezone` is compared with their own daily mean over

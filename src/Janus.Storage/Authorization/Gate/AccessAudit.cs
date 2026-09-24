@@ -13,19 +13,20 @@ using Janus.Storage.Identity.Audit;
 namespace Janus.Storage.Authorization.Gate;
 
 /// <summary>
-/// The refusals the gate records, over the <c>audit_records</c> table.
+/// The refusals and the exports the gate records, over the <c>audit_records</c> table.
 /// </summary>
 /// <param name="connections">Where the statements take their connection from.</param>
 /// <remarks>
-/// Implements AUTHZ-CONCEAL-004, AUTHZ-GATE-004, CONV-LOG-005 and CONV-DESIGN-003. The
-/// record is written through the operation's own connection, so a refusal on a path
-/// that opened no transaction stands on its own and one inside a transaction is part of
-/// it. Nothing here changes or removes a row.
+/// Implements AUTHZ-CONCEAL-004, AUTHZ-GATE-004, OPS-ALERT-006, CONV-LOG-005 and
+/// CONV-DESIGN-003. The record is written through the operation's own connection, so a
+/// refusal on a path that opened no transaction stands on its own and one inside a
+/// transaction is part of it. Nothing here changes or removes a row.
 /// </remarks>
 internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
 {
     private const string Permission = "permission";
     private const string ResourceType = "resourceType";
+    private const string Resource = "resource";
 
     private static readonly AuditAction Denied = AuditActions.AccessDenied;
 
@@ -36,6 +37,15 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
              organization, details)
         VALUES (@id, @category, @at, @action, @acting, @effective, @organization,
                 CAST(@details AS jsonb));
+        """;
+
+    private const string AppendExport =
+        """
+        INSERT INTO identity.audit_records
+            (id, category, occurred_at, action, acting_subject, effective_subject,
+             organization, details, principal, principal_reason)
+        VALUES (@id, @category, @at, @action, @acting, @effective, @organization,
+                CAST(@details AS jsonb), @principal, @reason);
         """;
 
     private const string ById =
@@ -85,6 +95,37 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
                     effective = denial.Effective?.Value,
                     organization = denial.Organization?.Value,
                     details = Written(denial),
+                },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask RecordAsync(ExportedAccess export, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(export);
+
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        await ambient.Connection
+            .ExecuteAsync(new CommandDefinition(
+                AppendExport,
+                new
+                {
+                    id = export.Id.Value,
+                    category = VocabularyConverter<AuditCategory>.Write(AuditCategory.Security),
+                    at = export.At.ToUniversalTime(),
+                    action = AuditActions.AccessExported.ToString(),
+
+                    // A principal's export names the nil subject under both identities,
+                    // as every row a system principal's work leaves does.
+                    acting = (export.Acting ?? default).Value,
+                    effective = (export.Effective ?? default).Value,
+                    organization = export.Organization?.Value,
+                    details = Written(export),
+                    principal = export.Principal?.Name,
+                    reason = export.Principal?.Reason,
                 },
                 ambient.Transaction,
                 cancellationToken: cancellationToken))
@@ -143,6 +184,24 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
             [ResourceType] = JsonSerializer.SerializeToElement(denial.Type.ToString()),
         },
         AuditDocument.Default.DictionaryStringJsonElement);
+
+    // OPS-ALERT-006, D-045: what was exported is the operation and the kind of record,
+    // and the one record where the call named one; never what the rows held.
+    private static string Written(ExportedAccess export)
+    {
+        var details = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+        {
+            [Permission] = JsonSerializer.SerializeToElement(export.Permission.ToString()),
+            [ResourceType] = JsonSerializer.SerializeToElement(export.Type.ToString()),
+        };
+
+        if (export.Record is ResourceId record)
+        {
+            details[Resource] = JsonSerializer.SerializeToElement(record.ToString());
+        }
+
+        return JsonSerializer.Serialize(details, AuditDocument.Default.DictionaryStringJsonElement);
+    }
 
     private static DeniedAccess Read(AuditRecordId correlation, RecordedDenial row)
     {

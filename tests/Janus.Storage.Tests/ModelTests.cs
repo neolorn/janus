@@ -185,6 +185,13 @@ public sealed class ModelTests
             "break_glass_credentials.issued_by",
             "break_glass_credentials.replaced_at",
 
+            // Not an account field: when each actor's exports of the last hour were
+            // admitted, which the hourly limit counts and nothing more (OPS-ALERT-006).
+            "bulk_exports.actor",
+            "bulk_exports.admitted_at",
+            "bulk_exports.id",
+            "bulk_exports.principal",
+
             // Not an account field: a host callback's provider events, each claimed once
             // by the hash of the provider's identifier (BFF-MACH-002).
             "callback_events.callback",

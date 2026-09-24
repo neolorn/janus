@@ -24,6 +24,14 @@ internal interface IAccessAudit
     ValueTask RecordAsync(DeniedAccess denial, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Records one admitted export.
+    /// </summary>
+    /// <param name="export">What was exported, by whom and when.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask RecordAsync(ExportedAccess export, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Reads back the refusal a correlation identifier stands for.
     /// </summary>
     /// <param name="correlation">The identifier the refusal was answered with.</param>

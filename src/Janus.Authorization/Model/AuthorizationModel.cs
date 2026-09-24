@@ -25,13 +25,18 @@ internal sealed class AuthorizationModel
     private const BindingFlags Carried =
         BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
 
+    // OPS-ALERT-006 AC1: an export is an action by that name, never a judgement of how
+    // much an action returns.
+    private const string Export = "export";
+
     // The three actions that read by their name alone; every other action modifies
     // unless the host declared it reading (AUTHZ-GATE-006, D-160).
-    private static readonly string[] Reading = ["read", "list", "export"];
+    private static readonly string[] Reading = ["read", "list", Export];
 
     private readonly Dictionary<string, LawfulBasisDeclaration> _bases;
     private readonly Dictionary<Type, ResourceTypeDeclaration> _entities;
     private readonly HashSet<Permission> _permissions;
+    private readonly HashSet<Permission> _exports;
     private readonly HashSet<string> _readingActions;
     private readonly Dictionary<string, RelationshipDeclaration> _relationships;
     private readonly DeclaredProcessing _processing;
@@ -56,6 +61,12 @@ internal sealed class AuthorizationModel
         _entities = entities;
         _relationships = relationships;
         _permissions = permissions;
+
+        _exports =
+        [
+            .. permissions.Where(permission =>
+                string.Equals(permission.Action, Export, StringComparison.Ordinal)),
+        ];
         _readingActions = readingActions;
         _stepUpGates = stepUpGates;
         _actionPurposes = actionPurposes;
@@ -145,6 +156,24 @@ internal sealed class AuthorizationModel
     /// <param name="permission">The permission a role would grant.</param>
     /// <returns>Whether it is declared.</returns>
     public bool Declares(Permission permission) => _permissions.Contains(permission);
+
+    /// <summary>
+    /// The export operations: every permission the host declares whose action is
+    /// <c>export</c>.
+    /// </summary>
+    /// <remarks>
+    /// Implements OPS-ALERT-006 AC1. A person's copy of their own records is no
+    /// permission and so never one of these: it is gated at the account's reachable
+    /// assurance instead (D-141, D-148).
+    /// </remarks>
+    public IReadOnlySet<Permission> Exports => _exports;
+
+    /// <summary>
+    /// Whether the permission is an export operation.
+    /// </summary>
+    /// <param name="permission">The permission being asked for.</param>
+    /// <returns>Whether it is one of <see cref="Exports"/>.</returns>
+    public bool IsExport(Permission permission) => _exports.Contains(permission);
 
     /// <summary>
     /// Whether the permission's action reads rather than modifies, which is what a

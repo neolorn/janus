@@ -489,6 +489,11 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     /// </summary>
     public DbSet<ReadBaselineRecord> ReadBaselines => Set<ReadBaselineRecord>();
 
+    /// <summary>
+    /// When each actor's recent export operations were admitted.
+    /// </summary>
+    public DbSet<BulkExportRecord> BulkExports => Set<BulkExportRecord>();
+
     /// <inheritdoc/>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -587,5 +592,6 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new MaintenanceEntryConfiguration());
         modelBuilder.ApplyConfiguration(new ReadVolumeConfiguration());
         modelBuilder.ApplyConfiguration(new ReadBaselineConfiguration());
+        modelBuilder.ApplyConfiguration(new BulkExportConfiguration());
     }
 }

@@ -191,6 +191,7 @@ public sealed class HostFixture : IAsyncLifetime
             .Permission(HostPermissions.Publish.ToString())
             .Permission(HostPermissions.ReadNote.ToString())
             .Permission(HostPermissions.Recommend.ToString())
+            .Permission(HostPermissions.Export.ToString())
             .StepUpGate(HostPermissions.Publish.ToString(), "document:publish")
             .ServesPurpose(HostPermissions.Recommend.ToString(), "recommendations")
             .Relationship<HostReviewer>(

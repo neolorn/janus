@@ -13,7 +13,7 @@ namespace Janus.Authorization.Tests.Model;
 /// <summary>
 /// The model a host declares and what building it refuses
 /// (AUTHZ-MODEL-001 to AUTHZ-MODEL-004, AUTHZ-MODEL-006, AUTHZ-GATE-001,
-/// AUTHZ-CONCEAL-001, PRIV-RIGHT-005a).
+/// AUTHZ-CONCEAL-001, PRIV-RIGHT-005a, OPS-ALERT-006).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class AuthorizationModelTests
@@ -338,6 +338,29 @@ public sealed class AuthorizationModelTests
 
         Assert.Equal("article:publish", model.GateOf(Permission.Parse("article:publish")));
         Assert.Null(model.GateOf(Permission.Parse("article:read")));
+    }
+
+    /// <summary>
+    /// OPS-ALERT-006 AC1: an export is an action the host declares by that name, so the
+    /// set is read from the declaration and no action is one by what it returns.
+    /// </summary>
+    [Fact]
+    public void OPS_ALERT_006_AC1_ExportIsAnEnumeratedSetOfOperations()
+    {
+        var model = AuthorizationModel.Of(HostDomain.Declared()
+            .Permission("article:export")
+            .Permission("folder:export")
+            .Permission("article:bulkread", reading: true)
+            .Build());
+
+        Assert.Equal(
+            ["article:export", "folder:export"],
+            model.Exports.Select(permission => permission.ToString()).Order(StringComparer.Ordinal));
+        Assert.True(model.IsExport(Permission.Parse("article:export")));
+        Assert.False(model.IsExport(Permission.Parse("article:read")));
+        Assert.False(model.IsExport(Permission.Parse("article:bulkread")));
+        Assert.False(model.IsExport(Permission.Parse("workspace:export")));
+        Assert.DoesNotContain(model.Exports, Permissions.All.Contains);
     }
 
     /// <summary>

@@ -829,6 +829,46 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
+    /// OPS-ALERT-006 (D-045): an export the grants allow asks for step-up although the
+    /// host bound it to no gate; once the session meets it, each export is recorded on
+    /// its own, and past the hour's limit the next is refused and recorded as nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_ALERT_006_AnExportIsGatedRecordedAndLimitedAtTheGateAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Export]);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        Assert.Equal(
+            ErrorCodes.StepUpUnavailable,
+            await RefusalAsync(nested.Account, nested.Record, HostPermissions.Export));
+        Assert.Equal(0, await ExportsRecordedAsync(nested.Account));
+
+        for (int export = 0; export < Settings.ExfiltrationExportRateLimit.Default; export++)
+        {
+            Assert.Null(await SteppedUpRefusalAsync(nested, TimeSpan.Zero, HostPermissions.Export));
+        }
+
+        Error throttled = Assert.IsType<Error>(
+            await SteppedUpRefusalAsync(nested, TimeSpan.Zero, HostPermissions.Export));
+
+        Assert.Equal(ErrorCodes.Throttled, throttled.Code);
+        Assert.True(throttled.Details.ContainsKey("retryAt"));
+        Assert.Equal(Settings.ExfiltrationExportRateLimit.Default, await ExportsRecordedAsync(nested.Account));
+        Assert.True(await ChecksAsync(nested.Account, nested.Record));
+    }
+
+    /// <summary>
     /// AUTHZ-PRIN-001 AC2, AUTHZ-DERIVE-001 (D-162): a check on a type a derivation
     /// reaches, asked without the rows the derivation is evaluated over, is a fault
     /// rather than an answer read from the stored grants alone. It is a fault whatever
@@ -1315,7 +1355,10 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
 
     // The request arrives on a session of the account's own, which proved a
     // phishing-resistant second factor the stated time ago.
-    private async Task<Error?> SteppedUpRefusalAsync(Nested nested, TimeSpan ago)
+    private async Task<Error?> SteppedUpRefusalAsync(
+        Nested nested,
+        TimeSpan ago,
+        Permission? permission = null)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
@@ -1360,7 +1403,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
         Result outcome = await services.GetRequiredService<IAccessGate>()
             .RequireAsync(
                 AccessContext.Of(nested.Account),
-                HostPermissions.Publish,
+                permission ?? HostPermissions.Publish,
                 nested.Record,
                 Sources(reading),
                 cancellationToken);
@@ -1385,6 +1428,18 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
                 TestContext.Current.CancellationToken);
 
         return outcome.Match(() => (ErrorCode?)null, error => error.Code);
+    }
+
+    private async Task<int> ExportsRecordedAsync(SubjectId account)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(
+            """
+            SELECT count(*)::int FROM identity.audit_records
+            WHERE action = 'authz.access.exported' AND acting_subject = @account
+            """,
+            new { account = account.Value });
     }
 
     private async Task<int> SpikesAsync(SubjectId? account)

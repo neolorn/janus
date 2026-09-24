@@ -23,6 +23,7 @@ namespace Janus.Authorization.Gate;
 /// <param name="spikes">Where each recorded refusal is counted against its actor.</param>
 /// <param name="subjects">Who the principal is, resolved once per operation.</param>
 /// <param name="gates">What an action's step-up gate still asks of the session.</param>
+/// <param name="exports">What an export operation asks beyond what the grants allow.</param>
 /// <param name="derived">Which of the host's relationships confer what is being asked.</param>
 /// <param name="lookup">Who can access a record, for the view that asks.</param>
 /// <param name="consents">What the caller has consented to, for the purpose the action serves.</param>
@@ -31,7 +32,7 @@ namespace Janus.Authorization.Gate;
 /// <remarks>
 /// Implements AUTHZ-SEAM-001, AUTHZ-PRIN-001, AUTHZ-PRIN-003, AUTHZ-GATE-002,
 /// AUTHZ-GATE-004, AUTHZ-GATE-005, AUTHZ-SCOPE-001, AUTHZ-CONCEAL-004, AUTHZ-DERIVE-007,
-/// PRIV-SENS-002, PRIV-SENS-002a and LIB-SEAM-001.
+/// PRIV-SENS-002, PRIV-SENS-002a, OPS-ALERT-006 and LIB-SEAM-001.
 /// A check and a filter are the one rule rendered two ways, so neither can come to
 /// answer what the other would refuse. Every path that cannot resolve what it needs
 /// denies.
@@ -44,6 +45,7 @@ internal sealed class AccessGate(
     DenialSpikes spikes,
     SubjectSets subjects,
     StepUpGates gates,
+    ExportOperations exports,
     Derivations derived,
     ReverseLookup lookup,
     IRecordedConsents consents,
@@ -92,7 +94,7 @@ internal sealed class AccessGate(
                 cancellationToken).ConfigureAwait(false);
         }
 
-        return await OutstandingAsync(context, decided.Subject, permission, cancellationToken)
+        return await AllowedAsync(context, permission, resource, decided, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -116,7 +118,7 @@ internal sealed class AccessGate(
 
         if (decided.Grant is { Deny: false })
         {
-            return await OutstandingAsync(context, decided.Subject, permission, cancellationToken)
+            return await AllowedAsync(context, permission, resource, decided, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -133,7 +135,7 @@ internal sealed class AccessGate(
                 [resource.Id],
                 cancellationToken).ConfigureAwait(false)).Contains(resource.Id.ToString()))
         {
-            return await OutstandingAsync(context, decided.Subject, permission, cancellationToken)
+            return await AllowedAsync(context, permission, resource, decided, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -174,8 +176,14 @@ internal sealed class AccessGate(
 
         // An organization-wide check names no record, so it has no data subject; a
         // consent-based purpose is refused rather than admitted on nobody's consent.
-        return await OutstandingAsync(context, dataSubject: null, permission, cancellationToken)
+        Result outstanding = await OutstandingAsync(context, dataSubject: null, permission, cancellationToken)
             .ConfigureAwait(false);
+
+        return outstanding.Match(() => (Error?)null, error => error) is Error unmet
+            ? Result.Failure(unmet)
+            : await exports
+                .AdmitAsync(context, permission, OrganizationWide, organization, record: null, cancellationToken)
+                .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -345,8 +353,9 @@ internal sealed class AccessGate(
         }
 
         // AUTH-STEP-001: a list exercises the permission as a check does, so the gate
-        // bound to it is asked of the session before any row is admitted.
-        if (await gates.OutstandingAsync(context, permission, cancellationToken).ConfigureAwait(false)
+        // bound to it is asked of the session before any row is admitted, and an export
+        // is admitted under its limit before the rule is handed out (OPS-ALERT-006).
+        if (await ExercisedAsync(context, permission, type, organization, cancellationToken).ConfigureAwait(false)
             is Error unmet)
         {
             return Result.Failure<Expression<Func<TResource, bool>>>(unmet);
@@ -377,7 +386,7 @@ internal sealed class AccessGate(
             return Result.Success(MatchesNothing);
         }
 
-        if (await gates.OutstandingAsync(context, permission, cancellationToken).ConfigureAwait(false)
+        if (await ExercisedAsync(context, permission, type, organization, cancellationToken).ConfigureAwait(false)
             is Error unmet)
         {
             return Result.Failure<SqlFilter>(unmet);
@@ -499,7 +508,7 @@ internal sealed class AccessGate(
 
         foreach (Permission permission in permissions)
         {
-            if (await gates.OutstandingAsync(context, permission, cancellationToken).ConfigureAwait(false)
+            if (await UnsteppedAsync(context, permission, cancellationToken).ConfigureAwait(false)
                 is not null)
             {
                 unstepped.Add(permission);
@@ -774,7 +783,7 @@ internal sealed class AccessGate(
         Permission permission,
         CancellationToken cancellationToken)
     {
-        if (await gates.OutstandingAsync(context, permission, cancellationToken).ConfigureAwait(false)
+        if (await UnsteppedAsync(context, permission, cancellationToken).ConfigureAwait(false)
             is Error unmet)
         {
             return Result.Failure(unmet);
@@ -785,6 +794,60 @@ internal sealed class AccessGate(
             ? Result.Failure(Error.From(missing))
             : Result.Success();
     }
+
+    // OPS-ALERT-006: an export the grants, its gate and its consent allow is admitted
+    // under the hourly limit and recorded last, so that nothing refused is counted.
+    private async ValueTask<Result> AllowedAsync(
+        AccessContext context,
+        Permission permission,
+        ResourceReference resource,
+        Decision decided,
+        CancellationToken cancellationToken)
+    {
+        Result outstanding = await OutstandingAsync(context, decided.Subject, permission, cancellationToken)
+            .ConfigureAwait(false);
+
+        return outstanding.Match(() => (Error?)null, error => error) is Error unmet
+            ? Result.Failure(unmet)
+            : await exports
+                .AdmitAsync(context, permission, resource.Type, decided.Organization, resource.Id, cancellationToken)
+                .ConfigureAwait(false);
+    }
+
+    // AUTH-STEP-001, OPS-ALERT-006: what a list or a fragment asks before the rule is
+    // handed out, which is the gate the action is bound to and, for an export, a place
+    // under the limit. The host reads the rows the rule admits, so the export is
+    // counted when the rule is handed out, whatever the query then returns.
+    private async ValueTask<Error?> ExercisedAsync(
+        AccessContext context,
+        Permission permission,
+        ResourceType type,
+        OrganizationId organization,
+        CancellationToken cancellationToken)
+    {
+        if (await UnsteppedAsync(context, permission, cancellationToken).ConfigureAwait(false)
+            is Error unmet)
+        {
+            return unmet;
+        }
+
+        Result admitted = await exports
+            .AdmitAsync(context, permission, type, organization, record: null, cancellationToken)
+            .ConfigureAwait(false);
+
+        return admitted.Match(() => (Error?)null, error => error);
+    }
+
+    // AUTH-STEP-001, OPS-ALERT-006: the gate an action asks for is the one the host bound
+    // it to, or, where it bound none, the one an export asks for of its own.
+    private async ValueTask<Error?> UnsteppedAsync(
+        AccessContext context,
+        Permission permission,
+        CancellationToken cancellationToken) =>
+        await gates.OutstandingAsync(
+            context,
+            model.GateOf(permission) ?? await exports.GateOfAsync(permission, cancellationToken).ConfigureAwait(false),
+            cancellationToken).ConfigureAwait(false);
 
     // PRIV-SENS-002 AC1, PRIV-SENS-002a: the consent read is the record's data
     // subject's, whoever the caller is, so staff and background work are gated exactly

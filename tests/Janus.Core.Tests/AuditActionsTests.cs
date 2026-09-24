@@ -40,6 +40,7 @@ public sealed class AuditActionsTests
         "auth.restriction.granted",
         "auth.session.presented",
         "authz.access.denied",
+        "authz.access.exported",
         "authz.group.created",
         "authz.group.memberadded",
         "authz.group.memberremoved",

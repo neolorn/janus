@@ -13045,6 +13045,101 @@ names costs (or let section 4.1a's `gates` carry host-named keys), and that a li
 filter asks the bound gate; LIB-HOST-004 could say what the provider's level is
 compared with, or return the three values a gate needs.
 
+---
+
+## 329. What an export operation is, and what it asks
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-ALERT-006, D-045, OPS-CFG-004**
+
+*The question.* OPS-ALERT-006 says export operations "SHALL be defined, gated by
+step-up, individually audited, and rate-limited", and its AC1 that "export" is an
+enumerated set of operations. `10` gives `exfiltration.export.stepuprequired` (staff
+bulk export only, D-148), `exfiltration.export.ratelimit` (5 per hour) and
+`exfiltration.export.auditing` (protected). No chapter says who enumerates the set,
+where an export passes through the library, what counts as one export, whom the limit
+counts, what the audit row carries, or what a system principal meets at the step-up
+gate. Entry 319 recorded that the three keys were read by nothing.
+
+*The readings.*
+
+1. The set is the library's own: nothing of the library's own surface is a staff bulk
+   export, so the set is empty and the keys stay unread.
+2. The set is the host's: every permission the host declares whose action is `export`
+   (the action AUTHZ-GATE-006 already names as reading) is an export operation, and the
+   gate, through which every exercise of a host's permission passes (AUTHZ-SEAM-001),
+   applies step-up, the limit and the audit row. What counts as one export is
+   (a) each admitted check, list filter or SQL fragment exercising the permission, or
+   (b) each record the host reports it returned.
+3. As 2, with a separate host-facing call the host makes when it exports, outside the
+   gate.
+
+*Chosen: 2(a).* Reading 1 leaves every key of D-045 dead and the item unbuilt.
+Reading 3 is a second path around the gate for the one kind of action the item exists
+to control, and a host that forgets the call exports ungated. Reading 2 puts the
+enumeration where AC1 puts it, in declared names, and never in a judgement of volume.
+Of the two counts, (b) needs the host's report, which `IReadVolume` (entry 327) already
+carries for volume and which the host could omit; (a) is counted where the gate admits
+the operation, so an export the host runs is counted whatever it then returns.
+
+What is built:
+
+- An export is a host-declared permission whose action is `export`.
+  `AuthorizationModel.Exports` holds the set; the library declares none, and a
+  person's copy of their own records (`/privacy/export`) is no permission and is
+  gated as before (D-141, D-148).
+- Step-up: while `exfiltration.export.stepuprequired` is on (default, and assumed on
+  where unreadable), an export the host bound to no gate asks for a gate named by the
+  export itself, which costs the dearest gate of the person's policy (entry 328). A gate
+  the host bound it to is asked instead. A system principal has no session and meets no
+  gate, so it cannot export while the flag is on (strictest reading); a deployment whose
+  background work exports turns the flag off, which is recorded and alerted as any
+  runtime change is.
+- Order: restriction, then grants, then the gate, then consent, then the limit, then
+  the audit row. A refused export is neither counted nor recorded as an export (a
+  refusal by the grants is recorded as `authz.access.denied`, as before).
+- One export is each admitted `RequireAsync` (all three overloads), `FilterAsync` and
+  `FragmentAsync` call exercising an export permission. A capability page is not one:
+  it answers what could be done and exercises nothing. A restricted account's list
+  filter matches nothing before any of this is asked; an export is a reading action
+  and is not restricted.
+- The limit is each actor's own over a rolling hour: a person by subject, a system
+  principal by its name. Past it the call is refused with `auth.throttled` and
+  `retryAt`, the instant the oldest of the hour's exports leaves the window. A limit of
+  zero or less admits nothing and answers one hour from now. The table `bulk_exports`
+  keeps the instants and forgets an actor's older than the hour when the actor's next
+  export is recorded. Two concurrent exports of one actor can both be admitted at the
+  limit, as with a subject's own exports (D-086); the limit is a brake, not a count of
+  record.
+- Every admitted export is recorded in the trail as `authz.access.exported`, category
+  security, with the acting and effective person (or the principal's name and reason,
+  with the nil subject), the organization where the call named one, and details
+  `permission`, `resourceType` and, for a check, `resource`. What the export returned is
+  never recorded. D-045's "why" is not carried: the gate takes no reason, and no
+  chapter gives an export one.
+- `exfiltration.export.auditing` is honoured: off only where the deployment turned it off
+  through the command line (OPS-CFG-004), and the export is still counted when it is.
+  Entry 319's observation no longer holds for this key.
+
+*Tests that pin it.*
+`AuthorizationModelTests.OPS_ALERT_006_AC1_ExportIsAnEnumeratedSetOfOperations`,
+`ExportOperationsTests.OPS_ALERT_006_AC1_OnlyADeclaredExportIsGatedLimitedAndRecordedAsync`,
+`ExportOperationsTests.OPS_ALERT_006_AnExportAsksForStepUpWhileTheDeploymentRequiresItAsync`,
+`ExportOperationsTests.OPS_ALERT_006_AnExportPastTheHourlyLimitIsThrottledUntilAPlaceFreesAsync`,
+`ExportOperationsTests.OPS_ALERT_006_TheLimitIsEachActorsOwnAsync`,
+`ExportOperationsTests.OPS_ALERT_006_ALimitOfNothingAdmitsNoExportAsync`,
+`ExportOperationsTests.OPS_ALERT_006_EachAdmittedExportIsIndividuallyAuditedAsync`,
+`ExportOperationsTests.OPS_ALERT_006_AC2_OnlyTheDeploymentTurnsTheAuditOffAsync`,
+`ConfigurationEndpointTests.OPS_ALERT_006_AC2_ExportAuditingCannotBeDisabledThroughTheApplicationAsync`,
+`ExportStoreTests.OPS_ALERT_006_EachActorsHourHoldsItsOwnExportsAsync`,
+`ExportStoreTests.OPS_ALERT_006_AnAdmittedExportIsRecordedOnItsOwnAsync`,
+`GateBehaviourTests.OPS_ALERT_006_AnExportIsGatedRecordedAndLimitedAtTheGateAsync`.
+
+*Chapter text that should change.* OPS-ALERT-006 could say that the set is the host's
+permissions whose action is `export`, that the gate applies all three requirements, what
+one export is, that the limit is per actor over a rolling hour and answered with
+`auth.throttled` and `retryAt`, what a system principal meets at the gate, and whether
+an export carries a reason (and so whether the gate should take one).
+
 
 # Rows for chapter 10
 
@@ -13206,6 +13301,7 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `auth.restriction.granted` | security | `AuditActions.RestrictionGranted` | A sending restriction was granted against an address or a number. (AUTH-ABUSE-005) |
 | `auth.session.presented` | security | `AuditActions.SessionPresented` | A session was presented, which is what a sign-in history is read from. (AUTH-SESS-010) |
 | `authz.access.denied` | security | `AuditActions.AccessDenied` | A permission was refused, which is the row the refusal's correlation identifier resolves to. (AUTHZ-CONCEAL-004) |
+| `authz.access.exported` | security | `AuditActions.AccessExported` | An export operation was admitted at the gate. The acting and effective subject is who exported, or the nil subject with the system principal's name and reason; details carry `permission`, `resourceType` and, where a check named one record, `resource`. Not written while `exfiltration.export.auditing` is off. (OPS-ALERT-006, entry 329) |
 | `authz.group.created` | security | `AuditActions.GroupCreated` | A group was created in an organization. Details carry `group`, `name` and `reason`; the row is filed under the group's organization. (AUTHZ-GROUP-001, entry 191) |
 | `authz.group.memberadded` | security | `AuditActions.GroupMemberAdded` | An account or a group was added to a group. Details carry `group`, `name`, `memberType`, `memberId` and `reason`. (AUTHZ-GROUP-001, OPS-CFG-007, entry 191) |
 | `authz.group.memberremoved` | security | `AuditActions.GroupMemberRemoved` | An account or a group was taken out of a group. Details carry `group`, `name`, `memberType`, `memberId` and `reason`. (AUTHZ-GROUP-001, OPS-CFG-007, entry 191) |

@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Janus.Authorization.Model;
 using Janus.Core;
 
 namespace Janus.Authorization.Gate;
@@ -9,7 +8,6 @@ namespace Janus.Authorization.Gate;
 /// <summary>
 /// What the step-up gate bound to an action still asks of the caller's session.
 /// </summary>
-/// <param name="model">The host's declaration, read for the gate an action is bound to.</param>
 /// <param name="sessions">
 /// Where the library's own session is judged against a gate, which a deployment whose
 /// people sign in through this library has and one consuming authorization alone does not.
@@ -25,23 +23,9 @@ namespace Janus.Authorization.Gate;
 /// met by what the acting person's session has proved and by nothing else.
 /// </remarks>
 internal sealed class StepUpGates(
-    AuthorizationModel model,
     ISessionGates? sessions,
     IAssuranceProvider? assurance)
 {
-    /// <summary>
-    /// What the action's gate still requires, or nothing where it requires nothing.
-    /// </summary>
-    /// <param name="context">Who is asking.</param>
-    /// <param name="permission">The permission being exercised or offered.</param>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The refusal, or nothing where nothing is outstanding.</returns>
-    public ValueTask<Error?> OutstandingAsync(
-        AccessContext context,
-        Permission permission,
-        CancellationToken cancellationToken) =>
-        OutstandingAsync(context, model.GateOf(permission), cancellationToken);
-
     /// <summary>
     /// What a named gate still requires, or nothing where no gate is named.
     /// </summary>
