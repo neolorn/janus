@@ -369,6 +369,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A host reports through `IReadVolume` how many records each gate-filtered query or
+  export returned to a person. Each person's count for the day in
+  `privacy.calendar.timezone` is compared with their own daily mean over
+  `exfiltration.readvolume.baselinewindow`, recomputed by the daily
+  `read-volume-baseline` job, and `read-volume-anomaly` is raised when it exceeds both
+  `exfiltration.readvolume.factor` times that mean and `exfiltration.readvolume.minimum`.
+  Work done by a system principal is not counted.
 - Two sessions of one account used inside `alerting.sessions.window` from cities
   further apart than `alerting.sessions.distance`, or in different countries, raise
   `concurrent-sessions-implausible` for the account, naming the two sessions and

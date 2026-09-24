@@ -391,6 +391,11 @@ public static class HostingRegistration
         services.AddScoped<IAccessAlerts, AccessAlerts>();
         services.AddScoped<DenialSpikes>();
         services.AddScoped<IAccessGate, AccessGate>();
+
+        // OPS-ALERT-005: the host says how many records a filtered query of its own
+        // returned, and the library counts them against the person given them.
+        services.AddScoped<ReadVolume>();
+        services.AddScoped<IReadVolume>(provider => provider.GetRequiredService<ReadVolume>());
         services.AddScoped<Janus.Authorization.Gate.AdministrativeScope>();
         services.AddScoped<IGrants, GrantService>();
         services.AddScoped<IRoles, RoleService>();

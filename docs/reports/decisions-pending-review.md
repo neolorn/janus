@@ -12906,6 +12906,82 @@ record are one session, and that the alert names the sessions and not the places
 AUTH-SESS-013 could say that the place kept under the person's key includes where the
 city lies.
 
+---
+
+## 327. Where read volume is counted from, and how a person's normal is kept
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-ALERT-005, AUTHZ-GATE-002, LIB-API-004, PRIV-RIGHT-005c**
+
+*The question.* OPS-ALERT-005 (D-153) counts "one record returned to the actor by a
+gate-filtered query or an export" per calendar day in `privacy.calendar.timezone`, and
+raises `read-volume-anomaly` when today's count exceeds `exfiltration.readvolume.factor`
+times the actor's mean daily count over `exfiltration.readvolume.baselinewindow` and
+exceeds `exfiltration.readvolume.minimum`. The gate returns a predicate the host runs
+against its own tables (AUTHZ-GATE-002), so the library never sees how many rows came
+back. The chapters do not say how the count reaches the library, who an actor is when
+one person acts for another or when a system principal runs, how the mean treats a day
+with no reads or a person with no history, when the mean is computed, or what is kept
+and for how long.
+
+*The readings.*
+
+1. The library counts nothing it cannot see; the condition is left to the host.
+2. The library exposes a port the host reports each filtered query's and each export's
+   row count to, and counts and judges them itself.
+3. As 2, and the library also counts the records its own staff routes return.
+
+*Chosen: 2, strictest where the readings differ on what is watched.* Reading 1 leaves a
+security condition of the table without a raise site, which OPS-ALERT-001 AC1 does not
+allow. A public `IReadVolume` (`Janus.Core`) takes the access context and the number of
+records one gate-filtered query or one export returned; a negative number is
+`api.request.malformed` naming `records`. Reading 3 is not taken: no library route runs
+a gate-filtered query (the library's own reads check a permission on one record or
+list the library's own administrative tables), and `/privacy/export` returns only the
+actor's own records and is outside the staff export controls (`10`,
+`exfiltration.export.stepuprequired`).
+
+The actor is the acting person (`AccessContext.Acting`): a staff member acting for a
+customer is counted, the customer is not. Work a system principal does is nobody's
+reading and is not counted. The day is the calendar day of the instant in
+`privacy.calendar.timezone`, the day the privacy clock counts. The mean is the sum of
+the actor's counts on the days of the window before today divided by the window's
+length in days, so a day without reads counts as nothing read and today never raises
+its own baseline; a person with no count in the window has a mean of nothing, so only
+the minimum stands between their first busy day and the alert, as D-153 intends. Both
+comparisons are strict.
+
+The means are recomputed once a day by the `read-volume-baseline` job (Monitoring,
+daily, in one transaction), which also forgets every count older than the window, so a
+count is kept no longer than the window it serves. A count and a mean hold the actor's
+identifier and a number and nothing of what was read; PRIV-RIGHT-005c's erasure leaves
+them as it leaves every row holding the identifier alone, and they lapse with the window.
+With `exfiltration.readvolume.alerting` off, counts are still kept so the mean is whole
+when it is turned back on; nothing is raised. An unreadable factor, minimum or flag
+falls back to its default rather than silencing the condition. The alert is scoped to
+the actor and its details are `{actor, records, dailyMean}`.
+
+*Tests that pin it.*
+`ReadVolumeTests.OPS_ALERT_005_AC1_AnActorReadingFarBeyondTheirOwnPatternRaisesAsync`,
+`ReadVolumeTests.OPS_ALERT_005_AC2_AnActorWhoseNormalIsHighDoesNotAlertAsync`,
+`ReadVolumeTests.OPS_ALERT_005_TheMinimumKeepsAFirstBusyDaySilentAsync`,
+`ReadVolumeTests.OPS_ALERT_005_TheFactorAndMinimumAreTheConfiguredOnesAsync`,
+`ReadVolumeTests.OPS_ALERT_005_AlertingOffCountsAndRaisesNothingAsync`,
+`ReadVolumeTests.OPS_ALERT_005_TheActorIsCountedNotThePersonActedForAsync`,
+`ReadVolumeTests.OPS_ALERT_005_ASystemPrincipalIsNotCountedAsync`,
+`ReadVolumeTests.OPS_ALERT_005_ANegativeCountIsMalformedAsync`,
+`ReadVolumeTests.OPS_ALERT_005_ADayIsTheCalendarDayInTheZoneAsync`,
+`ReadVolumeTests.OPS_ALERT_005_TheMeanIsTakenOverTheWindowBeforeTodayAsync`,
+`ReadVolumeTests.OPS_ALERT_005_TheWindowIsTheConfiguredOneAsync`,
+`ReadVolumeStoreTests.OPS_ALERT_005_ReportsOnOneDayAddToOneCountAsync`,
+`ReadVolumeStoreTests.OPS_ALERT_005_TheMeanIsRecomputedOverTheWindowBeforeTodayAsync`,
+`ReadVolumeStoreTests.OPS_ALERT_005_ARecountReplacesEveryMeanAsync`.
+
+*Chapter text that should change.* OPS-ALERT-005 could say that the host reports each
+filtered query's and export's row count through `IReadVolume` (and `07` list it among
+the ports a host calls), that the actor is the acting person and a system principal is
+not counted, that the mean is over every day of the window before today with a day
+without reads counted as nothing, and that counts are kept for the window only.
+
 
 # Rows for chapter 10
 

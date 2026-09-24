@@ -15,6 +15,7 @@ using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.SignIn;
+using Janus.Authorization.Gate;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Alerting;
@@ -206,6 +207,15 @@ internal static class BackgroundJobs
             async (services, _, cancellationToken) => await services.GetRequiredService<LocationDatabase>()
                 .RefreshAsync(cancellationToken)
                 .ConfigureAwait(false)),
+        BackgroundJob.Every(
+            "read-volume-baseline",
+            "OPS-ALERT-005",
+            SystemOperation.Monitoring,
+            Daily,
+            async (services, _, cancellationToken) => Done(
+                await services.GetRequiredService<ReadVolume>()
+                    .RebaselineAsync(cancellationToken)
+                    .ConfigureAwait(false))),
         BackgroundJob.Every(
             "holiday-list",
             "PRIV-RIGHT-002",

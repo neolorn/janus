@@ -642,6 +642,15 @@ public sealed class ModelTests
             "raised_alerts.idempotency_key",
             "raised_alerts.raised_at",
 
+            // Not an account field: the records each person was given by day and each
+            // person's daily mean, by identifier alone and forgotten once older than
+            // the baseline window (OPS-ALERT-005).
+            "read_baselines.actor",
+            "read_baselines.daily_mean",
+            "read_volume.actor",
+            "read_volume.day",
+            "read_volume.records",
+
             // Not an account field: one approver standing behind one re-enrolment, on
             // the channel they confirmed the person on, which is held under the
             // account's key (AUTH-RECOV-002, AUTH-RECOV-003).

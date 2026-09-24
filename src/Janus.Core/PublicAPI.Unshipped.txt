@@ -1284,6 +1284,8 @@ Janus.Core.IProcessingRecords.DeclareAsync(Janus.Core.AccessContext! context, Ja
 Janus.Core.IProcessingRecords.GenerateAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.ProcessingRegister!>>
 Janus.Core.IPurposeHandler
 Janus.Core.IPurposeHandler.Purposes.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
+Janus.Core.IReadVolume
+Janus.Core.IReadVolume.ReturnedAsync(Janus.Core.AccessContext! context, int records, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IRecovery
 Janus.Core.IRecovery.ApproveAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, string! reason, string! channelUsed, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.ApprovedRecovery!>>
 Janus.Core.IRecovery.BeginAsync(string! identifier, string! language, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>

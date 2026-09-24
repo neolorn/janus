@@ -20,6 +20,7 @@ using Janus.Storage.Authentication.Registration;
 using Janus.Storage.Authentication.Sending;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Authentication.SignIn;
+using Janus.Storage.Authorization.Gate;
 using Janus.Storage.Authorization.Grants;
 using Janus.Storage.Authorization.Groups;
 using Janus.Storage.Authorization.Resources;
@@ -478,6 +479,16 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     /// </summary>
     public DbSet<MaintenanceEntryRecord> MaintenanceLog => Set<MaintenanceEntryRecord>();
 
+    /// <summary>
+    /// The records each person was given, counted by day.
+    /// </summary>
+    public DbSet<ReadVolumeRecord> ReadVolume => Set<ReadVolumeRecord>();
+
+    /// <summary>
+    /// Each person's daily mean over the baseline window.
+    /// </summary>
+    public DbSet<ReadBaselineRecord> ReadBaselines => Set<ReadBaselineRecord>();
+
     /// <inheritdoc/>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -574,5 +585,7 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new KeyRotationConfiguration());
         modelBuilder.ApplyConfiguration(new LicenceConfiguration());
         modelBuilder.ApplyConfiguration(new MaintenanceEntryConfiguration());
+        modelBuilder.ApplyConfiguration(new ReadVolumeConfiguration());
+        modelBuilder.ApplyConfiguration(new ReadBaselineConfiguration());
     }
 }
