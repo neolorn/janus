@@ -93,6 +93,24 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// IDN-LIFE-009a AC1 and INT-MAIL-006: a grant in the administrative organization is
+    /// a grant and nothing more: the holder is no member of it afterwards and no
+    /// mailbox is reserved, since staff membership begins at an invitation.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_009a_AC1_AGrantInTheAdministrativeOrganizationMakesNoMemberAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Administration, Permissions.GrantManage);
+
+        Answer created = await GrantedAsync(administrator, "organization", Administration.ToString());
+
+        Assert.Equal(Administration, (await StoredAsync(created)).Organization);
+        Assert.Empty(await _deployment.Memberships.OfAsync(new SubjectId(Holder), CancellationToken.None));
+        Assert.Empty(_deployment.Mailboxes.Held);
+    }
+
+    /// <summary>
     /// AUTHZ-SCOPE-001: a grant on a record is scoped to the organization the record
     /// was registered in, and that is where the permission is asked.
     /// </summary>

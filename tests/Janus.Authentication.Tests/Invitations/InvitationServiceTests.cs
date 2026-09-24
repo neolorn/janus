@@ -225,6 +225,73 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-009a AC4: the mailbox is pushed disabled once the invitation is sent,
+    /// stays disabled and unheld when the person's account opens the link, which is
+    /// registration, and is pushed enabled once acknowledgement attaches the
+    /// membership.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_009a_AC4_TheMailboxIsEnabledByTheMembershipAndNeverByRegistrationAsync()
+    {
+        _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
+        _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(_server.Hosts(Corporate));
+
+        string token = _notifications.Mail[^1].Values["token"];
+        SubjectId holder = Holder();
+        Mailbox reserved = Assert.Single(_mailboxes.Held);
+
+        _ = _identifiers.Verified(holder, IdentifierKind.Email, Personal);
+        _authenticators.Hold(Passkey(holder));
+        _ = _mailboxes.Standing.Add(holder);
+        Accepted(await OpenAsync(holder, token));
+        _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
+
+        Assert.Null(reserved.Holder);
+        Assert.False(_server.Hosts(Corporate));
+        Assert.Single(_server.Applied);
+
+        Accepted(await AcknowledgeAsync(holder, _invitations.Held[0].Id));
+        _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(holder, reserved.Holder);
+        Assert.True(_server.Hosts(Corporate));
+        Assert.Equal(
+            [MailboxState.Disabled, MailboxState.Enabled],
+            _server.Applied.Select(push => push.State));
+    }
+
+    /// <summary>
+    /// INT-MAIL-006 AC1: a membership of the administrative organization added through
+    /// the application finds its mailbox already on the mail server: the invitation's
+    /// reservation is pushed before the person acknowledges, and the membership the
+    /// acknowledgement attaches is the first there is.
+    /// </summary>
+    [Fact]
+    public async Task INT_MAIL_006_AC1_TheMailboxIsOnTheServerBeforeTheMembershipBeginsAsync()
+    {
+        _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
+        _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
+
+        string token = _notifications.Mail[^1].Values["token"];
+        SubjectId holder = Holder();
+
+        _ = _identifiers.Verified(holder, IdentifierKind.Email, Personal);
+        _authenticators.Hold(Passkey(holder));
+        Accepted(await OpenAsync(holder, token));
+
+        Assert.NotNull(_server.Hosts(Corporate));
+        Assert.Empty(_attachments.Attached);
+        Assert.Empty(await _memberships.OfAsync(holder, TestContext.Current.CancellationToken));
+
+        Accepted(await AcknowledgeAsync(holder, _invitations.Held[0].Id));
+
+        Assert.Equal(Staff, Assert.Single(_attachments.Attached).Organization);
+        Assert.Equal(Corporate, Assert.Single(_server.Applied).Address);
+    }
+
+    /// <summary>
     /// REG-MAIL-001 AC2: the corporate address is never sent anything at issue: the
     /// link goes to the personal email alone.
     /// </summary>
