@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- A form another site posts as the whole page, with no session cookie on it, is no
+  longer refused by the browser profile: it is answered 303 with its own address, so
+  the browser reads that address with the session and the host's GET route there
+  continues. Nothing of the post is carried. The same post carrying the session, or
+  one that does not navigate the page, is refused as before.
+
 - A deployment that has not named every key it has to name now stops as it starts,
   before any other startup check and before the web server: the governing
   language under `model.startup.governinglanguage`, every other key under

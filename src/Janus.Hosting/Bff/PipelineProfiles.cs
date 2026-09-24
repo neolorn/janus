@@ -20,6 +20,15 @@ public static class PipelineProfiles
     /// Mounts the browser profile. Host middleware goes before this call or after the
     /// endpoints, never between the stages.
     /// </summary>
+    /// <remarks>
+    /// A processor that returns the browser by posting a form from its own site reaches
+    /// a public application without the session, the cookie being lax. Such a post is
+    /// never carried: the profile answers it 303 with its own address, the browser
+    /// reads that address with the session, and the host's route there is a GET that
+    /// asks the processor for the outcome rather than reading it from the post
+    /// (BFF-CSRF-005). A post of that kind that carries the session is refused as any
+    /// cross-site change is.
+    /// </remarks>
     /// <param name="application">The host's pipeline.</param>
     /// <returns>The pipeline, for chaining.</returns>
     /// <exception cref="ArgumentNullException">The pipeline is absent.</exception>

@@ -442,35 +442,77 @@ public sealed class BrowserProfileTests : IDisposable
     }
 
     /// <summary>
-    /// BFF-CSRF-005 AC4: a return the provider makes as a top-level navigation keeps
-    /// the session and reaches the application, while one arriving as a cross-site
-    /// state change does not, which is why a return that posts has to land on a route
-    /// that reads. The cookie a public application issues is lax, so the browser
-    /// carries it on that navigation (BFF-CSRF-005 AC2).
+    /// BFF-CSRF-005 AC4: a processor that returns the browser by posting a form from
+    /// its own site, with no session on it, is answered 303 with the same address and
+    /// reaches nothing; the read the browser then makes of that address carries the
+    /// session, the cookie a public application issues being lax (BFF-CSRF-005 AC2), and
+    /// reaches the host's route. A cross-site post that carries the session, that does
+    /// not navigate the page, or that loads into a frame is refused as before.
     /// </summary>
+    /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task BFF_CSRF_005_AC4_AReturnByNavigationKeepsTheSessionAsync()
+    public async Task BFF_CSRF_005_AC4_ACrossSitePostReturnContinuesAsTheHostsGetAsync()
     {
         var log = new LogInMemory<ResourceIsolation>();
         (OpaqueToken secret, OpaqueToken _) = await LiveAsync();
-        HttpContext navigating = Arriving(
-            "GET",
+        (string Name, string Value)[] returning =
+        [
             ("Sec-Fetch-Site", "cross-site"),
-            ("Sec-Fetch-Mode", "navigate"));
+            ("Sec-Fetch-Mode", "navigate"),
+            ("Sec-Fetch-Dest", "document"),
+        ];
 
-        Carrying(navigating, secret);
+        DefaultHttpContext posted = Arriving("POST", returning);
 
-        await new ResourceIsolation(log).InvokeAsync(navigating, Endpoint);
+        posted.Request.PathBase = "/host";
+        posted.Request.Path = "/return";
+        posted.Request.QueryString = new QueryString("?reference=r-1");
+
+        await new ResourceIsolation(log).InvokeAsync(posted, Endpoint);
+
+        Assert.False(_reached);
+        Assert.Equal(StatusCodes.Status303SeeOther, posted.Response.StatusCode);
+        Assert.Equal("/host/return?reference=r-1", posted.Response.Headers.Location.ToString());
+
+        DefaultHttpContext continuing = Arriving("GET", returning);
+
+        Carrying(continuing, secret);
+
+        await new ResourceIsolation(log).InvokeAsync(continuing, Endpoint);
 
         Assert.True(_reached);
         Assert.Equal(
             secret.Value,
-            navigating.Request.Cookies[BrowserCookies.Session]);
+            continuing.Request.Cookies[BrowserCookies.Session]);
 
         _reached = false;
 
-        await new ResourceIsolation(log)
-            .InvokeAsync(Arriving("POST", ("Sec-Fetch-Site", "cross-site")), Endpoint);
+        DefaultHttpContext carried = Arriving("POST", returning);
+
+        Carrying(carried, secret);
+
+        DefaultHttpContext[] refused =
+        [
+            carried,
+            Arriving(
+                "POST",
+                ("Sec-Fetch-Site", "cross-site"),
+                ("Sec-Fetch-Mode", "cors"),
+                ("Sec-Fetch-Dest", "empty")),
+            Arriving(
+                "POST",
+                ("Sec-Fetch-Site", "cross-site"),
+                ("Sec-Fetch-Mode", "navigate"),
+                ("Sec-Fetch-Dest", "iframe")),
+            Arriving("POST", ("Sec-Fetch-Site", "cross-site")),
+        ];
+
+        foreach (DefaultHttpContext context in refused)
+        {
+            await new ResourceIsolation(log).InvokeAsync(context, Endpoint);
+
+            Assert.Equal(StatusCodes.Status403Forbidden, context.Response.StatusCode);
+        }
 
         Assert.False(_reached);
     }

@@ -10350,6 +10350,60 @@ name the type (`SensitiveBodyAttribute`, in `Janus.Core`) and say that the libra
 own endpoints carry it and that an unknown endpoint counts as marked; chapter 17
 BFF-LOG-002 could say the same.
 
+---
+
+## 275. What the browser profile does with a processor's cross-site post return
+
+**Corrections 3 · 2026-09-24 · Tier 3 · BFF-CSRF-005 AC4, BFF-CSRF-002**
+
+*The question.* BFF-CSRF-005 AC4: "A cross-site POST return to a host route carrying
+no session cookie is handled as the host's GET continuation, not as a lost session;
+the library documents the pattern." The prose: "where one posts, the host's return
+route must be a GET that then continues, rather than relying on the session being
+present on the POST itself." BFF-CSRF-002: "Reject where `Sec-Fetch-Site` is
+`cross-site` and the request is state-changing", AC1 "A cross-site POST is rejected
+before reaching any endpoint." A post the processor makes reaches the resource
+isolation stage first and is refused there, so no host route can turn it into a GET
+unless the host puts its own code ahead of the stages. The criterion touches a gate,
+so the strictest reading is taken.
+
+*The readings.*
+
+1. The library refuses the post as today and documents that the host writes its own
+   middleware, ahead of the browser profile, that answers its return route with a
+   redirect.
+2. The resource isolation stage itself answers such a post 303 with its own address,
+   so the browser reads that address as a top-level navigation and the lax cookie
+   goes with it; nothing of the post is carried.
+
+*Chosen: 2*, in its narrowest form. Reading 1 asks every host to write code that
+meets cross-site posts ahead of every gate the library has, which is the hazard the
+stages exist to remove. Under reading 2:
+
+- Only a `POST` whose `Sec-Fetch-Site` is `cross-site`, `Sec-Fetch-Mode` is
+  `navigate` and `Sec-Fetch-Dest` is `document`, and which carries no session cookie,
+  is answered 303. A post that carries the session, one that does not navigate the
+  page, one that loads into a frame, and one without fetch metadata are refused
+  exactly as before with `session.csrf.invalid`.
+- The `Location` is the request's own encoded path and query, relative, so the answer
+  is never a redirect elsewhere. The body is not read and not forwarded.
+- It applies to every route of the browser profile, the library's included; a library
+  route that only accepts a post answers the read with 405, and no state changes.
+- The answer is recorded at Information under event 13 of the browser profile's log,
+  with the correlation identifier only.
+- BFF-CSRF-002 AC1 still holds: the post is not carried and reaches no endpoint.
+- The pattern is documented on `UseBrowserProfile`: the host's route there is a GET
+  that asks the processor for the outcome.
+
+*Tests that pin it.*
+`BrowserProfileTests.BFF_CSRF_005_AC4_ACrossSitePostReturnContinuesAsTheHostsGetAsync`,
+`BrowserProfileTests.BFF_CSRF_002_AC1_ACrossSitePostIsRejectedBeforeAnyEndpointAsync`.
+
+*Chapter text that should change.* Chapter 17 BFF-CSRF-005 could state the rule the
+stage applies (the three header values, no session cookie, 303 to the same address),
+and BFF-CSRF-002 could name it as the one cross-site post answered other than by
+refusal.
+
 
 # Rows for chapter 10
 
