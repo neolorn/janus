@@ -12524,8 +12524,10 @@ marked" with no row. Under 2:
   `outbox.retry.factor` per attempt with full jitter. The row is marked once every
   registered consumer has taken it, which is at once where none is registered.
 - After `outbox.retry.maxattempts` the row is failed and `degradation` (Normal) is
-  raised, scoped to the row, naming the kind, the attempts and the consumers still
-  outstanding, in the transaction that records the failure. A failed row is not offered
+  raised, scoped to the event's kind so that OPS-ALERT-002 keeps a consumer failing
+  every event of one kind to one alert inside `alerting.dedupe.window`, naming the row,
+  the attempts and the consumers still outstanding, in the transaction that records
+  the failure. A failed row is not offered
   again. There is no manual completion path: IDN-LIFE-003a requires one for erasure,
   restriction and takedown, which keep their own outbox.
 - Events are offered by the instant they were raised. Events of one millisecond carry

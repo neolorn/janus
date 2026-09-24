@@ -3,6 +3,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.Events;
 using Janus.Authentication.Tests;
 using Janus.Core;
@@ -108,8 +109,8 @@ public sealed class EventPublisherTests : IAsyncDisposable
     /// <summary>
     /// IDN-LIFE-003a, OPS-OBS-002: an event a consumer goes on refusing, here by
     /// throwing, is failed when <c>outbox.retry.maxattempts</c> is spent and
-    /// <c>degradation</c> is raised naming the consumer still outstanding; a failed
-    /// event is not offered again.
+    /// <c>degradation</c> is raised under its kind, naming the consumer still
+    /// outstanding; a failed event is not offered again.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -134,6 +135,11 @@ public sealed class EventPublisherTests : IAsyncDisposable
         AlertRaised raised = Assert.Single(_alerts.Of<AlertRaised>());
 
         Assert.Equal(AlertCondition.Degradation, raised.Condition);
+        Assert.StartsWith(
+            Alerts.Key(AlertCondition.Degradation, "event:AccountRegistered") + "@",
+            raised.IdempotencyKey,
+            StringComparison.Ordinal);
+        Assert.Equal(pending.Id.ToString(), raised.Details["event"].GetString());
         Assert.Equal("AccountRegistered", raised.Details["kind"].GetString());
         Assert.Equal(
             [typeof(RefusingConsumer).FullName],

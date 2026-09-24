@@ -106,13 +106,15 @@ internal sealed class EventPublisher(
             await events.RecordAsync(pending, cancellationToken).ConfigureAwait(false);
 
             // IDN-LIFE-003a: a spent budget is a diagnostic signal and not somewhere
-            // failures go quietly, so it is recorded with the alert or not at all.
+            // failures go quietly, so it is recorded with the alert or not at all. It
+            // is raised under the event's kind: a consumer that fails one event of a
+            // kind fails the rest, and OPS-ALERT-002 keeps that to one alert.
             if (spent
                 && (await alerts
                         .RaiseAsync(
                             Alerts.Of(
                                 AlertCondition.Degradation,
-                                "event:" + pending.Id,
+                                "event:" + pending.Raised.GetType().Name,
                                 now,
                                 Exhausted(pending, registered)),
                             cancellationToken)
