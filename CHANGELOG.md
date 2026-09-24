@@ -14,9 +14,9 @@ against the public contract of LIB-API-001.
   library's own processing makes true: the mail server, the SMS gateway, the hosting
   provider and password screening. The SMS gateway is now applied to every
   deployment's records of processing, as the hosting provider is, because every
-  deployment sends its text messages through a transport it registers. The payment,
-  shipping and developer rows are gone; a host declares every processor of its own
-  business on the model builder.
+  deployment sends its text messages through a transport it registers. The rows for
+  a host's own business and for developer tooling are gone; a host declares every
+  processor of its own business on the model builder.
 
 - A message goes out in the language its recipient's account settled on, else, where
   it answers a registration, sign-in or recovery request, in the locale that request
@@ -547,8 +547,8 @@ against the public contract of LIB-API-001.
 - The minor takedown, as `ITakedowns` and `POST /admin/accounts/{subject}/takedown`:
   under `takedown:execute` and step-up, one transaction suspends the account into its
   `takedown.grace` window, ends every session of it, records the trigger and the
-  reason, and writes the `TakedownExecuted` delivery the host confirms order
-  cancellation against. The answer carries `takedownId` and `erasureDue`.
+  reason, and writes the `TakedownExecuted` delivery on which the host stops its
+  own processing for the subject. The answer carries `takedownId` and `erasureDue`.
   `AccountSuspended` follows the commit; no deletion notice and no
   `AccountDeletionRequested` do.
 

@@ -282,7 +282,8 @@ internal sealed class Account
 
     /// <summary>
     /// Reverses a takedown inside its window, for the case where an adult was
-    /// misjudged. Cancelled orders are not restored; a restriction held comes back.
+    /// misjudged. What the host did on its <c>TakedownExecuted</c> is not undone; a
+    /// restriction held comes back.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// The account is not deleting, or its window was not entered by a takedown.

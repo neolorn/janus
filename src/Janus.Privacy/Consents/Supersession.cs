@@ -18,7 +18,7 @@ namespace Janus.Privacy.Consents;
 /// <remarks>
 /// Implements PRIV-CONS-007. Whether a version is material is the answer of the
 /// person publishing it and never a judgement of the code's: a text edit that
-/// superseded every customer's consent would stop a storefront on a paragraph.
+/// superseded every live consent would stop a service on a paragraph.
 /// Nothing here touches a purpose resting on another basis, because no consent record
 /// exists for one (PRIV-SENS-002a).
 /// </remarks>

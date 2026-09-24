@@ -35,7 +35,7 @@ internal sealed class Profile
     public DisplayName? DisplayName { get; private set; }
 
     /// <summary>
-    /// The name a host that invoices or ships collects.
+    /// The legal name, a proofing attribute collected only with a declared purpose.
     /// </summary>
     public LegalName? LegalName { get; private set; }
 

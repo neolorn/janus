@@ -20,7 +20,7 @@ namespace Janus.Core;
 /// </param>
 /// <param name="Callback">Whether it calls back into the deployment.</param>
 /// <remarks>
-/// Implements PRIV-ROPA-001, PRIV-ROPA-002 and chapter 05 section 8. The register is
+/// Implements PRIV-ROPA-001, PRIV-ROPA-002 and chapter 05 section 6. The register is
 /// a rendering of what was declared, so a recipient that is not declared cannot be
 /// sent anything and a recipient that is appears without anyone maintaining a list.
 /// </remarks>
