@@ -35,9 +35,9 @@ namespace Janus.Authentication.Recovery;
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where the cancel token is drawn from.</param>
 /// <remarks>
-/// Implements AUTH-RECOV-007, AUTH-RECOV-007a and AUTH-RECOV-008. Reporting asks no
-/// step-up, because the person reporting has lost the very factor a gate would ask
-/// for; what stands in its place is the window and the notices that run through it.
+/// Implements AUTH-RECOV-007, AUTH-RECOV-007a, AUTH-RECOV-008 and INF-BG-002. Reporting
+/// asks no step-up, because the person reporting has lost the very factor a gate would
+/// ask for; what stands in its place is the window and the notices that run through it.
 /// </remarks>
 internal sealed class LossReports(
     ILossReportStore reports,
@@ -285,10 +285,15 @@ internal sealed class LossReports(
     /// one is owed, invalidation where the window has run and a notice was delivered,
     /// and a hold where none was.
     /// </summary>
+    /// <param name="context">The system principal the pass runs as.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>How many reports were carried on.</returns>
-    public async ValueTask<Result<int>> AdvanceAsync(CancellationToken cancellationToken)
+    /// <exception cref="ArgumentException">
+    /// A person is asking, or the principal may not sweep what has expired.
+    /// </exception>
+    public async ValueTask<Result<int>> AdvanceAsync(AccessContext context, CancellationToken cancellationToken)
     {
+        SystemPrincipal principal = Sweeping(context);
         Error? failure = null;
 
         TimeSpan interval = (await configuration
@@ -311,7 +316,7 @@ internal sealed class LossReports(
 
         foreach (LossReport report in outstanding)
         {
-            (await CarryAsync(report, now, interval, cancellationToken).ConfigureAwait(false))
+            (await CarryAsync(principal, report, now, interval, cancellationToken).ConfigureAwait(false))
                 .Switch(count => carried += count, error => failure = error);
 
             if (failure is not null)
@@ -323,7 +328,17 @@ internal sealed class LossReports(
         return Result.Success(carried);
     }
 
+    // INF-BG-002 AC1: the pass runs as a named principal that may sweep what has
+    // expired, and never as nobody.
+    private static SystemPrincipal Sweeping(AccessContext context) =>
+        context?.Principal is { } principal && principal.MayRun(SystemOperation.ExpirySweep)
+            ? principal
+            : throw new ArgumentException(
+                "The pass runs as a system principal that may sweep what has expired.",
+                nameof(context));
+
     private async ValueTask<Result<int>> CarryAsync(
+        SystemPrincipal principal,
         LossReport report,
         DateTimeOffset now,
         TimeSpan interval,
@@ -345,14 +360,14 @@ internal sealed class LossReports(
             await work.BeginAsync(cancellationToken).ConfigureAwait(false);
             await reports.RecordAsync(report, cancellationToken).ConfigureAwait(false);
             await audit
-                .RecordedAsync(Held, report.Subject, report.Credential, now, cancellationToken)
+                .RecordedAsync(Held, principal, report.Subject, report.Credential, now, cancellationToken)
                 .ConfigureAwait(false);
             await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
             return Result.Success(1);
         }
 
-        return await InvalidateAsync(report, now, cancellationToken).ConfigureAwait(false);
+        return await InvalidateAsync(principal, report, now, cancellationToken).ConfigureAwait(false);
     }
 
     private async ValueTask<int> RepeatAsync(
@@ -374,6 +389,7 @@ internal sealed class LossReports(
     }
 
     private async ValueTask<Result<int>> InvalidateAsync(
+        SystemPrincipal principal,
         LossReport report,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -419,7 +435,7 @@ internal sealed class LossReports(
 
         await reports.RemoveAsync(report.Credential, cancellationToken).ConfigureAwait(false);
         await audit
-            .RecordedAsync(Invalidated, report.Subject, report.Credential, now, cancellationToken)
+            .RecordedAsync(Invalidated, principal, report.Subject, report.Credential, now, cancellationToken)
             .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 

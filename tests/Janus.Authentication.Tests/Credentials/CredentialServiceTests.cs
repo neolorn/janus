@@ -36,6 +36,9 @@ namespace Janus.Authentication.Tests.Credentials;
 [Trait("kind", "unit")]
 public sealed class CredentialServiceTests : IAsyncDisposable
 {
+    private static readonly AccessContext Sweeper = AccessContext.Of(
+        SystemPrincipal.ForDeployment("expiry-sweep", "OPS-OBS-003", SystemOperation.ExpirySweep));
+
     private const string Language = "en";
     private const string Source = "198.51.100.7";
     private const string Address = "person@example.test";
@@ -462,7 +465,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
 
         _clock.Advance(TimeSpan.FromDays(8));
 
-        _ = await Losses.AdvanceAsync(TestContext.Current.CancellationToken);
+        _ = await Losses.AdvanceAsync(Sweeper, TestContext.Current.CancellationToken);
 
         Assert.Equal(AuthenticatorState.Invalidated, Held(lost).State);
 

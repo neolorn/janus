@@ -23,7 +23,7 @@ namespace Janus.Storage.Identity.Audit;
 /// <param name="keyEncryptionKeys">The versions a subject key may be wrapped under.</param>
 /// <param name="randomness">The randomness the initialisation vector is drawn from.</param>
 /// <remarks>
-/// Implements IDN-AUD-001, PRIV-RET-002, PRIV-RET-003 and CONV-DESIGN-003.
+/// Implements IDN-AUD-001, IDN-PRIN-001, PRIV-RET-002, PRIV-RET-003 and CONV-DESIGN-003.
 /// Nothing here changes or removes a row: the only write is an append. The record is
 /// written through the operation's own connection, so an event on a path that opened no
 /// transaction stands on its own and one inside a transaction is part of it; a record
@@ -39,9 +39,9 @@ internal sealed class AuditStore(
         """
         INSERT INTO identity.audit_records
             (id, category, occurred_at, action, acting_subject, effective_subject,
-             organization, details, enc_details)
+             organization, details, enc_details, principal, principal_reason)
         VALUES (@id, @category, @at, @action, @acting, @effective, @organization,
-                CAST(@details AS jsonb), @personal);
+                CAST(@details AS jsonb), @personal, @principal, @reason);
         """;
 
     /// <inheritdoc/>
@@ -69,6 +69,8 @@ internal sealed class AuditStore(
                     organization = record.Organization?.Value,
                     details = Written(record.Details),
                     personal,
+                    principal = record.Principal,
+                    reason = record.Reason,
                 },
                 ambient.Transaction,
                 cancellationToken: cancellationToken))
@@ -157,7 +159,9 @@ internal sealed class AuditStore(
                 : Fields(PersonalFieldCipher.Decrypt(
                     dataKey,
                     Located(row.EffectiveSubject),
-                    row.PersonalDetails)));
+                    row.PersonalDetails)),
+            row.Principal,
+            row.PrincipalReason);
 
     private async ValueTask<byte[]> SealedAsync(
         AuditRecord record,

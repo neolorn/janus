@@ -13,9 +13,11 @@ namespace Janus.Privacy.Tests;
 /// <param name="Subject">Whose account it was done on.</param>
 /// <param name="At">When.</param>
 /// <param name="Details">The structured context.</param>
+/// <param name="Principal">The system principal that did it, where background work did.</param>
 internal sealed record PrivacyAuditEntry(
     AuditAction Action,
     SubjectId? Acting,
     SubjectId? Subject,
     DateTimeOffset At,
-    IReadOnlyDictionary<string, JsonElement> Details);
+    IReadOnlyDictionary<string, JsonElement> Details,
+    SystemPrincipal? Principal = null);

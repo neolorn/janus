@@ -11592,6 +11592,53 @@ a page for someone who is not technical is what FE-BG-001 forbids. Under it:
 reason", or chapter 09 and FE-BG-001 gain the member and the control; the owner
 decides which.
 
+---
+
+## 303. How an action of background work is audited, and what refuses it to nobody
+
+**Phase 9 · 2026-09-24 · Tier 3 · IDN-PRIN-001 AC1, AC3, AC4, INF-BG-002, IDN-AUD-001**
+
+*The question.* IDN-PRIN-001 AC4: "Actions taken by either are audited with the
+reason." INF-BG-002 AC1: "A background job cannot query without a principal." AC2:
+"Its actions are audited with the stated reason." The audit record holds an acting and
+an effective subject and nothing else about the actor, and the passes that audit took
+no principal at all: an erasure the sweep executed was recorded with the empty subject
+as its actor and no reason.
+
+*The readings.*
+
+1. Write the principal's name and reason into the record's `details` document.
+2. Give the record columns of its own for the principal and its reason, with the
+   acting subject left empty, and let the database refuse any other combination.
+
+*Chosen: 2*, the one the database enforces rather than the code remembering. Under it:
+
+- `audit_records` gains `principal` and `principal_reason`, and
+  `ck_audit_records_principal` admits them only together and only beside the empty
+  acting subject; the effective subject is still the account the action was taken
+  on, where there is one.
+- `AuditRecord.Of` has a form that takes a `SystemPrincipal`, and the privacy and
+  credential audit ports a form each; nothing else writes a principal.
+- Every pass that records what it does (the account and organization erasure sweeps,
+  the privacy-request deadline sweep and the loss-report windows) takes the
+  `AccessContext` it runs under and throws unless it carries a principal that may run
+  `expiry-sweep`, so a person, or a principal named for other work, cannot run it.
+- The breach query's public `AuditEntry` is unchanged, so the public surface does not
+  grow; it shows the empty acting subject for such a record.
+
+*Tests that pin it.*
+`AuditStoreTests.IDN_PRIN_001_AC4_ABackgroundActionIsRecordedWithItsReasonAsync`,
+`AuditStoreTests.IDN_PRIN_001_AC4_APrincipalIsRecordedOnlyWithItsReasonAndNoActorAsync`,
+`DeletionSweepTests.IDN_AUD_001_ThePassRecordsWhatItDidAndToWhomAsync`,
+`LossReportsTests.IDN_PRIN_001_AC4_AnInvalidationIsRecordedUnderTheSweepAsync`,
+`DeletionSweepTests.INF_BG_002_AC1_TheSweepNeverRunsAsNobodyAsync`,
+`OrganizationErasureSweepTests.INF_BG_002_AC1_TheSweepNeverRunsAsNobodyAsync`,
+`DeadlineSweepTests.INF_BG_002_AC1_TheSweepNeverRunsAsNobodyAsync`,
+`LossReportsTests.INF_BG_002_AC1_TheAdvanceNeverRunsAsNobodyAsync`.
+
+*Chapter text that should change.* IDN-AUD-001 could name the two columns beside the
+acting and effective subjects.
+
 
 # Rows for chapter 10
 

@@ -32,4 +32,18 @@ internal sealed class PrivacyAuditInMemory : IPrivacyAudit
 
         return ValueTask.CompletedTask;
     }
+
+    /// <inheritdoc/>
+    public ValueTask RecordedAsync(
+        AuditAction action,
+        SystemPrincipal principal,
+        SubjectId? subject,
+        DateTimeOffset at,
+        IReadOnlyDictionary<string, JsonElement> details,
+        CancellationToken cancellationToken)
+    {
+        _entries.Add(new PrivacyAuditEntry(action, Acting: null, subject, at, details, principal));
+
+        return ValueTask.CompletedTask;
+    }
 }

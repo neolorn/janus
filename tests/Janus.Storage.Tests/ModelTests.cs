@@ -120,7 +120,8 @@ public sealed class ModelTests
             "ancestry.resource_type",
 
             // Standing: the event record of IDN-AUD-001, with the attribute column
-            // PRIV-RET-002 puts an event's personal field in.
+            // PRIV-RET-002 puts an event's personal field in and the principal and
+            // reason IDN-PRIN-001 records an action of background work under.
             "audit_records.acting_subject",
             "audit_records.action",
             "audit_records.category",
@@ -130,6 +131,8 @@ public sealed class ModelTests
             "audit_records.id",
             "audit_records.occurred_at",
             "audit_records.organization",
+            "audit_records.principal",
+            "audit_records.principal_reason",
 
             // Credentials: the enrolled authenticator of AUTH-FACT-001, the shared secret
             // of AUTH-FACT-006 under the key, the WebAuthn columns AUTH-FACT-011 and

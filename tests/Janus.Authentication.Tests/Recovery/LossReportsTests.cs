@@ -30,6 +30,9 @@ namespace Janus.Authentication.Tests.Recovery;
 [Trait("kind", "unit")]
 public sealed class LossReportsTests : IAsyncDisposable
 {
+    private static readonly AccessContext Sweeper = AccessContext.Of(
+        SystemPrincipal.ForDeployment("expiry-sweep", "OPS-OBS-003", SystemOperation.ExpirySweep));
+
     private const string Language = "en";
     private const string Source = "198.51.100.7";
     private const string Address = "person@example.test";
@@ -77,6 +80,26 @@ public sealed class LossReportsTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// INF-BG-002 AC1, IDN-PRIN-001 AC3: the advance runs as a named principal that may
+    /// sweep what has expired, and is refused to a person and to a principal named for
+    /// other work.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INF_BG_002_AC1_TheAdvanceNeverRunsAsNobodyAsync()
+    {
+        await Assert.ThrowsAsync<ArgumentException>(async () => await Service.AdvanceAsync(
+            AccessContext.Of(new SubjectId(Guid.CreateVersion7())),
+            TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<ArgumentException>(async () => await Service.AdvanceAsync(
+            AccessContext.Of(SystemPrincipal.ForDeployment(
+                "mail-reconciliation",
+                "INT-MAIL-007",
+                SystemOperation.Reconciliation)),
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// AUTH-RECOV-007 AC1: a session holding nothing but a password reports the lost
     /// generator, no step-up is asked for, and it is refused from that instant.
     /// </summary>
@@ -97,6 +120,36 @@ public sealed class LossReportsTests : IAsyncDisposable
         Assert.Equal(_clock.GetUtcNow() + TimeSpan.FromDays(7), reported.InvalidatesAt);
         Assert.Equal(AuthenticatorState.Suspended, await StateAsync(generator));
         Assert.NotEmpty(_notifications.Mail);
+    }
+
+    /// <summary>
+    /// IDN-PRIN-001 AC4, INF-BG-002 AC2: the credential the window invalidates was
+    /// invalidated by nobody, so the record names the principal the sweep ran as and
+    /// the reason it stated, where a report names the person who made it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_PRIN_001_AC4_AnInvalidationIsRecordedUnderTheSweepAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        AuthenticatorId generator = await EnrolledAsync(subject);
+
+        _ = await Service.ReportAsync(
+            AccessContext.Of(subject),
+            generator,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        _clock.Advance(TimeSpan.FromDays(8));
+
+        _ = await Service.AdvanceAsync(Sweeper, TestContext.Current.CancellationToken);
+
+        int reported = _credentials.Records.FindIndex(record => record.Action == AuditActions.CredentialReportedLost);
+        int invalidated = _credentials.Records.FindIndex(record => record.Action == AuditActions.CredentialInvalidated);
+
+        Assert.Null(_credentials.Principals[reported]);
+        Assert.Same(Sweeper.Principal, _credentials.Principals[invalidated]);
+        Assert.Equal((AuditActions.CredentialInvalidated, subject, generator), _credentials.Records[invalidated]);
     }
 
     /// <summary>
@@ -144,7 +197,7 @@ public sealed class LossReportsTests : IAsyncDisposable
 
         _clock.Advance(TimeSpan.FromDays(8));
 
-        _ = await Service.AdvanceAsync(TestContext.Current.CancellationToken);
+        _ = await Service.AdvanceAsync(Sweeper, TestContext.Current.CancellationToken);
 
         CredentialInvalidated invalidated = Assert.Single(_events.Of<CredentialInvalidated>());
 
@@ -176,7 +229,7 @@ public sealed class LossReportsTests : IAsyncDisposable
 
         Assert.Equal(
             ErrorCodes.SystemFault,
-            Refused(await Service.AdvanceAsync(TestContext.Current.CancellationToken)));
+            Refused(await Service.AdvanceAsync(Sweeper, TestContext.Current.CancellationToken)));
     }
 
     /// <summary>
@@ -227,7 +280,7 @@ public sealed class LossReportsTests : IAsyncDisposable
 
         _clock.Advance(TimeSpan.FromDays(8));
 
-        _ = await Service.AdvanceAsync(TestContext.Current.CancellationToken);
+        _ = await Service.AdvanceAsync(Sweeper, TestContext.Current.CancellationToken);
 
         Assert.Equal(AssuranceLevel.Aal1, await ReachableAsync(subject));
     }
@@ -251,7 +304,7 @@ public sealed class LossReportsTests : IAsyncDisposable
 
         _clock.Advance(TimeSpan.FromDays(3));
 
-        _ = await Service.AdvanceAsync(TestContext.Current.CancellationToken);
+        _ = await Service.AdvanceAsync(Sweeper, TestContext.Current.CancellationToken);
 
         Assert.Equal(AuthenticatorState.Suspended, await StateAsync(generator));
 
@@ -265,7 +318,7 @@ public sealed class LossReportsTests : IAsyncDisposable
 
         _clock.Advance(TimeSpan.FromDays(8));
 
-        _ = await Service.AdvanceAsync(TestContext.Current.CancellationToken);
+        _ = await Service.AdvanceAsync(Sweeper, TestContext.Current.CancellationToken);
 
         Assert.Equal(AuthenticatorState.Active, await StateAsync(generator));
     }
@@ -317,7 +370,7 @@ public sealed class LossReportsTests : IAsyncDisposable
 
         _clock.Advance(TimeSpan.FromDays(8));
 
-        _ = await Service.AdvanceAsync(TestContext.Current.CancellationToken);
+        _ = await Service.AdvanceAsync(Sweeper, TestContext.Current.CancellationToken);
 
         Assert.Equal(AuthenticatorState.Suspended, await StateAsync(generator));
         Assert.NotNull(
@@ -347,7 +400,7 @@ public sealed class LossReportsTests : IAsyncDisposable
 
         _clock.Advance(TimeSpan.FromDays(8));
 
-        _ = await Service.AdvanceAsync(TestContext.Current.CancellationToken);
+        _ = await Service.AdvanceAsync(Sweeper, TestContext.Current.CancellationToken);
 
         Assert.Null(await _sets.FindAsync(subject, TestContext.Current.CancellationToken));
     }
@@ -376,7 +429,7 @@ public sealed class LossReportsTests : IAsyncDisposable
 
         _clock.Advance(TimeSpan.FromDays(8));
 
-        _ = await Service.AdvanceAsync(TestContext.Current.CancellationToken);
+        _ = await Service.AdvanceAsync(Sweeper, TestContext.Current.CancellationToken);
 
         Assert.True(
             (await _passwords.FindAsync(subject, TestContext.Current.CancellationToken))!
@@ -402,7 +455,7 @@ public sealed class LossReportsTests : IAsyncDisposable
 
         _clock.Advance(TimeSpan.FromDays(8));
 
-        _ = await Service.AdvanceAsync(TestContext.Current.CancellationToken);
+        _ = await Service.AdvanceAsync(Sweeper, TestContext.Current.CancellationToken);
 
         Assert.False(
             (await _passwords.FindAsync(subject, TestContext.Current.CancellationToken))!
@@ -485,7 +538,7 @@ public sealed class LossReportsTests : IAsyncDisposable
 
         _clock.Advance(TimeSpan.FromDays(1));
 
-        _ = await Service.AdvanceAsync(TestContext.Current.CancellationToken);
+        _ = await Service.AdvanceAsync(Sweeper, TestContext.Current.CancellationToken);
 
         Assert.True(_notifications.Mail.Count > sent);
         Assert.Equal(first, _notifications.Mail[^1].Values["token"]);
@@ -512,13 +565,13 @@ public sealed class LossReportsTests : IAsyncDisposable
             TestContext.Current.CancellationToken);
 
         _clock.Advance(TimeSpan.FromDays(1));
-        _ = await Service.AdvanceAsync(TestContext.Current.CancellationToken);
+        _ = await Service.AdvanceAsync(Sweeper, TestContext.Current.CancellationToken);
 
         string? settled = _notifications.Mail[^1].Language;
 
         _identifiers.Reads(subject, "fr");
         _clock.Advance(TimeSpan.FromDays(1));
-        _ = await Service.AdvanceAsync(TestContext.Current.CancellationToken);
+        _ = await Service.AdvanceAsync(Sweeper, TestContext.Current.CancellationToken);
 
         Assert.Equal("ar", settled);
         Assert.Null(_notifications.Mail[^1].Language);

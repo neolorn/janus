@@ -61,4 +61,15 @@ internal sealed class AuditRowRecord
     /// effective subject's key.
     /// </summary>
     public byte[]? PersonalDetails { get; set; }
+
+    /// <summary>
+    /// The <c>principal</c> column: the system principal that took the action, absent
+    /// where a person took it.
+    /// </summary>
+    public string? Principal { get; set; }
+
+    /// <summary>
+    /// The <c>principal_reason</c> column: the reason that principal stated.
+    /// </summary>
+    public string? PrincipalReason { get; set; }
 }

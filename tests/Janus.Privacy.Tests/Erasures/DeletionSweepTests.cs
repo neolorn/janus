@@ -20,6 +20,9 @@ namespace Janus.Privacy.Tests.Erasures;
 [Trait("kind", "unit")]
 public sealed class DeletionSweepTests : IAsyncDisposable
 {
+    private static readonly AccessContext Sweeper = AccessContext.Of(
+        SystemPrincipal.ForDeployment("expiry-sweep", "OPS-OBS-003", SystemOperation.ExpirySweep));
+
     private static readonly DateTimeOffset Noon = new(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly SubjectId Ahmed =
@@ -54,12 +57,12 @@ public sealed class DeletionSweepTests : IAsyncDisposable
 
         _accounts.Deletes(Ahmed, DeletionOrigin.Self, Noon - grace + TimeSpan.FromMinutes(1));
 
-        Assert.Equal(0, await Sweep.SweepAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(0, await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
         Assert.Empty(_eraser.Erased);
 
         _clock.Advance(TimeSpan.FromMinutes(1));
 
-        Assert.Equal(1, await Sweep.SweepAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
         Assert.Equal(Ahmed, Assert.Single(_eraser.Erased).Subject);
     }
 
@@ -77,7 +80,7 @@ public sealed class DeletionSweepTests : IAsyncDisposable
 
         _clock.Advance(Settings.AccountDeletionGrace.Default);
 
-        Assert.Equal(1, await Sweep.SweepAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
         Assert.Equal(Ahmed, Assert.Single(_eraser.Erased).Subject);
         Assert.Equal(AccountState.Active, _accounts.Of(Noura));
     }
@@ -94,7 +97,7 @@ public sealed class DeletionSweepTests : IAsyncDisposable
 
         _clock.Advance(Settings.AccountDeletionGrace.Default);
 
-        _ = await Sweep.SweepAsync(TestContext.Current.CancellationToken);
+        _ = await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken);
 
         Delivery announced = Assert.Single(_outbox.Deliveries);
 
@@ -120,7 +123,7 @@ public sealed class DeletionSweepTests : IAsyncDisposable
 
         _clock.Advance(Settings.AccountDeletionGrace.Default);
 
-        _ = await Sweep.SweepAsync(TestContext.Current.CancellationToken);
+        _ = await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken);
 
         Assert.Equal(ErasureReason.MinorTakedown, Assert.Single(_eraser.Erased).Reason);
         Assert.Equal(ErasureReason.MinorTakedown, Assert.Single(_outbox.Deliveries).Reason);
@@ -140,11 +143,11 @@ public sealed class DeletionSweepTests : IAsyncDisposable
 
         _clock.Advance(Settings.TakedownGrace.Default - TimeSpan.FromMinutes(1));
 
-        Assert.Equal(0, await Sweep.SweepAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(0, await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
 
         _clock.Advance(TimeSpan.FromMinutes(1));
 
-        Assert.Equal(1, await Sweep.SweepAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
         Assert.Equal(Ahmed, Assert.Single(_eraser.Erased).Subject);
         Assert.Equal(AccountState.Deleting, _accounts.Of(Noura));
     }
@@ -161,7 +164,7 @@ public sealed class DeletionSweepTests : IAsyncDisposable
 
         _clock.Advance(Settings.TakedownGrace.Default);
 
-        Assert.Equal(1, await Sweep.SweepAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
 
         Erasure erased = Assert.Single(_eraser.Erased);
         Delivery delivery = Assert.Single(_outbox.Deliveries);
@@ -172,8 +175,29 @@ public sealed class DeletionSweepTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-AUD-001: what the pass did is written down against the account it was
-    /// done to, with no acting person, because nobody acted.
+    /// INF-BG-002 AC1, IDN-PRIN-001 AC3: the pass runs as a named principal that may
+    /// sweep what has expired, and is refused to a person and to a principal named for
+    /// other work.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INF_BG_002_AC1_TheSweepNeverRunsAsNobodyAsync()
+    {
+        await Assert.ThrowsAsync<ArgumentException>(async () => await Sweep.SweepAsync(
+            AccessContext.Of(new SubjectId(Guid.CreateVersion7())),
+            TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<ArgumentException>(async () => await Sweep.SweepAsync(
+            AccessContext.Of(SystemPrincipal.ForDeployment(
+                "mail-reconciliation",
+                "INT-MAIL-007",
+                SystemOperation.Reconciliation)),
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// IDN-AUD-001, IDN-PRIN-001 AC4, INF-BG-002 AC2: what the pass did is written down
+    /// against the account it was done to, with no acting person, because nobody acted,
+    /// and under the principal the pass ran as and the reason it stated.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -183,13 +207,14 @@ public sealed class DeletionSweepTests : IAsyncDisposable
 
         _clock.Advance(Settings.AccountDeletionGrace.Default);
 
-        _ = await Sweep.SweepAsync(TestContext.Current.CancellationToken);
+        _ = await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken);
 
         PrivacyAuditEntry recorded = Assert.Single(_audit.Entries);
 
         Assert.Equal("privacy.erasure.executed", recorded.Action.ToString());
         Assert.Equal(Ahmed, recorded.Subject);
         Assert.Null(recorded.Acting);
+        Assert.Same(Sweeper.Principal, recorded.Principal);
         Assert.Equal(_clock.GetUtcNow(), recorded.At);
         Assert.Equal("OutOfBandRequest", recorded.Details["deletingBy"].GetString());
     }
@@ -207,11 +232,11 @@ public sealed class DeletionSweepTests : IAsyncDisposable
 
         _clock.Advance(TimeSpan.FromDays(14));
 
-        Assert.Equal(0, await Sweep.SweepAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(0, await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
 
         _configuration.Set(Settings.AccountDeletionGrace, TimeSpan.FromDays(7));
 
-        Assert.Equal(1, await Sweep.SweepAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
     }
 
     /// <summary>
@@ -227,7 +252,7 @@ public sealed class DeletionSweepTests : IAsyncDisposable
 
         _clock.Advance(Settings.AccountDeletionGrace.Default + TimeSpan.FromHours(1));
 
-        Assert.Equal(2, await Sweep.SweepAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(2, await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
 
         Assert.Equal<IEnumerable<SubjectId>>(
             [Ahmed, Noura],

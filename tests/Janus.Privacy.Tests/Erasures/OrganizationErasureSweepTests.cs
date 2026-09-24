@@ -16,6 +16,9 @@ namespace Janus.Privacy.Tests.Erasures;
 [Trait("kind", "unit")]
 public sealed class OrganizationErasureSweepTests : IAsyncDisposable
 {
+    private static readonly AccessContext Sweeper = AccessContext.Of(
+        SystemPrincipal.ForDeployment("expiry-sweep", "OPS-OBS-003", SystemOperation.ExpirySweep));
+
     private static readonly DateTimeOffset Noon = new(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly OrganizationId Acme =
@@ -36,6 +39,26 @@ public sealed class OrganizationErasureSweepTests : IAsyncDisposable
 
     private OrganizationErasureSweep Sweep =>
         new(_organizations, _events, _audit, _configuration, _work, _clock);
+
+    /// <summary>
+    /// INF-BG-002 AC1, IDN-PRIN-001 AC3: the pass runs as a named principal that may
+    /// sweep what has expired, and is refused to a person and to a principal named for
+    /// other work.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INF_BG_002_AC1_TheSweepNeverRunsAsNobodyAsync()
+    {
+        await Assert.ThrowsAsync<ArgumentException>(async () => await Sweep.SweepAsync(
+            AccessContext.Of(new SubjectId(Guid.CreateVersion7())),
+            TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<ArgumentException>(async () => await Sweep.SweepAsync(
+            AccessContext.Of(SystemPrincipal.ForDeployment(
+                "mail-reconciliation",
+                "INT-MAIL-007",
+                SystemOperation.Reconciliation)),
+            TestContext.Current.CancellationToken));
+    }
 
     /// <summary>
     /// IDN-ORG-003 AC3: the erasure executes when the window elapses and not before,
@@ -172,7 +195,7 @@ public sealed class OrganizationErasureSweepTests : IAsyncDisposable
 
         _events.Refusal = Error.From(ErrorCodes.SystemFault);
 
-        Result<int> swept = await Sweep.SweepAsync(TestContext.Current.CancellationToken);
+        Result<int> swept = await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken);
 
         Assert.Equal(
             ErrorCodes.SystemFault,
@@ -182,6 +205,6 @@ public sealed class OrganizationErasureSweepTests : IAsyncDisposable
     }
 
     private async ValueTask<int> ErasedAsync() =>
-        (await Sweep.SweepAsync(TestContext.Current.CancellationToken))
+        (await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken))
             .Match(count => count, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
 }
