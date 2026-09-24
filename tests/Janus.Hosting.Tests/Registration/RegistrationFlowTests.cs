@@ -18,8 +18,9 @@ namespace Janus.Hosting.Tests.Registration;
 
 /// <summary>
 /// The registration flow as a browser drives it: the pre-authentication session it
-/// is bound to, what a browser without that cookie may do, and where the tokens are
-/// (BFF-CSRF-005a, BFF-CSRF-005b, REG-SESS-001).
+/// is bound to, what a browser without that cookie may do, where the tokens are, and
+/// that it asks nothing of the mail server (BFF-CSRF-005a, BFF-CSRF-005b,
+/// REG-SESS-001, INT-MAIL-006).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class RegistrationFlowTests : IAsyncDisposable
@@ -45,6 +46,37 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync() => await _deployment.DisposeAsync();
+
+    /// <summary>
+    /// INT-MAIL-006 AC2: a customer who registers is given no mailbox: none is
+    /// reserved, none is written down, and nothing reaches the mail server.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_006_AC2_RegisteringACustomerProvisionsNoMailboxAsync()
+    {
+        _ = await Flow.SignedInAsync(_deployment);
+
+        Assert.Empty(_deployment.Mailboxes.Held);
+        Assert.Equal(0, _deployment.Mailboxes.Recorded);
+        Assert.Empty(_deployment.MailServer.Received);
+    }
+
+    /// <summary>
+    /// INT-MAIL-006 AC4: registration asks nothing of the mail server, so a customer
+    /// registers while it cannot be reached.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_006_AC4_AnUnreachableMailServerDoesNotBlockRegistrationAsync()
+    {
+        _deployment.MailServer.Unreachable = true;
+
+        _ = await Flow.SignedInAsync(_deployment);
+
+        Assert.Single(_deployment.Directory.Created);
+        Assert.Empty(_deployment.MailServer.Received);
+    }
 
     /// <summary>
     /// BFF-CSRF-005a AC1: a browser that carries nothing is given a first contact by
