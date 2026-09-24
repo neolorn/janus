@@ -4,6 +4,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
@@ -378,6 +379,39 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
         Assert.Contains(
             _events.Published.OfType<AlertRaised>(),
             raised => raised.Condition is AlertCondition.ApproverVolume);
+    }
+
+    /// <summary>
+    /// OPS-ALERT-001 and AUTH-RECOV-002: recovery approvals clustering on one account
+    /// raise the alert under that account once they reach the threshold, and not before.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_001_RecoveryClusteringOnOneAccountIsRaisedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        (SubjectId first, SessionId opened) = await ApproverAsync();
+        (SubjectId second, SessionId another) = await ApproverAsync();
+
+        _configuration.Set(Settings.RecoveryApproversRequired, 2);
+        _configuration.Set(Settings.AlertingRecoveryAccountThreshold, 2);
+
+        _ = await Approving(first, opened, subject, Reason);
+
+        Assert.DoesNotContain(
+            _events.Published.OfType<AlertRaised>(),
+            raised => raised.Condition is AlertCondition.RecoveryClustering);
+
+        _ = await Approving(second, another, subject, Reason);
+
+        AlertRaised clustering = Assert.Single(
+            _events.Published.OfType<AlertRaised>(),
+            raised => raised.Condition is AlertCondition.RecoveryClustering);
+
+        Assert.Equal(AlertSeverity.High, clustering.Severity);
+        Assert.Equal(
+            Alerts.Key(AlertCondition.RecoveryClustering, subject.ToString()),
+            Alerts.Deduplication(clustering.IdempotencyKey));
     }
 
     /// <summary>
