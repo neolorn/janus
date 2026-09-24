@@ -13,7 +13,8 @@ namespace Janus.Authentication.Accounts;
 
 /// <summary>
 /// What an administrator does to the standing of someone else's account: suspends it,
-/// reactivates it, lifts its restriction and cancels its deletion.
+/// reactivates it, lifts its restriction and cancels its deletion, and reads the photo it
+/// shows.
 /// </summary>
 /// <param name="scope">Whether the caller administers accounts in the deployment.</param>
 /// <param name="stepUp">What the gated operations ask of the administrator's session.</param>
@@ -23,6 +24,7 @@ namespace Janus.Authentication.Accounts;
 /// <param name="configuration">Where the grace window is read.</param>
 /// <param name="events">Where the transition is announced.</param>
 /// <param name="audit">Where what the administrator did is recorded.</param>
+/// <param name="photos">Where the photo an account shows is read.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -40,6 +42,7 @@ internal sealed class AccountAdministration(
     IConfigurationStore configuration,
     IEvents events,
     IAccountAudit audit,
+    ProfilePhotos photos,
     IUnitOfWork work,
     TimeProvider time) : IAccounts
 {
@@ -316,6 +319,25 @@ internal sealed class AccountAdministration(
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success();
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result<ReadOnlyMemory<byte>>> ReadPhotoAsync(
+        AccessContext context,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (await scope.RefusedAsync(context, Permissions.AccountManage, cancellationToken).ConfigureAwait(false)
+            is Error refused)
+        {
+            return Result.Failure<ReadOnlyMemory<byte>>(refused);
+        }
+
+        return await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false) is null
+            ? Result.Failure<ReadOnlyMemory<byte>>(Malformed("subject"))
+            : await photos.ReadOfAsync(subject, cancellationToken).ConfigureAwait(false);
     }
 
     private static string Key(SubjectId subject, DateTimeOffset at) =>

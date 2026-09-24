@@ -1,10 +1,12 @@
 using System;
 using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Sessions;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
 using Xunit;
 
@@ -115,6 +117,37 @@ public sealed class AccountAdministrationEndpointTests : IAsyncDisposable
         Assert.Equal(AccountState.Active, await StateAsync(member.Subject));
         Assert.Equal(StatusCodes.Status409Conflict, refused.Status);
         Assert.Equal("identity.takedown.active", refused.Text("code"));
+    }
+
+    /// <summary>
+    /// IDN-ATTR-003 AC3: an account's photo is served to an administrator as the JPEG it
+    /// is, with nothing a shared cache could hand to anyone else, and an account that
+    /// shows none is not found.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ATTR_003_AC3_AnAccountsPhotoIsServedToAnAdministratorAsync()
+    {
+        Session member = await MemberAsync();
+        Session bare = await MemberAsync();
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        var organization = OrganizationId.New(_deployment.Clock);
+
+        _deployment.Memberships.Place(member.Subject, organization);
+        _deployment.Memberships.Place(bare.Subject, organization);
+        _deployment.Configuration.Set(Settings.OrganizationPhoto, organization.ToString(), true);
+        _deployment.Accounts.Shows(member.Subject, Encoding.ASCII.GetBytes("a-photo"));
+        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Administration, Permissions.AccountManage);
+
+        Answer read = await browser.SendAsync("GET", PathOf(member.Subject, "photo"));
+        Answer none = await browser.SendAsync("GET", PathOf(bare.Subject, "photo"));
+
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+        Assert.Equal("image/jpeg", read.Header("Content-Type"));
+        Assert.Equal("no-store", read.Header("Cache-Control"));
+        Assert.Null(read.Header("ETag"));
+        Assert.Equal("a-photo", read.Body);
+        Assert.Equal(StatusCodes.Status404NotFound, none.Status);
     }
 
     private static string PathOf(SubjectId subject, string operation) =>

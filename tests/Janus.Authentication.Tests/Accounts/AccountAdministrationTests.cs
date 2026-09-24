@@ -84,6 +84,7 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
             _configuration,
             _events,
             _audit,
+            new ProfilePhotos(_directory, _memberships, _configuration, _audit, _work, codec: null, _clock),
             _work,
             _clock);
 
@@ -387,6 +388,52 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
         Assert.Empty(_audit.Administered);
     }
 
+    /// <summary>
+    /// IDN-ATTR-003 AC3: the photo an account shows is read through the gate, so an
+    /// administrator reads it, an unknown subject is named, and a person without the
+    /// permission is refused it.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ATTR_003_AC3_AnAccountsPhotoIsReadThroughTheGateAsync()
+    {
+        var organization = OrganizationId.New(_clock);
+        byte[] image = [0xFF, 0xD8, 0xFF, 0xD9];
+
+        _memberships.Place(_member, organization);
+        _configuration.Set(Settings.OrganizationPhoto, organization.ToString(), true);
+        _directory.Shows(_member, image);
+
+        Assert.Equal(image, (await PhotoAsync(Acting, _member)).Match(read => read.ToArray(), _ => []));
+        Assert.Equal(
+            ErrorCodes.RequestMalformed,
+            Refused(await PhotoAsync(Acting, SubjectId.New(_randomness))));
+        Assert.Equal(ErrorCodes.Denied, Refused(await PhotoAsync(AccessContext.Of(_member), _member)));
+        Assert.Empty(_audit.Administered);
+    }
+
+    /// <summary>
+    /// IDN-ATTR-002: a photo is read for an administrator only where the account's own
+    /// organizations show photos, and an account that shows none answers alike.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ATTR_002_APhotoThePolicyWithholdsIsNotReadAsync()
+    {
+        var organization = OrganizationId.New(_clock);
+        var bare = SubjectId.New(_randomness);
+
+        _directory.Stands(bare, AccountState.Active);
+        _memberships.Place(_member, organization);
+        _memberships.Place(bare, organization);
+        _configuration.Set(Settings.OrganizationPhoto, organization.ToString(), false);
+        _directory.Shows(_member, new byte[] { 0xFF, 0xD8, 0xFF, 0xD9 });
+
+        Assert.True((await PhotoAsync(Acting, _member)).Match(read => read.IsEmpty, _ => false));
+
+        _configuration.Set(Settings.OrganizationPhoto, organization.ToString(), true);
+
+        Assert.True((await PhotoAsync(Acting, bare)).Match(read => read.IsEmpty, _ => false));
+    }
+
     private static DateTimeOffset Stale =>
         Noon - Settings.SessionStepUpRecency.Default - TimeSpan.FromMinutes(1);
 
@@ -397,6 +444,14 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
         outcome.Match<ErrorCode>(
             () => throw new Xunit.Sdk.XunitException("The operation was admitted."),
             error => error.Code);
+
+    private static ErrorCode Refused<T>(Result<T> outcome) =>
+        outcome.Match<ErrorCode>(
+            _ => throw new Xunit.Sdk.XunitException("The operation was admitted."),
+            error => error.Code);
+
+    private async Task<Result<ReadOnlyMemory<byte>>> PhotoAsync(AccessContext context, SubjectId subject) =>
+        await Administration.ReadPhotoAsync(context, subject, TestContext.Current.CancellationToken);
 
     private async Task<Result> SuspendAsync(SubjectId subject) =>
         await Administration.SuspendAsync(

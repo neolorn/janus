@@ -363,6 +363,12 @@ against the public contract of LIB-API-001.
   window 422 `identity.deletion.windowelapsed`, and an account in no window 403
   `authz.denied`. `IAccounts.CancelDeletionAsync` is the same operation in process.
 
+- `GET /admin/accounts/{subject}/photo` serves the photo an account shows to an
+  administrator holding `account:manage`, as `image/jpeg` with `Cache-Control:
+  no-store`. An account that shows none and one whose organizations withhold photos
+  both answer 404; an unknown subject answers 400 `api.request.malformed` naming
+  `subject`. `IAccounts.ReadPhotoAsync` is the same read in process.
+
 - Staff mailboxes are provisioned through `IMailServer`, which a deployment registers
   where its staff mail is hosted and which no package ships. A mailbox is owed
   `disabled` from its reservation, `enabled` while its holder is an active member of

@@ -9568,6 +9568,49 @@ request's status vocabulary has no value for it.
 answers and say which origins it cancels, and IDN-LIFE-003 could say that "recorded
 against the request" is the audit row naming it.
 
+---
+
+## 261. What reading an account's photo as an administrator answers and whose policy withholds it
+
+**Phase 8 · 2026-09-24 · Tier 2 · IDN-ATTR-002, IDN-ATTR-003, IDN-AUD-001, chapter 09 sections 6 and 8a**
+
+*The question.* Chapter 09 section 8a lists `GET /admin/accounts/{subject}/photo` under
+"Accounts: `account:manage`" with "**404** where none is set or the policy does not
+enable photos (D-147)", and section 6 has staff photos read through it "under the same
+rule" as the account's own read. Nothing says whose policy is meant, since the
+administrator and the account may stand in different organizations, what an unknown
+subject answers, or whether the read is audited.
+
+*The readings.*
+
+1. The account's own organizations decide, as for its own read: every organization it
+   belongs to must show photos.
+2. The administrative organization's key decides.
+3. Both must show photos.
+
+*Chosen: 1.* IDN-ATTR-002 makes photos an organization's to show for its members, and
+the administrative organization is not the account's; under 1 a photo the account's
+policy withholds is withheld from every read, the administrator's included, which is
+the rule the account's own read already follows. Reading 3 would add a key the
+administrative organization never declared for anyone but its own members.
+
+- `IAccounts.ReadPhotoAsync`, under `account:manage` in the administrative
+  organization; no step-up, as chapter 10 section 5a names no gate for it.
+- **200** with the stored JPEG as `image/jpeg` and `Cache-Control: no-store`, no `ETag`;
+  **404** where the account shows none or its policy withholds photos, alike; **400**
+  `api.request.malformed` naming `subject` where no account bears it (entry 254);
+  **403** `authz.denied` without the permission or where no person acts.
+- Not audited: IDN-AUD-001 records lifecycle events, and a read changes nothing.
+
+*Tests that pin it.*
+`AccountAdministrationTests.IDN_ATTR_003_AC3_AnAccountsPhotoIsReadThroughTheGateAsync`,
+`AccountAdministrationTests.IDN_ATTR_002_APhotoThePolicyWithholdsIsNotReadAsync`,
+`AccountAdministrationEndpointTests.IDN_ATTR_003_AC3_AnAccountsPhotoIsServedToAnAdministratorAsync`,
+`SessionRequirementTests` (the list of session routes).
+
+*Chapter text that should change.* Chapter 09 section 8a could say that "the policy" is
+that of the account's organizations and give the endpoint its other answers.
+
 
 # Rows for chapter 10
 

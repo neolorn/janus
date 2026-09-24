@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -14,7 +15,8 @@ namespace Janus.Core;
 /// restriction and cancelling a deletion are none. Suspension ends every session of the
 /// account in the transaction that suspends it, and reactivation restores what the
 /// account held exactly as it held it, a restriction in force included. Every change is
-/// audited as the administrator's, on the account it was made on.
+/// audited as the administrator's, on the account it was made on; reading the photo
+/// changes nothing and is not.
 /// </remarks>
 public interface IAccounts
 {
@@ -88,6 +90,22 @@ public interface IAccounts
     /// <c>authz.denied</c> where the account is not in a grace window.
     /// </returns>
     ValueTask<Result> CancelDeletionAsync(
+        AccessContext context,
+        SubjectId subject,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The profile photo an account shows, for the management application.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The stored JPEG, empty where the account shows none or no organization it belongs
+    /// to shows photos; or the refusal: <c>api.request.malformed</c> naming
+    /// <c>subject</c> where no account bears it.
+    /// </returns>
+    ValueTask<Result<ReadOnlyMemory<byte>>> ReadPhotoAsync(
         AccessContext context,
         SubjectId subject,
         CancellationToken cancellationToken);

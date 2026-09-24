@@ -13,14 +13,21 @@ namespace Janus.Hosting.Accounts;
 /// The account endpoints of chapter 09 section 8a, under <c>account:manage</c>.
 /// </summary>
 /// <remarks>
-/// Implements CONV-DESIGN-006, LIB-API-005, IDN-LIFE-003, IDN-LIFE-013, AUTH-SESS-010
-/// and PRIV-RIGHT-004. Each is one line to <see cref="IAccounts"/>; the permission, the
+/// Implements CONV-DESIGN-006, LIB-API-005, IDN-LIFE-003, IDN-LIFE-013, AUTH-SESS-010,
+/// PRIV-RIGHT-004 and IDN-ATTR-003. Each is one line to <see cref="IAccounts"/>; the permission, the
 /// step-up and the state are the service's to judge, so a host calling it in process
 /// meets the same refusals.
 /// </remarks>
 internal static class AccountAdministrationEndpoints
 {
     private static readonly IResult Nothing = TypedResults.NoContent();
+
+    // Chapter 09 section 8a: an account that shows no photo, and one whose policy shows
+    // none, answer alike.
+    private static readonly IResult NoPhoto = TypedResults.NotFound();
+
+    // IDN-ATTR-004: what is stored is JPEG, whatever was uploaded.
+    private const string StoredPhoto = "image/jpeg";
 
     /// <summary>
     /// Mounts them.
@@ -38,6 +45,7 @@ internal static class AccountAdministrationEndpoints
         _ = SessionRequired.On(group.MapPost("/reactivate", ReactivateAsync));
         _ = SessionRequired.On(group.MapPost("/restriction/lift", LiftRestrictionAsync));
         _ = SessionRequired.On(group.MapPost("/delete/cancel", CancelDeletionAsync));
+        _ = SessionRequired.On(group.MapGet("/photo", ReadPhotoAsync));
 
         return endpoints;
     }
@@ -118,5 +126,32 @@ internal static class AccountAdministrationEndpoints
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
+    }
+
+    private static async Task<IResult> ReadPhotoAsync(
+        IAccounts accounts,
+        RequestSession browser,
+        HttpContext context,
+        Guid subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        // IDN-ATTR-003 AC3: the image is served through the gate, never at a public
+        // address, and carries nothing a shared cache could hand to anyone else.
+        context.Response.Headers.CacheControl = "no-store";
+
+        return Answers.Of(
+            await accounts
+                .ReadPhotoAsync(
+                    AccessContext.Of(browser.Required.Subject),
+                    new SubjectId(subject),
+                    cancellationToken)
+                .ConfigureAwait(false),
+            image => image.IsEmpty
+                ? NoPhoto
+                : TypedResults.Bytes(image, StoredPhoto));
     }
 }
