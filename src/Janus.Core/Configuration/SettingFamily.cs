@@ -35,4 +35,12 @@ public abstract class SettingFamily
     /// <param name="parameter">The organization identifier or the declared category.</param>
     /// <returns>The key.</returns>
     public ConfigurationKey For(string parameter) => ConfigurationKey.Parse(Prefix + "." + parameter);
+
+    /// <summary>
+    /// Hands the family, typed, to an operation that works on any family.
+    /// </summary>
+    /// <typeparam name="TResult">What the operation answers.</typeparam>
+    /// <param name="operation">The operation.</param>
+    /// <returns>What it answered.</returns>
+    internal abstract TResult Apply<TResult>(ISettingFamilyOperation<TResult> operation);
 }

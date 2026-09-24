@@ -486,6 +486,7 @@ Janus.Core.Configuration.SettingFamily<TValue>.Default.get -> TValue
 Janus.Core.Configuration.SettingFamily<TValue>.HasDefault.get -> bool
 Janus.Core.Configuration.SettingFamily<TValue>.Read(string! parameter, string! stored) -> Janus.Core.Result<TValue>
 Janus.Core.Configuration.SettingFamily<TValue>.Write(TValue value) -> string!
+Janus.Core.Configuration.SettingFamily<TValue>.Loosens(TValue before, TValue after) -> bool
 Janus.Core.Configuration.SettingScope
 Janus.Core.Configuration.SettingScope.Protected = 1 -> Janus.Core.Configuration.SettingScope
 Janus.Core.Configuration.SettingScope.Runtime = 0 -> Janus.Core.Configuration.SettingScope
@@ -2589,6 +2590,7 @@ Janus.Core.SuspensionOrigin.Self = 0 -> Janus.Core.SuspensionOrigin
 Janus.Core.SystemOperation
 Janus.Core.SystemOperation.Bootstrap = 6 -> Janus.Core.SystemOperation
 Janus.Core.SystemOperation.KeyRotation = 7 -> Janus.Core.SystemOperation
+Janus.Core.SystemOperation.Configuration = 8 -> Janus.Core.SystemOperation
 Janus.Core.SystemOperation.Delivery = 4 -> Janus.Core.SystemOperation
 Janus.Core.SystemOperation.ExpirySweep = 3 -> Janus.Core.SystemOperation
 Janus.Core.SystemOperation.Monitoring = 5 -> Janus.Core.SystemOperation

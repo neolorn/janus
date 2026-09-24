@@ -61,6 +61,8 @@ internal sealed class ConfigurationAudit(
         ConfigurationKey key,
         string? before,
         string after,
+        bool loosening,
+        string reason,
         SystemPrincipal principal,
         DateTimeOffset at,
         CancellationToken cancellationToken)
@@ -77,7 +79,7 @@ internal sealed class ConfigurationAudit(
                     principal,
                     effectiveSubject: null,
                     organization: null,
-                    Details(key, before, after, loosening: false, principal.Reason)),
+                    Details(key, before, after, loosening, reason)),
                 cancellationToken)
             .ConfigureAwait(false);
     }

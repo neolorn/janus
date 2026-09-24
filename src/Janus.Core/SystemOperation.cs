@@ -62,4 +62,10 @@ public enum SystemOperation
     /// </summary>
     [JsonStringEnumMemberName("key-rotation")]
     KeyRotation = 7,
+
+    /// <summary>
+    /// Changing a protected key from the server, which the application cannot do.
+    /// </summary>
+    [JsonStringEnumMemberName("configuration")]
+    Configuration = 8,
 }

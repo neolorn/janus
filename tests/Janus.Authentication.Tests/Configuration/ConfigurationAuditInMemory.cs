@@ -38,6 +38,8 @@ internal sealed class ConfigurationAuditInMemory : IConfigurationAudit
         ConfigurationKey key,
         string? before,
         string after,
+        bool loosening,
+        string reason,
         SystemPrincipal principal,
         DateTimeOffset at,
         CancellationToken cancellationToken)

@@ -12376,6 +12376,105 @@ IDN-LIFE-012a could say the provider's subject is held encrypted beside its
 fingerprint; AUTH-ABUSE-004 AC6 could admit the version; OPS-MIG-003a AC4 could list
 the rights above; the runbook's "printed but not rotated" could point at the command.
 
+---
+
+## 319. How a protected key is changed from the server, and what the change records and raises
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-CFG-004 AC2, OPS-CFG-005, OPS-ALERT-001, D-071, chapter 10 section 4.8**
+
+*The question.* OPS-CFG-004 AC2: "Changing one requires access the application itself
+does not have; a command-line operation restricted to the server satisfies this as well
+as a redeployment." D-071: "Whatever mechanism is used must record the change and
+alert." Chapter 10 section 4.8 leaves the mechanism to the deployment ("an
+infrastructure choice"). Until now a protected key was written by bootstrap alone
+(entry 315), so after bootstrap no mechanism existed, and a key changed by hand in the
+database would be neither recorded nor raised. Nothing says which credential the
+change runs under, whether it carries a reason, whether it is priced by direction,
+what a member of `stepup.enforcement.<organization>` names, or what the governing
+language's "a restart to change" means for a command.
+
+*The readings.*
+
+1. Build no mechanism: a protected key changes by redeployment of a fresh database or
+   by hand, unrecorded.
+2. A command of `Janus.Cli` under the maintenance credential.
+3. A command of `Janus.Cli` under the connection the piped document names, as
+   bootstrap runs, taking protected keys only, each change recorded and raised.
+
+*Chosen: 3*, the strictest that builds what D-071 requires: reading 1 leaves every
+change unrecorded, and reading 2 gives the maintenance credential a third use that
+OPS-MIG-003a ("exactly two uses") forbids. Under 3:
+
+- The command is `configure`: `--<key> <value>` for each key and `--reason <text>`.
+  Only a key the catalogue marks protected is taken, or one organization's member of
+  the protected family, named `stepup.enforcement.<organization identifier>` with the
+  identifier as the key holds it. Any other key, including every key the application
+  may change, is refused with `api.request.malformed` naming `--<key>`, as bootstrap
+  refuses a key it does not take (entry 308). A value its key does not admit is
+  refused with the key's own code before the database is reached.
+- A reason is required whatever the direction, and a change without one, or with a
+  blank one, is refused with `auth.restriction.reasonrequired`, the code OPS-CFG-002
+  gives a loosening without a reason. No step-up is asked: the command has no session,
+  and whoever holds the server can already do worse (D-071).
+- The command runs under the connection the piped document names (entry 307), as
+  bootstrap does, so the protection is access to the server and to the document, not
+  a database right the application lacks. The application's own credential can still
+  write the settings table; the application's code cannot write a protected key
+  (`config.key.protected`), and no endpoint or job reaches the command's service.
+- Each value is written in one transaction with the rest, and recorded as
+  `ops.configuration.changed` under the deployment-scoped principal `configure` with
+  the reason `OPS-CFG-004` and the new operation `configuration`, carrying `key`,
+  `before` (null where no value stood), `after`, `loosening` and the operator's
+  `reason`. The direction is the key's own rule; a value set where none stood loosens
+  nothing, as bootstrap's values do not (entry 315), and one whose direction cannot be
+  read from what stands is a loosening (D-079b). Bootstrap now writes its values
+  through the same writer, and the settings table has two writers: the configuration
+  store and that writer.
+- Each key changed raises `protected-setting-changed` (High) with the key in its
+  details, deduplicated per key. The governing language also raises
+  `governing-language-changed` (Normal): the two rows of OPS-ALERT-001 are both about
+  this change, and raising both keeps most. Every named key is written, recorded and
+  raised, even where its value is the one in force.
+- A member of `stepup.enforcement.<organization>` for an organization the deployment
+  does not hold is refused with `config.value.notallowed` naming the key and the field
+  `organization`, so a mistyped identifier does not leave an operator believing a
+  switch was thrown.
+- The change is checked by the rule the host's start applies (LIB-HOST-001) over what
+  the settings table holds once it is written, so a change that would leave the
+  deployment unable to start (`hosting.location` outside Egypt with no
+  `hosting.crossborderbasis`) is refused with the code and key that start would give,
+  and nothing of it stays.
+- A change takes effect where the library next reads the key. The governing language
+  is read where a document version is published, so a change from the server takes
+  effect without a restart; OPS-CFG-004 AC2 admits a command as well as a
+  redeployment, and D-146's ground (not a runtime toggle of the application) holds.
+- `audit.enabled`, `exfiltration.export.auditing`, `token.signature.verification` and
+  `stepup.enforcement.<organization>` are read by nothing in the library: it audits,
+  audits exports, verifies signatures and enforces step-up whatever they hold. A change
+  to one from the server is recorded and raised and changes no behaviour. The chapters
+  say these may not be turned off through the application and nowhere what turning
+  one off does, and honouring an off-switch would grant more than ignoring it.
+- Success prints `{"changed":[...]}`, the keys in the order named and nothing of their
+  values; a refusal is the JSON line of entry 308 on standard error with exit code 1.
+
+*Tests that pin it.*
+`ConfigureTests.OPS_CFG_004_AC2_AProtectedKeyIsChangedFromTheServerWrittenDownAndRaisedAsync`,
+`ConfigureTests.OPS_CFG_004_TheGoverningLanguageIsRaisedUnderItsOwnConditionAsync`,
+`ConfigureTests.OPS_CFG_004_AnOrganizationsStepUpEnforcementIsSwitchedFromTheServerAsync`,
+`ConfigureTests.OPS_CFG_004_AKeyTheApplicationChangesIsRefusedAsync`,
+`ConfigureTests.OPS_CFG_004_AChangeWithoutAReasonIsRefusedAsync`,
+`ConfigureTests.OPS_CFG_004_AValueItsKeyDoesNotAdmitIsRefusedAsync`,
+`ConfigureTests.OPS_CFG_004_AChangeThatLeavesTheDeploymentUnableToStartIsRefusedAsync`,
+`LibraryStructureTests.OPS_CFG_004_AC2_OnlyTheCommandLineWritesAProtectedKey`,
+`LibraryStructureTests.OPS_CFG_002_OnlyTheConfigurationAdministrationWritesARuntimeSetting`.
+
+*Chapter text that should change.* OPS-CFG-004 could name the command, say that it
+takes a reason and no step-up, and say what turning off each switch does, if
+anything; chapter 10 section 4.8 could say the mechanism is the command rather than
+an infrastructure choice; OPS-CFG-005 could say how a change from the server is
+recorded; IDN-PRIN-001 could list `configure` among the system principals;
+OPS-ALERT-001 could say whether the governing language raises one alert or both.
+
 
 # Rows for chapter 10
 
@@ -12566,7 +12665,7 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `identity.takedown.executed` | security | `AuditActions.TakedownExecuted` | Phase one of a takedown committed: the account entered its window, its sessions ended and the hosts' delivery was written. Details carry `takedown`, `trigger` (spelled as `10` section 5.12d), `reason` and `erasureDue`. (IDN-LIFE-003) |
 | `identity.takedown.reversed` | security | `AuditActions.TakedownReversed` | A takedown was reversed inside its window and the account restored to active. Details carry `reason`. (IDN-LIFE-003) |
 | `identity.username.changed` | routine | `AuditActions.UsernameChanged` | The account's username was changed, which holds the old one for as long as the retention says. (REG-IDENT-009) |
-| `ops.configuration.changed` | security | `AuditActions.ConfigurationChanged` | A runtime setting is put in force through the one configuration operation. Details carry `key`, `before`, `after`, `loosening` and, where the change is a loosening, `reason`. (OPS-CFG-002, OPS-CFG-005) |
+| `ops.configuration.changed` | security | `AuditActions.ConfigurationChanged` | A runtime setting is put in force through the one configuration operation, or a value is set by bootstrap or by `configure` from the server under that command's principal. Details carry `key`, `before`, `after`, `loosening` and, where the change is a loosening or is made from the server, `reason`. (OPS-CFG-002, OPS-CFG-004, OPS-CFG-005, entries 315 and 319) |
 | `privacy.consent.granted` | security | `AuditActions.ConsentGranted` | A consent was granted for a purpose, naming the document version it was given against. (PRIV-CONS-004) |
 | `privacy.consent.withdrawn` | security | `AuditActions.ConsentWithdrawn` | A consent was withdrawn for a purpose. (PRIV-CONS-008) |
 | `privacy.document.published` | security | `AuditActions.DocumentPublished` | A version of a legal document was published in the governing language. (PRIV-CONS-005) |

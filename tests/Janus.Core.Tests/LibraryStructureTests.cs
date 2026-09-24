@@ -283,8 +283,9 @@ public sealed class LibraryStructureTests
     /// OPS-CFG-002, OPS-CFG-005: one operation writes a runtime setting, so a change
     /// that went round it would be a change nobody was told of and nobody had to answer
     /// for. Nothing else in the library calls the store's write, and the settings table
-    /// is written by the store and by bootstrap's seed alone, which sets the values the
-    /// deployment starts from and records each (OPS-BOOT-001, entry 315).
+    /// is written by the store and by the writer of protected keys alone, which bootstrap
+    /// and the change from the server reach, each recording what it sets (OPS-BOOT-001,
+    /// OPS-CFG-004, entries 315 and 319).
     /// </summary>
     [Fact]
     public void OPS_CFG_002_OnlyTheConfigurationAdministrationWritesARuntimeSetting()
@@ -299,8 +300,25 @@ public sealed class LibraryStructureTests
 
         Assert.Empty(writing);
         Assert.Equal(
-            ["ConfigurationStore.cs", "DeploymentSeed.cs"],
+            ["ConfigurationStore.cs", "ProtectedSettings.cs"],
             Named(text => Regex.IsMatch(text, @"\bSettings\s*\.\s*Add\(", RegexOptions.None, TimeSpan.FromSeconds(5))));
+    }
+
+    /// <summary>
+    /// OPS-CFG-004 AC1 and AC2, D-071: a protected key is written by bootstrap and by the
+    /// change from the server alone, and the change from the server is run by the command
+    /// line alone, so no endpoint of the management application and no job of the worker
+    /// reaches either.
+    /// </summary>
+    [Fact]
+    public void OPS_CFG_004_AC2_OnlyTheCommandLineWritesAProtectedKey()
+    {
+        Assert.Equal(
+            ["DeploymentSeed.cs", "IProtectedSettings.cs", "ProtectedConfiguration.cs", "ProtectedSettings.cs", "StorageRegistration.cs"],
+            Named(text => Regex.IsMatch(text, @"\bIProtectedSettings\b", RegexOptions.None, TimeSpan.FromSeconds(5))));
+        Assert.Equal(
+            ["ConfigureCommand.cs", "ProtectedConfiguration.cs"],
+            Named(text => Regex.IsMatch(text, @"\bProtectedConfiguration\b", RegexOptions.None, TimeSpan.FromSeconds(5))));
     }
 
     /// <summary>

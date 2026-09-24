@@ -24,6 +24,7 @@ namespace Janus.Storage.Authentication.Bootstrap;
 /// privacy stores.
 /// </summary>
 /// <param name="context">The context the writes are tracked on.</param>
+/// <param name="settings">Where each value set is written.</param>
 /// <param name="organizations">Where the administrative organization is written.</param>
 /// <param name="accounts">Where each account row is written.</param>
 /// <param name="subjectKeys">Where each account's data key is drawn and written.</param>
@@ -40,6 +41,7 @@ namespace Janus.Storage.Authentication.Bootstrap;
 /// </remarks>
 internal sealed class DeploymentSeed(
     StoreContext context,
+    IProtectedSettings settings,
     IOrganizationStore organizations,
     IAccountStore accounts,
     ISubjectKeyStore subjectKeys,
@@ -78,25 +80,18 @@ internal sealed class DeploymentSeed(
         ArgumentNullException.ThrowIfNull(written);
 
         // OPS-CFG-004 and OPS-CFG-005: what bootstrap sets, protected keys among them, is
-        // written here by whoever holds the server and never through the application's
-        // configuration store, and each value is recorded as any change is.
+        // written by whoever holds the server and never through the application's
+        // configuration store, and each value is recorded as any change is. It is the
+        // value the deployment starts from, so it is recorded as no loosening:
+        // OPS-CFG-002 prices a change made through the application (entry 315).
         foreach ((ConfigurationKey key, string value) in written)
         {
-            SettingRecord? record = await context.Settings.FindAsync([key], cancellationToken).ConfigureAwait(false);
-            string? before = record?.Value;
+            string? before = await settings.WriteAsync(key, value, cancellationToken).ConfigureAwait(false);
 
-            if (record is null)
-            {
-                record = new SettingRecord { Key = key };
-                context.Settings.Add(record);
-            }
-
-            record.Value = value;
-
-            await configurationAudit.ChangedAsync(key, before, value, principal, at, cancellationToken).ConfigureAwait(false);
+            await configurationAudit
+                .ChangedAsync(key, before, value, loosening: false, principal.Reason, principal, at, cancellationToken)
+                .ConfigureAwait(false);
         }
-
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>

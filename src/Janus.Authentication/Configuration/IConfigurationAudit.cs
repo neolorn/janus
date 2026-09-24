@@ -27,15 +27,15 @@ internal interface IConfigurationAudit
     ValueTask ChangedAsync(ConfigurationChange change, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Records a value bootstrap set, under the principal it runs as. What bootstrap sets
-    /// is the value the deployment starts from, named by whoever holds the server, so it
-    /// is recorded as no loosening: OPS-CFG-002 prices a change made through the
-    /// application.
+    /// Records a value a command on the server set, bootstrap or a change of a protected
+    /// key, under the principal it runs as.
     /// </summary>
     /// <param name="key">Which setting.</param>
     /// <param name="before">What it read as, or nothing where no value stood.</param>
     /// <param name="after">What it reads as now.</param>
-    /// <param name="principal">The principal that set it, with its stated reason.</param>
+    /// <param name="loosening">Whether the change loosened the deployment.</param>
+    /// <param name="reason">Why.</param>
+    /// <param name="principal">The principal that set it.</param>
     /// <param name="at">When.</param>
     /// <param name="cancellationToken">Abandons the write.</param>
     /// <returns>The work of recording it.</returns>
@@ -43,6 +43,8 @@ internal interface IConfigurationAudit
         ConfigurationKey key,
         string? before,
         string after,
+        bool loosening,
+        string reason,
         SystemPrincipal principal,
         DateTimeOffset at,
         CancellationToken cancellationToken);

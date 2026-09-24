@@ -369,6 +369,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `configure` changes protected keys from the server, the one way to change a key the
+  management application refuses: pipe the key document to it as to `bootstrap` and
+  name each key as `--<key> <value>`, with `--reason`. It takes the keys chapter 10
+  section 4.8 protects and `stepup.enforcement.<organization>` for an organization the
+  deployment holds, and refuses every other key. Each change is recorded under the
+  `configure` principal with its reason and raises `protected-setting-changed`; the
+  governing language also raises `governing-language-changed`. A change that would
+  leave the deployment unable to start is refused and nothing of it is written.
 - A change to the system policy or to an organization's policy that leaves any step-up
   gate asking less (a lower level, phishing resistance no longer asked, or a longer
   maximum age) raises the High `stepup-policy-weakened` alert as it is made, naming the

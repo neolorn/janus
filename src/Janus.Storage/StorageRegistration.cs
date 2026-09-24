@@ -140,6 +140,7 @@ internal static class StorageRegistration
         services.AddSingleton<RandomNumberGenerator>(_ => RandomNumberGenerator.Create());
 
         services.AddScoped<IConfigurationStore, ConfigurationStore>();
+        services.AddScoped<IProtectedSettings, ProtectedSettings>();
 
         services.AddScoped<IAccountStore, AccountStore>();
         services.AddScoped<ISubjectKeyStore>(provider => new SubjectKeyStore(
