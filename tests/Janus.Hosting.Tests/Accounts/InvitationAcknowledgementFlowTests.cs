@@ -61,6 +61,64 @@ public sealed class InvitationAcknowledgementFlowTests : IAsyncDisposable
         Assert.Equal("2", document.GetProperty("version").GetString());
     }
 
+    /// <summary>
+    /// REG-INV-002 AC3 and REG-INV-001 AC3: the person acknowledges the invitation the
+    /// membership step showed and the membership attaches to the account that is
+    /// signed in, with the documents shown; no second account is made, and the step
+    /// has nothing more to show.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_INV_002_AC3_AcknowledgingAttachesTheMembershipToTheSameAccountAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId holder = _deployment.Directory.Created[^1].Subject;
+        int accounts = _deployment.Directory.Created.Count;
+        Invitation invitation = Attached(holder);
+
+        Answer acknowledged = await browser.SendAsync(
+            "POST",
+            "/account/invitation/acknowledge",
+            ("invitationId", invitation.Id.Value));
+
+        Answer after = await browser.SendAsync("GET", "/account/invitation");
+        Janus.Authentication.Tests.Invitations.AttachedMembership attached =
+            Assert.Single(_deployment.Attachments.Attached);
+
+        Assert.Equal(StatusCodes.Status204NoContent, acknowledged.Status);
+        Assert.Equal((holder, invitation.Organization), (attached.Subject, attached.Organization));
+        Assert.Equal([new InvitationDocument("staff-handbook", "2")], attached.Acknowledged);
+        Assert.Equal(accounts, _deployment.Directory.Created.Count);
+        Assert.Equal(StatusCodes.Status404NotFound, after.Status);
+    }
+
+    /// <summary>
+    /// Chapter 09 section 6a: the invitation acknowledged is named, and a request that
+    /// names none is malformed; one that names an invitation the account does not hold
+    /// is answered as one that does not exist.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_INV_002_TheAcknowledgedInvitationIsNamedAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId holder = _deployment.Directory.Created[^1].Subject;
+
+        _ = Attached(holder);
+
+        Answer unnamed = await browser.SendAsync("POST", "/account/invitation/acknowledge", "{}");
+        Answer unknown = await browser.SendAsync(
+            "POST",
+            "/account/invitation/acknowledge",
+            ("invitationId", Guid.NewGuid()));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, unnamed.Status);
+        Assert.Equal("invitationId", unnamed.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Equal(StatusCodes.Status404NotFound, unknown.Status);
+        Assert.Equal(ErrorCodes.InvitationNotFound.ToString(), unknown.Text("code"));
+        Assert.Empty(_deployment.Attachments.Attached);
+    }
+
     // An invitation into a named organization, from an account that shows its name,
     // attached to the account that opened its link.
     private Invitation Attached(SubjectId holder)

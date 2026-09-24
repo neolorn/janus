@@ -134,6 +134,7 @@ internal sealed class Deployment : IAsyncDisposable
         Grants = new OidcAuthorizationStoreInMemory(Tokens);
         Provider = new ProviderInMemory(this);
         Organizations = new Janus.Authentication.Tests.Organizations.OrganizationsInMemory(Memberships);
+        Attachments = new Janus.Authentication.Tests.Invitations.MembershipAttachmentInMemory(Memberships);
 
         Declared = preferences ?? PreferenceDeclarations.None;
         Accounts = new AccountDirectoryInMemory(Declared);
@@ -474,6 +475,11 @@ internal sealed class Deployment : IAsyncDisposable
     public Janus.Authentication.Tests.Invitations.InvitationStoreInMemory Invitations { get; } = new();
 
     /// <summary>
+    /// The memberships the acknowledged invitations attached.
+    /// </summary>
+    public Janus.Authentication.Tests.Invitations.MembershipAttachmentInMemory Attachments { get; }
+
+    /// <summary>
     /// The roles an invitation may name.
     /// </summary>
     public Janus.Authentication.Tests.Invitations.RoleCatalogueInMemory RoleCatalogue { get; } = new();
@@ -754,6 +760,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<Janus.Authentication.Invitations.IRoleCatalogue>(RoleCatalogue);
         _ = services.AddSingleton<Janus.Authentication.Mailboxes.IMailboxStore>(Mailboxes);
         _ = services.AddSingleton<IMailServer>(MailServer);
+        _ = services.AddSingleton<Janus.Authentication.Invitations.IMembershipAttachment>(Attachments);
+        _ = services.AddScoped<Janus.Authentication.Invitations.InvitationAcknowledgement>();
         _ = services.AddScoped<IInvitations, Janus.Authentication.Invitations.InvitationService>();
         _ = services.AddScoped<SigningKeys>();
         _ = services.AddScoped<OidcService>();

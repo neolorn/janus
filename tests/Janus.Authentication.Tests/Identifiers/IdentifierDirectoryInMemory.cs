@@ -204,6 +204,52 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
     }
 
     /// <inheritdoc/>
+    public ValueTask TakeCorporateAsync(
+        SubjectId subject,
+        IdentifierId id,
+        string entered,
+        string canonical,
+        IdentifierId personal,
+        DateTimeOffset at,
+        int maximum,
+        CancellationToken cancellationToken)
+    {
+        List<HeldIdentifier> all = Of(subject);
+        HeldIdentifier kept = Required(subject, personal);
+
+        if (all.Count(identifier => identifier.Kind is IdentifierKind.Email) >= maximum)
+        {
+            throw new InvalidOperationException("The account holds as many of that kind as it may.");
+        }
+
+        if (!kept.IsVerified || kept.Kind is not IdentifierKind.Email)
+        {
+            throw new InvalidOperationException("Only a verified email is kept.");
+        }
+
+        for (int place = 0; place < all.Count; place++)
+        {
+            if (all[place].Kind is IdentifierKind.Email)
+            {
+                all[place] = all[place] with { IsPrimary = false, IsPersonal = all[place].Id == personal };
+            }
+        }
+
+        all.Add(new HeldIdentifier(
+            id,
+            IdentifierKind.Email,
+            entered,
+            canonical,
+            IsVerified: true,
+            IsPrimary: true,
+            IsLocked: true,
+            IsPersonal: false,
+            at));
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
     public ValueTask ProveAsync(
         SubjectId subject,
         IdentifierId id,

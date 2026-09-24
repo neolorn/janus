@@ -832,6 +832,36 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-009a AC3 and IDN-LIFE-009b: a password that signed the account in
+    /// before it gained a membership signs nothing in once the organization's policy,
+    /// which does not permit it, is the one the account holds.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_009a_AC3_APasswordHeldBeforeTheMembershipNoLongerAuthenticatesAsync()
+    {
+        var organization = OrganizationId.New(_clock);
+        SubjectId subject = Subject();
+
+        Admits(organization, Factor.Passkey);
+
+        Assert.Null(Refusal(await Service.BeginAsync(
+            subject,
+            [Factor.Password],
+            Somewhere,
+            TestContext.Current.CancellationToken)));
+
+        _memberships.Place(subject, organization);
+
+        Assert.Equal(
+            ErrorCodes.FactorNotPermitted,
+            Refusal(await Service.BeginAsync(
+                subject,
+                [Factor.Password],
+                Somewhere,
+                TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
     /// AUTH-FACT-002 AC3: disabling an entry blocks the sign-in and deletes nothing,
     /// so naming it again admits the same account with no re-enrolment in between.
     /// </summary>

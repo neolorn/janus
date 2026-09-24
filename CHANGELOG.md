@@ -296,6 +296,24 @@ against the public contract of LIB-API-001.
   `identity.identifier.locked`; the account view shows it `locked`. Apply the
   migration, which adds `is_personal` to the identifiers table.
 
+- `POST /account/invitation/acknowledge` with `{ "invitationId" }` acknowledges the
+  invitation the membership step showed (204): the membership attaches carrying the
+  documents at their versions and when, each role is granted across the organization
+  as given by who invited them, and the audit trail records
+  `identity.invitation.acknowledged`. Where the organization's mail is integrated, the
+  corporate address becomes the primary email, verified and locked, the personal email
+  stays beside it, the mailbox is owed enabled, and the account's notice set is told
+  of the address. Nothing attaches until the account meets the organization's
+  required assurance and credential redundancy with the factors that organization
+  permits (403 `auth.stepup.required`, outcome `enrol`, naming the `field` and its
+  `value`); a bound identifier not verified on the account answers 422
+  `identity.invitation.identifiermismatch`, an invitation that no longer stands 422
+  `identity.invitation.expired`, and one the account does not hold 404
+  `identity.invitation.notfound`. The export carries `acknowledgedAt` on a membership
+  and a `membership-acknowledgements` section. Apply the migration, which adds the
+  acknowledgement to the memberships table. `IInvitations.AcknowledgeAsync` is the same
+  operation in process.
+
 - Staff mailboxes are provisioned through `IMailServer`, which a deployment registers
   where its staff mail is hosted and which no package ships. A mailbox is owed
   `disabled` from its reservation, `enabled` while its holder is an active member of

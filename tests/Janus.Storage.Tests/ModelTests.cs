@@ -375,6 +375,8 @@ public sealed class ModelTests
 
             // Standing: the membership record of IDN-MEM-001, with its own beginning
             // and end.
+            "memberships.acknowledged_at",
+            "memberships.acknowledged_documents",
             "memberships.created_at",
             "memberships.ended_at",
             "memberships.id",

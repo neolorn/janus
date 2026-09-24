@@ -7,8 +7,10 @@ using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Identity.Identifiers;
 using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Authentication.Identifiers;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Identifiers;
+using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -359,6 +361,53 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     /// <summary>
+    /// REG-MAIL-001 and REG-INV-001 AC4: the corporate address an organization asserts
+    /// is taken on verified, locked and primary, and the personal email it displaces
+    /// stays verified beside it as the membership's; both read back so.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_001_TheCorporateAddressIsTakenOnPrimaryBesideThePersonalEmailAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        IdentifierId personal = await WriteAsync(subject, _entered);
+        string entered = Fresh("Staff");
+        var corporate = IdentifierId.New(TimeProvider.System);
+
+        await RecordAsync(subject, set =>
+        {
+            set.Verify(personal, Noon);
+            set.MakePrimary(personal);
+        });
+
+        await using (StoreContext writing = database.Context())
+        {
+            await Directory(writing)
+                .TakeCorporateAsync(
+                    subject,
+                    corporate,
+                    entered,
+                    Canonicalised(entered),
+                    personal,
+                    Noon,
+                    maximum: 5,
+                    TestContext.Current.CancellationToken);
+
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        IdentifierSet read = await Store(reading).FindBySubjectAsync(
+            subject,
+            TestContext.Current.CancellationToken);
+        Identifier taken = read.Find(corporate)!;
+        Identifier kept = read.Find(personal)!;
+
+        Assert.Equal(Canonicalised(entered), taken.Canonical);
+        Assert.True(taken is { IsVerified: true, IsPrimary: true, IsLocked: true, IsPersonal: false });
+        Assert.True(kept is { IsVerified: true, IsPrimary: false, IsPersonal: true });
+    }
+
+    /// <summary>
     /// A value the account changed replaces both stored forms and the fingerprint, so
     /// the old value belongs to nobody and the new one belongs to the account.
     /// </summary>
@@ -519,6 +568,9 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
 
     private IdentifierStore Store(StoreContext context) =>
         new(context, _deployment.Keys, Deployment.FingerprintKey, _deployment.Randomness);
+
+    private IdentifierDirectory Directory(StoreContext context) =>
+        new(Store(context), new PreferenceStore(context, _deployment.Keys, _deployment.Randomness));
 
     private static string Fresh(string person) =>
         person + "." + Guid.NewGuid().ToString("N") + "@Example.COM";

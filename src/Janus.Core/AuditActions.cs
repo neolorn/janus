@@ -178,6 +178,13 @@ public static class AuditActions
         AuditAction.Parse("identity.invitation.revoked");
 
     /// <summary>
+    /// An invitation was acknowledged and the membership it offered attached.
+    /// </summary>
+    /// <remarks>Implements REG-INV-001, IDN-LIFE-009a and IDN-AUD-001.</remarks>
+    public static AuditAction InvitationAcknowledged { get; } =
+        AuditAction.Parse("identity.invitation.acknowledged");
+
+    /// <summary>
     /// A takedown was triggered, naming what raised it and the reason written for it.
     /// </summary>
     /// <remarks>Implements IDN-LIFE-003, chapter 10 section 5.</remarks>

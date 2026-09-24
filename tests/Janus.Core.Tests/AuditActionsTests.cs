@@ -44,6 +44,7 @@ public sealed class AuditActionsTests
         "identity.credential.labelled",
         "identity.deletion.cancelled",
         "identity.deletion.requested",
+        "identity.invitation.acknowledged",
         "identity.invitation.issued",
         "identity.invitation.revoked",
         "identity.organization.created",

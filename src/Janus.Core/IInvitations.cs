@@ -93,4 +93,29 @@ public interface IInvitations
     ValueTask<Result<AttachedInvitation>> AttachedAsync(
         AccessContext context,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Acknowledges the invitation the membership step showed: the membership attaches
+    /// carrying the documents at their versions, the roles are granted, and where the
+    /// organization's mail is integrated the corporate address becomes the primary
+    /// email beside the personal one (REG-INV-001, REG-INV-002, REG-MAIL-001).
+    /// </summary>
+    /// <param name="context">Who is signed in.</param>
+    /// <param name="invitation">The invitation the membership step showed.</param>
+    /// <param name="source">The address the request came from, which a notice counts against.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal: <c>identity.invitation.notfound</c> where no such
+    /// invitation is attached to the account; <c>identity.invitation.expired</c> where it
+    /// no longer stands; <c>identity.invitation.identifiermismatch</c> where an
+    /// identifier it binds is not verified on the account; <c>auth.stepup.required</c>
+    /// with outcome <c>enrol</c> where the account does not meet the organization's
+    /// credential policy; <c>identity.membership.limitreached</c> or
+    /// <c>identity.identifier.maximum</c> where the account can take no more.
+    /// </returns>
+    ValueTask<Result> AcknowledgeAsync(
+        AccessContext context,
+        InvitationId invitation,
+        string source,
+        CancellationToken cancellationToken);
 }

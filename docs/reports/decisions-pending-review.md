@@ -8897,6 +8897,212 @@ change.
 replacing the personal email during the membership is refused with
 `identity.identifier.locked`, and chapter 10's row for that code could name it.
 
+---
+
+## 244. What the acknowledgement names, and what it answers where the invitation no longer stands
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-INV-001, REG-INV-002, IDN-LIFE-009a, IDN-MEM-002, chapter 09 section 6a**
+
+*The question.* Chapter 09 gives `POST /account/invitation/acknowledge` its answers
+(**204**, **422** `identity.invitation.expired`, **422**
+`identity.invitation.identifiermismatch`, **403** `auth.stepup.required`) and no
+request body. It does not say which invitation is acknowledged where more than one is
+attached to the account, what is answered where none is, or whether an organization
+whose deletion is requested takes the member.
+
+*The readings.*
+
+1. No body: the acknowledgement takes whatever `GET /account/invitation` would answer at
+   that moment.
+2. The body names the invitation the membership step showed, `{ "invitationId": "..." }`,
+   required (`api.request.malformed` where absent).
+
+*Chosen: 2.* What REG-INV-001 has the person acknowledge is what they were shown; under
+reading 1 a link opened in another tab between the read and the press would attach a
+membership, roles and documents the person never saw. The answers:
+
+- `identity.invitation.notfound` (**404**, the code of entry 242) where the invitation
+  does not exist or is attached to another account, so nothing is learned of anyone
+  else's invitation.
+- `identity.invitation.expired` (**422**) where it was revoked, was acknowledged
+  already, is past `expiresAt`, or its organization has a deletion requested or was
+  erased: an organization on its way out takes no new member, as it issues no new
+  invitation.
+- `identity.membership.limitreached` where `organization.multiplememberships` leaves
+  the account no room (IDN-MEM-002), with nothing written and the invitation standing.
+- `identity.identifier.maximum` where the corporate address would take the account past
+  `identifiers.email.max`.
+
+Everything the acknowledgement writes is written in one transaction, and a refusal
+writes nothing.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_002_OnlyAStandingInvitationOfTheAccountIsAcknowledgedAsync`,
+`InvitationServiceTests.IDN_MEM_002_AnAccountAtItsMembershipLimitIsRefusedAsync`,
+`MembershipAttachmentTests.IDN_MEM_002_AnAccountThatMayHoldNoMoreIsRefusedAsync`,
+`InvitationAcknowledgementFlowTests.REG_INV_002_TheAcknowledgedInvitationIsNamedAsync`,
+`InvitationServiceTests.REG_MAIL_001_TheCorporateAddressCountsAgainstTheEmailMaximumAsync`.
+
+*Chapter text that should change.* Chapter 09 section 6a could give the body
+`{ "invitationId" }`, and add **404** `identity.invitation.notfound`,
+`identity.membership.limitreached` and `identity.identifier.maximum` to the answers.
+
+---
+
+## 245. Which identifiers must match at the acknowledgement
+
+**Phase 8 · 2026-09-24 · Tier 3 · REG-INV-001, REG-INV-002, REG-MAIL-001, REG-DOM-001**
+
+*The question.* Chapter 09 section 6a: `identity.invitation.identifiermismatch` is
+answered where "a bound identifier is verified on a different account than the one
+accepting". REG-INV-001: "Binding the phone means the link alone is not enough to
+accept". Neither says what is answered where the accepting account does not hold the
+bound identifier and no other account does either, nor what happens where the corporate
+address the organization asserts is already held.
+
+*The readings.*
+
+1. Refuse only where another account holds a bound identifier verified.
+2. Refuse unless the accepting account holds every bound email and phone verified, and
+   refuse where any account, this one included, already holds the corporate address.
+
+*Chosen: 2, the strictest reading.* Under reading 1 an account holding neither the
+bound phone nor any claim to it accepts an invitation whose phone was bound precisely
+so that the link alone would not be enough. Reading 2 grants least. On registration
+from an invitation the bound email is verified by the press and the bound phone before
+the membership step, so reading 2 refuses nothing there that reading 1 admits. The
+values are compared in canonical form. The domain lock is not read at the
+acknowledgement: REG-DOM-001 governs the sign-in email and an open email chosen at
+registration, and both are already enforced where they are used.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_002_AnIdentifierTheInvitationBindsIsVerifiedOnTheAccountAsync`.
+
+*Chapter text that should change.* Chapter 09 section 6a could read "a bound identifier
+is not verified on the account accepting, or the corporate address is already held".
+
+---
+
+## 246. How the credential policy is met before the membership attaches
+
+**Phase 8 · 2026-09-24 · Tier 3 · REG-INV-002, IDN-LIFE-009a, IDN-LIFE-009b, AUTH-FACT-002**
+
+*The question.* REG-INV-002: the organization's `requiredAssurance`,
+`credentialRedundancy` and `loginFactors` "SHALL be satisfied before the membership
+attaches"; chapter 09 section 6a answers **403** `auth.stepup.required` "with outcome
+`enrol`". Neither says which credentials count, which policy is read where the account
+already belongs elsewhere, or what the refusal carries beside `outcome`.
+
+*The readings.*
+
+1. Count every credential the account holds against the organization's own policy.
+2. Count only the credentials whose factor the policy in force once the membership
+   attaches permits, against that policy (the strictest of the organization's and of
+   every organization the account already belongs to).
+
+*Chosen: 2, the strictest reading.* A credential the organization does not permit stops
+signing in once the membership attaches (IDN-LIFE-009b), so counting it would attach a
+membership the account then cannot sign in under. The refusal carries `outcome`
+(`enrol`), `field` (`requiredAssurance` or `credentialRedundancy`, the `PolicyField`
+vocabulary a policy hold already uses) and `value` (the level or `enforced`).
+`policy.enforcement.grace` is not applied: it is the run-up for people already under a
+policy that is raised, and an account joining is not yet under it. IDN-LIFE-009b needs
+nothing written: the session gate refuses any factor outside the policy in force, and
+the membership makes the organization's policy the one in force.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_002_AC2_AnAccountBelowTheRequiredAssuranceIsHeldAtEnrolmentAsync`,
+`InvitationServiceTests.REG_INV_002_EnforcedRedundancyAsksForASecondCredentialAsync`,
+`SessionServiceTests.IDN_LIFE_009a_AC3_APasswordHeldBeforeTheMembershipNoLongerAuthenticatesAsync`.
+
+*Chapter text that should change.* Chapter 09 section 6a could name the details of the
+**403** and say that only the factors the policy permits are counted.
+
+---
+
+## 247. How the roles of an invitation are granted
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-INV-001, IDN-LIFE-009a, AUTHZ-GRANT-001**
+
+*The question.* REG-INV-001: on acknowledgement "the membership SHALL attach" with "the
+roles and grants that will attach". Nothing says in what scope, of what kind, granted by
+whom, with what reason, or what happens to a role the account already holds.
+
+*The readings.*
+
+1. Each role as a stored grant across the organization, granted by who issued the
+   invitation, with the machine reason `invitation:<id>` in the precedent of
+   `derivation:<relationship>`, once however often the invitation names it, and not
+   again where the account already holds the same live grant.
+2. The same, granted by the person acknowledging.
+
+*Chosen: 1.* The inviter is who decided the grant and whose permission to grant it was
+checked at issue (a role asks what a grant asks, entry 228); the person acknowledging
+decided nothing but to accept. The reason names the invitation so that the audit record
+of the issue explains the grant; the words are the frontend's (CONV-CONTENT-001).
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_001_AC3_AcknowledgingAttachesTheMembershipThatWasShownAsync`,
+`MembershipAttachmentTests.REG_INV_001_AC3_TheMembershipCarriesTheAcknowledgementAndTheGrantsAsync`,
+`MembershipAttachmentTests.REG_INV_001_AGrantTheAccountHoldsIsNotWrittenAgainAsync`.
+
+*Chapter text that should change.* REG-INV-001 could state the scope, the grantor and
+the reason of the grants an invitation attaches.
+
+---
+
+## 248. What the corporate address does at the acknowledgement
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-MAIL-001, REG-INV-001, REG-IDENT-004, INT-MAIL-006**
+
+*The question.* Chapter 09 section 6a: the acknowledgement "makes the corporate address
+primary where one exists, enables the pre-provisioned mailbox" and "Emits
+`MembershipChanged` and, where the primary email changed, `IdentifierPrimaryChanged`".
+Nothing says whether the person is told of the address as of any identifier added
+(REG-IDENT-004), or which email the membership keeps where the account holds several.
+
+*Chosen.* The corporate address is added verified, locked and primary; the email the
+membership keeps (entry 243) is the personal email the invitation bound, which entry 245
+has made sure the account holds verified. The security-notice set as it stood before
+the change is told of the address once, as `IdentifierAdded`, which is what any added
+identifier sends, so a person whose account gained an address they did not expect hears
+of it at the address they already had. The mailbox becomes the person's in the same
+transaction and is owed enabled from then on; the provisioning pass pushes it. The two
+events of chapter 09 are the only ones published.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_001_AC4_TheCorporateAddressBecomesPrimaryBesideThePersonalEmailAsync`,
+`IdentifierStoreTests.REG_MAIL_001_TheCorporateAddressIsTakenOnPrimaryBesideThePersonalEmailAsync`.
+
+*Chapter text that should change.* REG-MAIL-001 could say that the security-notice set
+is told of the corporate address when it is taken on.
+
+---
+
+## 249. How the acknowledgement is audited and exported
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-INV-001, IDN-AUD-001, PRIV-RIGHT-003, REG-ACCT-001**
+
+*The question.* IDN-AUD-001 has every organization change recorded, and entry 150 has
+the export carry everything held about the person. Chapter 10 has no audit action for
+an acknowledgement, and the export has no place for what REG-INV-001 AC3 records on the
+membership.
+
+*Chosen.* A new audit action, `identity.invitation.acknowledged`, security category,
+filed under the organization with the person as the actor and the invitation in the
+details, as its issue and revocation are (entries 231 and 234). The export's
+`memberships` record gains `acknowledgedAt`, and a new section,
+`membership-acknowledgements`, follows it with one record per document acknowledged:
+`membership`, `document`, `version`, `acknowledgedAt`.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_001_AC3_AcknowledgingAttachesTheMembershipThatWasShownAsync`,
+`ExportSourceTests.REG_INV_001_AC3_TheExportCarriesWhatWasAcknowledgedAsync`,
+`AuditActionsTests` (the list of actions).
+
+*Chapter text that should change.* Chapter 10 could hold the audit action row below,
+and chapter 09's export description could name the new section.
+
 
 # Rows for chapter 10
 
@@ -9061,6 +9267,7 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `identity.deletion.requested` | routine | `AuditActions.DeletionRequested` | A deletion was requested, which opens the grace window it can be brought back from. (IDN-LIFE-014) |
 | `identity.invitation.issued` | security | `AuditActions.InvitationIssued` | An invitation into an organization was issued. Details carry `invitation` and nothing it binds; the row is filed under the organization. (IDN-LIFE-009a, REG-INV-001, entry 234) |
 | `identity.invitation.revoked` | security | `AuditActions.InvitationRevoked` | An invitation nobody had acknowledged was revoked, or replaced by a later one for the same corporate address. Details carry `invitation`. (IDN-LIFE-009a, REG-MAIL-001, entries 231 and 233) |
+| `identity.invitation.acknowledged` | security | `AuditActions.InvitationAcknowledged` | An invitation was acknowledged and the membership it offered attached. Details carry `invitation`; the actor is the person acknowledging and the row is filed under the organization. (REG-INV-001, IDN-LIFE-009a, entry 249) |
 | `identity.organization.created` | security | `AuditActions.OrganizationCreated` | An organization was created, with its policy key holding no override. Details carry `reason`; the row is filed under the organization. (IDN-ORG-002, entry 197) |
 | `identity.organization.deletioncancelled` | security | `AuditActions.OrganizationDeletionCancelled` | An organization's deletion request was cancelled inside its window, which gives back every grant it holds. Details carry `reason`. (IDN-ORG-003, entry 197) |
 | `identity.organization.deletionrequested` | security | `AuditActions.OrganizationDeletionRequested` | An organization's deletion was requested: it is suspended and every member session ended. Details carry `reason`. (IDN-ORG-003, entry 197) |

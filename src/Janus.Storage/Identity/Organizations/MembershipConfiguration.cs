@@ -22,10 +22,18 @@ internal sealed class MembershipConfiguration : IEntityTypeConfiguration<Members
         ArgumentNullException.ThrowIfNull(builder);
 
         builder.ToTable("memberships", table =>
+        {
             // IDN-MEM-001: a membership that has ended ended after it began.
             table.HasCheckConstraint(
                 "ck_memberships_ended",
-                "ended_at IS NULL OR ended_at >= created_at"));
+                "ended_at IS NULL OR ended_at >= created_at");
+
+            // REG-INV-001 AC3: an acknowledgement is its documents and its instant
+            // together, or nothing.
+            table.HasCheckConstraint(
+                "ck_memberships_acknowledged",
+                "(acknowledged_at IS NULL) = (acknowledged_documents IS NULL)");
+        });
 
         builder.HasKey(membership => membership.Id).HasName("pk_memberships");
 
@@ -43,6 +51,12 @@ internal sealed class MembershipConfiguration : IEntityTypeConfiguration<Members
 
         builder.Property(membership => membership.CreatedAt).HasColumnName("created_at");
         builder.Property(membership => membership.EndedAt).HasColumnName("ended_at");
+
+        builder.Property(membership => membership.AcknowledgedDocuments)
+            .HasColumnName("acknowledged_documents")
+            .HasColumnType("jsonb");
+
+        builder.Property(membership => membership.AcknowledgedAt).HasColumnName("acknowledged_at");
 
         builder.HasOne<AccountRecord>()
             .WithMany()

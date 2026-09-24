@@ -274,6 +274,25 @@ internal sealed class Invitation
     }
 
     /// <summary>
+    /// Records that the person it is attached to acknowledged it and the membership
+    /// attached, forgetting what it bound.
+    /// </summary>
+    /// <param name="at">When.</param>
+    /// <exception cref="InvalidOperationException">
+    /// It no longer stands, it is attached to no account, or it has expired.
+    /// </exception>
+    public void Acknowledge(DateTimeOffset at)
+    {
+        if (!Stands || Invitee is null || HasExpired(at))
+        {
+            throw new InvalidOperationException("The invitation cannot be acknowledged.");
+        }
+
+        AcknowledgedAt = at;
+        Identifiers = null;
+    }
+
+    /// <summary>
     /// Revokes it, forgetting what it bound.
     /// </summary>
     /// <param name="at">When.</param>

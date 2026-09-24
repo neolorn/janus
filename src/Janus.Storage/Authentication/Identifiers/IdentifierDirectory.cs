@@ -124,6 +124,38 @@ internal sealed class IdentifierDirectory(
     }
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">The corporate address is not an email address.</exception>
+    public async ValueTask TakeCorporateAsync(
+        SubjectId subject,
+        IdentifierId id,
+        string entered,
+        string canonical,
+        IdentifierId personal,
+        DateTimeOffset at,
+        int maximum,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(entered);
+
+        if (!EmailAddress.TryParse(canonical, out EmailAddress address))
+        {
+            throw new InvalidOperationException("The corporate address is not an email address.");
+        }
+
+        IdentifierSet set = await identifiers.FindBySubjectAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        // The organization asserts the address and the system created its mailbox, so
+        // it is proved by the invitation and not by a code (REG-MAIL-001).
+        set.Add(Identifier.Email(id, subject, address, entered, at, isLocked: true), maximum);
+        set.Verify(id, at);
+        set.MakePrimary(id);
+        set.KeepPersonal(personal);
+
+        await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask ProveAsync(
         SubjectId subject,
         IdentifierId id,

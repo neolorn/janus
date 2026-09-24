@@ -376,6 +376,8 @@ public static class HostingRegistration
             provider.GetRequiredService<IEvents>(),
             provider.GetRequiredService<TimeProvider>()));
 
+        services.AddScoped<InvitationAcknowledgement>();
+
         // REG-MAIL-001: an invitation reserves a mailbox only where there is a mail
         // server to create it on.
         services.AddScoped<IInvitations>(provider => new InvitationService(
@@ -388,6 +390,7 @@ public static class HostingRegistration
             provider.GetRequiredService<DomainLock>(),
             provider.GetRequiredService<IInvitationStore>(),
             provider.GetRequiredService<IAccountDirectory>(),
+            provider.GetRequiredService<InvitationAcknowledgement>(),
             provider.GetRequiredService<IMailboxStore>(),
             provider.GetService<IMailServer>(),
             provider.GetRequiredService<INotificationHandler>(),

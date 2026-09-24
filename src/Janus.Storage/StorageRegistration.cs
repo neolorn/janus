@@ -258,6 +258,7 @@ internal static class StorageRegistration
             provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<IMembershipAttachment, MembershipAttachment>();
         services.AddScoped<IRoleCatalogue, RoleCatalogue>();
         services.AddScoped<IResourceStore, ResourceStore>();
 

@@ -24,6 +24,7 @@ namespace Janus.Hosting.Accounts;
 [JsonSerializable(typeof(IdentifierLandingView))]
 [JsonSerializable(typeof(DeletionView))]
 [JsonSerializable(typeof(AttachedInvitationView))]
+[JsonSerializable(typeof(AcknowledgeInvitationRequest))]
 [JsonSerializable(typeof(System.Collections.Generic.IReadOnlyList<CredentialView>))]
 [JsonSerializable(typeof(System.Collections.Generic.IReadOnlyList<SessionView>))]
 internal sealed partial class AccountJson : JsonSerializerContext;

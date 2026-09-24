@@ -113,6 +113,30 @@ internal interface IIdentifierDirectory
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Takes on the corporate address an organization asserts, verified, locked and
+    /// primary, and keeps the personal email it displaces through the membership
+    /// (REG-MAIL-001).
+    /// </summary>
+    /// <param name="subject">Whose it is.</param>
+    /// <param name="id">The identifier issued for the corporate address.</param>
+    /// <param name="entered">The address as the administrator entered it.</param>
+    /// <param name="canonical">The address in its canonical form.</param>
+    /// <param name="personal">The verified personal email the membership keeps.</param>
+    /// <param name="at">When the membership attached.</param>
+    /// <param name="maximum">How many emails the account may hold.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of taking it on.</returns>
+    ValueTask TakeCorporateAsync(
+        SubjectId subject,
+        IdentifierId id,
+        string entered,
+        string canonical,
+        IdentifierId personal,
+        DateTimeOffset at,
+        int maximum,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Records that a code or a same-browser link proved an identifier.
     /// </summary>
     /// <param name="subject">Whose it is.</param>

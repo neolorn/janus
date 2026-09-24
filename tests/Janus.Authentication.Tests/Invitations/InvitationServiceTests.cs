@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Identifiers;
 using Janus.Authentication.Invitations;
 using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Organizations;
@@ -13,6 +14,7 @@ using Janus.Authentication.Policies;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Factors;
+using Janus.Authentication.Tests.Identifiers;
 using Janus.Authentication.Tests.Mailboxes;
 using Janus.Authentication.Tests.Organizations;
 using Janus.Authentication.Tests.Passwords;
@@ -26,8 +28,8 @@ using Xunit;
 namespace Janus.Authentication.Tests.Invitations;
 
 /// <summary>
-/// Issuing an invitation into an organization and revoking it (IDN-LIFE-009a,
-/// REG-INV-001, REG-MAIL-001).
+/// Issuing an invitation into an organization, revoking it, and acknowledging it into a
+/// membership (IDN-LIFE-009a, REG-INV-001, REG-INV-002, REG-MAIL-001).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class InvitationServiceTests : IAsyncDisposable
@@ -64,10 +66,13 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     private readonly NotificationHandlerInMemory _notifications = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly OrganizationAuditInMemory _audit = new();
+    private readonly IdentifierDirectoryInMemory _identifiers = new();
+    private readonly EventsInMemory _events = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
     private readonly OrganizationsInMemory _organizations;
+    private readonly MembershipAttachmentInMemory _attachments;
     private readonly SubjectId _inviter;
 
     /// <summary>
@@ -77,6 +82,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     public InvitationServiceTests()
     {
         _organizations = new OrganizationsInMemory(_memberships);
+        _attachments = new MembershipAttachmentInMemory(_memberships);
         _organizations.Seed(Staff, administrative: true);
         _organizations.Seed(Customer, name: "Northern branch");
 
@@ -611,6 +617,303 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             Failure(await AttachedAsync(SubjectId.New(_randomness))).Code);
     }
 
+    /// <summary>
+    /// REG-INV-001 AC2 and AC3, IDN-LIFE-009a AC1: until the person acknowledges, the
+    /// account holds no membership of the organization and no grant; acknowledging
+    /// attaches the membership carrying the documents at the versions shown, grants the
+    /// roles across the organization as given by who invited them, announces it and
+    /// writes it down; the invitation forgets what it bound and stands no longer.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_001_AC3_AcknowledgingAttachesTheMembershipThatWasShownAsync()
+    {
+        RoleName clerk = _roles.Define("clerk", Permissions.MembershipManage);
+
+        _gate.Grant(_inviter, Customer, Permissions.GrantManage);
+        _documents.Publish("staff-handbook", "2", Noon.AddDays(-1));
+
+        string token = Accepted(await IssueAsync(
+            Customer,
+            Request(phone: Number, roles: [clerk], documents: ["staff-handbook"]))).Token!;
+        SubjectId holder = Holder();
+        Invitation invitation = _invitations.Held[0];
+
+        _ = _identifiers.Verified(holder, IdentifierKind.Phone, Number);
+        Accepted(await OpenAsync(holder, token));
+
+        Assert.Empty(_attachments.Attached);
+        Assert.Empty(await _memberships.OfAsync(holder, TestContext.Current.CancellationToken));
+
+        _clock.Advance(TimeSpan.FromMinutes(5));
+        Accepted(await AcknowledgeAsync(holder, invitation.Id));
+
+        AttachedMembership attached = Assert.Single(_attachments.Attached);
+        MembershipChanged began = Assert.Single(_events.Of<MembershipChanged>());
+        OrganizationAuditInMemory.OrganizationChange recorded = _audit.Changes[^1];
+
+        Assert.Equal((holder, Customer), (attached.Subject, attached.Organization));
+        Assert.Equal([new InvitationDocument("staff-handbook", "2")], attached.Acknowledged);
+        Assert.Equal([clerk], attached.Roles);
+        Assert.Equal(_inviter, attached.GrantedBy);
+        Assert.Equal($"invitation:{invitation.Id.Value}", attached.Reason);
+        Assert.Equal(Noon.AddMinutes(5), attached.At);
+        Assert.Equal((attached.Id, Customer, MembershipChange.Began), (began.Membership, began.Organization, began.Change));
+        Assert.Equal(holder, began.Subject);
+        Assert.Empty(_events.Of<IdentifierPrimaryChanged>());
+        Assert.Equal(AuditActions.InvitationAcknowledged, recorded.Action);
+        Assert.Equal((Customer, holder), (recorded.Organization, recorded.Actor));
+        Assert.Equal(invitation.Id, recorded.Invitation);
+        Assert.Equal(Noon.AddMinutes(5), invitation.AcknowledgedAt);
+        Assert.Null(invitation.Identifiers);
+        Assert.Equal(ErrorCodes.InvitationNotFound, Failure(await AttachedAsync(holder)).Code);
+        Assert.Equal(ErrorCodes.InvitationExpired, Failure(await AcknowledgeAsync(holder, invitation.Id)).Code);
+    }
+
+    /// <summary>
+    /// REG-INV-001 AC4, REG-MAIL-001 AC1 and AC5, IDN-LIFE-009a AC4: acknowledging an
+    /// invitation into an organization whose mail is integrated makes the corporate
+    /// address the primary email, verified and locked, keeps the personal email
+    /// verified beside it as the membership's, gives the person the mailbox, which is
+    /// then owed enabled, and tells the set as it stood of the address once.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_001_AC4_TheCorporateAddressBecomesPrimaryBesideThePersonalEmailAsync()
+    {
+        _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
+
+        string token = _notifications.Mail[^1].Values["token"];
+        SubjectId holder = Holder();
+        IdentifierId personal = _identifiers.Verified(holder, IdentifierKind.Email, Personal);
+        Invitation invitation = _invitations.Held[0];
+        Mailbox reserved = Assert.Single(_mailboxes.Held);
+
+        _authenticators.Hold(Passkey(holder));
+        Accepted(await OpenAsync(holder, token));
+        _notifications.Sent.Clear();
+
+        Accepted(await AcknowledgeAsync(holder, invitation.Id));
+
+        HeldIdentifiers held = await _identifiers.HeldAsync(holder, TestContext.Current.CancellationToken);
+        HeldIdentifier corporate = held.OfKind(IdentifierKind.Email).Single(email => email.Canonical == Corporate);
+        HeldIdentifier kept = held.Find(personal)!;
+        IdentifierPrimaryChanged promoted = Assert.Single(_events.Of<IdentifierPrimaryChanged>());
+        SendRequest told = Assert.Single(_notifications.Sent);
+
+        Assert.True(corporate is { IsVerified: true, IsPrimary: true, IsLocked: true, IsPersonal: false });
+        Assert.True(kept is { IsVerified: true, IsPrimary: false, IsPersonal: true });
+        Assert.Equal((corporate.Id, IdentifierKind.Email), (promoted.Identifier, promoted.Kind));
+        Assert.Equal(holder, promoted.Subject);
+        Assert.Equal((Personal, MessageKind.IdentifierAdded), (told.Destination.Canonical, told.Message));
+        Assert.Equal(holder, reserved.Holder);
+        Assert.Equal(MailboxState.Enabled, reserved.Owed(stands: true));
+        Assert.Equal(Staff, Assert.Single(_attachments.Attached).Organization);
+    }
+
+    /// <summary>
+    /// REG-IDENT-002 and REG-MAIL-001: the corporate address counts against
+    /// <c>identifiers.email.max</c> as any added email does, so an account already
+    /// holding as many as it may is refused and nothing attaches.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_001_TheCorporateAddressCountsAgainstTheEmailMaximumAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
+
+        string token = _notifications.Mail[^1].Values["token"];
+        SubjectId holder = Holder();
+
+        _ = _identifiers.Verified(holder, IdentifierKind.Email, Personal);
+        _authenticators.Hold(Passkey(holder));
+        Accepted(await OpenAsync(holder, token));
+
+        Assert.Equal(
+            ErrorCodes.IdentifierMaximum,
+            Failure(await AcknowledgeAsync(holder, _invitations.Held[0].Id)).Code);
+        Assert.Empty(_attachments.Attached);
+        Assert.Null(Assert.Single(_mailboxes.Held).Holder);
+    }
+
+    /// <summary>
+    /// REG-INV-002 AC2 and IDN-LIFE-009b: an account below the organization's required
+    /// assurance, counting only the factors that organization permits, is sent to
+    /// enrol and nothing attaches; once it holds a permitted factor that reaches the
+    /// level, the membership attaches, and the policy it then holds no longer counts
+    /// what the organization does not permit.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_002_AC2_AnAccountBelowTheRequiredAssuranceIsHeldAtEnrolmentAsync()
+    {
+        _configuration.Set(
+            Settings.OrganizationPolicy,
+            Customer.ToString(),
+            PolicyOverride.None with
+            {
+                RequiredAssurance = AssuranceLevel.Aal2,
+                LoginFactors = new HashSet<Factor> { Factor.Passkey, Factor.Totp },
+            });
+
+        string token = Accepted(await IssueAsync(Customer, Request(phone: Number))).Token!;
+        SubjectId holder = Holder();
+        Invitation invitation = _invitations.Held[0];
+
+        _ = _identifiers.Verified(holder, IdentifierKind.Phone, Number);
+        Accepted(await OpenAsync(holder, token));
+
+        Error held = Failure(await AcknowledgeAsync(holder, invitation.Id));
+
+        Assert.Equal(ErrorCodes.StepUpRequired, held.Code);
+        Assert.Equal("enrol", held.Details["outcome"].GetString());
+        Assert.Equal("requiredAssurance", held.Details["field"].GetString());
+        Assert.Equal("aal2", held.Details["value"].GetString());
+        Assert.Empty(_attachments.Attached);
+        Assert.Null(invitation.AcknowledgedAt);
+
+        _authenticators.Hold(Passkey(holder));
+        Accepted(await AcknowledgeAsync(holder, invitation.Id));
+
+        Policy joined = Accepted(await Policies.ForAsync(holder, TestContext.Current.CancellationToken));
+
+        Assert.Single(_attachments.Attached);
+        Assert.DoesNotContain(Factor.Password, joined.LoginFactors);
+    }
+
+    /// <summary>
+    /// REG-INV-002: where the organization enforces credential redundancy, an account
+    /// with one credential that is not backed up is sent to enrol another.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_002_EnforcedRedundancyAsksForASecondCredentialAsync()
+    {
+        _configuration.Set(
+            Settings.OrganizationPolicy,
+            Customer.ToString(),
+            PolicyOverride.None with { CredentialRedundancy = CredentialRedundancy.Enforced });
+
+        string token = Accepted(await IssueAsync(Customer, Request(phone: Number))).Token!;
+        SubjectId holder = Holder();
+
+        _ = _identifiers.Verified(holder, IdentifierKind.Phone, Number);
+        _authenticators.Hold(Passkey(holder, backedUp: false));
+        Accepted(await OpenAsync(holder, token));
+
+        Error held = Failure(await AcknowledgeAsync(holder, _invitations.Held[0].Id));
+
+        Assert.Equal(ErrorCodes.StepUpRequired, held.Code);
+        Assert.Equal("credentialRedundancy", held.Details["field"].GetString());
+        Assert.Equal("enforced", held.Details["value"].GetString());
+        Assert.Empty(_attachments.Attached);
+    }
+
+    /// <summary>
+    /// REG-INV-002: every identifier the invitation binds is one the accepting account
+    /// holds verified, and a corporate address another account holds cannot be taken
+    /// on; either is the mismatch, and nothing attaches.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_002_AnIdentifierTheInvitationBindsIsVerifiedOnTheAccountAsync()
+    {
+        string token = Accepted(await IssueAsync(Customer, Request(phone: Number))).Token!;
+        SubjectId holder = Holder();
+        SubjectId other = Holder();
+
+        _ = _identifiers.Verified(other, IdentifierKind.Phone, Number);
+        Accepted(await OpenAsync(holder, token));
+
+        Assert.Equal(
+            ErrorCodes.InvitationIdentifierMismatch,
+            Failure(await AcknowledgeAsync(holder, _invitations.Held[0].Id)).Code);
+
+        _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
+
+        string staff = _notifications.Mail[^1].Values["token"];
+        SubjectId member = Holder();
+
+        _ = _identifiers.Verified(member, IdentifierKind.Email, Personal);
+        _ = _identifiers.Verified(other, IdentifierKind.Email, Corporate);
+        _authenticators.Hold(Passkey(member));
+        Accepted(await OpenAsync(member, staff));
+
+        Assert.Equal(
+            ErrorCodes.InvitationIdentifierMismatch,
+            Failure(await AcknowledgeAsync(member, _invitations.Held[1].Id)).Code);
+        Assert.Empty(_attachments.Attached);
+        Assert.Null(Assert.Single(_mailboxes.Held).Holder);
+    }
+
+    /// <summary>
+    /// REG-INV-002 and IDN-LIFE-009a AC2: an invitation attached to another account, or
+    /// to none, is answered as one that does not exist; one that expired, was revoked,
+    /// or whose organization is on its way out no longer stands.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_002_OnlyAStandingInvitationOfTheAccountIsAcknowledgedAsync()
+    {
+        string token = Accepted(await IssueAsync(Customer, Request(phone: Number))).Token!;
+        string revoked = Accepted(await IssueAsync(Customer, Request(phone: "+441632960012"))).Token!;
+        SubjectId holder = Holder();
+        Invitation invitation = _invitations.Held[0];
+
+        _ = _identifiers.Verified(holder, IdentifierKind.Phone, Number);
+        _ = _identifiers.Verified(holder, IdentifierKind.Phone, "+441632960012");
+
+        Assert.Equal(ErrorCodes.InvitationNotFound, Failure(await AcknowledgeAsync(holder, invitation.Id)).Code);
+
+        Accepted(await OpenAsync(holder, token));
+        Accepted(await OpenAsync(holder, revoked));
+        Accepted(await RevokeAsync(Customer, _invitations.Held[1].Id));
+
+        Assert.Equal(
+            ErrorCodes.InvitationNotFound,
+            Failure(await AcknowledgeAsync(Holder(), invitation.Id)).Code);
+        Assert.Equal(
+            ErrorCodes.InvitationNotFound,
+            Failure(await AcknowledgeAsync(holder, new InvitationId(Guid.NewGuid()))).Code);
+        Assert.Equal(
+            ErrorCodes.InvitationExpired,
+            Failure(await AcknowledgeAsync(holder, _invitations.Held[1].Id)).Code);
+
+        _organizations.Seed(Customer, deletionRequestedAt: Noon, name: "Northern branch");
+
+        Assert.Equal(ErrorCodes.InvitationExpired, Failure(await AcknowledgeAsync(holder, invitation.Id)).Code);
+
+        _organizations.Seed(Customer, name: "Northern branch");
+        _clock.Advance(Settings.LinkInvitationLifetime.Default);
+
+        Assert.Equal(ErrorCodes.InvitationExpired, Failure(await AcknowledgeAsync(holder, invitation.Id)).Code);
+        Assert.Equal(
+            ErrorCodes.Denied,
+            Failure(await Service.AcknowledgeAsync(
+                AccessContext.Of(SystemPrincipal.ForOrganization("sweep", "expiry", Customer)),
+                invitation.Id,
+                Source,
+                TestContext.Current.CancellationToken)).Code);
+        Assert.Empty(_attachments.Attached);
+    }
+
+    /// <summary>
+    /// IDN-MEM-002: an account that may hold no further membership is refused with the
+    /// code, and nothing of the invitation is spent.
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_002_AnAccountAtItsMembershipLimitIsRefusedAsync()
+    {
+        string token = Accepted(await IssueAsync(Customer, Request(phone: Number))).Token!;
+        SubjectId holder = Holder();
+
+        _ = _identifiers.Verified(holder, IdentifierKind.Phone, Number);
+        _memberships.Place(holder, Staff);
+        _authenticators.Hold(Passkey(holder));
+        Accepted(await OpenAsync(holder, token));
+
+        Assert.Equal(
+            ErrorCodes.MembershipLimitReached,
+            Failure(await AcknowledgeAsync(holder, _invitations.Held[0].Id)).Code);
+        Assert.True(_invitations.Held[0].Stands);
+        Assert.Empty(_events.Published);
+    }
+
     private InvitationService Service => Serving(_server);
 
     private InvitationService ServiceWithout => Serving(server: null);
@@ -643,9 +946,11 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     private static Error Failure(Result outcome) =>
         outcome.Match(() => throw new Xunit.Sdk.XunitException("The operation was admitted."), error => error);
 
+    private PolicyResolution Policies => new(_memberships, _configuration, _raises);
+
     private InvitationService Serving(IMailServer? server)
     {
-        var policies = new PolicyResolution(_memberships, _configuration, _raises);
+        PolicyResolution policies = Policies;
 
         return new(
             _gate,
@@ -657,6 +962,21 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             new DomainLock(_memberships, _configuration, _domains),
             _invitations,
             _accounts,
+            new InvitationAcknowledgement(
+                _invitations,
+                _organizations,
+                _identifiers,
+                _authenticators,
+                _passwords,
+                policies,
+                _attachments,
+                _mailboxes,
+                _notifications,
+                _events,
+                _configuration,
+                _audit,
+                _work,
+                _clock),
             _mailboxes,
             server,
             _notifications,
@@ -671,6 +991,41 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         DisplayName.TryParse(name, out DisplayName named)
             ? named
             : throw new InvalidOperationException("The name does not parse.");
+
+    // An account holding a password, which is what reaches the system policy's floor.
+    private SubjectId Holder()
+    {
+        var holder = SubjectId.New(_randomness);
+
+        _passwords.Hold(holder, Noon);
+
+        return holder;
+    }
+
+    private Authenticator Passkey(SubjectId holder, bool backedUp = true) =>
+        Authenticator.WebAuthnCredential(
+            AuthenticatorId.New(_clock),
+            holder,
+            Factor.Passkey,
+            CredentialLabel.TryParse("This laptop", out CredentialLabel label)
+                ? label
+                : throw new InvalidOperationException("The label does not parse."),
+            new WebAuthnMaterial(
+                new byte[] { 1, 2, 3 },
+                new byte[] { 4, 5, 6 },
+                Algorithm: -7,
+                "example.test",
+                Counter: 0,
+                BackupEligible: backedUp,
+                BackupState: backedUp),
+            Noon);
+
+    private ValueTask<Result> AcknowledgeAsync(SubjectId holder, InvitationId invitation) =>
+        Service.AcknowledgeAsync(
+            AccessContext.Of(holder),
+            invitation,
+            Source,
+            TestContext.Current.CancellationToken);
 
     private ValueTask<Result<AttachedInvitation>> AttachedAsync(SubjectId holder) =>
         Service.AttachedAsync(AccessContext.Of(holder), TestContext.Current.CancellationToken);

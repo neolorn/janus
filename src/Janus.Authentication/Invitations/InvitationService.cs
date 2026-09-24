@@ -27,6 +27,7 @@ namespace Janus.Authentication.Invitations;
 /// <param name="locks">Whether the organization's domain lock admits an address.</param>
 /// <param name="invitations">Where invitations are kept.</param>
 /// <param name="accounts">Where the name of who issued an invitation is read.</param>
+/// <param name="acknowledgement">What attaches the membership an invitation offers.</param>
 /// <param name="mailboxes">Where the corporate mailboxes are reserved.</param>
 /// <param name="server">
 /// The mail server the administrative organization's mail is integrated with, absent
@@ -56,6 +57,7 @@ internal sealed class InvitationService(
     DomainLock locks,
     IInvitationStore invitations,
     IAccountDirectory accounts,
+    InvitationAcknowledgement acknowledgement,
     IMailboxStore mailboxes,
     IMailServer? server,
     INotificationHandler sending,
@@ -597,6 +599,14 @@ internal sealed class InvitationService(
             invitation.Documents,
             invitation.ExpiresAt));
     }
+
+    /// <inheritdoc/>
+    public ValueTask<Result> AcknowledgeAsync(
+        AccessContext context,
+        InvitationId invitation,
+        string source,
+        CancellationToken cancellationToken) =>
+        acknowledgement.AcknowledgeAsync(context, invitation, source, cancellationToken);
 
     private async ValueTask WithdrawnAsync(
         Invitation invitation,

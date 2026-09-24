@@ -162,6 +162,25 @@ public sealed class MembershipTests
     }
 
     /// <summary>
+    /// REG-INV-001 AC3: a membership an invitation attaches carries the documents the
+    /// person acknowledged, each at the version shown, and when.
+    /// </summary>
+    [Fact]
+    public void REG_INV_001_AC3_TheMembershipCarriesTheAcknowledgement()
+    {
+        var acknowledged = new MembershipAcknowledgement(
+            [new InvitationDocument("staff-handbook", "3")],
+            Noon);
+
+        Membership membership = Membership
+            .Create(Id, Ahmed, Acme, [], multiple: false, Noon, acknowledged)
+            .Match(made => made, error => throw new XunitException(error.Code.ToString()));
+
+        Assert.Same(acknowledged, membership.Acknowledgement);
+        Assert.Null(Made(Second, Beta).Acknowledgement);
+    }
+
+    /// <summary>
     /// Another account's memberships decide nothing about this one, and a caller that
     /// hands them over has made a mistake the rule cannot see past.
     /// </summary>
