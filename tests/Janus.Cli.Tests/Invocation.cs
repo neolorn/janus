@@ -118,7 +118,11 @@ public sealed record Invocation(int ExitCode, string Output, string Error)
                 ["current"] = 1,
                 ["versions"] = new JsonObject { ["1"] = KeyEncryptionKey },
             },
-            ["fingerprintKey"] = FingerprintKey,
+            ["fingerprintKeys"] = new JsonObject
+            {
+                ["current"] = 1,
+                ["versions"] = new JsonObject { ["1"] = FingerprintKey },
+            },
         };
 
     /// <summary>

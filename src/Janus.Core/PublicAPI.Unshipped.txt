@@ -1002,6 +1002,16 @@ Janus.Core.FilterSources<TResource>.Grants.get -> System.Linq.IQueryable<Janus.C
 Janus.Core.FilterSources<TResource>.Identifier.get -> System.Linq.Expressions.Expression<System.Func<TResource, string!>!>!
 Janus.Core.FilterSources<TResource>.Relationship<TRelationship>(string! name, System.Linq.IQueryable<TRelationship>! rows) -> Janus.Core.FilterSources<TResource>!
 Janus.Core.FilterSources<TResource>.Relationships.get -> System.Collections.Generic.IReadOnlyDictionary<string!, Janus.Core.RelationshipRows!>!
+Janus.Core.FingerprintKeys
+Janus.Core.FingerprintKeys.<Clone>$() -> Janus.Core.FingerprintKeys!
+Janus.Core.FingerprintKeys.Current.get -> System.ReadOnlyMemory<byte>
+Janus.Core.FingerprintKeys.CurrentVersion.get -> int
+Janus.Core.FingerprintKeys.CurrentVersion.init -> void
+Janus.Core.FingerprintKeys.Deconstruct(out int CurrentVersion, out System.Collections.Generic.IReadOnlyDictionary<int, System.ReadOnlyMemory<byte>>! Versions) -> void
+Janus.Core.FingerprintKeys.Equals(Janus.Core.FingerprintKeys? other) -> bool
+Janus.Core.FingerprintKeys.FingerprintKeys(int CurrentVersion, System.Collections.Generic.IReadOnlyDictionary<int, System.ReadOnlyMemory<byte>>! Versions) -> void
+Janus.Core.FingerprintKeys.Versions.get -> System.Collections.Generic.IReadOnlyDictionary<int, System.ReadOnlyMemory<byte>>!
+Janus.Core.FingerprintKeys.Versions.init -> void
 Janus.Core.Gate
 Janus.Core.Gate.<Clone>$() -> Janus.Core.Gate!
 Janus.Core.Gate.Deconstruct(out Janus.Core.GateLevel Level, out bool PhishingResistant, out System.TimeSpan MaximumAge) -> void
@@ -1304,7 +1314,7 @@ Janus.Core.IRoles.AllAsync(Janus.Core.AccessContext! context, System.Threading.C
 Janus.Core.IRoles.DefineAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.DefinedRole! role, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<bool>>
 Janus.Core.IRoles.RemoveAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.RoleName role, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.ISecretSource
-Janus.Core.ISecretSource.ReadFingerprintKeyAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.ReadOnlyMemory<byte>>
+Janus.Core.ISecretSource.ReadFingerprintKeysAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.FingerprintKeys!>
 Janus.Core.ISecretSource.ReadKeyEncryptionKeysAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.KeyEncryptionKeys!>
 Janus.Core.ISecretSource.ReadMaintenanceCredentialAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.ReadOnlyMemory<byte>>
 Janus.Core.ISecretSource.ReadSignOnSecretAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.ReadOnlyMemory<byte>>
@@ -2654,6 +2664,7 @@ const Janus.Core.DisplayName.MaximumBytes = 64 -> int
 const Janus.Core.DisplayName.MinimumBytes = 1 -> int
 const Janus.Core.EmailAddress.MaximumLocalPartOctets = 64 -> int
 const Janus.Core.EmailAddress.MaximumOctets = 254 -> int
+const Janus.Core.FingerprintKeys.MinimumLength = 32 -> int
 const Janus.Core.LegalName.MaximumLength = 200 -> int
 const Janus.Core.LegalName.MinimumLength = 1 -> int
 const Janus.Core.PhoneNumber.MaximumDigits = 15 -> int
@@ -2890,6 +2901,9 @@ override Janus.Core.ExportSection.ToString() -> string!
 override Janus.Core.FactorPresentation.Equals(object? obj) -> bool
 override Janus.Core.FactorPresentation.GetHashCode() -> int
 override Janus.Core.FactorPresentation.ToString() -> string!
+override Janus.Core.FingerprintKeys.Equals(object? obj) -> bool
+override Janus.Core.FingerprintKeys.GetHashCode() -> int
+override Janus.Core.FingerprintKeys.ToString() -> string!
 override Janus.Core.Gate.Equals(object? obj) -> bool
 override Janus.Core.Gate.GetHashCode() -> int
 override Janus.Core.Gate.ToString() -> string!
@@ -3744,6 +3758,8 @@ static Janus.Core.ExportSection.operator !=(Janus.Core.ExportSection? left, Janu
 static Janus.Core.ExportSection.operator ==(Janus.Core.ExportSection? left, Janus.Core.ExportSection? right) -> bool
 static Janus.Core.FactorPresentation.operator !=(Janus.Core.FactorPresentation? left, Janus.Core.FactorPresentation? right) -> bool
 static Janus.Core.FactorPresentation.operator ==(Janus.Core.FactorPresentation? left, Janus.Core.FactorPresentation? right) -> bool
+static Janus.Core.FingerprintKeys.operator !=(Janus.Core.FingerprintKeys? left, Janus.Core.FingerprintKeys? right) -> bool
+static Janus.Core.FingerprintKeys.operator ==(Janus.Core.FingerprintKeys? left, Janus.Core.FingerprintKeys? right) -> bool
 static Janus.Core.Gate.operator !=(Janus.Core.Gate? left, Janus.Core.Gate? right) -> bool
 static Janus.Core.Gate.operator ==(Janus.Core.Gate? left, Janus.Core.Gate? right) -> bool
 static Janus.Core.GeneratedRecoveryCodes.operator !=(Janus.Core.GeneratedRecoveryCodes? left, Janus.Core.GeneratedRecoveryCodes? right) -> bool

@@ -6,8 +6,9 @@ using Janus.Core;
 namespace Janus.Privacy.SubjectKeys;
 
 /// <summary>
-/// What the key-encryption key's rotation reads and writes: its own progress, and every
-/// value held wrapped under a version of the key.
+/// What the key-encryption key's rotation reads and writes: the progress of every
+/// rotation, which the fingerprint key's shares, and every value held wrapped under a
+/// version of the key.
 /// </summary>
 /// <remarks>
 /// Implements OPS-SEC-003, OPS-MIG-003a and CONV-DESIGN-003. Every value is unwrapped

@@ -235,7 +235,7 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
     }
 
     private MailboxStore Store(StoreContext context) =>
-        new(context, _deployment.Keys, Deployment.FingerprintKey, _deployment.Randomness);
+        new(context, _deployment.Keys, Deployment.FingerprintKeys, _deployment.Randomness);
 
     private async Task<Mailbox?> HeldByAsync(SubjectId holder)
     {

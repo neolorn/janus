@@ -28,24 +28,53 @@ internal static class EscrowCopy
     /// <param name="cancellationToken">Abandons the write.</param>
     /// <returns>The work of writing it.</returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
-    public static async ValueTask WriteAsync(
+    public static ValueTask WriteAsync(
         TextWriter output,
         KeyEncryptionKeys keys,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(keys);
 
-        string version = keys.CurrentVersion.ToString(CultureInfo.InvariantCulture);
-        char[] written = new char[(keys.Current.Length + 2) / 3 * 4];
+        return WrittenAsync(output, "keyEncryptionKeys", keys.CurrentVersion, keys.Current, cancellationToken);
+    }
+
+    /// <summary>
+    /// Writes the copy of the fingerprint key's current version.
+    /// </summary>
+    /// <param name="output">Where it is printed.</param>
+    /// <param name="keys">The versions, the one copied current.</param>
+    /// <param name="cancellationToken">Abandons the write.</param>
+    /// <returns>The work of writing it.</returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    public static ValueTask WriteAsync(
+        TextWriter output,
+        FingerprintKeys keys,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(keys);
+
+        return WrittenAsync(output, "fingerprintKeys", keys.CurrentVersion, keys.Current, cancellationToken);
+    }
+
+    private static async ValueTask WrittenAsync(
+        TextWriter output,
+        string member,
+        int currentVersion,
+        ReadOnlyMemory<byte> current,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+
+        string version = currentVersion.ToString(CultureInfo.InvariantCulture);
+        char[] written = new char[(current.Length + 2) / 3 * 4];
 
         try
         {
-            Convert.TryToBase64Chars(keys.Current.Span, written, out int length);
+            Convert.TryToBase64Chars(current.Span, written, out int length);
 
             await output
                 .WriteAsync(
-                    ("{\"keyEncryptionKeys\":{\"current\":" + version + ",\"versions\":{\"" + version + "\":\"").AsMemory(),
+                    ("{\"" + member + "\":{\"current\":" + version + ",\"versions\":{\"" + version + "\":\"").AsMemory(),
                     cancellationToken)
                 .ConfigureAwait(false);
             await output.WriteAsync(written.AsMemory(0, length), cancellationToken).ConfigureAwait(false);

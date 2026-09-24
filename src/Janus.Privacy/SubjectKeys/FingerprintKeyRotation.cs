@@ -10,49 +10,45 @@ using Janus.Core;
 namespace Janus.Privacy.SubjectKeys;
 
 /// <summary>
-/// The key-encryption key's rotation: every value wrapped under a previous version is
-/// wrapped again under the current one, in batches that each commit with the progress
+/// The fingerprint key's rotation: every stored fingerprint under a previous version is
+/// computed again under the current one, in batches that each commit with the progress
 /// they make, and the previous versions are retired once the escrow copy of the current
-/// one is sealed.
+/// one is sealed and no fingerprint still read stands under them.
 /// </summary>
-/// <param name="store">The progress and the wrapped values.</param>
+/// <param name="rotations">The progress, and whether the credential is the maintenance one.</param>
+/// <param name="store">The stored fingerprints.</param>
 /// <param name="work">The transaction each batch commits in.</param>
 /// <param name="audit">Where each step is recorded.</param>
 /// <param name="time">The clock the deployment runs on.</param>
-/// <param name="keyEncryptionKeys">The versions the command was handed, the new one current.</param>
+/// <param name="fingerprintKeys">The versions the command was handed, the new one current.</param>
 /// <remarks>
-/// Implements OPS-SEC-003, DR-009a, IDN-PRIN-001 and PRIV-RIGHT-005a, as entries 316 and
-/// 317 of the decisions pending review settle them. The run needs nothing of the
-/// application: it reads the versions from the command, runs under the maintenance
-/// credential, and resumes from the progress row after a crash, a restart or a lost
-/// connection. No stored ciphertext changes, because only the wrapping of the keys
-/// does.
+/// Implements OPS-SEC-003 AC6, PRIV-RIGHT-005c and IDN-PRIN-001, in the shape of the
+/// key-encryption key's rotation, as entry 318 of the decisions pending review settles
+/// it. The run needs nothing of the application: it reads the versions from the
+/// command, runs under the maintenance credential, and resumes from the progress row
+/// after a crash, a restart or a lost connection. The application looks a fingerprint
+/// up under every version it holds, so the previous version stays usable until the
+/// retirement.
 /// </remarks>
-internal sealed class KeyRotation(
-    IKeyRotationStore store,
+internal sealed class FingerprintKeyRotation(
+    IKeyRotationStore rotations,
+    IFingerprintRotationStore store,
     IUnitOfWork work,
     IPrivacyAudit audit,
     TimeProvider time,
-    KeyEncryptionKeys keyEncryptionKeys)
+    FingerprintKeys fingerprintKeys)
 {
-    /// <summary>
-    /// How many subject keys one transaction takes (OPS-SEC-003, D-153).
-    /// </summary>
-    public const int BatchSize = 500;
-
-    private const string Reason = "OPS-SEC-003";
-
-    private const KeyRotationKind Kind = KeyRotationKind.KeyEncryptionKey;
+    private const KeyRotationKind Kind = KeyRotationKind.FingerprintKey;
 
     private static readonly SystemPrincipal Principal =
-        SystemPrincipal.ForDeployment("rotate-kek", Reason, SystemOperation.KeyRotation);
+        SystemPrincipal.ForDeployment("rotate-fingerprint-key", "OPS-SEC-003", SystemOperation.KeyRotation);
 
     private static readonly JsonSerializerOptions Spelled =
         new() { Converters = { new JsonStringEnumConverter() } };
 
     /// <summary>
     /// Starts the rotation to the current version, or resumes the one that stopped, and
-    /// runs it until every value is under that version.
+    /// runs it until every fingerprint that can be computed again is under that version.
     /// </summary>
     /// <param name="cancellationToken">
     /// Abandons the run; the batch in hand rolls back and the next run resumes after the
@@ -61,33 +57,34 @@ internal sealed class KeyRotation(
     /// <returns>
     /// The rotation, complete, or the failure naming what was refused: the credential
     /// where it is not the maintenance credential, the keys where the current version is
-    /// not a new one or a stored value is wrapped under a version the command was not
+    /// not a new one or a fingerprint still read is under a version the command was not
     /// handed.
     /// </returns>
-    public async ValueTask<Result<KeyRotationProgress>> ReWrapAsync(CancellationToken cancellationToken)
+    public async ValueTask<Result<KeyRotationProgress>> RecomputeAsync(CancellationToken cancellationToken)
     {
-        if (!await store.UnderMaintenanceCredentialAsync(cancellationToken).ConfigureAwait(false))
+        if (!await rotations.UnderMaintenanceCredentialAsync(cancellationToken).ConfigureAwait(false))
         {
             return Result.Failure<KeyRotationProgress>(Error.From(ErrorCodes.Denied));
         }
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
-        KeyRotationProgress? latest = await store.LatestAsync(Kind, cancellationToken).ConfigureAwait(false);
-        IReadOnlySet<int> wrapping = await store.WrappingVersionsAsync(cancellationToken).ConfigureAwait(false);
+        DateTimeOffset now = time.GetUtcNow();
+        KeyRotationProgress? latest = await rotations.LatestAsync(Kind, cancellationToken).ConfigureAwait(false);
+        IReadOnlySet<int> computing = await store.FingerprintVersionsAsync(now, cancellationToken).ConfigureAwait(false);
 
-        // A rotation is to a version later than any rotated to before, and one that
-        // stopped is finished before another starts; every value must unwrap under a
-        // version the command holds, and none may be under one later than the current.
-        bool resumed = latest is { RetiredAt: null } && latest.Version == keyEncryptionKeys.CurrentVersion;
+        // As the key-encryption key's: a rotation is to a version later than any rotated
+        // to before, one that stopped is finished before another starts, and every
+        // fingerprint still read must be under a version the command holds and none
+        // under one later than the current.
+        bool resumed = latest is { RetiredAt: null } && latest.Version == fingerprintKeys.CurrentVersion;
 
-        if ((!resumed && latest is not null && (latest.RetiredAt is null || latest.Version >= keyEncryptionKeys.CurrentVersion))
-            || wrapping.Any(version => version > keyEncryptionKeys.CurrentVersion || !keyEncryptionKeys.Versions.ContainsKey(version)))
+        if ((!resumed && latest is not null && (latest.RetiredAt is null || latest.Version >= fingerprintKeys.CurrentVersion))
+            || computing.Any(version => version > fingerprintKeys.CurrentVersion || !fingerprintKeys.Versions.ContainsKey(version)))
         {
             return Result.Failure<KeyRotationProgress>(KeysUnavailable());
         }
 
-        DateTimeOffset now = time.GetUtcNow();
         KeyRotationProgress progress;
 
         if (resumed)
@@ -96,8 +93,8 @@ internal sealed class KeyRotation(
         }
         else
         {
-            progress = KeyRotationProgress.Started(Kind, keyEncryptionKeys.CurrentVersion, now);
-            await store.AddAsync(progress, cancellationToken).ConfigureAwait(false);
+            progress = KeyRotationProgress.Started(Kind, fingerprintKeys.CurrentVersion, now);
+            await rotations.AddAsync(progress, cancellationToken).ConfigureAwait(false);
         }
 
         await RecordedAsync(
@@ -123,7 +120,7 @@ internal sealed class KeyRotation(
             DateTimeOffset completed = time.GetUtcNow();
             progress.Complete(completed);
 
-            await store.RecordAsync(progress, cancellationToken).ConfigureAwait(false);
+            await rotations.RecordAsync(progress, cancellationToken).ConfigureAwait(false);
             await RecordedAsync(AuditActions.KeyRotationCompleted, progress, completed, retired: null, cancellationToken)
                 .ConfigureAwait(false);
             await work.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -134,30 +131,31 @@ internal sealed class KeyRotation(
 
     /// <summary>
     /// Retires the versions before the current one, once the operator has confirmed the
-    /// escrow copy of the current one sealed.
+    /// escrow copy of the current one sealed and no fingerprint still read stands under
+    /// them.
     /// </summary>
     /// <param name="cancellationToken">Abandons the retirement, which then records nothing.</param>
     /// <returns>
     /// The rotation, retired, and the versions it retired; or the failure naming what was
     /// refused: the credential where it is not the maintenance credential, the keys where
     /// the command was not handed the version of the rotation standing, and the seal
-    /// where the rotation has not completed or values are still being wrapped under a
+    /// where the rotation has not completed or fingerprints still read stand under a
     /// previous version.
     /// </returns>
     public async ValueTask<Result<KeyRetirement>> RetireAsync(CancellationToken cancellationToken)
     {
-        if (!await store.UnderMaintenanceCredentialAsync(cancellationToken).ConfigureAwait(false))
+        if (!await rotations.UnderMaintenanceCredentialAsync(cancellationToken).ConfigureAwait(false))
         {
             return Result.Failure<KeyRetirement>(Error.From(ErrorCodes.Denied));
         }
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
-        KeyRotationProgress? latest = await store.LatestAsync(Kind, cancellationToken).ConfigureAwait(false);
+        KeyRotationProgress? latest = await rotations.LatestAsync(Kind, cancellationToken).ConfigureAwait(false);
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-        if (latest is not null && latest.Version != keyEncryptionKeys.CurrentVersion)
+        if (latest is not null && latest.Version != fingerprintKeys.CurrentVersion)
         {
             return Result.Failure<KeyRetirement>(KeysUnavailable());
         }
@@ -169,24 +167,32 @@ internal sealed class KeyRotation(
             return Result.Failure<KeyRetirement>(SealRefused(pending: null));
         }
 
-        // A value wrapped under a previous version since the rotation completed means
-        // something still wraps under it, and retiring that version would strand what it
-        // wraps next. The values found are re-wrapped all the same.
-        int pending = await SweepAsync(latest, cancellationToken).ConfigureAwait(false);
-
-        if (pending > 0)
-        {
-            return Result.Failure<KeyRetirement>(SealRefused(pending));
-        }
+        // A fingerprint written under a previous version since the rotation completed
+        // means something still writes under it; one nothing can compute again, a held
+        // username above all, is read under it until it is released. Retiring the
+        // version would lose both, so it waits. What the sweep finds is computed again
+        // all the same.
+        int swept = await SweepAsync(latest, cancellationToken).ConfigureAwait(false);
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
         DateTimeOffset now = time.GetUtcNow();
+        int pending = swept + await store.StandingAsync(now, cancellationToken).ConfigureAwait(false);
+
+        if (pending > 0)
+        {
+            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+            return Result.Failure<KeyRetirement>(SealRefused(pending));
+        }
+
+        await store.ForgetAsync(now, cancellationToken).ConfigureAwait(false);
+
         latest.Retire(now);
 
-        int[] retired = [.. keyEncryptionKeys.Versions.Keys.Where(version => version != latest.Version).Order()];
+        int[] retired = [.. fingerprintKeys.Versions.Keys.Where(version => version != latest.Version).Order()];
 
-        await store.RecordAsync(latest, cancellationToken).ConfigureAwait(false);
+        await rotations.RecordAsync(latest, cancellationToken).ConfigureAwait(false);
         await RecordedAsync(AuditActions.KeyRotationRetired, latest, now, retired, cancellationToken).ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
@@ -194,10 +200,10 @@ internal sealed class KeyRotation(
     }
 
     private static Error KeysUnavailable() =>
-        Error.From(ErrorCodes.StartupKeyUnavailable, "member", JsonSerializer.SerializeToElement("keyEncryptionKeys"));
+        Error.From(ErrorCodes.StartupKeyUnavailable, "member", JsonSerializer.SerializeToElement("fingerprintKeys"));
 
-    // The seal named where the rotation cannot take it, with the count of values found
-    // under a previous version where that is why.
+    // The seal named where the rotation cannot take it, with the count of fingerprints
+    // found under a previous version where that is why.
     private static Error SealRefused(int? pending)
     {
         var details = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
@@ -222,7 +228,7 @@ internal sealed class KeyRotation(
             await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
             KeyRotationBatch batch = await store
-                .ReWrapSubjectKeysAfterAsync(progress.LastSubject, BatchSize, cancellationToken)
+                .RecomputeSubjectsAfterAsync(progress.LastSubject, KeyRotation.BatchSize, time.GetUtcNow(), cancellationToken)
                 .ConfigureAwait(false);
 
             if (batch.Last is not SubjectId last)
@@ -234,14 +240,14 @@ internal sealed class KeyRotation(
 
             progress.Passed(last, batch.Processed);
 
-            await store.RecordAsync(progress, cancellationToken).ConfigureAwait(false);
+            await rotations.RecordAsync(progress, cancellationToken).ConfigureAwait(false);
             await work.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
-    // What the ordered pass cannot reach: subject keys written under a previous version
-    // behind the point it had reached, and the values held wrapped beside the subject
-    // keys. Returns how many were re-wrapped.
+    // What the ordered pass cannot reach: fingerprints written under a previous version
+    // behind the point it had reached, and the mailboxes' addresses. Returns how many
+    // were computed again.
     private async ValueTask<int> SweepAsync(KeyRotationProgress progress, CancellationToken cancellationToken)
     {
         int swept = 0;
@@ -251,27 +257,17 @@ internal sealed class KeyRotation(
         {
             await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
-            taken = await store.ReWrapRemainingSubjectKeysAsync(BatchSize, cancellationToken).ConfigureAwait(false);
+            taken = await store
+                .RecomputeRemainingAsync(KeyRotation.BatchSize, time.GetUtcNow(), cancellationToken)
+                .ConfigureAwait(false);
             progress.Swept(taken);
 
-            await store.RecordAsync(progress, cancellationToken).ConfigureAwait(false);
+            await rotations.RecordAsync(progress, cancellationToken).ConfigureAwait(false);
             await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
             swept += taken;
         }
-        while (taken == BatchSize);
-
-        do
-        {
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-
-            taken = await store.ReWrapHeldValuesAsync(BatchSize, cancellationToken).ConfigureAwait(false);
-
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
-            swept += taken;
-        }
-        while (taken == BatchSize);
+        while (taken == KeyRotation.BatchSize);
 
         return swept;
     }

@@ -220,6 +220,34 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
     }
 
     /// <summary>
+    /// OPS-MIG-003a AC4, OPS-SEC-003 AC6: of a table holding a keyed fingerprint the
+    /// maintenance role reaches what computing it again needs and no other column, and
+    /// of a ledger the version a line is hashed under and the line to forget, never the
+    /// hash (entry 318 of the decisions pending review).
+    /// </summary>
+    [Fact]
+    public async Task OPS_MIG_003a_AC4_TheMaintenanceRoleReachesTheFingerprintsAndNoOtherColumnAsync()
+    {
+        await using NpgsqlConnection connection = await AsAsync("identity_maintenance");
+
+        Assert.Equal(0, await connection.ExecuteAsync(
+            """
+            UPDATE identity.identifiers SET fingerprint = fingerprint, fingerprint_version = fingerprint_version
+            WHERE identifier_id = identifier_id AND subject = subject AND enc_canonical = enc_canonical
+            """));
+        Assert.Equal(0, await connection.ExecuteAsync(
+            "DELETE FROM identity.throttle_counters WHERE fingerprint_version <> 1"));
+
+        PostgresException withheld = await Assert.ThrowsAsync<PostgresException>(async () =>
+            await connection.ExecuteScalarAsync<int>("SELECT count(enc_entered)::int FROM identity.identifiers"));
+        PostgresException hashed = await Assert.ThrowsAsync<PostgresException>(async () =>
+            await connection.ExecuteScalarAsync<int>("SELECT count(key)::int FROM identity.throttle_counters"));
+
+        Assert.Equal(InsufficientPrivilege, withheld.SqlState);
+        Assert.Equal(InsufficientPrivilege, hashed.SqlState);
+    }
+
+    /// <summary>
     /// OPS-MIG-003a AC2, AC4: what the serialized model lists for the maintenance
     /// credential is what the database grants it, so the listing a reviewer reads
     /// cannot drift from the migration that writes the grants.

@@ -26,6 +26,7 @@ internal sealed class RegistrationSourceConfiguration
             .HasColumnName("source")
             .HasMaxLength(Fingerprint.Length);
 
+        builder.Property(started => started.FingerprintVersion).HasColumnName("fingerprint_version");
         builder.Property(started => started.At).HasColumnName("at");
 
         builder.HasIndex(started => new { started.Source, started.At })

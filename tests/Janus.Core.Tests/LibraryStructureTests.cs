@@ -304,19 +304,40 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
-    /// OPS-SEC-003 AC1, DR-009a AC5: the key-encryption key's rotation is run by the
-    /// command line and by nothing else, so no endpoint of the management application,
-    /// no job of the worker and no host reaches it.
+    /// OPS-SEC-003 AC1 and AC6, DR-009a AC5: the rotations of the key-encryption key and
+    /// of the fingerprint key are run by the command line and by nothing else, so no
+    /// endpoint of the management application, no job of the worker and no host reaches
+    /// either. The fingerprint rotation reads the batch size of the other and keeps its
+    /// progress in the same table.
     /// </summary>
     [Fact]
     public void OPS_SEC_003_AC1_OnlyTheCommandLineRunsTheRotation()
     {
         Assert.Equal(
-            ["KeyRotation.cs", "RotateKeyEncryptionKeyCommand.cs"],
+            ["FingerprintKeyRotation.cs", "KeyRotation.cs", "RotateKeyEncryptionKeyCommand.cs"],
             Named(text => Regex.IsMatch(text, @"(?<!SystemOperation\.)\bKeyRotation\b(?!\s*=\s*\d)", RegexOptions.None, TimeSpan.FromSeconds(5))));
         Assert.Equal(
-            ["IKeyRotationStore.cs", "KeyRotation.cs", "KeyRotationStore.cs", "RotateKeyEncryptionKeyCommand.cs"],
+            [
+                "FingerprintKeyRotation.cs",
+                "IKeyRotationStore.cs",
+                "KeyRotation.cs",
+                "KeyRotationStore.cs",
+                "RotateFingerprintKeyCommand.cs",
+                "RotateKeyEncryptionKeyCommand.cs",
+            ],
             Named(text => Regex.IsMatch(text, @"\bIKeyRotationStore\b", RegexOptions.None, TimeSpan.FromSeconds(5))));
+        Assert.Equal(
+            [
+                "FingerprintKeyRotation.cs",
+                "FingerprintRotationStore.cs",
+                "IFingerprintRotationStore.cs",
+                "RotateFingerprintKeyCommand.cs",
+            ],
+            Named(text => Regex.IsMatch(
+                text,
+                @"\b(FingerprintKeyRotation|IFingerprintRotationStore)\b",
+                RegexOptions.None,
+                TimeSpan.FromSeconds(5))));
     }
 
     /// <summary>

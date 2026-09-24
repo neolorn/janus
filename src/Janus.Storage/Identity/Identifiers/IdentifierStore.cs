@@ -19,18 +19,20 @@ namespace Janus.Storage.Identity.Identifiers;
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
 /// <param name="keyEncryptionKeys">The versions a subject key may be wrapped under.</param>
-/// <param name="fingerprintKey">The key the searchable fingerprints are computed under.</param>
+/// <param name="fingerprintKeys">The versions the searchable fingerprints are computed under.</param>
 /// <param name="randomness">The randomness each initialisation vector is drawn from.</param>
 /// <remarks>
 /// Implements IDN-ACCT-004, REG-IDENT-002, PRIV-RIGHT-005a, PRIV-RIGHT-005c and
 /// CONV-DESIGN-003. The subject's data key is unwrapped once for an operation, however
 /// many fields it touches, and cleared before the operation returns (PRIV-RIGHT-005a
-/// AC12).
+/// AC12). A fingerprint is written under the current version of the fingerprint key and
+/// looked up under each version held, so one a rotation has not yet reached is still
+/// found (OPS-SEC-003).
 /// </remarks>
 internal sealed class IdentifierStore(
     StoreContext context,
     KeyEncryptionKeys keyEncryptionKeys,
-    ReadOnlyMemory<byte> fingerprintKey,
+    FingerprintKeys fingerprintKeys,
     RandomNumberGenerator randomness) : IIdentifierStore
 {
     /// <inheritdoc/>
@@ -82,11 +84,7 @@ internal sealed class IdentifierStore(
     {
         ArgumentNullException.ThrowIfNull(canonical);
 
-        byte[] fingerprint = Fingerprinted(canonical);
-
-        IdentifierRecord? row = await context.Identifiers
-            .Where(held => held.Kind == kind && held.Fingerprint == fingerprint)
-            .FirstOrDefaultAsync(cancellationToken)
+        IdentifierRecord? row = await FingerprintedAsync(kind, canonical, cancellationToken)
             .ConfigureAwait(false);
 
         // PRIV-RIGHT-005c: a neutralised fingerprint is nobody's, and no fingerprint
@@ -103,11 +101,7 @@ internal sealed class IdentifierStore(
     {
         ArgumentNullException.ThrowIfNull(canonical);
 
-        byte[] fingerprint = Fingerprinted(canonical);
-
-        IdentifierRecord? row = await context.Identifiers
-            .Where(held => held.Kind == kind && held.Fingerprint == fingerprint)
-            .FirstOrDefaultAsync(cancellationToken)
+        IdentifierRecord? row = await FingerprintedAsync(kind, canonical, cancellationToken)
             .ConfigureAwait(false);
 
         return row is null || Fingerprint.IsNeutralised(row.Fingerprint) ? null : (row.Subject, row.Id);
@@ -164,15 +158,21 @@ internal sealed class IdentifierStore(
     {
         ArgumentNullException.ThrowIfNull(canonical);
 
-        byte[] fingerprint = Fingerprinted(canonical);
+        foreach (byte[] fingerprint in Candidates(canonical))
+        {
+            if (await context.IdentifierRemovals
+                    .Where(removal =>
+                        removal.Kind == kind
+                        && removal.Fingerprint == fingerprint
+                        && removal.ExpiresAt > now)
+                    .AnyAsync(cancellationToken)
+                    .ConfigureAwait(false))
+            {
+                return true;
+            }
+        }
 
-        return await context.IdentifierRemovals
-            .Where(removal =>
-                removal.Kind == kind
-                && removal.Fingerprint == fingerprint
-                && removal.ExpiresAt > now)
-            .AnyAsync(cancellationToken)
-            .ConfigureAwait(false);
+        return false;
     }
 
     /// <inheritdoc/>
@@ -221,6 +221,7 @@ internal sealed class IdentifierStore(
                         Subject = removal.Subject,
                         Kind = removal.Kind,
                         Fingerprint = Fingerprinted(removal.Canonical),
+                        FingerprintVersion = fingerprintKeys.CurrentVersion,
                         Entered = Given(
                             removal.Subject,
                             IdentifierRemovalConfiguration.EnteredColumn,
@@ -277,12 +278,18 @@ internal sealed class IdentifierStore(
     {
         ArgumentNullException.ThrowIfNull(canonical);
 
-        byte[] fingerprint = Fingerprinted(canonical);
+        foreach (byte[] fingerprint in Candidates(canonical))
+        {
+            if (await context.UsernameHolds
+                    .Where(hold => hold.Fingerprint == fingerprint && hold.ReleasesAt > now)
+                    .AnyAsync(cancellationToken)
+                    .ConfigureAwait(false))
+            {
+                return true;
+            }
+        }
 
-        return await context.UsernameHolds
-            .Where(hold => hold.Fingerprint == fingerprint && hold.ReleasesAt > now)
-            .AnyAsync(cancellationToken)
-            .ConfigureAwait(false);
+        return false;
     }
 
     private static BackupSetting Settled(BackupSettingRecord row) =>
@@ -328,7 +335,10 @@ internal sealed class IdentifierStore(
             stored));
 
     private byte[] Fingerprinted(string canonical) =>
-        Fingerprint.Compute(Encoding.UTF8.GetBytes(canonical), fingerprintKey.Span);
+        Fingerprint.Compute(Encoding.UTF8.GetBytes(canonical), fingerprintKeys);
+
+    private IReadOnlyList<byte[]> Candidates(string canonical) =>
+        Fingerprint.Candidates(Encoding.UTF8.GetBytes(canonical), fingerprintKeys);
 
     private byte[] Written(SubjectId subject, string column, string value, ReadOnlySpan<byte> dataKey) =>
         PersonalFieldCipher.Encrypt(
@@ -351,6 +361,7 @@ internal sealed class IdentifierStore(
             Subject = identifier.Subject,
             Kind = identifier.Kind,
             Fingerprint = Fingerprinted(identifier.Canonical),
+            FingerprintVersion = fingerprintKeys.CurrentVersion,
             CanonicalisationVersion = CanonicalForm.UnicodeVersion,
             Entered = Written(
                 identifier.Subject,
@@ -405,8 +416,32 @@ internal sealed class IdentifierStore(
                 identifier.Canonical,
                 dataKey);
             row.Fingerprint = Fingerprinted(identifier.Canonical);
+            row.FingerprintVersion = fingerprintKeys.CurrentVersion;
             row.CanonicalisationVersion = CanonicalForm.UnicodeVersion;
         }
+    }
+
+    // The row an identifier is held by, under whichever version of the fingerprint key
+    // its fingerprint stands.
+    private async ValueTask<IdentifierRecord?> FingerprintedAsync(
+        IdentifierKind kind,
+        string canonical,
+        CancellationToken cancellationToken)
+    {
+        foreach (byte[] fingerprint in Candidates(canonical))
+        {
+            IdentifierRecord? row = await context.Identifiers
+                .Where(held => held.Kind == kind && held.Fingerprint == fingerprint)
+                .FirstOrDefaultAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            if (row is not null)
+            {
+                return row;
+            }
+        }
+
+        return null;
     }
 
     private async Task<List<IdentifierRecord>> HeldAsync(

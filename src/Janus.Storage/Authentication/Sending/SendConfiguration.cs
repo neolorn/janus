@@ -25,6 +25,7 @@ internal sealed class SendConfiguration : IEntityTypeConfiguration<SendRecord>
             .HasMaxLength(Fingerprint.Length);
 
         builder.Property(send => send.Counted).HasColumnName("counted");
+        builder.Property(send => send.FingerprintVersion).HasColumnName("fingerprint_version");
         builder.Property(send => send.SentAt).HasColumnName("sent_at");
         builder.Property(send => send.SettlesAt).HasColumnName("settles_at");
 

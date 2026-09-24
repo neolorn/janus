@@ -25,6 +25,9 @@ internal sealed class AuthenticatorConfiguration : IEntityTypeConfiguration<Auth
     /// <summary>The column the shared secret of a code generator is held in.</summary>
     public const string TotpSecretColumn = "totp_secret";
 
+    /// <summary>The column a linked provider's subject is held in.</summary>
+    public const string ProviderSubjectColumn = "enc_provider_subject";
+
     private const int LabelLength = 64;
 
     // The entries of the catalogue a person links rather than enrols: the social
@@ -70,13 +73,17 @@ internal sealed class AuthenticatorConfiguration : IEntityTypeConfiguration<Auth
                     + "(credential_id IS NULL) = (backup_state IS NULL)");
 
             // IDN-LIFE-012a, PRIV-RIGHT-005c: a linked identity is found by the keyed
-            // fingerprint of the provider's subject, and only a linked identity has one.
+            // fingerprint of the provider's subject, and only a linked identity has one,
+            // with the version it was computed under and the subject it was computed
+            // from (OPS-SEC-003).
             table.HasCheckConstraint(
                 "ck_authenticators_provider_subject",
                 string.Create(
                     CultureInfo.InvariantCulture,
                     $"(provider_subject IS NULL) <> ({Vocabulary.Admits("factor", Linked)}) AND "
-                        + $"(provider_subject IS NULL OR octet_length(provider_subject) = {Fingerprint.Length})"));
+                        + $"(provider_subject IS NULL OR octet_length(provider_subject) = {Fingerprint.Length}) AND "
+                        + $"(provider_subject IS NULL) = (fingerprint_version IS NULL) AND "
+                        + $"(provider_subject IS NULL) = ({ProviderSubjectColumn} IS NULL)"));
         });
 
         builder.HasKey(credential => credential.Id).HasName("pk_authenticators");
@@ -116,6 +123,8 @@ internal sealed class AuthenticatorConfiguration : IEntityTypeConfiguration<Auth
         builder.Property(credential => credential.BackupState).HasColumnName("backup_state");
         builder.Property(credential => credential.IsPreferred).HasColumnName("is_preferred");
         builder.Property(credential => credential.ProviderSubject).HasColumnName("provider_subject");
+        builder.Property(credential => credential.FingerprintVersion).HasColumnName("fingerprint_version");
+        builder.Property(credential => credential.EncryptedProviderSubject).HasColumnName(ProviderSubjectColumn);
 
         // AUTH-FACT-013: the browser names the credential and not the account, so the
         // credential identifier is what a presentation is resolved by.

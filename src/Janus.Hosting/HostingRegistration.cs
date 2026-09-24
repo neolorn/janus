@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -92,9 +93,9 @@ public static class HostingRegistration
     /// The versions a subject key may be wrapped under, read from the secrets manager
     /// at startup and never from the database (OPS-SEC-001).
     /// </param>
-    /// <param name="fingerprintKey">
-    /// The key the searchable fingerprints are computed under, read from the same place
-    /// and held outside the database (PRIV-RIGHT-005c).
+    /// <param name="fingerprintKeys">
+    /// The versions the searchable fingerprints are computed under, read from the same
+    /// place and held outside the database (PRIV-RIGHT-005c).
     /// </param>
     /// <param name="signOnSecret">
     /// What this application presents at the provider's token endpoint when it
@@ -116,7 +117,7 @@ public static class HostingRegistration
         this IServiceCollection services,
         string connectionString,
         KeyEncryptionKeys keyEncryptionKeys,
-        ReadOnlyMemory<byte> fingerprintKey,
+        FingerprintKeys fingerprintKeys,
         ReadOnlyMemory<byte> signOnSecret,
         AuthorizationDeclaration declaration,
         ApplicationKind application)
@@ -127,12 +128,12 @@ public static class HostingRegistration
         // the library holds no fallback for either, so a deployment that reached
         // neither stops here with the code that names why, not at the first request
         // that would have read a person's field.
-        Present(keyEncryptionKeys, fingerprintKey, signOnSecret);
+        Present(keyEncryptionKeys, fingerprintKeys, signOnSecret);
 
         // CONV-DESIGN-007: time is injected, and a host that has its own clock keeps it.
         services.TryAddSingleton(TimeProvider.System);
 
-        services.AddStorageArea(connectionString, keyEncryptionKeys, fingerprintKey);
+        services.AddStorageArea(connectionString, keyEncryptionKeys, fingerprintKeys);
         services.AddSingleton(AuthorizationModel.Of(declaration));
 
         // AUTHZ-GROUP-002: one set per operation, which is what makes ten checks in one
@@ -532,11 +533,11 @@ public static class HostingRegistration
     private static string Corpus =>
         Path.Combine(AppContext.BaseDirectory, WordList.Directory);
 
-    // The fingerprint key computes an HMAC-SHA256, so anything shorter than that hash
+    // The fingerprint key computes an HMAC-SHA256, so a version shorter than that hash
     // is a key that weakens the code it is used by and is not a key the library runs on.
     private static void Present(
         KeyEncryptionKeys keyEncryptionKeys,
-        ReadOnlyMemory<byte> fingerprintKey,
+        FingerprintKeys fingerprintKeys,
         ReadOnlyMemory<byte> signOnSecret)
     {
         if (keyEncryptionKeys is null)
@@ -546,11 +547,12 @@ public static class HostingRegistration
                 Error.From(ErrorCodes.StartupKeyUnavailable, "key", JsonSerializer.SerializeToElement("keyEncryptionKeys")));
         }
 
-        if (fingerprintKey.Length < 32)
+        if (fingerprintKeys is null
+            || fingerprintKeys.Versions.Values.Any(version => version.Length < FingerprintKeys.MinimumLength))
         {
             throw new StartupException(
-                "The fingerprint key was not supplied, or is shorter than the hash it computes.",
-                Error.From(ErrorCodes.StartupKeyUnavailable, "key", JsonSerializer.SerializeToElement("fingerprintKey")));
+                "The fingerprint key was not supplied, or a version of it is shorter than the hash it computes.",
+                Error.From(ErrorCodes.StartupKeyUnavailable, "key", JsonSerializer.SerializeToElement("fingerprintKeys")));
         }
 
         // BFF-SESS-006: an application that cannot authenticate itself at the token

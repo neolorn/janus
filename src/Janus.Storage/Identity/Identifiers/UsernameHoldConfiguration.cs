@@ -28,6 +28,7 @@ internal sealed class UsernameHoldConfiguration : IEntityTypeConfiguration<Usern
         builder.HasKey(hold => hold.Fingerprint).HasName("pk_username_holds");
 
         builder.Property(hold => hold.Fingerprint).HasColumnName("fingerprint");
+        builder.Property(hold => hold.FingerprintVersion).HasColumnName("fingerprint_version");
         builder.Property(hold => hold.HeldFrom).HasColumnName("held_from");
         builder.Property(hold => hold.ReleasesAt).HasColumnName("releases_at");
 

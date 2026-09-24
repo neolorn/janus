@@ -30,7 +30,9 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
 
     /// <summary>
     /// AUTH-ABUSE-004 AC6: the destination record is a keyed hash and times and
-    /// nothing else, so a dump of the table yields no address.
+    /// nothing else, so a dump of the table yields no address. The hash carries the
+    /// version of the key it is computed under (OPS-SEC-003 AC6, entry 318 of the
+    /// decisions pending review).
     /// </summary>
     [Fact]
     public async Task AUTH_ABUSE_004_AC6_TheRecordHoldsAHashAndTimesAndNothingElseAsync()
@@ -47,7 +49,7 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
             ORDER BY column_name
             """);
 
-        Assert.Equal(["key", "sent_at"], columns);
+        Assert.Equal(["fingerprint_version", "key", "sent_at"], columns);
 
         RestrictionKey destination = Destination(number);
 
@@ -225,7 +227,7 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
 
     private static byte[] Reference(byte one) => [.. Enumerable.Repeat(one, Fingerprint.Length)];
 
-    private static SendLedger Ledger(StoreContext context) => new(context, Deployment.FingerprintKey);
+    private static SendLedger Ledger(StoreContext context) => new(context, Deployment.FingerprintKeys);
 
     private async Task RecordedAsync(
         byte[] reference,

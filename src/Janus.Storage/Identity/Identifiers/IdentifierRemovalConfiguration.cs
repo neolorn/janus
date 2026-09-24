@@ -71,6 +71,7 @@ internal sealed class IdentifierRemovalConfiguration : IEntityTypeConfiguration<
             .HasConversion(new VocabularyConverter<IdentifierKind>());
 
         builder.Property(removal => removal.Fingerprint).HasColumnName("fingerprint");
+        builder.Property(removal => removal.FingerprintVersion).HasColumnName("fingerprint_version");
         builder.Property(removal => removal.Entered).HasColumnName(EnteredColumn);
         builder.Property(removal => removal.Canonical).HasColumnName(CanonicalColumn);
         builder.Property(removal => removal.IsLocked).HasColumnName("is_locked");

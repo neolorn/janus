@@ -10,6 +10,15 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- The fingerprint key now has versions, as the key-encryption key has.
+  `ISecretSource.ReadFingerprintKeysAsync` and `AddJanus` take a `FingerprintKeys`,
+  the current version and every version still held, and the key document piped to the
+  command line names `fingerprintKeys` with `current` and `versions`. Startup refuses a
+  set without its current version, or with any version shorter than 32 bytes. Every
+  fingerprint is written under the current version and found under any version held.
+  A deployment's existing fingerprints are version 1, so its first document names its
+  one key as version 1.
+
 - Every access token now names the client it was issued to in `aud`, beside
   `client_id`, as RFC 9068 has it; the token the library hands the mail server for app
   passwords names the mail server's client. A party verifying a token offline can now
@@ -360,6 +369,17 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `rotate-fingerprint-key` rotates the fingerprint key from the command line under the
+  maintenance credential, as `rotate-kek` rotates the other: add the new version as
+  current, keep the previous one, restart the application on it, and pipe the document
+  to the command. It computes every stored fingerprint again from the value beside it,
+  resumes where it stopped, and prints the new version's escrow copy. Once the copy is
+  sealed, `rotate-fingerprint-key --sealed` retires the previous versions; it refuses
+  while a username held after an erasure, or an address an erased account gave up, is
+  still reserved under one of them. Retirement forgets the throttle and sending counts
+  kept under a previous version, so any of those not touched since the new version
+  became current start again from nothing. A social sign-in link now also holds the
+  provider's subject encrypted under the account's key.
 - `rotate-kek` rotates the key-encryption key from the command line under the
   maintenance credential. Add the new version to the secrets manager as current, keep
   the previous one, restart the application on it, and pipe the document to the
@@ -373,7 +393,7 @@ against the public contract of LIB-API-001.
   the organization's name, the first administrator's email and phone, optionally the
   corporate address whose mailbox is queued for them, and each required deployment
   value as `--<key> <value>`; any other key is refused. The database connection, the
-  key-encryption keys and the fingerprint key are read once from a JSON document piped
+  key-encryption keys and the fingerprint keys are read once from a JSON document piped
   to standard input, never from a terminal, an argument or the environment. It writes
   the named values, the three administrative roles, the administrative organization
   and its policy, the administrator, the reserved `emergency` account holding the

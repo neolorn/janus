@@ -448,7 +448,11 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
         {
             ["connection"] = connection.ConnectionString,
             ["keyEncryptionKeys"] = new JsonObject { ["current"] = current, ["versions"] = held },
-            ["fingerprintKey"] = Invocation.FingerprintKey,
+            ["fingerprintKeys"] = new JsonObject
+            {
+                ["current"] = 1,
+                ["versions"] = new JsonObject { ["1"] = Invocation.FingerprintKey },
+            },
         };
     }
 }

@@ -23,6 +23,7 @@ internal sealed class SendCounterConfiguration : IEntityTypeConfiguration<SendCo
             .HasColumnName("key")
             .HasMaxLength(Fingerprint.Length);
 
+        builder.Property(counter => counter.FingerprintVersion).HasColumnName("fingerprint_version");
         builder.Property(counter => counter.SentAt).HasColumnName("sent_at");
 
         // The sweep reads the newest of the times, which no model builder expresses as

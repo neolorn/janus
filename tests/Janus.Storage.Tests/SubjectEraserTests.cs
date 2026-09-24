@@ -950,10 +950,10 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     private static ErasureStore Store(StoreContext context) => new(context);
 
     private AuthenticatorStore Authenticators(StoreContext context) =>
-        new(context, _deployment.Keys, _deployment.Randomness, Deployment.FingerprintKey);
+        new(context, _deployment.Keys, _deployment.Randomness, Deployment.FingerprintKeys);
 
     private IdentifierStore Identifiers(StoreContext context) =>
-        new(context, _deployment.Keys, Deployment.FingerprintKey, _deployment.Randomness);
+        new(context, _deployment.Keys, Deployment.FingerprintKeys, _deployment.Randomness);
 
     private static Invitation Invited(OrganizationId organization, SubjectId inviter) =>
         Invitation.Issued(
@@ -972,7 +972,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         new(context, _deployment.Keys, _deployment.Randomness);
 
     private MailboxStore Mailboxes(StoreContext context) =>
-        new(context, _deployment.Keys, Deployment.FingerprintKey, _deployment.Randomness);
+        new(context, _deployment.Keys, Deployment.FingerprintKeys, _deployment.Randomness);
 
     // The deployment's own records, which the library neither maps nor writes: a
     // record names its subject and outlives the subject's erasure (PRIV-RIGHT-005).

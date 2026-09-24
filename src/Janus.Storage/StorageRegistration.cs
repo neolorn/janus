@@ -113,8 +113,8 @@ internal static class StorageRegistration
     /// The versions a subject key may be wrapped under, read from the secrets manager
     /// at startup and never from the database (OPS-SEC-001).
     /// </param>
-    /// <param name="fingerprintKey">
-    /// The key the searchable fingerprints are computed under, read from the same
+    /// <param name="fingerprintKeys">
+    /// The versions the searchable fingerprints are computed under, read from the same
     /// place and held outside the database (PRIV-RIGHT-005c).
     /// </param>
     /// <returns>The collection, for chaining.</returns>
@@ -122,7 +122,7 @@ internal static class StorageRegistration
         this IServiceCollection services,
         string connectionString,
         KeyEncryptionKeys keyEncryptionKeys,
-        ReadOnlyMemory<byte> fingerprintKey)
+        FingerprintKeys fingerprintKeys)
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -161,7 +161,7 @@ internal static class StorageRegistration
         services.AddScoped<IIdentifierStore>(provider => new IdentifierStore(
             provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
-            fingerprintKey,
+            fingerprintKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IProfileStore>(provider => new ProfileStore(
             provider.GetRequiredService<StoreContext>(),
@@ -189,7 +189,7 @@ internal static class StorageRegistration
             provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>(),
-            fingerprintKey));
+            fingerprintKeys));
         services.AddScoped<IRegistrationSessionStore>(provider => new RegistrationSessionStore(
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<DataConnections>(),
@@ -267,7 +267,7 @@ internal static class StorageRegistration
         services.AddScoped<IMailboxStore>(provider => new MailboxStore(
             provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
-            fingerprintKey,
+            fingerprintKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IInvitationStore>(provider => new InvitationStore(
             provider.GetRequiredService<StoreContext>(),
@@ -293,21 +293,21 @@ internal static class StorageRegistration
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<ISendLedger>(provider => new SendLedger(
             provider.GetRequiredService<StoreContext>(),
-            fingerprintKey));
+            fingerprintKeys));
         services.AddScoped<IThrottleLedger>(provider => new ThrottleLedger(
             provider.GetRequiredService<StoreContext>(),
-            fingerprintKey));
+            fingerprintKeys));
         services.AddScoped<INoticeLedger>(provider => new NoticeLedger(
             provider.GetRequiredService<StoreContext>(),
-            fingerprintKey));
+            fingerprintKeys));
         services.AddScoped<ICallbackLedger>(provider => new CallbackLedger(
             provider.GetRequiredService<StoreContext>(),
-            fingerprintKey));
+            fingerprintKeys));
         services.AddScoped<ICallbackEvents, CallbackEventStore>();
         services.AddScoped<ICallbackReferenceStore, CallbackReferenceStore>();
         services.AddScoped<IRegistrationSources>(provider => new RegistrationSourceLedger(
             provider.GetRequiredService<StoreContext>(),
-            fingerprintKey));
+            fingerprintKeys));
         services.AddScoped<ISmsBalanceLedger, SmsBalanceLedger>();
         services.AddScoped<IAlertLedger, AlertLedger>();
         services.AddScoped<IRaisedAlerts, RaisedAlerts>();

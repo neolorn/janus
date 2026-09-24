@@ -79,4 +79,17 @@ internal sealed class AuthenticatorRecord
     /// name (IDN-LIFE-012a, PRIV-RIGHT-005c).
     /// </summary>
     public byte[]? ProviderSubject { get; set; }
+
+    /// <summary>
+    /// The <c>fingerprint_version</c> column: the version of the fingerprint key the
+    /// provider's subject was fingerprinted under, beside a linked identity only.
+    /// </summary>
+    public int? FingerprintVersion { get; set; }
+
+    /// <summary>
+    /// The <c>enc_provider_subject</c> column: the provider's subject itself, under the
+    /// account's key, which its fingerprint is computed from again when the fingerprint
+    /// key rotates (OPS-SEC-003).
+    /// </summary>
+    public byte[]? EncryptedProviderSubject { get; set; }
 }

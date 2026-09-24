@@ -19,6 +19,12 @@ internal sealed class UsernameHoldRecord
     public byte[] Fingerprint { get; set; } = [];
 
     /// <summary>
+    /// The <c>fingerprint_version</c> column: the version of the fingerprint key the
+    /// fingerprint was computed under.
+    /// </summary>
+    public int FingerprintVersion { get; set; }
+
+    /// <summary>
     /// The <c>held_from</c> column: the erasure the hold runs from.
     /// </summary>
     public DateTimeOffset HeldFrom { get; set; }

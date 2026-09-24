@@ -17,6 +17,12 @@ internal sealed class CallbackRecord
     /// <summary>The <c>source</c> column.</summary>
     public byte[] Source { get; set; } = [];
 
+    /// <summary>
+    /// The <c>fingerprint_version</c> column: the version of the fingerprint key the
+    /// source is hashed under.
+    /// </summary>
+    public int FingerprintVersion { get; set; }
+
     /// <summary>The <c>at</c> column.</summary>
     public DateTimeOffset At { get; set; }
 

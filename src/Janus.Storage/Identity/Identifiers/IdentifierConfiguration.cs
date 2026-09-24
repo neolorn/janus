@@ -78,6 +78,7 @@ internal sealed class IdentifierConfiguration : IEntityTypeConfiguration<Identif
             .HasConversion(new VocabularyConverter<IdentifierKind>());
 
         builder.Property(identifier => identifier.Fingerprint).HasColumnName("fingerprint");
+        builder.Property(identifier => identifier.FingerprintVersion).HasColumnName("fingerprint_version");
 
         builder.Property(identifier => identifier.CanonicalisationVersion)
             .HasColumnName("canonicalisation_version");

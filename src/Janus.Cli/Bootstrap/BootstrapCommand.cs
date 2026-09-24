@@ -97,7 +97,7 @@ internal static class BootstrapCommand
         var services = new ServiceCollection();
 
         services.AddSingleton(TimeProvider.System);
-        services.AddStorageArea(keys.Connection, keys.KeyEncryptionKeys, keys.FingerprintKey);
+        services.AddStorageArea(keys.Connection, keys.KeyEncryptionKeys, keys.FingerprintKeys);
         services.AddScoped<SchemaValidation>();
         services.AddScoped<DeploymentBootstrap>();
 

@@ -25,6 +25,7 @@ internal sealed class SendGrantConfiguration : IEntityTypeConfiguration<SendGran
             .HasColumnName("key")
             .HasMaxLength(Fingerprint.Length);
 
+        builder.Property(grant => grant.FingerprintVersion).HasColumnName("fingerprint_version");
         builder.Property(grant => grant.Credit).HasColumnName("credit");
     }
 }

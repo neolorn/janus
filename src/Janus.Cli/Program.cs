@@ -42,6 +42,7 @@ internal static class Program
         {
             [BootstrapCommand.Name] = BootstrapCommand.RunAsync,
             [RotateKeyEncryptionKeyCommand.Name] = RotateKeyEncryptionKeyCommand.RunAsync,
+            [RotateFingerprintKeyCommand.Name] = RotateFingerprintKeyCommand.RunAsync,
         };
 
     /// <summary>

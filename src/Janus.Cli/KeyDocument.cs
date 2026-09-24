@@ -29,11 +29,11 @@ internal sealed class KeyDocument
     // A connection and a handful of keys; anything longer is not the document.
     private const int Longest = 64 * 1024;
 
-    private KeyDocument(string connection, KeyEncryptionKeys keyEncryptionKeys, byte[] fingerprintKey)
+    private KeyDocument(string connection, KeyEncryptionKeys keyEncryptionKeys, FingerprintKeys fingerprintKeys)
     {
         Connection = connection;
         KeyEncryptionKeys = keyEncryptionKeys;
-        FingerprintKey = fingerprintKey;
+        FingerprintKeys = fingerprintKeys;
     }
 
     /// <summary>
@@ -47,9 +47,10 @@ internal sealed class KeyDocument
     public KeyEncryptionKeys KeyEncryptionKeys { get; }
 
     /// <summary>
-    /// The key the searchable fingerprints are computed under.
+    /// The key the searchable fingerprints are computed under and the versions retained
+    /// beside it.
     /// </summary>
-    public ReadOnlyMemory<byte> FingerprintKey { get; }
+    public FingerprintKeys FingerprintKeys { get; }
 
     /// <summary>
     /// Reads the document from standard input.
@@ -145,28 +146,34 @@ internal sealed class KeyDocument
                 return Result.Failure<KeyDocument>(Malformed("connection"));
             }
 
-            if (Versions(root, held) is not KeyEncryptionKeys keys)
+            if (Versions(root, "keyEncryptionKeys", held, length => length is 16 or 24 or 32)
+                is not (int keyVersion, Dictionary<int, ReadOnlyMemory<byte>> keyMaterial))
             {
                 return Result.Failure<KeyDocument>(Unavailable("keyEncryptionKeys"));
             }
 
-            if (!root.TryGetProperty("fingerprintKey", out JsonElement fingerprint)
-                || fingerprint.ValueKind is not JsonValueKind.String
-                || !fingerprint.TryGetBytesFromBase64(out byte[]? fingerprintKey)
-                || held.Hold(fingerprintKey).Length is 0)
+            if (Versions(root, "fingerprintKeys", held, length => length >= FingerprintKeys.MinimumLength)
+                is not (int fingerprintVersion, Dictionary<int, ReadOnlyMemory<byte>> fingerprintMaterial))
             {
-                return Result.Failure<KeyDocument>(Unavailable("fingerprintKey"));
+                return Result.Failure<KeyDocument>(Unavailable("fingerprintKeys"));
             }
 
-            return Result.Success(new KeyDocument(connection.GetString()!, keys, fingerprintKey));
+            return Result.Success(new KeyDocument(
+                connection.GetString()!,
+                new KeyEncryptionKeys(keyVersion, keyMaterial),
+                new FingerprintKeys(fingerprintVersion, fingerprintMaterial)));
         }
     }
 
-    // The key-encryption key's versions, each held where it can be cleared, or nothing
-    // where the member does not name a current version among AES keys.
-    private static KeyEncryptionKeys? Versions(JsonElement root, HeldKeys held)
+    // A key's versions, each held where it can be cleared, or nothing where the member
+    // does not name a current version among keys of a length the key takes.
+    private static (int Current, Dictionary<int, ReadOnlyMemory<byte>> Material)? Versions(
+        JsonElement root,
+        string name,
+        HeldKeys held,
+        Func<int, bool> usable)
     {
-        if (!root.TryGetProperty("keyEncryptionKeys", out JsonElement member)
+        if (!root.TryGetProperty(name, out JsonElement member)
             || member.ValueKind is not JsonValueKind.Object
             || !member.TryGetProperty("current", out JsonElement current)
             || !current.TryGetInt32(out int currentVersion)
@@ -187,13 +194,13 @@ internal sealed class KeyDocument
                 return null;
             }
 
-            if (held.Hold(key).Length is not (16 or 24 or 32) || !material.TryAdd(number, key))
+            if (!usable(held.Hold(key).Length) || !material.TryAdd(number, key))
             {
                 return null;
             }
         }
 
-        return material.ContainsKey(currentVersion) ? new KeyEncryptionKeys(currentVersion, material) : null;
+        return material.ContainsKey(currentVersion) ? (currentVersion, material) : null;
     }
 
     private static Error Unavailable(string member) =>

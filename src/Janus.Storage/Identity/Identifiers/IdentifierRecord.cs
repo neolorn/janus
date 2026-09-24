@@ -37,6 +37,12 @@ internal sealed class IdentifierRecord
     public byte[] Fingerprint { get; set; } = [];
 
     /// <summary>
+    /// The <c>fingerprint_version</c> column: the version of the fingerprint key the
+    /// fingerprint was computed under.
+    /// </summary>
+    public int FingerprintVersion { get; set; }
+
+    /// <summary>
     /// The <c>canonicalisation_version</c> column: the Unicode version the canonical
     /// form the fingerprint was derived from was computed under.
     /// </summary>

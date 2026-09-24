@@ -25,6 +25,7 @@ internal sealed class CallbackConfiguration : IEntityTypeConfiguration<CallbackR
             .HasColumnName("source")
             .HasMaxLength(Fingerprint.Length);
 
+        builder.Property(callback => callback.FingerprintVersion).HasColumnName("fingerprint_version");
         builder.Property(callback => callback.At).HasColumnName("at");
         builder.Property(callback => callback.Rejected).HasColumnName("rejected");
 

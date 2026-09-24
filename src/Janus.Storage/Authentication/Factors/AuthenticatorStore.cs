@@ -19,19 +19,20 @@ namespace Janus.Storage.Authentication.Factors;
 /// <param name="context">The context the operation's writes are tracked on.</param>
 /// <param name="keyEncryptionKeys">The versions a subject key may be wrapped under.</param>
 /// <param name="randomness">The randomness the initialisation vector is drawn from.</param>
-/// <param name="fingerprintKey">The key a provider's subject is fingerprinted under.</param>
+/// <param name="fingerprintKeys">The versions a provider's subject is fingerprinted under.</param>
 /// <remarks>
-/// Implements AUTH-FACT-001, AUTH-FACT-006, IDN-LIFE-012a, PRIV-RIGHT-005c and
-/// CONV-DESIGN-003. The shared secret of a code generator is written under the person's
-/// key, so a dump of the table yields no usable secret; the subject a social provider
-/// knows a linked identity by is held only as its keyed fingerprint, so a dump does not
-/// say who the person is at the provider either.
+/// Implements AUTH-FACT-001, AUTH-FACT-006, IDN-LIFE-012a, PRIV-RIGHT-005c, OPS-SEC-003
+/// and CONV-DESIGN-003. The shared secret of a code generator is written under the
+/// person's key, so a dump of the table yields no usable secret; the subject a social
+/// provider knows a linked identity by is found by its keyed fingerprint and held under
+/// the person's key, so a dump does not say who the person is at the provider either,
+/// and a rotation of the fingerprint key can compute the fingerprint again.
 /// </remarks>
 internal sealed class AuthenticatorStore(
     StoreContext context,
     KeyEncryptionKeys keyEncryptionKeys,
     RandomNumberGenerator randomness,
-    ReadOnlyMemory<byte> fingerprintKey) : IAuthenticatorStore
+    FingerprintKeys fingerprintKeys) : IAuthenticatorStore
 {
     /// <inheritdoc/>
     public async ValueTask<Authenticator?> FindAsync(
@@ -67,18 +68,22 @@ internal sealed class AuthenticatorStore(
     {
         ArgumentNullException.ThrowIfNull(providerSubject);
 
-        byte[] fingerprint = Fingerprinted(providerSubject);
+        foreach (byte[] fingerprint in Candidates(providerSubject))
+        {
+            AuthenticatorRecord? record = await context.Authenticators
+                .FirstOrDefaultAsync(
+                    credential => credential.Factor == provider && credential.ProviderSubject == fingerprint,
+                    cancellationToken)
+                .ConfigureAwait(false);
 
-        AuthenticatorRecord? record = await context.Authenticators
-            .FirstOrDefaultAsync(
-                credential => credential.Factor == provider && credential.ProviderSubject == fingerprint,
-                cancellationToken)
-            .ConfigureAwait(false);
+            // A fingerprint erasure neutralised is nobody's (PRIV-RIGHT-005c).
+            if (record is not null && Fingerprint.Matches(record.ProviderSubject, fingerprint))
+            {
+                return await ReadAsync(record, cancellationToken).ConfigureAwait(false);
+            }
+        }
 
-        // A fingerprint erasure neutralised is nobody's (PRIV-RIGHT-005c).
-        return record is null || !Fingerprint.Matches(record.ProviderSubject, fingerprint)
-            ? null
-            : await ReadAsync(record, cancellationToken).ConfigureAwait(false);
+        return null;
     }
 
     /// <inheritdoc/>
@@ -121,7 +126,7 @@ internal sealed class AuthenticatorStore(
     {
         ArgumentNullException.ThrowIfNull(providerSubject);
 
-        return AddedAsync(authenticator, Fingerprinted(providerSubject), cancellationToken);
+        return AddedAsync(authenticator, providerSubject, cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -161,6 +166,9 @@ internal sealed class AuthenticatorStore(
     private static PersonalFieldLocation Located(SubjectId subject) =>
         new(subject, AuthenticatorConfiguration.Table, AuthenticatorConfiguration.TotpSecretColumn);
 
+    private static PersonalFieldLocation Linked(SubjectId subject) =>
+        new(subject, AuthenticatorConfiguration.Table, AuthenticatorConfiguration.ProviderSubjectColumn);
+
     private static Authenticator Read(ReadOnlySpan<byte> dataKey, AuthenticatorRecord record) =>
         Authenticator.Existing(
             record.Id,
@@ -198,7 +206,7 @@ internal sealed class AuthenticatorStore(
 
     private async ValueTask AddedAsync(
         Authenticator authenticator,
-        byte[]? providerSubject,
+        string? providerSubject,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(authenticator);
@@ -223,21 +231,36 @@ internal sealed class AuthenticatorStore(
             BackupState = authenticator.WebAuthn?.BackupState,
             TotpConsumedStep = authenticator.Totp?.ConsumedStep,
             IsPreferred = authenticator.IsPreferred,
-            ProviderSubject = providerSubject,
         };
 
-        if (authenticator.Totp is not null)
+        if (authenticator.Totp is not null || providerSubject is not null)
         {
             byte[] dataKey = await DataKeyAsync(authenticator.Subject, cancellationToken)
                 .ConfigureAwait(false);
 
             try
             {
-                record.TotpSecret = PersonalFieldCipher.Encrypt(
-                    dataKey,
-                    Located(authenticator.Subject),
-                    authenticator.Totp.Secret.Span,
-                    randomness);
+                if (authenticator.Totp is not null)
+                {
+                    record.TotpSecret = PersonalFieldCipher.Encrypt(
+                        dataKey,
+                        Located(authenticator.Subject),
+                        authenticator.Totp.Secret.Span,
+                        randomness);
+                }
+
+                if (providerSubject is not null)
+                {
+                    byte[] linked = Encoding.UTF8.GetBytes(providerSubject);
+
+                    record.ProviderSubject = Fingerprint.Compute(linked, fingerprintKeys);
+                    record.FingerprintVersion = fingerprintKeys.CurrentVersion;
+                    record.EncryptedProviderSubject = PersonalFieldCipher.Encrypt(
+                        dataKey,
+                        Linked(authenticator.Subject),
+                        linked,
+                        randomness);
+                }
             }
             finally
             {
@@ -248,8 +271,8 @@ internal sealed class AuthenticatorStore(
         context.Authenticators.Add(record);
     }
 
-    private byte[] Fingerprinted(string providerSubject) =>
-        Fingerprint.Compute(Encoding.UTF8.GetBytes(providerSubject), fingerprintKey.Span);
+    private IReadOnlyList<byte[]> Candidates(string providerSubject) =>
+        Fingerprint.Candidates(Encoding.UTF8.GetBytes(providerSubject), fingerprintKeys);
 
     private async ValueTask<Authenticator> ReadAsync(
         AuthenticatorRecord record,

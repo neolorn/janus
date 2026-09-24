@@ -22,11 +22,12 @@ public interface ISecretSource
     ValueTask<KeyEncryptionKeys> ReadKeyEncryptionKeysAsync(CancellationToken cancellationToken);
 
     /// <summary>
-    /// Reads the key the searchable fingerprints are computed under.
+    /// Reads the key the searchable fingerprints are computed under and the versions
+    /// retained beside it.
     /// </summary>
     /// <param name="cancellationToken">Abandons the read.</param>
-    /// <returns>The key material.</returns>
-    ValueTask<ReadOnlyMemory<byte>> ReadFingerprintKeyAsync(CancellationToken cancellationToken);
+    /// <returns>The versions a stored fingerprint may be under, the one written current.</returns>
+    ValueTask<FingerprintKeys> ReadFingerprintKeysAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Reads the database credential the scheduled maintenance runs under, which the

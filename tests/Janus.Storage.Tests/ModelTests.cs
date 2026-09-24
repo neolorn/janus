@@ -137,7 +137,9 @@ public sealed class ModelTests
             // Credentials: the enrolled authenticator of AUTH-FACT-001, the shared secret
             // of AUTH-FACT-006 under the key, the WebAuthn columns AUTH-FACT-011 and
             // AUTH-FACT-012 read, and the keyed fingerprint a provider link is found by
-            // (IDN-LIFE-012a).
+            // (IDN-LIFE-012a), with the subject it is computed from under the key and
+            // the fingerprint key's version, so a rotation can compute it again
+            // (OPS-SEC-003 AC6).
             "authenticators.added_at",
             "authenticators.algorithm",
             "authenticators.backup_eligible",
@@ -145,7 +147,9 @@ public sealed class ModelTests
             "authenticators.confirmed",
             "authenticators.counter",
             "authenticators.credential_id",
+            "authenticators.enc_provider_subject",
             "authenticators.factor",
+            "authenticators.fingerprint_version",
             "authenticators.id",
             "authenticators.invalidates_at",
             "authenticators.is_preferred",
@@ -196,6 +200,7 @@ public sealed class ModelTests
             // Not an account field: the inbound callbacks counted per source
             // (INT-GEN-003, BFF-MACH-003), the source held by its hash.
             "callbacks.at",
+            "callbacks.fingerprint_version",
             "callbacks.id",
             "callbacks.rejected",
             "callbacks.source",
@@ -298,6 +303,7 @@ public sealed class ModelTests
             "identifier_removals.enc_entered",
             "identifier_removals.expires_at",
             "identifier_removals.fingerprint",
+            "identifier_removals.fingerprint_version",
             "identifier_removals.identifier_id",
             "identifier_removals.is_locked",
             "identifier_removals.kind",
@@ -327,6 +333,7 @@ public sealed class ModelTests
             "identifiers.enc_canonical",
             "identifiers.enc_entered",
             "identifiers.fingerprint",
+            "identifiers.fingerprint_version",
             "identifiers.identifier_id",
             "identifiers.is_locked",
             "identifiers.is_personal",
@@ -416,6 +423,7 @@ public sealed class ModelTests
             "mailboxes.enc_canonical",
             "mailboxes.failed_at",
             "mailboxes.fingerprint",
+            "mailboxes.fingerprint_version",
             "mailboxes.holder",
             "mailboxes.id",
             "mailboxes.key_version",
@@ -442,6 +450,7 @@ public sealed class ModelTests
             // an address, counted against the hash of the address.
             "nonexistence_notices.at",
             "nonexistence_notices.destination",
+            "nonexistence_notices.fingerprint_version",
             "nonexistence_notices.id",
 
             // Not an account field: the purposes on an objectable basis the subject has
@@ -659,6 +668,7 @@ public sealed class ModelTests
             // Not an account field: the registration sessions of AUTH-ABUSE-008, counted
             // against the hash of the source they were started from.
             "registration_sources.at",
+            "registration_sources.fingerprint_version",
             "registration_sources.id",
             "registration_sources.source",
 
@@ -682,9 +692,11 @@ public sealed class ModelTests
             // Not an account field: the sending counters of AUTH-ABUSE-004, an HMAC of the
             // restriction key with the times counted against it, and the credit support
             // kept apart from them.
+            "send_counters.fingerprint_version",
             "send_counters.key",
             "send_counters.sent_at",
             "send_grants.credit",
+            "send_grants.fingerprint_version",
             "send_grants.key",
 
             // The messages undertaken and not yet carried (D-022), each the whole of
@@ -701,6 +713,7 @@ public sealed class ModelTests
             // INT-SMS-005), held by the hash of its correlation reference so that a
             // delivery report can take its counts back out.
             "sends.counted",
+            "sends.fingerprint_version",
             "sends.reference",
             "sends.sent_at",
             "sends.settles_at",
@@ -789,6 +802,7 @@ public sealed class ModelTests
             // been typed.
             "throttle_counters.at",
             "throttle_counters.failures",
+            "throttle_counters.fingerprint_version",
             "throttle_counters.key",
             "throttle_counters.scope",
 
@@ -796,6 +810,7 @@ public sealed class ModelTests
             // `retention.consent` asks, so that nobody takes it in the meantime
             // (REG-IDENT-009, PRIV-RET-002).
             "username_holds.fingerprint",
+            "username_holds.fingerprint_version",
             "username_holds.held_from",
             "username_holds.releases_at",
 

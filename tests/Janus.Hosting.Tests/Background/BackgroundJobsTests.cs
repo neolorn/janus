@@ -64,7 +64,7 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
             .AddJanus(
                 host.ConnectionString,
                 new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-                new byte[32],
+                new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
                 Encoding.UTF8.GetBytes("the secret this application presents"),
                 HostFixture.Declaration(),
                 ApplicationKind.Public)

@@ -18,7 +18,7 @@ namespace Janus.Storage.Authentication.Mailboxes;
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
 /// <param name="keyEncryptionKeys">The versions a data key may be wrapped under.</param>
-/// <param name="fingerprintKey">The key the address's fingerprint is computed under.</param>
+/// <param name="fingerprintKeys">The versions the address's fingerprint is computed under.</param>
 /// <param name="randomness">The randomness the keys and the vectors are drawn from.</param>
 /// <remarks>
 /// Implements INT-MAIL-006, INT-MAIL-006a, INT-MAIL-007, PRIV-RIGHT-005a and
@@ -27,12 +27,13 @@ namespace Janus.Storage.Authentication.Mailboxes;
 /// state owed is never a copy that could lag. The address is the holder's personal
 /// field, under the holder's key, so erasing the holder leaves it unreadable where it
 /// is; while nobody holds the mailbox it is under a key of the row's own. A row whose
-/// holder was erased is not read at all.
+/// holder was erased is not read at all. An address is found under each version of the
+/// fingerprint key held (OPS-SEC-003).
 /// </remarks>
 internal sealed class MailboxStore(
     StoreContext context,
     KeyEncryptionKeys keyEncryptionKeys,
-    ReadOnlyMemory<byte> fingerprintKey,
+    FingerprintKeys fingerprintKeys,
     RandomNumberGenerator randomness) : IMailboxStore
 {
     /// <inheritdoc/>
@@ -71,13 +72,19 @@ internal sealed class MailboxStore(
     /// <inheritdoc/>
     public async ValueTask<Mailbox?> FindAsync(EmailAddress address, CancellationToken cancellationToken)
     {
-        byte[] fingerprint = Fingerprinted(address);
+        foreach (byte[] fingerprint in Candidates(address))
+        {
+            MailboxRecord? record = await Readable()
+                .FirstOrDefaultAsync(mailbox => mailbox.Fingerprint == fingerprint, cancellationToken)
+                .ConfigureAwait(false);
 
-        MailboxRecord? record = await Readable()
-            .FirstOrDefaultAsync(mailbox => mailbox.Fingerprint == fingerprint, cancellationToken)
-            .ConfigureAwait(false);
+            if (record is not null)
+            {
+                return await ReadAsync(record, cancellationToken).ConfigureAwait(false);
+            }
+        }
 
-        return record is null ? null : await ReadAsync(record, cancellationToken).ConfigureAwait(false);
+        return null;
     }
 
     /// <inheritdoc/>
@@ -113,6 +120,7 @@ internal sealed class MailboxStore(
         {
             Id = mailbox.Id.Value,
             Fingerprint = Fingerprinted(mailbox.Address),
+            FingerprintVersion = fingerprintKeys.CurrentVersion,
             CanonicalisationVersion = CanonicalForm.UnicodeVersion,
             ReservedAt = mailbox.ReservedAt,
         };
@@ -238,5 +246,8 @@ internal sealed class MailboxStore(
             : throw new InvalidOperationException("The mailbox's address is not an address.");
 
     private byte[] Fingerprinted(EmailAddress address) =>
-        Janus.Storage.Fingerprint.Compute(Encoding.UTF8.GetBytes(address.Value), fingerprintKey.Span);
+        Janus.Storage.Fingerprint.Compute(Encoding.UTF8.GetBytes(address.Value), fingerprintKeys);
+
+    private IReadOnlyList<byte[]> Candidates(EmailAddress address) =>
+        Janus.Storage.Fingerprint.Candidates(Encoding.UTF8.GetBytes(address.Value), fingerprintKeys);
 }

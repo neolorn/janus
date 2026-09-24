@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Callbacks;
+using Janus.Core;
 using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Authentication.Callbacks;
@@ -12,9 +14,13 @@ namespace Janus.Storage.Authentication.Callbacks;
 /// Where inbound callbacks are counted per source.
 /// </summary>
 /// <param name="context">The context the operation runs on.</param>
-/// <param name="fingerprintKey">What the sources are hashed under.</param>
-/// <remarks>Implements INT-GEN-003, BFF-MACH-003 and CONV-DESIGN-003.</remarks>
-internal sealed class CallbackLedger(StoreContext context, ReadOnlyMemory<byte> fingerprintKey)
+/// <param name="fingerprintKeys">The versions the sources are hashed under.</param>
+/// <remarks>
+/// Implements INT-GEN-003, BFF-MACH-003, OPS-SEC-003 and CONV-DESIGN-003. A callback
+/// recorded under a previous version of the fingerprint key still counts until the
+/// rotation retires it.
+/// </remarks>
+internal sealed class CallbackLedger(StoreContext context, FingerprintKeys fingerprintKeys)
     : ICallbackLedger
 {
     private static readonly TimeSpan Kept = TimeSpan.FromHours(1);
@@ -35,7 +41,7 @@ internal sealed class CallbackLedger(StoreContext context, ReadOnlyMemory<byte> 
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        byte[] hashed = Hashed(source);
+        IReadOnlyList<byte[]> candidates = Candidates(source);
 
         // A fixed window, so the count restarts at the interval boundary.
         DateTimeOffset opened = new(at.UtcTicks - (at.UtcTicks % window.Ticks), TimeSpan.Zero);
@@ -43,16 +49,22 @@ internal sealed class CallbackLedger(StoreContext context, ReadOnlyMemory<byte> 
         context.Callbacks.Add(new CallbackRecord
         {
             Id = Guid.CreateVersion7(at),
-            Source = hashed,
+            Source = candidates[0],
+            FingerprintVersion = fingerprintKeys.CurrentVersion,
             At = at,
             Rejected = false,
         });
 
-        int made = await context.Callbacks
-            .CountAsync(
-                callback => callback.Source == hashed && callback.At >= opened,
-                cancellationToken)
-            .ConfigureAwait(false);
+        int made = 0;
+
+        foreach (byte[] hashed in candidates)
+        {
+            made += await context.Callbacks
+                .CountAsync(
+                    callback => callback.Source == hashed && callback.At >= opened,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         return made + 1;
     }
@@ -66,25 +78,32 @@ internal sealed class CallbackLedger(StoreContext context, ReadOnlyMemory<byte> 
     {
         ArgumentNullException.ThrowIfNull(source);
 
-        byte[] hashed = Hashed(source);
+        IReadOnlyList<byte[]> candidates = Candidates(source);
 
         context.Callbacks.Add(new CallbackRecord
         {
             Id = Guid.CreateVersion7(at),
-            Source = hashed,
+            Source = candidates[0],
+            FingerprintVersion = fingerprintKeys.CurrentVersion,
             At = at,
             Rejected = true,
         });
 
-        int rejected = await context.Callbacks
-            .CountAsync(
-                callback => callback.Source == hashed && callback.Rejected && callback.At >= from,
-                cancellationToken)
-            .ConfigureAwait(false);
+        int rejected = 0;
+
+        foreach (byte[] hashed in candidates)
+        {
+            rejected += await context.Callbacks
+                .CountAsync(
+                    callback => callback.Source == hashed && callback.Rejected && callback.At >= from,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         return rejected + 1;
     }
 
-    private byte[] Hashed(string source) =>
-        Fingerprint.Compute(Encoding.UTF8.GetBytes(source), fingerprintKey.Span);
+    // The current version first, which is the one a callback is recorded under.
+    private IReadOnlyList<byte[]> Candidates(string source) =>
+        Fingerprint.Candidates(Encoding.UTF8.GetBytes(source), fingerprintKeys);
 }

@@ -12263,6 +12263,119 @@ and that retirement is the operator's removal once the command records it; chapt
 could list the four `ops.keyrotation` actions and the `key-rotation` operation; the
 runbook's section 9 could give the order above.
 
+---
+
+## 318. What the fingerprint key's rotation computes again, and what it keeps until the previous version retires
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-SEC-003 AC6, OPS-SEC-001, PRIV-RIGHT-005c, AUTH-KEY-002 AC2, AUTH-ABUSE-004 AC6, OPS-MIG-003a AC4**
+
+*The question.* OPS-SEC-003 has the fingerprint key's rotation use "the same shape (new
+version, resumable batch job, previous version usable until complete, escrow copy)"
+but re-compute "every stored fingerprint rather than re-wrapping a key", and AC6 asks
+for a test of it on a small fixture. OPS-SEC-001 and AUTH-KEY-002 speak of one
+fingerprint key; `ISecretSource`, `AddJanus` and the command-line key document carried
+one. A keyed fingerprint carries no version, so nothing said which key a stored one
+was computed under, and "previous version usable until complete" needs a lookup that
+matches under more than one. Four kinds of stored fingerprint have no value beside
+them to compute from: a username held after erasure, and the keys of the seven
+ledgers (throttle counters, send counters, send grants, sends, registration sources,
+non-existence notices, callbacks), which are hashes of addresses, numbers and sources
+the library never stores. A provider's link held the fingerprint of the provider's
+subject and not the subject. An address an erased subject gave up stays reserved
+until its undo lapses, and the subject's key that would decrypt it is destroyed.
+OPS-MIG-003a AC4 holds the maintenance credential to the subject-key and progress
+tables, entry 316 already widened it, and AUTH-ABUSE-004 AC6 has the send-counter
+row "a keyed hash and times and nothing else".
+
+*The readings.*
+
+1. Keep one key and have the command switch every fingerprint at once, the
+   application stopped. The previous version is not usable until complete, a stop
+   mid-run leaves lookups failing for whatever was not reached, and a rotation on
+   suspected exposure takes the service down for its length.
+2. Version the key as the key-encryption key is versioned, record the version beside
+   every stored fingerprint, look up under every version held, and have the command
+   compute each fingerprint again from the value beside it; what no value stands
+   behind is read under its version until it lapses or the retirement forgets it.
+3. As 2, but carry what no value stands behind across by copying it under the new
+   version at retirement. A keyed hash cannot be recomputed without its input, so this
+   is not open.
+
+*Chosen: 2*, the one reading that keeps the shape the chapter names; under it the
+previous version is retired only once nothing still read stands under it, which keeps
+most. Under 2:
+
+- `FingerprintKeys` (the current version and every version held) replaces the single
+  key in `ISecretSource.ReadFingerprintKeysAsync`, in `AddJanus` and in the key
+  document, whose member is now `fingerprintKeys` with `current` and `versions` as
+  `keyEncryptionKeys` has. Startup refuses a set whose current version is absent or
+  any of whose versions is shorter than 32 bytes, named as
+  `model.startup.kekunavailable` with `details.key` `fingerprintKeys`.
+- `fingerprint_version` is added beside the fingerprint on `identifiers`,
+  `identifier_removals`, `mailboxes`, `username_holds`, `authenticators` (nullable, set
+  with the provider subject) and the seven ledgers. Rows written before the migration
+  are version 1, which a deployment's first key document names; every write names its
+  version. A write is under the current version; a lookup matches under the current
+  version first and then each other version held, newest first.
+- A provider's link now also holds the provider's subject encrypted under the
+  subject's key (`enc_provider_subject`), so its fingerprint can be computed again.
+  Erasure neutralises the fingerprint as before and leaves the ciphertext under the
+  destroyed key.
+- `janus rotate-fingerprint-key` runs under the maintenance credential in the shape of
+  `rotate-kek` and shares its progress table: an ordered pass over the subjects in
+  batches of 500, each committing with the point it reached, computing again the
+  identifiers, the live reservations and the provider links of each live subject from
+  the value decrypted under the subject's key; then a sweep of what the pass could not
+  reach, the mailboxes' addresses included. Each fingerprint is written back only
+  where it and its version still stand as they were read. A stored fingerprint its own
+  value does not compute under its version stops the run as a defect.
+- The command refuses a current version no later than one rotated to before, and a
+  fingerprint still read under a version it was not handed, as `rotate-kek` does.
+- `--sealed` retires every version but the current once the run is complete and
+  nothing still read stands under a previous version: it is refused, with `pending`,
+  while a username is held under one or an erased subject's reservation has not
+  lapsed. On retirement, the ledger lines and the released holds under a previous
+  version are deleted. A throttle counter or a send count kept under the previous
+  version is lost with it, so a counter untouched since the switch starts again from
+  nothing; one touched since the switch was already counted under the new version.
+- The maintenance credential gains, by migration and in the serialized model: on
+  `identifiers` and `identifier_removals` the key, subject, fingerprint, version and
+  canonical ciphertext to read (and `expires_at` on the second), the fingerprint and
+  version to write; the same shape on `authenticators` (`provider_subject`,
+  `enc_provider_subject`) and on `mailboxes` (`holder`, `enc_canonical`); on
+  `username_holds` the version and release instant to read and `DELETE`; on each
+  ledger the version to read and `DELETE`, never the hash.
+- The send-counter row holds the version beside the hash, which AUTH-ABUSE-004 AC6's
+  "nothing else" does not list; it is not a value about anyone.
+
+*Tests that pin it.*
+`FingerprintRotationTests.OPS_SEC_003_AC6_ALookupMatchesUnderEveryVersionHeldAsync`,
+`FingerprintRotationTests.OPS_SEC_003_AC6_EveryFingerprintIsComputedAgainUnderTheNewVersionAsync`,
+`FingerprintRotationTests.OPS_SEC_003_AC6_AKilledRunResumesFromItsProgressAndComputesEachFingerprintOnceAsync`,
+`FingerprintRotationTests.OPS_SEC_003_AC6_RetirementWaitsForAHeldUsernameAndForgetsWhatTheVersionHashedAsync`,
+`FingerprintRotationTests.OPS_SEC_003_AC6_RetirementWaitsForTheReservationOfAnErasedSubjectAsync`,
+`FingerprintRotationTests.OPS_SEC_003_AC6_AFingerprintItsValueDoesNotComputeStopsTheRunAsync`,
+`FingerprintKeyRotationTests.OPS_SEC_003_AC6_TheCommandIsRefusedWithoutTheMaintenanceCredentialAsync`,
+`FingerprintKeyRotationTests.OPS_SEC_003_AC6_TheEscrowCopyIsPrintedAndTheRotationRetiresOnlyOnceItIsSealedAsync`,
+`FingerprintKeyRotationTests.OPS_SEC_003_AC6_ASealBeforeTheRotationCompletesIsRefusedAsync`,
+`FingerprintKeyRotationTests.OPS_SEC_003_AC6_EachStepIsRecordedWithTheVersionTheCountAndThePrincipalAsync`,
+`FingerprintKeyRotationTests.OPS_SEC_003_AC6_ARotationNeedsANewVersionAndEveryVersionInUseAsync`,
+`KeyMaterialTests.AUTH_KEY_002_AC2_StartupFailsNamedOnARetainedFingerprintKeyShorterThanTheHash`,
+`BootstrapRefusalTests.OPS_SEC_001_AC2_TheCommandRefusesAFingerprintKeyThatCannotBeUsedAsync`,
+`DatabaseRoleTests.OPS_MIG_003a_AC4_TheMaintenanceRoleReachesTheFingerprintsAndNoOtherColumnAsync`,
+`DatabaseRoleTests.OPS_MIG_003a_AC4_TheListedGrantsAreTheOnesTheDatabaseHoldsAsync`,
+`SendLedgerTests.AUTH_ABUSE_004_AC6_TheRecordHoldsAHashAndTimesAndNothingElseAsync`,
+`LibraryStructureTests.OPS_SEC_003_AC1_OnlyTheCommandLineRunsTheRotation`.
+
+*Chapter text that should change.* OPS-SEC-001, AUTH-KEY-002 and INF-HOST-003 could
+speak of the fingerprint key's versions as they speak of the key-encryption key's;
+PRIV-RIGHT-005c could say a fingerprint is stored with the version it was computed
+under; OPS-SEC-003 could say what a fingerprint with no value behind it becomes at
+retirement and that retirement waits for held usernames and unlapsed reservations;
+IDN-LIFE-012a could say the provider's subject is held encrypted beside its
+fingerprint; AUTH-ABUSE-004 AC6 could admit the version; OPS-MIG-003a AC4 could list
+the rights above; the runbook's "printed but not rotated" could point at the command.
+
 
 # Rows for chapter 10
 

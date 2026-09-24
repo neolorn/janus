@@ -195,7 +195,7 @@ internal sealed class KeyRotationStore(
 
         if (keys.Count == 0)
         {
-            return new KeyRotationBatch(Last: null, ReWrapped: 0);
+            return new KeyRotationBatch(Last: null, Processed: 0);
         }
 
         int reWrapped = 0;

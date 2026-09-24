@@ -448,7 +448,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
                 Declared,
                 new OutboxStore(reading, new FixedTime(Noon))),
             new IdentifierDirectory(Identifiers(reading), Preferences(reading)),
-            new AuthenticatorStore(reading, _deployment.Keys, _deployment.Randomness, Deployment.FingerprintKey),
+            new AuthenticatorStore(reading, _deployment.Keys, _deployment.Randomness, Deployment.FingerprintKeys),
             new PasswordStore(reading),
             new RecoveryCodeStore(reading),
             new DeviceStore(reading),
@@ -562,7 +562,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
 
         await using StoreContext writing = database.Context();
 
-        await new AuthenticatorStore(writing, _deployment.Keys, _deployment.Randomness, Deployment.FingerprintKey)
+        await new AuthenticatorStore(writing, _deployment.Keys, _deployment.Randomness, Deployment.FingerprintKeys)
             .AddAsync(credential, TestContext.Current.CancellationToken);
 
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -709,7 +709,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
     }
 
     private IdentifierStore Identifiers(StoreContext context) =>
-        new(context, _deployment.Keys, Deployment.FingerprintKey, _deployment.Randomness);
+        new(context, _deployment.Keys, Deployment.FingerprintKeys, _deployment.Randomness);
 
     private PreferenceStore Preferences(StoreContext context) =>
         new(context, _deployment.Keys, _deployment.Randomness);

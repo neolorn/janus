@@ -28,7 +28,7 @@ public sealed class KeyMaterialTests
     public void AUTH_KEY_002_AC2_StartupFailsNamedWithoutTheKeyEncryptionKey() =>
         Assert.Equal(
             ErrorCodes.StartupKeyUnavailable,
-            Refused(keys: null, fingerprintKey: new byte[32]));
+            Refused(keys: null, Fingerprints(new byte[32])));
 
     /// <summary>
     /// AUTH-KEY-002 AC2: the fingerprint key is read from the same place and the
@@ -38,7 +38,7 @@ public sealed class KeyMaterialTests
     public void AUTH_KEY_002_AC2_StartupFailsNamedWithoutTheFingerprintKey() =>
         Assert.Equal(
             ErrorCodes.StartupKeyUnavailable,
-            Refused(Usable, fingerprintKey: default));
+            Refused(Usable, fingerprintKeys: null));
 
     /// <summary>
     /// AUTH-KEY-002 AC2: a fingerprint key shorter than the hash it computes is no
@@ -48,7 +48,19 @@ public sealed class KeyMaterialTests
     public void AUTH_KEY_002_AC2_StartupFailsNamedOnAFingerprintKeyShorterThanTheHash() =>
         Assert.Equal(
             ErrorCodes.StartupKeyUnavailable,
-            Refused(Usable, new byte[16]));
+            Refused(Usable, Fingerprints(new byte[16])));
+
+    /// <summary>
+    /// AUTH-KEY-002 AC2, OPS-SEC-003: a version retained beside the current one is read
+    /// as the current one is, and is refused when it is short as the current one is.
+    /// </summary>
+    [Fact]
+    public void AUTH_KEY_002_AC2_StartupFailsNamedOnARetainedFingerprintKeyShorterThanTheHash() =>
+        Assert.Equal(
+            ErrorCodes.StartupKeyUnavailable,
+            Refused(
+                Usable,
+                new FingerprintKeys(2, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[16], [2] = new byte[32] })));
 
     /// <summary>
     /// AUTH-KEY-002, OPS-SEC-001: every store that wraps a personal field is handed the
@@ -69,7 +81,7 @@ public sealed class KeyMaterialTests
             .AddJanus(
                 Connection,
                 Usable,
-                new byte[32],
+                Fingerprints(new byte[32]),
                 Encoding.UTF8.GetBytes("the secret this application presents"),
                 HostFixture.Declaration(),
                 ApplicationKind.Public);
@@ -82,11 +94,14 @@ public sealed class KeyMaterialTests
     private static KeyEncryptionKeys Usable =>
         new(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] });
 
-    private static ErrorCode? Refused(KeyEncryptionKeys? keys, ReadOnlyMemory<byte> fingerprintKey) =>
+    private static FingerprintKeys Fingerprints(byte[] key) =>
+        new(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = key });
+
+    private static ErrorCode? Refused(KeyEncryptionKeys? keys, FingerprintKeys? fingerprintKeys) =>
         Assert.Throws<StartupException>(() => new ServiceCollection().AddJanus(
                 Connection,
                 keys!,
-                fingerprintKey,
+                fingerprintKeys!,
                 Encoding.UTF8.GetBytes("the secret this application presents"),
                 HostFixture.Declaration(),
                 ApplicationKind.Public))

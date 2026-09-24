@@ -52,6 +52,7 @@ internal sealed class MailboxConfiguration : IEntityTypeConfiguration<MailboxRec
 
         builder.Property(mailbox => mailbox.Id).HasColumnName("id");
         builder.Property(mailbox => mailbox.Fingerprint).HasColumnName("fingerprint");
+        builder.Property(mailbox => mailbox.FingerprintVersion).HasColumnName("fingerprint_version");
 
         builder.Property(mailbox => mailbox.CanonicalisationVersion)
             .HasColumnName("canonicalisation_version");

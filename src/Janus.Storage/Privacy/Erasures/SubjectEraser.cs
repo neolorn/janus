@@ -165,6 +165,7 @@ internal sealed class SubjectEraser(
                 new UsernameHoldRecord
                 {
                     Fingerprint = username.Fingerprint,
+                    FingerprintVersion = username.FingerprintVersion,
                     HeldFrom = at,
                     ReleasesAt = at + held,
                 },

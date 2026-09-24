@@ -577,7 +577,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         services.AddJanus(
             host.ConnectionString,
             new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-            new byte[32],
+            new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
             new byte[16],
             HostFixture.Declaration(materialised: true),
             ApplicationKind.Public);

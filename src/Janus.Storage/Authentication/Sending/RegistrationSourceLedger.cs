@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Sending;
+using Janus.Core;
 using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Authentication.Sending;
@@ -12,11 +14,14 @@ namespace Janus.Storage.Authentication.Sending;
 /// Where registration sessions are counted against the source that started them.
 /// </summary>
 /// <param name="context">The context the operation runs on.</param>
-/// <param name="fingerprintKey">What the sources are hashed under.</param>
-/// <remarks>Implements AUTH-ABUSE-008 and CONV-DESIGN-003.</remarks>
+/// <param name="fingerprintKeys">The versions the sources are hashed under.</param>
+/// <remarks>
+/// Implements AUTH-ABUSE-008, OPS-SEC-003 and CONV-DESIGN-003. A start recorded under a
+/// previous version of the fingerprint key still counts until the rotation retires it.
+/// </remarks>
 internal sealed class RegistrationSourceLedger(
     StoreContext context,
-    ReadOnlyMemory<byte> fingerprintKey) : IRegistrationSources
+    FingerprintKeys fingerprintKeys) : IRegistrationSources
 {
     private static readonly TimeSpan Kept = TimeSpan.FromHours(1);
 
@@ -38,7 +43,8 @@ internal sealed class RegistrationSourceLedger(
         context.RegistrationSources.Add(new RegistrationSourceRecord
         {
             Id = Guid.CreateVersion7(at),
-            Source = Hashed(source),
+            Source = Fingerprint.Compute(Encoding.UTF8.GetBytes(source), fingerprintKeys),
+            FingerprintVersion = fingerprintKeys.CurrentVersion,
             At = at,
         });
     }
@@ -51,15 +57,20 @@ internal sealed class RegistrationSourceLedger(
     {
         ArgumentNullException.ThrowIfNull(source);
 
-        byte[] hashed = Hashed(source);
+        int counted = 0;
 
-        return await context.RegistrationSources
-            .CountAsync(
-                started => started.Source == hashed && started.At >= from,
-                cancellationToken)
-            .ConfigureAwait(false);
+        foreach (byte[] hashed in Candidates(source))
+        {
+            counted += await context.RegistrationSources
+                .CountAsync(
+                    started => started.Source == hashed && started.At >= from,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return counted;
     }
 
-    private byte[] Hashed(string source) =>
-        Fingerprint.Compute(Encoding.UTF8.GetBytes(source), fingerprintKey.Span);
+    private IReadOnlyList<byte[]> Candidates(string source) =>
+        Fingerprint.Candidates(Encoding.UTF8.GetBytes(source), fingerprintKeys);
 }

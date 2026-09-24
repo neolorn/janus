@@ -110,7 +110,7 @@ public sealed class BootstrapRefusalTests
     /// <returns>The work of the test.</returns>
     [Theory]
     [InlineData("keyEncryptionKeys")]
-    [InlineData("fingerprintKey")]
+    [InlineData("fingerprintKeys")]
     public async Task OPS_SEC_001_AC2_TheCommandRefusesADocumentWithoutTheKeysAsync(string member)
     {
         JsonObject document = Invocation.Keys(Nowhere);
@@ -149,6 +149,32 @@ public sealed class BootstrapRefusalTests
     }
 
     /// <summary>
+    /// OPS-SEC-001 AC2, AUTH-KEY-002 AC2: a fingerprint key shorter than the hash it
+    /// computes, or whose current version is not among those given, is no key at all.
+    /// </summary>
+    /// <param name="current">The version the document calls current.</param>
+    /// <param name="length">The length of the one version it gives.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(2, 32)]
+    [InlineData(1, 16)]
+    public async Task OPS_SEC_001_AC2_TheCommandRefusesAFingerprintKeyThatCannotBeUsedAsync(int current, int length)
+    {
+        JsonObject document = Invocation.Keys(Nowhere);
+        document["fingerprintKeys"] = new JsonObject
+        {
+            ["current"] = current,
+            ["versions"] = new JsonObject { ["1"] = System.Convert.ToBase64String(new byte[length]) },
+        };
+
+        Invocation run = await Invocation.PipedAsync(Invocation.Bootstrap(), document);
+
+        Assert.Equal(1, run.ExitCode);
+        Assert.Equal(ErrorCodes.StartupKeyUnavailable.ToString(), Code(run));
+        Assert.Equal("fingerprintKeys", Detail(run, "member"));
+    }
+
+    /// <summary>
     /// API-CONV-002 and CONV-CONTENT-001: a refusal names the member it concerns and
     /// nothing piped in: no key, and not the connection with its credential.
     /// </summary>
@@ -157,7 +183,7 @@ public sealed class BootstrapRefusalTests
     public async Task OPS_SEC_001_ARefusalCarriesNoneOfTheDocumentAsync()
     {
         JsonObject document = Invocation.Keys(Nowhere + ";Password=the database credential");
-        Assert.True(document.Remove("fingerprintKey"));
+        Assert.True(document.Remove("fingerprintKeys"));
 
         Invocation run = await Invocation.PipedAsync(Invocation.Bootstrap(), document);
 

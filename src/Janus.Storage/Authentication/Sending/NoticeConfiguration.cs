@@ -25,6 +25,7 @@ internal sealed class NoticeConfiguration : IEntityTypeConfiguration<NoticeRecor
             .HasColumnName("destination")
             .HasMaxLength(Fingerprint.Length);
 
+        builder.Property(notice => notice.FingerprintVersion).HasColumnName("fingerprint_version");
         builder.Property(notice => notice.At).HasColumnName("at");
 
         // One notice per address per window is a question about one address.

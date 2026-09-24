@@ -178,7 +178,7 @@ public sealed class DefaultMessageTemplatesTests
             .AddJanus(
                 Connection,
                 new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-                new byte[32],
+                new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
                 new byte[16],
                 HostFixture.Declaration(),
                 ApplicationKind.Public)
