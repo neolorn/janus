@@ -100,13 +100,13 @@ public sealed class GroupAuditTests(DatabaseFixture database)
     }
 
     private GroupAudit Audit(StoreContext context) =>
-        new(new AuditStore(context, _deployment.Keys, _deployment.Randomness), TimeProvider.System);
+        new(new AuditStore(context, new DataConnections(context), _deployment.Keys, _deployment.Randomness), TimeProvider.System);
 
     private async Task<IReadOnlyList<AuditRecord>> RecordsAsync(SubjectId actor)
     {
         await using StoreContext reading = database.Context();
 
-        return await new AuditStore(reading, _deployment.Keys, _deployment.Randomness)
+        return await new AuditStore(reading, new DataConnections(reading), _deployment.Keys, _deployment.Randomness)
             .FindBySubjectAsync(actor, TestContext.Current.CancellationToken);
     }
 }

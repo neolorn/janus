@@ -531,7 +531,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await using (StoreContext writing = database.Context())
         {
-            await new AuditStore(writing, _deployment.Keys, _deployment.Randomness).AppendAsync(
+            await new AuditStore(writing, new DataConnections(writing), _deployment.Keys, _deployment.Randomness).AppendAsync(
                 AuditRecord.Of(
                     new AuditRecordId(Guid.CreateVersion7()),
                     AuditCategory.Security,
@@ -636,7 +636,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await using (StoreContext writing = database.Context())
         {
-            await new AuditStore(writing, _deployment.Keys, _deployment.Randomness).AppendAsync(
+            await new AuditStore(writing, new DataConnections(writing), _deployment.Keys, _deployment.Randomness).AppendAsync(
                 AuditRecord.Of(
                     new AuditRecordId(Guid.CreateVersion7()),
                     AuditCategory.Security,
@@ -666,7 +666,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await using StoreContext reading = database.Context();
 
         AuditRecord read = Assert.Single(
-            await new AuditStore(reading, _deployment.Keys, _deployment.Randomness)
+            await new AuditStore(reading, new DataConnections(reading), _deployment.Keys, _deployment.Randomness)
                 .FindBySubjectAsync(member, TestContext.Current.CancellationToken));
 
         Assert.Equal(organization, read.Organization);
@@ -1134,7 +1134,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await using (StoreContext writing = database.Context())
         {
-            await new AuditStore(writing, _deployment.Keys, _deployment.Randomness).AppendAsync(
+            await new AuditStore(writing, new DataConnections(writing), _deployment.Keys, _deployment.Randomness).AppendAsync(
                 AuditRecord.Of(
                     new AuditRecordId(Guid.CreateVersion7()),
                     AuditCategory.Security,

@@ -580,6 +580,58 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
         Assert.Equal(before, await CountedAsync(connection, subjects));
     }
 
+    /// <summary>
+    /// IDN-AUD-001 AC1: an event recorded on a path that opened no transaction, or after
+    /// the one it opened has committed, is kept: nothing waits for a later save that
+    /// never comes.
+    /// </summary>
+    [Fact]
+    public async Task IDN_AUD_001_AC1_AnEventOutsideATransactionIsKeptAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Now());
+
+        await using (StoreContext writing = database.Context())
+        {
+            await using var work = new UnitOfWork(writing);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            await work.CommitAsync(TestContext.Current.CancellationToken);
+
+            await Store(writing).AppendAsync(
+                AuditRecord.Of(NewId(), AuditCategory.Security, Suspended, Now(), subject, subject, organization: null),
+                TestContext.Current.CancellationToken);
+        }
+
+        AuditRecord read = await OneAsync(subject);
+
+        Assert.Equal(Suspended, read.Action);
+    }
+
+    /// <summary>
+    /// IDN-AUD-001 AC1: an event recorded inside a transaction is part of it, so an
+    /// operation that fails part way through leaves no record of what it never did.
+    /// </summary>
+    [Fact]
+    public async Task IDN_AUD_001_AC1_AnEventInsideATransactionFallsWithItAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Now());
+
+        await using (StoreContext writing = database.Context())
+        {
+            await using var work = new UnitOfWork(writing);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+
+            await Store(writing).AppendAsync(
+                AuditRecord.Of(NewId(), AuditCategory.Security, Suspended, Now(), subject, subject, organization: null),
+                TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Empty(await Store(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
@@ -623,7 +675,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
     }
 
     private AuditStore Store(StoreContext context) =>
-        new(context, _deployment.Keys, _deployment.Randomness);
+        new(context, new DataConnections(context), _deployment.Keys, _deployment.Randomness);
 
     private async ValueTask<IReadOnlyList<AuditEntry>> TrailAsync(SubjectId subject)
     {
@@ -638,7 +690,6 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
     {
         await using StoreContext writing = database.Context();
         await Store(writing).AppendAsync(record, TestContext.Current.CancellationToken);
-        await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
     private async ValueTask<AuditRecord> OneAsync(SubjectId subject)

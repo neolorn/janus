@@ -1600,6 +1600,12 @@ against the public contract of LIB-API-001.
 
 ### Fixed
 
+- Every audit record is kept. A record written where the operation had opened no
+  transaction, or after its transaction had committed, waited for a save that never
+  came and was lost; among them were the deactivation, reactivation and deletion of an
+  account, the invalidation of a lost credential, the erasures the sweep executes, and
+  an assembled export. A record is now written through the operation's own
+  connection: inside a transaction it is part of it, and outside one it stands alone.
 - Every alert condition the library raises reaches the alert destinations. It is
   written in the transaction that raised it and carried by the alert channels after
   that transaction commits, oldest first and once, so a condition raised by an

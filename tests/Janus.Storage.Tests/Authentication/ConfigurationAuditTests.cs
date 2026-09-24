@@ -105,7 +105,7 @@ public sealed class ConfigurationAuditTests(DatabaseFixture database)
         new(key, before, after, Loosening: true, "a support window", actor, DateTimeOffset.UtcNow);
 
     private ConfigurationAudit Audit(StoreContext context) =>
-        new(context, new AuditStore(context, _deployment.Keys, _deployment.Randomness), TimeProvider.System);
+        new(context, new AuditStore(context, new DataConnections(context), _deployment.Keys, _deployment.Randomness), TimeProvider.System);
 
     private async Task RecordedAsync(ConfigurationChange change)
     {

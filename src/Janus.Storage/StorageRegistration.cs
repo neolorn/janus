@@ -173,6 +173,7 @@ internal static class StorageRegistration
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IAuditStore>(provider => new AuditStore(
             provider.GetRequiredService<StoreContext>(),
+            provider.GetRequiredService<DataConnections>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
 
