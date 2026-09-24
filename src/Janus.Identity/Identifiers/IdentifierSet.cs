@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Janus.Core;
 
 namespace Janus.Identity.Identifiers;
@@ -281,6 +282,30 @@ internal sealed class IdentifierSet
     }
 
     /// <summary>
+    /// Drops a verified identifier to unverified, because the provider that vouched for
+    /// the address stopped vouching for it (IDN-LIFE-012a). Where it was the primary of
+    /// its kind, the role passes to the earliest verified of the kind that may hold it,
+    /// and stays vacant where none may.
+    /// </summary>
+    /// <param name="id">Which identifier.</param>
+    /// <exception cref="InvalidOperationException">
+    /// The account holds no such identifier, it is not verified, or it is the personal
+    /// email a membership keeps, which stays verified while it lasts (REG-MAIL-001).
+    /// </exception>
+    public void Unverify(IdentifierId id)
+    {
+        Identifier identifier = Require(id);
+        bool primary = identifier.IsPrimary;
+
+        identifier.Unverify();
+
+        if (primary)
+        {
+            Succeed(identifier.Kind);
+        }
+    }
+
+    /// <summary>
     /// Makes a verified identifier the primary of its kind, displacing the one that
     /// held the role.
     /// </summary>
@@ -376,6 +401,18 @@ internal sealed class IdentifierSet
         _removed.Add(identifier.Id);
 
         return identifier;
+    }
+
+    // The earliest verified of a kind takes the vacant primary role; the personal email
+    // a membership keeps never does while it keeps it (REG-MAIL-001).
+    private void Succeed(IdentifierKind kind)
+    {
+        Identifier? next = _identifiers
+            .Where(identifier => identifier.Kind == kind && identifier.IsVerified && !identifier.IsPersonal)
+            .OrderBy(identifier => identifier.VerifiedAt)
+            .FirstOrDefault();
+
+        next?.MakePrimary();
     }
 
     private void TakePrimaryIfVacant(Identifier identifier)

@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Sessions;
+using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Policies;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -29,6 +30,8 @@ public sealed class SessionServiceTests : IAsyncDisposable
 
     private readonly SessionStoreInMemory _sessions = new();
     private readonly SessionAuditInMemory _audit = new();
+    private readonly AuthenticatorStoreInMemory _authenticators = new();
+    private readonly CredentialAuditInMemory _credentials = new();
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly ConfigurationInMemory _configuration = new();
@@ -43,6 +46,8 @@ public sealed class SessionServiceTests : IAsyncDisposable
         new(
             _sessions,
             _audit,
+            _authenticators,
+            _credentials,
             new PolicyResolution(_memberships, _configuration, _raises),
             _configuration,
             new AdministrativeScope(_gate, _administrative),
@@ -106,6 +111,34 @@ public sealed class SessionServiceTests : IAsyncDisposable
             Assert.Single(_audit.Records);
         Assert.Equal(subject, who);
         Assert.Equal([Factor.Password], presented);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012a: a credential a provider's event held stands again when the person
+    /// signs in by another factor, in the transaction the session begins in, and the
+    /// restoration is recorded; a credential held for a reported loss is not.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_012a_AHeldCredentialStandsAgainAtASignInByAnotherFactorAsync()
+    {
+        SubjectId subject = Subject();
+        Assert.True(CredentialLabel.TryParse("Linked", out CredentialLabel label));
+        var held = Authenticator.Linked(AuthenticatorId.New(_clock), subject, Factor.Google, label, Noon);
+        var lost = Authenticator.Linked(AuthenticatorId.New(_clock), subject, Factor.Apple, label, Noon);
+
+        held.Hold();
+        lost.Suspend(Noon.AddDays(7));
+        _authenticators.Hold(held);
+        _authenticators.Hold(lost);
+
+        _ = await BegunAsync(subject, [Factor.Password]);
+
+        Assert.Equal(AuthenticatorState.Active, held.State);
+        Assert.True(lost is { State: AuthenticatorState.Suspended, IsHeldByProvider: false });
+        Assert.Equal(
+            (AuditActions.CredentialRestored, subject, held.Id),
+            Assert.Single(_credentials.Records));
+        Assert.Equal(1, _work.Committed);
     }
 
     /// <summary>

@@ -18,6 +18,7 @@ using Janus.Identity.Profiles;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Accounts;
+using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Authentication.Mailboxes;
 using Janus.Storage.Authentication.Sessions;
@@ -818,6 +819,47 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     }
 
     /// <summary>
+    /// IDN-LIFE-012a and PRIV-RIGHT-005c: the provider's subject identifier a linked
+    /// identity is found by is the holder's, so its fingerprint is neutralised with the
+    /// rest, the provider's events find the account no longer, and the identity can be
+    /// linked afresh.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_012a_TheProvidersSubjectOfALinkedIdentityGoesWithItsHolderAsync()
+    {
+        string providerSubject = Guid.NewGuid().ToString("N");
+        SubjectId subject = await DeletingAccountAsync();
+
+        Assert.True(CredentialLabel.TryParse("Linked", out CredentialLabel label));
+
+        var linked = Authenticator.Linked(
+            AuthenticatorId.New(TimeProvider.System),
+            subject,
+            Factor.Google,
+            label,
+            Noon);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await Authenticators(writing).LinkAsync(linked, providerSubject, TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using StoreContext reading = database.Context();
+
+        AuthenticatorRecord row = await reading.Authenticators
+            .SingleAsync(held => held.Id == linked.Id, TestContext.Current.CancellationToken);
+
+        Assert.True(Fingerprint.IsNeutralised(row.ProviderSubject!));
+        Assert.Null(await Authenticators(reading).ByProviderAsync(
+            Factor.Google,
+            providerSubject,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-005a: what an invitation attached to the subject binds is forgotten
     /// with the rest of their fields, while the row still names who invited into what;
     /// an invitation attached to nobody keeps what it binds until it is used or expires.
@@ -906,6 +948,9 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         new OutboxStore(context, new FixedTime(Noon)));
 
     private static ErasureStore Store(StoreContext context) => new(context);
+
+    private AuthenticatorStore Authenticators(StoreContext context) =>
+        new(context, _deployment.Keys, _deployment.Randomness, Deployment.FingerprintKey);
 
     private IdentifierStore Identifiers(StoreContext context) =>
         new(context, _deployment.Keys, Deployment.FingerprintKey, _deployment.Randomness);

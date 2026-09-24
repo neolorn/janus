@@ -13,8 +13,7 @@ using Microsoft.Extensions.Primitives;
 namespace Janus.Hosting.Sending;
 
 /// <summary>
-/// The one callback endpoint the library defines itself, chapter 09 section 10: the
-/// SMS gateway's delivery report, on the machine profile.
+/// The SMS gateway's delivery report, chapter 09 section 10, on the machine profile.
 /// </summary>
 /// <remarks>
 /// Implements INT-SMS-005, INT-GEN-003, BFF-MACH-001 and CONV-DESIGN-006. The transport

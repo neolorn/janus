@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
 using Janus.Core;
@@ -24,6 +25,9 @@ public sealed class AuthenticatorStoreTests(DatabaseFixture database)
     private static readonly byte[] PublicKey = [4, 9, 9, 9];
 
     private readonly Deployment _deployment = new(database);
+
+    // The tests share one database, so each links an identity no other test holds.
+    private readonly string _providerSubject = "001234." + Guid.NewGuid().ToString("N") + ".0456";
 
     /// <summary>
     /// AUTH-FACT-006 AC1: the shared secret is not in the table in plain, so a dump
@@ -195,6 +199,105 @@ public sealed class AuthenticatorStoreTests(DatabaseFixture database)
         Assert.Equal([Factor.Totp, Factor.Passkey], [.. Kinds(held)]);
     }
 
+    /// <summary>
+    /// IDN-LIFE-012a, REG-IDENT-008: a linked identity is found by the subject the
+    /// provider names it by, and only for that provider; the row holds the subject's
+    /// keyed fingerprint and never the subject itself (PRIV-RIGHT-005c).
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_012a_ALinkedIdentityIsFoundByTheProvidersSubjectAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        var id = AuthenticatorId.New(TimeProvider.System);
+
+        await LinkedAsync(Authenticator.Linked(id, subject, Factor.Google, Label("Google"), Noon), _providerSubject);
+
+        await using StoreContext reading = database.Context();
+        Authenticator found = Assert.IsType<Authenticator>(
+            await Store(reading).ByProviderAsync(Factor.Google, _providerSubject, TestContext.Current.CancellationToken));
+        AuthenticatorRecord stored = await reading.Authenticators
+            .SingleAsync(held => held.Subject == subject, TestContext.Current.CancellationToken);
+
+        Assert.Equal(id, found.Id);
+        Assert.Equal(Factor.Google, found.Factor);
+        Assert.True(found.IsUsable);
+        Assert.Null(await Store(reading).ByProviderAsync(Factor.Apple, _providerSubject, TestContext.Current.CancellationToken));
+        Assert.Null(await Store(reading).ByProviderAsync(Factor.Google, "another", TestContext.Current.CancellationToken));
+        Assert.Equal(
+            Fingerprint.Compute(Encoding.UTF8.GetBytes(_providerSubject), Deployment.FingerprintKey),
+            stored.ProviderSubject);
+    }
+
+    /// <summary>
+    /// REG-IDENT-008: a provider's subject is linked to one account, which the
+    /// database holds.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_012a_AProvidersSubjectIsLinkedOnceAsync()
+    {
+        SubjectId first = await _deployment.AccountAsync(Noon);
+        SubjectId second = await _deployment.AccountAsync(Noon);
+
+        await LinkedAsync(
+            Authenticator.Linked(AuthenticatorId.New(TimeProvider.System), first, Factor.Apple, Label("Apple"), Noon),
+            _providerSubject);
+
+        _ = await Assert.ThrowsAsync<DbUpdateException>(() => LinkedAsync(
+            Authenticator.Linked(AuthenticatorId.New(TimeProvider.System), second, Factor.Apple, Label("Apple"), Noon),
+            _providerSubject));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012a: a social provider's credential is not held without the subject
+    /// it is found by, and nothing else holds one.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_012a_OnlyALinkedIdentityHoldsAProvidersSubjectAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+
+        _ = await Assert.ThrowsAsync<DbUpdateException>(() => WrittenAsync(Authenticator.Linked(
+            AuthenticatorId.New(TimeProvider.System),
+            subject,
+            Factor.Google,
+            Label("Google"),
+            Noon)));
+        _ = await Assert.ThrowsAsync<DbUpdateException>(() => LinkedAsync(
+            Authenticator.EnrollingTotp(AuthenticatorId.New(TimeProvider.System), subject, Label("this phone"), Secret(), Noon),
+            _providerSubject));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012a: a credential a provider's event holds reads back held, with no
+    /// instant at which it is invalidated.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_012a_AHeldCredentialReadsBackHeldAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        var id = AuthenticatorId.New(TimeProvider.System);
+
+        await LinkedAsync(Authenticator.Linked(id, subject, Factor.Google, Label("Google"), Noon), _providerSubject);
+
+        await using (StoreContext changing = database.Context())
+        {
+            Authenticator held = Assert.IsType<Authenticator>(
+                await Store(changing).FindAsync(id, TestContext.Current.CancellationToken));
+
+            held.Hold();
+
+            await Store(changing).RecordAsync(held, TestContext.Current.CancellationToken);
+            await changing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        Authenticator read = Assert.IsType<Authenticator>(
+            await Store(reading).FindAsync(id, TestContext.Current.CancellationToken));
+
+        Assert.True(read.IsHeldByProvider);
+        Assert.Null(read.InvalidatesAt);
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
@@ -228,5 +331,13 @@ public sealed class AuthenticatorStoreTests(DatabaseFixture database)
     }
 
     private AuthenticatorStore Store(StoreContext context) =>
-        new(context, _deployment.Keys, _deployment.Randomness);
+        new(context, _deployment.Keys, _deployment.Randomness, Deployment.FingerprintKey);
+
+    private async Task LinkedAsync(Authenticator credential, string providerSubject)
+    {
+        await using StoreContext writing = database.Context();
+
+        await Store(writing).LinkAsync(credential, providerSubject, TestContext.Current.CancellationToken);
+        await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
 }

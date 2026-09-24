@@ -360,6 +360,25 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /callbacks/providers/google` and `POST /callbacks/providers/apple` take the
+  security events Google (Cross-Account Protection) and Sign in with Apple send about
+  an identity linked to an account, on the machine profile and held to
+  `integration.callback.ratelimit`. A host declares each provider it takes events from
+  with a `SocialProvider`: the address of the provider's document naming its issuer
+  and keys, and the deployment's client identifiers there; a provider declared twice,
+  one that is not a social provider, an address that is not HTTPS or no client stops
+  the deployment at startup under `model.startup.declarationmissing`. An event is
+  verified against the keys the provider publishes, carried once by its `jti`, and
+  audited under `auth.providerevent.taken` or `auth.providerevent.rejected`. A
+  compromised, disabled or signed-out provider account ends every session of the
+  account and holds the linked credential until the person signs in by another
+  factor, which restores it under `auth.credential.restored`; withdrawn consent or a
+  deleted provider account unlinks the credential, or suspends the account with a
+  security notice where it is the last way in; a disabled relay address drops to
+  unverified. An event of an undeclared provider, or one the keys do not verify, is
+  refused as every rejected callback is. The client the documents are read with is
+  `identity-providers`.
+
 - `UseCallback` mounts one of the host's own providers' callbacks on the machine
   profile, at a path the host chooses and ahead of the browser profile. A signed
   callback (`ISignedCallback`) names its provider's keyed hash, where the signature and

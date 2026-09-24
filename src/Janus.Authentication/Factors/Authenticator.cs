@@ -145,6 +145,40 @@ internal sealed class Authenticator
     }
 
     /// <summary>
+    /// An identity at a social provider, linked to the account: the sign-in at the
+    /// provider proved it, so it is confirmed as it is linked (IDN-LIFE-012).
+    /// </summary>
+    /// <param name="id">The identifier issued for it.</param>
+    /// <param name="subject">Whose it is.</param>
+    /// <param name="provider">Which social provider.</param>
+    /// <param name="label">What the person calls it.</param>
+    /// <param name="at">When it was linked.</param>
+    /// <returns>The credential.</returns>
+    /// <exception cref="ArgumentException">The factor is not a social provider.</exception>
+    public static Authenticator Linked(
+        AuthenticatorId id,
+        SubjectId subject,
+        Factor provider,
+        CredentialLabel label,
+        DateTimeOffset at)
+    {
+        if (FactorCatalogue.Of(provider).AssuranceLevel is not AssuranceLevel.Delegated)
+        {
+            throw new ArgumentException("Only a social provider is linked.", nameof(provider));
+        }
+
+        return new Authenticator(
+            id,
+            subject,
+            provider,
+            label,
+            at,
+            confirmed: true,
+            totp: null,
+            webAuthn: null);
+    }
+
+    /// <summary>
     /// The credential as it already stands, which is the store's translation of a row
     /// and no change to it.
     /// </summary>
@@ -247,8 +281,30 @@ internal sealed class Authenticator
     }
 
     /// <summary>
-    /// The report against it was cancelled, so it is usable again from this instant
-    /// (AUTH-RECOV-007).
+    /// Whether a social provider's security event holds it: suspended with no instant
+    /// at which it is invalidated, until the person signs in by another factor
+    /// (IDN-LIFE-012a). A reported loss always carries that instant, so the two are
+    /// never mistaken for each other.
+    /// </summary>
+    public bool IsHeldByProvider => State is AuthenticatorState.Suspended && InvalidatesAt is null;
+
+    /// <summary>
+    /// The provider said the identity behind it was compromised, disabled or signed
+    /// out everywhere: it is refused from now until the person signs in by another
+    /// factor, and nothing invalidates it meanwhile (IDN-LIFE-012a).
+    /// </summary>
+    public void Hold()
+    {
+        if (State is AuthenticatorState.Active)
+        {
+            State = AuthenticatorState.Suspended;
+        }
+    }
+
+    /// <summary>
+    /// The report against it was cancelled, or the person signed in by another factor
+    /// while a provider's event held it, so it is usable again from this instant
+    /// (AUTH-RECOV-007, IDN-LIFE-012a).
     /// </summary>
     public void Restore()
     {

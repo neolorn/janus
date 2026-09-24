@@ -181,7 +181,8 @@ internal static class StorageRegistration
         services.AddScoped<IAuthenticatorStore>(provider => new AuthenticatorStore(
             provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
-            provider.GetRequiredService<RandomNumberGenerator>()));
+            provider.GetRequiredService<RandomNumberGenerator>(),
+            fingerprintKey));
         services.AddScoped<IRegistrationSessionStore>(provider => new RegistrationSessionStore(
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<DataConnections>(),

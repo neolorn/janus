@@ -318,6 +318,32 @@ internal sealed class Identifier
     }
 
     /// <summary>
+    /// The provider that vouched for the address stopped vouching for it: its
+    /// verification is gone, and with it the primary role only a verified identifier
+    /// holds. Only the set it belongs to calls this, because only the set can hand the
+    /// role on.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// It is not verified, or it is the personal email a membership keeps, which stays
+    /// verified while the membership lasts (REG-MAIL-001).
+    /// </exception>
+    internal void Unverify()
+    {
+        if (!IsVerified)
+        {
+            throw new InvalidOperationException("The identifier is not verified.");
+        }
+
+        if (IsPersonal)
+        {
+            throw new InvalidOperationException("The personal email a membership keeps stays verified.");
+        }
+
+        VerifiedAt = null;
+        IsPrimary = false;
+    }
+
+    /// <summary>
     /// Gives up the primary role to another of its kind.
     /// </summary>
     internal void Relinquish() => IsPrimary = false;

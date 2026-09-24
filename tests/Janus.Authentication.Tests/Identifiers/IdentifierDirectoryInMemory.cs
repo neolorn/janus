@@ -275,6 +275,36 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
     }
 
     /// <inheritdoc/>
+    public ValueTask<IdentifierId?> UnverifyAsync(
+        SubjectId subject,
+        string canonical,
+        CancellationToken cancellationToken)
+    {
+        HeldIdentifier? vouched = Of(subject).FirstOrDefault(identifier =>
+            identifier.Kind is IdentifierKind.Email
+            && identifier.IsVerified
+            && !identifier.IsPersonal
+            && string.Equals(identifier.Canonical, canonical, StringComparison.Ordinal));
+
+        if (vouched is null)
+        {
+            return ValueTask.FromResult<IdentifierId?>(null);
+        }
+
+        Replace(
+            subject,
+            vouched.Id,
+            identifier => identifier with { IsVerified = false, VerifiedAt = null, IsPrimary = false });
+
+        if (vouched.IsPrimary)
+        {
+            Succeed(subject, IdentifierKind.Email);
+        }
+
+        return ValueTask.FromResult<IdentifierId?>(vouched.Id);
+    }
+
+    /// <inheritdoc/>
     public ValueTask ProveAsync(
         SubjectId subject,
         IdentifierId id,
@@ -522,6 +552,21 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
             {
                 all[at] = changed(all[at]);
             }
+        }
+    }
+
+    // A vacant primary role taken by the earliest verified of the kind the membership
+    // does not keep.
+    private void Succeed(SubjectId subject, IdentifierKind kind)
+    {
+        HeldIdentifier? next = Of(subject)
+            .Where(identifier => identifier.Kind == kind && identifier.IsVerified && !identifier.IsPersonal)
+            .OrderBy(identifier => identifier.VerifiedAt)
+            .FirstOrDefault();
+
+        if (next is not null)
+        {
+            Replace(subject, next.Id, identifier => identifier with { IsPrimary = true });
         }
     }
 

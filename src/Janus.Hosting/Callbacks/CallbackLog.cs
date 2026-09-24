@@ -6,7 +6,7 @@ namespace Janus.Hosting.Callbacks;
 /// What the machine profile records of a host's callback it did not carry.
 /// </summary>
 /// <remarks>
-/// Implements BFF-MACH-003, INT-GEN-003, CONV-LOG-001 and CONV-LOG-003. An entry names
+/// Implements BFF-MACH-003, INT-GEN-003, IDN-LIFE-012a, CONV-LOG-001 and CONV-LOG-003. An entry names
 /// the callback, the check that refused it and the correlation identifier; never a
 /// reference, a signature, a secret or anything of the body.
 /// </remarks>
@@ -36,4 +36,16 @@ internal static partial class CallbackLog
         Level = LogLevel.Information,
         Message = "A repeated delivery to {Callback} was acknowledged and not carried ({CorrelationId}).")]
     public static partial void Repeated(ILogger log, string callback, string correlationId);
+
+    /// <summary>
+    /// A provider whose published keys could not be read, so no event of it verifies
+    /// until they can be.
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="callback">The callback's name.</param>
+    [LoggerMessage(
+        EventId = 3,
+        Level = LogLevel.Error,
+        Message = "The published keys of {Callback} could not be read.")]
+    public static partial void Unreadable(ILogger log, string callback);
 }

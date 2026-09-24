@@ -2465,6 +2465,17 @@ Janus.Core.SmsMessage.Reference.init -> void
 Janus.Core.SmsMessage.SmsMessage(Janus.Core.PhoneNumber Destination, string! Text, string! Reference) -> void
 Janus.Core.SmsMessage.Text.get -> string!
 Janus.Core.SmsMessage.Text.init -> void
+Janus.Core.SocialProvider
+Janus.Core.SocialProvider.<Clone>$() -> Janus.Core.SocialProvider!
+Janus.Core.SocialProvider.ClientIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Janus.Core.SocialProvider.ClientIds.init -> void
+Janus.Core.SocialProvider.Deconstruct(out Janus.Core.Factor Provider, out System.Uri! Metadata, out System.Collections.Generic.IReadOnlyList<string!>! ClientIds) -> void
+Janus.Core.SocialProvider.Equals(Janus.Core.SocialProvider? other) -> bool
+Janus.Core.SocialProvider.Metadata.get -> System.Uri!
+Janus.Core.SocialProvider.Metadata.init -> void
+Janus.Core.SocialProvider.Provider.get -> Janus.Core.Factor
+Janus.Core.SocialProvider.Provider.init -> void
+Janus.Core.SocialProvider.SocialProvider(Janus.Core.Factor Provider, System.Uri! Metadata, System.Collections.Generic.IReadOnlyList<string!>! ClientIds) -> void
 Janus.Core.SqlFilter
 Janus.Core.SqlFilter.<Clone>$() -> Janus.Core.SqlFilter!
 Janus.Core.SqlFilter.Deconstruct(out string! Text, out System.Collections.Generic.IReadOnlyDictionary<string!, object!>! Parameters) -> void
@@ -3147,6 +3158,9 @@ override Janus.Core.SmsDeliveryReport.ToString() -> string!
 override Janus.Core.SmsMessage.Equals(object? obj) -> bool
 override Janus.Core.SmsMessage.GetHashCode() -> int
 override Janus.Core.SmsMessage.ToString() -> string!
+override Janus.Core.SocialProvider.Equals(object? obj) -> bool
+override Janus.Core.SocialProvider.GetHashCode() -> int
+override Janus.Core.SocialProvider.ToString() -> string!
 override Janus.Core.SqlFilter.Equals(object? obj) -> bool
 override Janus.Core.SqlFilter.GetHashCode() -> int
 override Janus.Core.SqlFilter.ToString() -> string!
@@ -3260,6 +3274,7 @@ static Janus.Core.AuditActions.CredentialLabelled.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.CredentialRemoved.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.CredentialReportCancelled.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.CredentialReportedLost.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.CredentialRestored.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.DeletionCancelled.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.DeletionRequested.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.DocumentPublished.get -> Janus.Core.AuditAction
@@ -3289,6 +3304,8 @@ static Janus.Core.AuditActions.OrganizationErased.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.PhoneSignalConsidered.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.PreferencesChanged.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ProfileChanged.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.ProviderEventRejected.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.ProviderEventTaken.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RecoveryApproved.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RefreshTokenReused.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RequestEntered.get -> Janus.Core.AuditAction
@@ -3971,6 +3988,8 @@ static Janus.Core.SmsDeliveryReport.operator !=(Janus.Core.SmsDeliveryReport? le
 static Janus.Core.SmsDeliveryReport.operator ==(Janus.Core.SmsDeliveryReport? left, Janus.Core.SmsDeliveryReport? right) -> bool
 static Janus.Core.SmsMessage.operator !=(Janus.Core.SmsMessage? left, Janus.Core.SmsMessage? right) -> bool
 static Janus.Core.SmsMessage.operator ==(Janus.Core.SmsMessage? left, Janus.Core.SmsMessage? right) -> bool
+static Janus.Core.SocialProvider.operator !=(Janus.Core.SocialProvider? left, Janus.Core.SocialProvider? right) -> bool
+static Janus.Core.SocialProvider.operator ==(Janus.Core.SocialProvider? left, Janus.Core.SocialProvider? right) -> bool
 static Janus.Core.SqlFilter.operator !=(Janus.Core.SqlFilter? left, Janus.Core.SqlFilter? right) -> bool
 static Janus.Core.SqlFilter.operator ==(Janus.Core.SqlFilter? left, Janus.Core.SqlFilter? right) -> bool
 static Janus.Core.StagedIdentifier.operator !=(Janus.Core.StagedIdentifier? left, Janus.Core.StagedIdentifier? right) -> bool

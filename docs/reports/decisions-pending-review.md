@@ -2233,6 +2233,8 @@ with its registered secret, and widens when phase 8 adds application passwords.
 
 *Chapter text that should change.* None.
 
+**Superseded by D-165.** The callbacks only; break-glass stays with phase 9. Applied in entry 276.
+
 ---
 
 ## 73. Two contracts reported absence with a null
@@ -3246,6 +3248,8 @@ declared by the host rather than applied, that an unstated location is the hosti
 location, and that `password screening` is fixed outside.
 
 **Superseded by D-162.** Applied in entry 151.
+
+**Superseded by D-165.** Applied in entry 270.
 
 ---
 
@@ -5375,6 +5379,8 @@ declares from, that an unstated location is the hosting location at generation, 
 `password screening` is fixed outside. Chapter 05 section 8's "Location field" column
 should read `inside` or `outside` for every row that states one and "follows hosting"
 for every row that does not.
+
+**Superseded by D-165.** Applied in entry 270.
 
 ---
 
@@ -9672,6 +9678,8 @@ the adapter in Milestone 2 step 5 (entry 215).
 process from the session record to the declared client and is not stored, and
 LIB-HOST-001 could hold the declaration (row below).
 
+**Superseded by D-164.** Applied in entry 281.
+
 ---
 
 ## 263. What the app-password endpoints answer and record
@@ -10767,6 +10775,343 @@ Reading 1 leaves a criterion untested. Under 2:
 identifier the token was issued to; 05 INT-MAIL-004 could list what the adapter
 verifies (signature, `typ`, issuer, audience, lifetime).
 
+---
+
+## 282. The provider event endpoint beside chapter 09's one callback
+
+**Corrections 3 · 2026-09-24 · Tier 3 · IDN-LIFE-012a AC3, 09 section 10, BFF-MACH-001, INT-GEN-003**
+
+*The question.* 09 section 10: "The library defines one callback endpoint of its own",
+and its table lists `GET /callbacks/sms/dlr` alone. IDN-LIFE-012a AC3: "The endpoint
+`POST /callbacks/providers/{provider}` is on the machine profile (BFF-MACH-001) and
+rate-limited like every callback." The two chapters contradict each other on what the
+library defines. No chapter says what the endpoint answers, where the event sits in
+the request, or which values `{provider}` takes.
+
+*The readings.*
+
+1. Build nothing until 09 names the endpoint.
+2. Build the endpoint IDN-LIFE-012a names, as the owner's corrections-3 order says,
+   and leave 09 to be brought into line.
+
+*Chosen: 2.* The owner's order names the endpoint and the item. Under it:
+
+- The library maps `POST /callbacks/providers/google` and `POST
+  /callbacks/providers/apple`, one route for each factor the catalogue marks as a
+  social provider; a path naming anything else is not the library's. Both are on the
+  machine profile's exact list.
+- Each delivery is counted against `integration.callback.ratelimit` before anything is
+  read, as INT-GEN-003 has it. No source is refused for where it is: neither provider
+  publishes the ranges its deliveries come from.
+- Google delivers the Security Event Token as the request's body (RFC 8935) and is
+  answered 202; Apple posts `{"payload": "<token>"}` and is answered 200. Every
+  refusal is `integration.callback.rejected`, 429, as every rejected callback is
+  (entry 276), and counts towards the callback alert.
+
+*Tests that pin it.*
+`ProviderEventTests.IDN_LIFE_012a_AC3_TheEndpointIsOnTheMachineProfileAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AC3_TheEndpointIsRateLimitedLikeEveryCallbackAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AC1_ASignedCompromiseEndsEverySessionAndHoldsTheCredentialAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AC2_AWithdrawnIdentityIsUnlinkedAsync`.
+
+*Chapter text that should change.* 09 section 10 could say the library defines two
+callback endpoints of its own and list `POST /callbacks/providers/{provider}` (source:
+Google, Apple; never does: act on an event its provider's keys do not verify), with
+`{provider}` one of `google` and `apple` and the answers 202 and 200.
+
+---
+
+## 283. What a deployment declares of a social provider, and how its keys are read
+
+**Corrections 3 · 2026-09-24 · Tier 3 · IDN-LIFE-012a, LIB-HOST-001, INT-GEN-003**
+
+*The question.* IDN-LIFE-012a: "Every event is verified against the provider's
+published keys". No chapter says where the library learns the address of those keys,
+the issuer an event names, or the audience it is addressed to, which is the
+deployment's own client identifier at the provider and nothing the library can know.
+LIB-HOST-001 has no row for a social provider.
+
+*The readings.*
+
+1. A fixed list of the providers' public addresses inside the library, with the client
+   identifiers in a configuration key.
+2. A host declaration per provider: the address of the provider's document naming its
+   issuer and key set, and the deployment's client identifiers there; optional, with
+   no default.
+
+*Chosen: 2, the strictest reading.* Reading 1 puts a vendor's address in library code
+and holds the audience in runtime configuration an administrator can change. Under 2:
+
+- `SocialProvider(Factor Provider, Uri Metadata, IReadOnlyList<string> ClientIds)` is a
+  public declaration registered once per provider. It is optional: a deployment that
+  declares none takes no provider event, and an event of an undeclared provider is
+  refused and counted as rejected, since nothing it holds could verify it.
+- A declaration that could verify nothing stops the deployment at startup with
+  `model.startup.declarationmissing`: `details.key` is `socialProvider.provider` for a
+  provider declared twice or a factor that is not a social provider,
+  `socialProvider.metadata` for an address that is not absolute HTTPS, and
+  `socialProvider.clientIds` for no client or an empty one.
+- The document and the key set are read over HTTPS only, on the framework's client
+  `identity-providers`, and held between events by the configuration manager of the
+  token library the provider stack already carries; nothing an event carries names
+  where keys are read from. An event naming a key the set does not hold is refused and
+  the set is asked for again, for the provider to deliver again. A set that cannot be
+  read refuses every event and is logged at error.
+- The signature is RS256 only; the issuer is the document's; the audience is one of
+  the declared clients. An event's lifetime is judged where it states one; a security
+  event states none and is not refused for that.
+
+*Tests that pin it.*
+`StartupValidationTests.IDN_LIFE_012a_ASocialProviderDeclaredShortOfWholeIsRefusedAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AnEventNothingDeclaredOrReadableVerifiesIsRefusedAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AC1_AnUnsignedEventChangesNothingAndIsAuditedAsRejectedAsync`.
+
+*Chapter text that should change.* 07 LIB-HOST-001 could list `SocialProvider` as an
+optional host declaration with the startup refusals above; 10 could carry its row.
+
+---
+
+## 284. How a provider's event finds the account it concerns
+
+**Corrections 3 · 2026-09-24 · Tier 2 · IDN-LIFE-012a, IDN-LIFE-012, PRIV-RIGHT-005c, REG-ACCT-001**
+
+*The question.* A provider's event names the identity by the provider's own subject
+identifier (`sub`), never by the account. No chapter says where the library holds that
+identifier for a linked identity, and social linking itself is built in phase 10.
+
+*The readings.*
+
+1. Hold the provider's subject in plain on the linked credential.
+2. Hold it as the keyed fingerprint every other searchable value is held as
+   (PRIV-RIGHT-005c), on the linked credential, unique per provider, and neutralised
+   at erasure with the rest.
+
+*Chosen: 2.* The identifier is the person's at the provider and is only ever looked up,
+never shown. Under it:
+
+- `authenticators.provider_subject` holds the 32-byte fingerprint of the provider's
+  subject under the fingerprint key. A check constraint holds it on a Google or Apple
+  credential and nowhere else; a unique index on the factor and the fingerprint, which
+  leaves out the neutralised value, keeps one account to an identity.
+- `IAuthenticatorStore.LinkAsync` records a linked identity with its subject and
+  `ByProviderAsync` finds it; phase 10's linking calls the first.
+- Erasure neutralises the fingerprint in the transaction that neutralises the others,
+  so the provider's events find the erased account no longer and the identity can be
+  linked afresh.
+- The column is a field of the Credentials group of REG-ACCT-001 ("provider links").
+
+*Tests that pin it.*
+`AuthenticatorStoreTests.IDN_LIFE_012a_ALinkedIdentityIsFoundByTheProvidersSubjectAsync`,
+`AuthenticatorStoreTests.IDN_LIFE_012a_AProvidersSubjectIsLinkedOnceAsync`,
+`AuthenticatorStoreTests.IDN_LIFE_012a_OnlyALinkedIdentityHoldsAProvidersSubjectAsync`,
+`SubjectEraserTests.IDN_LIFE_012a_TheProvidersSubjectOfALinkedIdentityGoesWithItsHolderAsync`,
+`ModelTests.REG_ACCT_001_AC2_NoFieldExistsOutsideTheGroupsTheTableNames`.
+
+*Chapter text that should change.* 01 IDN-LIFE-012 could say the provider's subject
+identifier is held as a keyed fingerprint on the linked credential; 04 PRIV-RIGHT-005c
+could list it among the fingerprints erasure neutralises.
+
+---
+
+## 285. Which provider events do what
+
+**Corrections 3 · 2026-09-24 · Tier 3 · IDN-LIFE-012a**
+
+*The question.* IDN-LIFE-012a names outcomes, not event types: "compromised, disabled,
+or its sessions revoked"; "consent revoked or account deleted"; "an email change or
+disable". AC1 names `sessions-revoked` and `account-disabled`, AC2 `consent-revoked`
+and `account-delete`. Google's catalogue also carries `tokens-revoked`,
+`token-revoked`, `account-credential-change-required`, `account-enabled` and
+`verification`; Apple's carries `email-enabled` and spells deletion `account-delete`.
+Neither provider sends an event for an email change.
+
+*The readings.*
+
+1. Act on the four types the criteria name and record every other.
+2. Act on every type whose meaning falls under an outcome the item names, and record
+   every other.
+
+*Chosen: 2, the strictest reading.* Under it:
+
+- Ends every session and holds the credential: Google `sessions-revoked`,
+  `account-disabled` (whatever its reason), `account-credential-change-required` (the
+  provider suspects a compromise) and `tokens-revoked` (the grant behind the sign-in is
+  gone).
+- Unlinks, or suspends where it is the last way in (entry 286): Apple
+  `consent-revoked`, `account-delete` and `account-deleted`.
+- Drops the address to unverified: Apple `email-disabled`, naming the address.
+- Recorded and changes nothing: `token-revoked`, `account-enabled`, `verification`,
+  `email-enabled` and any type the library does not know. `account-enabled` does not
+  lift a hold; only a sign-in by another factor does (entry 288).
+- An event naming no identity (`verification`, a revoked token) is acknowledged and
+  recorded nowhere, as is one naming an identity no account links.
+- "An email change" has no event in either provider's catalogue, so nothing answers
+  it.
+
+*Tests that pin it.*
+`ProviderEventTests.IDN_LIFE_012a_AC1_ASignedCompromiseEndsEverySessionAndHoldsTheCredentialAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AC2_AWithdrawnIdentityIsUnlinkedAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AnAddressTheProviderStoppedForwardingToDropsToUnverifiedAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AnEventThatChangesNothingIsRecordedAndAcknowledgedAsync`.
+
+*Chapter text that should change.* 01 IDN-LIFE-012a could name the event types for
+each outcome and drop "an email change", or name the event it means.
+
+---
+
+## 286. A withdrawn identity that is the last way in
+
+**Corrections 3 · 2026-09-24 · Tier 3 · IDN-LIFE-012a AC2, IDN-LIFE-012 AC3, IDN-LIFE-013, AUTH-SESS-010, REG-ACCT-001**
+
+*The question.* IDN-LIFE-012a: "IDN-LIFE-012 AC3 still refuses to remove the last
+credential, in which case the account is `suspended` with a security notice to the
+security-notice set". No chapter says what "the last credential" counts, who the
+suspension is recorded as made by (IDN-LIFE-013: `self` or `administrator`), what
+happens to an account already suspended or in its deletion window, or whether the
+credential stays.
+
+*The readings.*
+
+1. The last credential is the last row of any kind; the suspension is the owner's.
+2. The last credential is the last way in: nothing else the account holds may begin a
+   sign-in (REG-ACCT-001, "at least one primary sign-in method"). The suspension is an
+   administrator's, since only an administrator stands it back up.
+
+*Chosen: 2, the strictest reading.* A recovery code or a generator cannot sign a person
+in alone, and a suspension its owner could lift by the deactivation link would hand
+the account back to whoever holds the owner's mail. Under it:
+
+- The credential is the last where, without it, the password and every other usable
+  credential the account holds include no factor that may begin a sign-in.
+- Where it is not the last, it is removed and the security-notice set is told.
+- Where it is, it stays, and the account is suspended as an administrator suspends it:
+  `suspendedBy` is `administrator`, every session ends in the same transaction
+  (AUTH-SESS-010), `AccountSuspended` is announced with that origin, and the
+  security-notice set is told. An account its owner deactivated is taken over and
+  announces nothing, since its state does not change; one an administrator suspended
+  stays as it is; one in its deletion window or erased is left to that.
+
+*Tests that pin it.*
+`ProviderEventTests.IDN_LIFE_012a_AC2_AWithdrawnIdentityIsUnlinkedAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AC2_AWithdrawnLastCredentialSuspendsTheAccountWithANoticeAsync`.
+
+*Chapter text that should change.* 01 IDN-LIFE-012a could say that the last credential
+is the last way to begin a sign-in and that the suspension is recorded as the
+administrator's.
+
+---
+
+## 287. A disabled address that is the personal email a membership keeps
+
+**Corrections 3 · 2026-09-24 · Tier 3 · IDN-LIFE-012a, REG-MAIL-001 AC5, REG-MAIL-003 AC3**
+
+*The question.* IDN-LIFE-012a: "on an email change or disable, the provider-verified
+identifier SHALL drop to unverified". REG-MAIL-001 AC5 and REG-MAIL-003 AC3 hold the
+personal email a membership keeps verified for as long as the membership lasts, and
+the database refuses a kept email that is not verified. The two contradict each other
+where the provider's address is the one the membership keeps. No chapter says what
+becomes of the primary role an unverified address held.
+
+*The readings.*
+
+1. Drop it anyway and release it from the membership.
+2. Leave the kept personal email verified; drop every other.
+
+*Chosen: 2, the strictest reading.* It keeps most: a member keeps the verified address
+the end of the membership falls back on. Under it:
+
+- The verified email at the address the event names drops to unverified, unless it is
+  the kept personal email, which stays as it is and the event is recorded.
+- Where the dropped address was the primary email, the role passes to the earliest
+  verified email that may hold it, and stays vacant where none may.
+
+*Tests that pin it.*
+`IdentifierSetTests.IDN_LIFE_012a_AnUnvouchedAddressDropsToUnverifiedAndHandsThePrimaryOn`,
+`IdentifierStoreTests.IDN_LIFE_012a_AnUnvouchedAddressDropsToUnverifiedAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AnAddressTheProviderStoppedForwardingToDropsToUnverifiedAsync`.
+
+*Chapter text that should change.* 01 IDN-LIFE-012a could except the personal email a
+membership keeps and say where the primary role goes.
+
+---
+
+## 288. How a credential is held until the person signs in by another factor
+
+**Corrections 3 · 2026-09-24 · Tier 2 · IDN-LIFE-012a AC1, AUTH-RECOV-007, AUTH-SESS-001**
+
+*The question.* IDN-LIFE-012a: "the linked credential SHALL be `suspended` until the
+person signs in by another factor". `suspended` is also the state a reported loss puts
+a credential in, which is invalidated at the end of a window (AUTH-RECOV-007). No
+chapter says how the two are told apart, what counts as signing in by another factor,
+or whether the restoration is recorded.
+
+*The readings.*
+
+1. A new credential state.
+2. The existing `suspended` state with no instant at which it is invalidated, which a
+   reported loss always carries.
+
+*Chosen: 2.* It adds no value to a vocabulary chapter 10 holds. Under it:
+
+- The provider's event suspends the linked credential with no `invalidates_at`; the
+  sweep that invalidates a lost credential never reaches it.
+- Every session that begins for the account, on factors that do not include the held
+  credential's, restores it in the transaction the session begins in, and the
+  restoration is recorded as `auth.credential.restored` against the credential. A
+  credential suspended for a reported loss is not restored.
+
+*Tests that pin it.*
+`SessionServiceTests.IDN_LIFE_012a_AHeldCredentialStandsAgainAtASignInByAnotherFactorAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AHeldCredentialStandsAgainOnceThePersonSignsInByAnotherFactorAsync`,
+`AuthenticatorStoreTests.IDN_LIFE_012a_AHeldCredentialReadsBackHeldAsync`.
+
+*Chapter text that should change.* 01 IDN-LIFE-012a could say the credential is
+suspended with no invalidation instant and restored at the first session begun on
+another factor; 10 could list `auth.credential.restored`.
+
+---
+
+## 289. How a provider's event is carried once and audited
+
+**Corrections 3 · 2026-09-24 · Tier 2 · IDN-LIFE-012a AC1, IDN-AUD-001, INT-GEN-003, CONV-LOG-003**
+
+*The question.* IDN-LIFE-012a: every event "is idempotent by its `jti`, and is
+audited"; AC1: "an unsigned or replayed event changes nothing and is audited as
+rejected". No chapter names the audit actions or their details, says whose trail an
+unsigned event is recorded in, or what a replay is answered.
+
+*The readings.*
+
+1. Audit only what verified, and answer a replay as a refusal.
+2. Audit what verified and what did not against the account whose linked identity it
+   names, and acknowledge a replay so the provider stops delivering it.
+
+*Chosen: 2.* AC1 asks for the unsigned event to be audited, and a refused replay would
+be delivered again. Under it:
+
+- The `jti` is claimed under the provider's own callback name (`providers/google`,
+  `providers/apple`) in the ledger every callback claims its event in, in the
+  transaction the event's work runs in, so an event whose work fails is neither
+  claimed nor half done.
+- A carried event is recorded as `auth.providerevent.taken`; a replayed one as
+  `auth.providerevent.rejected`, answered as a carried one is. An event the keys do not
+  verify is recorded as `auth.providerevent.rejected` against the account whose linked
+  identity its unverified claims name, where they name one, and refused. Both are
+  security records with `credential`, `event` (the type as the provider spells it)
+  and `outcome`: `sessionsEnded`, `credentialUnlinked`, `accountSuspended`,
+  `addressUnverified`, `recorded`, `unsigned` or `replayed`. The provider's subject is
+  never recorded or logged.
+- An event about no linked identity is claimed and acknowledged and recorded nowhere.
+
+*Tests that pin it.*
+`ProviderEventTests.IDN_LIFE_012a_AC1_AnUnsignedEventChangesNothingAndIsAuditedAsRejectedAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AC1_AReplayedEventChangesNothingAndIsAuditedAsRejectedAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AnEventThatChangesNothingIsRecordedAndAcknowledgedAsync`,
+`AuditActionsTests` (the catalogue).
+
+*Chapter text that should change.* 10 could list the three audit actions and the
+`outcome` vocabulary.
+
 
 # Rows for chapter 10
 
@@ -10816,6 +11161,7 @@ The subsection each row belongs in is named with it.
 | `IDnsResolver` (`TextRecordsAsync`) | optional | No startup refusal. Every verification of a locked domain answers `identity.domain.unverified` and every scheduled check fails and raises `domain-reverification-failed`, so no domain is ever proved. A deployment that locks no domain needs none (REG-DOM-001, entry 212). |
 | `IMailServer` (`ProvisionAsync`, `MailboxesAsync`, `AppPasswordsAsync`, `CreateAppPasswordAsync`, `RevokeAppPasswordAsync`) | optional | No startup refusal. No mailbox is pushed and none is compared; the rows are still written, and the first pass after a registration pushes every state owed. A push carries a key that stays the same until the server confirms it, the address in its canonical form and the state `disabled`, `enabled` or `removed`; the server applies a key once. The listing answers every mailbox the server hosts with whether it is enabled. The three app-password calls carry the person's token and act on the account the server finds in it; the creation answers the server's new secret and its identifier, and a revocation of an identifier the server does not hold for that person answers `auth.credential.notfound`. Without a registration every app-password operation answers `authz.denied`. A deployment whose staff mail is hosted elsewhere needs none (INT-MAIL-006, INT-MAIL-008, INT-MAIL-009, INT-MAIL-010, entries 215, 262 and 263). |
 | `MailServerClient` (`clientId`) | where `IMailServer` is registered, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `mailServerClient.clientId`. The identifier is the registry's `protocol` client the mail server trusts, which the library issues the person's token to for the app-password calls; it presents no secret, since the library issues the token itself (INT-MAIL-010, AUTH-OIDC-001 AC4, entry 262). |
+| `SocialProvider` (`provider`, `metadata`, `clientIds`) | optional, once per social provider | No startup refusal where none is declared: every event of that provider is refused as a rejected callback. One declared twice, naming a factor that is not a social provider, with a `metadata` address that is not absolute HTTPS, or with no client or an empty one stops startup with `model.startup.declarationmissing` and `details.key` naming `socialProvider.provider`, `socialProvider.metadata` or `socialProvider.clientIds`. `metadata` is the provider's document naming `issuer` and `jwks_uri` (Google's Cross-Account Protection configuration, Apple's discovery document); `clientIds` are the audiences an event for the deployment names (IDN-LIFE-012a, entry 283). |
 | `ImageCodec` (`Reencode`) | optional, and required while any organization shows photos | Startup fails with `model.startup.declarationmissing` and `details.key` naming `imageCodec` where a `photo.enabled.<organization>` key is on and no codec is registered. The callback is `Func<ReadOnlyMemory<byte>, int, CancellationToken, ValueTask<ReadOnlyMemory<byte>?>>`: the uploaded bytes and the longest side in pixels the stored image is held to, answering the re-encoded JPEG with every metadata segment removed, or nothing where the bytes are not an image the deployment accepts. Nothing it answers chooses a code: a refusal is `identity.photo.invalid` (IDN-ATTR-002, IDN-ATTR-004). |
 
 ## Shipped default declarations
@@ -10912,9 +11258,12 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `auth.credential.invalidationheld` | security | `AuditActions.CredentialInvalidationHeld` | An invalidation was held rather than carried out, because carrying it out would leave the account with no way in. (AUTH-REC-004) |
 | `auth.credential.removed` | security | `AuditActions.CredentialRemoved` | A credential was removed from an account. (AUTH-FACT-001) |
 | `auth.credential.reportcancelled` | security | `AuditActions.CredentialReportCancelled` | A loss report was cancelled before it took effect. (AUTH-REC-004) |
+| `auth.credential.restored` | security | `AuditActions.CredentialRestored` | A credential a provider's event held stands again, because the person signed in by another factor. Details carry `credential`. (IDN-LIFE-012a, entry 288) |
 | `auth.credential.reportedlost` | security | `AuditActions.CredentialReportedLost` | A credential was reported lost, which starts the window before it is invalidated. (AUTH-REC-004) |
 | `auth.mailcredential.created` | security | `AuditActions.MailCredentialCreated` | The mail server generated an app password at its holder's request. Details carry `credential`, the server's identifier; neither the secret nor the label is written. The account is both subjects; the row names no organization. (REG-MAIL-002, INT-MAIL-010, entry 263) |
 | `auth.mailcredential.revoked` | security | `AuditActions.MailCredentialRevoked` | The mail server revoked an app password at its holder's request. Details carry `credential`, the server's identifier. The account is both subjects; the row names no organization. (REG-MAIL-002, INT-MAIL-010, entry 263) |
+| `auth.providerevent.rejected` | security | `AuditActions.ProviderEventRejected` | A social provider's security event about a linked identity was refused: its provider's keys do not verify it, or it had been carried before. Details carry `credential`, `event` (the type as the provider spells it) and `outcome` (`unsigned` or `replayed`); the account is both subjects. (IDN-LIFE-012a AC1, entry 289) |
+| `auth.providerevent.taken` | security | `AuditActions.ProviderEventTaken` | A social provider's security event about a linked identity was carried. Details carry `credential`, `event` and `outcome` (`sessionsEnded`, `credentialUnlinked`, `accountSuspended`, `addressUnverified` or `recorded`); the account is both subjects. (IDN-LIFE-012a, entries 285 to 289) |
 | `auth.oidc.refreshreused` | security | `AuditActions.RefreshTokenReused` | A refresh token was presented a second time, which revokes the family it belongs to. (AUTH-TOK-004) |
 | `auth.phonesignal.considered` | security | `AuditActions.PhoneSignalConsidered` | A phone signal was consulted before a send, recorded without the number it was consulted for. (AUTH-ABUSE-006) |
 | `auth.recovery.approved` | security | `AuditActions.RecoveryApproved` | An assisted recovery was approved, naming the approver and the reason given. (AUTH-REC-006) |

@@ -294,6 +294,45 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// IDN-LIFE-012a, LIB-HOST-001: a social provider is optional, and one declared is
+    /// declared whole, so a declaration that could verify none of its events stops the
+    /// deployment as it starts, naming the part that does not hold; one declared whole
+    /// starts.
+    /// </summary>
+    /// <param name="part">The part that does not hold.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("provider")]
+    [InlineData("metadata")]
+    [InlineData("clientIds")]
+    public async Task IDN_LIFE_012a_ASocialProviderDeclaredShortOfWholeIsRefusedAsync(string part)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var metadata = new Uri("https://accounts.google.test/.well-known/risc-configuration");
+        var whole = new SocialProvider(Factor.Google, metadata, ["the-client"]);
+        SocialProvider[] declared = part switch
+        {
+            "provider" => [whole, whole with { Provider = Factor.Password }],
+            "metadata" => [whole with { Metadata = new Uri("http://accounts.google.test/risc") }],
+            _ => [whole with { ClientIds = [] }],
+        };
+
+        using (IHost refusedHost = Deployed(providers: declared))
+        {
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await refusedHost.StartAsync(cancellationToken));
+
+            Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+            Assert.Equal("socialProvider." + part, refused.Failure?.Details["key"].GetString());
+        }
+
+        using IHost started = Deployed(providers: [whole]);
+
+        await started.StartAsync(cancellationToken);
+        await started.StopAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// API-REDIR-001: the default a destination falls back to is read against the
     /// registry as the deployment starts, so a key naming a client nothing registered
     /// stops it there rather than at the registration that would resolve to nothing.
@@ -546,10 +585,20 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool client = true,
         bool codec = false,
         bool mail = false,
-        bool mailClient = false) =>
+        bool mailClient = false,
+        IReadOnlyList<SocialProvider>? providers = null) =>
         new HostBuilder()
-            .ConfigureServices(services =>
-                Declared(services, catalogue, handlers, addresses, signIn, client, codec, mail, mailClient))
+            .ConfigureServices(services => Declared(
+                services,
+                catalogue,
+                handlers,
+                addresses,
+                signIn,
+                client,
+                codec,
+                mail,
+                mailClient,
+                providers: providers))
             .Build();
 
     // The library registered over this deployment, as the host's own code registers
@@ -564,7 +613,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool codec = false,
         bool mail = false,
         bool mailClient = false,
-        string? connection = null)
+        string? connection = null,
+        IReadOnlyList<SocialProvider>? providers = null)
     {
         // Where what the library announces goes, the host's own (LIB-HOST-001).
         services.AddSingleton<IEvents>(_events);
@@ -612,6 +662,11 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         if (client)
         {
             services.AddSingleton(new SignOnClient("this-application"));
+        }
+
+        foreach (SocialProvider provider in providers ?? [])
+        {
+            services.AddSingleton(provider);
         }
 
         return services.AddJanus(

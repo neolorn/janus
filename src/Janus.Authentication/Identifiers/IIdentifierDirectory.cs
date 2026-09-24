@@ -151,6 +151,24 @@ internal interface IIdentifierDirectory
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Drops the verified email an account holds at an address to unverified, because
+    /// the provider that vouched for the address stopped vouching for it
+    /// (IDN-LIFE-012a). The personal email a membership keeps stays verified while the
+    /// membership lasts (REG-MAIL-001 AC5, REG-MAIL-003 AC3).
+    /// </summary>
+    /// <param name="subject">Whose.</param>
+    /// <param name="canonical">The address in its canonical form.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The identifier dropped, or nothing where the account holds no verified email at
+    /// the address that may be dropped.
+    /// </returns>
+    ValueTask<IdentifierId?> UnverifyAsync(
+        SubjectId subject,
+        string canonical,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Records that a code or a same-browser link proved an identifier.
     /// </summary>
     /// <param name="subject">Whose it is.</param>

@@ -9,6 +9,7 @@ using Janus.Core.Configuration;
 using Janus.Identity.Accounts;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Authentication.Mailboxes;
 using Janus.Storage.Identity.Accounts;
@@ -182,6 +183,18 @@ internal sealed class SubjectEraser(
         foreach (IdentifierRecord identifier in identifiers)
         {
             identifier.Fingerprint = Fingerprint.Neutralised();
+        }
+
+        // PRIV-RIGHT-005c: the subject a social provider knows the person by is
+        // searchable as an identifier is, and is neutralised with them.
+        List<AuthenticatorRecord> linked = await context.Authenticators
+            .Where(credential => credential.Subject == subject && credential.ProviderSubject != null)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (AuthenticatorRecord credential in linked)
+        {
+            credential.ProviderSubject = Fingerprint.Neutralised();
         }
 
         // PRIV-RIGHT-005c: the address of a mailbox the subject holds or last held is

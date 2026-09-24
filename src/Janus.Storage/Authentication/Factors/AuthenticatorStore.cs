@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
@@ -18,15 +19,19 @@ namespace Janus.Storage.Authentication.Factors;
 /// <param name="context">The context the operation's writes are tracked on.</param>
 /// <param name="keyEncryptionKeys">The versions a subject key may be wrapped under.</param>
 /// <param name="randomness">The randomness the initialisation vector is drawn from.</param>
+/// <param name="fingerprintKey">The key a provider's subject is fingerprinted under.</param>
 /// <remarks>
-/// Implements AUTH-FACT-001, AUTH-FACT-006 and CONV-DESIGN-003. The shared secret of a
-/// code generator is written under the person's key, so a dump of the table yields no
-/// usable secret.
+/// Implements AUTH-FACT-001, AUTH-FACT-006, IDN-LIFE-012a, PRIV-RIGHT-005c and
+/// CONV-DESIGN-003. The shared secret of a code generator is written under the person's
+/// key, so a dump of the table yields no usable secret; the subject a social provider
+/// knows a linked identity by is held only as its keyed fingerprint, so a dump does not
+/// say who the person is at the provider either.
 /// </remarks>
 internal sealed class AuthenticatorStore(
     StoreContext context,
     KeyEncryptionKeys keyEncryptionKeys,
-    RandomNumberGenerator randomness) : IAuthenticatorStore
+    RandomNumberGenerator randomness,
+    ReadOnlyMemory<byte> fingerprintKey) : IAuthenticatorStore
 {
     /// <inheritdoc/>
     public async ValueTask<Authenticator?> FindAsync(
@@ -52,6 +57,28 @@ internal sealed class AuthenticatorStore(
             .ConfigureAwait(false);
 
         return record is null ? null : await ReadAsync(record, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Authenticator?> ByProviderAsync(
+        Factor provider,
+        string subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(subject);
+
+        byte[] fingerprint = Fingerprinted(subject);
+
+        AuthenticatorRecord? record = await context.Authenticators
+            .FirstOrDefaultAsync(
+                credential => credential.Factor == provider && credential.ProviderSubject == fingerprint,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        // A fingerprint erasure neutralised is nobody's (PRIV-RIGHT-005c).
+        return record is null || !Fingerprint.Matches(record.ProviderSubject, fingerprint)
+            ? null
+            : await ReadAsync(record, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -83,52 +110,18 @@ internal sealed class AuthenticatorStore(
     }
 
     /// <inheritdoc/>
-    public async ValueTask AddAsync(Authenticator authenticator, CancellationToken cancellationToken)
+    public ValueTask AddAsync(Authenticator authenticator, CancellationToken cancellationToken) =>
+        AddedAsync(authenticator, providerSubject: null, cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask LinkAsync(
+        Authenticator authenticator,
+        string subject,
+        CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(authenticator);
+        ArgumentNullException.ThrowIfNull(subject);
 
-        var record = new AuthenticatorRecord
-        {
-            Id = authenticator.Id,
-            Subject = authenticator.Subject,
-            Factor = authenticator.Factor,
-            Label = authenticator.Label.Value,
-            State = authenticator.State,
-            AddedAt = authenticator.AddedAt,
-            LastUsedAt = authenticator.LastUsedAt,
-            InvalidatesAt = authenticator.InvalidatesAt,
-            Confirmed = authenticator.Confirmed,
-            CredentialId = authenticator.WebAuthn?.CredentialId.ToArray(),
-            PublicKey = authenticator.WebAuthn?.PublicKey.ToArray(),
-            Algorithm = authenticator.WebAuthn?.Algorithm,
-            RelyingParty = authenticator.WebAuthn?.RelyingPartyId,
-            Counter = authenticator.WebAuthn?.Counter,
-            BackupEligible = authenticator.WebAuthn?.BackupEligible,
-            BackupState = authenticator.WebAuthn?.BackupState,
-            TotpConsumedStep = authenticator.Totp?.ConsumedStep,
-            IsPreferred = authenticator.IsPreferred,
-        };
-
-        if (authenticator.Totp is not null)
-        {
-            byte[] dataKey = await DataKeyAsync(authenticator.Subject, cancellationToken)
-                .ConfigureAwait(false);
-
-            try
-            {
-                record.TotpSecret = PersonalFieldCipher.Encrypt(
-                    dataKey,
-                    Located(authenticator.Subject),
-                    authenticator.Totp.Secret.Span,
-                    randomness);
-            }
-            finally
-            {
-                CryptographicOperations.ZeroMemory(dataKey);
-            }
-        }
-
-        context.Authenticators.Add(record);
+        return AddedAsync(authenticator, Fingerprinted(subject), cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -202,6 +195,61 @@ internal sealed class AuthenticatorStore(
         CredentialLabel.TryParse(stored, out CredentialLabel label)
             ? label
             : throw new InvalidOperationException("The stored label is not a label.");
+
+    private async ValueTask AddedAsync(
+        Authenticator authenticator,
+        byte[]? providerSubject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(authenticator);
+
+        var record = new AuthenticatorRecord
+        {
+            Id = authenticator.Id,
+            Subject = authenticator.Subject,
+            Factor = authenticator.Factor,
+            Label = authenticator.Label.Value,
+            State = authenticator.State,
+            AddedAt = authenticator.AddedAt,
+            LastUsedAt = authenticator.LastUsedAt,
+            InvalidatesAt = authenticator.InvalidatesAt,
+            Confirmed = authenticator.Confirmed,
+            CredentialId = authenticator.WebAuthn?.CredentialId.ToArray(),
+            PublicKey = authenticator.WebAuthn?.PublicKey.ToArray(),
+            Algorithm = authenticator.WebAuthn?.Algorithm,
+            RelyingParty = authenticator.WebAuthn?.RelyingPartyId,
+            Counter = authenticator.WebAuthn?.Counter,
+            BackupEligible = authenticator.WebAuthn?.BackupEligible,
+            BackupState = authenticator.WebAuthn?.BackupState,
+            TotpConsumedStep = authenticator.Totp?.ConsumedStep,
+            IsPreferred = authenticator.IsPreferred,
+            ProviderSubject = providerSubject,
+        };
+
+        if (authenticator.Totp is not null)
+        {
+            byte[] dataKey = await DataKeyAsync(authenticator.Subject, cancellationToken)
+                .ConfigureAwait(false);
+
+            try
+            {
+                record.TotpSecret = PersonalFieldCipher.Encrypt(
+                    dataKey,
+                    Located(authenticator.Subject),
+                    authenticator.Totp.Secret.Span,
+                    randomness);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(dataKey);
+            }
+        }
+
+        context.Authenticators.Add(record);
+    }
+
+    private byte[] Fingerprinted(string subject) =>
+        Fingerprint.Compute(Encoding.UTF8.GetBytes(subject), fingerprintKey.Span);
 
     private async ValueTask<Authenticator> ReadAsync(
         AuthenticatorRecord record,

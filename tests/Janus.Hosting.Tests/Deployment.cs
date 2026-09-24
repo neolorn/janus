@@ -51,6 +51,7 @@ using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
 using Janus.Hosting.Sending;
 using Janus.Hosting.Tests.Bff;
+using Janus.Hosting.Tests.Credentials;
 using Janus.Hosting.Tests.Oidc;
 using Janus.Privacy;
 using Janus.Privacy.Breaches;
@@ -125,13 +126,18 @@ internal sealed class Deployment : IAsyncDisposable
     /// <param name="preferences">The preference keys the host declared.</param>
     /// <param name="signIn">Where the host's own sign-in screen is.</param>
     /// <param name="client">Which client of the provider this application is.</param>
+    /// <param name="providers">
+    /// The social providers whose security events the host takes; both, unless it says
+    /// otherwise.
+    /// </param>
     public Deployment(
         ApplicationKind application = ApplicationKind.Public,
         PasskeyAddresses? addresses = null,
         string prefix = "",
         PreferenceDeclarations? preferences = null,
         AuthenticationAddresses? signIn = null,
-        SignOnClient? client = null)
+        SignOnClient? client = null,
+        IReadOnlyList<SocialProvider>? providers = null)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
@@ -163,7 +169,8 @@ internal sealed class Deployment : IAsyncDisposable
             application,
             addresses ?? Pages,
             signIn ?? Screen,
-            client ?? Registered);
+            client ?? Registered,
+            providers ?? [SocialProviders.Google, SocialProviders.Apple]);
 
         _application = builder.Build();
 
@@ -210,6 +217,17 @@ internal sealed class Deployment : IAsyncDisposable
     /// deployment (BFF-SESS-006 AC2).
     /// </summary>
     public ProviderInMemory Provider { get; }
+
+    /// <summary>
+    /// Google and Apple, as the deployment reads their keys and as they sign their
+    /// security events (IDN-LIFE-012a).
+    /// </summary>
+    public SocialProvidersInMemory SocialProviders { get; } = new();
+
+    /// <summary>
+    /// What was recorded of what happened to a credential.
+    /// </summary>
+    public CredentialAuditInMemory CredentialAudit { get; } = new();
 
     /// <summary>
     /// The clock the whole deployment reads.
@@ -597,7 +615,8 @@ internal sealed class Deployment : IAsyncDisposable
         ApplicationKind application,
         PasskeyAddresses addresses,
         AuthenticationAddresses signIn,
-        SignOnClient client)
+        SignOnClient client,
+        IReadOnlyList<SocialProvider> providers)
     {
         _ = services.AddSingleton<TimeProvider>(Clock);
         _ = services.AddSingleton(_randomness);
@@ -680,6 +699,19 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<ICallbackEvents, CallbackEventsInMemory>();
         _ = services.AddScoped<CallbackAdmission>();
         _ = services.AddScoped<DeliveryReports>();
+
+        // IDN-LIFE-012a: what the host declared of each provider, whose documents are
+        // read from the fake that signs its events.
+        foreach (SocialProvider declared in providers)
+        {
+            _ = services.AddSingleton(declared);
+        }
+
+        _ = services.AddSingleton<ProviderKeys>();
+        _ = services.AddHttpClient(ProviderKeys.Channel)
+            .ConfigurePrimaryHttpMessageHandler(() => SocialProviders);
+        _ = services.AddScoped<ProviderEvents>();
+        _ = services.AddScoped<ProviderEventIntake>();
         _ = services.AddScoped<RelayRegistration>();
         _ = services.AddScoped<SendingService>();
         _ = services.AddScoped<INotificationHandler>(
@@ -693,7 +725,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<NonExistenceNotice>();
         _ = services.AddScoped<ThrottleService>();
         _ = services.AddSingleton<IThrottleLedger, ThrottleLedgerInMemory>();
-        _ = services.AddSingleton<ICredentialAudit, CredentialAuditInMemory>();
+        _ = services.AddSingleton<ICredentialAudit>(CredentialAudit);
         _ = services.AddSingleton<Argon2idHasher>();
         _ = services.AddScoped<PasswordScreening>();
         _ = services.AddScoped<PasswordService>();
@@ -839,6 +871,7 @@ internal sealed class Deployment : IAsyncDisposable
         await _application.DisposeAsync();
         await Work.DisposeAsync();
 
+        SocialProviders.Dispose();
         _randomness.Dispose();
     }
 }

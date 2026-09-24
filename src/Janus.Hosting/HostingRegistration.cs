@@ -211,6 +211,14 @@ public static class HostingRegistration
         services.AddScoped<ICallbackReferences>(
             provider => provider.GetRequiredService<CallbackReferences>());
         services.AddScoped<DeliveryReports>();
+
+        // IDN-LIFE-012a: a provider's events are verified against the keys it publishes,
+        // read on a client of the framework's factory and held between events; a
+        // deployment that declares no provider takes none.
+        services.AddSingleton<ProviderKeys>();
+        _ = services.AddHttpClient(ProviderKeys.Channel);
+        services.AddScoped<ProviderEvents>();
+        services.AddScoped<ProviderEventIntake>();
         services.AddScoped(services => new BotDefence(
             services.GetRequiredService<IConfigurationStore>(),
             services.GetRequiredService<IDatacenterRanges>(),
@@ -272,6 +280,7 @@ public static class HostingRegistration
             provider.GetService<IMailServer>(),
             provider.GetService<MailServerClient>(),
             provider.GetService<ImageCodec>(),
+            provider.GetServices<SocialProvider>(),
             provider.GetRequiredService<IConfigurationStore>()));
 
         services.ConfigureHttpJsonOptions(ReadThroughContexts);

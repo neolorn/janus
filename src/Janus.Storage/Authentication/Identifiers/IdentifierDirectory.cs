@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Identifiers;
@@ -171,6 +172,34 @@ internal sealed class IdentifierDirectory(
         await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
 
         return primary;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<IdentifierId?> UnverifyAsync(
+        SubjectId subject,
+        string canonical,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(canonical);
+
+        IdentifierSet set = await identifiers.FindBySubjectAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        Identifier? vouched = set.OfKind(IdentifierKind.Email).FirstOrDefault(identifier =>
+            identifier.IsVerified
+            && !identifier.IsPersonal
+            && string.Equals(identifier.Canonical, canonical, StringComparison.Ordinal));
+
+        if (vouched is null)
+        {
+            return null;
+        }
+
+        set.Unverify(vouched.Id);
+
+        await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
+
+        return vouched.Id;
     }
 
     /// <inheritdoc/>

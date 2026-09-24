@@ -19,6 +19,8 @@ namespace Janus.Authentication.Sessions;
 /// </summary>
 /// <param name="sessions">Where sessions are read and written.</param>
 /// <param name="audit">Where the factors presented are recorded.</param>
+/// <param name="authenticators">Where a credential a provider's event held is restored.</param>
+/// <param name="credentials">Where a restored credential is recorded.</param>
 /// <param name="policies">Where the principal's policy is resolved.</param>
 /// <param name="configuration">Where the lifetimes are read from.</param>
 /// <param name="scope">Whether the caller may end sessions that are not their own.</param>
@@ -27,13 +29,15 @@ namespace Janus.Authentication.Sessions;
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where a session secret is drawn from.</param>
 /// <remarks>
-/// Implements AUTH-SESS-001 to AUTH-SESS-013. Lifetimes are read from the assurance
-/// the principal's policy requires and from nothing else, so the session a passkey
-/// opened lives exactly as long as the one a password opened.
+/// Implements AUTH-SESS-001 to AUTH-SESS-013 and IDN-LIFE-012a. Lifetimes are read
+/// from the assurance the principal's policy requires and from nothing else, so the
+/// session a passkey opened lives exactly as long as the one a password opened.
 /// </remarks>
 internal sealed class SessionService(
     ISessionStore sessions,
     ISessionAudit audit,
+    IAuthenticatorStore authenticators,
+    ICredentialAudit credentials,
     PolicyResolution policies,
     IConfigurationStore configuration,
     AdministrativeScope scope,
@@ -729,8 +733,33 @@ internal sealed class SessionService(
             .ConfigureAwait(false);
         await audit.PresentedAsync(session.Id, subject, presented, now, cancellationToken)
             .ConfigureAwait(false);
+        await RestoreAsync(subject, presented, now, cancellationToken).ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success(new IssuedSession(session.Id, secret, token));
+    }
+
+    // IDN-LIFE-012a: a credential a provider's event held stands again once the person
+    // signs in by another factor, in the transaction the session begins in.
+    private async ValueTask RestoreAsync(
+        SubjectId subject,
+        IReadOnlyCollection<Factor> presented,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<Authenticator> enrolled = await authenticators
+            .OfAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (Authenticator held in enrolled.Where(credential =>
+                     credential.IsHeldByProvider && !presented.Contains(credential.Factor)))
+        {
+            held.Restore();
+
+            await authenticators.RecordAsync(held, cancellationToken).ConfigureAwait(false);
+            await credentials
+                .RecordedAsync(AuditActions.CredentialRestored, subject, held.Id, now, cancellationToken)
+                .ConfigureAwait(false);
+        }
     }
 }

@@ -11,6 +11,7 @@ using Janus.Authentication.Factors;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests;
+using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Policies;
 using Janus.Authentication.Tests.Sessions;
 using Janus.Core;
@@ -870,6 +871,8 @@ public sealed class BrowserProfileTests : IDisposable
         services.AddSingleton<ILogger<MalformedRequest>>(new LogInMemory<MalformedRequest>());
         services.AddSingleton<ISessionStore>(_sessions);
         services.AddSingleton<ISessionAudit>(_audit);
+        services.AddSingleton<IAuthenticatorStore, AuthenticatorStoreInMemory>();
+        services.AddSingleton<ICredentialAudit, CredentialAuditInMemory>();
         services.AddSingleton<IMembershipLookup>(_memberships);
         services.AddSingleton<IPolicyRaiseStore, PolicyRaiseStoreInMemory>();
         services.AddSingleton<IAccessGate>(_gate);
