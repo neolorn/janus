@@ -2256,6 +2256,9 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasKey("Category", "OccurredAt", "Id")
                     .HasName("pk_audit_records");
 
+                b.HasIndex("ActingSubject", "OccurredAt")
+                    .HasDatabaseName("ix_audit_records_acting_subject");
+
                 b.HasIndex("EffectiveSubject", "OccurredAt")
                     .HasDatabaseName("ix_audit_records_effective_subject");
 

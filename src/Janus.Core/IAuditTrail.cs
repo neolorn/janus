@@ -6,7 +6,7 @@ namespace Janus.Core;
 
 /// <summary>
 /// The audit trail read by data subject, which is how "who was affected" is answered
-/// inside the notification clock.
+/// inside the notification clock, and what a departing person did is reviewed.
 /// </summary>
 /// <remarks>
 /// Implements LIB-API-005, PRIV-BREACH-002 and chapter 09 section 8a.
@@ -14,10 +14,11 @@ namespace Janus.Core;
 public interface IAuditTrail
 {
     /// <summary>
-    /// Every audit record of one subject, most recent first.
+    /// Every audit record naming one subject, as the acting or the effective identity,
+    /// most recent first.
     /// </summary>
     /// <param name="context">Who is asking.</param>
-    /// <param name="subject">Whose records, as the effective identity.</param>
+    /// <param name="subject">Whose records.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// The records, or <c>authz.denied</c> where the caller does not hold

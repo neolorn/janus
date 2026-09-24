@@ -9943,6 +9943,52 @@ written grants, unchanged).
 organization's records admit no one through any grant, derived ones included, and that
 cancellation restores derived access with the host's facts as they stand.
 
+---
+
+## 267. The audit trail by subject names what the subject did as well as what was done to it
+
+**Phase 8 · 2026-09-24 · Tier 3 · PRIV-BREACH-002, 09 section 8a, 16 sections 3 and 5, D-014, entry 177**
+
+*The question.* 09 section 8a: "`GET /admin/audit?subject=...` | Every audit record for
+one subject, without a full scan (PRIV-BREACH-002)". Chapter 16 section 3 step 5: "If
+they held `recovery:approve`, review their recent approvals." Section 5, for a hostile
+departure: "Review their audit trail for the preceding weeks". D-014: "Audit records
+both" the acting and the effective identity. The read built in this phase (entry 177)
+answered the records naming the subject as the effective identity only, so an
+approval, a grant or any action a person took on someone else's account was not in
+their trail, and no other read in 09 reaches it. No chapter says which identity "for
+one subject" means.
+
+*The readings.*
+
+1. The records naming the subject as the effective identity only.
+2. Every record naming the subject as either identity.
+
+*Chosen: 2, the strictest reading.* Reading 1 leaves the review chapter 16 asks for
+without a query, which is the "access that survives departure" and the "data leaving
+with them" the procedure exists to catch. No record is disclosed that `audit:read`
+could not already read under the other subject. Under this:
+
+- `IAuditStore.FindNamingAsync` reads every record whose acting or effective identity
+  is the subject, most recent first, through `ix_audit_records_effective_subject` and
+  `ix_audit_records_acting_subject` (the second written by the configuration change
+  index migration for OPS-CFG-005, now also declared on the model), with no key read:
+  what a record holds under any subject's key never comes back, as entry 177 holds for
+  the trail.
+- The trail (`IAuditTrail`, `GET /admin/audit?subject=...`) reads through it; the
+  entry shape is unchanged. The port's read by effective identity with the personal
+  values (`FindBySubjectAsync`) is unchanged.
+
+*Tests that pin it.*
+`AuditStoreTests.PRIV_BREACH_002_TheTrailNamesWhatTheSubjectDidToOthersAsync`,
+`AuditStoreTests.PRIV_BREACH_002_AC1_TheTrailNamingASubjectEitherWayTakesTheIndexesAsync`,
+`AuditStoreTests.PRIV_BREACH_002_AC2_TheTrailReadsTheSameBeforeAndAfterErasureAsync`,
+`AuditRecordTests.PRIV_RET_002_AC1_TheAuditPortOffersNoWriteButAnAppend` (the port's
+methods).
+
+*Chapter text that should change.* 09 section 8a could say "every audit record naming
+one subject, as the acting or the effective identity".
+
 
 # Rows for chapter 10
 

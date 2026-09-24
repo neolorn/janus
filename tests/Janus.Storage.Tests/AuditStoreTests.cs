@@ -395,6 +395,101 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
     }
 
     /// <summary>
+    /// PRIV-BREACH-002, 16 section 3 step 5 (entry 267): the trail of a subject names
+    /// what it did to others as well as what was done to it, most recent first, and a
+    /// record it acted in carries nothing held under the other subject's key.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_BREACH_002_TheTrailNamesWhatTheSubjectDidToOthersAsync()
+    {
+        SubjectId approver = await _deployment.AccountAsync(Now());
+        SubjectId recovered = await _deployment.AccountAsync(Now());
+        var approved = AuditAction.Parse("auth.recovery.approved");
+        DateTimeOffset occurred = Now();
+
+        await AppendAsync(AuditRecord.Of(
+            NewId(),
+            AuditCategory.Security,
+            Suspended,
+            occurred - TimeSpan.FromMinutes(5),
+            approver,
+            approver,
+            organization: null));
+
+        await AppendAsync(AuditRecord.Of(
+            NewId(),
+            AuditCategory.Security,
+            approved,
+            occurred,
+            approver,
+            recovered,
+            organization: null,
+            details: Fields(("channel", "in-person")),
+            personalDetails: Fields(("reason", "ahmed@example.com"))));
+
+        IReadOnlyList<AuditEntry> trail = await TrailAsync(approver);
+
+        Assert.Equal([approved, Suspended], trail.Select(entry => entry.Action));
+        Assert.Equal(approver, trail[0].Acting);
+        Assert.Equal(recovered, trail[0].Effective);
+        Assert.Equal("in-person", trail[0].Details["channel"].GetString());
+        Assert.False(trail[0].Details.ContainsKey("reason"));
+        Assert.Equal([approved], (await TrailAsync(recovered)).Select(entry => entry.Action));
+    }
+
+    /// <summary>
+    /// PRIV-BREACH-002 AC1 (entry 267): the trail naming a subject either way still
+    /// takes the indexes and not a scan of the partition holding its rows.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_BREACH_002_AC1_TheTrailNamingASubjectEitherWayTakesTheIndexesAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Now());
+        SubjectId other = await _deployment.AccountAsync(Now());
+
+        await AppendAsync(AuditRecord.Of(
+            NewId(),
+            AuditCategory.Security,
+            Suspended,
+            Now(),
+            subject,
+            other,
+            organization: null));
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        _ = await connection.ExecuteAsync(
+            "INSERT INTO identity.audit_records "
+                + "(id, category, occurred_at, action, acting_subject, effective_subject, details) "
+                + "SELECT gen_random_uuid(), 'security', now(), 'identity.account.read', "
+                + "gen_random_uuid(), gen_random_uuid(), '{}'::jsonb "
+                + "FROM generate_series(1, 20000)");
+
+        _ = await connection.ExecuteAsync("ANALYZE identity.audit_records");
+
+        IEnumerable<string> plan = await connection.QueryAsync<string>(
+            "EXPLAIN SELECT id, action, occurred_at FROM identity.audit_records "
+                + "WHERE effective_subject = @subject OR acting_subject = @subject "
+                + "ORDER BY occurred_at DESC",
+            new { subject = subject.Value });
+
+        string leaf = (await connection.QuerySingleAsync<string>(
+            "SELECT tableoid::regclass::text FROM identity.audit_records "
+                + "WHERE acting_subject = @subject",
+            new { subject = subject.Value }))["identity.".Length..];
+
+        Assert.Contains(
+            plan,
+            line => line.Contains("Index Scan", StringComparison.Ordinal)
+                && line.Contains(leaf, StringComparison.Ordinal)
+                && line.Contains("acting_subject", StringComparison.Ordinal));
+
+        Assert.DoesNotContain(
+            plan,
+            line => line.Contains("Seq Scan on " + leaf, StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// PRIV-RET-002: the row goes to the partition of its retention category, so a
     /// month of one category is dropped without touching the other.
     /// </summary>

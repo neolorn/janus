@@ -505,10 +505,11 @@ against the public contract of LIB-API-001.
   /admin/documents/{document}/versions/{version}/translations/{language}` attaches or
   corrects a translation without a new version.
 
-- `GET /admin/audit?subject=...` and `IAuditTrail` read every audit record of one
-  subject, most recent first, under `audit:read`: each entry carries its codes,
-  identities, organization and plain details, never a value held under the subject's
-  key, so it reads the same before and after erasure.
+- `GET /admin/audit?subject=...` and `IAuditTrail` read every audit record naming one
+  subject, what it did to others as well as what was done to it, most recent first,
+  under `audit:read`: each entry carries its codes, identities, organization and plain
+  details, never a value held under a subject's key, so it reads the same before and
+  after erasure.
 
 - `GET /admin/explanations/{correlationId}` resolves a refusal's correlation identifier
   to the permission and the principal for `audit:read`, and

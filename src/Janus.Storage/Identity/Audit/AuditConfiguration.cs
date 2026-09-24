@@ -77,5 +77,11 @@ internal sealed class AuditConfiguration : IEntityTypeConfiguration<AuditRowReco
         // PRIV-BREACH-002: every record of one subject, without a full scan.
         builder.HasIndex(record => new { record.EffectiveSubject, record.OccurredAt })
             .HasDatabaseName("ix_audit_records_effective_subject");
+
+        // OPS-CFG-005 AC2, PRIV-BREACH-002: every record by one actor, and with the index
+        // above every record naming a subject either way, without a full scan (entry
+        // 267). The configuration change index migration wrote it.
+        builder.HasIndex(record => new { record.ActingSubject, record.OccurredAt })
+            .HasDatabaseName("ix_audit_records_acting_subject");
     }
 }
