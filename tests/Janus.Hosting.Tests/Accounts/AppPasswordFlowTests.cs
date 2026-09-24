@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Mailboxes;
 using Janus.Core;
+using Janus.Hosting.Accounts;
 using Janus.Hosting.Tests.Oidc;
 using Microsoft.AspNetCore.Http;
 using Xunit;
@@ -67,6 +68,34 @@ public sealed class AppPasswordFlowTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status204NoContent, revoked.Status);
         Assert.Empty(_deployment.MailServer.AppPasswordsOf(subject));
+    }
+
+    /// <summary>
+    /// INT-MAIL-010 AC4: the secret the server generated is answered once and reaches no
+    /// log line at any level, whoever writes it; the types that carry it are marked
+    /// never logged, so a logging call handed one fails the build (JAN0002).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_010_AC4_NoSecretReachesALogAsync()
+    {
+        Browser browser = await HolderAsync();
+
+        Answer created = await browser.SendAsync("POST", Path, ("label", "Phone"));
+        Answer listed = await browser.SendAsync("GET", Path);
+        string secret = created.Text("secret");
+
+        Assert.Equal(Assert.Single(_deployment.MailServer.Secrets), secret);
+        Assert.DoesNotContain(secret, listed.Body, StringComparison.Ordinal);
+        Assert.NotEmpty(_deployment.Logs.Lines);
+        Assert.DoesNotContain(_deployment.Logs.Lines, line => line.Contains(secret, StringComparison.Ordinal));
+        Assert.All(
+            [typeof(IssuedAppPassword), typeof(IssuedAppPasswordView)],
+            carrier =>
+            {
+                Assert.True(carrier.IsDefined(typeof(NeverLoggedAttribute), inherit: false));
+                Assert.True(carrier.GetProperty("Secret")!.IsDefined(typeof(NeverLoggedAttribute), inherit: false));
+            });
     }
 
     /// <summary>

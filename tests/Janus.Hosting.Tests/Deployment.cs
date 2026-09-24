@@ -134,6 +134,7 @@ internal sealed class Deployment : IAsyncDisposable
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
         builder.Logging.ClearProviders();
+        builder.Logging.SetMinimumLevel(LogLevel.Trace).AddProvider(Logs);
 
         Signals = new RegistrationSignalsInMemory(Clock);
         Grants = new OidcAuthorizationStoreInMemory(Tokens);
@@ -412,6 +413,11 @@ internal sealed class Deployment : IAsyncDisposable
     /// What the provider logged about a request it corrected.
     /// </summary>
     public LogInMemory<RegisteredDestination> OidcLog { get; } = new();
+
+    /// <summary>
+    /// Every other line the deployment logged, at every level.
+    /// </summary>
+    public LogsInMemory Logs { get; } = new();
 
     /// <summary>
     /// What the sign-on recorded when it would not carry a return (BFF-SESS-006 AC3).

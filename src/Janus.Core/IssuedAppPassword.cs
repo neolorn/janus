@@ -7,4 +7,5 @@ namespace Janus.Core;
 /// <param name="Id">What the server calls it, which is what a revocation names.</param>
 /// <param name="Secret">The secret, returned once and never read back.</param>
 /// <remarks>Implements REG-MAIL-002 and INT-MAIL-010.</remarks>
-public sealed record IssuedAppPassword(string Id, string Secret);
+[NeverLogged]
+public sealed record IssuedAppPassword(string Id, [property: NeverLogged] string Secret);

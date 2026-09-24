@@ -1,3 +1,5 @@
+using Janus.Core;
+
 namespace Janus.Hosting.Accounts;
 
 /// <summary>
@@ -6,4 +8,5 @@ namespace Janus.Hosting.Accounts;
 /// <param name="Id">What the revocation endpoint names it by.</param>
 /// <param name="Secret">The secret, shown once and never read back.</param>
 /// <remarks>Implements REG-MAIL-002 and INT-MAIL-010.</remarks>
-internal sealed record IssuedAppPasswordView(string Id, string Secret);
+[NeverLogged]
+internal sealed record IssuedAppPasswordView(string Id, [property: NeverLogged] string Secret);

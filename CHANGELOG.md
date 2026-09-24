@@ -373,7 +373,8 @@ against the public contract of LIB-API-001.
   list, create and revoke the signed-in person's mail app passwords at the mail
   server. The library issues the person a token to the mail server's client from
   their session and makes one call with it; the server generates the secret, which is
-  answered once and stored nowhere. Creation and revocation are the
+  answered once, stored nowhere and never logged: `IssuedAppPassword` and its `Secret`
+  carry `NeverLogged`. Creation and revocation are the
   `mailcredential:create` and `mailcredential:revoke` step-up actions, notified to the
   security-notice set and audited as `auth.mailcredential.created` and
   `auth.mailcredential.revoked` by the server's identifier. An account that holds no
