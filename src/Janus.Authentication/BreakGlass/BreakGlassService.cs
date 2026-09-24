@@ -159,6 +159,14 @@ internal sealed class BreakGlassService(
     }
 
     /// <summary>
+    /// Forgets the attempts no window counts any more (OPS-OBS-003).
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>How many were forgotten.</returns>
+    public ValueTask<int> SweepAsync(CancellationToken cancellationToken) =>
+        store.SweepAsync(time.GetUtcNow() - GlobalWindow, cancellationToken);
+
+    /// <summary>
     /// Generates the credential, a first issue or a replacement that invalidates the
     /// one before it, and answers it the one time it is shown.
     /// </summary>

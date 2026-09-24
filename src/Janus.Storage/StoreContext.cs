@@ -1,6 +1,7 @@
 using System;
 using Janus.Storage.Authentication.Accounts;
 using Janus.Storage.Authentication.Alerting;
+using Janus.Storage.Authentication.Background;
 using Janus.Storage.Authentication.BreakGlass;
 using Janus.Storage.Authentication.Callbacks;
 using Janus.Storage.Authentication.Credentials;
@@ -448,6 +449,11 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     /// </summary>
     public DbSet<SigningKeyRecord> SigningKeys => Set<SigningKeyRecord>();
 
+    /// <summary>
+    /// The background jobs, with when each was last attempted and last succeeded.
+    /// </summary>
+    public DbSet<BackgroundJobRecord> BackgroundJobs => Set<BackgroundJobRecord>();
+
     /// <inheritdoc/>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -539,5 +545,6 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new PrivacyRequestConfiguration());
         modelBuilder.ApplyConfiguration(new ExportConfiguration());
         modelBuilder.ApplyConfiguration(new ComplianceConfiguration());
+        modelBuilder.ApplyConfiguration(new BackgroundJobConfiguration());
     }
 }

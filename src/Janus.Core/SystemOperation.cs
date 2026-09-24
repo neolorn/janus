@@ -34,4 +34,18 @@ public enum SystemOperation
     /// </summary>
     [JsonStringEnumMemberName("expiry-sweep")]
     ExpirySweep = 3,
+
+    /// <summary>
+    /// Carrying what has been committed to where it goes: the outbox, the mailboxes
+    /// owed to the mail server and the raised alerts.
+    /// </summary>
+    [JsonStringEnumMemberName("delivery")]
+    Delivery = 4,
+
+    /// <summary>
+    /// Reading the state of something the deployment depends on and raising the alert
+    /// its reading calls for.
+    /// </summary>
+    [JsonStringEnumMemberName("monitoring")]
+    Monitoring = 5,
 }

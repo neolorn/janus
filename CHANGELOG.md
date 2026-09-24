@@ -360,6 +360,15 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The library runs its own scheduled work. A worker `AddJanus` registers sweeps
+  expired sessions, codes, links and tokens, ends the windows of account deletion,
+  organization erasure, loss reports and privacy-request deadlines, re-verifies locked
+  domains, publishes the outbox, provisions mailboxes, carries raised alerts,
+  reconciles the mail server daily and reads the gateway balance. Each job runs as a
+  named principal of its own, once across the processes of a deployment, and a job
+  whose last success is older than twice its interval raises `background-job-failed`.
+  `SystemOperation` gains `Delivery` and `Monitoring`. A deployment applies one
+  further migration, which adds the table the runs are kept in.
 - Background work acts as a named system principal that states its reason, and is
   audited as one. The passes that record what they do (the account and organization
   erasure sweeps, the privacy-request deadline sweep and the loss-report windows) run

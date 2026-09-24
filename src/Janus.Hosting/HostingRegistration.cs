@@ -34,6 +34,7 @@ using Janus.Hosting.Accounts;
 using Janus.Hosting.Alerting;
 using Janus.Hosting.Authentication;
 using Janus.Hosting.Authorization;
+using Janus.Hosting.Background;
 using Janus.Hosting.Bff;
 using Janus.Hosting.BreakGlass;
 using Janus.Hosting.Configuration;
@@ -64,6 +65,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace Janus.Hosting;
 
@@ -434,7 +436,7 @@ public static class HostingRegistration
 
         // REG-MAIL-001: an invitation reserves a mailbox only where there is a mail
         // server to create it on.
-        services.AddScoped<IInvitations>(provider => new InvitationService(
+        services.AddScoped(provider => new InvitationService(
             provider.GetRequiredService<IAccessGate>(),
             provider.GetRequiredService<Janus.Authentication.Policies.AdministrativeScope>(),
             provider.GetRequiredService<StepUpGuard>(),
@@ -454,6 +456,7 @@ public static class HostingRegistration
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<IInvitations>(provider => provider.GetRequiredService<InvitationService>());
         services.AddScoped<IGroups, GroupService>();
         services.AddScoped<IDerivationMaterialiser, DerivationMaterialiser>();
         services.AddScoped<ModelValidation>();
@@ -475,6 +478,13 @@ public static class HostingRegistration
         services.Insert(7, ServiceDescriptor.Singleton<IHostedService, RedirectValidationService>());
         services.Insert(8, ServiceDescriptor.Singleton<IHostedService, SigningKeyValidationService>());
         services.Insert(9, ServiceDescriptor.Singleton<IHostedService, RelayValidationService>());
+
+        // INF-BG-001: the scheduled work starts once the checks above have passed.
+        services.AddHostedService(provider => new BackgroundWorker(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            BackgroundJobs.All,
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<ILogger<BackgroundWorker>>()));
 
         return services;
     }

@@ -159,6 +159,14 @@ public sealed class ModelTests
             "authenticators.totp_consumed_step",
             "authenticators.totp_secret",
 
+            // Not an account field: when each background job was first seen, last
+            // attempted, last succeeded and last raised as lapsed (INF-BG-001).
+            "background_jobs.attempted_at",
+            "background_jobs.lapse_raised_at",
+            "background_jobs.name",
+            "background_jobs.recorded_at",
+            "background_jobs.succeeded_at",
+
             // Not an account field: the attempts at the break-glass credential from any
             // source, counted against the global limit of OPS-BOOT-004.
             "break_glass_attempts.attempted_at",

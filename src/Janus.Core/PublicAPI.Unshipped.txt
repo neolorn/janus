@@ -2577,7 +2577,9 @@ Janus.Core.SuspensionOrigin
 Janus.Core.SuspensionOrigin.Administrator = 1 -> Janus.Core.SuspensionOrigin
 Janus.Core.SuspensionOrigin.Self = 0 -> Janus.Core.SuspensionOrigin
 Janus.Core.SystemOperation
+Janus.Core.SystemOperation.Delivery = 4 -> Janus.Core.SystemOperation
 Janus.Core.SystemOperation.ExpirySweep = 3 -> Janus.Core.SystemOperation
+Janus.Core.SystemOperation.Monitoring = 5 -> Janus.Core.SystemOperation
 Janus.Core.SystemOperation.Reconciliation = 0 -> Janus.Core.SystemOperation
 Janus.Core.SystemOperation.RecordsOfProcessing = 2 -> Janus.Core.SystemOperation
 Janus.Core.SystemOperation.RetentionPurge = 1 -> Janus.Core.SystemOperation

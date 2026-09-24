@@ -11639,6 +11639,118 @@ as its actor and no reason.
 *Chapter text that should change.* IDN-AUD-001 could name the two columns beside the
 acting and effective subjects.
 
+---
+
+## 304. Which pool-wide operations the scheduled jobs run as
+
+**Phase 9 · 2026-09-24 · Tier 3 · IDN-PRIN-001 AC3, INF-BG-001, INF-BG-002**
+
+*The question.* IDN-PRIN-001 lists the pool-wide work a deployment-scoped principal
+exists for, as reconciliation, retention purging, records-of-processing generation and
+expiry sweeps, and says it "is restricted to those named operations." INF-BG-001
+requires jobs that are none of the four: the transactional outbox publisher, the
+mailbox provisioning that follows it, the carrying of raised alerts, and the gateway
+balance poll. Each of them has to run as a principal naming some operation.
+
+*The readings.*
+
+1. Keep the four, and run each other job under the nearest of them (a publisher as
+   reconciliation, the balance poll as an expiry sweep).
+2. Add one operation per job.
+3. Add the fewest operations that cover the jobs outside the four: `delivery`, carrying
+   what has been committed to where it goes, and `monitoring`, reading the state of
+   something the deployment depends on and raising what the reading calls for.
+
+*Chosen: 3.* Reading 1 grants a job an operation it does not perform, so the outbox
+publisher's principal could run a reconciliation; reading 2 grows the public
+enumeration by a member for every job. Under 3:
+
+- `SystemOperation` gains `Delivery` (`delivery`) and `Monitoring` (`monitoring`).
+- Every job is its own deployment-scoped principal naming exactly one operation, and
+  states as its reason the item that requires it: the sweeps and grace windows run as
+  `expiry-sweep`, the mail reconciliation as `reconciliation`, the outbox, mailbox
+  provisioning and alert carrying as `delivery`, the balance poll as `monitoring`.
+- A pass that records what it does still refuses any principal that may not run
+  `expiry-sweep` (entry 303).
+
+*Tests that pin it.*
+`BackgroundWorkerTests.INF_BG_002_EveryScheduledJobIsANamedRestrictedPrincipal`,
+`BackgroundWorkerTests.INF_BG_002_AC1_AJobRunsAsItsPrincipalAsync`.
+
+*Chapter text that should change.* IDN-PRIN-001 could name delivery and monitoring
+beside the four operations it lists, or say which of the four each of the jobs of
+INF-BG-001 runs as.
+
+---
+
+## 305. How often the jobs run that no setting paces
+
+**Phase 9 · 2026-09-24 · Tier 2 · INF-BG-001, INT-MAIL-007, OPS-ALERT-001, INT-SMS-004**
+
+*The question.* INF-BG-001 AC2 judges a job by twice its interval, so every job needs
+one. `10` names the interval of most of them (`sweep.interval`, `outbox.poll.interval`,
+`abuse.sms.pollinterval`) but not of two: the carrying of raised alerts to their
+channels, and the mail reconciliation, which INT-MAIL-007 says "SHALL run daily". Nor
+does any chapter say what the balance poll does in a deployment that registered no SMS
+transport.
+
+*The readings.*
+
+1. Carry raised alerts every `sweep.interval`, as the other passes over a table are.
+2. Carry them every `outbox.poll.interval`, as the outbox publisher is.
+
+For the reconciliation, a new setting, or the day the chapter fixes. For the poll, a
+failure where no transport is registered, or a run with nothing to read.
+
+*Chosen: 2*, a day for the reconciliation, and nothing to read for the poll. A raised
+alert waits in `raised_alerts` exactly as an event waits in the outbox, and it is the
+record least able to wait five minutes. The reconciliation's day is the chapter's own
+and needs no key. A deployment with no transport has no balance, and a failure there
+would raise `background-job-failed` every hour for a gateway that does not exist.
+
+*Tests that pin it.* `BackgroundJobsTests.INF_BG_001_AC1_EveryJobRunsWithoutAPersonAsync`.
+
+*Chapter text that should change.* The `outbox.poll.interval` row of `10` could name
+OPS-ALERT-001 among the passes it paces.
+
+---
+
+## 306. How far back the token sweep reaches, and the one sweep not scheduled
+
+**Phase 9 · 2026-09-24 · Tier 3 · AUTH-KEY-003, AUTH-OIDC-003, OPS-OBS-003**
+
+*The question.* AUTH-KEY-003 requires consumed refresh tokens to be swept. AUTH-OIDC-003
+AC1 requires "A refresh token presented twice revokes all derived sessions", which the
+provider can only do while the redeemed row exists; the store's prune removes a
+redeemed row created before the instant it is given, whatever that row's own expiry.
+Separately, the store of staged identifier verifications has a sweep that takes an
+instant, and no chapter says how old a staged verification is when it is abandoned.
+
+*The readings.* For the tokens:
+
+1. Prune at the access token lifetime, or at some shorter span.
+2. Prune only what is older than the longest session the settings allow, the ceiling of
+   `session.default.absolute`, since no refresh token outlives its session.
+
+For the staged verifications:
+
+1. Sweep them at `code.verification.lifetime` after staging.
+2. Leave them unswept, ended only by `POST /account/identifiers/{id}/abandon` or by
+   completion.
+
+*Chosen: 2 and 2*, the readings that keep most. Pruning a redeemed refresh token that
+could still be presented turns a stolen token's reuse from a revocation of the family
+into a plain refusal, which AC1 forbids. A staged verification swept by age would
+strand the unverified identifier the account still holds: asking for the code again
+finds no pending verification and sends nothing.
+
+*Tests that pin it.* `BackgroundJobsTests.INF_BG_001_AC1_EveryJobRunsWithoutAPersonAsync`
+runs the sweep over the database; the reach itself is the constant `LongestSession` in
+`BackgroundJobs`.
+
+*Chapter text that should change.* AUTH-KEY-003 could say how long a consumed refresh
+token is kept, and chapter `20` how long a staged identifier verification stands.
+
 
 # Rows for chapter 10
 
