@@ -13696,6 +13696,50 @@ What is built:
 fall back that cannot be raised refuses the operation. INT-PWD-002 AC1 could say the
 fall back is raised, not only recorded.
 
+---
+
+## 338. A development database is made ready the way a production one is
+
+**Phase 9 · 2026-09-25 · Tier 2 · OPS-ENV-001, OPS-BOOT-001**
+
+*The question.* OPS-ENV-001 has development databases "seeded with realistic principals
+and grants", AC1 "A fresh development database yields a usable, permission-realistic
+dataset", AC2 "No bypass flag exists in any environment". No chapter says what seeds a
+development database, what it holds, or how the absence of a bypass flag is shown.
+
+*The readings.*
+
+1. A development seed of the library's own: a command or a start-up step that writes
+   sample organizations, accounts and grants into a database it is told is for
+   development.
+2. The path a production database takes, and nothing beside it: the migrations, then
+   `janus bootstrap`, which writes the administrative organization, the three
+   administrative roles with their permissions, the first administrator and
+   `emergency`; everything after that is made through the library's own operations, as
+   in production.
+
+*Chosen: 2.* A seed of its own is a second way of making principals and grants that
+production never runs, and a path that exists only where a database is told it is for
+development is itself the kind of switch AC2 forbids. Under 2 what a developer sees is
+exactly what an operator sees on the first day: real roles, real grants, a real
+administrator whose link enrols, and nothing granted outside a role.
+
+What is built: nothing new in the library. AC1 is pinned on a fresh database after
+bootstrap: every live grant belongs to a member of the administrative organization and
+names the seeded system administrator's role, there are exactly two such principals (the
+administrator and `emergency`), and no grant names a role that confers nothing. AC2 is
+pinned by a scan of the shipped code: nothing asks which environment it runs in
+(`IsDevelopment`, `EnvironmentName`, `GetEnvironmentVariable`), and no key of the
+settings catalogue is named for bypassing, skipping or disabling a check.
+
+*Tests that pin it.*
+`BootstrapTests.OPS_ENV_001_AC1_AFreshDatabaseYieldsAUsablePermissionRealisticDatasetAsync`,
+`FailClosedTests.OPS_ENV_001_AC2_NoBypassFlagExistsInAnyEnvironment`.
+
+*Chapter text that should change.* OPS-ENV-001 could say that a development database is
+made ready by the migrations and `janus bootstrap`, as a production one is, and that the
+library ships no seed of its own.
+
 
 # Rows for chapter 10
 

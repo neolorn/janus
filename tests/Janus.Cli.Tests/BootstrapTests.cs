@@ -100,6 +100,40 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
     }
 
     /// <summary>
+    /// OPS-ENV-001 AC1: a fresh database is made ready for development by the command
+    /// that makes a production one ready, so what it holds is what production holds: an
+    /// administrator the printed link enrols and the reserved account, each a member of
+    /// the administrative organization holding the seeded role, and no grant of a role
+    /// that confers nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ENV_001_AC1_AFreshDatabaseYieldsAUsablePermissionRealisticDatasetAsync()
+    {
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        IReadOnlyList<Guid> granted = [.. await connection.QueryAsync<Guid>(
+            "SELECT DISTINCT subject_id FROM identity.grants WHERE NOT deny AND revoked_at IS NULL")];
+        long conferringNothing = await connection.ExecuteScalarAsync<long>(
+            """
+            SELECT count(*) FROM identity.grants g
+            WHERE NOT EXISTS (SELECT 1 FROM identity.role_permissions p WHERE p.role = g.role)
+            """);
+        var held = new List<IReadOnlyList<string>>(granted.Count);
+
+        foreach (Guid subject in granted)
+        {
+            held.Add(await RolesAsync(connection, subject));
+        }
+
+        Assert.Equal(0, deployment.First.ExitCode);
+        Assert.StartsWith(Link, deployment.First.Output, StringComparison.Ordinal);
+        Assert.Equal(2, held.Count);
+        Assert.All(held, roles => Assert.Equal(["system-administrator"], roles));
+        Assert.Equal(0, conferringNothing);
+    }
+
+    /// <summary>
     /// OPS-BOOT-001: the printed address opens an enrolment for the first administrator,
     /// for <c>recovery.link.lifetime</c>, and the administrator is a member of the
     /// administrative organization holding the system administrator's role.

@@ -21,6 +21,9 @@ public sealed class FailClosedTests
     private static readonly DateTimeOffset Noon =
         new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
+    // The words a key that turned a check off would be named with.
+    private static readonly string[] Switching = ["bypass", "skip", "disable", "insecure", "debug"];
+
     private readonly LeakedPasswordCorpusInMemory _corpus = new();
     private readonly WordListInMemory _words = new();
     private readonly ConfigurationInMemory _configuration = new();
@@ -70,6 +73,29 @@ public sealed class FailClosedTests
     /// </summary>
     [Fact]
     public void AUTH_PRIN_001_AC3_NoPathReturnsAnAllowOnAnException() => Assert.Empty(Allowing());
+
+    /// <summary>
+    /// OPS-ENV-001 AC2: nothing the library ships asks which environment it runs in, and
+    /// no key it reads is a switch named to skip or turn off a check, so no environment
+    /// has a way round the gate, the sign-in or the screening that another lacks.
+    /// </summary>
+    [Fact]
+    public void OPS_ENV_001_AC2_NoBypassFlagExistsInAnyEnvironment()
+    {
+        string[] asking = Files(line =>
+            line.Contains("IsDevelopment", StringComparison.Ordinal)
+            || line.Contains("EnvironmentName", StringComparison.Ordinal)
+            || line.Contains("GetEnvironmentVariable", StringComparison.Ordinal));
+        string[] switches =
+        [
+            .. Settings.All
+                .Select(setting => setting.Key.ToString())
+                .Where(key => Switching.Any(word => key.Contains(word, StringComparison.OrdinalIgnoreCase))),
+        ];
+
+        Assert.Empty(asking);
+        Assert.Empty(switches);
+    }
 
     // The catch blocks that answer with anything but a refusal or an exception.
     private static string[] Allowing() =>
