@@ -20,6 +20,7 @@ namespace Janus.Authorization.Gate;
 /// <param name="records">Where a record's organization is read from.</param>
 /// <param name="evaluator">Where a rendered rule is run.</param>
 /// <param name="audit">Where a refusal is recorded and read back.</param>
+/// <param name="concealed">Where a refusal on a type that conceals is handed to the boundary.</param>
 /// <param name="spikes">Where each recorded refusal is counted against its actor.</param>
 /// <param name="subjects">Who the principal is, resolved once per operation.</param>
 /// <param name="gates">What an action's step-up gate still asks of the session.</param>
@@ -31,8 +32,8 @@ namespace Janus.Authorization.Gate;
 /// <param name="time">The clock liveness is read against.</param>
 /// <remarks>
 /// Implements AUTHZ-SEAM-001, AUTHZ-PRIN-001, AUTHZ-PRIN-003, AUTHZ-GATE-002,
-/// AUTHZ-GATE-004, AUTHZ-GATE-005, AUTHZ-SCOPE-001, AUTHZ-CONCEAL-004, AUTHZ-DERIVE-007,
-/// PRIV-SENS-002, PRIV-SENS-002a, OPS-ALERT-006 and LIB-SEAM-001.
+/// AUTHZ-GATE-004, AUTHZ-GATE-005, AUTHZ-SCOPE-001, AUTHZ-CONCEAL-001, AUTHZ-CONCEAL-004,
+/// AUTHZ-DERIVE-007, PRIV-SENS-002, PRIV-SENS-002a, OPS-ALERT-006 and LIB-SEAM-001.
 /// A check and a filter are the one rule rendered two ways, so neither can come to
 /// answer what the other would refuse. Every path that cannot resolve what it needs
 /// denies.
@@ -42,6 +43,7 @@ internal sealed class AccessGate(
     IResourceStore records,
     IAccessEvaluator evaluator,
     IAccessAudit audit,
+    IConcealedRefusals concealed,
     DenialSpikes spikes,
     SubjectSets subjects,
     StepUpGates gates,
@@ -1082,6 +1084,14 @@ internal sealed class AccessGate(
 
         await audit.RecordAsync(denial, cancellationToken).ConfigureAwait(false);
         await spikes.WatchAsync(denial, cancellationToken).ConfigureAwait(false);
+
+        // AUTHZ-CONCEAL-001, BFF-ERR-003: on a type that conceals, what the caller is
+        // answered is the boundary's, under this identifier, so it is the same answer
+        // whether the record is there and whatever the endpoint writes after this.
+        if (!Discloses(type))
+        {
+            concealed.Concealed(correlation);
+        }
 
         return Result.Failure(Error.From(
             ErrorCodes.Denied,

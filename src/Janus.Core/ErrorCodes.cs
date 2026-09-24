@@ -800,6 +800,17 @@ public static class ErrorCodes
     public static ErrorCode PolicyUnregistered { get; } = ErrorCode.Parse("authz.policy.unregistered");
 
     /// <summary>
+    /// No such record, or one the caller may not see on a type that conceals its
+    /// records; the answer is the same for both. Name a record that exists and that
+    /// the caller holds a permission on.
+    /// </summary>
+    /// <remarks>
+    /// Implements AUTHZ-CONCEAL-001, AUTHZ-CONCEAL-002, API-CONV-003 and BFF-ERR-003. The
+    /// browser profile answers it; nothing in the library returns it from an operation.
+    /// </remarks>
+    public static ErrorCode ResourceNotFound { get; } = ErrorCode.Parse("authz.resource.notfound");
+
+    /// <summary>
     /// The subject's processing is restricted, so the record is readable and not
     /// modifiable. Lift the restriction first.
     /// </summary>

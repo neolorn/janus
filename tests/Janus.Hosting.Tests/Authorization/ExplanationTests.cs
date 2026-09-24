@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Core;
+using Janus.Hosting.Bff;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Xunit;
@@ -499,6 +500,56 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
+    /// AUTHZ-CONCEAL-001 AC1: a type that declares nothing about concealment conceals,
+    /// so its refusal is handed to the boundary of the same request to answer as an
+    /// absence, under the identifier it was recorded as, whether the record is there or
+    /// not.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_CONCEAL_001_AC1_ARefusalOnATypeDeclaringNothingIsConcealedAsync()
+    {
+        Deployed deployed = await DeployAsync(granted: false);
+
+        (Error present, AuditRecordId? presentConcealed) =
+            await ConcealedAsync(deployed, deployed.Record, HostPermissions.Read);
+        (Error absent, AuditRecordId? absentConcealed) =
+            await ConcealedAsync(deployed, Reference(Document), HostPermissions.Read);
+
+        Assert.Equal(present.Details["correlation"].GetGuid(), presentConcealed?.Value);
+        Assert.Equal(absent.Details["correlation"].GetGuid(), absentConcealed?.Value);
+    }
+
+    /// <summary>
+    /// AUTHZ-CONCEAL-001 AC2, AUTHZ-CONCEAL-005: a type declared as disclosing, and a
+    /// permission tied to no record, are refused as forbidden, and nothing is handed to
+    /// the boundary to conceal.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_CONCEAL_001_AC2_ARefusalOnADisclosingTypeIsNotConcealedAsync()
+    {
+        Deployed deployed = await DeployAsync(granted: false);
+
+        (Error note, AuditRecordId? concealed) =
+            await ConcealedAsync(deployed, deployed.Note, HostPermissions.ReadNote);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        Result organizationWide = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+            .RequireAsync(
+                AccessContext.Of(deployed.Account),
+                Permissions.AuditRead,
+                deployed.Deployment.Organization,
+                TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.Denied, note.Code);
+        Assert.Null(concealed);
+        Assert.False(organizationWide.Match(() => true, _ => false));
+        Assert.Null(scope.ServiceProvider.GetRequiredService<ConcealedRefusals>().Correlation);
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-001 AC2: a grant naming the whole organization confers the
     /// permission there, and one naming a record confers nothing over the organization
     /// the record sits in.
@@ -577,6 +628,30 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
         return outcome.Match(
             () => throw new InvalidOperationException("The permission was not refused."),
             error => error);
+    }
+
+    // A check as a request makes it, and what the same request's boundary was handed.
+    private async Task<(Error Refusal, AuditRecordId? Concealed)> ConcealedAsync(
+        Deployed deployed,
+        ResourceReference resource,
+        Permission permission)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+            .RequireAsync(
+                AccessContext.Of(deployed.Account),
+                permission,
+                resource,
+                Sources(reading),
+                TestContext.Current.CancellationToken);
+
+        return (
+            outcome.Match(
+                () => throw new InvalidOperationException("The permission was not refused."),
+                error => error),
+            scope.ServiceProvider.GetRequiredService<ConcealedRefusals>().Correlation);
     }
 
     private async Task<AccessExplanation> ResolvedAsync(Deployed deployed, AuditRecordId correlation)

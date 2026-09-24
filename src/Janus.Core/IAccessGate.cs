@@ -33,9 +33,11 @@ public interface IAccessGate
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Nothing, or <c>authz.denied</c> carrying the correlation identifier the audit
-    /// trail records it under. What the caller answers with is the type's declared
-    /// concealment behaviour: a concealing type answers as a record that does not
-    /// exist, a disclosing one says the record exists and is forbidden.
+    /// trail records it under. What the caller is answered is the type's declared
+    /// concealment behaviour: on a disclosing type the refusal says the record exists
+    /// and is forbidden; on a concealing one the browser profile answers the request as
+    /// a record that does not exist, <c>authz.resource.notfound</c> under the same
+    /// identifier, whatever the endpoint goes on to write.
     /// </returns>
     ValueTask<Result> RequireAsync(
         AccessContext context,

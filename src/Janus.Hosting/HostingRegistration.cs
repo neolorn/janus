@@ -172,6 +172,7 @@ public static class HostingRegistration
         // and what validates a token are registered here and not left to the host.
         services.AddSingleton(new BrowserSessionCookies(application));
         services.AddScoped<SynchronizerTokens>();
+        services.AddScoped<Concealment>();
         services.AddScoped<MalformedRequest>();
         services.AddScoped<ResourceIsolation>();
         services.AddScoped<CustomRequestHeader>();
@@ -469,6 +470,11 @@ public static class HostingRegistration
         services.AddScoped<ReverseLookup>();
         services.AddScoped<IAccessAlerts, AccessAlerts>();
         services.AddScoped<DenialSpikes>();
+
+        // BFF-ERR-003: what the gate concealed is answered by stage 11 of the same
+        // request, so the two share one holder.
+        services.AddScoped<ConcealedRefusals>();
+        services.AddScoped<IConcealedRefusals>(provider => provider.GetRequiredService<ConcealedRefusals>());
         services.AddScoped<IAccessGate, AccessGate>();
 
         // OPS-ALERT-005: the host says how many records a filtered query of its own

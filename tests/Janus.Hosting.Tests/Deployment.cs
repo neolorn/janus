@@ -931,6 +931,8 @@ internal sealed class Deployment : IAsyncDisposable
 
         _ = services.AddSingleton(new BrowserSessionCookies(application));
         _ = services.AddScoped<SynchronizerTokens>();
+        _ = services.AddScoped<ConcealedRefusals>();
+        _ = services.AddScoped<Concealment>();
         _ = services.AddScoped<MalformedRequest>();
         _ = services.AddScoped<ResourceIsolation>();
         _ = services.AddScoped<CustomRequestHeader>();

@@ -35,6 +35,7 @@ public sealed class ApiStatusTests
 
         Assert.Equal(StatusCodes.Status404NotFound, ApiStatus.Of(ErrorCodes.GrantNotFound));
         Assert.Equal(StatusCodes.Status404NotFound, ApiStatus.Of(ErrorCodes.CredentialNotFound));
+        Assert.Equal(StatusCodes.Status404NotFound, ApiStatus.Of(ErrorCodes.ResourceNotFound));
     }
 
     /// <summary>

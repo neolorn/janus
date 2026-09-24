@@ -65,6 +65,7 @@ internal static class ApiStatus
         // Not found, and the concealed denial that answers the same way.
         [ErrorCodes.CredentialNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.GrantNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.ResourceNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.DocumentNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.RequestNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.TakedownNotFound] = StatusCodes.Status404NotFound,

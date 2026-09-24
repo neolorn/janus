@@ -1773,6 +1773,11 @@ against the public contract of LIB-API-001.
 
 ### Fixed
 
+- A refusal on a resource type that conceals its records is answered by the browser
+  profile as `404 authz.resource.notfound`, carrying the identifier the refusal was
+  recorded under, whatever the endpoint wrote after it, and the answer is the same
+  whether or not the record exists. Each host endpoint had been left to answer the
+  gate's `authz.denied` itself, and one that answered 403 said the record was there.
 - An account that was restricted when its deletion was requested is erased when its
   grace window ends. The erasure had been refused by the database at every attempt,
   because the restriction held through the window was never released with it.

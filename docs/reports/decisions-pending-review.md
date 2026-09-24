@@ -13740,6 +13740,93 @@ settings catalogue is named for bypassing, skipping or disabling a check.
 made ready by the migrations and `janus bootstrap`, as a production one is, and that the
 library ships no seed of its own.
 
+---
+
+## 339. A concealed refusal is answered by the browser profile
+
+**Phase 9 · 2026-09-25 · Tier 3 · BFF-ERR-003, BFF-ORDER-001, OPS-ENV-002, AUTHZ-CONCEAL-001, AUTHZ-CONCEAL-002, AUTHZ-CONCEAL-004, API-CONV-003**
+
+*The question.* BFF-ORDER-001 stage 11 is "Error translation and concealment",
+BFF-ERR-003 AC3 has uniformity "enforced by the pipeline, not by endpoint discipline",
+and OPS-ENV-002 AC1 has denied-access semantics enforced in shared infrastructure.
+Entry 126 built stage 11's error translation and left its concealment unbuilt. The gate
+refused every record-level check with `authz.denied`, which the status table maps to
+403, and left the host's endpoint to answer it as an absence; the library's writer is
+internal, so each host endpoint answered a concealing type however it chose, and one
+that answered 403 said the record was there. Chapter 10 section 1.3 has `authz.denied`
+"used where existence is not concealed" and names no code for a concealed denial. No
+chapter says what the concealed answer's code and body are, how the pipeline learns
+that a refusal was concealed, or what becomes of what the endpoint wrote.
+
+*The readings.* For the code: (1) the gate returns a not-found code on a concealing type
+in place of `authz.denied`; (2) the gate keeps `authz.denied` and the pipeline answers a
+not-found code. For what the pipeline replaces: (a) a 403 or 404 the endpoint answered;
+(b) every answer of a request in which a refusal was concealed. For what the answer
+carries: (i) the code alone; (ii) the audit identifier of the refusal, as `authz.denied`
+carries it.
+
+*Chosen: 2, b and ii (Tier 3, the strictest reading).* BFF-ERR-003 puts concealment in
+the pipeline, and a code from the gate would still leave the answer to each endpoint;
+the result a host holds is unchanged and what crosses the boundary is not. An endpoint
+that goes on past a concealed refusal and answers anything else has answered from a
+record the caller may not see; under (a) a success, a 409 or a 422 would still say the
+record is there. AUTHZ-CONCEAL-004 has the response carry an identifier that appears in
+the audit trail, and the gate records a refusal for a record the library holds no row
+for exactly as one for a record the caller may not see, so the genuine absence carries
+one too and the two stay the same shape.
+
+What is built:
+
+- The code `authz.resource.notfound`, answered 404 (`ErrorCodes.ResourceNotFound`). No
+  operation returns it; stage 11 answers it.
+- The gate hands every refusal on a type that does not disclose to a holder of the
+  request, under the identifier it recorded. A refusal on a disclosing type, and one
+  tied to no record (AUTHZ-CONCEAL-005), hand nothing.
+- Stage 11 of the browser profile, mounted outermost, stands in for the response body:
+  what the endpoint writes goes through until a refusal is concealed and nothing goes
+  through after. When the request comes back with a refusal concealed, the response is
+  cleared to what it carried when the request reached the endpoints (the stages' own
+  cookies stay, anything the endpoint added goes), and the one refusal writer answers
+  404 `authz.resource.notfound` with `details.correlation` the audit identifier of the
+  first refusal concealed. A log line ties the request's trace identifier to it.
+- An answer the endpoint had begun before the refusal cannot be taken back: the
+  connection is closed rather than finished, and the operator is told at error level.
+- The machine profile does not carry the stage. Its routes are the library's own, none
+  of which checks a record, and a provider's callback has no caller to conceal from.
+
+*Residue.* Timing (BFF-ERR-003 AC2, AUTHZ-CONCEAL-002 AC2, API-CONV-003 AC1) is one
+refusal path and one writer, with the byte identity asserted, and is named in the report
+as verified by construction as the criteria say. The gate reads the candidate grants of
+a record it holds a row for and not of one it holds none for, so the two refusals
+differ by that query; the owner may want the read made for both. A host that answers
+its own 404 without asking the gate is outside the pipeline: the remarks of
+`UseBrowserProfile` and `IAccessGate.RequireAsync` say the gate is asked and the
+profile answers.
+
+*Rows for chapter 10.* Section 1.3: `authz.resource.notfound` | No such record, or a
+record of a concealing type the caller may not see; one answer for both, 404, carrying
+the audit identifier of the refusal | AUTHZ-CONCEAL-001, BFF-ERR-003.
+
+*Tests that pin it.*
+`ConcealmentTests.BFF_ERR_003_AC1_AConcealedRefusalIsTheSameBytesWhateverTheEndpointWroteAsync`,
+`ConcealmentTests.AUTHZ_CONCEAL_004_AC1_TheAnswerCarriesTheIdentifierTheRefusalWasRecordedUnderAsync`,
+`ConcealmentTests.InvokeAsync_TwoRefusalsConcealed_AnswersTheFirstAsync`,
+`ConcealmentTests.InvokeAsync_ARefusalConcealed_KeepsWhatTheStagesWroteAsync`,
+`ConcealmentTests.InvokeAsync_NothingConcealed_LeavesTheAnswerAsTheEndpointWroteItAsync`,
+`ConcealmentTests.InvokeAsync_AnAnswerBegunBeforeTheRefusal_IsBrokenOffAsync`,
+`BrowserProfileTests.OPS_ENV_002_AC1_TheProfileAnswersAConcealedRefusalAndKeepsWhatItsStagesWroteAsync`,
+`BrowserProfileTests.BFF_ERR_003_AC3_AnEndpointAnsweringPastAConcealedRefusalIsAnsweredAsAbsenceAsync`,
+`ExplanationTests.AUTHZ_CONCEAL_001_AC1_ARefusalOnATypeDeclaringNothingIsConcealedAsync`,
+`ExplanationTests.AUTHZ_CONCEAL_001_AC2_ARefusalOnADisclosingTypeIsNotConcealedAsync`,
+`ApiStatusTests.API_CONV_003_AC2_OnlyAFailureNamingNoRecordAnswersForbidden` (extended),
+`ErrorCodesTests.CONV_NAME_003_AC2_ChangingACodeFailsTheContractTest` (extended).
+
+*Chapter text that should change.* Chapter 10 section 1.3 needs the row above.
+BFF-ERR-003 could name the code and say the answer carries the refusal's audit
+identifier and nothing the endpoint wrote. AUTHZ-CONCEAL-001 could say that a host asks
+the gate before it looks the record up, since a record the library holds no row for is
+the genuine absence a concealed refusal is identical to.
+
 
 # Rows for chapter 10
 

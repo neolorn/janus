@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using Janus.Hosting.Callbacks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Janus.Hosting.Bff;
 
@@ -33,6 +34,13 @@ public static class PipelineProfiles
     /// asks the processor for the outcome rather than reading it from the post
     /// (BFF-CSRF-005). A post of that kind that carries the session is refused as any
     /// cross-site change is.
+    /// <para>
+    /// A refusal the gate makes on a type that conceals its records is answered by the
+    /// profile as the absence of the record, whatever the endpoint writes after it
+    /// (BFF-ERR-003). An endpoint answers a refused check however it likes; one that
+    /// wants to know what the caller may do, rather than to do it, asks the gate for
+    /// capabilities and not for a check whose refusal it goes on past.
+    /// </para>
     /// </remarks>
     /// <param name="application">The host's pipeline.</param>
     /// <returns>The pipeline, for chaining.</returns>
@@ -151,8 +159,11 @@ public static class PipelineProfiles
     private static void Browser(IApplicationBuilder application)
     {
         // BFF-ORDER-001 stage 11, which is last on the way out and therefore first on
-        // the way in: a body the reader could not parse fails at the endpoint, after
-        // every stage before it has run (API-CONV-002).
+        // the way in. Concealment stands outside everything, so nothing inside it has
+        // the last word on a concealed refusal (BFF-ERR-003); a body the reader could
+        // not parse fails at the endpoint, after every stage before it has run
+        // (API-CONV-002).
+        _ = application.UseMiddleware<Concealment>();
         _ = application.UseMiddleware<MalformedRequest>();
 
         // Stages 2 and 3. The cheap rejections come first, before anything reads the
@@ -177,6 +188,15 @@ public static class PipelineProfiles
         // that established what the browser carries, because what it issues a code
         // against is the session it found.
         _ = application.UseAuthentication();
+
+        // Where the endpoints begin. A concealed refusal is answered with what the
+        // response carries here and nothing an endpoint adds to it (BFF-ERR-003).
+        _ = application.Use((context, next) =>
+        {
+            context.RequestServices.GetRequiredService<ConcealedRefusals>().Reached(context.Response.Headers);
+
+            return next(context);
+        });
     }
 
     // The stages every route on the machine profile passes.

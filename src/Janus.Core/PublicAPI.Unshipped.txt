@@ -3718,6 +3718,7 @@ static Janus.Core.ErrorCodes.RequestDuplicate.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RequestMalformed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RequestNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RequestReceivedFuture.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.ResourceNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.Restricted.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RestrictionExceeded.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RestrictionReasonRequired.get -> Janus.Core.ErrorCode
