@@ -5924,7 +5924,7 @@ knows. Both fail startup with `model.startup.declarationmissing` naming the key.
 
 *What the secrets manager supplies.* `ISecretSource.ReadSignOnSecretAsync`, passed to
 `AddJanus` beside the key-encryption key and the fingerprint key; absent, startup fails
-with `model.startup.keyunavailable`. Nothing of it is written anywhere. The proof key,
+with `model.startup.kekunavailable`. Nothing of it is written anywhere. The proof key,
 which is this server's own secret for the life of one flow, is held on the
 pre-authentication row wrapped under the key-encryption key.
 
@@ -11791,7 +11791,7 @@ INF-HOST-003 forbids one or in the process list. Under 4:
   source that LIB-EXT-001 leaves to the host.
 - A document that is not JSON, or larger than 64 KiB, is refused with
   `api.request.malformed` naming `input`; a missing or unusable key with
-  `model.startup.keyunavailable` naming `keyEncryptionKeys` or `fingerprintKey`. A
+  `model.startup.kekunavailable` naming `keyEncryptionKeys` or `fingerprintKey`. A
   refusal carries the member it concerns and nothing of the document.
 - A command whose standard input is not redirected is refused before it reads
   anything, so no key is typed or pasted into a terminal.
@@ -12162,7 +12162,7 @@ The subsection each row belongs in is named with it.
 | --- | --- | --- |
 | `PasskeyAddresses` (`changePassword`, `enrol`, `manage`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `passkeyAddresses` or the field of it that is empty. The addresses are the frontend pages `/.well-known/change-password` and `/.well-known/passkey-endpoints` point at (REG-PM-001). |
 | `AuthenticationAddresses` (`signIn`, `provider`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `authenticationAddresses.signIn` or `authenticationAddresses.provider`. The first is where an authorization request that is not silent and holds no session is forwarded (AUTH-SESS-012 AC3). The second is the address the library is mounted at on the authentication application, which is where another application finds `/oidc/authorize` and `/oidc/token` (BFF-SESS-006). |
-| `SignOnClient` (`clientId`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `signOnClient.clientId`. The identifier is what this application calls itself at the provider when it establishes its own session, and the registry holds the one destination a code returns to under it. The secret it presents is not a declaration: it comes from the secrets manager through `ISecretSource.ReadSignOnSecretAsync` and is passed to `AddJanus`, which refuses to start without it with `model.startup.keyunavailable` and `details.key` naming `signOnSecret` (BFF-SESS-006, OPS-SEC-001). |
+| `SignOnClient` (`clientId`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `signOnClient.clientId`. The identifier is what this application calls itself at the provider when it establishes its own session, and the registry holds the one destination a code returns to under it. The secret it presents is not a declaration: it comes from the secrets manager through `ISecretSource.ReadSignOnSecretAsync` and is passed to `AddJanus`, which refuses to start without it with `model.startup.kekunavailable` and `details.key` naming `signOnSecret` (BFF-SESS-006, OPS-SEC-001). |
 | `IDnsResolver` (`TextRecordsAsync`) | optional | No startup refusal. Every verification of a locked domain answers `identity.domain.unverified` and every scheduled check fails and raises `domain-reverification-failed`, so no domain is ever proved. A deployment that locks no domain needs none (REG-DOM-001, entry 212). |
 | `IMailServer` (`ProvisionAsync`, `MailboxesAsync`, `AppPasswordsAsync`, `CreateAppPasswordAsync`, `RevokeAppPasswordAsync`) | optional | No startup refusal. No mailbox is pushed and none is compared; the rows are still written, and the first pass after a registration pushes every state owed. A push carries a key that stays the same until the server confirms it, the address in its canonical form and the state `disabled`, `enabled` or `removed`; the server applies a key once. The listing answers every mailbox the server hosts with whether it is enabled. The three app-password calls carry the person's token and act on the account the server finds in it; the creation answers the server's new secret and its identifier, and a revocation of an identifier the server does not hold for that person answers `auth.credential.notfound`. Without a registration every app-password operation answers `authz.denied`. A deployment whose staff mail is hosted elsewhere needs none (INT-MAIL-006, INT-MAIL-008, INT-MAIL-009, INT-MAIL-010, entries 215, 262 and 263). |
 | `MailServerClient` (`clientId`) | where `IMailServer` is registered, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `mailServerClient.clientId`. The identifier is the registry's `protocol` client the mail server trusts, which the library issues the person's token to for the app-password calls; it presents no secret, since the library issues the token itself (INT-MAIL-010, AUTH-OIDC-001 AC4, entry 262). |
