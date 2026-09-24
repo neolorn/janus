@@ -108,7 +108,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
             _notices,
             new PasswordService(
                 _passwords,
-                new PasswordScreening(_corpus, _words, _configuration, _screening),
+                new PasswordScreening(_corpus, _words, _configuration, _screening, _events, _clock),
                 new Argon2idHasher(_randomness),
                 _configuration,
                 _work,

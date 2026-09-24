@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Alerting;
 using Janus.Core;
 using Janus.Core.Configuration;
 
@@ -19,14 +21,25 @@ namespace Janus.Authentication.Passwords;
 /// <param name="words">The word list, where the deployment rejects on one.</param>
 /// <param name="configuration">Where the deployment's choices are read from.</param>
 /// <param name="log">Where a fall back to another corpus is recorded.</param>
-/// <remarks>Implements AUTH-PASS-004, INT-PWD-001, INT-PWD-002, INT-PWD-003.</remarks>
+/// <param name="alerts">Where a fall back to another corpus is raised.</param>
+/// <param name="time">When a fall back happened.</param>
+/// <remarks>
+/// Implements AUTH-PASS-004, INT-PWD-001, INT-PWD-002, INT-PWD-003 and OPS-OBS-002. A
+/// fall back is raised as <c>degradation</c> before the offline corpus is asked, and
+/// one that cannot be raised refuses the operation: screening never degrades
+/// unseen.
+/// </remarks>
 internal sealed class PasswordScreening(
     ILeakedPasswordCorpus corpus,
     IWordList words,
     IConfigurationStore configuration,
-    IScreeningLog log)
+    IScreeningLog log,
+    IAlertChannels alerts,
+    TimeProvider time)
 {
     private const int PrefixLength = 5;
+
+    private const string Fallback = "password.blocklist.fallback";
 
     /// <summary>
     /// Screens a password.
@@ -136,6 +149,13 @@ internal sealed class PasswordScreening(
 
     private static Result Refused() => Result.Failure(Error.From(ErrorCodes.PasswordBlocklisted));
 
+    private static Dictionary<string, JsonElement> FellBack(BlocklistSource configured) =>
+        new(capacity: 2, StringComparer.Ordinal)
+        {
+            ["configured"] = JsonSerializer.SerializeToElement(WrittenName.Of(configured)),
+            ["used"] = JsonSerializer.SerializeToElement(WrittenName.Of(BlocklistSource.Offline)),
+        };
+
     private static TValue Held<TValue>(Error error, ref Error? failure)
     {
         failure = error;
@@ -168,6 +188,18 @@ internal sealed class PasswordScreening(
         if (range is null && asked is not BlocklistSource.Offline)
         {
             log.Degraded(asked, BlocklistSource.Offline);
+
+            Result raised = await alerts
+                .RaiseAsync(
+                    Alerts.Of(AlertCondition.Degradation, Fallback, time.GetUtcNow(), FellBack(asked)),
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            if (raised.Match(() => (Error?)null, error => error) is Error unraised)
+            {
+                return Result.Failure(unraised);
+            }
+
             range = await AskAsync(BlocklistSource.Offline, hash, cancellationToken).ConfigureAwait(false);
         }
 

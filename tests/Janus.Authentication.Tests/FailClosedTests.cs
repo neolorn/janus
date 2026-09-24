@@ -18,10 +18,15 @@ namespace Janus.Authentication.Tests;
 [Trait("kind", "contract")]
 public sealed class FailClosedTests
 {
+    private static readonly DateTimeOffset Noon =
+        new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
+
     private readonly LeakedPasswordCorpusInMemory _corpus = new();
     private readonly WordListInMemory _words = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly ScreeningLogInMemory _log = new();
+    private readonly EventsInMemory _events = new();
+    private readonly FixedClock _clock = new(Noon);
 
     /// <summary>
     /// AUTH-PRIN-001 AC1: a cache outage never permits, and never denies either,
@@ -47,7 +52,7 @@ public sealed class FailClosedTests
         _corpus.Unreachable.Add(BlocklistSource.RangeApi);
         _corpus.Unreachable.Add(BlocklistSource.Offline);
 
-        Result screened = await new PasswordScreening(_corpus, _words, _configuration, _log)
+        Result screened = await new PasswordScreening(_corpus, _words, _configuration, _log, _events, _clock)
             .ScreenAsync(
                 Encoding.UTF8.GetBytes("orangemarmaladeandtoast"),
                 [],

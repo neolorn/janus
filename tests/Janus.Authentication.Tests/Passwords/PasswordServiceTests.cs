@@ -28,13 +28,14 @@ public sealed class PasswordServiceTests : IAsyncDisposable
     private readonly WordListInMemory _words = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly ScreeningLogInMemory _log = new();
+    private readonly EventsInMemory _events = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
 
     private PasswordService Service => new(
         _passwords,
-        new PasswordScreening(_corpus, _words, _configuration, _log),
+        new PasswordScreening(_corpus, _words, _configuration, _log, _events, _clock),
         new Argon2idHasher(_randomness),
         _configuration,
         _work,

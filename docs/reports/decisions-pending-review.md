@@ -13645,6 +13645,57 @@ what its record holds. INF-HOST-003 and chapter 07 could say the maintenance cre
 a whole database connection handed to `AddJanus` at startup, and that a deployment
 without it does not start. Chapter 10 could list `ops.auditpartitions.maintained`.
 
+---
+
+## 337. How a blocklist fallback is raised
+
+**Phase 9 · 2026-09-25 · Tier 2 · OPS-OBS-002, OPS-ALERT-001, OPS-ALERT-002, INT-PWD-002, AUTH-PASS-004**
+
+*The question.* OPS-ALERT-001's table lists "blocklist fallback" under `degradation`,
+and OPS-OBS-002 AC1 has each listed degradation produce a monitored signal. Phase 2 had
+screening write the fall back to the host's log only (`IScreeningLog.Degraded`), so a
+deployment whose range service had been unreachable for months would have screened
+against the offline corpus without anyone being told. The other three degradations
+the item lists raise the alert already (entries on `mailbox.push:<mailbox id>`,
+`mailbox.reconciliation` and `send:<channel>`). No chapter names the scope of this one,
+its details, or what screening does when the alert cannot be raised.
+
+*The readings.* For the scope: (1) one scope for every fall back; (2) a scope per
+configured corpus. For an alert that cannot be raised: (a) screen on against the
+offline corpus and leave the log as the only trace; (b) refuse the operation with what
+refused the alert.
+
+*Chosen: 1 and b.* The condition is the deployment's, not a person's, so one scope
+keeps a sustained outage to one alert a window under OPS-ALERT-002 whichever corpus is
+configured; the details say which. A fall back the owner cannot be told of is the
+silent degradation OPS-OBS-002 forbids, so the operation is refused, as an absent
+location source is (entry 325).
+
+What is built:
+
+- `PasswordScreening` takes the alert channels and the clock. When the configured corpus
+  cannot answer and it is not the offline one, the fall back is logged as before, then
+  raised as `degradation` with the scope `password.blocklist.fallback` and details
+  `configured` (the written name of the configured corpus) and `used` (`offline`),
+  before the offline corpus is asked.
+- A raise that fails refuses the screening with the error that refused it; nothing is
+  screened past unseen.
+- Screening runs outside any open transaction on every path that reaches it (set,
+  change, recovery, registration), so the alert commits with its own unit of work and a
+  refusal of the password that follows does not roll it back.
+
+*Tests that pin it.*
+`PasswordScreeningTests.OPS_OBS_002_AC1_ABlocklistFallbackRaisesADegradationAsync`,
+`PasswordScreeningTests.OPS_OBS_002_AC2_AFallbackThatCannotBeRaisedRefusesTheOperationAsync`,
+`PasswordScreeningTests.ScreenAsync_TheConfiguredCorpusAnswering_RaisesNothingAsync`,
+`ScreeningTests.INT_PWD_002_AC1_WithTheServiceUnreachableTheOfflineListAnswersAsync`
+(extended).
+
+*Chapter text that should change.* OPS-OBS-002 could name the scope
+`password.blocklist.fallback` beside the other degradations' scopes, and say that a
+fall back that cannot be raised refuses the operation. INT-PWD-002 AC1 could say the
+fall back is raised, not only recorded.
+
 
 # Rows for chapter 10
 

@@ -1,11 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.Passwords;
+using Janus.Authentication.Tests;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Passwords;
@@ -36,6 +39,7 @@ public sealed class ScreeningTests : IDisposable
     private readonly RangeApiInMemory _service = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly ScreeningLogInMemory _log = new();
+    private readonly EventsInMemory _events = new();
 
     private OfflineCorpus _offline = new();
     private DateTimeOffset _now = Noon;
@@ -89,6 +93,9 @@ public sealed class ScreeningTests : IDisposable
         Assert.Equal(
             [(BlocklistSource.RangeApi, BlocklistSource.Offline)],
             [.. _log.Entries]);
+        Assert.Equal(
+            [Alerts.Key(AlertCondition.Degradation, "password.blocklist.fallback")],
+            _events.Of<AlertRaised>().Select(raised => Alerts.Deduplication(raised.IdempotencyKey)));
     }
 
     /// <summary>
@@ -262,7 +269,9 @@ public sealed class ScreeningTests : IDisposable
             new LeakedPasswordCorpus(client, _configuration, new FixedTime(_now), _offline),
             new WordList(_directory),
             _configuration,
-            _log);
+            _log,
+            _events,
+            new FixedTime(_now));
 
         return await screening.ScreenAsync(
             Encoding.UTF8.GetBytes(password),

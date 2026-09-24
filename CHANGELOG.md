@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- A fall back from the configured compromised-password corpus to the offline one is
+  raised as `degradation` under the scope `password.blocklist.fallback`, naming both
+  corpora, and no longer only logged. Where the alert cannot be raised the password is
+  refused.
 - `AddJanus` takes the maintenance credential after the sign-on secret: the database
   connection of a login holding the maintenance role's rights, read from the secrets
   manager. A deployment that supplies none does not start, with

@@ -610,7 +610,7 @@ public sealed class LossReportsTests : IAsyncDisposable
     private PasswordService Passwords =>
         new(
             _passwords,
-            new PasswordScreening(_corpus, _words, _configuration, _screening),
+            new PasswordScreening(_corpus, _words, _configuration, _screening, _events, _clock),
             new Argon2idHasher(_randomness),
             _configuration,
             _work,
