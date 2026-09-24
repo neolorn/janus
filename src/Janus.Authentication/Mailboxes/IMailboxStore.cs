@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Core;
 
 namespace Janus.Authentication.Mailboxes;
 
@@ -42,6 +43,14 @@ internal interface IMailboxStore
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The mailbox, or nothing where no such row exists or its last holder was erased.</returns>
     ValueTask<Mailbox?> FindAsync(MailboxId id, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads the mailbox an account holds now.
+    /// </summary>
+    /// <param name="holder">Whose.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The mailbox, or nothing where the account holds none.</returns>
+    ValueTask<Mailbox?> HeldByAsync(SubjectId holder, CancellationToken cancellationToken);
 
     /// <summary>
     /// Writes a newly reserved mailbox onto the transaction in progress.

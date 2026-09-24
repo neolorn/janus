@@ -250,6 +250,31 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
     }
 
     /// <inheritdoc/>
+    public ValueTask<IdentifierId> RetireCorporateAsync(
+        SubjectId subject,
+        string canonical,
+        CancellationToken cancellationToken)
+    {
+        List<HeldIdentifier> all = Of(subject);
+        HeldIdentifier personal = all.SingleOrDefault(identifier => identifier.IsPersonal)
+            ?? throw new InvalidOperationException("No personal email is kept for the account to continue on.");
+
+        _ = all.RemoveAll(identifier =>
+            identifier.Kind is IdentifierKind.Email
+            && string.Equals(identifier.Canonical, canonical, StringComparison.Ordinal));
+
+        for (int place = 0; place < all.Count; place++)
+        {
+            if (all[place].Kind is IdentifierKind.Email)
+            {
+                all[place] = all[place] with { IsPrimary = all[place].Id == personal.Id, IsPersonal = false };
+            }
+        }
+
+        return ValueTask.FromResult(personal.Id);
+    }
+
+    /// <inheritdoc/>
     public ValueTask ProveAsync(
         SubjectId subject,
         IdentifierId id,

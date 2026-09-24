@@ -1145,6 +1145,7 @@ Janus.Core.IIdentifiers.VerifyAsync(Janus.Core.EnrolmentSessionId enrolment, Jan
 Janus.Core.IInvitations
 Janus.Core.IInvitations.AcknowledgeAsync(Janus.Core.AccessContext! context, Janus.Core.InvitationId invitation, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IInvitations.AttachedAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AttachedInvitation!>>
+Janus.Core.IInvitations.EndMembershipAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, Janus.Core.SubjectId member, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IInvitations.IssueAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, Janus.Core.InvitationRequest! request, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.IssuedInvitation!>>
 Janus.Core.IInvitations.OpenAsync(Janus.Core.AccessContext! context, string! token, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IInvitations.RevokeAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, Janus.Core.InvitationId invitation, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -3145,6 +3146,7 @@ static Janus.Core.AuditActions.GroupMemberAdded.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.GroupMemberRemoved.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.GroupRemoved.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.InvitationAcknowledged.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.MembershipEnded.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.InvitationIssued.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.InvitationRevoked.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ObjectionRecorded.get -> Janus.Core.AuditAction

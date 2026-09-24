@@ -156,6 +156,24 @@ internal sealed class IdentifierDirectory(
     }
 
     /// <inheritdoc/>
+    public async ValueTask<IdentifierId> RetireCorporateAsync(
+        SubjectId subject,
+        string canonical,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(canonical);
+
+        IdentifierSet set = await identifiers.FindBySubjectAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        IdentifierId primary = set.RetireCorporate(canonical);
+
+        await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
+
+        return primary;
+    }
+
+    /// <inheritdoc/>
     public async ValueTask ProveAsync(
         SubjectId subject,
         IdentifierId id,

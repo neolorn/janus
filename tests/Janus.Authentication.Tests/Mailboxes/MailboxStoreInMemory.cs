@@ -56,6 +56,10 @@ internal sealed class MailboxStoreInMemory : IMailboxStore
         ValueTask.FromResult(Held.FirstOrDefault(mailbox => mailbox.Id == id));
 
     /// <inheritdoc/>
+    public ValueTask<Mailbox?> HeldByAsync(SubjectId holder, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(Held.SingleOrDefault(mailbox => mailbox.IsHeld && mailbox.Holder == holder));
+
+    /// <inheritdoc/>
     public ValueTask AddAsync(Mailbox mailbox, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(mailbox);

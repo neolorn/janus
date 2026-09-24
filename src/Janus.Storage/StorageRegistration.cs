@@ -259,6 +259,7 @@ internal static class StorageRegistration
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IMembershipAttachment, MembershipAttachment>();
+        services.AddScoped<IMembershipEnding, MembershipEnding>();
         services.AddScoped<IRoleCatalogue, RoleCatalogue>();
         services.AddScoped<IResourceStore, ResourceStore>();
 

@@ -137,6 +137,20 @@ internal interface IIdentifierDirectory
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Retires the corporate address when the membership that gave it ends: the
+    /// personal email the membership kept becomes the primary email in the same step,
+    /// and the corporate address leaves the account (REG-MAIL-003).
+    /// </summary>
+    /// <param name="subject">Whose.</param>
+    /// <param name="canonical">The corporate address in its canonical form.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The personal email, now the primary.</returns>
+    ValueTask<IdentifierId> RetireCorporateAsync(
+        SubjectId subject,
+        string canonical,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Records that a code or a same-browser link proved an identifier.
     /// </summary>
     /// <param name="subject">Whose it is.</param>

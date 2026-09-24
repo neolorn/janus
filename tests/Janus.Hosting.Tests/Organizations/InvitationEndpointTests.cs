@@ -12,8 +12,9 @@ namespace Janus.Hosting.Tests.Organizations;
 
 /// <summary>
 /// The invitations over <c>/admin/organizations/{id}/invitations</c> of chapter 09
-/// section 8a: issuing a time-boxed link and revoking an unused one (IDN-LIFE-009a,
-/// REG-INV-001, REG-MAIL-001).
+/// section 8a: issuing a time-boxed link and revoking an unused one, and the end of a
+/// membership over <c>/admin/organizations/{id}/memberships</c> (IDN-LIFE-009a,
+/// IDN-MEM-001, REG-INV-001, REG-MAIL-001).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class InvitationEndpointTests : IAsyncDisposable
@@ -192,6 +193,37 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
             [AuditActions.InvitationIssued, AuditActions.InvitationRevoked],
             _deployment.OrganizationChanges.Changes.Select(change => change.Action));
     }
+
+    /// <summary>
+    /// 09 section 8a and IDN-MEM-001: ending a membership answers <c>204</c> and writes
+    /// it down; an account holding no current membership of the organization is a
+    /// <c>400</c> naming it, and one without <c>membership:manage</c> is refused.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_MEM_001_AMembershipIsEndedAsync()
+    {
+        var member = new SubjectId(Guid.NewGuid());
+
+        _deployment.Memberships.Place(member, Branch);
+
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        Answer withheld = await browser.SendAsync("DELETE", MembershipOf(Branch, member));
+
+        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Branch, Permissions.MembershipManage);
+
+        Answer ended = await browser.SendAsync("DELETE", MembershipOf(Branch, member));
+        Answer again = await browser.SendAsync("DELETE", MembershipOf(Branch, member));
+
+        Assert.Equal(StatusCodes.Status403Forbidden, withheld.Status);
+        Assert.Equal(StatusCodes.Status204NoContent, ended.Status);
+        Assert.Equal("subject", Member(again));
+        Assert.Equal((member, Branch), (Assert.Single(_deployment.Endings.Ended).Subject, _deployment.Endings.Ended[0].Organization));
+        Assert.Equal(AuditActions.MembershipEnded, Assert.Single(_deployment.OrganizationChanges.Changes).Action);
+    }
+
+    private static string MembershipOf(OrganizationId organization, SubjectId member) =>
+        "/admin/organizations/" + organization + "/memberships/" + member;
 
     private static string PathOf(OrganizationId organization) =>
         "/admin/organizations/" + organization + "/invitations";

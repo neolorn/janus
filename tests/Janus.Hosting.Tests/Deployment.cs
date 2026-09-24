@@ -135,6 +135,7 @@ internal sealed class Deployment : IAsyncDisposable
         Provider = new ProviderInMemory(this);
         Organizations = new Janus.Authentication.Tests.Organizations.OrganizationsInMemory(Memberships);
         Attachments = new Janus.Authentication.Tests.Invitations.MembershipAttachmentInMemory(Memberships);
+        Endings = new Janus.Authentication.Tests.Invitations.MembershipEndingInMemory(Memberships);
 
         Declared = preferences ?? PreferenceDeclarations.None;
         Accounts = new AccountDirectoryInMemory(Declared);
@@ -480,6 +481,11 @@ internal sealed class Deployment : IAsyncDisposable
     public Janus.Authentication.Tests.Invitations.MembershipAttachmentInMemory Attachments { get; }
 
     /// <summary>
+    /// The memberships administrators ended.
+    /// </summary>
+    public Janus.Authentication.Tests.Invitations.MembershipEndingInMemory Endings { get; }
+
+    /// <summary>
     /// The roles an invitation may name.
     /// </summary>
     public Janus.Authentication.Tests.Invitations.RoleCatalogueInMemory RoleCatalogue { get; } = new();
@@ -762,6 +768,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IMailServer>(MailServer);
         _ = services.AddSingleton<Janus.Authentication.Invitations.IMembershipAttachment>(Attachments);
         _ = services.AddScoped<Janus.Authentication.Invitations.InvitationAcknowledgement>();
+        _ = services.AddSingleton<Janus.Authentication.Invitations.IMembershipEnding>(Endings);
+        _ = services.AddScoped<Janus.Authentication.Invitations.MembershipEnd>();
         _ = services.AddScoped<IInvitations, Janus.Authentication.Invitations.InvitationService>();
         _ = services.AddScoped<SigningKeys>();
         _ = services.AddScoped<OidcService>();

@@ -93,6 +93,20 @@ internal sealed class MailboxStore(
     }
 
     /// <inheritdoc/>
+    public async ValueTask<Mailbox?> HeldByAsync(SubjectId holder, CancellationToken cancellationToken)
+    {
+        // A membership of the administrative organization is held once at most, so an
+        // account holds one mailbox at most; a retired one is its last holder's no more.
+        MailboxRecord? record = await Readable()
+            .SingleOrDefaultAsync(
+                mailbox => mailbox.Holder == holder && mailbox.RetiredAt == null,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return record is null ? null : await ReadAsync(record, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask AddAsync(Mailbox mailbox, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(mailbox);

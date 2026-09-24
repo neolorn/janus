@@ -47,6 +47,7 @@ public sealed class AuditActionsTests
         "identity.invitation.acknowledged",
         "identity.invitation.issued",
         "identity.invitation.revoked",
+        "identity.membership.ended",
         "identity.organization.created",
         "identity.organization.deletioncancelled",
         "identity.organization.deletionrequested",

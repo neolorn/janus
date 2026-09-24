@@ -16,12 +16,13 @@ namespace Janus.Hosting.Organizations;
 /// <summary>
 /// The organization administration of chapter 09 section 8a: creating an
 /// organization, requesting its deletion, cancelling the request, reading and
-/// replacing its policy, the domains it locks its members to, and the invitations
-/// into its membership.
+/// replacing its policy, the domains it locks its members to, the invitations into its
+/// membership, and the end of a membership.
 /// </summary>
 /// <remarks>
 /// Implements IDN-ORG-002, IDN-ORG-003, IDN-ORG-004, IDN-ORG-006, REG-DOM-001,
-/// IDN-LIFE-009a, REG-INV-001, AUTH-STEP-002a, LIB-API-005 and CONV-DESIGN-006.
+/// IDN-LIFE-009a, IDN-MEM-001, REG-INV-001, REG-MAIL-003, AUTH-STEP-002a, LIB-API-005
+/// and CONV-DESIGN-006.
 /// Each is one line to <see cref="IOrganizations"/>, <see cref="IOrganizationDomains"/>
 /// or <see cref="IInvitations"/>, which judge the permission, the step-up and the
 /// reason.
@@ -57,6 +58,9 @@ internal static class OrganizationEndpoints
         _ = SessionRequired.On(endpoints.MapDelete(
             "/admin/organizations/{id:guid}/invitations/{invitationId:guid}",
             RevokeInvitationAsync));
+        _ = SessionRequired.On(endpoints.MapDelete(
+            "/admin/organizations/{id:guid}/memberships/{subject:guid}",
+            EndMembershipAsync));
 
         return endpoints;
     }
@@ -345,6 +349,30 @@ internal static class OrganizationEndpoints
                     AccessContext.Of(browser.Required.Subject),
                     new OrganizationId(id),
                     new InvitationId(invitationId),
+                    cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
+    }
+
+    private static async Task<IResult> EndMembershipAsync(
+        IInvitations invitations,
+        RequestSession browser,
+        HttpContext context,
+        Guid id,
+        Guid subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(invitations);
+        ArgumentNullException.ThrowIfNull(browser);
+        ArgumentNullException.ThrowIfNull(context);
+
+        return Answers.Of(
+            await invitations
+                .EndMembershipAsync(
+                    AccessContext.Of(browser.Required.Subject),
+                    new OrganizationId(id),
+                    new SubjectId(subject),
+                    RequestOrigin.Source(context.Request),
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);

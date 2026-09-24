@@ -4,14 +4,14 @@ using System.Threading.Tasks;
 namespace Janus.Core;
 
 /// <summary>
-/// The invitations an organization issues into its membership, under
-/// <c>membership:manage</c> in that organization.
+/// The invitations an organization issues into its membership, and the end of a
+/// membership, under <c>membership:manage</c> in that organization.
 /// </summary>
 /// <remarks>
-/// Implements LIB-API-005, IDN-LIFE-009a, REG-INV-001, REG-MAIL-001 and chapter 09
-/// section 8a. An invitation is a time-boxed, single-use link; issuing one is the
-/// <c>invitation:issue</c> step-up action, and roles it attaches also need
-/// <c>grant:manage</c> in the organization.
+/// Implements LIB-API-005, IDN-LIFE-009a, IDN-MEM-001, REG-INV-001, REG-MAIL-001,
+/// REG-MAIL-003 and chapter 09 section 8a. An invitation is a time-boxed, single-use
+/// link; issuing one is the <c>invitation:issue</c> step-up action, and roles it
+/// attaches also need <c>grant:manage</c> in the organization.
 /// </remarks>
 public interface IInvitations
 {
@@ -116,6 +116,28 @@ public interface IInvitations
     ValueTask<Result> AcknowledgeAsync(
         AccessContext context,
         InvitationId invitation,
+        string source,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Ends an account's membership of the organization; the account, its state and its
+    /// grants persist. Where the membership gave the account a corporate address, the
+    /// address and its mailbox are retired and the personal email becomes the primary
+    /// in the same operation (REG-MAIL-003).
+    /// </summary>
+    /// <param name="context">Who is ending it.</param>
+    /// <param name="organization">Of which organization.</param>
+    /// <param name="member">Whose membership.</param>
+    /// <param name="source">The address the request came from, which a notice counts against.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal: <c>api.request.malformed</c> naming <c>subject</c> where
+    /// the account holds no current membership of the organization.
+    /// </returns>
+    ValueTask<Result> EndMembershipAsync(
+        AccessContext context,
+        OrganizationId organization,
+        SubjectId member,
         string source,
         CancellationToken cancellationToken);
 }

@@ -32,6 +32,16 @@ internal sealed class MembershipLookupInMemory : IMembershipLookup
     }
 
     /// <summary>
+    /// Takes a principal out of an organization.
+    /// </summary>
+    /// <param name="subject">The principal.</param>
+    /// <param name="organization">The organization.</param>
+    /// <returns>Whether the principal was in it.</returns>
+    public bool Leave(SubjectId subject, OrganizationId organization) =>
+        _held.TryGetValue(subject, out List<OrganizationId>? organizations)
+        && organizations.Remove(organization);
+
+    /// <summary>
     /// Every principal placed in an organization.
     /// </summary>
     /// <param name="organization">The organization.</param>

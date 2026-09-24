@@ -317,6 +317,16 @@ against the public contract of LIB-API-001.
 - An invitation that expires unused forgets what it bound when the invitation sweep
   runs; the row keeps who invited into what and when, and its mailbox stays reserved.
 
+- `DELETE /admin/organizations/{id}/memberships/{subject}` ends a membership under
+  `membership:manage` (204); the account, its state, its grants and the organization
+  persist, and the audit trail records `identity.membership.ended`. An account holding
+  no current membership of the organization answers 400 `api.request.malformed` naming
+  `subject`. Ending a membership of the administrative organization retires the
+  corporate address in the same transaction: the address leaves the account and is
+  free for a later invitation, the personal email becomes the primary, the mailbox is
+  owed disabled, and the notice set is told of the new primary.
+  `IInvitations.EndMembershipAsync` is the same operation in process.
+
 - Staff mailboxes are provisioned through `IMailServer`, which a deployment registers
   where its staff mail is hosted and which no package ships. A mailbox is owed
   `disabled` from its reservation, `enabled` while its holder is an active member of

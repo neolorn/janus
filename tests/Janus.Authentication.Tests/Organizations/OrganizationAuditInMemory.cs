@@ -67,6 +67,24 @@ internal sealed class OrganizationAuditInMemory : IOrganizationAudit
         return ValueTask.CompletedTask;
     }
 
+    /// <inheritdoc/>
+    public ValueTask MembershipEndedAsync(
+        OrganizationId organization,
+        MembershipId membership,
+        SubjectId member,
+        SubjectId actor,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        _changes.Add(new OrganizationChange(AuditActions.MembershipEnded, organization, string.Empty, actor, at)
+        {
+            Membership = membership,
+            Member = member,
+        });
+
+        return ValueTask.CompletedTask;
+    }
+
     /// <summary>
     /// One change as it was written down.
     /// </summary>
@@ -91,5 +109,15 @@ internal sealed class OrganizationAuditInMemory : IOrganizationAudit
         /// Which invitation was issued or revoked, where one was.
         /// </summary>
         public InvitationId? Invitation { get; init; }
+
+        /// <summary>
+        /// Which membership ended, where one did.
+        /// </summary>
+        public MembershipId? Membership { get; init; }
+
+        /// <summary>
+        /// Whose membership ended, where one did.
+        /// </summary>
+        public SubjectId? Member { get; init; }
     }
 }

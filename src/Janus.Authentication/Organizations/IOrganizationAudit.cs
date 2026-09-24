@@ -6,10 +6,13 @@ using Janus.Core;
 namespace Janus.Authentication.Organizations;
 
 /// <summary>
-/// Where a change to an organization's lifecycle, to its domain lock or to the
-/// invitations into it is written down: who, which organization, what, when and why.
+/// Where a change to an organization's lifecycle, to its domain lock, to the
+/// invitations into it or to its memberships is written down: who, which organization,
+/// what, when and why.
 /// </summary>
-/// <remarks>Implements IDN-ORG-003, REG-DOM-001, IDN-LIFE-009a and IDN-AUD-001.</remarks>
+/// <remarks>
+/// Implements IDN-ORG-003, REG-DOM-001, IDN-LIFE-009a, IDN-MEM-001 and IDN-AUD-001.
+/// </remarks>
 internal interface IOrganizationAudit
 {
     /// <summary>
@@ -66,6 +69,25 @@ internal interface IOrganizationAudit
         AuditAction action,
         OrganizationId organization,
         InvitationId invitation,
+        SubjectId actor,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records a membership an administrator ended, filed under the organization with
+    /// the member as whom it was done to.
+    /// </summary>
+    /// <param name="organization">Which organization.</param>
+    /// <param name="membership">Which membership.</param>
+    /// <param name="member">Whose membership it was.</param>
+    /// <param name="actor">Who ended it.</param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask MembershipEndedAsync(
+        OrganizationId organization,
+        MembershipId membership,
+        SubjectId member,
         SubjectId actor,
         DateTimeOffset at,
         CancellationToken cancellationToken);

@@ -314,6 +314,40 @@ internal sealed class IdentifierSet
     public void KeepPersonal(IdentifierId id) => Require(id).KeepAsPersonal();
 
     /// <summary>
+    /// Retires the corporate address a membership gave the account when that membership
+    /// ends: the personal email the membership kept becomes the primary email in the
+    /// same step and is kept no longer, and the corporate address leaves the account,
+    /// free for a later invitation (REG-MAIL-003).
+    /// </summary>
+    /// <param name="canonical">
+    /// The corporate address in its canonical form. Where the account no longer holds
+    /// it, the personal email still takes the primary role.
+    /// </param>
+    /// <returns>The personal email, now the primary.</returns>
+    /// <exception cref="InvalidOperationException">No personal email is kept.</exception>
+    public IdentifierId RetireCorporate(string canonical)
+    {
+        ArgumentNullException.ThrowIfNull(canonical);
+
+        Identifier personal = _identifiers.Find(identifier => identifier.IsPersonal)
+            ?? throw new InvalidOperationException("No personal email is kept for the account to continue on.");
+        Identifier? corporate = _identifiers.Find(identifier =>
+            identifier.Kind is IdentifierKind.Email
+            && string.Equals(identifier.Canonical, canonical, StringComparison.Ordinal));
+
+        personal.Release();
+        MakePrimary(personal.Id);
+
+        if (corporate is not null)
+        {
+            _identifiers.Remove(corporate);
+            _removed.Add(corporate.Id);
+        }
+
+        return personal.Id;
+    }
+
+    /// <summary>
     /// Takes an identifier off the account. The primary of a kind is never removed:
     /// another of its kind takes the role first (REG-IDENT-006). The personal email a
     /// membership keeps is not removed while it keeps it (REG-MAIL-001).

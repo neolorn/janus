@@ -321,4 +321,9 @@ internal sealed class Identifier
     /// Gives up the primary role to another of its kind.
     /// </summary>
     internal void Relinquish() => IsPrimary = false;
+
+    /// <summary>
+    /// Stops keeping it as the personal email of a membership, which has ended.
+    /// </summary>
+    internal void Release() => IsPersonal = false;
 }

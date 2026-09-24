@@ -28,8 +28,9 @@ using Xunit;
 namespace Janus.Authentication.Tests.Invitations;
 
 /// <summary>
-/// Issuing an invitation into an organization, revoking it, and acknowledging it into a
-/// membership (IDN-LIFE-009a, REG-INV-001, REG-INV-002, REG-MAIL-001).
+/// Issuing an invitation into an organization, revoking it, acknowledging it into a
+/// membership, and ending the membership (IDN-LIFE-009a, IDN-MEM-001, REG-INV-001,
+/// REG-INV-002, REG-MAIL-001, REG-MAIL-003).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class InvitationServiceTests : IAsyncDisposable
@@ -73,6 +74,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
     private readonly OrganizationsInMemory _organizations;
     private readonly MembershipAttachmentInMemory _attachments;
+    private readonly MembershipEndingInMemory _ending;
     private readonly SubjectId _inviter;
 
     /// <summary>
@@ -83,6 +85,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     {
         _organizations = new OrganizationsInMemory(_memberships);
         _attachments = new MembershipAttachmentInMemory(_memberships);
+        _ending = new MembershipEndingInMemory(_memberships);
         _organizations.Seed(Staff, administrative: true);
         _organizations.Seed(Customer, name: "Northern branch");
 
@@ -935,6 +938,134 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Assert.Equal((1, 1), (_work.Opened, _work.Committed));
     }
 
+    /// <summary>
+    /// REG-MAIL-003 AC1 to AC3, IDN-MEM-001 AC1 and INT-MAIL-006a: ending the membership
+    /// that gave the account its corporate address takes the address off the account and
+    /// makes the personal email the primary in the same transaction, retires the mailbox,
+    /// which is then owed disabled whatever the account's standing, tells the set as it
+    /// now stands once, announces both changes and writes the end down against the
+    /// member; the address is free for a later invitation.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_003_AC2_EndingTheMembershipRetiresTheCorporateAddressAsync()
+    {
+        (SubjectId holder, IdentifierId personal) = await StaffMemberAsync();
+        Mailbox mailbox = Assert.Single(_mailboxes.Held);
+
+        _clock.Advance(TimeSpan.FromDays(30));
+        _notifications.Sent.Clear();
+        _work.Reset();
+
+        Accepted(await EndAsync(Staff, holder));
+
+        HeldIdentifiers held = await _identifiers.HeldAsync(holder, TestContext.Current.CancellationToken);
+        EndedMembership ended = Assert.Single(_ending.Ended);
+        MembershipChanged announced = _events.Of<MembershipChanged>()[^1];
+        IdentifierPrimaryChanged promoted = _events.Of<IdentifierPrimaryChanged>()[^1];
+        SendRequest told = Assert.Single(_notifications.Sent);
+        OrganizationAuditInMemory.OrganizationChange recorded = _audit.Changes[^1];
+        DateTimeOffset now = _clock.GetUtcNow();
+
+        HeldIdentifier continued = Assert.Single(held.OfKind(IdentifierKind.Email));
+
+        Assert.True(continued is { IsVerified: true, IsPrimary: true, IsPersonal: false, Canonical: Personal });
+        Assert.Equal(personal, continued.Id);
+        Assert.Empty(await _memberships.OfAsync(holder, TestContext.Current.CancellationToken));
+        Assert.Equal((holder, Staff, now), (ended.Subject, ended.Organization, ended.At));
+        Assert.Equal((ended.Id, Staff, MembershipChange.Ended), (announced.Membership, announced.Organization, announced.Change));
+        Assert.Equal(holder, announced.Subject);
+        Assert.Equal((personal, IdentifierKind.Email, holder), (promoted.Identifier, promoted.Kind, promoted.Subject));
+        Assert.Equal((Personal, MessageKind.IdentifierSettingsChanged), (told.Destination.Canonical, told.Message));
+        Assert.Equal(Source, told.Source);
+        Assert.False(mailbox.IsHeld);
+        Assert.Equal(now, mailbox.RetiredAt);
+        Assert.Equal(MailboxState.Disabled, mailbox.Owed(stands: true));
+        Assert.Equal(AuditActions.MembershipEnded, recorded.Action);
+        Assert.Equal((Staff, _inviter, holder, ended.Id), (recorded.Organization, recorded.Actor, recorded.Member, recorded.Membership));
+        Assert.Equal((1, 1), (_work.Opened, _work.Committed));
+
+        _ = Accepted(await IssueAsync(Staff, Request(email: "another@elsewhere.test", corporate: Corporate)));
+
+        Assert.Same(mailbox, Assert.Single(_mailboxes.Held));
+        Assert.Null(mailbox.Holder);
+    }
+
+    /// <summary>
+    /// IDN-MEM-001 AC1 and REG-MAIL-003: ending a membership that gave no corporate
+    /// address changes no identifier, sends nothing and retires no mailbox, and ending
+    /// another membership of an account that holds a corporate address leaves the
+    /// address, the primary and the mailbox where they were; the organization persists.
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_001_AC1_EndingAnotherMembershipLeavesTheCorporateAddressAsync()
+    {
+        _configuration.Set(Settings.OrganizationMultipleMemberships, true);
+
+        (SubjectId holder, IdentifierId personal) = await StaffMemberAsync();
+        string token = Accepted(await IssueAsync(Customer, Request(email: Personal))).Token
+            ?? _notifications.Mail[^1].Values["token"];
+
+        Accepted(await OpenAsync(holder, token));
+        Accepted(await AcknowledgeAsync(holder, _invitations.Held[^1].Id));
+        _notifications.Sent.Clear();
+
+        int primaries = _events.Of<IdentifierPrimaryChanged>().Count;
+
+        Accepted(await EndAsync(Customer, holder));
+
+        HeldIdentifiers held = await _identifiers.HeldAsync(holder, TestContext.Current.CancellationToken);
+
+        Assert.True(held.Find(personal) is { IsPersonal: true, IsPrimary: false });
+        Assert.Contains(held.OfKind(IdentifierKind.Email), email => email is { Canonical: Corporate, IsPrimary: true });
+        Assert.True(Assert.Single(_mailboxes.Held).IsHeld);
+        Assert.Equal([Staff], await _memberships.OfAsync(holder, TestContext.Current.CancellationToken));
+        Assert.Equal(MembershipChange.Ended, _events.Of<MembershipChanged>()[^1].Change);
+        Assert.Equal(primaries, _events.Of<IdentifierPrimaryChanged>().Count);
+        Assert.Empty(_notifications.Sent);
+        Assert.NotNull(await _organizations.FindAsync(Customer, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// IDN-MEM-001: ending a membership asks <c>membership:manage</c> in the
+    /// organization and a person to ask it, and only a current membership is ended;
+    /// anything else is refused with nothing written.
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_001_OnlyACurrentMembershipIsEndedAsync()
+    {
+        SubjectId holder = Holder();
+        SubjectId stranger = Holder();
+
+        _memberships.Place(holder, Customer);
+
+        Assert.Equal(
+            ErrorCodes.Denied,
+            Failure(await Service.EndMembershipAsync(
+                AccessContext.Of(stranger),
+                Customer,
+                holder,
+                Source,
+                TestContext.Current.CancellationToken)).Code);
+        Assert.Equal(
+            ErrorCodes.Denied,
+            Failure(await Service.EndMembershipAsync(
+                AccessContext.Of(SystemPrincipal.ForOrganization("sweep", "expiry", Customer)),
+                Customer,
+                holder,
+                Source,
+                TestContext.Current.CancellationToken)).Code);
+        Assert.Equal((ErrorCodes.RequestMalformed, "subject"), Coded(Failure(await EndAsync(Staff, holder))));
+        Assert.Equal((ErrorCodes.RequestMalformed, "subject"), Coded(Failure(await EndAsync(Customer, stranger))));
+        Assert.Empty(_ending.Ended);
+        Assert.Equal(0, _work.Committed);
+
+        Accepted(await EndAsync(Customer, holder));
+
+        Assert.Equal((ErrorCodes.RequestMalformed, "subject"), Coded(Failure(await EndAsync(Customer, holder))));
+        Assert.Single(_ending.Ended);
+        Assert.Single(_audit.Changes);
+    }
+
     private InvitationService Service => Serving(_server);
 
     private InvitationService ServiceWithout => Serving(server: null);
@@ -991,6 +1122,18 @@ public sealed class InvitationServiceTests : IAsyncDisposable
                 _passwords,
                 policies,
                 _attachments,
+                _mailboxes,
+                _notifications,
+                _events,
+                _configuration,
+                _audit,
+                _work,
+                _clock),
+            new MembershipEnd(
+                _gate,
+                _organizations,
+                _ending,
+                _identifiers,
                 _mailboxes,
                 _notifications,
                 _events,
@@ -1062,6 +1205,31 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             request,
             Source,
             TestContext.Current.CancellationToken);
+
+    private ValueTask<Result> EndAsync(OrganizationId organization, SubjectId member) =>
+        Service.EndMembershipAsync(
+            AccessContext.Of(_inviter),
+            organization,
+            member,
+            Source,
+            TestContext.Current.CancellationToken);
+
+    // An account that acknowledged an invitation into the staff organization, whose
+    // mail is integrated, and holds its corporate address beside the personal email.
+    private async Task<(SubjectId Holder, IdentifierId Personal)> StaffMemberAsync()
+    {
+        _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
+
+        string token = _notifications.Mail[^1].Values["token"];
+        SubjectId holder = Holder();
+        IdentifierId personal = _identifiers.Verified(holder, IdentifierKind.Email, Personal);
+
+        _authenticators.Hold(Passkey(holder));
+        Accepted(await OpenAsync(holder, token));
+        Accepted(await AcknowledgeAsync(holder, _invitations.Held[^1].Id));
+
+        return (holder, personal);
+    }
 
     private ValueTask<Result> RevokeAsync(OrganizationId organization, InvitationId invitation) =>
         Service.RevokeAsync(

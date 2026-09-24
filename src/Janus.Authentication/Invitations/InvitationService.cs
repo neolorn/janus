@@ -16,7 +16,8 @@ using Janus.Core.Configuration;
 namespace Janus.Authentication.Invitations;
 
 /// <summary>
-/// The invitations an organization issues into its membership, and their revocation.
+/// The invitations an organization issues into its membership, their revocation, and
+/// the end of a membership.
 /// </summary>
 /// <param name="gate">The one place a permission is evaluated.</param>
 /// <param name="scope">Whether the caller may attach a role that administers the deployment.</param>
@@ -28,6 +29,7 @@ namespace Janus.Authentication.Invitations;
 /// <param name="invitations">Where invitations are kept.</param>
 /// <param name="accounts">Where the name of who issued an invitation is read.</param>
 /// <param name="acknowledgement">What attaches the membership an invitation offers.</param>
+/// <param name="end">What ends a membership.</param>
 /// <param name="mailboxes">Where the corporate mailboxes are reserved.</param>
 /// <param name="server">
 /// The mail server the administrative organization's mail is integrated with, absent
@@ -58,6 +60,7 @@ internal sealed class InvitationService(
     IInvitationStore invitations,
     IAccountDirectory accounts,
     InvitationAcknowledgement acknowledgement,
+    MembershipEnd end,
     IMailboxStore mailboxes,
     IMailServer? server,
     INotificationHandler sending,
@@ -618,6 +621,15 @@ internal sealed class InvitationService(
 
         return swept;
     }
+
+    /// <inheritdoc/>
+    public ValueTask<Result> EndMembershipAsync(
+        AccessContext context,
+        OrganizationId organization,
+        SubjectId member,
+        string source,
+        CancellationToken cancellationToken) =>
+        end.EndAsync(context, organization, member, source, cancellationToken);
 
     /// <inheritdoc/>
     public ValueTask<Result> AcknowledgeAsync(

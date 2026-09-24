@@ -9103,6 +9103,139 @@ details, as its issue and revocation are (entries 231 and 234). The export's
 *Chapter text that should change.* Chapter 10 could hold the audit action row below,
 and chapter 09's export description could name the new section.
 
+---
+
+## 250. Where a membership is ended, and what it answers
+
+**Phase 8 · 2026-09-24 · Tier 2 · IDN-MEM-001, REG-MAIL-003, LIB-API-005, chapter 09 section 8a**
+
+*The question.* Chapter 09 section 8a lists `DELETE /admin/organizations/{id}/memberships/{subject}`
+in its table of memberships and invitations under `membership:manage`, with "Ends a membership; the
+account and organization persist (IDN-MEM-001)". It names no answers, and no service
+contract carries the operation. Chapter 10 section 5a lists no step-up action for it,
+and no chapter asks a reason.
+
+*The readings.*
+
+1. A method on `IInvitations`, the contract that already carries the section's other
+   operations under the same permission.
+2. A method on `IOrganizations`, whose operations are `organization:manage` in the
+   administrative organization.
+3. A new public contract for memberships.
+
+*Chosen: 1.* It adds one method and no type, and keeps one contract per permission of
+the section. `membership:manage` is asked in the organization the membership is of, as
+it is for issuing and revoking. No step-up is asked, because chapter 10 section 5a lists
+none, and no reason, because the endpoint names no body. The answers:
+
+- **204** where the membership ended.
+- **400** `api.request.malformed` naming `subject` where the account holds no current
+  membership of the organization, in the precedent of revoking an invitation the
+  organization never issued (`invitationId`), so ending twice is refused the second time.
+- **403** `authz.denied` without the permission, or where no person acts.
+
+The end is written in one transaction with everything it changes. It is audited as a new
+action, `identity.membership.ended`, security category, filed under the organization,
+with the administrator as the acting subject, the member as the effective subject, and
+`membership` in the details, in the precedent of an administrator acting on someone
+else's account (the recovery audit). `MembershipChanged` is published with `change`
+`ended` under the key `membership-ended:<membership>@<ticks>` the organization erasure
+already uses for the same event. The account's state is not read or written
+(REG-MAIL-003: "Membership end SHALL NOT by itself change the account's state").
+
+*Tests that pin it.*
+`InvitationServiceTests.IDN_MEM_001_OnlyACurrentMembershipIsEndedAsync`,
+`InvitationServiceTests.REG_MAIL_003_AC2_EndingTheMembershipRetiresTheCorporateAddressAsync`,
+`InvitationEndpointTests.IDN_MEM_001_AMembershipIsEndedAsync`,
+`MembershipEndingTests.IDN_MEM_001_AC2_TheMembershipEndsAndItsRecordStaysAsync`,
+`SessionRequirementTests` (the list of session routes), `AuditActionsTests` (the list of
+actions).
+
+*Chapter text that should change.* Chapter 09 section 8a could give the endpoint its
+answers, and chapter 10 could hold the audit action row below.
+
+---
+
+## 251. What the end of a membership does to the corporate address
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-MAIL-003, REG-IDENT-005, INT-MAIL-006a, chapter 10 section 5b**
+
+*The question.* REG-MAIL-003: "the corporate address SHALL stop being a valid identifier
+of the account and the mailbox SHALL be disabled (INT-MAIL-006a)", the personal email
+"SHALL become the primary email **automatically, in the same operation**", and "A
+retired corporate address SHALL be available to a later invitation". Chapter 10 section
+5b has `IdentifierPrimaryChanged` fire "when a membership ends (REG-MAIL-003)". REG-IDENT-005
+has setting the primary "produce one notice to the security-notice set". Nothing says
+which set is told where the primary moves because the old one left, whether the address
+is removed or kept unusable, or which membership's end retires the mailbox where the
+account holds more than one.
+
+*Chosen.*
+
+- Only the end of a membership of the administrative organization retires anything,
+  because the mailboxes are that organization's (INT-MAIL-006); ending another
+  membership of the same account leaves the address, the primary and the mailbox where
+  they were.
+- The corporate address is removed from the account, so it resolves to nobody at every
+  path, including recovery (REG-MAIL-003 AC1: it "behaves as an unknown identifier").
+  No removal record is written: the address was never the person's to take back, and
+  REG-MAIL-003 makes it free for a later invitation.
+- The personal email becomes the primary and is kept by no membership from then on; a
+  phone is not touched.
+- The mailbox is retired, which leaves it owed disabled whatever its holder's standing;
+  the provisioning pass pushes the disable, which ends every app password (INT-MAIL-006a).
+- The set as it stands after the change is told once, as `IdentifierSettingsChanged`:
+  the set before, less the address that left, since the personal email was in it and no
+  backup setting changed. The retired address is told nothing, because it behaves as
+  unknown and its mailbox is the organization's.
+- `IdentifierPrimaryChanged` is published for the personal email, keyed
+  `<identifier>@<ticks>` as the acknowledgement keys it.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_MAIL_003_AC2_EndingTheMembershipRetiresTheCorporateAddressAsync`,
+`InvitationServiceTests.IDN_MEM_001_AC1_EndingAnotherMembershipLeavesTheCorporateAddressAsync`,
+`IdentifierSetTests.REG_MAIL_003_AC2_ThePersonalEmailBecomesPrimaryAndTheCorporateAddressLeaves`,
+`IdentifierStoreTests.REG_MAIL_003_TheCorporateAddressLeavesAndThePersonalEmailIsPrimaryAsync`,
+`MailboxStoreTests.REG_MAIL_003_TheMailboxAnAccountHoldsIsReadUntilRetiredAsync`.
+
+*Chapter text that should change.* REG-MAIL-003 could say that the security-notice set
+as it stands after the change is told once, and that only the end of the administrative
+organization's membership retires the address.
+
+---
+
+## 252. Whether the end of a membership removes the member's grants
+
+**Phase 8 · 2026-09-24 · Tier 3 · IDN-MEM-001, REG-MAIL-003, chapter 16 section 3**
+
+*The question.* No chapter says whether ending a membership removes the grants the
+account holds in the organization. The gate does not ask for a membership, so a grant
+kept after the end still confers once the account is active.
+
+*The readings.*
+
+1. Ending the membership removes the account's grants in the organization: the reading
+   that grants least.
+2. Ending the membership changes only what REG-MAIL-003 and chapter 16 step 3 list, and
+   the grants stay until an administrator removes or transfers them.
+
+*Chosen: 2.* Reading 1 is not open. Chapter 16 section 3 orders the steps of a departure
+and makes the grants a step of their own after the end of membership: "Remove or transfer
+their grants", with "If they were the sole holder of a permission, transfer it before
+removing". Removing them at step 3 would make that instruction impossible to follow, and
+chapter 16 step 3 and REG-MAIL-003 list what the end does without the grants. The risk
+the owner should see: an account whose suspension (step 2) is reversed before step 4 is
+done holds its former organization's grants again, since IDN-LIFE-013 suspends grants
+and does not remove them.
+
+*Tests that pin it.* None writes a grant: `MembershipEnd` holds no grant store, and
+`InvitationServiceTests.REG_MAIL_003_AC2_EndingTheMembershipRetiresTheCorporateAddressAsync`
+pins everything the end writes.
+
+*Chapter text that should change.* IDN-MEM-001 could state that ending a membership does
+not remove the account's grants in the organization, pointing at chapter 16 step 4, or
+the owner could decide that it does and reorder chapter 16.
+
 
 # Rows for chapter 10
 
@@ -9268,6 +9401,7 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `identity.invitation.issued` | security | `AuditActions.InvitationIssued` | An invitation into an organization was issued. Details carry `invitation` and nothing it binds; the row is filed under the organization. (IDN-LIFE-009a, REG-INV-001, entry 234) |
 | `identity.invitation.revoked` | security | `AuditActions.InvitationRevoked` | An invitation nobody had acknowledged was revoked, or replaced by a later one for the same corporate address. Details carry `invitation`. (IDN-LIFE-009a, REG-MAIL-001, entries 231 and 233) |
 | `identity.invitation.acknowledged` | security | `AuditActions.InvitationAcknowledged` | An invitation was acknowledged and the membership it offered attached. Details carry `invitation`; the actor is the person acknowledging and the row is filed under the organization. (REG-INV-001, IDN-LIFE-009a, entry 249) |
+| `identity.membership.ended` | security | `AuditActions.MembershipEnded` | An administrator ended a membership; the account and the organization persist. Details carry `membership`; the acting subject is the administrator, the effective subject the member, and the row is filed under the organization. (IDN-MEM-001, REG-MAIL-003, entry 250) |
 | `identity.organization.created` | security | `AuditActions.OrganizationCreated` | An organization was created, with its policy key holding no override. Details carry `reason`; the row is filed under the organization. (IDN-ORG-002, entry 197) |
 | `identity.organization.deletioncancelled` | security | `AuditActions.OrganizationDeletionCancelled` | An organization's deletion request was cancelled inside its window, which gives back every grant it holds. Details carry `reason`. (IDN-ORG-003, entry 197) |
 | `identity.organization.deletionrequested` | security | `AuditActions.OrganizationDeletionRequested` | An organization's deletion was requested: it is suspended and every member session ended. Details carry `reason`. (IDN-ORG-003, entry 197) |

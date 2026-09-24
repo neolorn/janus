@@ -32,6 +32,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "DELETE /admin/groups/{id:guid}/members",
         "DELETE /admin/organizations/{id:guid}/domains/{domain}",
         "DELETE /admin/organizations/{id:guid}/invitations/{invitationId:guid}",
+        "DELETE /admin/organizations/{id:guid}/memberships/{subject:guid}",
         "DELETE /admin/restrictions/{name}",
         "DELETE /admin/roles/{name}",
         "DELETE /privacy/objections/{purpose}",

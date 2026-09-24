@@ -185,6 +185,13 @@ public static class AuditActions
         AuditAction.Parse("identity.invitation.acknowledged");
 
     /// <summary>
+    /// An administrator ended a membership; the account and the organization persist.
+    /// </summary>
+    /// <remarks>Implements IDN-MEM-001, REG-MAIL-003 and IDN-AUD-001.</remarks>
+    public static AuditAction MembershipEnded { get; } =
+        AuditAction.Parse("identity.membership.ended");
+
+    /// <summary>
     /// A takedown was triggered, naming what raised it and the reason written for it.
     /// </summary>
     /// <remarks>Implements IDN-LIFE-003, chapter 10 section 5.</remarks>

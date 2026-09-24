@@ -106,6 +106,37 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// REG-MAIL-003: the mailbox an account holds is read by its holder until it is
+    /// retired, and a later holder of the same address reads it as theirs.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_MAIL_003_TheMailboxAnAccountHoldsIsReadUntilRetiredAsync()
+    {
+        SubjectId holder = await _deployment.AccountAsync(Noon);
+        SubjectId later = await _deployment.AccountAsync(Noon);
+        var mailbox = Mailbox.Reserved("held@example.test", Noon);
+
+        mailbox.Hold(holder);
+        await WrittenAsync(store => store.AddAsync(mailbox, TestContext.Current.CancellationToken));
+
+        Assert.Equal(mailbox.Id, (await HeldByAsync(holder))?.Id);
+        Assert.Null(await HeldByAsync(later));
+
+        mailbox.Retire(Noon.AddDays(1));
+        await WrittenAsync(store => store.RecordAsync(mailbox, TestContext.Current.CancellationToken));
+
+        Assert.Null(await HeldByAsync(holder));
+
+        mailbox.Reserve();
+        mailbox.Hold(later);
+        await WrittenAsync(store => store.RecordAsync(mailbox, TestContext.Current.CancellationToken));
+
+        Assert.Null(await HeldByAsync(holder));
+        Assert.Equal(mailbox.Id, (await HeldByAsync(later))?.Id);
+    }
+
+    /// <summary>
     /// INT-MAIL-007: the outstanding push and its key are carried onto the row and read
     /// back, so a retry after a restart is made under the same key; a removal the server
     /// has confirmed is no longer read.
@@ -205,6 +236,13 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
 
     private MailboxStore Store(StoreContext context) =>
         new(context, _deployment.Keys, Deployment.FingerprintKey, _deployment.Randomness);
+
+    private async Task<Mailbox?> HeldByAsync(SubjectId holder)
+    {
+        await using StoreContext reading = database.Context();
+
+        return await Store(reading).HeldByAsync(holder, TestContext.Current.CancellationToken);
+    }
 
     private async Task<bool> StandsAsync(MailboxId mailbox) =>
         (await ReadAsync()).Single(standing => standing.Mailbox.Id == mailbox).Stands;

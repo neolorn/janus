@@ -246,6 +246,53 @@ public sealed class IdentifierSetTests
     }
 
     /// <summary>
+    /// REG-MAIL-003 AC2 and AC3: when the membership ends the personal email becomes the
+    /// primary, kept no longer, and the corporate address leaves the account, so the
+    /// account never holds zero verified emails; an account whose corporate address is
+    /// already gone still continues on its personal email.
+    /// </summary>
+    [Fact]
+    public void REG_MAIL_003_AC2_ThePersonalEmailBecomesPrimaryAndTheCorporateAddressLeaves()
+    {
+        IdentifierSet set = Empty();
+        Identifier personal = Email(1, "ahmed@example.com");
+        Identifier corporate = Email(2, "ahmed@staff.example");
+        Identifier phone = Phone(3, "+201001234567");
+
+        set.Add(personal, maximum: 10);
+        set.Add(corporate, maximum: 10);
+        set.Add(phone, maximum: 10);
+        set.Verify(personal.Id, Noon);
+        set.Verify(corporate.Id, Noon);
+        set.Verify(phone.Id, Noon);
+        set.MakePrimary(corporate.Id);
+        set.KeepPersonal(personal.Id);
+
+        Assert.Equal(personal.Id, set.RetireCorporate(corporate.Canonical));
+        Assert.True(personal is { IsPrimary: true, IsPersonal: false, IsVerified: true });
+        Assert.Equal([personal, phone], set.All);
+        Assert.Equal([corporate.Id], set.Removed);
+        Assert.True(phone.IsPrimary);
+
+        IdentifierSet gone = Empty();
+        Identifier kept = Email(4, "hana@example.com");
+        Identifier other = Email(5, "hana@example.org");
+
+        gone.Add(kept, maximum: 10);
+        gone.Add(other, maximum: 10);
+        gone.Verify(kept.Id, Noon);
+        gone.Verify(other.Id, Noon);
+        gone.MakePrimary(other.Id);
+        gone.KeepPersonal(kept.Id);
+
+        Assert.Equal(kept.Id, gone.RetireCorporate("hana@staff.example"));
+        Assert.True(kept.IsPrimary);
+        Assert.False(other.IsPrimary);
+        Assert.Empty(gone.Removed);
+        Assert.Throws<InvalidOperationException>(() => Empty().RetireCorporate("hana@staff.example"));
+    }
+
+    /// <summary>
     /// REG-MAIL-001: only a verified email other than the primary is kept as the
     /// personal email of a membership.
     /// </summary>
