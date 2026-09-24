@@ -43,7 +43,8 @@ internal static class BackgroundJobs
 {
     // INT-MAIL-007: the reconciliation runs daily, which the chapter fixes and no
     // setting names. The watches over a list of dates (OPS-MAINT-001, PRIV-RIGHT-002)
-    // run at the same pace, since the lead they measure is counted in days.
+    // run at the same pace, since the lead they measure is counted in days, and so
+    // does the recovery-code reminder (AUTH-FACT-008), whose age is counted in months.
     private static readonly TimeSpan Daily = TimeSpan.FromDays(1);
 
     // INF-TLS-003: a failed renewal is seen the day it happens, and INF-HOST-001: a clock
@@ -137,6 +138,15 @@ internal static class BackgroundJobs
             async (services, context, cancellationToken) => Done(
                 await services.GetRequiredService<LossReports>()
                     .AdvanceAsync(context, cancellationToken)
+                    .ConfigureAwait(false))),
+        BackgroundJob.Every(
+            "recovery-code-reminder",
+            "AUTH-FACT-008",
+            SystemOperation.ExpirySweep,
+            Daily,
+            async (services, _, cancellationToken) => Done(
+                await services.GetRequiredService<RecoveryCodeReminders>()
+                    .RemindAsync(cancellationToken)
                     .ConfigureAwait(false))),
         BackgroundJob.Every(
             "domain-reverification",

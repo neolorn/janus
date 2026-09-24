@@ -335,6 +335,7 @@ public static class HostingRegistration
         services.AddScoped<TotpService>();
         services.AddScoped<WebAuthnService>();
         services.AddScoped<RecoveryCodeService>();
+        services.AddScoped<RecoveryCodeReminders>();
         services.AddScoped<DeviceService>();
         services.AddScoped<StepUpGuard>();
         services.AddScoped<IStepUpGate, StepUpGate>();

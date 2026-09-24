@@ -12,8 +12,8 @@ using Xunit;
 namespace Janus.Authentication.Tests.Factors;
 
 /// <summary>
-/// Recovery codes: how they are issued, spent, replaced and reminded about
-/// (AUTH-FACT-008, AUTH-FACT-009).
+/// Recovery codes: how they are issued, spent and replaced (AUTH-FACT-008,
+/// AUTH-FACT-009).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class RecoveryCodeServiceTests : IAsyncDisposable
@@ -145,29 +145,6 @@ public sealed class RecoveryCodeServiceTests : IAsyncDisposable
         await Service.ShownAsync(subject, exported: true, TestContext.Current.CancellationToken);
 
         Assert.Equal(Noon, (await SetAsync(subject)).ExportedAt);
-    }
-
-    /// <summary>
-    /// AUTH-FACT-008 AC5: a set older than the reminder age produces one reminder and
-    /// no further reminder until the set is regenerated.
-    /// </summary>
-    [Fact]
-    public async Task AUTH_FACT_008_AC5_AnOldSetRemindsItsOwnerOnceAsync()
-    {
-        SubjectId subject = Subject();
-        await GeneratedAsync(subject);
-
-        Assert.False(Value(await Service.RemindAsync(subject, TestContext.Current.CancellationToken)));
-
-        _clock.Advance(TimeSpan.FromDays(365));
-
-        Assert.True(Value(await Service.RemindAsync(subject, TestContext.Current.CancellationToken)));
-        Assert.False(Value(await Service.RemindAsync(subject, TestContext.Current.CancellationToken)));
-
-        await GeneratedAsync(subject);
-        _clock.Advance(TimeSpan.FromDays(365));
-
-        Assert.True(Value(await Service.RemindAsync(subject, TestContext.Current.CancellationToken)));
     }
 
     /// <summary>

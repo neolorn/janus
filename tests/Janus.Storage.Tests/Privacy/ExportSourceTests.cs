@@ -176,6 +176,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
 
         Assert.Equal("2", codes["remaining"]);
         Assert.Equal(Noon, DateTimeOffset.Parse(codes["generatedAt"], null));
+        Assert.Equal(Noon + TimeSpan.FromDays(365), DateTimeOffset.Parse(codes["remindedAt"], null));
 
         IReadOnlyDictionary<string, string> browser =
             Assert.Single(named["devices"].Records).Values;
@@ -581,11 +582,12 @@ public sealed class ExportSourceTests(DatabaseFixture database)
                 parallelism: 1)),
         ];
 
+        var set = RecoveryCodeSet.Of(subject, hashes, Noon);
+        set.Reminded(Noon + TimeSpan.FromDays(365));
+
         await using StoreContext writing = database.Context();
 
-        await new RecoveryCodeStore(writing).ReplaceAsync(
-            RecoveryCodeSet.Of(subject, hashes, Noon),
-            TestContext.Current.CancellationToken);
+        await new RecoveryCodeStore(writing).ReplaceAsync(set, TestContext.Current.CancellationToken);
 
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
     }

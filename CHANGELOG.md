@@ -373,6 +373,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A set of recovery codes older than `recovery.codes.reminder` now reminds its owner,
+  once, on every channel of the security-notice set, under the new message kind
+  `recovery-codes-reminder`; a daily job sends it to active accounts only. The account
+  read shows `recoveryCodes.remindedAt`, and the export carries it.
 - The restore test runs by itself every `backup.restoretest.interval`. A deployment
   registers `IRestoreTestInstance`, which restores its latest backup into a throwaway
   instance and tears it down again; the library opens the restored database with the

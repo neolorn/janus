@@ -13502,6 +13502,69 @@ test and that a failed one raises. Chapter 10 could list `ops.restoretest.comple
 If "at least quarterly" means once in every calendar quarter, the
 `backup.restoretest.interval` row could be written as `P90D`.
 
+---
+
+## 335. How the recovery-code reminder is sent
+
+**Phase 9 · 2026-09-25 · Tier 2 · AUTH-FACT-008 AC5, INF-BG-001, REG-ACCT-001, PRIV-RIGHT-003, D-022**
+
+*The question.* AUTH-FACT-008 AC5 asks that a set older than `recovery.codes.reminder`
+produce one reminder and no further reminder until the set is regenerated. Phase 3
+built the set's `RemindedAt` and a service method that marked a set reminded, but no
+job called it and nothing was sent, so the criterion held in a unit test and never in
+a deployment. No chapter names the message, who it reaches, which accounts it skips,
+when the pass runs, or where the person sees that it fired.
+
+*The readings.*
+
+1. A message kind of its own, sent to the security-notice set; the set is marked in the
+   transaction that writes the notices; accounts that are not active are skipped; the
+   instant is shown on the account and carried in the export.
+2. As 1, but the reminder rides `security-notice`, which already reaches the same set.
+3. As 1, but every account with a set is reminded, whatever its state.
+
+*Chosen: 1.* A catalogue that words `security-notice` for "something happened to the
+account" would tell a person their account was touched when nothing was; CONV-CONTENT-001
+leaves the words to the deployment, which needs a key to word this one by. A suspended,
+restricted or deleting account cannot act on the reminder, and a deleting one is owed
+no mail beyond its deletion notice; its set stays owed the reminder, so it is sent if
+the account comes back. D-022 writes a message in the transaction that made it
+necessary, which is what makes "one reminder" hold across a failed pass.
+
+What is built:
+
+- `MessageKind.RecoveryCodesReminder`, key `recovery-codes-reminder`, on both channels,
+  with default words in both shipped languages. It carries no link and no value.
+- `IRecoveryCodeStore.DueReminderAsync`: the sets generated at or before an instant,
+  never reminded, held by an active account, oldest first, a page at a time.
+- `RecoveryCodeReminders.RemindAsync` reads the age (an unreadable one fails the pass
+  and sends nothing), and for each set due marks it reminded, records it, and asks for
+  the reminder on every channel of the security-notice set, in one transaction. A
+  channel that refuses the reminder does not keep the set owed it: the one reminder
+  was produced. The pass takes every page until none is left.
+- The job `recovery-code-reminder`, reason `AUTH-FACT-008`, operation `expiry-sweep`,
+  daily, since the age is counted in months.
+- `RecoveryCodeStatus.RemindedAt` (public), shown as `recoveryCodes.remindedAt` on the
+  account read, and `remindedAt` in the export's `recovery-codes` record beside the
+  other instants the set carries.
+- The unused `RecoveryCodeService.RemindAsync` is removed.
+
+*Tests that pin it.*
+`RecoveryCodeRemindersTests.AUTH_FACT_008_AC5_AnOldSetRemindsItsOwnerOnceAsync`,
+`RecoveryCodeRemindersTests.AUTH_FACT_008_AC5_TheAgeIsWhatTheDeploymentConfiguresAsync`,
+`RecoveryCodeRemindersTests.AUTH_FACT_008_AC5_AnAccountThatIsNotActiveIsNotRemindedAsync`,
+`RecoveryCodeRemindersTests.AUTH_FACT_008_AC5_EverySetDueIsRemindedOnceInOnePassAsync`,
+`RecoveryCodeStoreTests.AUTH_FACT_008_AC5_TheSetsOwedTheirReminderAreReadOldestFirstAsync`,
+`AccountServiceTests.AUTH_FACT_008_AC5_TheReadCarriesWhenTheSetWasRemindedOfAsync`,
+`ExportSourceTests.REG_ACCT_001_AC1_TheExportCarriesTheCredentialsTheAccountShowsAsync`,
+`VocabularyContractTests.WireNames_TheKeysTheCatalogueIsAskedBy_AreWritten`,
+`BackgroundJobsTests.INF_BG_001_AC1_EveryJobRunsWithoutAPersonAsync`.
+
+*Chapter text that should change.* AUTH-FACT-008 could name the message, its recipients
+(the security-notice set), that only an active account is reminded, and the daily pass.
+Chapter 09 could list `remindedAt` in the account's `recoveryCodes` object. Chapter 10
+could carry `recovery-codes-reminder` if it lists message kinds.
+
 
 # Rows for chapter 10
 
@@ -13739,6 +13802,7 @@ asks for it. The library never holds the words (CONV-CONTENT-001).
 | `no-account` | `MessageKind.NoAccount` | The answer to a request made for an address no account holds. |
 | `privacy-request-lapsed` | `MessageKind.PrivacyRequestLapsed` | The honest word to a subject whose out-of-band erasure request reached its deadline undecided (PRIV-RIGHT-002). |
 | `privacy-request-received` | `MessageKind.PrivacyRequestReceived` | The automatic receipt a data subject request gets the moment it enters the queue, which is not a decision and starts nothing (PRIV-RIGHT-002). |
+| `recovery-codes-reminder` | `MessageKind.RecoveryCodesReminder` | The one reminder a set of recovery codes gets once it is older than `recovery.codes.reminder`, sent to the security-notice set of an active account and carrying no link (AUTH-FACT-008 AC5, entry 335). |
 | `recovery-link` | `MessageKind.RecoveryLink` | The link a person asked for to set a new password, which restores nothing else and removes no factor. |
 | `secondstep-code` | `MessageKind.SecondStepCode` | A code presented as a second step. |
 | `security-notice` | `MessageKind.SecurityNotice` | A notice that something happened to the account. |

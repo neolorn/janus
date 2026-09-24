@@ -9,7 +9,9 @@ using Janus.Authentication.Factors;
 using Janus.Authentication.Passwords;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Identity.Accounts;
 using Janus.Storage.Authentication.Factors;
+using Janus.Storage.Identity.Accounts;
 using Npgsql;
 using Xunit;
 
@@ -25,6 +27,10 @@ public sealed class RecoveryCodeStoreTests(DatabaseFixture database)
     : IClassFixture<DatabaseFixture>, IDisposable
 {
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
+
+    // Earlier than any set the other tests write, so the reminder query sees only
+    // the sets its own test wrote.
+    private static readonly DateTimeOffset LongAgo = new(2001, 1, 1, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly Argon2StrengthClass Shipped = new(
         Janus.Core.Configuration.Settings.PasswordArgon2Memory.Default,
@@ -165,6 +171,56 @@ public sealed class RecoveryCodeStoreTests(DatabaseFixture database)
         Assert.Equal(Noon + TimeSpan.FromMinutes(1), read.ViewedAt);
         Assert.Equal(Noon + TimeSpan.FromMinutes(2), read.ExportedAt);
         Assert.Null(read.RemindedAt);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-008 AC5: the sets owed their reminder are those generated long enough
+    /// ago, never reminded of, and held by an active account, oldest first.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_008_AC5_TheSetsOwedTheirReminderAreReadOldestFirstAsync()
+    {
+        SubjectId oldest = await _deployment.AccountAsync(Noon);
+        SubjectId older = await _deployment.AccountAsync(Noon);
+        SubjectId reminded = await _deployment.AccountAsync(Noon);
+        SubjectId young = await _deployment.AccountAsync(Noon);
+        SubjectId suspended = await _deployment.AccountAsync(Noon);
+
+        var remindedSet = RecoveryCodeSet.Of(reminded, [], LongAgo);
+        remindedSet.Reminded(LongAgo + TimeSpan.FromDays(1));
+
+        await WrittenAsync(RecoveryCodeSet.Of(older, [], LongAgo + TimeSpan.FromHours(1)));
+        await WrittenAsync(RecoveryCodeSet.Of(oldest, [], LongAgo));
+        await WrittenAsync(remindedSet);
+        await WrittenAsync(RecoveryCodeSet.Of(young, [], LongAgo + TimeSpan.FromDays(2)));
+        await WrittenAsync(RecoveryCodeSet.Of(suspended, [], LongAgo));
+
+        await using (StoreContext suspending = database.Context())
+        {
+            var accounts = new AccountStore(suspending);
+            Account account = Assert.IsType<Account>(
+                await accounts.FindBySubjectAsync(suspended, TestContext.Current.CancellationToken));
+
+            account.Suspend();
+            await accounts.RecordTransitionAsync(account, TestContext.Current.CancellationToken);
+            await suspending.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        var store = new RecoveryCodeStore(reading);
+
+        Assert.Equal(
+            [oldest, older],
+            await store.DueReminderAsync(
+                LongAgo + TimeSpan.FromDays(1),
+                count: 10,
+                TestContext.Current.CancellationToken));
+        Assert.Equal(
+            [oldest],
+            await store.DueReminderAsync(
+                LongAgo + TimeSpan.FromDays(1),
+                count: 1,
+                TestContext.Current.CancellationToken));
     }
 
     /// <summary>

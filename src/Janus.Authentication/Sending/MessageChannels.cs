@@ -45,6 +45,7 @@ internal static class MessageChannels
         MessageKind.DeactivationNotice,
         MessageKind.DeletionNotice,
         MessageKind.InvitationLink,
+        MessageKind.RecoveryCodesReminder,
     ];
 
     /// <summary>
@@ -64,6 +65,7 @@ internal static class MessageChannels
         MessageKind.CredentialEnrolled,
         MessageKind.DeactivationNotice,
         MessageKind.DeletionNotice,
+        MessageKind.RecoveryCodesReminder,
     ]);
 
     /// <summary>

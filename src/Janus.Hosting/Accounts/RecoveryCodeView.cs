@@ -10,12 +10,17 @@ namespace Janus.Hosting.Accounts;
 /// <param name="GeneratedAt">When the set was drawn.</param>
 /// <param name="ViewedAt">When the person last looked at them.</param>
 /// <param name="ExportedAt">When the person last took a copy away.</param>
+/// <param name="RemindedAt">
+/// When the set's one reminder fired, which the account shows until the set is
+/// regenerated.
+/// </param>
 /// <remarks>Implements REG-ACCT-001 and AUTH-FACT-008.</remarks>
 internal sealed record RecoveryCodeView(
     int Remaining,
     DateTimeOffset GeneratedAt,
     DateTimeOffset? ViewedAt,
-    DateTimeOffset? ExportedAt)
+    DateTimeOffset? ExportedAt,
+    DateTimeOffset? RemindedAt)
 {
     /// <summary>
     /// Reads the set.
@@ -29,5 +34,6 @@ internal sealed record RecoveryCodeView(
                 status.Remaining,
                 status.GeneratedAt,
                 status.ViewedAt,
-                status.ExportedAt);
+                status.ExportedAt,
+                status.RemindedAt);
 }

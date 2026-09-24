@@ -1578,6 +1578,7 @@ Janus.Core.MessageKind.InvitationLink = 19 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.NoAccount = 6 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.PrivacyRequestLapsed = 16 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.PrivacyRequestReceived = 15 -> Janus.Core.MessageKind
+Janus.Core.MessageKind.RecoveryCodesReminder = 20 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.RecoveryLink = 14 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.SecondStepCode = 2 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.SecurityNotice = 3 -> Janus.Core.MessageKind
@@ -2059,14 +2060,16 @@ Janus.Core.RecipientRecord.Name.init -> void
 Janus.Core.RecipientRecord.RecipientRecord(string! Name, Janus.Core.RecipientCharacterisation Characterisation, System.Collections.Generic.IReadOnlyList<string!>! DataReceived, Janus.Core.Configuration.HostingLocation Location, string? AgreementReference, string? CrossBorderBasis, bool Callback) -> void
 Janus.Core.RecoveryCodeStatus
 Janus.Core.RecoveryCodeStatus.<Clone>$() -> Janus.Core.RecoveryCodeStatus!
-Janus.Core.RecoveryCodeStatus.Deconstruct(out int Remaining, out System.DateTimeOffset GeneratedAt, out System.DateTimeOffset? ViewedAt, out System.DateTimeOffset? ExportedAt) -> void
+Janus.Core.RecoveryCodeStatus.Deconstruct(out int Remaining, out System.DateTimeOffset GeneratedAt, out System.DateTimeOffset? ViewedAt, out System.DateTimeOffset? ExportedAt, out System.DateTimeOffset? RemindedAt) -> void
 Janus.Core.RecoveryCodeStatus.Equals(Janus.Core.RecoveryCodeStatus? other) -> bool
 Janus.Core.RecoveryCodeStatus.ExportedAt.get -> System.DateTimeOffset?
 Janus.Core.RecoveryCodeStatus.ExportedAt.init -> void
 Janus.Core.RecoveryCodeStatus.GeneratedAt.get -> System.DateTimeOffset
 Janus.Core.RecoveryCodeStatus.GeneratedAt.init -> void
-Janus.Core.RecoveryCodeStatus.RecoveryCodeStatus(int Remaining, System.DateTimeOffset GeneratedAt, System.DateTimeOffset? ViewedAt, System.DateTimeOffset? ExportedAt) -> void
+Janus.Core.RecoveryCodeStatus.RecoveryCodeStatus(int Remaining, System.DateTimeOffset GeneratedAt, System.DateTimeOffset? ViewedAt, System.DateTimeOffset? ExportedAt, System.DateTimeOffset? RemindedAt) -> void
 Janus.Core.RecoveryCodeStatus.Remaining.get -> int
+Janus.Core.RecoveryCodeStatus.RemindedAt.get -> System.DateTimeOffset?
+Janus.Core.RecoveryCodeStatus.RemindedAt.init -> void
 Janus.Core.RecoveryCodeStatus.Remaining.init -> void
 Janus.Core.RecoveryCodeStatus.ViewedAt.get -> System.DateTimeOffset?
 Janus.Core.RecoveryCodeStatus.ViewedAt.init -> void

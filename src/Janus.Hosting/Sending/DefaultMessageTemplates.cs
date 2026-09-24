@@ -232,6 +232,16 @@ internal sealed class DefaultMessageTemplates : IMessageTemplates
                 "دعوة للانضمام إلى مؤسسة",
                 "أنت مدعو للانضمام إلى مؤسسة. للقبول استخدم هذا: {token}. تنتهي صلاحيتها بعد مدة. إن لم تكن تتوقعها فتجاهل هذه الرسالة.",
                 null)),
+        (
+            MessageKind.RecoveryCodesReminder,
+            new Words(
+                "Check your recovery codes",
+                "Your recovery codes were made a while ago. If you no longer know where they are, sign in and make a new set.",
+                "Your recovery codes were made a while ago. If you cannot find them, make a new set."),
+            new Words(
+                "راجع رموز الاستعادة",
+                "أنشئت رموز الاستعادة الخاصة بك منذ مدة. إن لم تعد تعرف مكانها فسجل الدخول وأنشئ مجموعة جديدة.",
+                "أنشئت رموز الاستعادة منذ مدة. إن لم تجدها فأنشئ مجموعة جديدة.")),
     ];
 
     private static readonly FrozenDictionary<Held, MessageTemplate> Texts = Written();
