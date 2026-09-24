@@ -9989,6 +9989,62 @@ methods).
 *Chapter text that should change.* 09 section 8a could say "every audit record naming
 one subject, as the acting or the effective identity".
 
+---
+
+## 268. The grants one user or group holds in its own name are read under `grant:read`
+
+**Phase 8 · 2026-09-24 · Tier 2 · AUTHZ-GRANT-003 AC3, 09 section 8, 10 `grant:read`, 16 section 3 step 4**
+
+*The question.* Chapter 16 section 3 step 4, "Remove or transfer their grants", reads:
+"Anything granted directly to them rather than through a group." AUTHZ-GRANT-003 AC3:
+"\"Who granted this and when\" is answerable by query." Chapter 10 gives `grant:read`
+as "Viewing grants and the \"who can access this?\" view". Chapter 09 section 8 names
+`POST /admin/grants` and `DELETE /admin/grants/{id}` and no read of grants, and the
+revocation needs the grant's identifier, which only its creation returned. The "who
+can access this?" view (entry 265) answers per record, so the grants one person holds
+across an organization could be found only record by record, and an organization-wide
+grant only by asking for the organization.
+
+*The readings.*
+
+1. No listing: 09 names none; the operator finds a person's grants through the "who can
+   access this?" view, record by record.
+2. `GET /admin/grants?organization=...&subjectType=user|group&subjectId=...` and
+   `IGrants.HeldAsync`, under `grant:read` in that organization: the live grants the
+   user or group holds in its own name there, oldest first, each in the shape a grant
+   is written in, with its identifier, kind, who granted it, when, why and its expiry.
+
+*Chosen: 2.* Reading 1 leaves step 4 without a way to know what to remove, and a
+revocation without the identifier it needs. Reading 2 is the smallest surface that
+serves both, under the permission 10 already names for viewing grants. Under it:
+
+- It is read per organization, as a grant is scoped (AUTHZ-SCOPE-001), and the
+  permission is asked there; `grant:read` elsewhere, or `grant:manage` alone, is
+  `authz.denied` (AUTHZ-CONCEAL-005).
+- It lists grants naming the holder itself; a grant reaching a user through a group is
+  read under the group, which is the step's "rather than through a group".
+- Revoked and expired grants are left out, as the gate leaves them out; the full history
+  of a grant stays in the audit trail (entry 267).
+- An organization-wide grant reads as `resourceType` `organization` with the
+  organization's identifier, as it is written (AUTHZ-GRANT-001 AC2).
+- A materialised grant is listed with `kind` `materialised`, so the one a revocation
+  refuses as `authz.grant.notfound` is told apart; the host's data answers for it.
+- A malformed `organization`, `subjectType` or `subjectId` is `api.request.malformed`
+  naming the member (API-CONV-002).
+- Nothing is written, so it is not audited, as the other reads under `grant:read` are
+  not.
+
+*Tests that pin it.*
+`GrantEndpointTests.AUTHZ_GRANT_003_AC3_WhoGrantedWhatAHolderHoldsAndWhenIsReadAsync`,
+`GrantEndpointTests.AUTHZ_GRANT_003_AC3_AGroupsAndAMaterialisedGrantAreReadWithTheirKindAsync`,
+`GrantEndpointTests.AUTHZ_GRANT_003_AC3_ReadingWhatAHolderHoldsNeedsGrantReadThereAsync`,
+`GrantEndpointTests.API_CONV_002_AReadOfHeldGrantsNamesWhoseAndWhereAsync`,
+`SessionRequirementTests` (the route).
+
+*Chapter text that should change.* 09 section 8 could add
+`GET /admin/grants?organization=...&subjectType=...&subjectId=...` with its response
+shape and `grant:read`, and 16 section 3 step 4 could name it.
+
 
 # Rows for chapter 10
 

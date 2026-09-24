@@ -54,6 +54,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "GET /admin/erasures/",
         "GET /admin/erasures/{id:guid}",
         "GET /admin/explanations/{correlationId:guid}",
+        "GET /admin/grants",
         "GET /admin/groups",
         "GET /admin/organizations/{id:guid}/domains",
         "GET /admin/organizations/{id:guid}/policy",

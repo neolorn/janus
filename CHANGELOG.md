@@ -484,6 +484,13 @@ against the public contract of LIB-API-001.
   revocation of a role carrying `system:administer` also needs `system:administer`.
   `IGrants` is the same pair of operations in process.
 
+- `GET /admin/grants?organization=...&subjectType=user|group&subjectId=...` and
+  `IGrants.HeldAsync` read the live grants one account or group holds in its own name
+  in an organization, oldest first, each with its identifier, kind, role, what it is
+  on, whether it denies, its expiry, and who granted it, when and why. It needs
+  `grant:read` in that organization; a grant reaching an account through a group is
+  read under the group.
+
 - `GET /admin/restrictions` and `GET /admin/restrictions/{name}` read the named
   restriction set under `restriction:edit`, the shipped defaults included;
   `PUT /admin/restrictions/{name}` creates or replaces one and `DELETE` removes one,

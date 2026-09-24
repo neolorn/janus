@@ -1081,6 +1081,31 @@ Janus.Core.GroupId.GroupId() -> void
 Janus.Core.GroupId.GroupId(System.Guid Value) -> void
 Janus.Core.GroupId.Value.get -> System.Guid
 Janus.Core.GroupId.Value.init -> void
+Janus.Core.HeldGrant
+Janus.Core.HeldGrant.<Clone>$() -> Janus.Core.HeldGrant!
+Janus.Core.HeldGrant.Deconstruct(out Janus.Core.GrantId Id, out Janus.Core.GrantKind Kind, out Janus.Core.GrantSubject Subject, out Janus.Core.RoleName Role, out Janus.Core.ResourceReference On, out bool Deny, out System.DateTimeOffset? ExpiresAt, out Janus.Core.SubjectId GrantedBy, out System.DateTimeOffset GrantedAt, out string! Reason) -> void
+Janus.Core.HeldGrant.Deny.get -> bool
+Janus.Core.HeldGrant.Deny.init -> void
+Janus.Core.HeldGrant.Equals(Janus.Core.HeldGrant? other) -> bool
+Janus.Core.HeldGrant.ExpiresAt.get -> System.DateTimeOffset?
+Janus.Core.HeldGrant.ExpiresAt.init -> void
+Janus.Core.HeldGrant.GrantedAt.get -> System.DateTimeOffset
+Janus.Core.HeldGrant.GrantedAt.init -> void
+Janus.Core.HeldGrant.GrantedBy.get -> Janus.Core.SubjectId
+Janus.Core.HeldGrant.GrantedBy.init -> void
+Janus.Core.HeldGrant.HeldGrant(Janus.Core.GrantId Id, Janus.Core.GrantKind Kind, Janus.Core.GrantSubject Subject, Janus.Core.RoleName Role, Janus.Core.ResourceReference On, bool Deny, System.DateTimeOffset? ExpiresAt, Janus.Core.SubjectId GrantedBy, System.DateTimeOffset GrantedAt, string! Reason) -> void
+Janus.Core.HeldGrant.Id.get -> Janus.Core.GrantId
+Janus.Core.HeldGrant.Id.init -> void
+Janus.Core.HeldGrant.Kind.get -> Janus.Core.GrantKind
+Janus.Core.HeldGrant.Kind.init -> void
+Janus.Core.HeldGrant.On.get -> Janus.Core.ResourceReference
+Janus.Core.HeldGrant.On.init -> void
+Janus.Core.HeldGrant.Reason.get -> string!
+Janus.Core.HeldGrant.Reason.init -> void
+Janus.Core.HeldGrant.Role.get -> Janus.Core.RoleName
+Janus.Core.HeldGrant.Role.init -> void
+Janus.Core.HeldGrant.Subject.get -> Janus.Core.GrantSubject
+Janus.Core.HeldGrant.Subject.init -> void
 Janus.Core.HostedMailbox
 Janus.Core.HostedMailbox.<Clone>$() -> Janus.Core.HostedMailbox!
 Janus.Core.HostedMailbox.Address.get -> string!
@@ -1176,6 +1201,7 @@ Janus.Core.IExports
 Janus.Core.IExports.AssembleAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.SubjectExport!>>
 Janus.Core.IGrants
 Janus.Core.IGrants.GrantAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.GrantRequest! request, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.GrantId>>
+Janus.Core.IGrants.HeldAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, Janus.Core.GrantSubject holder, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.HeldGrant!>!>>
 Janus.Core.IGrants.RevokeAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.GrantId grant, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IGroups
 Janus.Core.IGroups.AddMemberAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.GroupId group, Janus.Core.GrantSubject member, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -2876,6 +2902,9 @@ override Janus.Core.GrantSubject.GetHashCode() -> int
 override Janus.Core.GrantSubject.ToString() -> string!
 override Janus.Core.GroupId.GetHashCode() -> int
 override Janus.Core.GroupId.ToString() -> string!
+override Janus.Core.HeldGrant.Equals(object? obj) -> bool
+override Janus.Core.HeldGrant.GetHashCode() -> int
+override Janus.Core.HeldGrant.ToString() -> string!
 override Janus.Core.HostedMailbox.Equals(object? obj) -> bool
 override Janus.Core.HostedMailbox.GetHashCode() -> int
 override Janus.Core.HostedMailbox.ToString() -> string!
@@ -3713,6 +3742,8 @@ static Janus.Core.GrantSubject.operator ==(Janus.Core.GrantSubject left, Janus.C
 static Janus.Core.GroupId.New(System.TimeProvider! time) -> Janus.Core.GroupId
 static Janus.Core.GroupId.operator !=(Janus.Core.GroupId left, Janus.Core.GroupId right) -> bool
 static Janus.Core.GroupId.operator ==(Janus.Core.GroupId left, Janus.Core.GroupId right) -> bool
+static Janus.Core.HeldGrant.operator !=(Janus.Core.HeldGrant? left, Janus.Core.HeldGrant? right) -> bool
+static Janus.Core.HeldGrant.operator ==(Janus.Core.HeldGrant? left, Janus.Core.HeldGrant? right) -> bool
 static Janus.Core.HostedMailbox.operator !=(Janus.Core.HostedMailbox? left, Janus.Core.HostedMailbox? right) -> bool
 static Janus.Core.HostedMailbox.operator ==(Janus.Core.HostedMailbox? left, Janus.Core.HostedMailbox? right) -> bool
 static Janus.Core.IdentifierAdded.operator !=(Janus.Core.IdentifierAdded? left, Janus.Core.IdentifierAdded? right) -> bool

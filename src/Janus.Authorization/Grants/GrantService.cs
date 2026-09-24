@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,7 +13,8 @@ using Janus.Core;
 namespace Janus.Authorization.Grants;
 
 /// <summary>
-/// Stored grants, written and revoked by an administrator.
+/// Stored grants, written and revoked by an administrator, and read by one holding
+/// <c>grant:read</c>.
 /// </summary>
 /// <param name="gate">Whether the caller may manage grants where the grant is scoped.</param>
 /// <param name="scope">Whether the caller holds system administration.</param>
@@ -189,6 +192,47 @@ internal sealed class GrantService(
 
         return Result.Success();
     }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result<IReadOnlyList<HeldGrant>>> HeldAsync(
+        AccessContext context,
+        OrganizationId organization,
+        GrantSubject holder,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        Result permitted = await gate
+            .RequireAsync(context, Permissions.GrantRead, organization, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (permitted.Match<Error?>(() => null, error => error) is Error refused)
+        {
+            return Result.Failure<IReadOnlyList<HeldGrant>>(refused);
+        }
+
+        IReadOnlyList<Grant> held = await grants
+            .HeldByAsync([holder], organization, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
+
+        return Result.Success<IReadOnlyList<HeldGrant>>(
+            [.. held.OrderBy(grant => grant.GrantedAt).Select(Held)]);
+    }
+
+    // AUTHZ-GRANT-001 AC2: the whole organization is named as a grant on it is written.
+    private static HeldGrant Held(Grant grant) => new(
+        grant.Id,
+        grant.Kind,
+        grant.Subject,
+        grant.Role,
+        grant.ResourceType is ResourceType type && grant.ResourceId is ResourceId id
+            ? new ResourceReference(type, id)
+            : new ResourceReference(OrganizationWide, ResourceId.Parse(grant.Organization.ToString())),
+        grant.Deny,
+        grant.ExpiresAt,
+        grant.GrantedBy,
+        grant.GrantedAt,
+        grant.Reason);
 
     // API-CONV-002: a free-text field is 1 to 1024 characters after trimming. A blank
     // reason is the refusal 10 names for a grant; one past the limit is a request the

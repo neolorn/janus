@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authorization.Grants;
@@ -15,7 +17,8 @@ namespace Janus.Hosting.Tests.Authorization;
 /// <summary>
 /// Writing and revoking stored grants over <c>/admin/grants</c> of chapter 09 section 8,
 /// behind <c>grant:manage</c> in the grant's organization and its step-up
-/// (AUTHZ-GRANT-001 to AUTHZ-GRANT-003, OPS-CFG-007).
+/// (AUTHZ-GRANT-001 to AUTHZ-GRANT-003, OPS-CFG-007), and reading what one holder
+/// holds behind <c>grant:read</c> there (entry 268).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class GrantEndpointTests : IAsyncLifetime
@@ -394,6 +397,143 @@ public sealed class GrantEndpointTests : IAsyncLifetime
             new GrantSubject(SubjectType.Group, local.Id.Value),
             (await StoredAsync(localGroup)).Subject);
     }
+
+    /// <summary>
+    /// AUTHZ-GRANT-003 AC3: the live grants one user holds in its own name are read
+    /// oldest first, each with who granted it, when and why; an organization-wide grant
+    /// names the organization, and revoked, expired and group grants are left out.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_003_AC3_WhoGrantedWhatAHolderHoldsAndWhenIsReadAsync()
+    {
+        (Browser administrator, SubjectId actor) =
+            await AuthorisedAsync(Branch, Permissions.GrantManage, Permissions.GrantRead);
+        var tellers = Group.Create(new GroupId(Guid.NewGuid()), Branch, "Tellers");
+
+        await _deployment.Groups.CreateAsync(tellers, CancellationToken.None);
+
+        DateTimeOffset first = _deployment.Clock.GetUtcNow();
+        Answer onRecord = await GrantedAsync(administrator, "document", "d-1", expiresAt: first.AddDays(30));
+
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(1));
+
+        DateTimeOffset second = _deployment.Clock.GetUtcNow();
+        Answer wide = await GrantedAsync(administrator, "organization", Branch.ToString(), deny: true, reason: "Suspended pending review.");
+        Answer revoked = await GrantedAsync(administrator, "document", "d-1", deny: true);
+        Answer expired = await GrantedAsync(administrator, "organization", Branch.ToString(), expiresAt: second.AddMinutes(2));
+        Answer toGroup = await GrantedAsync(administrator, "document", "d-1", group: tellers.Id);
+
+        Assert.Equal(StatusCodes.Status204NoContent, (await RevokedAsync(administrator, revoked.Text("id"))).Status);
+        Assert.Equal(StatusCodes.Status201Created, expired.Status);
+        Assert.Equal(StatusCodes.Status201Created, toGroup.Status);
+
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(3));
+
+        Answer read = await ReadAsync(administrator, "user", Holder.ToString());
+
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+
+        JsonElement[] held = [.. read.Json().EnumerateArray()];
+
+        Assert.Equal([onRecord.Text("id"), wide.Text("id")], held.Select(grant => grant.GetProperty("id").GetString()));
+        Assert.Equal("stored", held[0].GetProperty("kind").GetString());
+        Assert.Equal("user", held[0].GetProperty("subjectType").GetString());
+        Assert.Equal(Holder, held[0].GetProperty("subjectId").GetGuid());
+        Assert.Equal("document", held[0].GetProperty("resourceType").GetString());
+        Assert.Equal("d-1", held[0].GetProperty("resourceId").GetString());
+        Assert.Equal(Reader.ToString(), held[0].GetProperty("role").GetString());
+        Assert.False(held[0].GetProperty("deny").GetBoolean());
+        Assert.Equal(first.AddDays(30), held[0].GetProperty("expiresAt").GetDateTimeOffset());
+        Assert.Equal(actor.Value, held[0].GetProperty("grantedBy").GetGuid());
+        Assert.Equal(first, held[0].GetProperty("grantedAt").GetDateTimeOffset());
+        Assert.Equal("Needs it.", held[0].GetProperty("reason").GetString());
+        Assert.Equal("organization", held[1].GetProperty("resourceType").GetString());
+        Assert.Equal(Branch.ToString(), held[1].GetProperty("resourceId").GetString());
+        Assert.True(held[1].GetProperty("deny").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, held[1].GetProperty("expiresAt").ValueKind);
+        Assert.Equal(second, held[1].GetProperty("grantedAt").GetDateTimeOffset());
+        Assert.Equal("Suspended pending review.", held[1].GetProperty("reason").GetString());
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-003 AC3: a group's grants are read under the group, and a grant a
+    /// materialisation wrote is read with its kind, which tells apart the one no
+    /// revocation names.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_003_AC3_AGroupsAndAMaterialisedGrantAreReadWithTheirKindAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GrantManage, Permissions.GrantRead);
+        var tellers = Group.Create(new GroupId(Guid.NewGuid()), Branch, "Tellers");
+
+        await _deployment.Groups.CreateAsync(tellers, CancellationToken.None);
+
+        Answer toGroup = await GrantedAsync(administrator, "document", "d-1", group: tellers.Id);
+        Grant materialised = await MaterialisedAsync();
+
+        Answer group = await ReadAsync(administrator, "group", tellers.Id.ToString());
+        Answer user = await ReadAsync(administrator, "user", Holder.ToString());
+
+        JsonElement grouped = Assert.Single(group.Json().EnumerateArray());
+        JsonElement derived = Assert.Single(user.Json().EnumerateArray());
+
+        Assert.Equal(toGroup.Text("id"), grouped.GetProperty("id").GetString());
+        Assert.Equal("group", grouped.GetProperty("subjectType").GetString());
+        Assert.Equal(tellers.Id.Value, grouped.GetProperty("subjectId").GetGuid());
+        Assert.Equal(materialised.Id.ToString(), derived.GetProperty("id").GetString());
+        Assert.Equal("materialised", derived.GetProperty("kind").GetString());
+    }
+
+    /// <summary>
+    /// Entry 268 and AUTHZ-CONCEAL-005: reading what a holder holds needs
+    /// <c>grant:read</c> in that organization; <c>grant:manage</c> alone, or
+    /// <c>grant:read</c> elsewhere, is forbidden.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_003_AC3_ReadingWhatAHolderHoldsNeedsGrantReadThereAsync()
+    {
+        (Browser manager, SubjectId actor) = await AuthorisedAsync(Branch, Permissions.GrantManage);
+
+        Answer created = await GrantedAsync(manager, "document", "d-1");
+        Answer unread = await ReadAsync(manager, "user", Holder.ToString());
+
+        _deployment.Gate.Grant(actor, Administration, Permissions.GrantRead);
+
+        Answer foreign = await ReadAsync(manager, "user", Holder.ToString());
+
+        Assert.Equal(StatusCodes.Status201Created, created.Status);
+        Assert.Equal(StatusCodes.Status403Forbidden, unread.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), unread.Text("code"));
+        Assert.Equal(StatusCodes.Status403Forbidden, foreign.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), foreign.Text("code"));
+    }
+
+    /// <summary>
+    /// API-CONV-002: a read of held grants names an organization, a user or group, and
+    /// its identifier; anything else is a malformed request naming the member.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_CONV_002_AReadOfHeldGrantsNamesWhoseAndWhereAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GrantRead);
+
+        Answer unscoped = await administrator.SendAsync("GET", "/admin/grants?subjectType=user&subjectId=" + Holder);
+        Answer untyped = await administrator.SendAsync("GET", "/admin/grants?organization=" + Branch + "&subjectType=role&subjectId=" + Holder);
+        Answer unnamed = await administrator.SendAsync("GET", "/admin/grants?organization=" + Branch + "&subjectType=user&subjectId=d-1");
+
+        Assert.Equal("organization", Member(unscoped));
+        Assert.Equal("subjectType", Member(untyped));
+        Assert.Equal("subjectId", Member(unnamed));
+    }
+
+    private static Task<Answer> ReadAsync(Browser administrator, string subjectType, string subjectId) =>
+        administrator.SendAsync(
+            "GET",
+            "/admin/grants?organization=" + Branch + "&subjectType=" + subjectType + "&subjectId=" + subjectId);
 
     private static string Member(Answer answer)
     {
