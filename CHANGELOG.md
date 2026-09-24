@@ -1607,6 +1607,11 @@ against the public contract of LIB-API-001.
 
 ### Fixed
 
+- The application's own database role, `identity_app`, reaches the rows of every table
+  the library uses and reads the migration history its startup check compares. Only
+  the tables of the first two migrations had been granted to it, so a deployment
+  running under that role, as the separation of credentials requires, could neither
+  start nor serve. A deployment applies one further migration, which grants the rest.
 - Every audit record is kept. A record written where the operation had opened no
   transaction, or after its transaction had committed, waited for a save that never
   came and was lost; among them were the deactivation, reactivation and deletion of an

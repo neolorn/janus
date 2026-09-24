@@ -223,6 +223,40 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
     }
 
     /// <summary>
+    /// OPS-MIG-003: the application reaches the rows of every table the library holds,
+    /// the audit trail only to read and append (PRIV-RET-002), the migration history
+    /// and the views only to read, and every sequence it draws from. A table a migration
+    /// adds without granting it fails here rather than under the application's own
+    /// credential.
+    /// </summary>
+    [Fact]
+    public async Task OPS_MIG_003_TheApplicationReachesTheRowsOfEveryTableAsync()
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        IEnumerable<string> withheld = await connection.QueryAsync<string>(
+            """
+            SELECT relname || ' ' || right_held
+            FROM pg_class
+            JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace,
+                 unnest(CASE
+                     WHEN relkind = 'v' OR relname = '__migrations_history' THEN ARRAY['SELECT']
+                     WHEN relname = 'audit_records' THEN ARRAY['SELECT', 'INSERT']
+                     WHEN relkind = 'S' THEN ARRAY['USAGE']
+                     ELSE ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE'] END) AS right_held
+            WHERE nspname = 'identity'
+              AND relkind IN ('r', 'p', 'v', 'S')
+              AND NOT relispartition
+              AND NOT CASE relkind
+                  WHEN 'S' THEN has_sequence_privilege('identity_app', pg_class.oid, right_held)
+                  ELSE has_table_privilege('identity_app', pg_class.oid, right_held) END
+            ORDER BY 1
+            """);
+
+        Assert.Empty(withheld);
+    }
+
+    /// <summary>
     /// OPS-MIG-003 AC1: the application role executes no schema-altering statement.
     /// </summary>
     [Fact]
