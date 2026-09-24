@@ -4,7 +4,9 @@ using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Authorization.Grants;
+using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Organizations;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace Janus.Storage.Tests.Authentication;
@@ -53,8 +55,37 @@ public sealed class MembershipEndingTests(DatabaseFixture database)
         Assert.True(held[again].IsCurrent);
     }
 
+    /// <summary>
+    /// REG-MAIL-003 AC3: ending a membership writes the membership and nothing of the
+    /// account: its state, and who or what placed it there, read the same afterwards.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_MAIL_003_AC3_EndingTheMembershipLeavesTheAccountsStateAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+
+        _ = await AttachAsync(subject, organization, Noon);
+
+        (AccountState, SuspensionOrigin?, bool, DeletionOrigin?) before = await StandingAsync(subject);
+
+        Assert.NotNull(await EndAsync(subject, organization, Noon.AddDays(1)));
+        Assert.Equal(before, await StandingAsync(subject));
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
+
+    private async Task<(AccountState, SuspensionOrigin?, bool, DeletionOrigin?)> StandingAsync(SubjectId subject)
+    {
+        await using StoreContext reading = database.Context();
+
+        AccountRecord account = await reading.Accounts
+            .SingleAsync(account => account.Subject == subject, TestContext.Current.CancellationToken);
+
+        return (account.State, account.SuspendedBy, account.RestrictionHeld, account.DeletingBy);
+    }
 
     private async Task<MembershipId> AttachAsync(SubjectId subject, OrganizationId organization, DateTimeOffset at)
     {

@@ -428,6 +428,60 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     /// <summary>
+    /// REG-MAIL-003 AC1: sign-in finds an account through the holder of what was
+    /// entered, and once the membership ends the retired corporate address has none,
+    /// exactly as an address no account ever held.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_MAIL_003_AC1_TheRetiredAddressHasNoHolderToSignInAsAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        IdentifierId personal = await WriteAsync(subject, _entered);
+        string entered = Fresh("Retired");
+        string never = Canonicalised(Fresh("Never"));
+        var corporate = IdentifierId.New(TimeProvider.System);
+
+        await TakenCorporateAsync(subject, personal, corporate, entered);
+
+        await using (StoreContext holding = database.Context())
+        {
+            Assert.Equal(
+                (subject, corporate),
+                await Directory(holding).HolderAsync(
+                    IdentifierKind.Email,
+                    Canonicalised(entered),
+                    TestContext.Current.CancellationToken));
+        }
+
+        await using (StoreContext writing = database.Context())
+        {
+            _ = await Directory(writing).RetireCorporateAsync(
+                subject,
+                Canonicalised(entered),
+                TestContext.Current.CancellationToken);
+
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        IdentifierDirectory directory = Directory(reading);
+
+        Assert.Null(await directory.HolderAsync(
+            IdentifierKind.Email,
+            Canonicalised(entered),
+            TestContext.Current.CancellationToken));
+        Assert.Null(await directory.OwnerAsync(
+            IdentifierKind.Email,
+            Canonicalised(entered),
+            TestContext.Current.CancellationToken));
+        Assert.Null(await directory.HolderAsync(
+            IdentifierKind.Email,
+            never,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// A value the account changed replaces both stored forms and the fingerprint, so
     /// the old value belongs to nobody and the new one belongs to the account.
     /// </summary>

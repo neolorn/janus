@@ -293,6 +293,51 @@ public sealed class IdentifierSetTests
     }
 
     /// <summary>
+    /// REG-MAIL-003 AC3: no path through the set leaves a member with zero verified
+    /// emails: the kept personal email can be neither removed nor unverified-replaced
+    /// while the membership lasts, retiring the corporate address without it is
+    /// refused and changes nothing, and after retirement a verified primary email
+    /// remains.
+    /// </summary>
+    [Fact]
+    public void REG_MAIL_003_AC3_MembershipEndNeverLeavesZeroVerifiedEmails()
+    {
+        IdentifierSet set = Empty();
+        Identifier personal = Email(1, "ahmed@example.com");
+        Identifier corporate = Email(2, "ahmed@staff.example");
+
+        set.Add(personal, maximum: 10);
+        set.Add(corporate, maximum: 10);
+        set.Verify(personal.Id, Noon);
+        set.Verify(corporate.Id, Noon);
+        set.MakePrimary(corporate.Id);
+
+        IdentifierSet unkept = Empty();
+        Identifier only = Email(3, "hana@staff.example");
+
+        unkept.Add(only, maximum: 10);
+        unkept.Verify(only.Id, Noon);
+
+        Assert.Throws<InvalidOperationException>(() => unkept.RetireCorporate(only.Canonical));
+        Assert.Equal([only], unkept.All);
+        Assert.True(only is { IsVerified: true, IsPrimary: true });
+        Assert.Empty(unkept.Removed);
+
+        set.KeepPersonal(personal.Id);
+
+        Assert.Throws<InvalidOperationException>(() => set.Remove(personal.Id));
+        Assert.Throws<InvalidOperationException>(
+            () => personal.Replace("ahmed@example.org", "ahmed@example.org", Noon));
+
+        _ = set.RetireCorporate(corporate.Canonical);
+
+        Identifier remaining = Assert.Single(set.All);
+
+        Assert.True(remaining is { IsVerified: true, IsPrimary: true, IsPersonal: false });
+        Assert.Same(personal, remaining);
+    }
+
+    /// <summary>
     /// REG-MAIL-001: only a verified email other than the primary is kept as the
     /// personal email of a membership.
     /// </summary>
