@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Janus.Authentication.Tests;
+using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Tests.Authorization;
@@ -47,6 +49,35 @@ public sealed class KeyMaterialTests
         Assert.Equal(
             ErrorCodes.StartupKeyUnavailable,
             Refused(Usable, new byte[16]));
+
+    /// <summary>
+    /// AUTH-KEY-002, OPS-SEC-001: every store that wraps a personal field is handed the
+    /// keys the host passed in, so everything the entry point registers resolves once
+    /// the host has declared what is its own to declare (LIB-HOST-001).
+    /// </summary>
+    [Fact]
+    public void AUTH_KEY_002_EveryStoreIsHandedTheKeysTheHostPassedIn()
+    {
+        IServiceCollection services = new ServiceCollection()
+            .AddSingleton<IEvents>(new EventsInMemory())
+            .AddSingleton<IMailTransport>(new MailTransportInMemory())
+            .AddSingleton<ISmsTransport>(new SmsTransportInMemory())
+            .AddSingleton(new AuthenticationAddresses(
+                "https://accounts.example.test/signin",
+                "https://accounts.example.test"))
+            .AddSingleton(new SignOnClient("this-application"))
+            .AddJanus(
+                Connection,
+                Usable,
+                new byte[32],
+                Encoding.UTF8.GetBytes("the secret this application presents"),
+                HostFixture.Declaration(),
+                ApplicationKind.Public);
+
+        Assert.Null(Record.Exception(() => services
+            .BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true })
+            .Dispose()));
+    }
 
     private static KeyEncryptionKeys Usable =>
         new(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] });

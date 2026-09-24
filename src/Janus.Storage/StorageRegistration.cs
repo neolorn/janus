@@ -214,7 +214,9 @@ internal static class StorageRegistration
         services.AddScoped<Janus.Authentication.BreakGlass.IEmergencyAccount, EmergencyAccount>();
         services.AddScoped<IBreakGlassStore, BreakGlassStore>();
         services.AddScoped<IBreakGlassAudit, BreakGlassAudit>();
-        services.AddScoped<IPreAuthenticationStore, PreAuthenticationStore>();
+        services.AddScoped<IPreAuthenticationStore>(provider => new PreAuthenticationStore(
+            provider.GetRequiredService<StoreContext>(),
+            keyEncryptionKeys));
         services.AddScoped<IChallengeStore, ChallengeStore>();
         services.AddScoped<IVerificationCodeStore, VerificationCodeStore>();
         services.AddScoped<IKeyCeremonyStore, KeyCeremonyStore>();

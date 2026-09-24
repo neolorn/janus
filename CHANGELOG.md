@@ -1607,6 +1607,9 @@ against the public contract of LIB-API-001.
 
 ### Fixed
 
+- A deployment resolves the store a browser's first contact is bound through, which
+  every sign-in reaches. The store was never handed the key-encryption keys the host
+  passes in, so resolving it failed and no browser could begin a sign-in.
 - The application's own database role, `identity_app`, reaches the rows of every table
   the library uses and reads the migration history its startup check compares. Only
   the tables of the first two migrations had been granted to it, so a deployment
