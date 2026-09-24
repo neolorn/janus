@@ -2,6 +2,7 @@ using System;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Sending;
@@ -19,10 +20,11 @@ namespace Janus.Authentication.Configuration;
 /// <param name="scope">Whether the caller may loosen the deployment.</param>
 /// <param name="policies">Where what a change to the system policy raised is recorded.</param>
 /// <param name="relay">Whether mail still reaches an Apple private relay address after a change.</param>
+/// <param name="alerts">Where a change that weakens a step-up gate is told.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements OPS-CFG-002, OPS-CFG-005, OPS-CFG-008, INT-MAIL-011 AC2 and the
+/// Implements OPS-CFG-002, OPS-CFG-005, OPS-CFG-008, INT-MAIL-011 AC2, OPS-ALERT-001 and the
 /// <c>system:administer</c> row of chapter 10 section 2.1. Nothing else calls
 /// <see cref="IConfigurationStore.WriteAsync{TValue}(Setting{TValue}, TValue, CancellationToken)"/>:
 /// a change that went round this would be a change nobody was told of and nobody had
@@ -34,6 +36,7 @@ internal sealed class ConfigurationAdministration(
     AdministrativeScope scope,
     PolicyResolution policies,
     RelayRegistration relay,
+    IAlertChannels alerts,
     IUnitOfWork work,
     TimeProvider time)
 {
@@ -113,6 +116,17 @@ internal sealed class ConfigurationAdministration(
             _ = await policies
                 .RaisedAsync(null, was, becomes, time.GetUtcNow(), cancellationToken)
                 .ConfigureAwait(false);
+
+            // D-083, OPS-ALERT-001: a system policy that asks less at a step-up gate is
+            // told as it is made.
+            if (PolicyStrictness.WeakenedGates(was, becomes) is { Count: > 0 } weakened
+                && (await alerts
+                        .RaiseAsync(StepUpWeakening.Of(setting.Key, scope: null, weakened, time.GetUtcNow()), cancellationToken)
+                        .ConfigureAwait(false))
+                    .Match(() => (Error?)null, error => error) is Error unalerted)
+            {
+                return Result.Failure(unalerted);
+            }
         }
 
         // INT-MAIL-011 AC2 (entry 269): a change to what decides whether mail reaches a

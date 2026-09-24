@@ -64,6 +64,7 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
             new AdministrativeScope(_gate, _administrative),
             new PolicyResolution(new MembershipLookupInMemory(), _configuration, _raises),
             new RelayRegistration(_configuration, _events, _clock),
+            _events,
             _work,
             _clock);
 
@@ -330,6 +331,49 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
         await ChangedAsync(Settings.PolicyDefault, Janus.Core.Policies.SystemDefault, "the campaign ended", Satisfied);
 
         Assert.Empty(await _raises.OfAsync(null, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// OPS-ALERT-001 AC1, D-083: a system policy that asks less at a step-up gate raises
+    /// the High alert as the change is made, naming the policy and the gate.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_ALERT_001_AC1_ASystemPolicyAskingLessAtAGateRaisesTheAlertAsync()
+    {
+        Gate enrolling = Janus.Core.Policies.SystemDefault.Gates[StepUpAction.FactorEnrol];
+
+        await ChangedAsync(
+            Settings.PolicyDefault,
+            Gated(StepUpAction.FactorEnrol, enrolling with { MaximumAge = enrolling.MaximumAge * 4 }),
+            "a support window",
+            Satisfied);
+
+        AlertRaised raised = Assert.Single(_events.Of<AlertRaised>());
+
+        Assert.Equal(AlertCondition.StepUpPolicyWeakened, raised.Condition);
+        Assert.Equal(AlertSeverity.High, raised.Severity);
+        Assert.Equal("policy.default", raised.Details["key"].GetString());
+        Assert.Equal(["factor:enrol"], raised.Details["gates"].EnumerateArray().Select(gate => gate.GetString()));
+    }
+
+    /// <summary>
+    /// OPS-ALERT-001 AC1, D-083: a gate asked more of weakens nothing and raises nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_ALERT_001_AC1_ASystemPolicyAskingMoreAtAGateRaisesNothingAsync()
+    {
+        Gate enrolling = Janus.Core.Policies.SystemDefault.Gates[StepUpAction.FactorEnrol];
+
+        await ChangedAsync(
+            Settings.PolicyDefault,
+            Gated(StepUpAction.FactorEnrol, enrolling with { PhishingResistant = true }),
+            reason: null,
+            Wanting);
+
+        Assert.Empty(_events.Of<AlertRaised>());
+        Assert.Single(_changes.Written);
     }
 
     /// <summary>

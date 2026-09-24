@@ -369,6 +369,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A change to the system policy or to an organization's policy that leaves any step-up
+  gate asking less (a lower level, phishing resistance no longer asked, or a longer
+  maximum age) raises the High `stepup-policy-weakened` alert as it is made, naming the
+  policy key and the gates. An organization's alert is raised under that organization.
 - `rotate-fingerprint-key` rotates the fingerprint key from the command line under the
   maintenance credential, as `rotate-kek` rotates the other: add the new version as
   current, keep the previous one, restart the application on it, and pipe the document

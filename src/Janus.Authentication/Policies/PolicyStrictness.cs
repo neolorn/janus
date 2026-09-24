@@ -125,10 +125,26 @@ internal static class PolicyStrictness
 
         return stricter.RequiredAssurance != after.RequiredAssurance
             || !stricter.LoginFactors.SetEquals(after.LoginFactors)
-            || Enum.GetValues<StepUpAction>().Any(action => stricter.Gates[action] != after.Gates[action])
+            || Weakened(stricter, after).Length > 0
             || stricter.CredentialRedundancy != after.CredentialRedundancy
             || stricter.SelfServiceRecovery != after.SelfServiceRecovery
             || !Admitting(stricter.EmailDomains).SetEquals(after.EmailDomains);
+    }
+
+    /// <summary>
+    /// The step-up actions whose gate one policy asks less of than another: a lower
+    /// level, phishing resistance no longer asked, or a longer maximum age.
+    /// </summary>
+    /// <param name="before">What was in force.</param>
+    /// <param name="after">What would be.</param>
+    /// <returns>The actions in their declared order, none where no gate asks less.</returns>
+    /// <exception cref="ArgumentNullException">A policy is absent.</exception>
+    public static IReadOnlyList<StepUpAction> WeakenedGates(Policy before, Policy after)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+        ArgumentNullException.ThrowIfNull(after);
+
+        return Weakened(Strictest(before, after), after);
     }
 
     /// <summary>
@@ -196,6 +212,10 @@ internal static class PolicyStrictness
         GateLevel.Reachable => 1,
         _ => 2,
     };
+
+    // A gate of the policy in force that the stricter of the two asks more of.
+    private static StepUpAction[] Weakened(Policy stricter, Policy after) =>
+        [.. Enum.GetValues<StepUpAction>().Where(action => stricter.Gates[action] != after.Gates[action])];
 
     // Chapter 10 section 4.1a: an organization stores only what it overrides, so its
     // gates name the actions it tightens and no others.

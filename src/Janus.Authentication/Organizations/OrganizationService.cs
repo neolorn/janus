@@ -2,6 +2,7 @@ using System;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.Configuration;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Policies;
@@ -23,10 +24,11 @@ namespace Janus.Authentication.Organizations;
 /// <param name="configuration">Where the grace window and the policies are read.</param>
 /// <param name="administration">Where an organization's policy key is written and recorded.</param>
 /// <param name="policies">Where what a change of policy raised is recorded.</param>
+/// <param name="alerts">Where a change of policy that weakens a step-up gate is told.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements LIB-API-005, IDN-ORG-002, IDN-ORG-003 and IDN-ORG-004. An organization is
+/// Implements LIB-API-005, IDN-ORG-002, IDN-ORG-003, IDN-ORG-004 and OPS-ALERT-001. An organization is
 /// the deployment's, and its own grants confer nothing while it is suspended, so
 /// <c>organization:manage</c> is asked in the administrative organization: that is the
 /// one place a suspended organization can still be restored from.
@@ -40,6 +42,7 @@ internal sealed class OrganizationService(
     IConfigurationStore configuration,
     ConfigurationAdministration administration,
     PolicyResolution policies,
+    IAlertChannels alerts,
     IUnitOfWork work,
     TimeProvider time) : IOrganizations
 {
@@ -415,6 +418,23 @@ internal sealed class OrganizationService(
         _ = await policies
             .RaisedAsync(organization, was, becomes, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
+
+        // D-083, OPS-ALERT-001: a policy that asks less at a step-up gate is told as it
+        // is made, under the organization whose it is.
+        if (PolicyStrictness.WeakenedGates(was, becomes) is { Count: > 0 } weakened
+            && (await alerts
+                    .RaiseAsync(
+                        StepUpWeakening.Of(
+                            Settings.OrganizationPolicy.For(organization.ToString()),
+                            organization,
+                            weakened,
+                            time.GetUtcNow()),
+                        cancellationToken)
+                    .ConfigureAwait(false))
+                .Match(() => (Error?)null, error => error) is Error unalerted)
+        {
+            return Result.Failure(unalerted);
+        }
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
