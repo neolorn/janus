@@ -843,6 +843,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<WorkingCalendar>();
         _ = services.AddScoped<RestrictionGrant>();
         _ = services.AddScoped<DeadlineSweep>();
+        _ = services.AddScoped<HolidayListWatch>();
         _ = services.AddScoped<IPrivacyRequests, PrivacyRequestService>();
         _ = services.AddSingleton<IExportSource>(ExportSource);
         _ = services.AddSingleton<IExportLedger>(ExportLedger);

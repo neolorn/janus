@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -94,6 +95,26 @@ internal sealed class WorkingCalendar(IConfigurationStore configuration)
             week => Result.Success(
                 DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(instant, week.Zone).DateTime)),
             Result.Failure<DateOnly>);
+
+    /// <summary>
+    /// Whether any listed holiday falls after the calendar date an instant falls on in
+    /// the deployment's zone.
+    /// </summary>
+    /// <param name="instant">The instant.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Whether one does, or the refusal the settings gave.</returns>
+    public async ValueTask<Result<bool>> ListedBeyondAsync(
+        DateTimeOffset instant,
+        CancellationToken cancellationToken) =>
+        (await WeekAsync(cancellationToken).ConfigureAwait(false))
+        .Match(
+            week =>
+            {
+                var day = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(instant, week.Zone).DateTime);
+
+                return Result.Success(week.Holidays.Any(holiday => holiday > day));
+            },
+            Result.Failure<bool>);
 
     // PRIV-RIGHT-002: the days counted are the ones that follow the submission's own
     // calendar day, so a request received on a working day does not spend it.

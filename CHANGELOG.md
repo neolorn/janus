@@ -369,6 +369,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The daily `holiday-list` job raises `holiday-list-exhausted` when no date in
+  `privacy.holidays` falls beyond `maintenance.expiry.warninglead`, an empty list
+  included. Deadlines are counted as before; the alert only asks for the next dates.
 - Licence and permit expiry dates are kept and read at `/admin/compliance/licences`,
   and the daily `licence-expiry` job raises `expiry-approaching` for each one within
   `maintenance.expiry.warninglead`, a lapsed one included. The maintenance log is read

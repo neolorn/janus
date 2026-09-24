@@ -39,7 +39,8 @@ namespace Janus.Hosting.Background;
 internal static class BackgroundJobs
 {
     // INT-MAIL-007: the reconciliation runs daily, which the chapter fixes and no
-    // setting names.
+    // setting names. The watches over a list of dates (OPS-MAINT-001, PRIV-RIGHT-002)
+    // run at the same pace, since the lead they measure is counted in days.
     private static readonly TimeSpan Daily = TimeSpan.FromDays(1);
 
     // AUTH-OIDC-003: no refresh token outlives its session and no session outlives
@@ -195,6 +196,15 @@ internal static class BackgroundJobs
             async (services, _, cancellationToken) => Done(
                 await services.GetRequiredService<MailboxReconciliation>()
                     .ReconcileAsync(cancellationToken)
+                    .ConfigureAwait(false))),
+        BackgroundJob.Every(
+            "holiday-list",
+            "PRIV-RIGHT-002",
+            SystemOperation.Monitoring,
+            Daily,
+            async (services, _, cancellationToken) => Done(
+                await services.GetRequiredService<HolidayListWatch>()
+                    .WatchAsync(cancellationToken)
                     .ConfigureAwait(false))),
         BackgroundJob.Every(
             "licence-expiry",

@@ -358,6 +358,7 @@ public static class HostingRegistration
         services.AddScoped<WorkingCalendar>();
         services.AddScoped<RestrictionGrant>();
         services.AddScoped<DeadlineSweep>();
+        services.AddScoped<HolidayListWatch>();
         services.AddScoped<IPrivacyRequests, PrivacyRequestService>();
         services.AddScoped<ITakedowns, TakedownService>();
         services.AddScoped<IErasures, ErasureService>();

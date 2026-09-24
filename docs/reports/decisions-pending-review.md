@@ -12736,6 +12736,46 @@ feature sits in `Janus.Authentication` beside the alerting it raises on.
 the `PUT`; OPS-MAINT-001 could say that the log is append-only at the database role and
 that a lapsed licence stays warned of.
 
+---
+
+## 324. When the holiday list has run out, and what looks
+
+**Phase 9 · 2026-09-24 · Tier 2 · PRIV-RIGHT-002, D-142, OPS-ALERT-001, `10` row `privacy.holidays`**
+
+*The question.* D-142 item 4 and the `10` row for `privacy.holidays` raise a Normal
+alert "when no listed date lies beyond `maintenance.expiry.warninglead`", and
+PRIV-RIGHT-002 calls it "a list running out". Neither says whether an empty list,
+which is the default, has run out, in which zone "beyond" is judged, or what looks.
+
+*The readings.*
+
+1. Only a list that holds dates can run out; an empty list raises nothing.
+2. The words as written: an empty list lists no date beyond the lead and is raised.
+
+*Chosen: 2.* It is what the sentence says, and it is the reading that warns: a
+deployment that never lists a holiday counts every one as a working day, which is
+compliant but is what the alert exists to bring to a person's attention. OPS-ALERT-002
+keeps it to one alert inside `alerting.dedupe.window`, so it recurs at that pace until
+a date is listed.
+
+A date lies beyond the lead when it falls after the calendar day that now plus the
+lead falls on in `privacy.calendar.timezone`, the zone every holiday is determined in
+(D-153); a date on that day itself is not beyond it. The condition names no one and
+carries the horizon instant. The look is the job `holiday-list`, run daily as a
+monitoring operation beside `licence-expiry`, since the lead it measures is counted in
+days.
+
+*Tests that pin it.*
+`HolidayListWatchTests.OPS_ALERT_001_AC1_AHolidayListRunningOutIsRaisedAsync`,
+`HolidayListWatchTests.PRIV_RIGHT_002_AnEmptyHolidayListIsRaisedAsync`,
+`HolidayListWatchTests.PRIV_RIGHT_002_AListReachingPastTheLeadRaisesNothingAsync`,
+`HolidayListWatchTests.PRIV_RIGHT_002_TheLeadIsTheConfiguredOneAsync`.
+
+*Chapter text that should change.* The `10` row for `privacy.holidays` could say that
+an empty list is raised and that "beyond" is judged by calendar day in
+`privacy.calendar.timezone`; INF-BG-001 could name the holiday-list look among the
+jobs.
+
 
 # Rows for chapter 10
 
