@@ -74,6 +74,13 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
         _randomness.Dispose();
     }
 
+    // The system default with one step-up action's gate replaced.
+    private static Policy Gated(StepUpAction action, Gate gate) =>
+        Janus.Core.Policies.SystemDefault with
+        {
+            Gates = new Dictionary<StepUpAction, Gate>(Janus.Core.Policies.SystemDefault.Gates) { [action] = gate },
+        };
+
     /// <summary>
     /// OPS-CFG-002 AC1: shortening a session timeout tightens the deployment, so it
     /// passes with no gate met and no reason written.
@@ -323,6 +330,32 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
         await ChangedAsync(Settings.PolicyDefault, Janus.Core.Policies.SystemDefault, "the campaign ended", Satisfied);
 
         Assert.Empty(await _raises.OfAsync(null, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// OPS-CFG-002 AC1: the system policy is classified field by field as chapter 10
+    /// section 4.1a writes it, so a gate asked more of is free and one asked less of
+    /// costs the gate.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_CFG_002_AC1_TheSystemPolicyIsClassifiedFieldByFieldAsync()
+    {
+        Gate enrolling = Janus.Core.Policies.SystemDefault.Gates[StepUpAction.FactorEnrol];
+
+        await ChangedAsync(
+            Settings.PolicyDefault,
+            Gated(StepUpAction.FactorEnrol, enrolling with { MaximumAge = enrolling.MaximumAge / 2 }),
+            reason: null,
+            Wanting);
+
+        Assert.Equal(
+            ErrorCodes.StepUpRequired,
+            (await RefusedAsync(
+                Settings.PolicyDefault,
+                Janus.Core.Policies.SystemDefault,
+                "a support window",
+                Wanting)).Code);
     }
 
     /// <summary>

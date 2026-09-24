@@ -1658,6 +1658,9 @@ against the public contract of LIB-API-001.
 
 ### Fixed
 
+- A change to the system policy is judged field by field, as an organization's policy
+  is: a change that only asks more is a tightening and is made without step-up or a
+  reason. Any change to the system policy used to be treated as a loosening.
 - A deployment resolves the store a browser's first contact is bound through, which
   every sign-in reaches. The store was never handed the key-encryption keys the host
   passes in, so resolving it failed and no browser could begin a sign-in.

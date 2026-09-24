@@ -87,7 +87,7 @@ internal sealed class ConfigurationAdministration(
             return Result.Failure(failure);
         }
 
-        bool loosening = setting.Loosens(before, value);
+        bool loosening = Loosens(setting, before, value);
 
         if (await RefusalAsync(setting, loosening, reason, challenge, context, cancellationToken)
                 .ConfigureAwait(false) is Error refused)
@@ -245,11 +245,18 @@ internal sealed class ConfigurationAdministration(
             return Result.Failure(failure);
         }
 
-        return await RefusalAsync(setting, setting.Loosens(before, value), reason, challenge, context, cancellationToken)
+        return await RefusalAsync(setting, Loosens(setting, before, value), reason, challenge, context, cancellationToken)
                 .ConfigureAwait(false) is Error refused
             ? Result.Failure(refused)
             : Result.Success();
     }
+
+    // Chapter 10 section 4.1a classifies each field of the system policy on its own, as
+    // it does an organization's, so a policy that only asks more is a tightening.
+    private static bool Loosens<TValue>(Setting<TValue> setting, TValue before, TValue after) =>
+        before is Policy was && after is Policy becomes
+            ? PolicyStrictness.Loosens(was, becomes)
+            : setting.Loosens(before, after);
 
     // A tightening is free; a loosening, and any change to a key with no direction,
     // costs the permission to loosen, the gate and a written reason (OPS-CFG-002 AC1
