@@ -12473,7 +12473,9 @@ takes a reason and no step-up, and say what turning off each switch does, if
 anything; chapter 10 section 4.8 could say the mechanism is the command rather than
 an infrastructure choice; OPS-CFG-005 could say how a change from the server is
 recorded; IDN-PRIN-001 could list `configure` among the system principals;
-OPS-ALERT-001 could say whether the governing language raises one alert or both.
+OPS-ALERT-001 could say whether the governing language raises one alert or both;
+CONV-LAYOUT-001 could list `configure` among what `Janus.Cli` carries, beside bootstrap
+and key rotation.
 
 
 # Rows for chapter 10
