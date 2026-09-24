@@ -369,6 +369,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `no-emergency-credential` is raised by the hourly `emergency-credential` job for as
+  long as no break-glass credential stands, including after one is spent, and stops
+  only when one is generated.
 - A deployment can register `IClockReference`, which reports how far the host's clock
   stands from the time the environment keeps it to, and `ICertificateRenewal`, which
   reports when the last certificate renewal failed. The hourly `clock-drift` job raises

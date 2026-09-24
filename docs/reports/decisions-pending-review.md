@@ -13206,6 +13206,47 @@ the two seams, and LIB-EXT-001's table could list them with "None: the deploymen
 supplies them; an absent one is raised as a degradation". OPS-OBS-002's list of
 degradations could name the four scopes.
 
+---
+
+## 331. How the missing emergency credential stays raised, and where it is shown
+
+**Phase 9 · 2026-09-24 · Tier 2 · OPS-BOOT-001 AC3, OPS-ALERT-001, OPS-ALERT-002, 09**
+
+*The question.* OPS-BOOT-001 AC3: until a break-glass credential is generated, "a
+non-dismissable High alert ... is shown to every system administrator and raised on
+OPS-ALERT-001". Bootstrap raised `no-emergency-credential` once (entry 313), so the
+alert went out in one window and never again, and nothing raised it after a credential
+was spent. `09` names no route a management application could read the credential's
+state from, so nothing could show it to an administrator.
+
+*The readings.*
+
+1. Raise it once at bootstrap, as before.
+2. Raise it at every pass of a job while no issue stands (none generated, or the last
+   spent), so OPS-ALERT-002 carries it once a window until one is generated; and for
+   the showing, (a) add a route such as `GET /admin/break-glass` answering whether an
+   issue stands, or (b) add no route.
+
+*Chosen: 2(b).* Reading 1 is dismissed by the first window's end, which "non-dismissable"
+forbids. The hourly `emergency-credential` job raises it while `StandingAsync` finds no
+issue, which covers a spent credential too: after an emergency no credential exists.
+For the showing, `09` is authoritative for routes and names none, and a new route
+widens the public surface, so none is added; the alert reaches the alert destinations,
+which the operator holds. What a management application shows every system
+administrator needs a route `09` does not yet have.
+
+*Tests that pin it.*
+`EmergencyCredentialWatchTests.OPS_BOOT_001_AC3_TheAbsenceIsRaisedUntilACredentialIsGeneratedAsync`,
+`EmergencyCredentialWatchTests.OPS_BOOT_001_AC3_ASpentCredentialLeavesTheAbsenceRaisedAsync`,
+`BootstrapTests.OPS_BOOT_001_AC3_NoEmergencyCredentialIsIssuedAndItsAbsenceIsRaisedAsync`,
+`BackgroundJobsTests.INF_BG_001_AC1_EveryJobRunsWithoutAPersonAsync`.
+
+*Chapter text that should change.* `09` could add a route answering whether a
+break-glass credential stands (for example `GET /admin/break-glass`, system
+administrators only, `{ "standing": true|false, "issuedAt": ... }`), so the management
+application can show the alert of OPS-BOOT-001 AC3; OPS-BOOT-001 AC3 could say the
+alert is raised again every window until one is generated, a spent one included.
+
 
 # Rows for chapter 10
 

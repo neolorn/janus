@@ -253,8 +253,10 @@ public static class HostingRegistration
         services.AddScoped<EventConsumers>();
         services.AddScoped<EventPublisher>();
 
-        // OPS-BOOT-002, OPS-BOOT-004: the sealed emergency credential.
+        // OPS-BOOT-002, OPS-BOOT-004: the sealed emergency credential, and OPS-BOOT-001
+        // AC3: its absence raised until one is generated.
         services.AddScoped<BreakGlassService>();
+        services.AddScoped<EmergencyCredentialWatch>();
 
         // OPS-MAINT-001: the licences and permits warned of, and the maintenance log.
         services.AddScoped<MaintenanceRecords>();
