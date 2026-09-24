@@ -18,15 +18,18 @@ namespace Janus.Privacy.Erasures;
 /// <param name="outbox">Where each erasure's delivery and its confirmations are.</param>
 /// <param name="erasures">Where the erasure's own row is carried in step with its delivery.</param>
 /// <param name="subscribers">Who the host registered to do its half.</param>
+/// <param name="ledger">Where an erasure is written down off the host, if the deployment registered one.</param>
 /// <param name="audit">Where a manual completion is written down.</param>
 /// <param name="work">The one transaction a completion runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements LIB-API-005, IDN-LIFE-003a and IDN-LIFE-003b. An erasure is read from the
-/// delivery its host-side work travels on, which carries its subject, reason, status,
-/// attempts and confirmations, and which the erasures row follows step for step. The
-/// manual path is for permanent failure and is itself recorded, so an erasure never
-/// closes without a trace of who closed it or what was outstanding.
+/// Implements LIB-API-005, IDN-LIFE-003a, IDN-LIFE-003b and DR-016. An erasure is read
+/// from the delivery its host-side work travels on, which carries its subject, reason,
+/// status, attempts and confirmations, and which the erasures row follows step for
+/// step. The manual path is for permanent failure and is itself recorded, so an erasure
+/// never closes without a trace of who closed it or what was outstanding. The operator
+/// vouches for the host's subscribers and never for the ledger line: the path appends
+/// it where it is outstanding, and closes nothing until it is durable (DR-016 AC2).
 /// </remarks>
 internal sealed class ErasureService(
     AdministrativeScope scope,
@@ -34,11 +37,15 @@ internal sealed class ErasureService(
     IOutboxStore outbox,
     IErasureStore erasures,
     IEnumerable<ISubjectEventSubscriber> subscribers,
+    IErasureLedger? ledger,
     IPrivacyAudit audit,
     IUnitOfWork work,
     TimeProvider time) : IErasures
 {
     private static readonly AuditAction Completed = AuditActions.ErasureCompleted;
+
+    private readonly IReadOnlyList<ISubjectEventSubscriber> _waitedFor =
+        ErasureLedgerSubscriber.Joined(subscribers, ledger);
 
     /// <inheritdoc/>
     public async ValueTask<Result<IReadOnlyList<ErasureProgress>>> ListAsync(
@@ -110,6 +117,11 @@ internal sealed class ErasureService(
             return Result.Failure(Error.From(ErrorCodes.ErasureNotFailed));
         }
 
+        if (await LedgeredAsync(delivery, cancellationToken).ConfigureAwait(false) is Error unwritten)
+        {
+            return Result.Failure(unwritten);
+        }
+
         string[] outstanding = Outstanding(delivery);
 
         delivery.CompleteManually();
@@ -149,7 +161,7 @@ internal sealed class ErasureService(
             delivery.Status,
             delivery.Attempts,
             [
-                .. subscribers.Select(subscriber => new SubscriberConfirmation(
+                .. _waitedFor.Select(subscriber => new SubscriberConfirmation(
                     subscriber.Name,
                     subscriber.Required,
                     progress.ConfirmedAt.TryGetValue(subscriber.Name, out DateTimeOffset at)
@@ -166,6 +178,34 @@ internal sealed class ErasureService(
             .Where(subscriber => subscriber.Required && !delivery.Confirmed.Contains(subscriber.Name))
             .Select(subscriber => subscriber.Name),
     ];
+
+    // DR-016 AC2: the line is appended here where the delivery's attempts never made it
+    // durable, and nothing is closed while it is not. A line appended here and then not
+    // recorded is appended again by the next attempt, which a replay reads as one.
+    private async ValueTask<Error?> LedgeredAsync(Delivery delivery, CancellationToken cancellationToken)
+    {
+        if (ledger is null || delivery.Confirmed.Contains(ErasureLedgerSubscriber.Called))
+        {
+            return null;
+        }
+
+        // The ledger is the environment's, so what it answered is a fault here and not
+        // a refusal whose code the caller would read.
+        if (!(await new ErasureLedgerSubscriber(ledger)
+                .HandleAsync(delivery.Raised(), cancellationToken)
+                .ConfigureAwait(false))
+            .Match(() => true, _ => false))
+        {
+            return Error.From(
+                ErrorCodes.SystemFault,
+                "handler",
+                JsonSerializer.SerializeToElement(ErasureLedgerSubscriber.Called));
+        }
+
+        delivery.Confirm(ErasureLedgerSubscriber.Called);
+
+        return null;
+    }
 
     // The erasure's own row followed the delivery into failure, so it follows it out
     // rather than describing work that is done.

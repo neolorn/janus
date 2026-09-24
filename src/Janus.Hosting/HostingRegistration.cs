@@ -394,13 +394,36 @@ public static class HostingRegistration
         services.AddScoped<HolidayListWatch>();
         services.AddScoped<IPrivacyRequests, PrivacyRequestService>();
         services.AddScoped<ITakedowns, TakedownService>();
-        services.AddScoped<IErasures, ErasureService>();
+
+        // DR-016: the off-host ledger is the deployment's to register; one it does not
+        // register leaves its erasures completing without a line, the residual R-A13
+        // accepts until the tier upgrade.
+        services.AddScoped<IErasures>(provider => new ErasureService(
+            provider.GetRequiredService<Janus.Privacy.Policies.AdministrativeScope>(),
+            provider.GetRequiredService<IStepUpGate>(),
+            provider.GetRequiredService<IOutboxStore>(),
+            provider.GetRequiredService<IErasureStore>(),
+            provider.GetServices<ISubjectEventSubscriber>(),
+            provider.GetService<IErasureLedger>(),
+            provider.GetRequiredService<IPrivacyAudit>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>()));
+
         services.AddScoped<DeletionSweep>();
         services.AddScoped<OrganizationErasureSweep>();
         services.AddScoped<IExports, ExportService>();
         services.AddScoped<IProcessingRecords, ProcessingRecordsService>();
         services.AddScoped<IAuditTrail, AuditTrailService>();
-        services.AddScoped<OutboxPublisher>();
+        services.AddScoped(provider => new OutboxPublisher(
+            provider.GetRequiredService<IOutboxStore>(),
+            provider.GetRequiredService<IErasureStore>(),
+            provider.GetServices<ISubjectEventSubscriber>(),
+            provider.GetService<IErasureLedger>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IPrivacyAlerts>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<RandomNumberGenerator>()));
 
         // AUTHZ-MODEL-001: what may be processed for what is part of the one
         // declaration the host makes, so the privacy side reads it from there rather

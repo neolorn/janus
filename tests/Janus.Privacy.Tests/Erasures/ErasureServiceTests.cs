@@ -51,6 +51,7 @@ public sealed class ErasureServiceTests : IAsyncDisposable
     private readonly PrivacyAuditInMemory _audit = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
+    private ErasureLedgerInMemory? _ledger;
 
     /// <summary>
     /// A deployment with one member of staff who holds <c>privacyrequest:manage</c>.
@@ -68,6 +69,7 @@ public sealed class ErasureServiceTests : IAsyncDisposable
             _outbox,
             _erasures,
             [_records, _newsletter],
+            _ledger,
             _audit,
             _work,
             _clock);
@@ -262,6 +264,99 @@ public sealed class ErasureServiceTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.Denied, Refused(await CompletedAsync(Sara, erasure)).Code);
         Assert.Equal(ErasureStatus.Failed, delivery.Status);
         Assert.Empty(_stepUp.Asked);
+    }
+
+    /// <summary>
+    /// DR-016 AC2: the ledger line is read with the rest of an erasure's progress, as
+    /// the first required confirmation, where the deployment registered a ledger.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task DR_016_AC2_AnErasureIsReadWithItsLedgerLineAsync()
+    {
+        _ledger = new ErasureLedgerInMemory();
+
+        Delivery delivery = await ErasedAsync(Ahmed, Noon.AddHours(-1), ErasureStatus.Failed);
+
+        _outbox.Confirms(delivery, "erasure-ledger", Noon.AddMinutes(-50));
+
+        ErasureProgress progress = Held(await ReadAsync(Mona, new ErasureId(delivery.Id.Value)));
+
+        Assert.Equal(
+            [
+                new SubscriberConfirmation("erasure-ledger", Required: true, Noon.AddMinutes(-50)),
+                new SubscriberConfirmation("records", Required: true, ConfirmedAt: null),
+                new SubscriberConfirmation("newsletter", Required: false, ConfirmedAt: null),
+            ],
+            progress.Subscribers);
+    }
+
+    /// <summary>
+    /// DR-016 AC2: the operator vouches for the host's subscribers and never for the
+    /// ledger, so the manual path writes the line the attempts could not, then closes
+    /// the erasure; what it records as outstanding is the host's.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task DR_016_AC2_AManualCompletionWritesTheLineBeforeItClosesTheErasureAsync()
+    {
+        _ledger = new ErasureLedgerInMemory();
+
+        Delivery delivery = await ErasedAsync(Ahmed, Noon.AddHours(-1), ErasureStatus.Failed);
+
+        Held(await CompletedAsync(Mona, new ErasureId(delivery.Id.Value)));
+
+        Assert.Equal(
+            ["2026-09-24T11:00:00Z 11111111-1111-4111-8111-111111111111 minor-takedown"],
+            _ledger.Lines);
+        Assert.Contains("erasure-ledger", delivery.Confirmed);
+        Assert.Equal(ErasureStatus.Complete, delivery.Status);
+        Assert.Equal(
+            ["records"],
+            Assert.Single(_audit.Entries).Details["outstanding"].EnumerateArray().Select(name => name.GetString()));
+    }
+
+    /// <summary>
+    /// DR-016 AC2: a line the worker already made durable is not written again by the
+    /// manual path.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task DR_016_AC2_ALineAlreadyWrittenIsNotWrittenAgainAsync()
+    {
+        _ledger = new ErasureLedgerInMemory();
+
+        Delivery delivery = await ErasedAsync(Ahmed, Noon.AddHours(-1), ErasureStatus.Failed);
+
+        delivery.Confirm("erasure-ledger");
+
+        Held(await CompletedAsync(Mona, new ErasureId(delivery.Id.Value)));
+
+        Assert.Empty(_ledger.Lines);
+        Assert.Equal(ErasureStatus.Complete, delivery.Status);
+    }
+
+    /// <summary>
+    /// DR-016 AC2: while the ledger cannot take the line the manual path closes
+    /// nothing and records nothing, and answers a fault, which is the environment's.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task DR_016_AC2_AManualCompletionClosesNothingWhileTheLineCannotBeWrittenAsync()
+    {
+        _ledger = new ErasureLedgerInMemory { Durable = false };
+
+        Delivery delivery = await ErasedAsync(Ahmed, Noon.AddHours(-1), ErasureStatus.Failed);
+
+        Error refused = Refused(await CompletedAsync(Mona, new ErasureId(delivery.Id.Value)));
+
+        Assert.Equal(ErrorCodes.SystemFault, refused.Code);
+        Assert.Equal("erasure-ledger", refused.Details["handler"].GetString());
+        Assert.Equal(ErasureStatus.Failed, delivery.Status);
+        Assert.Equal(ErasureStatus.Failed, Assert.Single(_erasures.Erasures).Status);
+        Assert.DoesNotContain("erasure-ledger", delivery.Confirmed);
+        Assert.Empty(_audit.Entries);
+        Assert.Equal(0, _work.Opened);
     }
 
     private static TValue Held<TValue>(Result<TValue> outcome) =>

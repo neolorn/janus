@@ -67,6 +67,14 @@ public static class ErrorCodes
     public static ErrorCode StartupDeclarationMissing { get; } = ErrorCode.Parse("model.startup.declarationmissing");
 
     /// <summary>
+    /// Startup: two subject-event subscribers are registered under one name, or one is
+    /// registered under the name the erasure ledger's confirmation is recorded under.
+    /// The details name it under <c>handler</c>; give each subscriber a name of its own.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-003a and DR-016.</remarks>
+    public static ErrorCode StartupSubscriberName { get; } = ErrorCode.Parse("model.startup.subscribername");
+
+    /// <summary>
     /// Startup: a host preference declaration is malformed. The details name the key
     /// under <c>preference</c>; correct the declaration.
     /// </summary>

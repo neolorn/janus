@@ -380,6 +380,12 @@ internal sealed class Deployment : IAsyncDisposable
     public Janus.Privacy.Tests.Erasures.ErasureStoreInMemory Erasures { get; } = new();
 
     /// <summary>
+    /// The off-host erasure ledger, so a test can read the lines written and make the
+    /// storage unreachable.
+    /// </summary>
+    public Janus.Privacy.Tests.Erasures.ErasureLedgerInMemory Ledger { get; } = new();
+
+    /// <summary>
     /// What the other areas hold of an export, so a test can arrange it.
     /// </summary>
     public ExportSourceInMemory ExportSource { get; } = new();
@@ -851,6 +857,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IExports, ExportService>();
         _ = services.AddScoped<ITakedowns, Janus.Privacy.Takedowns.TakedownService>();
         _ = services.AddSingleton<Janus.Privacy.Erasures.IErasureStore>(Erasures);
+        _ = services.AddSingleton<IErasureLedger>(Ledger);
         _ = services.AddScoped<IErasures, Janus.Privacy.Erasures.ErasureService>();
         _ = services.AddSingleton(Janus.Privacy.Tests.Declaration.Reaching);
         _ = services.AddSingleton<Janus.Privacy.Records.IComplianceStore>(Compliance);

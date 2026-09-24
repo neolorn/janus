@@ -3723,6 +3723,7 @@ static Janus.Core.ErrorCodes.SessionExpired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.SmsBalanceFloor.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupContainmentCycle.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupDeclarationMissing.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.StartupSubscriberName.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupGoverningLanguage.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupKeyUnavailable.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupLabelLimit.get -> Janus.Core.ErrorCode
@@ -4101,3 +4102,5 @@ Janus.Core.ICertificateRenewal
 Janus.Core.ICertificateRenewal.LastFailureAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.DateTimeOffset?>>
 Janus.Core.IClockReference
 Janus.Core.IClockReference.OffsetAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.TimeSpan>>
+Janus.Core.IErasureLedger
+Janus.Core.IErasureLedger.AppendAsync(string! line, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>

@@ -129,6 +129,7 @@ public sealed class ErrorCodesTests
         "model.startup.redirectclient",
         "model.startup.rpid",
         "model.startup.schemamismatch",
+        "model.startup.subscribername",
         "model.type.noorganizationpath",
         "model.type.undeclaredreference",
         "privacy.consent.required",

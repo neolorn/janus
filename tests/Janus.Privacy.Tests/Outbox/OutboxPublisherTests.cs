@@ -35,6 +35,7 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
     private readonly FixedClock _clock = new(Noon);
     private readonly FixedRandomness _whole = new(0xFF, 0xFF);
     private readonly FixedRandomness _none = new(0x00);
+    private ErasureLedgerInMemory? _ledger;
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
@@ -274,6 +275,116 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
         Assert.Equal(ErasureStatus.Complete, delivery.Status);
     }
 
+    /// <summary>
+    /// DR-016 AC2: while the ledger cannot take the line the erasure stays outstanding,
+    /// with every host subscriber confirmed and its row still awaiting; the pass that
+    /// makes the line durable is the one that completes it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task DR_016_AC2_AnErasureIsNotCompleteUntilItsLineIsDurableAsync()
+    {
+        _subscribers.Add(new SubscriberInMemory("host", required: true));
+        _ledger = new ErasureLedgerInMemory { Durable = false };
+
+        Delivery delivery = await RaisedAsync(SubjectEventKind.ErasureRequested);
+        var erasure = Erasure.Begun(Ahmed, Noon, ErasureReason.ErasureRequest);
+
+        _erasures.Add(erasure);
+
+        Assert.Equal(0, await Publisher(_none).PublishAsync(CancellationToken.None));
+        Assert.Equal(ErasureStatus.AwaitingSubscribers, delivery.Status);
+        Assert.Equal(ErasureStatus.AwaitingSubscribers, erasure.Status);
+        Assert.Equal(["host"], delivery.Confirmed);
+        Assert.Empty(_ledger.Lines);
+
+        _ledger.Durable = true;
+
+        Assert.Equal(1, await Publisher(_none).PublishAsync(CancellationToken.None));
+        Assert.Equal(ErasureStatus.Complete, delivery.Status);
+        Assert.Equal(ErasureStatus.Complete, erasure.Status);
+        Assert.Single(_ledger.Lines);
+    }
+
+    /// <summary>
+    /// DR-016, DR-016 AC4: the line is the instant to the second, the subject
+    /// identifier and the reason in the spelling of chapter 10 section 5.12a, one space
+    /// apart, and nothing else; it is written once however many passes the host's
+    /// subscribers take.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task DR_016_AC4_TheLineHoldsTheInstantTheSubjectAndTheReasonAndNothingElseAsync()
+    {
+        var host = new SubscriberInMemory("host", required: true) { Confirms = false };
+
+        _subscribers.Add(host);
+        _ledger = new ErasureLedgerInMemory();
+
+        await _outbox.AddAsync(
+            Delivery.Of(
+                Ahmed,
+                SubjectEventKind.ErasureRequested,
+                Noon.AddMilliseconds(-250),
+                reason: ErasureReason.MinorTakedown),
+            CancellationToken.None);
+
+        await Publisher(_none).PublishAsync(CancellationToken.None);
+
+        host.Confirms = true;
+
+        await Publisher(_none).PublishAsync(CancellationToken.None);
+
+        Assert.Equal(
+            ["2026-09-20T11:59:59Z 11111111-1111-4111-8111-111111111111 minor-takedown"],
+            _ledger.Lines);
+    }
+
+    /// <summary>
+    /// DR-016 AC2, IDN-LIFE-003a AC4: a ledger that never takes the line spends the
+    /// erasure's budget like any required subscriber, and the alert names it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task DR_016_AC2_ALedgerThatNeverTakesTheLineIsRaisedWhenTheBudgetIsSpentAsync()
+    {
+        _subscribers.Add(new SubscriberInMemory("host", required: true));
+        _ledger = new ErasureLedgerInMemory { Durable = false };
+        _configuration.Set(Settings.OutboxRetryMaxAttempts, 2);
+
+        Delivery delivery = await RaisedAsync(SubjectEventKind.ErasureRequested);
+
+        await Publisher(_none).PublishAsync(CancellationToken.None);
+        await Publisher(_none).PublishAsync(CancellationToken.None);
+
+        Assert.Equal(ErasureStatus.Failed, delivery.Status);
+
+        PrivacyAlertRaised raised = Assert.Single(_alerts.Raised);
+
+        Assert.Equal(AlertCondition.ErasureDeliveryExhausted, raised.Condition);
+        Assert.Equal(
+            ["erasure-ledger"],
+            raised.Details["outstanding"].EnumerateArray().Select(name => name.GetString()));
+    }
+
+    /// <summary>
+    /// DR-016: only an erasure is written down; a restriction closes on its host
+    /// subscribers with the ledger unreachable and leaves no line.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task DR_016_OnlyAnErasureWaitsForTheLedgerAsync()
+    {
+        _subscribers.Add(new SubscriberInMemory("host", required: true));
+        _ledger = new ErasureLedgerInMemory { Durable = false };
+
+        Delivery delivery = await RaisedAsync(SubjectEventKind.RestrictionChanged);
+
+        Assert.Equal(1, await Publisher(_none).PublishAsync(CancellationToken.None));
+        Assert.Equal(ErasureStatus.Complete, delivery.Status);
+        Assert.Equal(["host"], delivery.Confirmed);
+    }
+
     private async ValueTask<Delivery> RaisedAsync(SubjectEventKind kind)
     {
         var delivery = Delivery.Of(Ahmed, kind, Noon);
@@ -288,6 +399,7 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
             _outbox,
             _erasures,
             _subscribers,
+            _ledger,
             _configuration,
             _alerts,
             _work,

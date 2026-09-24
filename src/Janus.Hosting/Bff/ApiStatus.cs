@@ -25,6 +25,7 @@ internal static class ApiStatus
         // rather than a denial.
         [ErrorCodes.StartupGoverningLanguage] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupDeclarationMissing] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupSubscriberName] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupPreferenceDeclaration] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupContainmentCycle] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupUnindexedDerivation] = StatusCodes.Status500InternalServerError,

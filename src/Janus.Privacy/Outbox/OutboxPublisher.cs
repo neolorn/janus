@@ -19,21 +19,24 @@ namespace Janus.Privacy.Outbox;
 /// <param name="outbox">Where the deliveries are.</param>
 /// <param name="erasures">Where an erasure's own row is carried in step with its delivery.</param>
 /// <param name="subscribers">Who the host registered.</param>
+/// <param name="ledger">Where an erasure is written down off the host, if the deployment registered one.</param>
 /// <param name="configuration">Where the retry schedule is read.</param>
 /// <param name="alerts">Where a spent retry budget is raised.</param>
 /// <param name="work">The one transaction a pass records its progress in.</param>
 /// <param name="time">The clock the schedule is computed against.</param>
 /// <param name="randomness">Where the full jitter of each delay comes from.</param>
 /// <remarks>
-/// Implements IDN-LIFE-003a and PRIV-RIGHT-005b. Delivery is at least once: a
+/// Implements IDN-LIFE-003a, PRIV-RIGHT-005b and DR-016. Delivery is at least once: a
 /// subscriber that confirmed is not offered the event again, and one that did not is,
 /// until the budget is spent. A subscriber that throws is a subscriber that did not
-/// confirm, and the delivery outlives the process either way.
+/// confirm, and the delivery outlives the process either way. An erasure also waits
+/// for its ledger line, which is offered as the first required subscriber.
 /// </remarks>
 internal sealed class OutboxPublisher(
     IOutboxStore outbox,
     IErasureStore erasures,
     IEnumerable<ISubjectEventSubscriber> subscribers,
+    IErasureLedger? ledger,
     IConfigurationStore configuration,
     IPrivacyAlerts alerts,
     IUnitOfWork work,
@@ -59,11 +62,15 @@ internal sealed class OutboxPublisher(
 
         Schedule schedule = await ScheduleAsync(cancellationToken).ConfigureAwait(false);
         IReadOnlyList<ISubjectEventSubscriber> registered = [.. subscribers];
+        IReadOnlyList<ISubjectEventSubscriber> erasing = ErasureLedgerSubscriber.Joined(registered, ledger);
         int closed = 0;
 
         foreach (Delivery delivery in due)
         {
-            if (await DeliveredAsync(delivery, registered, schedule, now, cancellationToken)
+            IReadOnlyList<ISubjectEventSubscriber> waitedFor =
+                delivery.Kind is SubjectEventKind.ErasureRequested ? erasing : registered;
+
+            if (await DeliveredAsync(delivery, waitedFor, schedule, now, cancellationToken)
                 .ConfigureAwait(false))
             {
                 closed++;

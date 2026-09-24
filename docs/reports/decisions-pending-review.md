@@ -13247,6 +13247,93 @@ administrators only, `{ "standing": true|false, "issuedAt": ... }`), so the mana
 application can show the alert of OPS-BOOT-001 AC3; OPS-BOOT-001 AC3 could say the
 alert is raised again every window until one is generated, a spent one included.
 
+---
+
+## 332. How the off-host erasure ledger is written, and what an erasure waits for
+
+**Phase 9 · 2026-09-24 · Tier 3 · DR-016, DR-006a, IDN-LIFE-003a, IDN-LIFE-003b, LIB-EXT-001**
+
+*The question.* DR-016 asks that completed erasures be appended to an off-host ledger
+and that no erasure be reported complete until its line is durable (AC2); the plan puts
+the ledger writer in phase 9. No chapter says how the library reaches storage off the
+host, at which point of an erasure the line is written, or what happens while the
+ledger cannot take it, and LIB-EXT-001's table has no row for it. It touches erasure, so
+the strictest reading is taken.
+
+*The readings.*
+
+1. Append the line inside the erasure's own transaction, before it commits. The ledger
+   is not the database, so the two cannot commit together: a transaction that fails
+   after the append leaves a line for an erasure that did not happen.
+2. Append once the erasure's transaction commits, tracked by a new column on the
+   erasures table and a retry pass of its own. IDN-LIFE-003b lists that table's
+   columns, and the pass would repeat the outbox's retry, budget and alert.
+3. Make the line one more required confirmation on the erasure's outbox record, which
+   IDN-LIFE-003a already describes ("the outbox record carries each required
+   subscriber's confirmation"; "complete only when every required subscriber has
+   confirmed"), so the record and the erasures row that follows it complete only once
+   the line is durable.
+
+*Chosen: 3.* Reading 1 writes lines for erasures that may not exist, which a replay
+would then carry out. Reading 2 adds a column IDN-LIFE-003b does not list and a second
+retry mechanism. Reading 3 holds the erasure open, retries it and raises it by the
+mechanism the chapter already gives the host-side work.
+
+What is built:
+
+- `IErasureLedger.AppendAsync(line)`, answering success only once the line is durable.
+  The deployment registers it over storage that does not share fate with the database
+  host; that storage is the environment's (DR-016 AC1, verified in Milestone 2).
+- The line is the erasure's instant in RFC 3339 UTC to the second (the instant its
+  transaction committed, truncated), one space, the subject identifier in its
+  lower-case form, one space, the reason in the spelling of `10` section 5.12a, and
+  nothing else (AC4). DR-016's illustration shows the minute and two spaces; its
+  Values paragraph (D-153) says the second and one space, and is followed. A line is
+  read back only in the exact form it is written in.
+- The confirmation is named `erasure-ledger`, is required, is offered before the host's
+  subscribers, and only on `ErasureRequested` records. While the ledger refuses the
+  line, the record and the erasures row stay `awaiting-subscribers` on the outbox
+  schedule; a spent budget fails both and raises `erasure-delivery-exhausted` with
+  `erasure-ledger` among the outstanding. `GET /admin/erasures/{id}` lists it first.
+- The manual completion path vouches for the host's subscribers and never for the
+  line: where the attempts never made it durable, the path appends it first, and while
+  the ledger refuses it the path answers `system.fault` (500) and closes nothing. The
+  audit's `outstanding` names the host's subscribers only.
+- A confirmation is recorded under the subscriber's name, so a host subscriber named
+  `erasure-ledger`, or two host subscribers under one name, would read another's
+  confirmation as their own and close an erasure with its work undone. Startup refuses
+  either with the new code `model.startup.subscribername`, `details.handler` naming the
+  name. Two host subscribers sharing a name had that effect before this entry too.
+- A line may be appended twice (a pass whose record does not commit after the append,
+  or a replay's redelivery); a replay reads a repeat as the one erasure.
+- A deployment that registers no ledger completes its erasures without a line and
+  raises nothing: DR-016 is deferred until the tier upgrade and R-A13 accepts the
+  exposure until then, so an hourly alert would raise an accepted risk as a failure.
+
+*Tests that pin it.*
+`OutboxPublisherTests.DR_016_AC2_AnErasureIsNotCompleteUntilItsLineIsDurableAsync`,
+`OutboxPublisherTests.DR_016_AC4_TheLineHoldsTheInstantTheSubjectAndTheReasonAndNothingElseAsync`,
+`OutboxPublisherTests.DR_016_AC2_ALedgerThatNeverTakesTheLineIsRaisedWhenTheBudgetIsSpentAsync`,
+`OutboxPublisherTests.DR_016_OnlyAnErasureWaitsForTheLedgerAsync`,
+`ErasureServiceTests.DR_016_AC2_AnErasureIsReadWithItsLedgerLineAsync`,
+`ErasureServiceTests.DR_016_AC2_AManualCompletionWritesTheLineBeforeItClosesTheErasureAsync`,
+`ErasureServiceTests.DR_016_AC2_ALineAlreadyWrittenIsNotWrittenAgainAsync`,
+`ErasureServiceTests.DR_016_AC2_AManualCompletionClosesNothingWhileTheLineCannotBeWrittenAsync`,
+`ErasureLedgerLineTests.DR_016_ALineIsReadAsTheErasureItWasWrittenFor`,
+`ErasureLedgerLineTests.DR_016_ALineInAnyOtherFormIsNotRead`,
+`HandlerCoverageTests.DR_016_AC2_ASubscriberUnderTheLedgersNameFailsStartup`,
+`HandlerCoverageTests.IDN_LIFE_003a_TwoSubscribersUnderOneNameFailStartup`,
+`StartupValidationTests.DR_016_AC2_ASubscriberUnderTheLedgersNameIsRefusedAsync`,
+`ErasureEndpointTests.DR_016_AC2_AManualCompletionIsAFaultWhileTheLedgerCannotTakeTheLineAsync`.
+
+*Chapter text that should change.* LIB-EXT-001's table could add "Off-host erasure
+ledger (DR-016) | None: the deployment supplies it at the tier upgrade; until then
+erasures complete without it (R-A13)". DR-016 could say the line is a required
+confirmation on the erasure's outbox record, that the manual completion appends it and
+never vouches for it, and could show its illustration to the second with one space.
+IDN-LIFE-003a could say that subscriber names are distinct and that `erasure-ledger` is
+the library's. `10` section 1.5 could add `model.startup.subscribername`.
+
 
 # Rows for chapter 10
 
@@ -13285,6 +13372,7 @@ The subsection each row belongs in is named with it.
 | `authz.group.inuse` | 1.3 | 409 | The group holds a member, belongs to a group, or was given a grant, so it cannot be removed. (AUTHZ-GROUP-001, AUTHZ-GRANT-003 AC3, entry 192) |
 | `identity.domain.unverified` | 1.1 | 422 | A listed domain is verified and no TXT value at `_identity-verify.<domain>` is `identity-domain-verification=<token>`, or the lookup could not be made; nothing is written. (REG-DOM-001, entry 209) |
 | `identity.invitation.notfound` | 1.1 | 404 | `GET /account/invitation` or the acknowledgement is asked of an account no standing invitation is attached to: none of its links was opened by it, or each it opened was acknowledged or revoked. (REG-INV-002, entry 242) |
+| `model.startup.subscribername` | 1.5 | 500 | Startup: two subject-event subscribers are registered under one name, or one under `erasure-ledger`, the name the erasure ledger's confirmation is recorded under. `details.handler` names it; nothing starts (IDN-LIFE-003a, DR-016, entry 332). |
 
 ## LIB-HOST-001, host declarations
 

@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- Startup refuses two subject-event subscribers registered under one name, and any
+  subscriber named `erasure-ledger`, with `model.startup.subscribername` naming it,
+  since a confirmation is recorded under the name and a shared one would let an
+  erasure close with a subscriber's work undone.
 - The fingerprint key now has versions, as the key-encryption key has.
   `ISecretSource.ReadFingerprintKeysAsync` and `AddJanus` take a `FingerprintKeys`,
   the current version and every version still held, and the key document piped to the
@@ -369,6 +373,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A deployment can register `IErasureLedger` over storage that does not share fate
+  with the database host. Every erasure's line (its instant to the second, the subject
+  identifier and the reason) is appended to it before the erasure completes: the line
+  is a required confirmation named `erasure-ledger`, retried and raised as any
+  required subscriber is and listed first at `GET /admin/erasures/{id}`, and the manual
+  completion appends it itself and answers `system.fault` while the ledger refuses it.
+  Without a ledger, erasures complete as before.
 - `no-emergency-credential` is raised by the hourly `emergency-credential` job for as
   long as no break-glass credential stands, including after one is spent, and stops
   only when one is generated.
