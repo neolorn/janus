@@ -257,6 +257,27 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-RIGHT-004: a restriction fulfilled while the account is suspended is held
+    /// for when it comes back, and the subscribers stop acting on it now.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_004_ARestrictionFulfilledWhileSuspendedIsHeldAsync()
+    {
+        PrivacyRequestReceipt receipt =
+            await EnteredAsync(PrivacyRequestType.Restriction, new DateOnly(2026, 9, 18));
+
+        _accounts.Hold(Ahmed, AccountState.Suspended);
+
+        _ = await Requests
+            .FulfilAsync(AccessContext.Of(Mona), receipt.RequestId, CancellationToken.None);
+
+        Assert.Equal(AccountState.Suspended, _accounts.Of(Ahmed));
+        Assert.True(_accounts.Holds(Ahmed));
+        Assert.True(Assert.Single(_outbox.Deliveries).Restricted);
+    }
+
+    /// <summary>
     /// 09 section 8a, IDN-LIFE-003: a fulfilled erasure enters the grace window with
     /// the origin that says a human entered it out of band.
     /// </summary>

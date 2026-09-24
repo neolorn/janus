@@ -9400,6 +9400,55 @@ either side: the restriction was never lifted.
 account suspended while restricted to `restricted`, and chapter 10 section 5.12b could
 name the recorded fact beside `suspendedBy`.
 
+---
+
+## 257. A restriction held while the account is away from the restricted state
+
+**Phase 8 · 2026-09-24 · Tier 3 · PRIV-RIGHT-004, PRIV-RIGHT-002, IDN-LIFE-003, IDN-LIFE-014, chapter 09 section 8a**
+
+*The question.* PRIV-RIGHT-004 AC2 has "Lifting it restores prior behaviour exactly",
+and nothing but a decision lifts a restriction. Three paths lost one without a decision:
+
+- a restricted account that entered its deletion window and cancelled it came back
+  `active` (IDN-LIFE-014 cancellation restores "the account exactly as it stood");
+- a restricted account taken down and reversed came back `active`, which is what chapter
+  09 section 8a says of the reversal ("Restores `active`");
+- a restriction fulfilled, or granted by lapse (PRIV-RIGHT-002), while the account was
+  suspended or in its deletion window was recorded nowhere: the request was fulfilled,
+  the subscribers were told nothing, and the account later came back `active`.
+
+*The readings.*
+
+1. Leave the three paths as they were: a restriction is only a state, and a state the
+   account leaves is gone.
+2. Hold the restriction on the account while it is suspended or deleting, tell the
+   subscribers when it is decided, and bring the account back `restricted` from any of
+   the three.
+
+*Chosen: 2, the strictest reading.* Reading 1 ends a restriction the subject asked for
+without a decision, and in the third path acts on records the company decided not to
+act on. The column entry 256 added, `restriction_held`, carries it: entering the
+deletion window or a takedown from `restricted` sets it, a restriction decided while the
+account is suspended (by either origin) or deleting sets it and writes the
+`RestrictionChanged` delivery with `restricted` true in the same transaction, leaving the
+window by cancellation or reversal and reactivation return the account to `restricted`,
+and the erasure clears it. The reversal of a takedown restores `active` as chapter 09
+section 8a says except where a restriction is held, where it restores `restricted`. A
+restriction decided twice is recorded and announced once.
+
+*Tests that pin it.*
+`AccountTests.PRIV_RIGHT_004_AC2_ARestrictionIsHeldThroughADeletionWindow`,
+`AccountTests.PRIV_RIGHT_004_ARestrictionDecidedAwayFromActiveIsHeld`,
+`AccountStatesTests.PRIV_RIGHT_004_ARestrictionIsHeldThroughATakedownAsync`,
+`PrivacyRequestTests.PRIV_RIGHT_004_ARestrictionFulfilledWhileSuspendedIsHeldAsync`,
+`AccountTests.Transitions_FromAStateThatDoesNotMakeThem_Throw` (restriction of a
+deleting account still refused by `Restrict`, which is the active path).
+
+*Chapter text that should change.* PRIV-RIGHT-004 could say that a restriction decided
+while the account is suspended or deleting is held and in force when it returns, and
+chapter 09 section 8a could say that the takedown reversal restores `restricted` where
+the account was restricted.
+
 
 # Rows for chapter 10
 

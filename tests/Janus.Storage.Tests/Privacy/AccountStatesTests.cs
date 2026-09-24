@@ -135,6 +135,39 @@ public sealed class AccountStatesTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// PRIV-RIGHT-004: a restriction decided while the account is in a takedown's window
+    /// is held in the row, once, and the reversal brings the account back restricted.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_004_ARestrictionIsHeldThroughATakedownAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+
+        await TakenDownAsync(subject);
+
+        await using (StoreContext restricting = database.Context())
+        {
+            Assert.True(await States(restricting).RestrictAsync(
+                subject,
+                TestContext.Current.CancellationToken));
+            await restricting.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (StoreContext again = database.Context())
+        {
+            Assert.False(await States(again).RestrictAsync(
+                subject,
+                TestContext.Current.CancellationToken));
+            Assert.True(await States(again).ReverseTakedownAsync(
+                subject,
+                TestContext.Current.CancellationToken));
+            await again.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(AccountState.Restricted, (await StandingAsync(subject)).State);
+    }
+
+    /// <summary>
     /// IDN-LIFE-003: an account already in its own deletion window is not taken down,
     /// and the refusal writes nothing.
     /// </summary>

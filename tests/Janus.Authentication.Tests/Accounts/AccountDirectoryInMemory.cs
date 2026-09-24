@@ -140,6 +140,11 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
+        if (_states.GetValueOrDefault(subject) is AccountState.Restricted)
+        {
+            _ = _restrictionHeld.Add(subject);
+        }
+
         Deleting(subject, DeletionOrigin.Self, at);
 
         return ValueTask.CompletedTask;
@@ -148,7 +153,9 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
     /// <inheritdoc/>
     public ValueTask CancelDeletionAsync(SubjectId subject, CancellationToken cancellationToken)
     {
-        _states[subject] = AccountState.Active;
+        _states[subject] = _restrictionHeld.Remove(subject)
+            ? AccountState.Restricted
+            : AccountState.Active;
         _ = _deletions.Remove(subject);
 
         return ValueTask.CompletedTask;

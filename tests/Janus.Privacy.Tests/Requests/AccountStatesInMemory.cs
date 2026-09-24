@@ -17,6 +17,7 @@ internal sealed class AccountStatesInMemory : IAccountStates
     private readonly Dictionary<SubjectId, AccountState> _states = [];
     private readonly Dictionary<SubjectId, PendingDeletion> _deletions = [];
     private readonly Dictionary<SubjectId, DateTimeOffset> _sessionsEnded = [];
+    private readonly HashSet<SubjectId> _held = [];
 
     /// <summary>
     /// Puts an account in a state, as a deployment has one.
@@ -33,9 +34,17 @@ internal sealed class AccountStatesInMemory : IAccountStates
     public AccountState? Of(SubjectId subject) =>
         _states.TryGetValue(subject, out AccountState state) ? state : null;
 
+    /// <summary>
+    /// Whether the account holds a restriction while it is away from active.
+    /// </summary>
+    /// <param name="subject">Whose.</param>
+    /// <returns>Whether it holds one.</returns>
+    public bool Holds(SubjectId subject) => _held.Contains(subject);
+
     /// <inheritdoc/>
     public ValueTask<bool> RestrictAsync(SubjectId subject, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(Moved(subject, AccountState.Active, AccountState.Restricted));
+        ValueTask.FromResult(Moved(subject, AccountState.Active, AccountState.Restricted)
+            || (Of(subject) is AccountState.Suspended or AccountState.Deleting && _held.Add(subject)));
 
     /// <inheritdoc/>
     public ValueTask<bool> BeginDeletionAsync(

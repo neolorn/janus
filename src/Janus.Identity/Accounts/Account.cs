@@ -190,6 +190,21 @@ internal sealed class Account
     }
 
     /// <summary>
+    /// Restricts processing at the subject's request while the account is suspended or
+    /// in its deletion window: the restriction is held, and the account comes back
+    /// restricted from either.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The account is neither suspended nor deleting.
+    /// </exception>
+    public void HoldRestriction()
+    {
+        Require(AccountState.Suspended, AccountState.Deleting);
+
+        RestrictionHeld = true;
+    }
+
+    /// <summary>
     /// Lifts the restriction.
     /// </summary>
     /// <exception cref="InvalidOperationException">The account is not restricted.</exception>
@@ -223,6 +238,8 @@ internal sealed class Account
         }
 
         Require(AccountState.Active, AccountState.Restricted);
+
+        RestrictionHeld = State is AccountState.Restricted;
         EnterDeletion(by, at);
     }
 
@@ -238,15 +255,15 @@ internal sealed class Account
     {
         Require(AccountState.Active, AccountState.Restricted, AccountState.Suspended);
 
+        RestrictionHeld = RestrictionHeld || State is AccountState.Restricted;
         State = AccountState.Suspended;
         SuspendedBy = SuspensionOrigin.Administrator;
-        RestrictionHeld = false;
         EnterDeletion(DeletionOrigin.Takedown, at);
     }
 
     /// <summary>
-    /// Cancels a deletion inside its window and restores the account. A takedown is not
-    /// cancellable this way.
+    /// Cancels a deletion inside its window and restores the account, restricted where a
+    /// restriction is held. A takedown is not cancellable this way.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// The account is not deleting, or its window was entered by a takedown.
@@ -265,7 +282,7 @@ internal sealed class Account
 
     /// <summary>
     /// Reverses a takedown inside its window, for the case where an adult was
-    /// misjudged. Cancelled orders are not restored.
+    /// misjudged. Cancelled orders are not restored; a restriction held comes back.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// The account is not deleting, or its window was not entered by a takedown.
@@ -292,6 +309,7 @@ internal sealed class Account
         Require(AccountState.Deleting);
 
         State = AccountState.Deleted;
+        RestrictionHeld = false;
     }
 
     private void EnterSuspension(SuspensionOrigin by, params AccountState[] from)
@@ -311,7 +329,8 @@ internal sealed class Account
 
     private void LeaveDeletion()
     {
-        State = AccountState.Active;
+        State = RestrictionHeld ? AccountState.Restricted : AccountState.Active;
+        RestrictionHeld = false;
         DeletingBy = null;
         DeletingSince = null;
         SuspendedBy = null;

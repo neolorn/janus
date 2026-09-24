@@ -29,13 +29,26 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
         SubjectId subject,
         CancellationToken cancellationToken)
     {
-        if (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
-            is not { State: AccountState.Active } account)
-        {
-            return false;
-        }
+        Account? account = await accounts.FindBySubjectAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
 
-        account.Restrict();
+        switch (account)
+        {
+            case { State: AccountState.Active }:
+                account.Restrict();
+
+                break;
+
+            // PRIV-RIGHT-004: an account away from active holds the restriction, so it
+            // comes back restricted and nothing acts on it meanwhile.
+            case { State: AccountState.Suspended or AccountState.Deleting, RestrictionHeld: false }:
+                account.HoldRestriction();
+
+                break;
+
+            default:
+                return false;
+        }
 
         await accounts.RecordTransitionAsync(account, cancellationToken).ConfigureAwait(false);
 

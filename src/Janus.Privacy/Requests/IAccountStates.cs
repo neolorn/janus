@@ -21,13 +21,14 @@ namespace Janus.Privacy.Requests;
 internal interface IAccountStates
 {
     /// <summary>
-    /// Restricts one account.
+    /// Restricts one account; one suspended or in its deletion window holds the
+    /// restriction and comes back restricted.
     /// </summary>
     /// <param name="subject">Whose.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// Whether the state changed: an account that is not active cannot be restricted,
-    /// and one already restricted needs nothing.
+    /// Whether the restriction is new: one already restricted or held needs nothing,
+    /// and an erased account cannot be restricted.
     /// </returns>
     ValueTask<bool> RestrictAsync(SubjectId subject, CancellationToken cancellationToken);
 

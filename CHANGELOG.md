@@ -342,6 +342,12 @@ against the public contract of LIB-API-001.
   category. `IAccounts` is the same pair of operations in process. Apply the
   migration, which adds `restriction_held` to the accounts table.
 
+- A processing restriction is no longer lost when the account passes through a
+  deletion window, a takedown or a suspension: cancelling the deletion, reversing the
+  takedown and reactivating the account each bring it back restricted, and a
+  restriction decided while the account is suspended or deleting is held for when it
+  returns, with `RestrictionChanged` delivered to the subscribers when it is decided.
+
 - Staff mailboxes are provisioned through `IMailServer`, which a deployment registers
   where its staff mail is hosted and which no package ships. A mailbox is owed
   `disabled` from its reservation, `enabled` while its holder is an active member of
