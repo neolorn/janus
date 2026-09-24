@@ -100,6 +100,13 @@ public static class AuditActions
     public static AuditAction RestoreTestCompleted { get; } = AuditAction.Parse("ops.restoretest.completed");
 
     /// <summary>
+    /// A run of the audit retention job ended, with how many monthly partitions it
+    /// created ahead, how many expired ones it dropped, and the retentions it held them to.
+    /// </summary>
+    /// <remarks>Implements PRIV-RET-002, INF-BG-002.</remarks>
+    public static AuditAction AuditPartitionsMaintained { get; } = AuditAction.Parse("ops.auditpartitions.maintained");
+
+    /// <summary>
     /// A consent was granted for a purpose, naming the document version it was given against.
     /// </summary>
     /// <remarks>Implements PRIV-CONS-004, chapter 10 section 5.</remarks>

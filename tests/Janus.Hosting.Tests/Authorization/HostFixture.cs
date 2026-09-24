@@ -35,6 +35,14 @@ public sealed class HostFixture : IAsyncLifetime
     public string ConnectionString => _database.ConnectionString;
 
     /// <summary>
+    /// The connection the scheduled maintenance runs under: the fixture's own, holding
+    /// the maintenance role's rights and no path to the application's (OPS-MIG-003a).
+    /// </summary>
+    public string MaintenanceConnectionString =>
+        new NpgsqlConnectionStringBuilder(ConnectionString) { Options = "-c role=identity_maintenance" }
+            .ConnectionString;
+
+    /// <summary>
     /// The container the library's services are resolved from.
     /// </summary>
     public IServiceProvider Services => _services
@@ -146,6 +154,7 @@ public sealed class HostFixture : IAsyncLifetime
                 1,
                 new Dictionary<int, ReadOnlyMemory<byte>> { [1] = Encoding.UTF8.GetBytes("the fingerprint key of this deployment") }),
             Encoding.UTF8.GetBytes("the secret this application presents"),
+            Encoding.UTF8.GetBytes(MaintenanceConnectionString),
             Declaration(),
             ApplicationKind.Public);
 

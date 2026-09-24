@@ -106,6 +106,11 @@ public static class HostingRegistration
     /// establishes its own session, read from the same place and never from
     /// configuration (BFF-SESS-006, OPS-SEC-001).
     /// </param>
+    /// <param name="maintenanceCredential">
+    /// The database connection the scheduled maintenance runs under, which holds the
+    /// maintenance role's rights and nothing else, read from the same place and never
+    /// from configuration (OPS-MIG-003a, INF-HOST-003).
+    /// </param>
     /// <param name="declaration">What the host declared about its own domain.</param>
     /// <param name="application">
     /// Which of the deployment's applications this process serves, which decides the
@@ -123,6 +128,7 @@ public static class HostingRegistration
         KeyEncryptionKeys keyEncryptionKeys,
         FingerprintKeys fingerprintKeys,
         ReadOnlyMemory<byte> signOnSecret,
+        ReadOnlyMemory<byte> maintenanceCredential,
         AuthorizationDeclaration declaration,
         ApplicationKind application)
     {
@@ -132,7 +138,7 @@ public static class HostingRegistration
         // the library holds no fallback for either, so a deployment that reached
         // neither stops here with the code that names why, not at the first request
         // that would have read a person's field.
-        Present(keyEncryptionKeys, fingerprintKeys, signOnSecret);
+        Present(keyEncryptionKeys, fingerprintKeys, signOnSecret, maintenanceCredential);
 
         // CONV-DESIGN-007: time is injected, and a host that has its own clock keeps it.
         services.TryAddSingleton(TimeProvider.System);
@@ -289,6 +295,18 @@ public static class HostingRegistration
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<ILogger<RestoreTest>>()));
+
+        // PRIV-RET-002, OPS-MIG-003a: the partitions are reached over the maintenance
+        // credential only, in an area of their own built with the keys this process holds.
+        services.AddSingleton(new MaintenanceCredential(maintenanceCredential));
+        services.AddScoped(provider => new AuditRetention(
+            provider.GetRequiredService<MaintenanceCredential>(),
+            keyEncryptionKeys,
+            fingerprintKeys,
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IPrivacyAudit>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<AlertDestinationChange>();
         services.AddScoped<IAlertLog, AlertLog>();
         services.AddScoped<IConfigurationAdministration, ConfigurationService>();
@@ -633,7 +651,8 @@ public static class HostingRegistration
     private static void Present(
         KeyEncryptionKeys keyEncryptionKeys,
         FingerprintKeys fingerprintKeys,
-        ReadOnlyMemory<byte> signOnSecret)
+        ReadOnlyMemory<byte> signOnSecret,
+        ReadOnlyMemory<byte> maintenanceCredential)
     {
         if (keyEncryptionKeys is null)
         {
@@ -658,6 +677,16 @@ public static class HostingRegistration
             throw new StartupException(
                 "The sign-on client secret was not supplied; the library reads it from the secrets manager and holds no fallback.",
                 Error.From(ErrorCodes.StartupKeyUnavailable, "key", JsonSerializer.SerializeToElement("signOnSecret")));
+        }
+
+        // PRIV-RET-002: without the maintenance credential no month is created ahead and
+        // no expired one is dropped, so the trail stops taking rows once the months the
+        // migration created have passed; the deployment stops here instead.
+        if (maintenanceCredential.Length is 0)
+        {
+            throw new StartupException(
+                "The maintenance credential was not supplied; the library reads it from the secrets manager and holds no fallback.",
+                Error.From(ErrorCodes.StartupKeyUnavailable, "key", JsonSerializer.SerializeToElement("maintenanceCredential")));
         }
     }
 

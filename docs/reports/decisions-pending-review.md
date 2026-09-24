@@ -13565,6 +13565,86 @@ What is built:
 Chapter 09 could list `remindedAt` in the account's `recoveryCodes` object. Chapter 10
 could carry `recovery-codes-reminder` if it lists message kinds.
 
+---
+
+## 336. How the audit partitions are kept, and how the maintenance credential reaches the worker
+
+**Phase 9 · 2026-09-25 · Tier 3 · PRIV-RET-002, OPS-MIG-003a, INF-HOST-003, INF-BG-001, INF-BG-002, OPS-DATA-002, LIB-EXT-001**
+
+*The question.* Phase 1 created `audit_ensure_partitions()` and
+`audit_drop_expired_partitions(interval, interval)`, executable by the maintenance role
+only, and ran the first once at migration. Nothing called either afterwards: no month
+past the two the migration created was ever made, so a deployment not migrated again
+within about two months would refuse every audited operation for want of a partition,
+and no expired partition was ever dropped. PRIV-RET-002 has a scheduled job call the
+drop with the maintenance credential "the worker fetches from the secrets manager", and
+the months "created ahead by the sweep". `ISecretSource.ReadMaintenanceCredentialAsync`
+exists but nothing reads it, and `AddJanus`, which takes every other value the secrets
+manager supplies, does not take this one. No chapter says what form the credential has,
+how the worker is handed it, what a deployment without it becomes, what the job does
+under a credential that is not the maintenance one, or what the record of a run holds. It
+touches credentials and retention, so the strictest reading is taken.
+
+*The readings.*
+
+For the credential's path: (1) a further `AddJanus` argument, as the key-encryption key,
+the fingerprint key and the sign-on secret are passed; (2) the job resolves the host's
+`ISecretSource` from the container at each run. For its form: (a) a whole database
+connection for the maintenance login; (b) a password joined to the application's own
+connection under a user name the library would have to assume. For its absence: refuse
+to start, or start and fail every run. For the months ahead: this job, or the expiry
+sweep, which runs under the application's credential and cannot execute the function.
+
+*Chosen: 1, a, refuse to start, and this job.* Every other secret reaches the library as
+an `AddJanus` argument read once at startup (chapter 08's "fetched once, at startup"),
+and no `ISecretSource` is registered in a container anywhere, so 2 would be a second way
+of doing the same thing. The role is `NOLOGIN` and the deployment attaches the login
+(OPS-MIG-003), so the library cannot know the user name (b) would need, and the command
+line's key document already carries the maintenance connection whole. A deployment that
+starts without the credential would lose its audit trail within two months, so it does
+not start. The sweep cannot reach the function, so the months ahead are this job's.
+
+What is built:
+
+- `AddJanus` takes `maintenanceCredential` after `signOnSecret`: the database connection
+  of a login that holds the maintenance role's rights, as its UTF-8 bytes. Empty, startup
+  fails with `model.startup.kekunavailable`, `details.key` `maintenanceCredential`.
+- Internal `IAuditPartitions` (Identity, audit) with `AuditPartitions` (Storage): whether
+  the connection is the maintenance credential (the role's rights and no path to the
+  application's, the test the key-rotation commands apply, entry 316), the ensure
+  function and the drop function, each through the connection accessor of its own area.
+- The job `audit-partitions`, reason `PRIV-RET-002`, operation `retention-purge`, daily.
+  It opens a storage area of its own over the maintenance credential, unpooled, so no
+  connection stays open under it after the run, and shares none with the running one
+  (OPS-DATA-002 holds within each area: nothing of the job's is in the application's
+  transaction). It refuses a connection that is not the maintenance credential with
+  `authz.denied` before either function is asked; then creates the months ahead; then
+  reads `retention.audit.security` and `retention.audit.routine` and, where either is
+  unreadable, fails the run having dropped nothing; then drops.
+- Each completed run is recorded as `ops.auditpartitions.maintained`, security category,
+  under the job's principal, over the application's own credential (the maintenance role
+  writes no row), with details `created`, `dropped`, `securityRetentionDays` and
+  `routineRetentionDays`, and no subject.
+- A drop is not undone by a record that then fails to be written; the run fails and the
+  worker's lapse alert applies (INF-BG-001).
+- A refused or failed run is a failed run, which the worker raises as
+  `background-job-failed` once the job has lapsed (PRIV-RET-002 AC3).
+
+*Tests that pin it.*
+`AuditRetentionTests.PRIV_RET_002_AC3_ExpiredPartitionsAreDroppedOnScheduleWithoutAPersonAsync`,
+`AuditRetentionTests.PRIV_RET_002_AC5_ARunUnderAnotherCredentialDropsNothingAsync`,
+`AuditPartitionsTests.OPS_MIG_003a_OnlyTheMaintenanceCredentialIsTakenForItAsync` (3 cases),
+`AuditPartitionsTests.PRIV_RET_002_AC3_TheMonthsAheadAreCreatedAndTheExpiredDroppedAsync`,
+`KeyMaterialTests.OPS_MIG_003a_StartupFailsNamedWithoutTheMaintenanceCredential`,
+`BackgroundJobsTests.INF_BG_001_AC1_EveryJobRunsWithoutAPersonAsync`,
+`AuditActionsTests` (the list).
+
+*Chapter text that should change.* PRIV-RET-002 could say that the job creates the months
+ahead as well as dropping, since the sweep it names cannot execute the function, and
+what its record holds. INF-HOST-003 and chapter 07 could say the maintenance credential is
+a whole database connection handed to `AddJanus` at startup, and that a deployment
+without it does not start. Chapter 10 could list `ops.auditpartitions.maintained`.
+
 
 # Rows for chapter 10
 
@@ -13757,6 +13837,7 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `identity.takedown.executed` | security | `AuditActions.TakedownExecuted` | Phase one of a takedown committed: the account entered its window, its sessions ended and the hosts' delivery was written. Details carry `takedown`, `trigger` (spelled as `10` section 5.12d), `reason` and `erasureDue`. (IDN-LIFE-003) |
 | `identity.takedown.reversed` | security | `AuditActions.TakedownReversed` | A takedown was reversed inside its window and the account restored to active. Details carry `reason`. (IDN-LIFE-003) |
 | `identity.username.changed` | routine | `AuditActions.UsernameChanged` | The account's username was changed, which holds the old one for as long as the retention says. (REG-IDENT-009) |
+| `ops.auditpartitions.maintained` | security | `AuditActions.AuditPartitionsMaintained` | A run of the audit retention job completed under the maintenance credential. Details carry `created` (months made ahead), `dropped` (partitions past retention), `securityRetentionDays` and `routineRetentionDays`; the principal is the job's, `audit-partitions`, reason `PRIV-RET-002`; the row names no subject and no organization. (PRIV-RET-002, INF-BG-002, entry 336) |
 | `ops.configuration.changed` | security | `AuditActions.ConfigurationChanged` | A runtime setting is put in force through the one configuration operation, or a value is set by bootstrap or by `configure` from the server under that command's principal. Details carry `key`, `before`, `after`, `loosening` and, where the change is a loosening or is made from the server, `reason`. (OPS-CFG-002, OPS-CFG-004, OPS-CFG-005, entries 315 and 319) |
 | `ops.keyrotation.completed` | security | `AuditActions.KeyRotationCompleted` | A rotation of the key-encryption key or the fingerprint key reached every value under its version. Details carry `kind`, `version` and `processed`; the principal is the command's, `rotate-kek` or `rotate-fingerprint-key`, reason `OPS-SEC-003`; the row names no subject and no organization. (OPS-SEC-003 AC5, entries 316 and 318) |
 | `ops.keyrotation.resumed` | security | `AuditActions.KeyRotationResumed` | A rotation that had stopped was taken up again from its recorded progress. Details carry `kind`, `version` and `processed`, under the command's principal. (OPS-SEC-003 AC2, AC5, entries 316 and 318) |

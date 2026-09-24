@@ -185,6 +185,7 @@ internal static class StorageRegistration
             provider.GetRequiredService<DataConnections>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<IAuditPartitions, AuditPartitions>();
 
         services.AddScoped<ISessionStore>(provider => new SessionStore(
             provider.GetRequiredService<StoreContext>(),

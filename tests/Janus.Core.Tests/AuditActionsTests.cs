@@ -70,6 +70,7 @@ public sealed class AuditActionsTests
         "identity.takedown.executed",
         "identity.takedown.reversed",
         "identity.username.changed",
+        "ops.auditpartitions.maintained",
         "ops.configuration.changed",
         "ops.keyrotation.completed",
         "ops.keyrotation.resumed",

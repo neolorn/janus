@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- `AddJanus` takes the maintenance credential after the sign-on secret: the database
+  connection of a login holding the maintenance role's rights, read from the secrets
+  manager. A deployment that supplies none does not start, with
+  `model.startup.kekunavailable` naming `maintenanceCredential`.
 - Startup refuses two subject-event subscribers registered under one name, and any
   subscriber named `erasure-ledger`, with `model.startup.subscribername` naming it,
   since a confirmation is recorded under the name and a shared one would let an
@@ -373,6 +377,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The audit trail's monthly partitions are kept by a daily job, `audit-partitions`,
+  under the maintenance credential: the current month and the two after it are created
+  where missing, and partitions past `retention.audit.security` or
+  `retention.audit.routine` are dropped. The job refuses any other credential, and each
+  run is recorded as `ops.auditpartitions.maintained`.
 - A set of recovery codes older than `recovery.codes.reminder` now reminds its owner,
   once, on every channel of the security-notice set, under the new message kind
   `recovery-codes-reminder`; a daily job sends it to active accounts only. The account

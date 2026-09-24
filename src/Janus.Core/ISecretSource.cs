@@ -30,11 +30,12 @@ public interface ISecretSource
     ValueTask<FingerprintKeys> ReadFingerprintKeysAsync(CancellationToken cancellationToken);
 
     /// <summary>
-    /// Reads the database credential the scheduled maintenance runs under, which the
-    /// application's own configuration never carries.
+    /// Reads the database connection the scheduled maintenance runs under, whose login
+    /// holds the maintenance role's rights and nothing else, and which the application's
+    /// own configuration never carries.
     /// </summary>
     /// <param name="cancellationToken">Abandons the read.</param>
-    /// <returns>The credential, as its UTF-8 bytes.</returns>
+    /// <returns>The connection, as its UTF-8 bytes.</returns>
     ValueTask<ReadOnlyMemory<byte>> ReadMaintenanceCredentialAsync(CancellationToken cancellationToken);
 
     /// <summary>

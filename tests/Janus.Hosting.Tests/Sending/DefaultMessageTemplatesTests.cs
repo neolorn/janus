@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using Janus.Authentication.Sending;
 using Janus.Core;
@@ -180,6 +181,7 @@ public sealed class DefaultMessageTemplatesTests
                 new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
                 new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
                 new byte[16],
+                Encoding.UTF8.GetBytes(Connection),
                 HostFixture.Declaration(),
                 ApplicationKind.Public)
             .BuildServiceProvider()

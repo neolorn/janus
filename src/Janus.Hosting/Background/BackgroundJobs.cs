@@ -44,7 +44,8 @@ internal static class BackgroundJobs
     // INT-MAIL-007: the reconciliation runs daily, which the chapter fixes and no
     // setting names. The watches over a list of dates (OPS-MAINT-001, PRIV-RIGHT-002)
     // run at the same pace, since the lead they measure is counted in days, and so
-    // does the recovery-code reminder (AUTH-FACT-008), whose age is counted in months.
+    // does the recovery-code reminder (AUTH-FACT-008), whose age is counted in months,
+    // and the audit retention (PRIV-RET-002), whose partitions are counted in months.
     private static readonly TimeSpan Daily = TimeSpan.FromDays(1);
 
     // INF-TLS-003: a failed renewal is seen the day it happens, and INF-HOST-001: a clock
@@ -273,6 +274,15 @@ internal static class BackgroundJobs
             async (services, context, cancellationToken) => await services.GetRequiredService<RestoreTest>()
                 .RunAsync(context, cancellationToken)
                 .ConfigureAwait(false)),
+        BackgroundJob.Every(
+            "audit-partitions",
+            "PRIV-RET-002",
+            SystemOperation.RetentionPurge,
+            Daily,
+            async (services, context, cancellationToken) => Done(
+                await services.GetRequiredService<AuditRetention>()
+                    .RunAsync(context, cancellationToken)
+                    .ConfigureAwait(false))),
         BackgroundJob.Every(
             "licence-expiry",
             "OPS-MAINT-001",

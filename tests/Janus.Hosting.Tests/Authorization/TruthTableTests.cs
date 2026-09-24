@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -579,6 +580,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
             new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
             new byte[16],
+            Encoding.UTF8.GetBytes(host.MaintenanceConnectionString),
             HostFixture.Declaration(materialised: true),
             ApplicationKind.Public);
 

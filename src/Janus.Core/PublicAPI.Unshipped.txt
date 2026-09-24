@@ -3289,6 +3289,7 @@ static Janus.Core.AuditAction.operator ==(Janus.Core.AuditAction left, Janus.Cor
 static Janus.Core.AuditActions.AccessDenied.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.AccessExported.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.AccountDeactivated.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.AuditPartitionsMaintained.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.AccountReactivated.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.AccountSuspended.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.BotDefenceSignalled.get -> Janus.Core.AuditAction

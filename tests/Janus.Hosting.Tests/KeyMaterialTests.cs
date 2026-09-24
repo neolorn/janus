@@ -63,6 +63,28 @@ public sealed class KeyMaterialTests
                 new FingerprintKeys(2, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[16], [2] = new byte[32] })));
 
     /// <summary>
+    /// OPS-MIG-003a, PRIV-RET-002: the maintenance credential is read from the same place,
+    /// and the library does not start without it, since without it the audit trail stops
+    /// taking rows once the months created ahead have passed.
+    /// </summary>
+    [Fact]
+    public void OPS_MIG_003a_StartupFailsNamedWithoutTheMaintenanceCredential()
+    {
+        Error? refused = Assert.Throws<StartupException>(() => new ServiceCollection().AddJanus(
+                Connection,
+                Usable,
+                Fingerprints(new byte[32]),
+                Encoding.UTF8.GetBytes("the secret this application presents"),
+                ReadOnlyMemory<byte>.Empty,
+                HostFixture.Declaration(),
+                ApplicationKind.Public))
+            .Failure;
+
+        Assert.Equal(ErrorCodes.StartupKeyUnavailable, refused?.Code);
+        Assert.Equal("maintenanceCredential", refused?.Details["key"].GetString());
+    }
+
+    /// <summary>
     /// AUTH-KEY-002, OPS-SEC-001: every store that wraps a personal field is handed the
     /// keys the host passed in, so everything the entry point registers resolves once
     /// the host has declared what is its own to declare (LIB-HOST-001).
@@ -83,6 +105,7 @@ public sealed class KeyMaterialTests
                 Usable,
                 Fingerprints(new byte[32]),
                 Encoding.UTF8.GetBytes("the secret this application presents"),
+                Encoding.UTF8.GetBytes(Connection),
                 HostFixture.Declaration(),
                 ApplicationKind.Public);
 
@@ -103,6 +126,7 @@ public sealed class KeyMaterialTests
                 keys!,
                 fingerprintKeys!,
                 Encoding.UTF8.GetBytes("the secret this application presents"),
+                Encoding.UTF8.GetBytes(Connection),
                 HostFixture.Declaration(),
                 ApplicationKind.Public))
             .Failure?.Code;
