@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- A deployment that has not named every key it has to name now stops as it starts,
+  before any other startup check and before the web server: the governing
+  language under `model.startup.governinglanguage`, every other key under
+  `model.startup.declarationmissing` with `details.key`. `hosting.environment` is
+  among them in every deployment, since every deployment serves the records of
+  processing.
+
 - Every public type and member that carries a password, a token, a code, a key or
   the text of a notice is marked `[NeverLogged]`: `SessionId`,
   `GeneratedRecoveryCodes`, `KeyEncryptionKeys`, the code of `LinkLanding` and

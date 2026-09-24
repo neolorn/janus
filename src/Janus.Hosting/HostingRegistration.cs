@@ -438,16 +438,18 @@ public static class HostingRegistration
         // AUTHZ-MODEL-004 AC2 (D-160): what a hosted service starts before is what was
         // registered after it, and the web server is one, so the checks that read the
         // database go at the head of the collection. OPS-MIG-002 leads them, because
-        // every one of the others reads a table.
+        // every one of the others reads a table, and LIB-HOST-001 follows, because
+        // most of them read a key the deployment has to name.
         services.Insert(0, ServiceDescriptor.Singleton<IHostedService, SchemaValidationService>());
-        services.Insert(1, ServiceDescriptor.Singleton<IHostedService, ModelValidationService>());
-        services.Insert(2, ServiceDescriptor.Singleton<IHostedService, SendingValidationService>());
-        services.Insert(3, ServiceDescriptor.Singleton<IHostedService, HandlerValidationService>());
-        services.Insert(4, ServiceDescriptor.Singleton<IHostedService, ConfigurationValidationService>());
-        services.Insert(5, ServiceDescriptor.Singleton<IHostedService, DeclarationValidationService>());
-        services.Insert(6, ServiceDescriptor.Singleton<IHostedService, RedirectValidationService>());
-        services.Insert(7, ServiceDescriptor.Singleton<IHostedService, SigningKeyValidationService>());
-        services.Insert(8, ServiceDescriptor.Singleton<IHostedService, RelayValidationService>());
+        services.Insert(1, ServiceDescriptor.Singleton<IHostedService, SettingsValidationService>());
+        services.Insert(2, ServiceDescriptor.Singleton<IHostedService, ModelValidationService>());
+        services.Insert(3, ServiceDescriptor.Singleton<IHostedService, SendingValidationService>());
+        services.Insert(4, ServiceDescriptor.Singleton<IHostedService, HandlerValidationService>());
+        services.Insert(5, ServiceDescriptor.Singleton<IHostedService, ConfigurationValidationService>());
+        services.Insert(6, ServiceDescriptor.Singleton<IHostedService, DeclarationValidationService>());
+        services.Insert(7, ServiceDescriptor.Singleton<IHostedService, RedirectValidationService>());
+        services.Insert(8, ServiceDescriptor.Singleton<IHostedService, SigningKeyValidationService>());
+        services.Insert(9, ServiceDescriptor.Singleton<IHostedService, RelayValidationService>());
 
         return services;
     }

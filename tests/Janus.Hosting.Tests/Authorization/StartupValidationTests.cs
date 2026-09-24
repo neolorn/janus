@@ -420,6 +420,124 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         }
     }
 
+    /// <summary>
+    /// LIB-HOST-001 AC1, AC3: the deployment names the keys the list gives and
+    /// retention for the categories it declares, and nothing else, and it starts.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task LIB_HOST_001_AC3_ADeploymentNamingOnlyTheListedKeysStartsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        var served = new ServerStandIn();
+        using IHost deployment = new HostBuilder()
+            .ConfigureServices(services => Declared(services.AddSingleton<IHostedService>(served)))
+            .Build();
+
+        await deployment.StartAsync(cancellationToken);
+        await deployment.StopAsync(cancellationToken);
+
+        Assert.True(served.Started);
+    }
+
+    /// <summary>
+    /// LIB-HOST-001 AC4: a deployment that never named the language its legal
+    /// documents bind in is stopped as it starts, under that key's own code.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task LIB_HOST_001_AC4_ADeploymentWithoutItsGoverningLanguageIsRefusedAsync()
+    {
+        StartupException refused = await RefusedWithoutAsync(Settings.LegalGoverningLanguage.Key, "ar");
+
+        Assert.Equal(ErrorCodes.StartupGoverningLanguage, refused.Failure?.Code);
+        Assert.Equal("legal.governinglanguage", refused.Failure?.Details["key"].GetString());
+    }
+
+    /// <summary>
+    /// LIB-HOST-001 AC2: a key the deployment has to name and left unnamed stops it as
+    /// it starts, by the key's name and before the web server registered after the
+    /// library has served anything.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task LIB_HOST_001_AC2_AnUnnamedKeyIsRefusedByNameBeforeTheServerStartsAsync()
+    {
+        StartupException refused = await RefusedWithoutAsync(
+            Settings.HostingEnvironment.Key,
+            "a rented virtual machine");
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        Assert.Equal("hosting.environment", refused.Failure?.Details["key"].GetString());
+    }
+
+    /// <summary>
+    /// LIB-HOST-001 AC2: a conditional key is one the deployment has to name once its
+    /// condition holds, so a deployment that moves its data outside Egypt and names no
+    /// basis for the transfer is stopped by that key.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task LIB_HOST_001_AC2_AConditionalKeyIsRefusedOnceItsConditionHoldsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await WriteAsync(Located(HostingLocation.Outside), cancellationToken);
+
+        try
+        {
+            using IHost deployment = Deployed();
+
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await deployment.StartAsync(cancellationToken));
+
+            Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+            Assert.Equal("hosting.crossborderbasis", refused.Failure?.Details["key"].GetString());
+        }
+        finally
+        {
+            await WriteAsync(Located(HostingLocation.Inside), cancellationToken);
+        }
+    }
+
+    // LIB-HOST-001: the deployment started with one key it has to name left unnamed,
+    // which is named again afterwards whatever the start did.
+    private async Task<StartupException> RefusedWithoutAsync(ConfigurationKey key, string value)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await WriteAsync("DELETE FROM identity.settings WHERE key = '" + key + "';", cancellationToken);
+
+        try
+        {
+            var served = new ServerStandIn();
+            using IHost deployment = new HostBuilder()
+                .ConfigureServices(services => Declared(services.AddSingleton<IHostedService>(served)))
+                .Build();
+
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await deployment.StartAsync(cancellationToken));
+
+            Assert.False(served.Started);
+
+            return refused;
+        }
+        finally
+        {
+            await WriteAsync(
+                "INSERT INTO identity.settings (key, value) VALUES ('" + key + "', '" + value + "');",
+                cancellationToken);
+        }
+    }
+
+    private static string Located(HostingLocation location) =>
+        "UPDATE identity.settings SET value = '"
+        + Settings.HostingLocation.Write(location)
+        + "' WHERE key = '"
+        + Settings.HostingLocation.Key
+        + "';";
+
     private IHost Deployed(
         bool catalogue = true,
         bool handlers = true,
