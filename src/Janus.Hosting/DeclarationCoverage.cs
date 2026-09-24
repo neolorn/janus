@@ -22,25 +22,35 @@ namespace Janus.Hosting;
 /// Which client of the provider this application is, or nothing where the deployment
 /// registered none.
 /// </param>
+/// <param name="mail">The mail server, or nothing where the deployment hosts no mailbox.</param>
+/// <param name="mailClient">
+/// Which client of the provider the mail server is, or nothing where the deployment
+/// registered none.
+/// </param>
 /// <param name="codec">
 /// What the deployment reads uploaded images with, or nothing where it registered
 /// none.
 /// </param>
 /// <param name="configuration">Where the organizations that show photos are read.</param>
 /// <remarks>
-/// Implements LIB-HOST-001, REG-PM-001, AUTH-SESS-012, BFF-SESS-006 and IDN-ATTR-002.
+/// Implements LIB-HOST-001, REG-PM-001, AUTH-SESS-012, BFF-SESS-006, IDN-ATTR-002 and
+/// INT-MAIL-010.
 /// The library knows no route of the frontend, so it has none to fall back on: a
 /// deployment that declares none of these is stopped here rather than answering a
 /// password manager as a site that offers neither page, meeting an interactive
 /// authorization request with nowhere to send it, or reaching the first person who
 /// arrives holding nothing without knowing what to call itself at the provider. The
 /// codec is optional until a policy shows photos, and required from then on, because
-/// the library reads no image itself.
+/// the library reads no image itself. The mail server's client is optional until a mail
+/// server is registered, and required from then on, because which protocol client the
+/// server trusts is the deployment's to say.
 /// </remarks>
 internal sealed class DeclarationCoverage(
     PasskeyAddresses? addresses,
     AuthenticationAddresses? authentication,
     SignOnClient? signOn,
+    IMailServer? mail,
+    MailServerClient? mailClient,
     ImageCodec? codec,
     IConfigurationStore configuration)
 {
@@ -51,6 +61,8 @@ internal sealed class DeclarationCoverage(
     private const string Client = "signOnClient.clientId";
 
     private const string Codec = "imageCodec";
+
+    private const string MailClient = "mailServerClient.clientId";
 
     /// <summary>
     /// Reads what LIB-HOST-001 requires against what is registered.
@@ -95,6 +107,13 @@ internal sealed class DeclarationCoverage(
         if (signOn is null || signOn.ClientId.Length is 0)
         {
             return Missing(Client);
+        }
+
+        // INT-MAIL-010: the app passwords of a hosted mailbox are reached with a token
+        // issued to the mail server's client, and nothing else says which client it is.
+        if (mail is not null && (mailClient is null || mailClient.ClientId.Length is 0))
+        {
+            return Missing(MailClient);
         }
 
         return await PhotographedAsync(cancellationToken).ConfigureAwait(false);

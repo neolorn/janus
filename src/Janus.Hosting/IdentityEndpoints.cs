@@ -42,6 +42,7 @@ public static class IdentityEndpoints
         _ = endpoints.MapSignOn();
         _ = endpoints.MapAccount();
         _ = endpoints.MapAccountAdministration();
+        _ = endpoints.MapAppPasswords();
         _ = endpoints.MapCredentials();
         _ = endpoints.MapRecovery();
         _ = endpoints.MapPrivacy();

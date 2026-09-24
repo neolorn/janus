@@ -26,6 +26,8 @@ public sealed class AuditActionsTests
         "auth.credential.removed",
         "auth.credential.reportcancelled",
         "auth.credential.reportedlost",
+        "auth.mailcredential.created",
+        "auth.mailcredential.revoked",
         "auth.oidc.refreshreused",
         "auth.phonesignal.considered",
         "auth.recovery.approved",

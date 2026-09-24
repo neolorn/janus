@@ -260,6 +260,8 @@ public static class HostingRegistration
             provider.GetService<PasskeyAddresses>(),
             provider.GetService<AuthenticationAddresses>(),
             provider.GetService<SignOnClient>(),
+            provider.GetService<IMailServer>(),
+            provider.GetService<MailServerClient>(),
             provider.GetService<ImageCodec>(),
             provider.GetRequiredService<IConfigurationStore>()));
 
@@ -375,6 +377,29 @@ public static class HostingRegistration
             provider.GetRequiredService<IMailboxStore>(),
             provider.GetService<IMailServer>(),
             provider.GetRequiredService<IEvents>(),
+            provider.GetRequiredService<TimeProvider>()));
+
+        // INT-MAIL-010: the app passwords are the mail server's, reached with a token
+        // the provider issues to the server's client; without a server there are none.
+        services.AddScoped<IMailServerTokens>(provider => new MailServerTokens(
+            provider.GetRequiredService<OpenIddict.Server.IOpenIddictServerFactory>(),
+            provider.GetRequiredService<OpenIddict.Server.IOpenIddictServerDispatcher>(),
+            provider.GetRequiredService<OidcService>(),
+            provider.GetRequiredService<IOidcClientStore>(),
+            provider.GetService<MailServerClient>(),
+            provider.GetRequiredService<AuthenticationAddresses>(),
+            provider.GetRequiredService<TimeProvider>()));
+        services.AddScoped<IAppPasswords>(provider => new AppPasswords(
+            provider.GetService<IMailServer>(),
+            provider.GetRequiredService<IMailServerTokens>(),
+            provider.GetRequiredService<IMailboxStore>(),
+            provider.GetRequiredService<IAccountDirectory>(),
+            provider.GetRequiredService<StepUpGuard>(),
+            provider.GetRequiredService<IIdentifierDirectory>(),
+            provider.GetRequiredService<INotificationHandler>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<ICredentialAudit>(),
+            provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>()));
 
         services.AddScoped<InvitationAcknowledgement>();

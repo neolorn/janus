@@ -259,6 +259,18 @@ public static class AuditActions
     public static AuditAction GroupRemoved { get; } = AuditAction.Parse("authz.group.removed");
 
     /// <summary>
+    /// The mail server generated an app password at its holder's request.
+    /// </summary>
+    /// <remarks>Implements REG-MAIL-002, INT-MAIL-010, chapter 10 section 5.</remarks>
+    public static AuditAction MailCredentialCreated { get; } = AuditAction.Parse("auth.mailcredential.created");
+
+    /// <summary>
+    /// The mail server revoked an app password at its holder's request.
+    /// </summary>
+    /// <remarks>Implements REG-MAIL-002, INT-MAIL-010, chapter 10 section 5.</remarks>
+    public static AuditAction MailCredentialRevoked { get; } = AuditAction.Parse("auth.mailcredential.revoked");
+
+    /// <summary>
     /// An objection to a purpose was recorded.
     /// </summary>
     /// <remarks>Implements PRIV-BASIS-003, chapter 10 section 5.</remarks>

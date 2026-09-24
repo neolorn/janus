@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Authentication.Tests.Accounts;
+using Janus.Authentication.Tests.Mailboxes;
 using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -253,6 +254,33 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// INT-MAIL-010, LIB-HOST-001: the app passwords of a hosted mailbox are reached
+    /// with a token issued to the mail server's client, so a deployment that registers a
+    /// mail server and declares no client for it is stopped as it starts, and the same
+    /// deployment starts once it declares one.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_MAIL_010_ADeploymentHostingMailDeclaresTheMailServersClientAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using (IHost undeclared = Deployed(mail: true))
+        {
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await undeclared.StartAsync(cancellationToken));
+
+            Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+            Assert.Equal("mailServerClient.clientId", refused.Failure?.Details["key"].GetString());
+        }
+
+        using IHost declared = Deployed(mail: true, mailClient: true);
+
+        await declared.StartAsync(cancellationToken);
+        await declared.StopAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// API-REDIR-001: the default a destination falls back to is read against the
     /// registry as the deployment starts, so a key naming a client nothing registered
     /// stops it there rather than at the registration that would resolve to nothing.
@@ -345,10 +373,12 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool addresses = true,
         bool signIn = true,
         bool client = true,
-        bool codec = false) =>
+        bool codec = false,
+        bool mail = false,
+        bool mailClient = false) =>
         new HostBuilder()
             .ConfigureServices(services =>
-                Declared(services, catalogue, handlers, addresses, signIn, client, codec))
+                Declared(services, catalogue, handlers, addresses, signIn, client, codec, mail, mailClient))
             .Build();
 
     // The library registered over this deployment, as the host's own code registers
@@ -361,11 +391,23 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool signIn = true,
         bool client = true,
         bool codec = false,
+        bool mail = false,
+        bool mailClient = false,
         string? connection = null)
     {
         if (codec)
         {
             services.AddSingleton(new ImageCodecInMemory().Declared);
+        }
+
+        if (mail)
+        {
+            services.AddSingleton<IMailServer>(new MailServerInMemory());
+        }
+
+        if (mailClient)
+        {
+            services.AddSingleton(new MailServerClient("mail-server"));
         }
 
         if (catalogue)

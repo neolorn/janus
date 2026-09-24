@@ -102,6 +102,11 @@ internal sealed class Deployment : IAsyncDisposable
     // is a declaration no deployment starts without either.
     private static readonly SignOnClient Registered = new("this-application");
 
+    // LIB-HOST-001, INT-MAIL-010: a deployment that registers a mail server declares
+    // which client of the provider the server is, and every deployment here registers
+    // one.
+    private static readonly MailServerClient MailClient = new("mail-server");
+
     // LIB-HOST-001: the frontend's pages are a declaration no deployment starts
     // without, so every deployment here carries one (REG-PM-001).
     private static readonly PasskeyAddresses Pages = new(
@@ -636,6 +641,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton(addresses);
         _ = services.AddSingleton(signIn);
         _ = services.AddSingleton(client);
+        _ = services.AddSingleton(MailClient);
 
         // BFF-SESS-006: the client half of the sign-on is the library's, and the
         // connection it trades a code on reaches this same deployment's machine
@@ -776,6 +782,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<OidcService>();
         _ = services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
         _ = services.AddOidc(Wrapping);
+        _ = services.AddScoped<Janus.Authentication.Mailboxes.IMailServerTokens, Janus.Hosting.Oidc.MailServerTokens>();
+        _ = services.AddScoped<IAppPasswords, Janus.Authentication.Mailboxes.AppPasswords>();
 
         _ = services.AddSingleton(new BrowserSessionCookies(application));
         _ = services.AddScoped<SynchronizerTokens>();

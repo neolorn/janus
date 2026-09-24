@@ -369,6 +369,19 @@ against the public contract of LIB-API-001.
   both answer 404; an unknown subject answers 400 `api.request.malformed` naming
   `subject`. `IAccounts.ReadPhotoAsync` is the same read in process.
 
+- `GET`, `POST /account/mail/apppasswords` and `DELETE /account/mail/apppasswords/{id}`
+  list, create and revoke the signed-in person's mail app passwords at the mail
+  server. The library issues the person a token to the mail server's client from
+  their session and makes one call with it; the server generates the secret, which is
+  answered once and stored nowhere. Creation and revocation are the
+  `mailcredential:create` and `mailcredential:revoke` step-up actions, notified to the
+  security-notice set and audited as `auth.mailcredential.created` and
+  `auth.mailcredential.revoked` by the server's identifier. An account that holds no
+  enabled mailbox is refused with 403 `authz.denied`. `IMailServer` gains
+  `AppPasswordsAsync`, `CreateAppPasswordAsync` and `RevokeAppPasswordAsync`, and a
+  deployment that registers a mail server must declare `MailServerClient` or it does
+  not start. `IAppPasswords` is the same operations in process.
+
 - Staff mailboxes are provisioned through `IMailServer`, which a deployment registers
   where its staff mail is hosted and which no package ships. A mailbox is owed
   `disabled` from its reservation, `enabled` while its holder is an active member of

@@ -25,6 +25,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
     [
         "DELETE /account/devices/{id:guid}",
         "DELETE /account/identifiers/{id:guid}",
+        "DELETE /account/mail/apppasswords/{id}",
         "DELETE /account/photo",
         "DELETE /account/sessions/{id:guid}",
         "DELETE /admin/grants/{id:guid}",
@@ -41,6 +42,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "GET /account/devices/",
         "GET /account/explanations/{correlationId:guid}",
         "GET /account/invitation",
+        "GET /account/mail/apppasswords/",
         "GET /account/photo",
         "GET /account/preferences",
         "GET /account/sessions",
@@ -67,6 +69,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "POST /account/identifiers",
         "POST /account/identifiers/{id:guid}/primary",
         "POST /account/invitation/acknowledge",
+        "POST /account/mail/apppasswords/",
         "POST /admin/accounts/{subject:guid}/delete/cancel",
         "POST /admin/accounts/{subject:guid}/reactivate",
         "POST /admin/accounts/{subject:guid}/restriction/lift",

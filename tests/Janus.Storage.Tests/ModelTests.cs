@@ -788,6 +788,15 @@ public sealed class ModelTests
         Assert.Equal(expected, fields.OrderBy(name => name, StringComparer.Ordinal));
     }
 
+    /// <summary>
+    /// REG-MAIL-002 AC1, INT-MAIL-010 AC1 and AC4: no table of the library's has a place
+    /// for a mail app password. The server generates the secret and holds the
+    /// credential, so there is nowhere here to keep either it or a hash of it.
+    /// </summary>
+    [Fact]
+    public void REG_MAIL_002_AC1_NoTableHoldsAnAppPassword() =>
+        RefuseColumnsNamedAfter(["apppassword", "app_password", "mailcredential", "mail_credential"]);
+
     private static void RefuseColumnsNamedAfter(string[] forbidden) =>
         Assert.All(Columns(), column => Assert.DoesNotContain(
             forbidden,

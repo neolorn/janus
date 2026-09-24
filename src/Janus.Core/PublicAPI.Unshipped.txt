@@ -147,6 +147,19 @@ Janus.Core.AncestryEntry.ResourceId.get -> string!
 Janus.Core.AncestryEntry.ResourceId.init -> void
 Janus.Core.AncestryEntry.ResourceType.get -> string!
 Janus.Core.AncestryEntry.ResourceType.init -> void
+Janus.Core.AppPassword
+Janus.Core.AppPassword.<Clone>$() -> Janus.Core.AppPassword!
+Janus.Core.AppPassword.AppPassword(string! Id, string! Label, System.DateTimeOffset CreatedAt, System.DateTimeOffset? ExpiresAt) -> void
+Janus.Core.AppPassword.CreatedAt.get -> System.DateTimeOffset
+Janus.Core.AppPassword.CreatedAt.init -> void
+Janus.Core.AppPassword.Deconstruct(out string! Id, out string! Label, out System.DateTimeOffset CreatedAt, out System.DateTimeOffset? ExpiresAt) -> void
+Janus.Core.AppPassword.Equals(Janus.Core.AppPassword? other) -> bool
+Janus.Core.AppPassword.ExpiresAt.get -> System.DateTimeOffset?
+Janus.Core.AppPassword.ExpiresAt.init -> void
+Janus.Core.AppPassword.Id.get -> string!
+Janus.Core.AppPassword.Id.init -> void
+Janus.Core.AppPassword.Label.get -> string!
+Janus.Core.AppPassword.Label.init -> void
 Janus.Core.ApprovedRecovery
 Janus.Core.ApprovedRecovery.<Clone>$() -> Janus.Core.ApprovedRecovery!
 Janus.Core.ApprovedRecovery.ApprovedRecovery(System.DateTimeOffset? EnrolmentLinkExpiresAt) -> void
@@ -1086,6 +1099,10 @@ Janus.Core.IAccounts.LiftRestrictionAsync(Janus.Core.AccessContext! context, Jan
 Janus.Core.IAccounts.ReactivateAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAccounts.ReadPhotoAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.ReadOnlyMemory<byte>>>
 Janus.Core.IAccounts.SuspendAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IAppPasswords
+Janus.Core.IAppPasswords.CreateAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, string! label, System.DateTimeOffset? expiresAt, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.IssuedAppPassword!>>
+Janus.Core.IAppPasswords.ListAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.AppPassword!>!>>
+Janus.Core.IAppPasswords.RevokeAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, string! id, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAssuranceProvider
 Janus.Core.IAssuranceProvider.LevelAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AssuranceLevel>>
 Janus.Core.IAuditTrail
@@ -1160,8 +1177,11 @@ Janus.Core.ILegalDocuments.PublishAsync(Janus.Core.AccessContext! context, Janus
 Janus.Core.ILegalDocuments.ReadAsync(string! document, string? version, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.DocumentVersion!>>
 Janus.Core.ILegalDocuments.TranslateAsync(Janus.Core.AccessContext! context, string! document, string! version, Janus.Core.DocumentTranslation! translation, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IMailServer
+Janus.Core.IMailServer.AppPasswordsAsync(string! accessToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.AppPassword!>!>>
+Janus.Core.IMailServer.CreateAppPasswordAsync(string! accessToken, string! label, System.DateTimeOffset? expiresAt, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.IssuedAppPassword!>>
 Janus.Core.IMailServer.MailboxesAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.HostedMailbox!>!>>
 Janus.Core.IMailServer.ProvisionAsync(Janus.Core.MailboxPush! push, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IMailServer.RevokeAppPasswordAsync(string! accessToken, string! id, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IMailTransport
 Janus.Core.IMailTransport.SendAsync(Janus.Core.MailMessage! mail, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IMessageTemplates
@@ -1343,6 +1363,15 @@ Janus.Core.InvitationRequest.Phone.get -> string?
 Janus.Core.InvitationRequest.Phone.init -> void
 Janus.Core.InvitationRequest.Roles.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>!
 Janus.Core.InvitationRequest.Roles.init -> void
+Janus.Core.IssuedAppPassword
+Janus.Core.IssuedAppPassword.<Clone>$() -> Janus.Core.IssuedAppPassword!
+Janus.Core.IssuedAppPassword.Deconstruct(out string! Id, out string! Secret) -> void
+Janus.Core.IssuedAppPassword.Equals(Janus.Core.IssuedAppPassword? other) -> bool
+Janus.Core.IssuedAppPassword.Id.get -> string!
+Janus.Core.IssuedAppPassword.Id.init -> void
+Janus.Core.IssuedAppPassword.IssuedAppPassword(string! Id, string! Secret) -> void
+Janus.Core.IssuedAppPassword.Secret.get -> string!
+Janus.Core.IssuedAppPassword.Secret.init -> void
 Janus.Core.IssuedInvitation
 Janus.Core.IssuedInvitation.<Clone>$() -> Janus.Core.IssuedInvitation!
 Janus.Core.IssuedInvitation.Deconstruct(out Janus.Core.InvitationId Id, out System.DateTimeOffset ExpiresAt, out string? Token) -> void
@@ -1417,6 +1446,13 @@ Janus.Core.MailMessage.Reference.get -> string!
 Janus.Core.MailMessage.Reference.init -> void
 Janus.Core.MailMessage.Subject.get -> string!
 Janus.Core.MailMessage.Subject.init -> void
+Janus.Core.MailServerClient
+Janus.Core.MailServerClient.<Clone>$() -> Janus.Core.MailServerClient!
+Janus.Core.MailServerClient.ClientId.get -> string!
+Janus.Core.MailServerClient.ClientId.init -> void
+Janus.Core.MailServerClient.Deconstruct(out string! ClientId) -> void
+Janus.Core.MailServerClient.Equals(Janus.Core.MailServerClient? other) -> bool
+Janus.Core.MailServerClient.MailServerClient(string! ClientId) -> void
 Janus.Core.MailboxPush
 Janus.Core.MailboxPush.<Clone>$() -> Janus.Core.MailboxPush!
 Janus.Core.MailboxPush.Address.get -> string!
@@ -2585,6 +2621,9 @@ override Janus.Core.AlertRaised.ToString() -> string!
 override Janus.Core.AncestryEntry.Equals(object? obj) -> bool
 override Janus.Core.AncestryEntry.GetHashCode() -> int
 override Janus.Core.AncestryEntry.ToString() -> string!
+override Janus.Core.AppPassword.Equals(object? obj) -> bool
+override Janus.Core.AppPassword.GetHashCode() -> int
+override Janus.Core.AppPassword.ToString() -> string!
 override Janus.Core.ApprovedRecovery.Equals(object? obj) -> bool
 override Janus.Core.ApprovedRecovery.GetHashCode() -> int
 override Janus.Core.ApprovedRecovery.ToString() -> string!
@@ -2820,6 +2859,9 @@ override Janus.Core.InvitationId.ToString() -> string!
 override Janus.Core.InvitationRequest.Equals(object? obj) -> bool
 override Janus.Core.InvitationRequest.GetHashCode() -> int
 override Janus.Core.InvitationRequest.ToString() -> string!
+override Janus.Core.IssuedAppPassword.Equals(object? obj) -> bool
+override Janus.Core.IssuedAppPassword.GetHashCode() -> int
+override Janus.Core.IssuedAppPassword.ToString() -> string!
 override Janus.Core.IssuedInvitation.Equals(object? obj) -> bool
 override Janus.Core.IssuedInvitation.GetHashCode() -> int
 override Janus.Core.IssuedInvitation.ToString() -> string!
@@ -2840,6 +2882,9 @@ override Janus.Core.LossReported.ToString() -> string!
 override Janus.Core.MailMessage.Equals(object? obj) -> bool
 override Janus.Core.MailMessage.GetHashCode() -> int
 override Janus.Core.MailMessage.ToString() -> string!
+override Janus.Core.MailServerClient.Equals(object? obj) -> bool
+override Janus.Core.MailServerClient.GetHashCode() -> int
+override Janus.Core.MailServerClient.ToString() -> string!
 override Janus.Core.MailboxPush.Equals(object? obj) -> bool
 override Janus.Core.MailboxPush.GetHashCode() -> int
 override Janus.Core.MailboxPush.ToString() -> string!
@@ -3119,6 +3164,8 @@ static Janus.Core.AlertRaised.operator !=(Janus.Core.AlertRaised? left, Janus.Co
 static Janus.Core.AlertRaised.operator ==(Janus.Core.AlertRaised? left, Janus.Core.AlertRaised? right) -> bool
 static Janus.Core.AncestryEntry.operator !=(Janus.Core.AncestryEntry? left, Janus.Core.AncestryEntry? right) -> bool
 static Janus.Core.AncestryEntry.operator ==(Janus.Core.AncestryEntry? left, Janus.Core.AncestryEntry? right) -> bool
+static Janus.Core.AppPassword.operator !=(Janus.Core.AppPassword? left, Janus.Core.AppPassword? right) -> bool
+static Janus.Core.AppPassword.operator ==(Janus.Core.AppPassword? left, Janus.Core.AppPassword? right) -> bool
 static Janus.Core.ApprovedRecovery.operator !=(Janus.Core.ApprovedRecovery? left, Janus.Core.ApprovedRecovery? right) -> bool
 static Janus.Core.ApprovedRecovery.operator ==(Janus.Core.ApprovedRecovery? left, Janus.Core.ApprovedRecovery? right) -> bool
 static Janus.Core.AttachedInvitation.operator !=(Janus.Core.AttachedInvitation? left, Janus.Core.AttachedInvitation? right) -> bool
@@ -3153,6 +3200,8 @@ static Janus.Core.AuditActions.GroupMemberAdded.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.GroupMemberRemoved.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.GroupRemoved.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.InvitationAcknowledged.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.MailCredentialCreated.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.MailCredentialRevoked.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.MembershipEnded.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.InvitationIssued.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.InvitationRevoked.get -> Janus.Core.AuditAction
@@ -3630,6 +3679,8 @@ static Janus.Core.InvitationId.operator !=(Janus.Core.InvitationId left, Janus.C
 static Janus.Core.InvitationId.operator ==(Janus.Core.InvitationId left, Janus.Core.InvitationId right) -> bool
 static Janus.Core.InvitationRequest.operator !=(Janus.Core.InvitationRequest? left, Janus.Core.InvitationRequest? right) -> bool
 static Janus.Core.InvitationRequest.operator ==(Janus.Core.InvitationRequest? left, Janus.Core.InvitationRequest? right) -> bool
+static Janus.Core.IssuedAppPassword.operator !=(Janus.Core.IssuedAppPassword? left, Janus.Core.IssuedAppPassword? right) -> bool
+static Janus.Core.IssuedAppPassword.operator ==(Janus.Core.IssuedAppPassword? left, Janus.Core.IssuedAppPassword? right) -> bool
 static Janus.Core.IssuedInvitation.operator !=(Janus.Core.IssuedInvitation? left, Janus.Core.IssuedInvitation? right) -> bool
 static Janus.Core.IssuedInvitation.operator ==(Janus.Core.IssuedInvitation? left, Janus.Core.IssuedInvitation? right) -> bool
 static Janus.Core.KeyEncryptionKeys.operator !=(Janus.Core.KeyEncryptionKeys? left, Janus.Core.KeyEncryptionKeys? right) -> bool
@@ -3646,6 +3697,8 @@ static Janus.Core.LossReported.operator !=(Janus.Core.LossReported? left, Janus.
 static Janus.Core.LossReported.operator ==(Janus.Core.LossReported? left, Janus.Core.LossReported? right) -> bool
 static Janus.Core.MailMessage.operator !=(Janus.Core.MailMessage? left, Janus.Core.MailMessage? right) -> bool
 static Janus.Core.MailMessage.operator ==(Janus.Core.MailMessage? left, Janus.Core.MailMessage? right) -> bool
+static Janus.Core.MailServerClient.operator !=(Janus.Core.MailServerClient? left, Janus.Core.MailServerClient? right) -> bool
+static Janus.Core.MailServerClient.operator ==(Janus.Core.MailServerClient? left, Janus.Core.MailServerClient? right) -> bool
 static Janus.Core.MailboxPush.operator !=(Janus.Core.MailboxPush? left, Janus.Core.MailboxPush? right) -> bool
 static Janus.Core.MailboxPush.operator ==(Janus.Core.MailboxPush? left, Janus.Core.MailboxPush? right) -> bool
 static Janus.Core.MembershipChanged.operator !=(Janus.Core.MembershipChanged? left, Janus.Core.MembershipChanged? right) -> bool
