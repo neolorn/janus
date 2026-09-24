@@ -99,7 +99,11 @@ public interface IAccessGate
     /// <param name="organization">The organization the listing is within.</param>
     /// <param name="sources">The contract tables and the identifier selector.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The predicate, which enumerates nothing and returns no record.</returns>
+    /// <returns>
+    /// The predicate, which enumerates nothing and returns no record, or
+    /// <c>auth.stepup.required</c> where the action is bound to a step-up gate the
+    /// session has not met.
+    /// </returns>
     ValueTask<Result<Expression<Func<TResource, bool>>>> FilterAsync<TResource>(
         AccessContext context,
         Permission permission,
@@ -119,7 +123,10 @@ public interface IAccessGate
     /// <param name="rowAlias">The alias the query gives the row.</param>
     /// <param name="column">The column of that row holding the record's identifier.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The fragment and its parameters.</returns>
+    /// <returns>
+    /// The fragment and its parameters, or <c>auth.stepup.required</c> where the action
+    /// is bound to a step-up gate the session has not met.
+    /// </returns>
     /// <exception cref="ArgumentException">
     /// The row alias or the column is not an identifier, which is what would let a value
     /// into the fragment's text.

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Passwords;
@@ -99,6 +100,35 @@ internal sealed class StepUpGuard(
         CancellationToken cancellationToken) =>
         ChallengedAsync(subject, session, action, enrolling: null, cancellationToken);
 
+    /// <summary>
+    /// What a session's proof amounts to against a gate named rather than enumerated:
+    /// one of chapter 10 section 5a, or one the host bound its own action to.
+    /// </summary>
+    /// <param name="subject">Whose account the action is on.</param>
+    /// <param name="session">The session the request arrived on.</param>
+    /// <param name="gate">The gate's name.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The challenge, met or not, or the refusal where the session is not the
+    /// account's.
+    /// </returns>
+    /// <remarks>
+    /// A gate the host names is one no policy states values for, so it costs what the
+    /// dearest gate of the principal's policy costs (AUTHZ-GATE-005, D-160).
+    /// </remarks>
+    public ValueTask<Result<StepUpChallenge>> ChallengeAsync(
+        SubjectId subject,
+        SessionId session,
+        string gate,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(gate);
+
+        return Enum.GetValues<StepUpAction>().Where(action => WrittenName.Of(action) == gate).ToArray() is [StepUpAction named]
+            ? ChallengedAsync(subject, session, named, enrolling: null, cancellationToken)
+            : ChallengedAsync(subject, session, action: null, enrolling: null, cancellationToken);
+    }
+
     private async ValueTask<Error?> JudgedAsync(
         SubjectId subject,
         SessionId session,
@@ -115,7 +145,7 @@ internal sealed class StepUpGuard(
     private async ValueTask<Result<StepUpChallenge>> ChallengedAsync(
         SubjectId subject,
         SessionId session,
-        StepUpAction action,
+        StepUpAction? action,
         Factor? enrolling,
         CancellationToken cancellationToken)
     {
@@ -126,7 +156,7 @@ internal sealed class StepUpGuard(
             return Result.Failure<StepUpChallenge>(Error.From(ErrorCodes.StepUpRequired));
         }
 
-        if (live.SatisfiesEveryGate && Unavailable.Contains(action))
+        if (live.SatisfiesEveryGate && action is StepUpAction withheld && Unavailable.Contains(withheld))
         {
             return Result.Failure<StepUpChallenge>(Error.From(ErrorCodes.Denied));
         }
@@ -141,7 +171,7 @@ internal sealed class StepUpGuard(
             return Result.Failure<StepUpChallenge>(failure);
         }
 
-        if (!policy.Gates.TryGetValue(action, out Gate? gate))
+        if (Costs(policy, action) is not Gate gate)
         {
             return Result.Failure<StepUpChallenge>(Error.From(ErrorCodes.StepUpRequired));
         }
@@ -160,6 +190,13 @@ internal sealed class StepUpGuard(
             ? StepUp.ToEnrol(live, gate, held, creating, now)
             : StepUp.On(live, gate, held, now));
     }
+
+    // D-160: a host's gate has no values of its own in any policy, so it asks what the
+    // dearest of the policy's gates asks and never less than a named one would.
+    private static Gate? Costs(Policy policy, StepUpAction? action) =>
+        action is StepUpAction named
+            ? policy.Gates.TryGetValue(named, out Gate? gate) ? gate : null
+            : policy.Gates.Values.Aggregate(PolicyStrictness.Strictest);
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)
     {

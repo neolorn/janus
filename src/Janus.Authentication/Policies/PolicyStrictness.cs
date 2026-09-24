@@ -254,7 +254,13 @@ internal static class PolicyStrictness
                 action => action,
                 action => Strictest(first[action], second[action]));
 
-    private static Gate Strictest(Gate first, Gate second) =>
+    /// <summary>
+    /// The gate that asks the more of two in each of its three values.
+    /// </summary>
+    /// <param name="first">One gate.</param>
+    /// <param name="second">The other.</param>
+    /// <returns>The higher level, phishing resistance where either asks it, and the shorter age.</returns>
+    public static Gate Strictest(Gate first, Gate second) =>
         new(
             Rank(first.Level) >= Rank(second.Level) ? first.Level : second.Level,
             first.PhishingResistant || second.PhishingResistant,

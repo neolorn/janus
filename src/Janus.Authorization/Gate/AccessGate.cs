@@ -92,7 +92,7 @@ internal sealed class AccessGate(
                 cancellationToken).ConfigureAwait(false);
         }
 
-        return await OutstandingAsync(decided.Subject, permission, cancellationToken)
+        return await OutstandingAsync(context, decided.Subject, permission, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -116,7 +116,7 @@ internal sealed class AccessGate(
 
         if (decided.Grant is { Deny: false })
         {
-            return await OutstandingAsync(decided.Subject, permission, cancellationToken)
+            return await OutstandingAsync(context, decided.Subject, permission, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -133,7 +133,7 @@ internal sealed class AccessGate(
                 [resource.Id],
                 cancellationToken).ConfigureAwait(false)).Contains(resource.Id.ToString()))
         {
-            return await OutstandingAsync(decided.Subject, permission, cancellationToken)
+            return await OutstandingAsync(context, decided.Subject, permission, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -174,7 +174,7 @@ internal sealed class AccessGate(
 
         // An organization-wide check names no record, so it has no data subject; a
         // consent-based purpose is refused rather than admitted on nobody's consent.
-        return await OutstandingAsync(dataSubject: null, permission, cancellationToken)
+        return await OutstandingAsync(context, dataSubject: null, permission, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -344,6 +344,14 @@ internal sealed class AccessGate(
             return Result.Success<Expression<Func<TResource, bool>>>(_ => false);
         }
 
+        // AUTH-STEP-001: a list exercises the permission as a check does, so the gate
+        // bound to it is asked of the session before any row is admitted.
+        if (await gates.OutstandingAsync(context, permission, cancellationToken).ConfigureAwait(false)
+            is Error unmet)
+        {
+            return Result.Failure<Expression<Func<TResource, bool>>>(unmet);
+        }
+
         PermissionRule rule = await RuleAsync(
             context,
             [permission],
@@ -367,6 +375,12 @@ internal sealed class AccessGate(
         if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
         {
             return Result.Success(MatchesNothing);
+        }
+
+        if (await gates.OutstandingAsync(context, permission, cancellationToken).ConfigureAwait(false)
+            is Error unmet)
+        {
+            return Result.Failure<SqlFilter>(unmet);
         }
 
         PermissionRule rule = await RuleAsync(
@@ -479,6 +493,19 @@ internal sealed class AccessGate(
         IReadOnlySet<Permission> nobody = await UnconsentedAsync(
             dataSubject: null, permissions, cancellationToken).ConfigureAwait(false);
 
+        // AUTHZ-GATE-005 (D-160): a gate is the session's to meet whatever the record,
+        // so it is judged once for the page rather than once per row.
+        var unstepped = new HashSet<Permission>();
+
+        foreach (Permission permission in permissions)
+        {
+            if (await gates.OutstandingAsync(context, permission, cancellationToken).ConfigureAwait(false)
+                is not null)
+            {
+                unstepped.Add(permission);
+            }
+        }
+
         var unconsented = new Dictionary<SubjectId, IReadOnlySet<Permission>>();
 
         foreach (ResourceId resource in resources)
@@ -497,6 +524,7 @@ internal sealed class AccessGate(
                 conferred,
                 derivedRows,
                 set.Restricted,
+                unstepped,
                 Whose(whose, resource) is SubjectId owner ? unconsented[owner] : nobody)),
         ]);
     }
@@ -678,6 +706,7 @@ internal sealed class AccessGate(
         IReadOnlyList<PageCapability> conferred,
         IReadOnlyDictionary<Permission, IReadOnlySet<string>> derivedRows,
         bool restricted,
+        HashSet<Permission> unstepped,
         IReadOnlySet<Permission> unconsented)
     {
         string named = resource.ToString();
@@ -716,7 +745,7 @@ internal sealed class AccessGate(
                 outstanding.Add(CapabilityResidual.Restricted);
             }
 
-            if (gates.OutstandingOn(permission) is not null)
+            if (unstepped.Contains(permission))
             {
                 outstanding.Add(CapabilityResidual.StepUp);
             }
@@ -740,13 +769,15 @@ internal sealed class AccessGate(
     // those does not is refused with what it is waiting for rather than with a denial
     // (AUTH-STEP-001, PRIV-SENS-002).
     private async ValueTask<Result> OutstandingAsync(
+        AccessContext context,
         SubjectId? dataSubject,
         Permission permission,
         CancellationToken cancellationToken)
     {
-        if (gates.OutstandingOn(permission) is ErrorCode code)
+        if (await gates.OutstandingAsync(context, permission, cancellationToken).ConfigureAwait(false)
+            is Error unmet)
         {
-            return Result.Failure(Error.From(code));
+            return Result.Failure(unmet);
         }
 
         return await UnconsentedAsync(dataSubject, permission, cancellationToken)

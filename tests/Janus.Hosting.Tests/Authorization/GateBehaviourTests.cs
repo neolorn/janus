@@ -2,12 +2,17 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Authentication.Alerting;
+using Janus.Authentication.Factors;
+using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Hosting.Bff;
+using Janus.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -740,6 +745,90 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
+    /// AUTH-STEP-002 AC3, AUTHZ-GATE-005 (D-160): a host's action bound to a gate is
+    /// judged against the acting person's own session, so a session that proved enough
+    /// within the gate's age is admitted without a challenge, and one whose proof has
+    /// aged is refused with what the gate costs.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_STEP_002_AC3_ASessionThatMeetsAHostsGateIsNotChallengedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Publish]);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        Assert.Null(await SteppedUpRefusalAsync(nested, TimeSpan.Zero));
+
+        Error aged = Assert.IsType<Error>(await SteppedUpRefusalAsync(nested, TimeSpan.FromDays(1)));
+
+        Assert.Equal(ErrorCodes.StepUpRequired, aged.Code);
+        Assert.Equal(HostPermissions.Publish.ToString(), aged.Details["action"].GetString());
+    }
+
+    /// <summary>
+    /// AUTH-STEP-001, AUTHZ-GATE-001: a list exercises the permission as a check does,
+    /// so the filter for an action bound to a gate is refused as the check is, and the
+    /// two renderings of one rule never disagree about it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_STEP_001_AListUnderABoundActionAsksForStepUpAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Publish]);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        IAccessGate gate = scope.ServiceProvider.GetRequiredService<IAccessGate>();
+
+        Result<SqlFilter> fragment = await gate.FragmentAsync(
+            AccessContext.Of(nested.Account),
+            HostPermissions.Publish,
+            Document,
+            nested.Deployment.Organization,
+            "d",
+            "id",
+            cancellationToken);
+
+        Result<Expression<Func<HostDocument, bool>>> filter = await gate.FilterAsync(
+            AccessContext.Of(nested.Account),
+            HostPermissions.Publish,
+            Document,
+            nested.Deployment.Organization,
+            Sources(reading),
+            cancellationToken);
+
+        Assert.Equal(
+            ErrorCodes.StepUpUnavailable,
+            fragment.Match(_ => (ErrorCode?)null, error => error.Code));
+        Assert.Equal(
+            ErrorCodes.StepUpUnavailable,
+            filter.Match(_ => (ErrorCode?)null, error => error.Code));
+        Assert.Equal(
+            ErrorCodes.StepUpUnavailable,
+            await RefusalAsync(nested.Account, nested.Record, HostPermissions.Publish));
+    }
+
+    /// <summary>
     /// AUTHZ-PRIN-001 AC2, AUTHZ-DERIVE-001 (D-162): a check on a type a derivation
     /// reaches, asked without the rows the derivation is evaluated over, is a fault
     /// rather than an answer read from the stored grants alone. It is a fault whatever
@@ -1222,6 +1311,61 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
                     [HostPermissions.Read, HostPermissions.Edit],
                     Sources(reading),
                     TestContext.Current.CancellationToken)));
+    }
+
+    // The request arrives on a session of the account's own, which proved a
+    // phishing-resistant second factor the stated time ago.
+    private async Task<Error?> SteppedUpRefusalAsync(Nested nested, TimeSpan ago)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        IServiceProvider services = scope.ServiceProvider;
+        DateTimeOffset proved = services.GetRequiredService<TimeProvider>().GetUtcNow() - ago;
+
+        var session = Session.Begin(
+            SessionId.New(TimeProvider.System),
+            nested.Account,
+            new Assurance(AssuranceLevel.Aal2, PhishingResistant: true),
+            new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")),
+            proved,
+            TimeSpan.FromDays(7),
+            TimeSpan.FromDays(30),
+            satisfiesEveryGate: false);
+
+        IUnitOfWork work = services.GetRequiredService<IUnitOfWork>();
+
+        await work.BeginAsync(cancellationToken);
+
+        // A session is kept under its person's key, which an account written directly
+        // does not have until its first session asks for it.
+        ISubjectKeyStore keys = services.GetRequiredService<ISubjectKeyStore>();
+
+        if (await keys.FindBySubjectAsync(nested.Account, cancellationToken) is null)
+        {
+            await keys.CreateAsync(nested.Account, cancellationToken);
+        }
+
+        await services.GetRequiredService<ISessionStore>().AddAsync(
+            session,
+            RandomNumberGenerator.GetBytes(32),
+            RandomNumberGenerator.GetBytes(32),
+            cancellationToken);
+        await work.CommitAsync(cancellationToken);
+
+        services.GetRequiredService<RequestSession>().Resolved(session);
+
+        Result outcome = await services.GetRequiredService<IAccessGate>()
+            .RequireAsync(
+                AccessContext.Of(nested.Account),
+                HostPermissions.Publish,
+                nested.Record,
+                Sources(reading),
+                cancellationToken);
+
+        return outcome.Match(() => (Error?)null, error => error);
     }
 
     private async Task<ErrorCode?> RefusalAsync(

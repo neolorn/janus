@@ -1711,6 +1711,13 @@ against the public contract of LIB-API-001.
 
 ### Fixed
 
+- A host's action bound to a step-up gate can be performed once the person has stepped
+  up. The gate is judged against the acting person's own session, a gate named in the
+  step-up catalogue costs what the person's policy states for it, and a gate the host
+  names costs what the dearest gate of that policy costs. Every such action used to be
+  refused whatever the session had proved. The list filter and the SQL fragment now ask
+  the bound gate as the single check does, and a refusal carries what the gate costs
+  and what the person can present.
 - The fields of the records of processing a person supplies through
   `PUT /admin/compliance/assessments` are committed. They were handed to the store and
   never saved, so a deployment's register reported them missing whatever was supplied.

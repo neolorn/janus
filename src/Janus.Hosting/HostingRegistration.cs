@@ -145,9 +145,13 @@ public static class HostingRegistration
         services.AddScoped<SubjectSets>();
 
         // LIB-HOST-004: the assurance provider is the host's to supply, and a host
-        // that supplies none is one where nothing reports what a session has proved.
+        // that supplies none is one where nothing reports what a session has proved
+        // other than the library's own session, which is judged where it carries the
+        // request (AUTH-STEP-002).
+        services.AddScoped<ISessionGates, RequestGates>();
         services.AddScoped(services => new StepUpGates(
             services.GetRequiredService<AuthorizationModel>(),
+            services.GetRequiredService<ISessionGates>(),
             services.GetService<IAssuranceProvider>()));
 
         // API-CONV-002: a body the reader could not parse is answered by the library

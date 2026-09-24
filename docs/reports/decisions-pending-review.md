@@ -12982,6 +12982,69 @@ the ports a host calls), that the actor is the acting person and a system princi
 not counted, that the mean is over every day of the window before today with a day
 without reads counted as nothing, and that counts are kept for the window only.
 
+---
+
+## 328. How a host's action bound to a step-up gate is met
+
+**Phase 9 · 2026-09-24 · Tier 3 · AUTH-STEP-001, AUTH-STEP-002, AUTH-STEP-003, AUTHZ-GATE-005, LIB-HOST-004**
+
+*The question.* A host binds its own action to a step-up gate through the model builder
+(`StepUpGate`, D-160), naming a gate of `10` section 5a or one of its own. Every such
+action was refused with `auth.stepup.required` on every call: the gate never read a
+session, since phase 2 left the session to phase 3 and phase 3 built the session's
+judgement for the library's own actions only. AUTH-STEP-002 AC3 ("a subject whose
+session meets the gate within the maximum age is not challenged") and D-160's
+`requires` ("an action whose bound gate the session does not currently satisfy") never
+held for a host's action, and the list filter admitted rows under a bound action the
+check refused. The chapters do not say which session judges a host's gate, what a gate
+the host names costs when no policy states values for it, or what the assurance
+provider's level is compared with.
+
+*The readings.*
+
+1. Keep refusing every bound action of a host.
+2. Judge the gate against the library's session that carries the request, where it is
+   the acting person's own; a gate named in section 5a costs that action's values, and
+   a gate the host names costs (a) the system default gate, (b) the dearest gate of the
+   person's policy, or (c) nothing it can be met by.
+
+*Chosen: 2(b).* Reading 1 fails AUTH-STEP-002 AC3 for every host. Of the three costs,
+(a) can be cheaper than what the person's own organization asks at its gates, and (c)
+is reading 1 again; (b) never asks less than a named gate of the same policy would. The
+session judged is the one the request resolved to, and only where its account is the
+context's acting person: a context acting for someone else is judged by the actor's
+session, and a system principal, a call carrying no session of the library (a token, a
+background job) or a context the session does not belong to is not judged by it. That
+unjudged case is as before: `auth.stepup.unavailable` with no assurance provider, and
+`auth.stepup.required` with one. The provider's level is still not compared with any
+gate, because it reports a level alone and a gate is three values (AUTH-STEP-002); no
+level can show a phishing-resistance requirement or a maximum age met.
+
+The refusal carries what a gate on the library's own surface carries (`action`,
+`level`, `phishingResistant`, `outcome`, `combinations`), so the frontend prompts the
+same way and steps up at `POST /auth/step-up`. A gate is judged once a request and once
+a capability page, never once a row (AUTHZ-GATE-005 AC1). The list filter and the SQL
+fragment ask the bound gate as the check does, so the two renderings of one rule agree
+(AUTHZ-GATE-001); a restricted account's list still matches nothing before any gate is
+asked.
+
+*Tests that pin it.*
+`StepUpGatesTests.AUTH_STEP_002_AC3_ASessionThatMeetsAHostsGateIsNotChallengedAsync`,
+`StepUpGatesTests.AUTH_STEP_002_AnotherPersonsSessionMeetsNoGateAsync`,
+`StepUpGatesTests.AUTH_STEP_003_AC2_TheDenialIsDistinguishableFromAnOrdinaryOneAsync`,
+`StepUpGuardTests.AUTH_STEP_002_AGateNamedInTheCatalogueCostsItsOwnValuesAsync`,
+`StepUpGuardTests.AUTHZ_GATE_005_AGateTheHostNamesCostsTheDearestGateOfThePolicyAsync`,
+`StepUpGuardTests.AUTH_STEP_002_AnotherPersonsSessionIsRefusedAsync`,
+`GateBehaviourTests.AUTH_STEP_002_AC3_ASessionThatMeetsAHostsGateIsNotChallengedAsync`,
+`GateBehaviourTests.AUTH_STEP_001_AListUnderABoundActionAsksForStepUpAsync`,
+`GateBehaviourTests.LIB_HOST_004_AC2_ABoundActionIsDeniedWithNoAssuranceProviderAsync`.
+
+*Chapter text that should change.* AUTH-STEP-002 or AUTHZ-GATE-005 could say that a
+host's gate is judged against the acting person's own session, what a gate the host
+names costs (or let section 4.1a's `gates` carry host-named keys), and that a list
+filter asks the bound gate; LIB-HOST-004 could say what the provider's level is
+compared with, or return the three values a gate needs.
+
 
 # Rows for chapter 10
 
