@@ -8,7 +8,10 @@ namespace Janus.Authentication.Configuration;
 /// One runtime setting change as the trail holds it.
 /// </summary>
 /// <param name="Key">Which setting.</param>
-/// <param name="Before">What it read as, in the form the settings table writes.</param>
+/// <param name="Before">
+/// What it read as, in the form the settings table writes, or nothing where no value
+/// stood, as before bootstrap names the deployment's values.
+/// </param>
 /// <param name="After">What it reads as now, in the same form.</param>
 /// <param name="Loosening">Whether the change loosens the deployment.</param>
 /// <param name="Reason">The written reason, which a loosening requires.</param>
@@ -21,7 +24,7 @@ namespace Janus.Authentication.Configuration;
 /// </remarks>
 internal sealed record ConfigurationChange(
     ConfigurationKey Key,
-    string Before,
+    string? Before,
     string After,
     bool Loosening,
     string? Reason,

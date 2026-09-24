@@ -48,4 +48,11 @@ public enum SystemOperation
     /// </summary>
     [JsonStringEnumMemberName("monitoring")]
     Monitoring = 5,
+
+    /// <summary>
+    /// Standing a fresh deployment up: its named values, its administrative roles and
+    /// organization, and the accounts it starts with.
+    /// </summary>
+    [JsonStringEnumMemberName("bootstrap")]
+    Bootstrap = 6,
 }

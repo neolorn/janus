@@ -274,7 +274,9 @@ public sealed class LibraryStructureTests
     /// <summary>
     /// OPS-CFG-002, OPS-CFG-005: one operation writes a runtime setting, so a change
     /// that went round it would be a change nobody was told of and nobody had to answer
-    /// for. Nothing else in the library calls the store's write.
+    /// for. Nothing else in the library calls the store's write, and the settings table
+    /// is written by the store and by bootstrap's seed alone, which sets the values the
+    /// deployment starts from and records each (OPS-BOOT-001, entry 315).
     /// </summary>
     [Fact]
     public void OPS_CFG_002_OnlyTheConfigurationAdministrationWritesARuntimeSetting()
@@ -288,12 +290,16 @@ public sealed class LibraryStructureTests
             .Select(one => one.File);
 
         Assert.Empty(writing);
+        Assert.Equal(
+            ["ConfigurationStore.cs", "DeploymentSeed.cs"],
+            Named(text => Regex.IsMatch(text, @"\bSettings\s*\.\s*Add\(", RegexOptions.None, TimeSpan.FromSeconds(5))));
     }
 
     /// <summary>
     /// IDN-LIFE-009a AC1: a membership is made in one place, the attachment of an
-    /// acknowledged invitation, and the acknowledgement is the one thing that runs it;
-    /// a grant, or any other path, makes none.
+    /// acknowledged invitation, and the acknowledgement is the one thing that runs it,
+    /// beside bootstrap, which makes the first administrator's (OPS-BOOT-001,
+    /// INT-MAIL-006 AC1a, entry 313); a grant, or any other path, makes none.
     /// </summary>
     [Fact]
     public void IDN_LIFE_009a_AC1_OnlyAnAcknowledgedInvitationMakesAMembership()
@@ -307,7 +313,13 @@ public sealed class LibraryStructureTests
 
         Assert.Equal(["MembershipAttachment.cs"], making);
         Assert.Equal(
-            ["IMembershipAttachment.cs", "InvitationAcknowledgement.cs", "MembershipAttachment.cs", "StorageRegistration.cs"],
+            [
+                "DeploymentBootstrap.cs",
+                "IMembershipAttachment.cs",
+                "InvitationAcknowledgement.cs",
+                "MembershipAttachment.cs",
+                "StorageRegistration.cs",
+            ],
             Named(text => text.Contains("MembershipAttachment", StringComparison.Ordinal)));
     }
 

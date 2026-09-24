@@ -11751,6 +11751,372 @@ runs the sweep over the database; the reach itself is the constant `LongestSessi
 *Chapter text that should change.* AUTH-KEY-003 could say how long a consumed refresh
 token is kept, and chapter `20` how long a staged identifier verification stands.
 
+---
+
+## 307. How the command-line application reaches the deployment's keys
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-BOOT-001, OPS-SEC-001, OPS-SEC-003, LIB-EXT-001, INF-HOST-003**
+
+*The question.* `janus bootstrap` creates an account whose identifiers are encrypted
+under a subject key wrapped by the key-encryption key and found by fingerprints
+computed under the fingerprint key, and `janus rotate-kek` needs the key versions and
+the maintenance credential. LIB-EXT-001 makes the secret source the host's to supply,
+"registered through configuration, not inheritance from a library type", and
+`ISecretSource` says each value is read "at startup or at the start of a command". The
+command-line application is an executable of the package: CONV-LAYOUT-002 allows it no
+public type a host could call with its own source, and CONV-CODE-004 allows no
+reflection to load one. INF-HOST-003 allows no secret in a file, an image or an
+environment variable.
+
+*The readings.*
+
+1. Give the command a public entry point, in `Janus.Core` or in the mounting types,
+   that a host calls from a program of its own with its `ISecretSource`.
+2. Load the host's `ISecretSource` from an assembly the command line names.
+3. Take the values as arguments, from a file, or from the environment.
+4. Read one document from standard input, which the operator pipes from the secrets
+   manager's own client, and refuse to run where standard input is a terminal.
+
+*Chosen: 4*, the one reading that crosses no rule: 1 grows the public surface against
+CONV-LAYOUT-002, 2 is reflection against CONV-CODE-004, 3 puts a secret where
+INF-HOST-003 forbids one or in the process list. Under 4:
+
+- The document is JSON with `connection` (the database connection the command runs
+  under), `keyEncryptionKeys` (`current` and `versions`, each version's key in
+  base64) and `fingerprintKey` in base64. The rotation commands read what they need
+  from the same document, and are recorded where they are built.
+- The command reads it once, at its start, and clears every key's bytes when it
+  ends; nothing of it is written anywhere. It is read by the command itself and not
+  through an `ISecretSource` of the library's own, which would be a default secret
+  source that LIB-EXT-001 leaves to the host.
+- A document that is not JSON, or larger than 64 KiB, is refused with
+  `api.request.malformed` naming `input`; a missing or unusable key with
+  `model.startup.keyunavailable` naming `keyEncryptionKeys` or `fingerprintKey`. A
+  refusal carries the member it concerns and nothing of the document.
+- A command whose standard input is not redirected is refused before it reads
+  anything, so no key is typed or pasted into a terminal.
+
+*Tests that pin it.* `BootstrapRefusalTests.OPS_SEC_001_TheCommandRefusesATerminalAsync`,
+`BootstrapRefusalTests.OPS_SEC_001_AC2_TheCommandRefusesADocumentWithoutTheKeysAsync`,
+`BootstrapRefusalTests.OPS_SEC_001_AC2_TheCommandRefusesAKeyThatCannotBeUsedAsync`,
+`BootstrapRefusalTests.OPS_SEC_001_ARefusalCarriesNoneOfTheDocumentAsync`.
+
+*Chapter text that should change.* OPS-BOOT-001 and OPS-SEC-003 could say how the
+command is handed the values of INF-HOST-003, and LIB-EXT-001 how the secret source is
+supplied to `Janus.Cli`.
+
+---
+
+## 308. What `janus bootstrap` takes on its command line, and how it refuses
+
+**Phase 9 · 2026-09-24 · Tier 2 · OPS-BOOT-001, LIB-HOST-001, OPS-CFG-004, CONV-NAME-001**
+
+*The question.* OPS-BOOT-001 gives the arguments as "the organization name, the
+administrator's email and phone, and every required deployment value by its key name",
+and the exit codes, and no more: not the spelling of an argument, whether a key that is
+not required may be named too, what completeness means, or where a refusal is written.
+
+*The readings.*
+
+1. Take any key of chapter 10 section 4, required or not, as `--<key> <value>`.
+2. Take the required keys only, and refuse every other.
+
+*Chosen: 2.* Every other key keeps its safe default until the application changes it
+through the audited configuration path, so a value bootstrap wrote could not bypass a
+direction rule or a protected key. Under 2:
+
+- The executable is the project's own, `Janus.Cli`, and `bootstrap` is its first
+  argument. Naming the executable `janus` would put the product name where
+  CONV-NAME-001 (D-163) allows it nowhere; a deployment may install it under any name.
+- Every argument is `--<name> <value>`: `--organization`, `--email`, `--phone`, and
+  each required key by its key name. A name given twice, without a value, or not
+  starting `--` is refused with `api.request.malformed` naming it.
+- A key that is not among the required ones is refused the same way, naming
+  `--<key>`. A required value its key does not admit is refused with the code the key
+  gives it, before the database is reached.
+- What is complete is decided by the same rule the host's start applies
+  (`model.startup.declarationmissing` naming the key,
+  `model.startup.governinglanguage` for `legal.governinglanguage`), so what bootstrap
+  accepts is a deployment that starts.
+- The schema is validated before anything is written, and the whole run is one
+  transaction.
+- Success prints the enrolment address alone on standard output and exits 0. A
+  refusal writes one JSON line `{"code": ..., "details": {...}}` to standard error,
+  prints nothing on standard output, and exits 1.
+
+*Tests that pin it.*
+`BootstrapRefusalTests.OPS_BOOT_001_AC4_BootstrapWithoutTheGoverningLanguageIsRefusedByNameAsync`,
+`BootstrapRefusalTests.OPS_BOOT_001_AValueTheDeploymentLeftUnnamedIsRefusedByItsKeyAsync`,
+`BootstrapRefusalTests.OPS_BOOT_001_AValueItsKeyDoesNotAdmitIsRefusedAsync`,
+`BootstrapRefusalTests.OPS_BOOT_001_AKeyThatDoesNotNameTheDeploymentIsRefusedAsync`,
+`BootstrapTests.OPS_BOOT_001_AFreshDeploymentIsStoodUpByTheCommandAsync`,
+`BootstrapTests.OPS_BOOT_001_TheNamedValuesAndTheAdministrativePolicyAreWrittenAsync`.
+
+*Chapter text that should change.* OPS-BOOT-001 could give the argument form, say
+that only the required keys are taken, say where a refusal is written, and name the
+command without the product name.
+
+---
+
+## 309. How bootstrap queues the first administrator's mailbox
+
+**Phase 9 · 2026-09-24 · Tier 2 · OPS-BOOT-001, INT-MAIL-006 AC1a, REG-MAIL-001**
+
+*The question.* INT-MAIL-006 AC1a requires that the bootstrap-created administrator's
+"provisioning request is queued and completes on the first successful push". The
+arguments OPS-BOOT-001 lists name the administrator's email and phone and no corporate
+address, and the command cannot tell whether the deployment integrates a mail server,
+since it needs only the database.
+
+*The readings.*
+
+1. Queue a mailbox at the administrator's email.
+2. Queue none.
+3. Take an optional `--mailbox <corporate address>` and queue a mailbox there where
+   one is named.
+
+*Chosen: 3.* Reading 1 makes the personal email the corporate one, which REG-MAIL-001
+forbids; reading 2 leaves AC1a unmet on a deployment that has a mail server. Under 3:
+
+- `--mailbox` is optional. Where it is named, the administrator takes the corporate
+  address as it would at an invitation's acknowledgement (primary, locked, verified),
+  and a mailbox is reserved at it and held by the administrator, which the delivery
+  job pushes once the mail server is reachable.
+- An address equal to the personal email is refused with
+  `identity.identifier.invalid` naming `mailbox`.
+- The `emergency` account gets no mailbox and no identifier (AC1b).
+
+*Tests that pin it.* `BootstrapTests.INT_MAIL_006_AC1a_TheAdministratorsMailboxIsQueuedAsync`,
+`BootstrapTests.OPS_BOOT_002_TheEmergencyAccountHoldsTheRoleAndNoWayInAsync`.
+
+*Chapter text that should change.* OPS-BOOT-001 could list the corporate address among
+the arguments, and say it is optional where no mail server is integrated.
+
+---
+
+## 310. The enrolment address bootstrap prints
+
+**Phase 9 · 2026-09-24 · Tier 2 · OPS-BOOT-001, INT-MAIL-006, API-LAND-001**
+
+*The question.* OPS-BOOT-001 prints the link "as the full `/enrol` address" and says
+"nothing is transmitted". INT-MAIL-006 says the administrator is reached at the
+personal address "where the enrolment link goes in any case". Neither names the origin
+the address is under or where the token travels in it.
+
+*The readings.*
+
+1. Print the address and also send it to the personal email.
+2. Print it only.
+
+*Chosen: 2.* The command needs only the database, and a message sent would be a
+transmission OPS-BOOT-001 rules out; the personal email is where the administrator is
+reached afterwards. Under 2:
+
+- The address is the first `webauthn.origins` entry's scheme and authority, then
+  `/enrol#token=<token>`. The token travels in the fragment, which no request carries,
+  so no server log or referrer holds it.
+- The token is an enrolment link held for the administrator, which lives
+  `recovery.link.lifetime`.
+- A first `webauthn.origins` entry that is not an absolute address is refused with
+  `api.request.malformed` naming the key.
+
+*Tests that pin it.* `BootstrapTests.OPS_BOOT_001_ThePrintedAddressEnrolsTheFirstAdministratorAsync`,
+`BootstrapTests.OPS_BOOT_001_AFreshDeploymentIsStoodUpByTheCommandAsync`.
+
+*Chapter text that should change.* OPS-BOOT-001 could name the origin and the
+fragment, and INT-MAIL-006 could say the link is printed, not sent.
+
+---
+
+## 311. What "a system administrator exists" means to bootstrap
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-BOOT-001 AC1, OPS-CFG-007, D-028**
+
+*The question.* OPS-BOOT-001 AC1: "Running it twice while a system administrator
+exists is refused." A deployment can lose its administrator in several ways: the grant
+revoked, the grant expired, the account suspended or erased. Nothing says which of
+them re-opens bootstrap, which runs without any gate (D-028).
+
+*The readings.*
+
+1. Refuse only while some account holds a live, unexpired allow grant of a role
+   holding `system:administer`.
+2. Refuse where the administrative organization exists, or where any allow grant of
+   such a role was made and not revoked, expired or not.
+
+*Chosen: 2*, the strictest: it refuses most. Reading 1 would let whoever reaches the
+database mint a new administrator once every grant has lapsed, which is a way in with
+no gate at all. Under 2:
+
+- The check runs inside the transaction bootstrap writes in.
+- The refusal is `authz.denied`, with no details, and nothing is written.
+
+*Tests that pin it.*
+`BootstrapTests.OPS_BOOT_001_AC1_RunningItAgainWhileASystemAdministratorExistsIsRefusedAsync`.
+
+*Chapter text that should change.* OPS-BOOT-001 AC1 could say that a deployment once
+stood up is never stood up again, and name the refusal's code.
+
+---
+
+## 312. The canary subject and the reserved account bootstrap seeds
+
+**Phase 9 · 2026-09-24 · Tier 2 · OPS-BOOT-001, OPS-BOOT-002, DR-007, INT-MAIL-006 AC1b**
+
+*The question.* DR-007 says the canary holds "one encrypted field" and "a verified
+email" found by its fingerprint, and chapter 10 records it in
+`backup.restoretest.canary` as "the canary subject bootstrap seeds in the
+administrative organization". Neither names the field, the address, or whether the
+canary is an account.
+
+*The readings.*
+
+1. A subject key and rows with no account.
+2. An account, a member of the administrative organization holding no role.
+
+*Chosen: 2.* The identifier and profile rows are an account's, and a membership
+without a role grants nothing. Under 2:
+
+- The address is `canary@restore-test.invalid`, under the name RFC 2606 reserves for
+  what never resolves, so nothing addressed to it reaches anybody.
+- The encrypted field is the display name `Restore canary`.
+- The canary holds no credential, so it has no way in.
+- The `emergency` account is given a subject key like any other account, because a
+  break-glass session acts under it and what it does is recorded against it.
+
+*Tests that pin it.* `BootstrapTests.DR_007_TheCanarySubjectIsSeededAsync`,
+`BootstrapTests.OPS_BOOT_002_TheEmergencyAccountHoldsTheRoleAndNoWayInAsync`,
+`BootstrapTests.OPS_BOOT_001_AC2_NoAccountHoldsACredentialAsync`.
+
+*Chapter text that should change.* DR-007 or chapter 10's `backup.restoretest.canary`
+row could name the field, the address and the membership.
+
+---
+
+## 313. Who grants what bootstrap grants, and how its alert is raised
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-BOOT-001 AC3, IDN-LIFE-009a AC1, AUTHZ-GRANT-004, OPS-ALERT-001, D-133**
+
+*The question.* IDN-LIFE-009a AC1: "Staff membership originates from an invitation,
+never from a bare grant", while OPS-BOOT-001 and INT-MAIL-006 AC1a have bootstrap make
+the first administrator's membership with no invitation. Every stored grant names who
+made it and why, and bootstrap makes the first grants, when nobody holds anything.
+OPS-BOOT-001 AC3 also has the "no emergency credential" alert raised on
+OPS-ALERT-001, which is carried by the alert channels the host registers, and the
+command runs with no host.
+
+*The readings.*
+
+1. For the membership: have bootstrap issue an invitation and acknowledge it itself,
+   or attach the membership directly as the one exception.
+2. For the granter: name none, or a subject no account holds, or each holder as its
+   own granter with the item as the reason.
+3. For the alert: send it from the command, or write it to the raised-alerts outbox
+   for the delivery job to carry.
+
+*Chosen: the direct attachment, the holder as granter, and the outbox.* An invitation
+bootstrap acknowledged itself would record a consent nobody gave. A grant with no
+granter is one no check can trace, and a granter no account holds reads as a system
+action where a person stood behind the command. Under this:
+
+- Bootstrap attaches its memberships through the same attachment the acknowledgement
+  uses, and is the one caller of it beside the acknowledgement; the structure test
+  that pins IDN-LIFE-009a AC1 names the two and no other.
+- The administrator's and the emergency account's `system-administrator` grants, and
+  the canary's membership, name the holder as granter and `OPS-BOOT-001` as the reason.
+- The alert is written to the raised-alerts outbox in the bootstrap transaction, and
+  carried by the delivery job like any raised alert, since the command sends nothing.
+
+*Tests that pin it.*
+`BootstrapTests.OPS_BOOT_001_AC3_NoEmergencyCredentialIsIssuedAndItsAbsenceIsRaisedAsync`,
+`BootstrapTests.OPS_BOOT_001_ThePrintedAddressEnrolsTheFirstAdministratorAsync`,
+`LibraryStructureTests.IDN_LIFE_009a_AC1_OnlyAnAcknowledgedInvitationMakesAMembership`.
+
+*Chapter text that should change.* IDN-LIFE-009a AC1 could except the bootstrap
+administrator, and OPS-BOOT-001 could name the granter of the first grants and say the
+alert is queued rather than sent.
+
+---
+
+## 314. What bootstrap records in the audit trail
+
+**Phase 9 · 2026-09-24 · Tier 3 · IDN-PRIN-001, IDN-AUD-001, AUTHZ-GRANT-004, OPS-BOOT-001**
+
+*The question.* Bootstrap creates the administrative organization and defines the three
+administrative roles. A person with server access runs it, but no one is signed in, and
+IDN-PRIN-001 requires that non-human work act as a named principal with a stated
+reason. Chapter 06 does not say whether bootstrap is audited, or as whom.
+
+*The readings.*
+
+1. Record nothing, since the rows themselves show what was made.
+2. Record under the administrator bootstrap creates.
+3. Record under a deployment-scoped system principal of its own.
+
+*Chosen: 3*, the strictest: it keeps most, and does not credit the administrator with
+what nobody signed in did. Under 3:
+
+- `SystemOperation` gains `Bootstrap` (`bootstrap`). The principal is named
+  `bootstrap`, states `OPS-BOOT-001` as its reason, and may run nothing else.
+- The organization is recorded as `identity.organization.created`, and each role
+  bootstrap defines as `authz.role.defined` with `before` empty and `reason`
+  `OPS-BOOT-001`, both under the principal and in the bootstrap transaction.
+- Every value bootstrap sets is recorded under the principal too, as entry 315 says.
+- `IOrganizationAudit`, `IRoleAudit` and `IConfigurationAudit` gain a form that takes
+  a system principal, as `ICredentialAudit` did in entry 303.
+
+*Tests that pin it.*
+`BootstrapTests.IDN_PRIN_001_AC4_WhatBootstrapDefinesAndSetsIsRecordedUnderItsPrincipalAsync`.
+
+*Chapter text that should change.* OPS-BOOT-001 could say bootstrap is audited under a
+principal of its own, and IDN-PRIN-001 could list `bootstrap` beside the operations
+entry 304 added.
+
+---
+
+## 315. How bootstrap writes the values it sets
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-BOOT-001, OPS-CFG-002, OPS-CFG-004, OPS-CFG-005, chapter 10 section 4.1a**
+
+*The question.* Bootstrap sets the values the deployment names, protected keys among
+them, the administrative organization's `policy.<organization>` ("set at bootstrap",
+chapter 10 section 4.1a) and `backup.restoretest.canary` ("set at bootstrap"). The
+library's one path for a runtime setting is the configuration administration, which
+refuses a system principal ("a system principal is nobody to answer", OPS-CFG-005) and
+never writes a protected key (OPS-CFG-004). OPS-CFG-005 AC1: "Every change produces an
+audit record with before and after values."
+
+*The readings.*
+
+1. Write through the configuration store as the administration does, leaving the
+   values unrecorded.
+2. Write the rows directly, unrecorded, as the initial state rather than a change.
+3. Write the rows directly and record each value as a configuration change under
+   bootstrap's principal.
+
+*Chosen: 3*, the strictest: it keeps most. Reading 1 puts a second caller on the
+store's write, which the structure test pinning OPS-CFG-002 refuses, and cannot write
+the protected keys; reading 2 leaves the security values the deployment starts from
+with no record. Under 3:
+
+- Every value bootstrap sets is written by its seed, in the transaction, and recorded
+  as `ops.configuration.changed` under the `bootstrap` principal with `key`, `before`
+  (null where no value stood), `after`, `loosening` false and `reason`
+  `OPS-BOOT-001`.
+- A value set where none stood is recorded as no loosening: OPS-CFG-002 prices a change
+  made through the application, and the value bootstrap sets is the one the
+  deployment starts from, named by whoever holds the server (D-028).
+- The settings table is written by the store and by bootstrap's seed alone; the
+  structure test pinning OPS-CFG-002 now names the two.
+
+*Tests that pin it.*
+`BootstrapTests.IDN_PRIN_001_AC4_WhatBootstrapDefinesAndSetsIsRecordedUnderItsPrincipalAsync`,
+`BootstrapTests.OPS_BOOT_001_TheNamedValuesAndTheAdministrativePolicyAreWrittenAsync`,
+`LibraryStructureTests.OPS_CFG_002_OnlyTheConfigurationAdministrationWritesARuntimeSetting`.
+
+*Chapter text that should change.* OPS-CFG-005 could say how the values set at
+bootstrap are recorded, and what `before` holds where no value stood.
+
 
 # Rows for chapter 10
 

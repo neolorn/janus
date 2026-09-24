@@ -360,6 +360,19 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A command-line application stands a fresh deployment up with `bootstrap`. It takes
+  the organization's name, the first administrator's email and phone, optionally the
+  corporate address whose mailbox is queued for them, and each required deployment
+  value as `--<key> <value>`; any other key is refused. The database connection, the
+  key-encryption keys and the fingerprint key are read once from a JSON document piped
+  to standard input, never from a terminal, an argument or the environment. It writes
+  the named values, the three administrative roles, the administrative organization
+  and its policy, the administrator, the reserved `emergency` account holding the
+  role and no way in, and the restore test's canary, raises the alert that no
+  emergency credential exists, and prints the administrator's `/enrol` address. It
+  refuses to run where a system administrator exists or ever existed. A refusal is one
+  JSON line on standard error, with exit code 1. What it defines and sets is audited
+  under its own principal, for which `SystemOperation` gains `Bootstrap`.
 - The library runs its own scheduled work. A worker `AddJanus` registers sweeps
   expired sessions, codes, links and tokens, ends the windows of account deletion,
   organization erasure, loss reports and privacy-request deadlines, re-verifies locked
