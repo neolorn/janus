@@ -20,7 +20,9 @@ public sealed class AuditPartitionsTests(DatabaseFixture database) : IClassFixtu
 
     private static readonly TimeSpan SecurityRetention = TimeSpan.FromDays(7 * 365);
 
-    private static readonly TimeSpan RoutineRetention = TimeSpan.FromDays(90);
+    // Longer than any month the fixture holds has been past, so the one partition the case
+    // makes expired is the only one the drop finds, whatever day the suite runs on.
+    private static readonly TimeSpan RoutineRetention = TimeSpan.FromDays(30 * 365);
 
     /// <summary>
     /// OPS-MIG-003a: the maintenance credential is recognised, and neither the
@@ -64,9 +66,9 @@ public sealed class AuditPartitionsTests(DatabaseFixture database) : IClassFixtu
         await connection.ExecuteAsync("DROP TABLE identity." + ahead);
         await connection.ExecuteAsync(
             """
-            CREATE TABLE identity.audit_records_routine_2019_03
+            CREATE TABLE identity.audit_records_routine_1990_03
                 PARTITION OF identity.audit_records_routine
-                FOR VALUES FROM ('2019-03-01 00:00:00+00') TO ('2019-04-01 00:00:00+00');
+                FOR VALUES FROM ('1990-03-01 00:00:00+00') TO ('1990-04-01 00:00:00+00');
             """);
 
         await using StoreContext context = As(Maintenance);
@@ -79,7 +81,7 @@ public sealed class AuditPartitionsTests(DatabaseFixture database) : IClassFixtu
             await partitions.DropExpiredAsync(SecurityRetention, RoutineRetention, TestContext.Current.CancellationToken));
 
         Assert.Equal(ahead, await StandingAsync(connection, ahead));
-        Assert.Null(await StandingAsync(connection, "audit_records_routine_2019_03"));
+        Assert.Null(await StandingAsync(connection, "audit_records_routine_1990_03"));
     }
 
     private static async Task<string?> StandingAsync(NpgsqlConnection connection, string partition) =>

@@ -24,6 +24,35 @@ public sealed class DatabaseFixture : IAsyncLifetime
 
     private const string BackupScript = "/tmp/backup.sql";
 
+    // The cases stamp their records in September 2026 and the weeks after it, the months
+    // a migration run then created. The migration creates the months of the day it runs,
+    // so a later run is given these as that one created them, under the names the
+    // migration's function gives them.
+    private const string FixedMonths =
+        """
+        DO $months$
+        DECLARE
+            parent text;
+            starts timestamp with time zone;
+        BEGIN
+            FOREACH parent IN ARRAY ARRAY['audit_records_security', 'audit_records_routine'] LOOP
+                FOREACH starts IN ARRAY ARRAY[
+                    timestamptz '2026-09-01 00:00:00+00',
+                    timestamptz '2026-10-01 00:00:00+00',
+                    timestamptz '2026-11-01 00:00:00+00'] LOOP
+                    EXECUTE format(
+                        'CREATE TABLE IF NOT EXISTS identity.%I PARTITION OF identity.%I '
+                            || 'FOR VALUES FROM (%L) TO (%L)',
+                        parent || '_' || to_char(starts AT TIME ZONE 'UTC', 'YYYY_MM'),
+                        parent,
+                        starts,
+                        starts + interval '1 month');
+                END LOOP;
+            END LOOP;
+        END
+        $months$;
+        """;
+
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:17-alpine").Build();
 
     /// <summary>
@@ -105,6 +134,9 @@ public sealed class DatabaseFixture : IAsyncLifetime
         }.ConnectionString;
 
         await MigrateAsync();
+
+        await using NpgsqlConnection connection = await OpenAsync();
+        await connection.ExecuteAsync(FixedMonths);
     }
 
     /// <inheritdoc/>

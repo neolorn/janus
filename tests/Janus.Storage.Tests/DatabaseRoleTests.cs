@@ -25,7 +25,9 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
 {
     // The shipped defaults of retention.audit.security and retention.audit.routine,
     // which the worker reads from the catalogue and passes in.
-    private const string Retentions = "interval '7 years', interval '90 days'";
+    // Longer than any month the fixture holds has been past, so the one partition a case
+    // makes expired is the only one the drop finds, whatever day the suite runs on.
+    private const string Retentions = "interval '7 years', interval '30 years'";
 
     private const string InsufficientPrivilege = "42501";
 
@@ -82,9 +84,9 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
 
         await connection.ExecuteAsync(
             """
-            CREATE TABLE identity.audit_records_routine_2020_01
+            CREATE TABLE identity.audit_records_routine_1990_01
                 PARTITION OF identity.audit_records_routine
-                FOR VALUES FROM ('2020-01-01 00:00:00+00') TO ('2020-02-01 00:00:00+00');
+                FOR VALUES FROM ('1990-01-01 00:00:00+00') TO ('1990-02-01 00:00:00+00');
             """);
 
         int standing = await PartitionsAsync(connection);
@@ -94,7 +96,7 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
         Assert.Equal(1, dropped);
         Assert.Equal(standing - 1, await PartitionsAsync(connection));
         Assert.Null(await connection.ExecuteScalarAsync<string>(
-            "SELECT to_regclass('identity.audit_records_routine_2020_01')::text"));
+            "SELECT to_regclass('identity.audit_records_routine_1990_01')::text"));
     }
 
     /// <summary>

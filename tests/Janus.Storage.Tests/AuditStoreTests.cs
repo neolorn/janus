@@ -530,8 +530,16 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             "SELECT identity.audit_ensure_partitions()");
 
         int months = await connection.ExecuteScalarAsync<int>(
-            "SELECT count(*) FROM pg_class "
-                + "WHERE relkind = 'r' AND relname LIKE 'audit_records_%_20%'");
+            """
+            SELECT count(*)
+            FROM pg_class,
+                unnest(ARRAY['audit_records_security_', 'audit_records_routine_']) AS parent,
+                generate_series(0, 2) AS ahead
+            WHERE relkind = 'r'
+                AND relname = parent || to_char(
+                    date_trunc('month', now() AT TIME ZONE 'UTC') + ahead * interval '1 month',
+                    'YYYY_MM')
+            """);
 
         Assert.Equal(0, created);
         Assert.Equal(6, months);
