@@ -246,6 +246,18 @@ public sealed class ModelTests
             "erasures.status",
             "erasures.subject",
 
+            // Not an account field: an emitted event waiting for the consumers the host
+            // registered, and marked once they have it (LIB-API-001, CONV-DESIGN-002).
+            "events.attempts",
+            "events.failed_at",
+            "events.id",
+            "events.kind",
+            "events.next_attempt_at",
+            "events.payload",
+            "events.published_at",
+            "events.raised_at",
+            "events.taken_by",
+
             // Authorization: the counter of AUTHZ-CACHE-001, raised in the transaction of
             // the change that orphans an entry.
             "grant_versions.subject",

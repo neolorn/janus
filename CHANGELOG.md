@@ -369,6 +369,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The library now carries the events it emits. An operation writes each event onto its
+  own transaction, and the `events` job offers it, once that transaction has committed,
+  to every `IEventConsumer<TEvent>` the host registered for its kind. A consumer that
+  refuses or throws is offered the event again under `outbox.retry.*`, the others are
+  not, and once the budget is spent the event is failed and `degradation` is raised. A
+  host no longer registers an `IEvents` of its own; one that does keeps it, and the
+  library's delivery is bypassed.
 - `configure` changes protected keys from the server, the one way to change a key the
   management application refuses: pipe the key document to it as to `bootstrap` and
   name each key as `--<key> <value>`, with `--reason`. It takes the keys chapter 10

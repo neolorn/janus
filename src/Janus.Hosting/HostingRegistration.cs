@@ -11,6 +11,7 @@ using Janus.Authentication.BreakGlass;
 using Janus.Authentication.Callbacks;
 using Janus.Authentication.Configuration;
 using Janus.Authentication.Credentials;
+using Janus.Authentication.Events;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Invitations;
@@ -40,6 +41,7 @@ using Janus.Hosting.Bff;
 using Janus.Hosting.BreakGlass;
 using Janus.Hosting.Configuration;
 using Janus.Hosting.Credentials;
+using Janus.Hosting.Events;
 using Janus.Hosting.Oidc;
 using Janus.Hosting.Organizations;
 using Janus.Hosting.Passwords;
@@ -235,6 +237,12 @@ public static class HostingRegistration
         services.AddScoped<AlertRouter>();
         services.AddScoped<IAlertChannels, AlertChannels>();
         services.AddScoped<AlertDispatch>();
+
+        // LIB-API-001, CONV-DESIGN-002: an emitted event is a row on the transaction
+        // that made it true, offered to the host's consumers once that has committed.
+        services.TryAddScoped<IEvents, EventOutbox>();
+        services.AddScoped<EventConsumers>();
+        services.AddScoped<EventPublisher>();
 
         // OPS-BOOT-002, OPS-BOOT-004: the sealed emergency credential.
         services.AddScoped<BreakGlassService>();

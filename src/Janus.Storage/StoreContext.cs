@@ -5,6 +5,7 @@ using Janus.Storage.Authentication.Background;
 using Janus.Storage.Authentication.BreakGlass;
 using Janus.Storage.Authentication.Callbacks;
 using Janus.Storage.Authentication.Credentials;
+using Janus.Storage.Authentication.Events;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Identifiers;
 using Janus.Storage.Authentication.Invitations;
@@ -335,6 +336,12 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     public DbSet<RaisedAlertRecord> RaisedAlerts => Set<RaisedAlertRecord>();
 
     /// <summary>
+    /// The emitted events, each until every consumer registered for its kind has
+    /// taken it, and marked after.
+    /// </summary>
+    public DbSet<PendingEventRecord> Events => Set<PendingEventRecord>();
+
+    /// <summary>
     /// The registrations in progress, each staging what its steps collected.
     /// </summary>
     public DbSet<RegistrationSessionRecord> RegistrationSessions =>
@@ -520,6 +527,7 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new RegistrationSourceConfiguration());
         modelBuilder.ApplyConfiguration(new AlertConfiguration());
         modelBuilder.ApplyConfiguration(new RaisedAlertConfiguration());
+        modelBuilder.ApplyConfiguration(new PendingEventConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationSessionConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationLinkConfiguration());
         modelBuilder.ApplyConfiguration(new PreAuthenticationConfiguration());

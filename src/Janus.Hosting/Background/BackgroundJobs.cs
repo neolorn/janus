@@ -17,6 +17,7 @@ using Janus.Authentication.SignIn;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Alerting;
+using Janus.Hosting.Events;
 using Janus.Identity.Identifiers;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.Outbox;
@@ -148,6 +149,15 @@ internal static class BackgroundJobs
 
                 return Result.Success();
             }),
+        BackgroundJob.Every(
+            "events",
+            "IDN-LIFE-003a",
+            SystemOperation.Delivery,
+            Settings.OutboxPollInterval,
+            async (services, _, cancellationToken) => Done(
+                await services.GetRequiredService<EventPublisher>()
+                    .PublishAsync(cancellationToken)
+                    .ConfigureAwait(false))),
         BackgroundJob.Every(
             "mailbox-provisioning",
             "INT-MAIL-006a",

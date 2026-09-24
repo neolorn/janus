@@ -12477,6 +12477,81 @@ OPS-ALERT-001 could say whether the governing language raises one alert or both;
 CONV-LAYOUT-001 could list `configure` among what `Janus.Cli` carries, beside bootstrap
 and key rotation.
 
+---
+
+## 320. The library carries its own events: a row on the transaction, and a publisher that offers it to the host's consumers
+
+**Phase 9 · 2026-09-24 · Tier 2 · LIB-API-001, LIB-HOST-001 AC1 and AC3, CONV-DESIGN-002, IDN-LIFE-003a, INF-BG-001, D-162 items 22 and 29, entry 121**
+
+*The question.* Entry 121 left the row a publication is recorded in, its marking and
+the degradation on exhaustion to "the publisher of phase 9", and noted that no
+implementation of `IEvents` was shipped. Every operation that emits an event publishes
+through `IEvents`, and the library registered nothing for it, so a host declaring only
+what LIB-HOST-001 lists could resolve none of those operations. CONV-DESIGN-002 has the
+events "raised from the committed outbox row"; D-162 item 29 has the row stay unmarked
+on failure, with the degradation raised, and marked on success; `IEventConsumer<TEvent>`
+in `Janus.Core` is "what a consumer registers" and nothing called it. No chapter names
+the table, says how a consumer is known, whether a consumer that took an event is
+offered it again when another refused it, what order the events keep, or what becomes
+of a marked row.
+
+*The readings.*
+
+1. `IEvents` is the host's to implement, as the test hosts treated it: the library
+   calls it inside the transaction and keeps no row.
+2. The library implements `IEvents` by writing a row onto the operation's transaction,
+   and a background publisher offers each committed row to the host's
+   `IEventConsumer<TEvent>` registrations, retries under `outbox.retry.*`, marks the row
+   once every consumer has taken it, and fails it and raises `degradation` once the
+   budget is spent.
+
+*Chosen: 2.* Reading 1 adds a declaration LIB-HOST-001 does not list (AC1, AC3), leaves
+`IEventConsumer<TEvent>` uncalled, and leaves "the committed outbox row" and "the row is
+marked" with no row. Under 2:
+
+- The row is `identity.events`: the event's name in chapter 10 section 5b as `kind`,
+  the event itself as generated JSON with every value of the vocabulary written by
+  name, the attempts, the next attempt, the consumers that have taken it, `published_at`
+  (the mark) and `failed_at`. The application's credential holds all four rights on it.
+- A publication succeeds once the row is on the transaction, and a rollback leaves no
+  row, so no consumer hears of a change that did not happen. A consumer's refusal never
+  fails the operation; a failure to write the row still does (entry 121, point 1).
+- The publisher is the job `events` (reason IDN-LIFE-003a, operation `delivery`, every
+  `outbox.poll.interval`) in `Janus.Hosting`, where D-162 item 22 puts the outbox
+  publisher. A consumer is an `IEventConsumer<TEvent>` registered for the event's kind,
+  known by the full name of its type. One that took an event is not offered it again;
+  one that refused it or threw is, after `outbox.retry.initial` multiplied by
+  `outbox.retry.factor` per attempt with full jitter. The row is marked once every
+  registered consumer has taken it, which is at once where none is registered.
+- After `outbox.retry.maxattempts` the row is failed and `degradation` (Normal) is
+  raised, scoped to the row, naming the kind, the attempts and the consumers still
+  outstanding, in the transaction that records the failure. A failed row is not offered
+  again. There is no manual completion path: IDN-LIFE-003a requires one for erasure,
+  restriction and takedown, which keep their own outbox.
+- Events are offered by the instant they were raised. Events of one millisecond carry
+  no order among themselves, and one a consumer refused waits out its delay while
+  later ones reach it: delivery promises each consumer the event, not its place.
+- Marked rows are kept, and nothing removes them. D-162 item 29 says the row is marked,
+  and no chapter names a retention for it.
+- The library's registration gives way to an `IEvents` a host registered before it, as
+  the replaceable defaults do; such a host bypasses the row and the publisher.
+
+*Tests that pin it.*
+`PendingEventsTests.LIB_API_001_EveryEmittedEventReadsBackAsItWasRaisedAsync`,
+`PendingEventsTests.CONV_DESIGN_002_AnEventWaitsOnlyOnceItsTransactionCommitsAsync`,
+`PendingEventsTests.IDN_LIFE_003a_AMarkedOrFailedEventIsNotReadAgainAsync`,
+`EventPublisherTests.CONV_DESIGN_002_AnEventReachesEveryConsumerOfItsKindAndIsMarkedAsync`,
+`EventPublisherTests.IDN_LIFE_003a_OnlyAConsumerThatRefusedIsOfferedTheEventAgainAsync`,
+`EventPublisherTests.IDN_LIFE_003a_AnEventWhoseBudgetIsSpentFailsAndRaisesDegradationAsync`,
+`EventPublisherTests.LIB_API_001_EveryEmittedEventHasItsConsumers`,
+`BackgroundJobsTests.INF_BG_001_AC1_EveryJobRunsWithoutAPersonAsync`.
+
+*Chapter text that should change.* LIB-API-001 or CONV-DESIGN-002 should say that the
+library carries its events through a row of its own and that a host consumes them by
+registering `IEventConsumer<TEvent>`; INF-BG-001 should name the event publisher beside
+the outbox publisher; chapter 10 should name a retention for a marked row, or say that
+a marked row is removed.
+
 
 # Rows for chapter 10
 
