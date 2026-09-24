@@ -330,6 +330,18 @@ against the public contract of LIB-API-001.
   owed disabled, and the notice set is told of the new primary.
   `IInvitations.EndMembershipAsync` is the same operation in process.
 
+- `POST /admin/accounts/{subject}/suspend` and `/reactivate` suspend and reactivate an
+  account under `account:manage`, each a step-up action (204). Suspension ends every
+  session of the account in the same transaction; reactivation restores the account as
+  it stood, so one suspended while restricted is restricted again. An account its
+  owner deactivated becomes the administrator's to reactivate and its owner's link no
+  longer stands it up. Reactivation applies only to an administrator's suspension, and
+  an account being deleted is not suspended (403 `authz.denied`); an unknown subject
+  answers 400 `api.request.malformed` naming `subject`. The audit trail records
+  `identity.account.suspended` and `identity.account.reactivated` in the security
+  category. `IAccounts` is the same pair of operations in process. Apply the
+  migration, which adds `restriction_held` to the accounts table.
+
 - Staff mailboxes are provisioned through `IMailServer`, which a deployment registers
   where its staff mail is hosted and which no package ships. A mailbox is owed
   `disabled` from its reservation, `enabled` while its holder is an active member of

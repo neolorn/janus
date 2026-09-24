@@ -43,4 +43,24 @@ internal sealed class AccountAudit(IAuditStore records, TimeProvider time) : IAc
                     Nothing),
                 cancellationToken)
             .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async ValueTask AdministeredAsync(
+        AuditAction action,
+        SubjectId acting,
+        SubjectId subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken) =>
+        await records.AppendAsync(
+                AuditRecord.Of(
+                    AuditRecordId.New(time),
+                    AuditCategory.Security,
+                    action,
+                    at,
+                    acting,
+                    subject,
+                    organization: null,
+                    Nothing),
+                cancellationToken)
+            .ConfigureAwait(false);
 }

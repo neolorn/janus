@@ -28,6 +28,7 @@ internal sealed class Account
         DateTimeOffset createdAt,
         AccountState state,
         SuspensionOrigin? suspendedBy,
+        bool restrictionHeld,
         DeletionOrigin? deletingBy,
         DateTimeOffset? deletingSince)
     {
@@ -35,6 +36,7 @@ internal sealed class Account
         CreatedAt = createdAt;
         State = state;
         SuspendedBy = suspendedBy;
+        RestrictionHeld = restrictionHeld;
         DeletingBy = deletingBy;
         DeletingSince = deletingSince;
     }
@@ -59,6 +61,13 @@ internal sealed class Account
     /// differently.
     /// </summary>
     public SuspensionOrigin? SuspendedBy { get; private set; }
+
+    /// <summary>
+    /// Whether a restriction of processing is held while the account is away from the
+    /// restricted state, so that it is in force again when the account returns
+    /// (PRIV-RIGHT-004).
+    /// </summary>
+    public bool RestrictionHeld { get; private set; }
 
     /// <summary>
     /// Why the account entered its grace window, where it is deleting. The origin
@@ -102,6 +111,9 @@ internal sealed class Account
     /// <param name="createdAt">The instant it was created.</param>
     /// <param name="state">The state it is in.</param>
     /// <param name="suspendedBy">Who suspended it, where it is suspended.</param>
+    /// <param name="restrictionHeld">
+    /// Whether a restriction is held while it is away from the restricted state.
+    /// </param>
     /// <param name="deletingBy">Why its grace window began, where one is running.</param>
     /// <param name="deletingSince">When that window began.</param>
     /// <param name="registration">What the registration recorded.</param>
@@ -111,10 +123,11 @@ internal sealed class Account
         DateTimeOffset createdAt,
         AccountState state,
         SuspensionOrigin? suspendedBy,
+        bool restrictionHeld,
         DeletionOrigin? deletingBy,
         DateTimeOffset? deletingSince,
         AccountRegistration? registration) =>
-        new(subject, createdAt, state, suspendedBy, deletingBy, deletingSince)
+        new(subject, createdAt, state, suspendedBy, restrictionHeld, deletingBy, deletingSince)
         {
             Registration = registration,
         };
@@ -128,24 +141,40 @@ internal sealed class Account
     public void Deactivate() => EnterSuspension(SuspensionOrigin.Self, AccountState.Active);
 
     /// <summary>
-    /// An administrator suspends the account. Only an administrator reactivates it.
+    /// An administrator suspends the account. Only an administrator reactivates it, so
+    /// an account its owner deactivated becomes one the owner can no longer stand back
+    /// up, and a restriction in force is remembered to be restored.
     /// </summary>
     /// <exception cref="InvalidOperationException">
-    /// The account is neither active nor restricted.
+    /// The account is neither active, restricted nor deactivated by its owner.
     /// </exception>
-    public void Suspend() =>
+    public void Suspend()
+    {
+        if (State is AccountState.Suspended && SuspendedBy is SuspensionOrigin.Self)
+        {
+            SuspendedBy = SuspensionOrigin.Administrator;
+
+            return;
+        }
+
+        bool restricted = State is AccountState.Restricted;
+
         EnterSuspension(SuspensionOrigin.Administrator, AccountState.Active, AccountState.Restricted);
+        RestrictionHeld = restricted;
+    }
 
     /// <summary>
-    /// Restores a suspended account. Prior access returns exactly as it was.
+    /// Restores a suspended account. Prior access returns exactly as it was, a
+    /// restriction in force when it was suspended included.
     /// </summary>
     /// <exception cref="InvalidOperationException">The account is not suspended.</exception>
     public void Reactivate()
     {
         Require(AccountState.Suspended);
 
-        State = AccountState.Active;
+        State = RestrictionHeld ? AccountState.Restricted : AccountState.Active;
         SuspendedBy = null;
+        RestrictionHeld = false;
     }
 
     /// <summary>
@@ -211,6 +240,7 @@ internal sealed class Account
 
         State = AccountState.Suspended;
         SuspendedBy = SuspensionOrigin.Administrator;
+        RestrictionHeld = false;
         EnterDeletion(DeletionOrigin.Takedown, at);
     }
 

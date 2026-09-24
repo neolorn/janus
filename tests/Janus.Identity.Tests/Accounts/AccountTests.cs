@@ -103,6 +103,36 @@ public sealed class AccountTests
     }
 
     /// <summary>
+    /// IDN-LIFE-013 AC1 and PRIV-RIGHT-004: an administrator suspending a restricted
+    /// account and reactivating it restores the restriction, and an active one comes
+    /// back active; an account its owner deactivated becomes the administrator's to
+    /// reactivate.
+    /// </summary>
+    [Fact]
+    public void IDN_LIFE_013_AC1_ReactivationRestoresARestrictionInForce()
+    {
+        var restricted = Account.Create(Ahmed, Noon);
+        var active = Account.Create(Ahmed, Noon);
+        var deactivated = Account.Create(Ahmed, Noon);
+
+        restricted.Restrict();
+        restricted.Suspend();
+        active.Suspend();
+        deactivated.Deactivate();
+        deactivated.Suspend();
+
+        Assert.Equal((AccountState.Suspended, true), (restricted.State, restricted.RestrictionHeld));
+        Assert.Equal(SuspensionOrigin.Administrator, deactivated.SuspendedBy);
+
+        restricted.Reactivate();
+        active.Reactivate();
+
+        Assert.Equal((AccountState.Restricted, false), (restricted.State, restricted.RestrictionHeld));
+        Assert.Equal(AccountState.Active, active.State);
+        Assert.Throws<InvalidOperationException>(() => restricted.Reactivate());
+    }
+
+    /// <summary>
     /// IDN-LIFE-003 AC4: a takedown passes the account through suspension into the
     /// grace window in one transaction, recording that a takedown put it there.
     /// </summary>

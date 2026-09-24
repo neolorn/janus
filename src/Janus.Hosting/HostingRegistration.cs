@@ -282,6 +282,7 @@ public static class HostingRegistration
             provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<AccountService>();
         services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
+        services.AddScoped<IAccounts, AccountAdministration>();
         services.AddScoped<SignInLinks>();
         services.AddScoped<VerificationCodes>();
         services.AddScoped<AuthenticationService>();

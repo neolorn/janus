@@ -32,6 +32,7 @@ internal sealed class AccountStore(StoreContext context) : IAccountStore
             record.CreatedAt,
             record.State,
             record.SuspendedBy,
+            record.RestrictionHeld,
             record.DeletingBy,
             record.DeletingSince,
             Registered(record));
@@ -50,6 +51,7 @@ internal sealed class AccountStore(StoreContext context) : IAccountStore
                     CreatedAt = account.CreatedAt,
                     State = account.State,
                     SuspendedBy = account.SuspendedBy,
+                    RestrictionHeld = account.RestrictionHeld,
                     DeletingBy = account.DeletingBy,
                     DeletingSince = account.DeletingSince,
                     AdultAffirmed = account.Registration?.AdultAffirmed,
@@ -72,6 +74,7 @@ internal sealed class AccountStore(StoreContext context) : IAccountStore
 
         record.State = account.State;
         record.SuspendedBy = account.SuspendedBy;
+        record.RestrictionHeld = account.RestrictionHeld;
         record.DeletingBy = account.DeletingBy;
         record.DeletingSince = account.DeletingSince;
     }
@@ -95,6 +98,7 @@ internal sealed class AccountStore(StoreContext context) : IAccountStore
                 record.CreatedAt,
                 record.State,
                 record.SuspendedBy,
+                record.RestrictionHeld,
                 record.DeletingBy,
                 record.DeletingSince,
                 Registered(record))),

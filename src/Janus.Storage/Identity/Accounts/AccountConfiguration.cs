@@ -32,6 +32,12 @@ internal sealed class AccountConfiguration : IEntityTypeConfiguration<AccountRec
                 "ck_accounts_suspended_by",
                 "suspended_by IS NULL OR "
                     + Vocabulary.Admits<SuspensionOrigin>("suspended_by"));
+
+            // PRIV-RIGHT-004: a restriction is held only while the account is in a state
+            // it can come back from.
+            table.HasCheckConstraint(
+                "ck_accounts_restriction_held",
+                "NOT restriction_held OR state IN ('deleting', 'suspended')");
             table.HasCheckConstraint(
                 "ck_accounts_deleting_by",
                 "deleting_by IS NULL OR "
@@ -78,6 +84,9 @@ internal sealed class AccountConfiguration : IEntityTypeConfiguration<AccountRec
         builder.Property(account => account.SuspendedBy)
             .HasColumnName("suspended_by")
             .HasConversion(new VocabularyConverter<SuspensionOrigin>());
+
+        builder.Property(account => account.RestrictionHeld)
+            .HasColumnName("restriction_held");
 
         builder.Property(account => account.DeletingBy)
             .HasColumnName("deleting_by")

@@ -34,6 +34,11 @@ internal sealed class AccountRecord
     public SuspensionOrigin? SuspendedBy { get; set; }
 
     /// <summary>
+    /// The <c>restriction_held</c> column.
+    /// </summary>
+    public bool RestrictionHeld { get; set; }
+
+    /// <summary>
     /// The <c>deleting_by</c> column.
     /// </summary>
     public DeletionOrigin? DeletingBy { get; set; }

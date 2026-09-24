@@ -21,10 +21,17 @@ public static class AuditActions
     public static AuditAction AccountDeactivated { get; } = AuditAction.Parse("identity.account.deactivated");
 
     /// <summary>
-    /// A deactivated account was stood back up.
+    /// A suspended account was stood back up, by its owner from a deactivation or by an
+    /// administrator from an administrator's suspension.
     /// </summary>
     /// <remarks>Implements IDN-LIFE-013, chapter 10 section 5.</remarks>
     public static AuditAction AccountReactivated { get; } = AuditAction.Parse("identity.account.reactivated");
+
+    /// <summary>
+    /// An administrator suspended an account; only an administrator reactivates it.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-013, AUTH-SESS-010 and IDN-AUD-001.</remarks>
+    public static AuditAction AccountSuspended { get; } = AuditAction.Parse("identity.account.suspended");
 
     /// <summary>
     /// The bot defence answered a send with a signal, which is recorded without the signal's own detail.

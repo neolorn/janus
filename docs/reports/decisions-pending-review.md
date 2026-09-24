@@ -9265,6 +9265,141 @@ as entry 234 has it.
 *Chapter text that should change.* PRIV-RIGHT-005a could name the identifiers an
 attached invitation binds among what an erasure makes unreadable.
 
+---
+
+## 254. What an administrator's suspension and reactivation answer and record
+
+**Phase 8 · 2026-09-24 · Tier 2 · IDN-LIFE-013, AUTH-SESS-010, IDN-AUD-001, LIB-API-005, chapter 09 section 8a, chapter 10 section 5a**
+
+*The question.* Chapter 09 section 8a lists `POST /admin/accounts/{subject}/suspend` and
+`/reactivate` under "Accounts: `account:manage`", with "Suspension ends sessions in the
+same operation (AUTH-SESS-010); reactivation restores grants exactly (IDN-LIFE-013).
+Requires step-up". Chapter 10 section 5a names the step-up actions `account:suspend` and
+`account:reactivate`. Nothing names the service contract, the answers, what either
+announces or what either writes to the audit trail, and chapter 10 holds audit rows only
+for the owner's own deactivation and reactivation, both routine.
+
+*Chosen.*
+
+- A new public contract, `IAccounts`, carries both, in the pattern of `IOrganizations`
+  for the section's organization operations; the section's other account operations
+  join it as they are built. `account:manage` is asked in the administrative
+  organization, as every deployment operation is.
+- **204** where the change is made; **400** `api.request.malformed` naming `subject`
+  where no account bears it, in the precedent of entry 250; **403** `authz.denied`
+  without the permission, where no person acts, or where the account is in a state the
+  operation does not apply to (deleting or deleted for suspension, anything but an
+  administrator's suspension for reactivation), in the takedown precedent; **403**
+  `auth.stepup.required` where the session has not stepped up.
+- Suspending an account an administrator already suspended changes nothing and answers
+  204 before step-up is asked, in the precedent of requesting an organization's deletion
+  twice.
+- No reason is asked, because the endpoint names no body, unlike the takedown and the
+  organization operations beside it.
+- Suspension ends every session of the account in its transaction and publishes
+  `AccountSuspended` with `by` `administrator` and the administrator as actor;
+  reactivation publishes `AccountReactivated` with the administrator as actor.
+- Both are audited in the transaction that makes the change, security category,
+  acting subject the administrator and effective subject the account, no organization:
+  suspension as a new action, `identity.account.suspended`, and reactivation as the existing
+  `identity.account.reactivated`. An administrator acting on another person's standing
+  is a security event (chapter 04, retention "Security events, permission changes"),
+  while the owner's own reactivation stays routine as it was, so the category of an
+  `identity.account.reactivated` row follows who acted.
+
+*Tests that pin it.*
+`AccountAdministrationTests.AUTH_SESS_010_SuspensionEndsTheSessionsOfTheAccountAsync`,
+`AccountAdministrationTests.IDN_LIFE_013_AnAccountBeingDeletedOrUnknownIsNotSuspendedAsync`,
+`AccountAdministrationTests.IDN_LIFE_013_SuspendingTwiceChangesNothingAsync`,
+`AccountAdministrationTests.IDN_LIFE_013_WithoutThePermissionOrAStepUpNothingChangesAsync`,
+`AccountAdministrationEndpointTests.AUTH_SESS_010_AnAccountIsSuspendedAndReactivatedAsync`,
+`SessionRequirementTests` (the list of session routes), `AuditActionsTests` (the list of
+actions).
+
+*Chapter text that should change.* Chapter 09 section 8a could give the two endpoints
+their answers, and chapter 10 could hold the audit rows below, with the category of
+`identity.account.reactivated` depending on who acted.
+
+---
+
+## 255. An administrator's suspension of an account its owner deactivated
+
+**Phase 8 · 2026-09-24 · Tier 3 · IDN-LIFE-013, D-140, chapter 16 section 3 step 2**
+
+*The question.* IDN-LIFE-013 has the account record who suspended it "because the two
+are reversed differently", and the self suspension reversed by its owner's link or by
+recovery (D-140). Chapter 16 step 2 has the administrator suspend a departing person's
+account so that "only an administrator can reverse it". Nothing says what suspending an
+account its owner has already deactivated does, or whether an administrator may
+reactivate an account its owner deactivated.
+
+*The readings.*
+
+1. Refuse the suspension, since the account is not active or restricted; the owner can
+   still stand it back up with the link or by recovery.
+2. The account stays suspended and becomes the administrator's: `suspendedBy` becomes
+   `administrator`, so neither the link nor recovery stands it back up.
+3. Answer success and change nothing.
+
+*Chosen: 2, the strictest reading.* Readings 1 and 3 leave the departing person able to
+reverse what the administrator meant only an administrator to reverse. The link the
+deactivation notice carried is kept, so presenting it answers
+`identity.account.adminsuspended` as it does for any account an administrator suspended.
+The sessions are ended in the transaction as for any suspension, though a suspended
+account holds none. `AccountSuspended` is not published, because chapter 10 section 5b
+fires it when the "State enters or leaves `suspended`" and the state did not change; the
+change is audited as `identity.account.suspended`.
+
+For the reverse, an administrator reactivates only what an administrator suspended; an
+account its owner deactivated answers `authz.denied`, since reversing the owner's own
+choice is theirs, by the link or by recovery.
+
+*Tests that pin it.*
+`AccountAdministrationTests.IDN_LIFE_013_ADeactivatedAccountBecomesTheAdministratorsAsync`,
+`AccountAdministrationTests.IDN_LIFE_013_OnlyAnAdministratorsSuspensionIsReactivatedAsync`,
+`AccountTests.IDN_LIFE_013_AC1_ReactivationRestoresARestrictionInForce`,
+`AccountLifecycleTests.IDN_LIFE_013_AdministrativeSuspensionIsNotReversedByALinkAsync`.
+
+*Chapter text that should change.* IDN-LIFE-013 could say that an administrator's
+suspension of a self-deactivated account makes it the administrator's to reverse, and
+that an administrator does not reactivate an account its owner deactivated.
+
+---
+
+## 256. What reactivation restores to an account suspended while restricted
+
+**Phase 8 · 2026-09-24 · Tier 3 · IDN-LIFE-013, PRIV-RIGHT-004, IDN-ACCT-007**
+
+*The question.* The account already let an administrator suspend a restricted account,
+and IDN-LIFE-013 AC1 has "Reactivation restores prior access exactly". IDN-ACCT-007 has
+an account "in exactly one state at any time", so once it was suspended the restriction
+was recorded nowhere, and reactivation made every suspended account `active`.
+
+*The readings.*
+
+1. Reactivation makes the account `active`, which lifts the restriction as a side
+   effect of the suspension.
+2. The account remembers that it was restricted when an administrator suspended it,
+   and reactivation makes it `restricted` again.
+
+*Chosen: 2, the strictest reading.* Reading 1 ends a restriction the subject asked for
+without the decision PRIV-RIGHT-004 requires to lift it, and it is not "prior access
+exactly". The account carries a new column, `restriction_held`, which can be true only
+while the account is suspended or in its deletion window (a check constraint pins it).
+An administrator's suspension of a restricted account sets it and the reactivation
+clears it on the way back to `restricted`. Nothing is sent to the privacy subscribers on
+either side: the restriction was never lifted.
+
+*Tests that pin it.*
+`AccountTests.IDN_LIFE_013_AC1_ReactivationRestoresARestrictionInForce`,
+`AccountStoreTests.IDN_LIFE_013_AC1_TheRowCarriesTheRestrictionToRestoreAsync`,
+`AccountAdministrationTests.IDN_LIFE_013_AC1_ReactivationRestoresPriorAccessExactlyAsync`,
+`ModelTests` (the list of columns).
+
+*Chapter text that should change.* IDN-LIFE-013 could say that reactivation returns an
+account suspended while restricted to `restricted`, and chapter 10 section 5.12b could
+name the recorded fact beside `suspendedBy`.
+
 
 # Rows for chapter 10
 
@@ -9423,7 +9558,8 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `authz.role.defined` | security | `AuditActions.RoleDefined` | A role was created, or the permissions it bundles were changed. Details carry `role`, `before`, `after` and `reason`; the row names no organization. (AUTHZ-GRANT-004, OPS-CFG-007, entry 188) |
 | `authz.role.removed` | security | `AuditActions.RoleRemoved` | A role nothing named was removed. Details carry `role`, `before`, `after` (null) and `reason`. (AUTHZ-GRANT-004, entries 188 and 189) |
 | `identity.account.deactivated` | routine | `AuditActions.AccountDeactivated` | An account was deactivated by its own owner. (IDN-LIFE-013) |
-| `identity.account.reactivated` | routine | `AuditActions.AccountReactivated` | A deactivated account was stood back up. (IDN-LIFE-013) |
+| `identity.account.reactivated` | routine, or security where an administrator acted | `AuditActions.AccountReactivated` | A suspended account was stood back up: by its owner from a deactivation (routine), or by an administrator from an administrator's suspension (security, the acting subject the administrator and the effective subject the account). (IDN-LIFE-013, entry 254) |
+| `identity.account.suspended` | security | `AuditActions.AccountSuspended` | An administrator suspended an account, or took over the suspension of one its owner deactivated. The acting subject is the administrator, the effective subject the account; the row names no organization. (IDN-LIFE-013, AUTH-SESS-010, entries 254 and 255) |
 | `identity.credential.labelled` | routine | `AuditActions.CredentialLabelled` | A credential was given or renamed a label by its holder. (REG-PM-002) |
 | `identity.deletion.cancelled` | routine | `AuditActions.DeletionCancelled` | A deletion was cancelled inside its grace window. (IDN-LIFE-014) |
 | `identity.deletion.requested` | routine | `AuditActions.DeletionRequested` | A deletion was requested, which opens the grace window it can be brought back from. (IDN-LIFE-014) |

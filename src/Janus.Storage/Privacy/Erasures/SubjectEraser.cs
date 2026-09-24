@@ -88,6 +88,7 @@ internal sealed class SubjectEraser(
             record.CreatedAt,
             record.State,
             record.SuspendedBy,
+            record.RestrictionHeld,
             record.DeletingBy,
             record.DeletingSince,
             registration: null);

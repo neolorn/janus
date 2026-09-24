@@ -41,6 +41,7 @@ public sealed class AuditActionsTests
         "authz.role.removed",
         "identity.account.deactivated",
         "identity.account.reactivated",
+        "identity.account.suspended",
         "identity.credential.labelled",
         "identity.deletion.cancelled",
         "identity.deletion.requested",

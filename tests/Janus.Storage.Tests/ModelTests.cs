@@ -94,6 +94,7 @@ public sealed class ModelTests
             "accounts.deleting_by",
             "accounts.deleting_since",
             "accounts.notice_version",
+            "accounts.restriction_held",
             "accounts.state",
             "accounts.subject",
             "accounts.suspended_by",

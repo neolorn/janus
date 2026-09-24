@@ -73,6 +73,20 @@ internal sealed class AccountDirectory(
             : null;
 
     /// <inheritdoc/>
+    public async ValueTask SuspendAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        if (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
+            is not Account account)
+        {
+            return;
+        }
+
+        account.Suspend();
+
+        await accounts.RecordTransitionAsync(account, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask DeactivateAsync(SubjectId subject, CancellationToken cancellationToken)
     {
         if (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)

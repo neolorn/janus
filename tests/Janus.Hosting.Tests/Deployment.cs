@@ -691,6 +691,7 @@ internal sealed class Deployment : IAsyncDisposable
             provider.GetRequiredService<TimeProvider>()));
         _ = services.AddScoped<AccountService>();
         _ = services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
+        _ = services.AddScoped<IAccounts, AccountAdministration>();
         _ = services.AddScoped<TotpService>();
         _ = services.AddScoped<WebAuthnService>();
         _ = services.AddScoped<SignInLinks>();

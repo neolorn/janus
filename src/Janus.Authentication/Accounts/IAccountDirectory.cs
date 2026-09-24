@@ -40,13 +40,25 @@ internal interface IAccountDirectory
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Stands a self-deactivated account back up, which completing recovery does
-    /// (D-140).
+    /// Stands a suspended account back up: a self-deactivated one from its link or at
+    /// the completion of recovery (D-140), an administratively suspended one by an
+    /// administrator. A restriction in force when it was suspended is in force again
+    /// (IDN-LIFE-013).
     /// </summary>
     /// <param name="subject">Whose account.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of standing it up.</returns>
     ValueTask ReinstateAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Suspends an account as an administrator, which is the <c>administrator</c> entry
+    /// into the suspended state; an account its owner deactivated stays suspended and
+    /// becomes the administrator's to reactivate.
+    /// </summary>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of suspending it.</returns>
+    ValueTask SuspendAsync(SubjectId subject, CancellationToken cancellationToken);
 
     /// <summary>
     /// The deletion an account is in the grace window of, where it is in one.

@@ -20,6 +20,8 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
     private readonly Dictionary<SubjectId, HeldPreferences> _preferences = [];
     private readonly Dictionary<SubjectId, DateTimeOffset> _created = [];
     private readonly Dictionary<SubjectId, SuspensionOrigin> _suspensions = [];
+
+    private readonly HashSet<SubjectId> _restrictionHeld = [];
     private readonly Dictionary<SubjectId, HeldDeletion> _deletions = [];
     private readonly Dictionary<SubjectId, ReadOnlyMemory<byte>> _photos = [];
 
@@ -80,8 +82,24 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
     /// <inheritdoc/>
     public ValueTask ReinstateAsync(SubjectId subject, CancellationToken cancellationToken)
     {
-        _states[subject] = AccountState.Active;
+        _states[subject] = _restrictionHeld.Remove(subject)
+            ? AccountState.Restricted
+            : AccountState.Active;
         _ = _suspensions.Remove(subject);
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask SuspendAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        if (_states.GetValueOrDefault(subject) is AccountState.Restricted)
+        {
+            _ = _restrictionHeld.Add(subject);
+        }
+
+        _states[subject] = AccountState.Suspended;
+        _suspensions[subject] = SuspensionOrigin.Administrator;
 
         return ValueTask.CompletedTask;
     }

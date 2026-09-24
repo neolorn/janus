@@ -1080,6 +1080,9 @@ Janus.Core.IAccount.ReadPreferencesAsync(Janus.Core.AccessContext! context, Syst
 Janus.Core.IAccount.RemovePhotoAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAccount.SetPhotoAsync(Janus.Core.AccessContext! context, System.ReadOnlyMemory<byte> upload, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAccount.SetPreferencesAsync(Janus.Core.AccessContext! context, string? language, string? timeZone, System.Collections.Generic.IReadOnlyDictionary<string!, string!>! declared, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IAccounts
+Janus.Core.IAccounts.ReactivateAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IAccounts.SuspendAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAssuranceProvider
 Janus.Core.IAssuranceProvider.LevelAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AssuranceLevel>>
 Janus.Core.IAuditTrail
@@ -3123,6 +3126,7 @@ static Janus.Core.AuditAction.operator ==(Janus.Core.AuditAction left, Janus.Cor
 static Janus.Core.AuditActions.AccessDenied.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.AccountDeactivated.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.AccountReactivated.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.AccountSuspended.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.BotDefenceSignalled.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ConfigurationChanged.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ConsentGranted.get -> Janus.Core.AuditAction
