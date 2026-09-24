@@ -14,7 +14,7 @@ namespace Janus.Hosting.Tests.Authorization;
 
 /// <summary>
 /// What the gate says about a decision, and what a refusal discloses
-/// (AUTHZ-GATE-004, AUTHZ-CONCEAL-001 to AUTHZ-CONCEAL-005, AUTHZ-IMP-001).
+/// (AUTHZ-GATE-004, AUTHZ-CONCEAL-001 to AUTHZ-CONCEAL-005, AUTHZ-IMP-001, OPS-OBS-001).
 /// </summary>
 [Trait("kind", "integration")]
 public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixture>
@@ -279,6 +279,57 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
             .ResolveAsync(AccessContext.Of(local), correlation, cancellationToken);
 
         Assert.Equal(ErrorCodes.Denied, Refusal(resolved).Code);
+    }
+
+    /// <summary>
+    /// OPS-OBS-001 AC1: the identifier a denial carries resolves, through the gate and
+    /// without a debugger, to an explanation naming the permission refused and saying
+    /// that no grant matched.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_OBS_001_AC1_ADenialResolvesToThePermissionAndTheMissingGrantAsync()
+    {
+        Deployed deployed = await DeployAsync(granted: false);
+
+        AuditRecordId correlation = await RefusedAsync(deployed, deployed.Note, HostPermissions.ReadNote);
+
+        AccessExplanation explanation = Explained(await ResolvedOwnAsync(deployed.Account, correlation));
+
+        Assert.Equal(AccessOutcome.Denied, explanation.Outcome);
+        Assert.Equal(HostPermissions.ReadNote, explanation.Permission);
+        Assert.Null(explanation.Grant);
+    }
+
+    /// <summary>
+    /// OPS-OBS-001 AC2: a person holding no grant at all resolves their own refusal,
+    /// while the same identifier through the support resolution, which needs
+    /// <c>audit:read</c>, is refused to them.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_OBS_001_AC2_OnesOwnRefusalIsExplainedWithoutAnElevatedRoleAsync()
+    {
+        Deployed deployed = await DeployAsync(granted: false);
+
+        AuditRecordId correlation = await RefusedAsync(deployed, deployed.Note, HostPermissions.ReadNote);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        IAccessGate gate = scope.ServiceProvider.GetRequiredService<IAccessGate>();
+
+        Result<AccessExplanation> own = await gate.ResolveOwnAsync(
+            AccessContext.Of(deployed.Account),
+            correlation,
+            TestContext.Current.CancellationToken);
+
+        Result<AccessExplanation> asSupport = await gate.ResolveAsync(
+            AccessContext.Of(deployed.Account),
+            correlation,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(AccessOutcome.Denied, Explained(own).Outcome);
+        Assert.Equal(deployed.Account, Explained(own).Principal.Acting);
+        Assert.Equal(ErrorCodes.Denied, Refusal(asSupport).Code);
     }
 
     /// <summary>
