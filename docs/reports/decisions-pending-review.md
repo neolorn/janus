@@ -1943,6 +1943,8 @@ chooses nothing about what the profile covers.
 
 *Chapter text that should change.* None.
 
+**Superseded by D-165.** The host's own callbacks are mounted at paths it chooses; the library's routes stay a fixed list. Applied in entry 276.
+
 ---
 
 ## 63. A deployment that starts without key material refuses to start
