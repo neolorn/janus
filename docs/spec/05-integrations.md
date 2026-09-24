@@ -22,10 +22,10 @@ specifying a plaintext endpoint SHALL be rejected at startup.
 
 *Source: P-003*
 
-This is not theoretical. The shipping provider's own published environment file
-specifies a plain `http://` base URL, which would send customer names, addresses and
-phone numbers unencrypted. Rejecting it at validation is what prevents that value
-being copied into configuration unexamined.
+This is not theoretical. Providers publish sample configuration that specifies a plain
+`http://` base URL, which would send names, addresses and phone numbers unencrypted.
+Rejecting it at validation is what prevents such a value being copied into
+configuration unexamined.
 
 **Acceptance criteria**
 1. A base URL with scheme `http` fails startup with a named error.
@@ -58,6 +58,14 @@ and source restriction where ranges are published.
 
 A callback SHALL NEVER by itself advance an authoritative state.
 
+**The pipeline is the library's; the callbacks are mostly the host's.** The library
+ships these controls as a host-mountable machine-profile pipeline (BFF-MACH-002,
+BFF-MACH-003): signature verification, correlation references, the rate limit and
+source restriction. The only callback endpoint the library defines itself is the SMS
+delivery report (INT-SMS-005, `09` section 10). A host mounts each of its own
+providers' callbacks on the same pipeline and owns what state, if any, they may
+influence.
+
 **Values (D-153).** The callback endpoints accept `integration.callback.ratelimit` requests
 per source per minute, fixed window, and answer 429 `integration.callback.rejected`
 before any lookup. A correlation reference is 128 random bits, base64url, compared in
@@ -68,7 +76,7 @@ fixed time. A signing secret rotates with a 24 hour overlap (BFF-MACH-002).
 *Source: D-013, D-030*
 
 Callbacks arrive unauthenticated or weakly authenticated. A forged one must be
-unable to mark a phone verified, an order delivered, or a payment received.
+unable to mark a phone verified, or to advance any state the host hangs on a callback.
 
 **Acceptance criteria**
 1. A callback with a guessed reference is rejected.
@@ -93,8 +101,9 @@ layer, never assembled ad hoc at call sites.
 
 *Source: D-030*
 
-The minimisation rules in `04-privacy` are only enforceable if there is exactly one
-place a payload is built.
+The data categories declared for each recipient (PRIV-ROPA-002) are only enforceable
+if there is exactly one place a payload is built; a payload carries nothing outside
+its recipient's declared categories.
 
 **Acceptance criteria**
 1. A test asserts the exact field set of each outbound payload.
@@ -115,8 +124,8 @@ condition is raised.
 *Source: D-146; AUTH-SESS-013*
 
 A network lookup would hand every sign-in address to whoever runs the lookup service.
-The database is a data file like the courier's district taxonomy (INT-SHIP-005), and
-its age is a degradation to surface (OPS-OBS-002), not a reason to look elsewhere.
+The database is a data file, refreshed like any other, and its age is a degradation to
+surface (OPS-OBS-002), not a reason to look elsewhere.
 
 **Acceptance criteria**
 1. No outbound request is made to resolve a location; a test asserts the resolver
@@ -171,7 +180,7 @@ credential and would replace the provisioning row only.
 *Source: D-006, D-085*
 
 Separation avoids coupling to a pre-1.0 schema and keeps mail out of the database
-holding customer health data. It also means the application's continuous archiving
+holding the subjects' personal data. It also means the application's continuous archiving
 does **not** cover it — unnoticed until the second review, and it would have lost all
 staff mail history on host loss.
 
@@ -407,178 +416,7 @@ unreachable without knowing it.
 
 ---
 
-## 3. Payments
-
-**INT-PAY-001** — Card data SHALL NEVER touch this system. Only a provider reference
-and an amount SHALL be received and stored.
-
-*Source: D-030, PRIV-SENS-004*
-
-This is what removes the financial-detail sensitive category from our own holdings.
-
-**Acceptance criteria**
-1. No schema field holds a card number, expiry, or verification value.
-2. No request body accepted by this system contains card data.
-
----
-
-**INT-PAY-002** — Payment callbacks **SHALL be signature-verified**, and SHALL NOT by
-themselves mark an order paid.
-
-*Source: D-070, D-080*
-
-**The provider signs.** Verified against their documentation: callbacks carry an
-HMAC-SHA-512-family signature over the payload, signed with the merchant secret. A
-newer scheme places the signature, merchant identifier and request timestamp in
-headers, signing the concatenation of timestamp and body — which supplies replay
-protection natively and is preferred where available.
-
-The provider additionally publishes IP ranges and recommends restricting callbacks to
-them, and recommends confirming status against their query API rather than trusting
-the callback. All three apply.
-
-**Operational:** a non-2xx response is treated as unacknowledged and retried for 72
-hours. The endpoint must therefore acknowledge quickly and process asynchronously, and
-must be idempotent.
-
-**Acceptance criteria**
-1. An unsigned or mis-signed callback is rejected before parsing.
-2. Where the timestamped scheme is available, a replayed callback outside the window
-   is rejected.
-3. A duplicate notification identifier is processed once.
-4. Payment state is confirmed against the provider's query API before the order
-   advances.
-5. The endpoint returns 2xx within the provider's timeout and processes
-   asynchronously.
-
----
-
-**INT-PAY-003** — The processing location of the payment provider SHALL be recorded
-in configuration and reflected in generated records. If processing occurs outside
-Egypt, it SHALL be included in the cross-border transfer scope.
-
-*Source: D-023, D-036*
-
-**Acceptance criteria**
-1. The hosting location field is populated for this provider.
-2. An out-of-Egypt value causes the provider to appear in the cross-border section.
-
----
-
-## 4. Shipping
-
-### 4.1 Contract
-
-**INT-SHIP-001** — Shipment creation SHALL send exactly the fields in the mapping
-below and no others.
-
-| Field | Rule |
-|---|---|
-| Package description | **Fixed generic string.** Never product names, never a category narrowing to a condition, never derived from the cart. Configurable, but not per order |
-| Items count | Permitted |
-| Notes | Delivery instructions only. Never order contents |
-| Business reference | Opaque internal reference, meaningless outside this system |
-| Receiver first name, last name, phone | Permitted |
-| **Receiver email** | **Omitted.** Phone suffices for a courier |
-| Drop-off address | Permitted |
-| Cash on delivery amount | Permitted where applicable |
-
-*Source: D-030, PRIV-MIN-001*
-
-**Acceptance criteria**
-1. The description field is unreachable from order line items in code.
-2. A test asserts the exact outbound field set, failing if a field is added.
-3. No outbound request contains a product name.
-
----
-
-**INT-SHIP-002** — The provider's product-catalogue integration SHALL NOT be used
-for storefront orders.
-
-*Source: D-030*
-
-The provider offers a product catalogue with inventory and search. Linking it to
-deliveries would place product identity beside a named person's home address in a
-third party's system.
-
-**Acceptance criteria**
-1. No call is made to catalogue endpoints from the storefront order path.
-
----
-
-**INT-SHIP-003** — The status callback SHALL NOT by itself advance order state, and
-SHALL trigger verification against the provider's API.
-
-*Source: D-070, D-080*
-
-**The provider does not sign.** Their published collection was searched exhaustively
-for a signature header, HMAC reference, signing secret or webhook secret; `webhookUrl`
-is the only webhook-related field it contains.
-
-Verification-on-receipt is therefore the primary control, supported by unguessable
-references and rate limiting.
-
-*Source: D-030, PRIV-MIN-002*
-
-**Acceptance criteria**
-1. A forged callback does not change order state.
-2. The callback endpoint is rate-limited.
-
----
-
-**INT-SHIP-004** — Authentication SHALL use the provider's API key in an
-`Authorization` header, held as a rotatable secret per INT-GEN-002.
-
-*Source: verified against the provider's collection*
-
-**Acceptance criteria**
-1. The key is not present in any repository file.
-2. Rotation requires no deployment.
-
----
-
-**INT-SHIP-005** — The provider's city, zone and district taxonomy SHALL be cached
-locally and refreshed on a schedule.
-
-*Source: D-061*
-
-Zones change. Addresses store identifiers rather than names (IDN-ATTR-005), so a
-rename does not orphan them.
-
-**Acceptance criteria**
-1. Refresh occurs without human action.
-2. Districts flagged as unserved are refused at address entry, not at dispatch.
-
----
-
-**INT-SHIP-006** — Address free-text lines SHALL be passed through and SHALL receive
-the same treatment as everything else sent to the provider.
-
-*Source: D-061, D-030*
-
-The structured part routes the parcel; the free text is what the courier reads
-standing in the street. These lines are the field most likely to contain something
-unexpected, since people write whatever they think will help — so they are never
-logged and never used for anything but the shipment.
-
-**Acceptance criteria**
-1. Free-text lines appear in no log entry.
-2. Both structured selection and free text are submitted.
-
----
-
-### 4.2 Accepted residual
-
-The shipping provider knows the sender is a medical supplies company. That implies
-"bought something medical," not a specific condition — a materially weaker inference,
-unavoidable if we ship at all, and proportionate. Cash-on-delivery amounts cross by
-necessity.
-
-*Source: D-030*
-
----
-
-## 5. SMS
+## 3. SMS
 
 **INT-SMS-001** — SMS SHALL be used for **verification codes**, for **sign-in links**
 (`phoneLink`), for **second-step codes** (`phoneCode`), for **security notices** to a
@@ -690,7 +528,7 @@ solves for non-engineer editors, of whom there are none.
 
 ---
 
-## 6. Compromised-password screening
+## 4. Compromised-password screening
 
 **INT-PWD-001** — Screening SHALL send only a hash prefix. The full hash and the
 password SHALL NEVER leave the system.
@@ -739,7 +577,7 @@ transfer with destination and basis.
 
 ---
 
-## 7. Hosting
+## 5. Hosting
 
 **INT-HOST-001** — The hosting location SHALL be recorded in configuration and
 reflected in generated records as **inside** or **outside Egypt**.
@@ -765,26 +603,28 @@ A consent withdrawal would otherwise leave data that cannot lawfully be hosted.
 
 ---
 
-## 8. Provider register
+## 6. Provider register
 
 | Provider | Role | Data received | Location field | Callback |
 |---|---|---|---|---|
-| Mail server | Processor | Mailbox contents, account identifiers | Follows hosting | — |
-| Payment provider | Processor | Payment details, amount, order reference | Configured | Yes |
-| Shipping provider | Processor | Name, phone, address, generic description, amount | Configured | Yes |
+| Mail server | Processor | Mailbox contents, account identifiers | Follows hosting | No |
 | SMS gateway | Processor | Phone number, message text | Configured | Yes |
-| Hosting provider | Processor | All stored data | Configured | — |
-| Password screening | Recipient | Hash prefix only | Outside Egypt | — |
-| Developer | Processor | All stored data | — | — |
+| Hosting provider | Processor | All stored data | Configured | No |
+| Password screening | Recipient | Hash prefix only | Outside Egypt | No |
+| Developer | Processor | All stored data | n/a | No |
 
-*Source: D-036, D-029, D-041*
+*Source: D-036, D-029, D-041, D-162 C.103*
 
 Each requires an agreement reference in generated records. The register is a
-rendering of configuration, not a separately maintained list.
+rendering of configuration, not a separately maintained list. These rows are the
+processors the library itself makes true and are shipped as defaults, each applied only
+while the integration it describes is configured (D-162 C.103). Every processor of the
+host's own business (its payment or delivery vendors, say) is a row the host declares
+through `recipients` (PRIV-ROPA-002); the library ships no such row.
 
 ---
 
-## 9. Open items
+## 7. Open items
 
 None. Cross-references: consent and minimisation policy in `04-privacy`; abuse
 control behaviour in `02-authentication`; secrets handling and configuration

@@ -1024,7 +1024,7 @@ staff (AUTH-SESS-005b) use that, lifetimes do not.
 requires that "a definite reauthentication overall timeout SHALL be established" and
 recommends (SHOULD) no more than 30 days at AAL1. The 365-day absolute lifetime
 satisfies the SHALL; the 30 days is the one departure, from a SHOULD, made because
-consumer practice — Google, every major store — is a session that persists while
+consumer practice (Google, every major consumer service) is a session that persists while
 used and is revocable in one action. The security of the customer session rests on
 the controls that actually matter: an
 opaque server-side cookie revocable instantly (AUTH-SESS-001), rotation on every
@@ -1035,7 +1035,7 @@ removal or password change (IDN-LIFE-008), a device list with "sign out everywhe
 
 **Staff re-authenticate once a day and after an hour away — without losing their
 work.** Both figures are NIST SHOULDs at AAL2, kept as defaults because staff see
-health data and change grants; the organization may lengthen them up to the
+sensitive data and change grants; the organization may lengthen them up to the
 enforced ceilings. After an **inactivity** expiry that is still inside the 24-hour
 window, the verifier SHALL accept **a single factor bound to the existing session
 secret** — a passkey (biometric or PIN user verification) or the password, never a
@@ -2058,6 +2058,35 @@ towards the ceiling accepts a longer one.
    and the key cannot be set above its ceiling.
 3. A relying party validating offline rejects the token no later than its expiry; the
    documented revocation latency for that party equals the configured lifetime.
+
+
+**AUTH-OIDC-006** — The provider SHALL conform to the OAuth 2.0 Security Best Current
+Practice (RFC 9700) and to OAuth 2.1 semantics, and SHALL prove it: only the
+authorization code grant with PKCE `S256` and the refresh grant exist; the implicit,
+password and plain-PKCE forms are refused; every redirect is an exact registered match;
+no public client receives a refresh token. **Every authorization request SHALL be a
+Pushed Authorization Request (RFC 9126):** the client posts the parameters to
+`POST /oidc/par` over the back channel and the browser carries only the returned
+`request_uri`; a direct `/oidc/authorize` with parameters is refused with
+`invalid_request`. **Access tokens SHALL follow RFC 9068**: header `typ: at+jwt`, claims
+`iss`, `exp`, `aud`, `sub`, `client_id`, `iat`, `jti`, and the mail server adapter
+verifies `aud` as well as the signature.
+
+*Source: D-164*
+
+Janus owns both ends of every flow, so a pushed request costs no interoperability and
+removes the authorization parameters from the browser entirely rather than protecting
+them one by one. RFC 9068 makes an access token unmistakable for an ID token and binds
+it to its audience, which convention alone does not.
+
+**Acceptance criteria**
+1. A conformance suite asserts each refusal named above and the exact-match rule.
+2. `/oidc/authorize` without a `request_uri` from `/oidc/par` is refused; the
+   `request_uri` is single use and expires in 60 seconds.
+3. Every access token carries `typ: at+jwt` and the seven claims; a token whose
+   `aud` is not the mail server's client identifier is rejected by the adapter.
+4. Discovery advertises `pushed_authorization_request_endpoint` and
+   `require_pushed_authorization_requests: true`.
 
 ---
 

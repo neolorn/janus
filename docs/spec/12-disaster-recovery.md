@@ -38,10 +38,10 @@ honestly at 4–8 hours rather than aspirationally at 2–3.
 This is a deliberate trade of recovery time for infrastructure cost, recorded so it
 is a known position rather than a discovery during an incident.
 
-**Two things that soften it:** payment records are held independently by the payment
-provider, so in-flight orders are reconcilable. And the failure this protects
-against is rare — most incidents are application faults fixed by deploying, not data
-loss.
+**Two things that soften it:** a host's processors hold their own records
+independently, so a host's in-flight business records are usually reconcilable against
+them. And the failure this protects against is rare: most incidents are application
+faults fixed by deploying, not data loss.
 
 *Source: D-044*
 
@@ -97,11 +97,10 @@ alike.
 **What it does not cover:** loss of the host. If the server is gone, the backups are
 gone with it.
 
-**Accepted risk, stated plainly.** From launch the database holds health data —
-order history that discloses a diagnosis (PRIV-SENS-003). During this phase, loss of
-the host means **permanent, unrecoverable loss of customer health data**, and that
-is also a reportable personal data incident under the availability limb of the
-breach rules (section 7).
+**Accepted risk, stated plainly.** From launch the database holds whatever sensitive
+data the host declares (PRIV-SENS-001). During this phase, loss of the host means
+**permanent, unrecoverable loss of that data**, and that is also a reportable personal
+data incident under the availability limb of the breach rules (section 7).
 
 This is accepted deliberately, ending at the trigger in DR-005 — which has no date, so the period is open-ended (D-109).
 
@@ -277,8 +276,9 @@ The public half MAY reside on the host; the private half SHALL NOT.
 *Source: D-069, D-103*
 
 Otherwise losing the host loses both the data and the means to read it. Backups will
-hold health data and will move to third-party storage at the tier upgrade, and the
-records of processing state that encryption is in place.
+hold personal data, including any the host declares sensitive, and will move to
+third-party storage at the tier upgrade, and the records of processing state that
+encryption is in place.
 
 **Why asymmetric, and why its own key.** An unattended backup job must encrypt without
 holding a secret, which only a public key allows. Keeping the key separate from the
@@ -376,7 +376,7 @@ unaccepted and unrecorded.
 
 Two stores backed up separately drift apart in two ways: one is moved and the other
 forgotten, or the two are restored to different points and the business is left with
-orders it cannot match to correspondence. Both are avoided by producing them as one
+records it cannot match to correspondence. Both are avoided by producing them as one
 artefact pair. This matters most at the storage upgrade: moving the application
 backup to object storage while leaving the mail store on the host would produce an
 off-site backup that is incomplete, undiscovered until it was needed.
@@ -551,15 +551,15 @@ the ancestry integrity check before cutting over.
 
 ## 6. What restore does not fix
 
-**External systems do not roll back.** Mail is delivered, payments are captured,
-shipments are dispatched. A restore to an earlier point produces a database that
-disagrees with the payment provider, the courier, and the mail server.
+**External systems do not roll back.** Mail is delivered, and every processor the host
+integrates has acted on what it was sent. A restore to an earlier point produces a
+database that disagrees with the mail server and with each of the host's processors.
 
 After any restore that moves time backwards:
 
-- Reconcile orders against payment provider records
-- Reconcile shipment state against the courier
 - Run Stalwart reconciliation (INT-MAIL-007) and read the drift report
+- Reconcile the host's records against each processor the host declares, following
+  the host's own procedure
 
 **Restoring is not undo.** It recovers the database; it does not recover the world.
 

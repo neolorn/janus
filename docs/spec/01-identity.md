@@ -197,7 +197,7 @@ which the account still exists but cannot be acted upon (`04-privacy`).
 **Acceptance criteria**
 1. Every account row has a state; none is null.
 2. A `restricted` account can read its own data and exercise data subject rights,
-   and cannot place orders or change settings.
+   and cannot perform host write operations or change settings.
 3. Transitioning to `deleted` leaves the subject identifier resolvable and removes
    personal attributes.
 4. `deleting` is cancellable throughout its window, restoring the account to `active`,
@@ -392,46 +392,48 @@ restriction, takedown. Sensitive data about an identifiable person, attached to 
 account, has no route by which any right can be exercised or honoured.
 
 **This is a library rule about sensitive data**, not a rule about any particular host's
-checkout. A host processing no sensitive data is unaffected.
+product. A host processing no sensitive data is unaffected.
 
-**Data a subject enters about a third party is that subject's personal data.** A
-delivery recipient's name, phone and address — a customer ordering for a parent — are
-entered by the customer, controlled by the customer, and encrypted under the
-**customer's** key (PRIV-RIGHT-005a). The recipient holds no account, no key and no
-dashboard; they remain a data subject in law, and any request they make is handled
-through the out-of-band path (PRIV-RIGHT-001) against the customer's records. When the
-customer is erased, the recipient's details go with them. Recipients as subjects in
-their own right — keys, consent and rights for people who never touched the system —
-is rejected (D-131).
+**Data a subject enters about a third party is that subject's personal data.** A third
+party's name, phone and address, entered by a customer on a record the host keeps for
+that customer, are controlled by the customer and encrypted under the **customer's**
+key (PRIV-RIGHT-005a). The third party holds no account, no key and no dashboard; they
+remain a data subject in law, and any request they make is handled through the
+out-of-band path (PRIV-RIGHT-001) against the customer's records. When the customer is
+erased, the third party's details go with them. Third parties as subjects in their own
+right (keys, consent and rights for people who never touched the system) is rejected
+(D-131).
 
 **Acceptance criteria**
 1. No path exists by which a sensitive resource type is created without a subject
    holding an account.
-2. A recipient's fields on an order are encrypted under the ordering customer's key
-   and become unrecoverable when that customer is erased.
+2. A third party's fields on a host record are encrypted under the key of the subject
+   who entered them and become unrecoverable when that subject is erased.
 3. A subject with sensitive data held about them has an account, a history and a
    privacy dashboard.
 4. The takedown procedure always has an account to act on.
 
-**Host application: the storefront.** Order history is sensitive (PRIV-SENS-003), so
-every order belongs to an account and there is **no guest checkout**. The cost is one
-screen — phone verification is required by default (REG-IDENT-001, `registration.phone`), which is the entire
-friction guest checkout would have avoided. Registration, which opens with the age
-screen (REG-PROF-002), is the single point at which the adult affirmation is collected.
+**Consequence for a host.** A host whose records about a subject are sensitive
+(PRIV-SENS-001) gives every such subject an account, so there is **no anonymous path**
+into those records. The cost is one screen: phone verification is required by default
+(REG-IDENT-001, `registration.phone`), which is the entire friction an anonymous path
+would have avoided. Registration, which opens with the age screen (REG-PROF-002), is
+the single point at which the adult affirmation is collected.
 
 ---
 
-**IDN-LIFE-003** — A documented takedown procedure SHALL exist and be followed on
-any credible indication that a customer is under 18: account suspended, open orders
-cancelled, personal data removed, event recorded.
+**IDN-LIFE-003** A documented takedown procedure SHALL exist and be followed on
+any credible indication that a customer is under 18: account suspended, host-side
+processing for the subject stopped, personal data removed, event recorded.
 
 *Source: D-148; D-039, D-127, D-147*
 
 **Two phases, one operation.** Triggering the takedown does, in one transaction:
 suspend the account, terminate its sessions (AUTH-SESS-010), record the event with
-its trigger and reason, and publish the outbox record that tells the host to cancel
-open orders. That outbox record is the per-subscriber completion record of the
-cancellation: it is written in the trigger transaction, the worker delivers it and each
+its trigger and reason, and publish the outbox record that tells the host to stop its
+own processing for the subject. That outbox record is the per-subscriber completion
+record of that host-side work: it is written in the trigger transaction, the worker
+delivers it and each
 required subscriber confirms against it (IDN-LIFE-003a), and it is what the takedown
 screen reads during the window (D-148). No erasures row exists yet: the erasures table
 (IDN-LIFE-003b) describes an erasure, and none has happened. Access and processing stop
@@ -440,7 +442,8 @@ fingerprint neutralisation) runs when `takedown.grace` (default **7 days**) elap
 through the ordinary erasure transaction (IDN-LIFE-003a), after which the account is
 `deleted`. During the window the takedown can be **reversed** by a holder of
 `takedown:execute`, for the case where an adult was misjudged, restoring `active`
-and re-enabling sign-in; cancelled orders are not restored. State sequence:
+and re-enabling sign-in; host-side actions already taken on `TakedownExecuted` are not
+undone by the library. State sequence:
 `active → suspended → deleting → deleted`, the first two transitions in the trigger
 transaction; the account sits in **`deleting`** for the window.
 
@@ -464,10 +467,10 @@ reason. A takedown the subject could cancel from their inbox would not be a take
 `AccountDeletionRequested` fires.
 
 **Why a window.** Immediate key destruction would make a mistaken takedown
-unfixable and would leave nothing for the refund and reporting steps in
+unfixable and would leave nothing for the host's follow-up and reporting steps in
 `14-takedown-procedure` to contact. Nothing is processed during the window: the
-account cannot sign in, staff cannot act on it, and the host has already cancelled
-its orders.
+account cannot sign in, staff cannot act on it, and the host has already stopped its
+own processing for the subject.
 
 The affirmation verifies nothing. What makes self-declaration proportionate for
 sensitive data is that the situation has a defined outcome rather than being decided
@@ -477,12 +480,12 @@ on the spot.
 1. The procedure exists as `14-takedown-procedure.md`.
 2. The system provides an operation performing all four steps **reliably, with
    per-subscriber completion visible**, not atomically (IDN-LIFE-003a): the
-   cancellation's completion is read from its outbox record from the moment of
+   host-side work's completion is read from its outbox record from the moment of
    trigger, the erasure's from the erasures row once phase two has run.
 3. Execution is recorded in the audit trail with the reason.
 4. On trigger, in one transaction, the account passes through `suspended` into
-   `deleting` with `deletingBy = takedown`, its sessions are ended and the host-side
-   cancellation is published as an outbox record carrying per-subscriber confirmation;
+   `deleting` with `deletingBy = takedown`, its sessions are ended and `TakedownExecuted`
+   is published as an outbox record carrying per-subscriber confirmation;
    no personal field is destroyed yet and no erasures row is written.
 5. When `takedown.grace` elapses without reversal, the erasure transaction runs and
    the account is `deleted`; reversal inside the window restores `active`.
@@ -556,19 +559,19 @@ identity and knows nothing of who consumes them.
    them. For an erasure, the subject's wrapped key is
    overwritten and the fingerprint neutralised **in that same transaction**
    (PRIV-RIGHT-005a, PRIV-RIGHT-005c). None can exist without the others. A takedown
-   runs this step twice: at trigger, with the host-side cancellation as the outbox
+   runs this step twice: at trigger, with `TakedownExecuted` as the outbox
    record and no erasures row; and at the end of `takedown.grace`, as an ordinary
    erasure (IDN-LIFE-003, D-148). The outbox record carries each required
-   subscriber's confirmation, so the completion of a cancellation is visible from the
-   trigger onward
+   subscriber's confirmation, so the completion of the host-side work is visible from
+   the trigger onward
 2. **The worker publishes** to every registered subscriber
 3. **Subscribers act** in their own tables
 4. **Each confirms** independently
 5. **Complete** only when every required subscriber has confirmed
 
-**Generic by construction.** The event says *"account X was erased"*, never *"cancel
-orders for X."* A second application registers as another subscriber and the library
-changes not at all.
+**Generic by construction.** The event says *"account X was erased"*, never *"redact
+X's records in the host's tables."* A second application registers as another
+subscriber and the library changes not at all.
 
 **Requirements on the mechanism:**
 - **Subscribers SHALL be idempotent.** Delivery is at-least-once; a retry may arrive
@@ -661,9 +664,9 @@ followed by a grant.
 *Source: D-148; D-079a, D-146*
 
 The only account-creation path was public registration, so a staff member would
-register as a customer — storefront client identifier, marketing consent, a password
-— and be granted membership afterwards, with nothing saying when the organization's
-policy began to apply to the credentials they already held.
+register as a customer (the public application's client identifier, marketing consent,
+a password) and be granted membership afterwards, with nothing saying when the
+organization's policy began to apply to the credentials they already held.
 
 An invitation MAY bind the email, the phone, both or neither; a bound identifier is
 pre-filled and locked during registration. Where the organization's mail server is
@@ -711,6 +714,33 @@ one code like a typed address (REG-IDENT-008).
 1. Linking changes no grant and no membership.
 2. Unlinking leaves the account usable via its remaining credentials.
 3. Unlinking the only remaining credential is rejected.
+
+
+**IDN-LIFE-012a** — The library SHALL consume the security events the social providers
+send about a linked identity: Google's Cross-Account Protection (RISC, Security Event
+Tokens) and Sign in with Apple's server-to-server notifications. On an event that says
+the provider account was compromised, disabled, or its sessions revoked, every session
+of the linked account SHALL end and the linked credential SHALL be `suspended` until
+the person signs in by another factor; on consent revoked or account deleted at the
+provider, the credential SHALL be unlinked (IDN-LIFE-012 AC3 still refuses to remove
+the last credential, in which case the account is `suspended` with a security notice
+to the security-notice set); on an email change or disable, the provider-verified
+identifier SHALL drop to unverified. Every event is verified against the provider's
+published keys, is idempotent by its `jti`, and is audited.
+
+*Source: D-164*
+
+A person's Google account is taken over and Google tells every relying party within
+seconds. A system that ignores that is choosing to keep the attacker signed in.
+
+**Acceptance criteria**
+1. A signed `sessions-revoked` or `account-disabled` event ends every session of the
+   linked account and suspends the credential; an unsigned or replayed event changes
+   nothing and is audited as rejected.
+2. An Apple `consent-revoked` or `account-delete` event unlinks the credential, or
+   suspends the account with a notice when it is the last one.
+3. The endpoint `POST /callbacks/providers/{provider}` is on the machine profile
+   (BFF-MACH-001) and rate-limited like every callback.
 
 ---
 
@@ -778,7 +808,7 @@ purpose.
 |---|---|
 | Accounts, organizations, memberships | Expired sessions |
 | Grants, including revoked ones | Consumed tokens and one-time codes |
-| Orders | Elapsed grace windows |
+| The host's own records of what happened (the host applies this rule to its tables) | Elapsed grace windows |
 | Audit records, within retention | Delivered outbox records, once every subscriber has confirmed |
 | Consent and notice-presentation records — rows kept; personal content key-destroyed at the end of `retention.consent` (PRIV-RET-001, D-135) | Cache entries |
 | | Expired audit partitions (PRIV-RET-002) |
@@ -903,12 +933,10 @@ no address.
 
 *Source: D-061, D-079b*
 
-An earlier draft placed a courier's district identifier in the identity model — a
+An earlier draft placed a delivery vendor's area identifier in the identity model: a
 vendor identifier in a core namespace, which the decoupled-by-default principle
 forbids, and domain data in a library that must know nothing of the host's domain.
-
-Where the host stores addresses, it stores the courier's **district identifier rather
-than its name**, so a rename does not orphan them.
+How the host models the addresses it stores is the host's decision.
 
 **Acceptance criteria**
 1. No library table holds an address.

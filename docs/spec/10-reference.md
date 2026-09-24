@@ -825,21 +825,21 @@ and effective identities where a person acted, and an idempotency key
 | Event | Raised when | Consumers |
 |---|---|---|
 | `AccountRegistered` | The one transaction of the terms step has committed (REG-SESS-001, REG-SESS-007): the account exists, `active`, once per account; nothing fires for a registration session that is abandoned or expires | Host welcome — **no mailbox**: provisioning follows the invitation and enabling the membership (REG-MAIL-001) (INT-MAIL-006, IDN-LIFE-009b) |
-| `TakedownReversed` | A takedown reversed inside its window | Host — the person is back; cancelled orders are not restored |
+| `TakedownReversed` | A takedown reversed inside its window | Host: the person is back; whatever the host did on `TakedownExecuted` is the host's to reconsider |
 | `OrganizationErased` | An organization's grace window elapsed | Host, mail provisioning |
 | `IdentifierChanged` | *Retired by D-146. See `IdentifierAdded`, `IdentifierRemoved`, `IdentifierPrimaryChanged`.* | |
 | `IdentifierAdded` | An added email or phone was verified and counts (REG-IDENT-004); also a replace that completed (REG-IDENT-007) | Host, mail provisioning |
 | `IdentifierRemoved` | An identifier was removed (REG-IDENT-006); a later undo fires `IdentifierAdded` | Host, mail provisioning |
 | `IdentifierPrimaryChanged` | The primary of a kind changed (REG-IDENT-005), including on invitation acknowledgement when the corporate address becomes primary (REG-INV-001) and when a membership ends (REG-MAIL-003) | Host, mail provisioning |
 | `AccountSuspended` · `AccountReactivated` | State enters or leaves `suspended`, by the subject or an administrator | Mail provisioning, host |
-| `AccountDeletionRequested` · `AccountDeletionCancelled` | The grace window starts or is cancelled | Host (hold fulfilment) |
+| `AccountDeletionRequested` · `AccountDeletionCancelled` | The grace window starts or is cancelled | Host (pause its own processing for the subject) |
 | `ErasureRequested` | The erasure transaction has committed; host-side redaction is due (PRIV-RIGHT-005b) | Every registered subject-event handler — **required** |
 | `RestrictionChanged` | `restricted` set or lifted | Every registered subject-event handler — **required** |
 | `SendingRestrictionChanged` | A named restriction was created, edited or deleted through `/admin/restrictions/{name}` (AUTH-ABUSE-004); carries the restriction name, the actor and whether the change was a loosening. | Audit, alerting (OPS-ALERT-001) |
 | `SendingRestrictionGranted` | Support added credit to one key under a restriction (AUTH-ABUSE-004); carries the restriction name, the credit, the actor and the reason, never the plain key value | Audit, alerting (OPS-ALERT-001) |
 | `DeviceVerified` | A new-device check completed (AUTH-FACT-016); carries the browser identifier and no personal data | Host (optional) |
 | `ExportRequested` | A subject export is assembled | Every registered subject-event handler — **required** |
-| `TakedownExecuted` | Phase one of a takedown has committed — fires with `AccountSuspended`; `AccountDeletionRequested` does **not** fire for a takedown | Host (cancel open orders) |
+| `TakedownExecuted` | Phase one of a takedown has committed; fires with `AccountSuspended`; `AccountDeletionRequested` does **not** fire for a takedown | Host (stop its own processing for the subject, as a required subscriber) |
 | `MembershipChanged` | A membership begins or ends | Mail provisioning, host |
 | `ConsentChanged` | A consent granted, withdrawn or superseded; on withdrawal, handlers erase data held solely for the purpose (PRIV-CONS-008) | Every registered handler for the purpose — **required** |
 | `ObjectionChanged` | An objection recorded or withdrawn for a purpose on an objectable basis (PRIV-RIGHT-001a) | Every registered handler for the purpose — **required** |

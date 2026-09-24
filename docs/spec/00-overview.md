@@ -25,7 +25,7 @@ anyone who wants it.
 | **02-authentication** | Factors, flows, sessions, recovery, abuse controls |
 | **03-authorization** | Grants, roles, the model builder, permission filtering |
 | **04-privacy** | Consent, data subject rights, RoPA, retention, sensitivity |
-| **05-integrations** | Stalwart, OPay, Bosta, SMS gateway — contracts and field mappings |
+| **05-integrations** | Stalwart, SMS gateway, generic outbound and callback rules: contracts and field mappings |
 | **06-operations** | Migrations, CI, secrets, bootstrap, configuration |
 | **07-library-contract** | Public API surface, packaging, versioning |
 | **08-engineering-conventions** | Naming, layout, error handling, testing, review |
@@ -112,7 +112,7 @@ The shape the library is built to support. It is a topology the library **works
 with**, not one it assumes — a smaller project may use the same library as a single
 application with no separate authentication or account app.
 
-- **Public storefront** (app + BFF) — customer-facing, including the store
+- **Public application** (app + BFF): customer-facing, the host's own product
 - **Management app** (app + BFF) — internal, administrative organization only
 - **Authentication app** (app + gateway) — authentication endpoint, holds the auth
   session that makes cross-app SSO possible
@@ -154,9 +154,9 @@ as data. **Something** is one item, a container, or the whole organization.
 Groups nest. Containers pass access downward. Deny entries exist and always win.
 Grants and roles are data, so granting, revoking and adding roles need no deploy.
 
-A grant is either **stored** — a row someone wrote — or **derived** — computed from a
+A grant is either **stored** (a row someone wrote) or **derived** (computed from a
 relationship in the host's own data, such as "the assigned representative on an
-account may read that account's orders." Derived grants need no maintenance and
+account may read that account's records"). Derived grants need no maintenance and
 cannot drift. Both obey identical rules.
 
 *Source: D-015, D-016, D-043*
@@ -179,8 +179,9 @@ storage, ever.
 
 ### 3.4 Sensitivity
 
-The storefront's order history is **health data**. An individual purchasing insulin
-needles discloses a diagnosis through the purchase itself.
+A host's ordinary business records can be **special-category data**: a record of what
+a person obtained can disclose a diagnosis, a belief or a financial position through
+the record itself. Which of its resource types are sensitive is the host's declaration.
 
 Sensitivity is a **declared property of a resource type**, driving written-consent
 capture, stricter retention, mandatory encryption at rest, and separate treatment
@@ -290,8 +291,7 @@ requirement.
 | Area | Owner | Contract with this system |
 |---|---|---|
 | Mail delivery and storage | Stalwart | OIDC authentication; JMAP provisioning; its own database. Never its internals |
-| Payment processing | OPay | Card data never touches our servers; we hold a reference and an amount |
-| Shipping | Bosta | Fixed field mapping, contents never disclosed |
+| Payment, shipping and any other business processor | The host | Declared by the host in its processor register and integrated through the generic outbound and callback rules (`05` INT-GEN); the library names none |
 | SMS delivery | Gateway | Send, delivery report, balance |
 | Hosting | IONOS | Processor under contract |
 | DPIA / LIA / TIA production | Company + counsel | System stores references and flags absence |
@@ -321,8 +321,7 @@ Nothing is deferred silently.
 | Message templates editable outside the repository (D-059) | When a non-engineer needs to change a message |
 | Profile photos enabled for customers (D-060) | When a feature makes a customer photo meaningful |
 | Object storage for uploads (D-060) | Customer photos, or any genuinely large artifact |
-| District-level boundary polygons (D-061) | If city-level preselection proves too coarse |
-| Paid geocoding provider (D-061) | If customers demonstrably struggle with the address form |
+
 | Separate hosts per application (D-063) | When host compromise becomes a threat worth defending against |
 
 This table carries every row of the decision log's "Deferred, with reactivation
@@ -341,7 +340,7 @@ triggers" table (D-147); a deferral recorded in the log and absent here is a def
 | **Auth session** | Session held by the authentication app that makes silent SSO between apps possible |
 | **BFF** | Backend for Frontend. Holds the session; the browser holds only an opaque cookie |
 | **Break-glass** | Single-use sealed credential granting a time-boxed system-admin session. Held by the company owner |
-| **Controller / Processor** | PDPL roles. The company is controller; OPay, Bosta, the SMS gateway, IONOS and the developer are processors |
+| **Controller / Processor** | PDPL roles. The deploying company is controller; the SMS gateway, the hosting provider, the developer and every processor the host declares are processors |
 | **Data user** | PDPL term covering both controllers and processors |
 | **Governing language** | The one language in which a version of a legal document is authoritative, defaulted from `legal.governinglanguage`; translations attach to the version and never govern (`04-privacy`, D-146) |
 | **Grant** | One row expressing "[somebody] has [a role] on [something]" |

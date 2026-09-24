@@ -23,13 +23,13 @@ Risks knowingly carried. Each was raised, considered, and accepted.
 | | |
 |---|---|
 | **Likelihood** | Low |
-| **Impact** | Severe — total loss of customer health data; reportable incident |
+| **Impact** | Severe: total loss of subject data, including any category the host declares sensitive; reportable incident |
 | **Decision** | Accepted under time constraint |
 | **Source** | D-044, DR-004 |
 
 Backups reside on the same host as the database from development through launch and
 early operation. If the host is lost, backups are lost with it. From launch this
-includes order history, which is health data.
+includes every field the host has declared sensitive (PRIV-SENS-001).
 
 **Reason accepted: time pressure, not a lower assessment of the risk.** The severity
 is agreed. The constraint is schedule.
@@ -124,9 +124,9 @@ approver as well as per account.
 The business need was 2–3 hours. Meeting that reliably requires a warm standby to
 fail over to; a second server was declined on cost.
 
-**Softening factors:** payment records are held independently by the provider, so
-in-flight orders are reconcilable. Most incidents are application faults fixed by
-deploying, not data loss.
+**Softening factors:** a host's processors hold their own records independently, so
+the host's in-flight business records are usually reconcilable against them. Most
+incidents are application faults fixed by deploying, not data loss.
 
 **Corrected 2026-08-27.** As originally specified, a restore recovered the database
 and not the key that makes it readable, and the key was reachable only by the
@@ -134,21 +134,23 @@ operator. Combined with R-A01 and R-O02, host loss during the operator's absence
 total, unrecoverable and un-notifiable. D-069 escrows the key with the break-glass
 credential, removing the unrecoverable part.
 
-**This acceptance has a built-in expiry.** It is tolerable now because sales still run
-by phone and WhatsApp, so the business continues while the system is down. The system
-exists to replace those channels. **The more successful it is, the less acceptable
-this window becomes** — and the crossover will not announce itself.
+**This acceptance has a built-in expiry.** It is tolerable now because the host's
+business still runs partly through channels outside the system, so the business
+continues while the system is down. The system exists to replace those channels. **The
+more successful it is, the less acceptable this window becomes**, and the crossover
+will not announce itself.
 
-**Trigger to revisit:** when **more than half of a calendar month's orders** arrive
-through the system rather than by phone or WhatsApp (measured from the order system's
-channel field) — or when the cost of a day's downtime exceeds the cost of a second
-server, whichever comes first. The half is a chosen figure (D-125), not a derived one:
-it is the point at which the system, not the phone, is the business.
+**Trigger to revisit:** when **more than half of a calendar month's business** arrives
+through the system rather than through the host's other channels (measured from a
+host record the library cannot see), or when the cost of a day's downtime exceeds the
+cost of a second server, whichever comes first. The half is a chosen figure (D-125),
+not a derived one: it is the point at which the system, not the other channels, is the
+business.
 
-**Who measures it (D-147).** The order channel is host data the library cannot see, so
-the trigger has an owner: the operator measures the share quarterly, from the host's
-order channel field, and records the figure and the date in the maintenance log of
-OPS-MAINT-001. A trigger nobody measures never fires.
+**Who measures it (D-147).** The share is host data the library cannot see, so the
+trigger has an owner: the operator measures it quarterly, from the host's own records,
+and records the figure and the date in the maintenance log of OPS-MAINT-001. A trigger
+nobody measures never fires.
 
 ---
 
@@ -167,28 +169,12 @@ solves.
 
 **The regulator's standard is "proportionate," not "reliable."**
 
-**Mitigations:** phone verification (required by default, `registration.phone`) and payment already filter most cases;
-a written takedown procedure exists and is executed on any credible indication.
+**Mitigations:** phone verification (required by default, `registration.phone`) already
+filters most cases, as does any payment step the host runs; a written takedown
+procedure exists and is executed on any credible indication.
 
 ---
 
-### R-A06 · The courier can infer a medical purchase
-
-| | |
-|---|---|
-| **Likelihood** | Certain |
-| **Impact** | Low |
-| **Decision** | Accepted, unavoidable |
-| **Source** | D-030, PRIV-MIN-001 |
-
-The shipping provider knows the sender is a medical supplies company. That implies
-"bought something medical," not a specific condition.
-
-**Unavoidable if we ship at all.** Contents are never disclosed — package description
-is a fixed generic string, never derived from the cart, and the catalogue integration
-is not used for storefront orders.
-
----
 
 ### R-A07 · Staff step up once per recency window, not per action
 
@@ -315,35 +301,7 @@ reference, rate limiting, and no authoritative state advanced by the callback.
 
 ---
 
-### R-A10 · The shipping provider delivers unsigned callbacks
 
-| | |
-|---|---|
-| **Likelihood** | Low |
-| **Impact** | Medium — a forged callback that passed would misreport delivery or payment |
-| **Decision** | Accepted; compensating control is stronger than the missing one |
-| **Source** | D-070 |
-
-Signature verification is the industry baseline for webhooks.
-
-**Checked against published documentation, 2026-08-27:**
-
-| Provider | Signs? |
-|---|---|
-| Payment | **Yes** — HMAC-SHA-512 family over the payload; a newer header-based scheme adds a request timestamp. Also publishes IP ranges |
-| Shipping | **No** — collection searched exhaustively; `webhookUrl` is the only webhook field |
-| SMS gateway | **No** — plain-HTTP GET with query parameters cannot carry a signature meaningfully |
-
-So this risk is narrower than first recorded: the payment provider, which carries the
-highest-value callbacks, is fully verifiable.
-
-**Mitigation:** the callback triggers verification against the provider's own API
-rather than being believed. State advances on the provider's answer, not on the
-callback — which is arguably stronger than a signature, since it also catches a
-genuine callback carrying stale information.
-
-**Trigger to revisit:** either provider adding signing support. Worth asking both — it
-may be undocumented rather than absent.
 
 ---
 
@@ -383,29 +341,15 @@ account's reachable assurance (AUTH-STEP-002, AUTH-STEP-006); on an account that
 reaches AAL2, that is AAL2. The customer is told this once, when linking the
 provider. Not available to staff.
 
-**Minimum accepted assurance, stated (NIST SP 800-63C §2.5).** The storefront's
-minimum accepted AAL for a customer session is **`delegated`** — no asserted AAL: a
-social-only session is admitted to the customer's own account and history; sensitive
+**Minimum accepted assurance, stated (NIST SP 800-63C §2.5).** A public application's
+minimum accepted AAL for a customer session is **`delegated`**, with no asserted AAL: a
+social-only session is admitted to the customer's own account and records; sensitive
 actions are gated by step-up, not by the sign-in's assurance. The administrative
 organization's minimum is AAL2 (AUTH-SESS-005b) (D-140, D-141).
 
 ---
 
-### R-A15 · A compromised customer session can browse that customer's order history
 
-| | |
-|---|---|
-| **Likelihood** | Low |
-| **Impact** | Medium — order history is health data (PRIV-SENS-001) |
-| **Decision** | Accepted |
-| **Source** | D-093 §93.6 (M-2), D-123, D-125 |
-
-A customer session browses its own order history freely; only *export* is
-rate-limited (`privacy.export.ratelimit`) and only account changes require step-up.
-Gating browsing behind step-up would make the storefront unusable. The exposure is
-bounded by instant revocation, rotation, the device list, and the fact that the
-attacker learns one customer's history — theirs to view already — not a population's.
-Recorded so the position is visible; previously noted only in the decision log.
 
 ---
 
@@ -582,12 +526,12 @@ Risks addressed by design rather than accepted.
 | R-M09 | Cloned authenticator | Signature counter verified where provided | AUTH-FACT-014 |
 | R-M10 | Lookalike identifiers defeating human identity checks | Unicode normalization; mixed-script rejection | D-040 |
 | R-M11 | Forged provider callbacks | Signature verification where supported; verification-against-provider where not; never advance state alone | INT-GEN-003, D-070 |
-| R-M12 | Unencrypted customer data to the courier | TLS enforced at startup; plaintext endpoints rejected | INT-GEN-001 |
+| R-M12 | Unencrypted personal data to a processor | TLS enforced at startup; plaintext endpoints rejected | INT-GEN-001 |
 | R-M13 | Permission drift between check and list | One rule, two renderings, asserted equal in tests | AUTHZ-PRIN-001 |
 | R-M14 | Admin console as a privilege escalation path | Protected-settings list unreachable from the application; direction-based friction | D-010, D-071 |
 | R-M15 | Stale permissions after revocation | Version counter bumped in the same transaction | AUTHZ-CACHE-001 |
 | R-M16 | Offboarded staff still reading mail | Lifecycle push with idempotency; daily reconciliation flagging drift | INT-MAIL-007 |
-| R-M17 | Health data disclosed in logs | Order contents never logged; analyzer-enforced | CONV-LOG-003 |
+| R-M17 | Sensitive data disclosed in logs | Bodies of host-marked sensitive endpoints never logged; analyzer-enforced | CONV-LOG-003, BFF-LOG-002 |
 | R-M18 | Fail-open from a defensive catch block | Analyzer rule; no catch returns a permitted outcome | CONV-ERR-002 |
 | R-M19 | Insider bulk exfiltration | Per-actor baselined volume alerting; exports enumerated, gated, audited, rate-limited | OPS-ALERT-005, OPS-ALERT-006 |
 | R-M20 | Compromised dependency | Lockfile pinning; automated vulnerability alerting; deliberate additions | D-046 |
@@ -671,12 +615,12 @@ system's part is OPS-MAINT-001's expiry tracking once the licence exists.
 4. **A written processor agreement between the company and the developer** — the
    developer is a processor (D-029) and PRIV-ROPA-002 flags every generated RoPA until
    an agreement reference exists.
-5. **Counsel question (D-145):** whether processing a health-implying *order* may rest
-   on the contract basis (D-089's position) or whether Law 151/2020 Art. 12 — a
-   stand-alone prohibition on sensitive-data processing without a licence and explicit
-   written consent — requires written consent at registration for order processing
-   itself. The conservative reading is the latter; the design keeps D-089 until counsel
-   answers.
+5. **Counsel question (D-145):** whether processing a host record that implies a
+   sensitive category may rest on the contract basis (D-089's position) or whether
+   Law 151/2020 Art. 12, a stand-alone prohibition on sensitive-data processing without
+   a licence and explicit written consent, requires written consent at registration for
+   that processing itself. The conservative reading is the latter; the design keeps
+   D-089 until counsel answers. The host's counsel answers it for the host's records.
 6. **Legitimate interest is untested in Egypt** (D-145): neither the law nor the
    Regulations name it as a processing basis; the default declaration keeps it for
    fraud, security and abuse controls only, and PRIV-CONS-002 advises consent for
@@ -692,7 +636,7 @@ system's part is OPS-MAINT-001's expiry tracking once the licence exists.
 
 **RISK-001** — This register SHALL be reviewed when any accepted risk's trigger
 fires, and at each licence renewal. The operator checks every trigger below at the
-same quarterly review that measures R-A04's order share (OPS-MAINT-001), and records
+same quarterly review that measures R-A04's share (OPS-MAINT-001), and records
 the check, so that a trigger that depends on host data or on a judgement is looked at
 on a calendar rather than waited for (D-147).
 
@@ -702,10 +646,10 @@ on a calendar rather than waited for (D-147).
 |---|---|
 | R-A01 | **Schedule allows**, or the VPS tier upgrade — neither has a date; open-ended (D-109) |
 | R-A03 | A second person holds recovery approval |
-| R-A04 | Downtime cost exceeds a second server; or more than half of a calendar month's orders arrive through the system, measured quarterly by the operator from the host's order channel field |
+| R-A04 | Downtime cost exceeds a second server; or more than half of a calendar month's business arrives through the system, measured quarterly by the operator from the host's own records |
 | R-A08 | A second person holds deploy access |
 | R-A09 | Optimisation ladder exhausted; or reverse lookup for the administrative view exceeds `authz.reverselookup.budget` (2 s) at production volume |
-| R-A10 | Either shipping or payment provider adds callback signing support (D-148) |
+| R-A10 | The SMS gateway adds callback signing support (D-148) |
 | R-A11 | A third trustworthy custodian exists, making a split of the escrowed key worthwhile (D-148) |
 | R-A17 | A host or regulator requires the NIST blocklist sources as written |
 | R-A20 | A second market whose law names another governing language is served |
@@ -715,8 +659,8 @@ on a calendar rather than waited for (D-147).
 ## 5. What is not here
 
 Risks belonging to a threat model rather than a register: who would attack, what they
-want, and how. That exercise is `15-threat-model.md`, which found six gaps this
-register did not contain — insider exfiltration, cash-on-delivery abuse, dependency
-supply chain, the operator's machine, authentication anomaly monitoring, and shared
-logins (D-051). Those
-become register entries once decided.
+want, and how. That exercise is `15-threat-model.md`, which found five gaps this
+register did not contain (insider exfiltration, dependency supply chain, the
+operator's machine, authentication anomaly monitoring, and shared logins, D-051) and
+one host-owned gap it handed to the host (D-049). Those become register entries once
+decided.

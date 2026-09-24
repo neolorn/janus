@@ -275,17 +275,19 @@ that it should not be relied on as a primary defence, and that a cookie must not
 scoped to a parent domain — which the `__Host-` prefix already enforces
 (BFF-SESS-002).
 
-**If the payment provider returns the browser by POST**, `Lax` withholds the cookie
-and the session appears lost on return. Verify the provider's return method; where it
-posts, the return must land on a GET route that then continues, rather than relying on
-the session being present on the POST itself.
+**If a host's processor returns the browser by POST** (a hosted page that posts back,
+for example), `Lax` withholds the cookie and the session appears lost on return. The
+host verifies each such processor's return method; where one posts, the host's return
+route must be a GET that then continues, rather than relying on the session being
+present on the POST itself. The library's own flows return by GET.
 
 **Acceptance criteria**
 1. The management application's cookie carries `SameSite=Strict`.
 2. A sign-in link from email or SMS lands successfully on a public application.
 3. No cookie is issued with `SameSite=None`.
-4. A payment return preserves the session regardless of the provider's return
-   method.
+4. A cross-site POST return to a host route carrying no session cookie is handled as
+   the host's GET continuation, not as a lost session; the library documents the
+   pattern.
 
 ---
 
@@ -385,10 +387,10 @@ carrying no session and no CSRF protection.
 *Source: D-070*
 
 Stalwart calling the token endpoint, the BFFs exchanging sign-on codes
-(BFF-SESS-006), and the payment, shipping and SMS providers calling their callbacks,
-send no cookie, no synchronizer token, no custom header and no Fetch Metadata. Under
-the browser profile every one of them is rejected — mail authentication, sign-on and
-all provider callbacks fail on day one.
+(BFF-SESS-006), the SMS gateway calling its delivery-report callback, and any callback
+a host mounts on this profile for its own processors, send no cookie, no synchronizer
+token, no custom header and no Fetch Metadata. Under the browser profile every one of
+them is rejected: mail authentication, sign-on and all callbacks fail on day one.
 
 **The no-opt-out property is preserved.** An endpoint's protection derives from **where
 it is mounted**, not from a flag or attribute. A developer cannot accidentally place a
@@ -443,12 +445,12 @@ an hour raise `callback-verification-failed`.
 
 *Source: D-070, INT-GEN-003*
 
-Verified against the providers' documentation: the shipping provider offers no signing
-secret or signature header; the SMS gateway calls over plain HTTP with parameters in
-the query string, which cannot carry a signature meaningfully.
+Of the library's own callbacks, the SMS gateway calls over plain HTTP with parameters in
+the query string, which cannot carry a signature meaningfully (R-A12). A host records
+for each of its own processors whether it signs.
 
-**This is the primary control for unsigned callbacks**, not a secondary one. A parcel
-is not marked delivered because something said so — the provider is asked.
+**This is the primary control for unsigned callbacks**, not a secondary one. A record
+is not advanced because something said so; the provider is asked.
 
 Supporting controls: unguessable correlation references, rate limiting, and source
 restriction where the provider publishes ranges.
@@ -622,20 +624,21 @@ logging, audit, and any error response.
 ---
 
 **BFF-LOG-002** — The BFF SHALL NOT log request or response bodies for endpoints
-carrying order data.
+carrying the host's sensitive data.
 
-**Values (D-153).** An endpoint carrying order data is one the host marks with the
-`SensitiveBody` endpoint metadata (LIB-HOST-001); the library has no order concept.
+**Values (D-153).** Such an endpoint is one the host marks with the `SensitiveBody`
+endpoint metadata (LIB-HOST-001); the library has no knowledge of what the body holds.
 Body logging is off for a marked endpoint whatever the setting.
 
-*Source: CONV-LOG-003, PRIV-SENS-003*
+*Source: CONV-LOG-003, PRIV-SENS-001*
 
-Order contents are health data. Body logging at the boundary is the most likely place
-for it to leak, because it looks like ordinary diagnostics.
+A marked body carries data the host has declared sensitive. Body logging at the
+boundary is the most likely place for it to leak, because it looks like ordinary
+diagnostics.
 
 **Acceptance criteria**
-1. Body logging is off by default and cannot be enabled for order endpoints.
-2. A test asserts no log entry contains an order line item.
+1. Body logging is off by default and cannot be enabled for a marked endpoint.
+2. A test asserts no log entry contains a field of a marked endpoint's body.
 
 ---
 

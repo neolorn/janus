@@ -1266,6 +1266,8 @@ not an emergency, which trains users to expect random logouts. A separate explic
 
 ## D-027 — Minors: 18+ only, enforced on the order flow
 
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
+
 **Date:** 2026-08-25 · **Status:** accepted · **Follows from:** D-023, D-024
 
 **Decision.** Accounts and orders require a self-declared **18+ affirmation**. No
@@ -1375,6 +1377,8 @@ once; the user's call.
 ---
 
 ## D-030 — Sensitive data: health-implying purchase history
+
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
 
 **Date:** 2026-08-25 · **Status:** accepted · **Resolves:** R-02 · **Extends:** D-015, D-024, D-025
 
@@ -1703,6 +1707,8 @@ common bug.
 
 ## D-036 — RoPA fields, rewritten against the regulator's template
 
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
+
 **Date:** 2026-08-25 · **Status:** accepted · **Resolves:** R-13 · **Supersedes:** D-025's field sketch
 
 **TL;DR.** The PDPC publishes an official template for the record of processing
@@ -1833,6 +1839,8 @@ kind of authority.
 
 ## D-039 — Age verification: self-declaration plus a documented takedown route
 
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
+
 **Date:** 2026-08-25 · **Status:** accepted · **Resolves:** R-23 · **Amends:** D-027
 
 **TL;DR.** Keep the 18+ checkbox. Do not attempt real age verification. But write
@@ -1919,6 +1927,8 @@ data and possibly surfacing collisions between accounts that are now duplicates.
 ---
 
 ## D-041 — Minor sweep (R-14, R-15, R-17 to R-22, R-24)
+
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
 
 **Date:** 2026-08-25 · **Status:** accepted
 
@@ -2124,6 +2134,8 @@ migration trigger stands: top-three slow query with index tuning exhausted.
 
 ## D-044 — Backup and disaster recovery
 
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
+
 **Date:** 2026-08-25 · **Status:** accepted · **Closes:** the gap under OPS-MIG-006 and D-019
 
 **TL;DR.** Continuous log archiving gives near-zero data loss cheaply. Fast recovery
@@ -2192,6 +2204,8 @@ Stalwart. Restoring is not undo.
 ---
 
 ## D-045 — Insider data exfiltration: detect, and gate exports
+
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
 
 **Date:** 2026-08-25 · **Status:** accepted · **Closes:** threat model §6.1
 
@@ -2356,6 +2370,8 @@ This is it.
 ---
 
 ## D-049 — Cash-on-delivery abuse: out of scope
+
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
 
 **Date:** 2026-08-25 · **Status:** accepted · **Closes:** threat model §6.2
 
@@ -2665,6 +2681,8 @@ nearly unreachable rather than merely rare.
 
 ## D-056 — The privacy notice is presented, not accepted
 
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
+
 **Date:** 2026-08-25 · **Status:** accepted · **Extends:** D-024, D-032
 
 **TL;DR.** A privacy notice is something you tell people, not something they agree to.
@@ -2948,6 +2966,8 @@ earns its place, plausibly alongside the tier upgrade D-044 already anticipates.
 ---
 
 ## D-061 — Location, time zone, and address resolution
+
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
 
 **Date:** 2026-08-25 · **Status:** accepted · **Closes:** the location-detection gap
 
@@ -3300,6 +3320,8 @@ present.
 
 ## D-066 — Consent gates purposes, not records
 
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
+
 **Date:** 2026-08-27 · **Status:** accepted · **Amends:** D-024, D-030, D-064 · **Resolves:** F-02
 
 **TL;DR.** An order exists for three legal reasons at once and a customer can withdraw
@@ -3434,6 +3456,8 @@ people least able to work around it.
 ---
 
 ## D-068 — Erasure reaches host data; per-subject encryption replaces pseudonymisation
+
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
 
 **Date:** 2026-08-27 · **Status:** accepted · **Amends:** D-026.1, D-037 · **Resolves:** F-04
 
@@ -3593,6 +3617,8 @@ part; the rest stands as recorded.
 ---
 
 ## D-070 — Two pipeline profiles; webhook verification raised to standard
+
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
 
 **Date:** 2026-08-27 · **Status:** accepted · **Amends:** D-052, D-053, D-013, D-030 · **Resolves:** F-06
 
@@ -3786,6 +3812,8 @@ Certificates do not join them.
 ---
 
 ## D-073 — Guest checkout removed; every order belongs to an account
+
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
 
 **Date:** 2026-08-27 · **Status:** accepted · **Amends:** D-027, D-039 · **Resolves:** F-09
 
@@ -4087,6 +4115,8 @@ requires a change at next sign-in.
 
 ## D-079b — Consistency sweep: F-23 (fourteen items), F-24, F-25, F-26
 
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
+
 **Date:** 2026-08-27 · **Status:** accepted
 
 Contradictions between documents, each of which would have produced a failing test or
@@ -4146,6 +4176,8 @@ partial.
 ---
 
 ## D-080 — Provider signing capability confirmed
+
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
 
 **Date:** 2026-08-27 · **Status:** accepted · **Extends:** D-070
 
@@ -4514,6 +4546,8 @@ straight to the scripted path later.
 
 ## D-086 — Step-up policy separated from login policy; social sign-in resolved; assurance table added
 
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
+
 
 > **Superseded in part.** §86.5 "the person chooses" is reversed by D-128 (strongest class); §86.6 lifetimes are D-123/D-130; social is "no asserted AAL" per D-128.
 **Date:** 2026-08-27 · **Status:** accepted · **Amends:** D-020.1, D-020.2, D-067, D-012 · **Resolves:** M2
@@ -4690,6 +4724,8 @@ review rather than by the change itself.
 
 ## D-088 — Takedown document re-rendered to current state
 
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
+
 **Date:** 2026-08-27 · **Status:** accepted · **Resolves:** M4
 
 **TL;DR.** The operator-facing document for the most sensitive procedure in the system
@@ -4733,6 +4769,8 @@ The runbook now carries the same statement, so the two documents agree.
 ---
 
 ## D-089 — Assurance floor, alert exemption, and a surviving consent fragment
+
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
 
 **Date:** 2026-08-27 · **Status:** accepted · **Resolves:** M5, M6, M7
 
@@ -4789,6 +4827,8 @@ and retained for a customer who has granted none.
 ---
 
 ## D-090 — Nothing is deleted; erasure delivered by a transactional outbox
+
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
 
 **Date:** 2026-08-27 · **Status:** accepted · **Amends:** D-039, D-068 · **Resolves:** M8
 
@@ -4888,6 +4928,8 @@ a transaction. The shared-database constraint applied only to the rejected alter
 
 ## D-091 — Jurisdiction-specific configuration, recorded separately
 
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
+
 **Date:** 2026-08-27 · **Status:** accepted · **Extends:** D-032
 
 **TL;DR.** The lawful bases are Egypt's, not a universal set. Folded into the privacy
@@ -4944,6 +4986,8 @@ provider, hold a written agreement, and not instruct unlawful processing — all
 ---
 
 ## D-092 — Low-severity sweep: L1 to L8
+
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
 
 **Date:** 2026-08-27 · **Status:** accepted · **Resolves:** L1–L8
 
@@ -5006,6 +5050,8 @@ lowercase-hyphenated permission pattern its own validator enforces.
 ---
 
 ## D-093 — The two-store seam: reconciling the key service with the database
+
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
 
 **Date:** 2026-08-29 · **Status:** accepted · **Amends:** D-082, D-089, D-090 · **Resolves:** third review, all 21 findings
 
@@ -5162,6 +5208,8 @@ from reading cold.
 ---
 
 ## D-094 — Erasure records intent first; enumerated values have a rule
+
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
 
 **Date:** 2026-08-29 · **Status:** accepted · **Amends:** D-093 §93.3 · **Origin:** user, rejecting both options offered
 
@@ -6071,6 +6119,8 @@ pass" — a habit at the point of a pull request, not a calendar entry.
 
 ## D-111 — Admin-assisted recovery covers customers; the enrolment link may travel by SMS; recovery sets or resets the password
 
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
+
 **Date:** 2026-09-03 · **Status:** accepted · **Amends:** D-008, D-009, D-013, D-035, D-067 · **Resolves:** final review, finding 10
 
 **TL;DR.** A customer whose old mailbox was gone could never change their email
@@ -6335,6 +6385,8 @@ do to a resource — still resolves from the resource (IDN-MEM-003), unchanged.
 ---
 
 ## D-117 — Erasure is key destruction; business records are outside the erasure right
+
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
 
 **Date:** 2026-09-04 · **Status:** accepted · **Amends:** D-093 §93.6 (M-4 superseded) · **Extends:** D-097, D-102, D-108 · **Resolves:** final review, finding 16
 
@@ -6632,6 +6684,8 @@ off, and a customer without MFA is worse off than one with MFA and a trusted dev
 
 ## D-125 — Housekeeping pass: small inconsistencies and two legal precisions
 
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
+
 **Date:** 2026-09-04 · **Status:** accepted · **Resolves:** final review, findings 23 and 24
 
 **TL;DR.** Eleven small inconsistencies and two points of legal precision, each
@@ -6732,6 +6786,8 @@ OPS-ALERT-001 · `10` §4.7 · `00` §6.
 ---
 
 ## D-127 — Takedown stops access now and erases after a seven-day window; one description in all three documents
+
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
 
 **Date:** 2026-09-04 · **Status:** accepted · **Extends:** D-039, D-102, D-113 · **Resolves:** review-2, H-2
 
@@ -6872,6 +6928,8 @@ trades an honest conformance statement for something no customer would ever noti
 ---
 
 ## D-131 — A delivery recipient's details are the customer's personal data, under the customer's key
+
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
 
 **Date:** 2026-09-04 · **Status:** accepted · **Extends:** D-027, D-098, D-099 · **Resolves:** review-2, M-2
 
@@ -7723,6 +7781,8 @@ CONV-GATE-002) · `09` (`/enrol/begin`, `/recovery/complete`, `/auth/break-glass
 ---
 
 ## D-148 — Staff accounts carry a verified personal email from day one; review-5 closed
+
+> **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
 
 **Date:** 2026-09-18 · **Status:** accepted · **Amends:** D-146 (REG-MAIL-001, REG-MAIL-003, REG-IDENT-007) · **Extends:** D-147 · **Resolves:** review-5 H-1, H-2, M-1 to M-5, L-1 to L-23
 
@@ -8663,6 +8723,195 @@ word `identity` is used: schema `identity`, roles `identity_app`, `identity_migr
 
 ---
 
+## D-164 — Provider profile stated and proved: RFC 9700 and OAuth 2.1, PAR, RFC 9068, provider security events
+
+> **Amended.** The `09` section 10 text this entry propagated to no longer lists payment or shipping callbacks beside `/callbacks/providers/{provider}` (D-165).
+
+**Date:** 2026-09-23 · **Status:** accepted · **Amends:** D-005 (provider scope), D-007, D-147 · **Extends:** D-162 (the OIDC rebuild)
+
+**TL;DR.** A standards checklist was put against the design. Two thirds of it describes
+federated, multi-party or open-banking systems and stays out on principle (surface
+nothing calls is attack surface, the reasoning that already excluded introspection).
+Four items make the system more correct for what it is and are adopted into version 1,
+in the provider rebuild already under way, so nothing is built twice.
+
+1. **RFC 9700 and OAuth 2.1, stated and proved.** The behaviour existed; now a
+   conformance suite asserts it (AUTH-OIDC-006 AC1).
+2. **Pushed Authorization Requests (RFC 9126), required.** Both ends are the library's,
+   so the authorization parameters leave the browser entirely at no interoperability
+   cost. JAR is thereby unnecessary; mTLS is not adopted (one host behind one proxy).
+3. **RFC 9068 access tokens.** `typ: at+jwt` and the seven claims; the mail server
+   adapter verifies `aud`. Token confusion becomes impossible rather than unlikely.
+4. **Provider security events consumed** (IDN-LIFE-012a): Google RISC and Apple
+   server-to-server notifications end sessions, suspend or unlink the credential, or
+   unverify the identifier. Outbound Shared Signals stays out; this is the inbound half
+   that a system using social sign-in owes its people.
+
+**Stays out, with a trigger.** RP-initiated and back-channel logout and RFC 7009
+revocation become due the day a third-party relying party exists (D-005's deferred
+item); every current party is first-party and holds no token to revoke. DPoP, RFC 9728,
+SCIM, SAML, AuthZEN, FAPI as a profile, OpenID Federation: they describe systems this
+is not.
+
+**Propagated to:** `02` AUTH-OIDC-006 · `01` IDN-LIFE-012a · `09` section 9 and
+section 10 (`/callbacks/providers/{provider}`) · `10` (rows in the reconciliation pass).
+
+---
+
+## D-165 — Host business content leaves the specification: the library knows no orders, payments or shipments
+
+**Date:** 2026-09-24 · **Status:** accepted · **Amends:** D-027, D-030, D-036, D-039, D-041, D-044, D-045, D-049, D-056, D-061, D-066, D-068, D-070, D-073, D-079b, D-080, D-086, D-088, D-089, D-090, D-091, D-092, D-093, D-094, D-111, D-117, D-125, D-127, D-131, D-148, D-164 · **Extends:** D-162 C.103, D-163
+
+**TL;DR.** The chapters were written with the first host in view and carried its
+business: two vendors by name, rules about orders, payments, shipments, couriers,
+products and cash on delivery, and acceptance criteria that can only be tested against
+a store. Chapter `00` section 4 forbids exactly this ("no host-domain knowledge"). The
+implementer of the first host found the leak by reading the chapters as a host would.
+Every such rule moves to the host; the library keeps the generic seam it hung on.
+
+**The boundary.** The library keeps, generic: the processor register populated from host
+declarations plus the four rows the library itself makes true (mail server, SMS gateway,
+hosting provider, password screening; D-162 C.103); processing purposes, lawful bases
+and sensitivity categories declared through the model builder, with the Egyptian
+default lists (law, not business); the privacy event hooks `ErasureRequested`,
+`RestrictionChanged`, `TakedownExecuted`, `TakedownReversed`, `ExportRequested`,
+`ConsentChanged`, `ObjectionChanged`; the outbound integration rules (INT-GEN-001 to
+INT-GEN-005); one host-mountable machine-profile callback pipeline (BFF-MACH-001 to
+BFF-MACH-003, INT-GEN-003: signature verification, correlation reference, rate limit,
+source restriction) with no named payment or shipping callback of its own; the SMS
+delivery report callback (`GET /callbacks/sms/dlr`) because SMS is the library's; the
+mail server integration, deliberately library-owned; per-subject field encryption
+declared per field by the host, including on host tables.
+
+**Removed from the chapters (135 edits).**
+
+- `04`: PRIV-SENS-003 (order history sensitive), PRIV-SENS-004 (card data), the former
+  section 10 (PRIV-MIN-001, PRIV-MIN-002: package description, courier callback); later
+  sections renumbered, the chapter now ends at section 10 "Open items". Business
+  meanings of the privacy events (hold shipments and refunds, cancel undispatched
+  orders, anonymise order rows, order counts unaffected) replaced by generic host
+  statements.
+- `05`: INT-PAY-001 to INT-PAY-003 and INT-SHIP-001 to INT-SHIP-006 with their sections;
+  the chapter is now 1 General, 2 Mail, 3 SMS, 4 Password screening, 5 Hosting,
+  6 Provider register, 7 Open items. The payment and shipping rows leave the shipped
+  register; the register carries only the four library-true rows.
+- `09` section 10: the `POST /callbacks/payment` and `POST /callbacks/shipping` rows,
+  replaced by a paragraph and criterion stating that a host mounts its own callbacks on
+  the machine profile pipeline and documents their paths itself.
+- `13`: R-A06 (courier inference) removed; R-A10 rewritten for the generic pipeline.
+- `18` section 7: FE-ADDR-001 to FE-ADDR-006 replaced by a boundary paragraph (addresses
+  are host data, IDN-ATTR-005).
+- `19`: INF-DB-002 (boundary dataset).
+- `00`: vendor names, the deferred rows for district polygons and a geocoding provider
+  (D-061 keeps them as the host's).
+- `01`, `02`, `03`, `06`, `07`, `08`, `10`, `11`, `12`, `14`, `15`, `17`, `20`, the guide:
+  rationale illustrations neutralised to a generic host example; `15` keeps the first
+  host's facts only as a marked worked example. Cross-references to every removed
+  identifier were followed and repaired in the same pass.
+
+Kept on purpose: "customer" and "staff" as kinds of person, "financial record" as a
+legal retention category, Law 151/2020 and Decree 816/2025 references, and the
+recipient row for the developer relationship (D-029).
+
+**Code consequences.** The library ships no payment or shipping callback endpoint,
+handler, rate limit key, error code or test; the machine-profile pipeline exposes the
+seam a host mounts its own callbacks on; the shipped register defaults are the four
+library-true rows; no fixture, test name, sample configuration or comment names a
+payment or shipping provider, an order, a cart, a courier or cash on delivery; catalogue
+rows (`10`) for the removed items are dropped and the renumbered `04` and `05` sections
+are cited by their new numbers.
+
+**Handover to the host.** The first host receives these, each hung on a library seam.
+They are the host's requirements now, not the library's.
+
+1. Declare order history sensitive in the model builder (PRIV-SENS-001); this derives
+   written consent for its consent-based purposes, per-subject encryption of its
+   personal fields and separate reporting in the records of processing (PRIV-SENS-002).
+   Three-purpose example: fulfilment on contractual obligation, tax retention on legal
+   obligation, personalised recommendations on consent. Withdrawal of the consent-based
+   purpose must not interrupt fulfilment, the courier callback or refund processing
+   (`ConsentChanged`).
+2. No guest checkout; every order belongs to an account, so the adult affirmation is
+   collected once, at registration (IDN-LIFE-002a, D-073).
+3. Delivery recipient fields are the ordering customer's personal data, encrypted under
+   the customer's per-subject key through host-declared field encryption
+   (PRIV-RIGHT-005a, D-131); recipients get no account.
+4. Card data never touches the system: provider reference and amount only; no schema
+   field or accepted request body holds a card number, expiry or verification value.
+   Stolen-card fraud is the provider's.
+5. Payment callbacks are signature-verified and never mark an order paid by themselves;
+   confirm against the provider's query API; acknowledge fast, process asynchronously,
+   idempotent on the notification identifier. Mount on the machine-profile pipeline
+   (BFF-MACH-002, INT-GEN-003).
+6. The shipping status callback is unsigned and therefore a hint: verify against the
+   courier's API before any order state changes (BFF-MACH-003). A forged callback
+   changes nothing.
+7. Where a provider returns the browser by POST, land it on a GET route
+   (BFF-CSRF-005, `SameSite=Lax`).
+8. Shipment creation sends a fixed field set: a fixed generic package description never
+   derived from the cart, item count, delivery notes, an opaque reference, receiver
+   name, phone, drop-off address, cash-on-delivery amount; no email. One mapping layer,
+   the exact field set tested. The courier's catalogue integration is not used.
+9. Courier API key in an `Authorization` header as a rotatable secret. Cache the
+   courier's city, zone and district taxonomy locally, refreshed by a background job;
+   store the district identifier, not its name; refuse unserved districts at address
+   entry. Pass address free-text lines through and never log them.
+10. Own the address flow (former FE-ADDR-001 to 006, INF-DB-002, D-061): opt-in
+    location control, preselection from coordinates resolved against boundaries in the
+    host's own database, confirmation before save, coordinates never retained,
+    overrides logged, landmark prompted. Nothing in the library except IDN-ATTR-006.
+11. Declare the payment provider and the courier as processors through `recipients`
+    (LIB-HOST-001): name, `processor`, data received, location (an outside-Egypt
+    location enters the cross-border scope, INT-HOST-001, PRIV-ROPA-002), agreement
+    reference, `callback: true`, and whether callbacks are signed.
+12. On `TakedownExecuted`: cancel every undispatched order, ask the courier to halt what
+    it can, hold shipments and refunds, confirm as a required subscriber
+    (IDN-LIFE-003a). On `TakedownReversed`: do not restore cancelled orders. Refund
+    cancelled orders through the normal process even after erasure.
+13. On `AccountDeletionRequested`: hold fulfilment; on `AccountDeletionCancelled`:
+    release it.
+14. On `RestrictionChanged` (granted): hold shipments and refunds, stop acting on the
+    subject's orders, keep them visible and counted (PRIV-RIGHT-004).
+15. On erasure: order and transaction rows are retained under legal obligation and
+    become anonymous through key destruction; order counts, revenue and product
+    analysis are unchanged, which the host tests on its own aggregates
+    (PRIV-RIGHT-005, D-117).
+16. After any restore that moves time backwards, reconcile orders against the payment
+    provider and shipments against the courier, after the operator's mail
+    reconciliation (`12` sections 5 and 6, D-044).
+17. Mark every endpoint that carries order data `SensitiveBody` (BFF-LOG-002); never log
+    order contents, a cart or card data.
+18. Cash-on-delivery abuse is a commercial control (order limits, prepayment thresholds,
+    refusal history on the stable subject identifier, deposits); no identity control
+    applies (D-049).
+19. Rectification of an order's recorded details is a privacy request decided under
+    the six-working-day rule; the host corrects its own records.
+20. Own risk register entries: courier inference (former R-A06), unsigned shipping
+    callbacks and the payment provider's signing scheme (former R-A10 rows), the
+    plaintext base URL in the shipping provider's sample configuration.
+21. Measure quarterly the share of a month's orders arriving through the system versus
+    phone and messaging, and give the figure to the operator for OPS-MAINT-001 (R-A04's
+    trigger).
+22. Counsel question: whether a health-implying order may rest on the contract basis or
+    needs written consent at registration (Law 151/2020 Art. 12); D-089 stands until
+    answered.
+23. The threat-model facts (exclusive importer, B2B customer list, clinics and
+    pharmacies, the diagnosis-disclosing purchase, phone and messaging as a parallel
+    channel) belong in the host's own model.
+
+**History.** The entries listed under Amends keep their text: they record why each rule
+exists and are the reasoning the host inherits. Each carries a note pointing here.
+Vendor names survive only in those historic entries.
+
+**Propagated to:** `00` sections 4 and deferred table · `01` IDN-LIFE-002a, IDN-LIFE-003
+· `04` sections 3, 6, 8, 10 · `05` whole chapter · `07` LIB-HOST-001 Recipients · `08`
+CONV-ENUM-001, CONV-LOG-003 · `09` sections 7 and 10 · `10` catalogue · `11`, `12`,
+`13` R-A04, R-A06, R-A10 · `14`, `15` worked example · `17` BFF-MACH-001 to 003 · `18`
+section 7 · `19` · `20` · `docs/guide/janus-explained.md`,
+`docs/guide/implementation-plan.md`.
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -8836,6 +9085,8 @@ word `identity` is used: schema `identity`, roles `identity_app`, `identity_migr
 | Phase 2, third stop: derived checks take sources; host-called refresh; the implementer decides alone through Milestone 1 | D-161 |
 | Review of the 109 absent-owner decisions: 27 reversed, 14 settled, trace removed | D-162 |
 | The product name is not a naming element; neutral `identity` prefix | D-163 |
+| Provider profile proved: RFC 9700 and 2.1 tests, PAR required, RFC 9068 tokens, provider security events | D-164 |
+| Host business content moved out of the specification; library-true rows and seams only | D-165 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
