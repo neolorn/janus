@@ -13866,6 +13866,7 @@ The subsection each row belongs in is named with it.
 | `identity.domain.unverified` | 1.1 | 422 | A listed domain is verified and no TXT value at `_identity-verify.<domain>` is `identity-domain-verification=<token>`, or the lookup could not be made; nothing is written. (REG-DOM-001, entry 209) |
 | `identity.invitation.notfound` | 1.1 | 404 | `GET /account/invitation` or the acknowledgement is asked of an account no standing invitation is attached to: none of its links was opened by it, or each it opened was acknowledged or revoked. (REG-INV-002, entry 242) |
 | `model.startup.subscribername` | 1.5 | 500 | Startup: two subject-event subscribers are registered under one name, or one under `erasure-ledger`, the name the erasure ledger's confirmation is recorded under. `details.handler` names it; nothing starts (IDN-LIFE-003a, DR-016, entry 332). |
+| `authz.resource.notfound` | 1.3 | 404 | The browser profile answers a request in which the gate refused a record of a type that conceals its records, whether or not the record exists, and whatever the endpoint wrote after the refusal. `details.correlation` is the audit record of the refusal; nothing else is carried (AUTHZ-CONCEAL-001, BFF-ERR-003, entry 339). |
 
 ## LIB-HOST-001, host declarations
 
