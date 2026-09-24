@@ -403,15 +403,16 @@ public sealed class BrowserProfileTests : IDisposable
     /// <summary>
     /// AUTH-SESS-007 AC2: enforcement is the pipeline's, so nothing an endpoint
     /// carries and no key of chapter 10 section 4 takes it out of the layer. What an
-    /// endpoint carries is read in two files and only ever adds a refusal to it: an
-    /// endpoint says that it needs a session, and nothing says it needs less than the
-    /// stages give it (BFF-STEP-001).
+    /// endpoint carries is read for enforcement in two files and only ever adds a
+    /// refusal to it: an endpoint says that it needs a session, and nothing says it
+    /// needs less than the stages give it (BFF-STEP-001). The third reader is the
+    /// logging of BFF-LOG-002, which only ever takes a body out of a log.
     /// </summary>
     [Fact]
     public void AUTH_SESS_007_AC2_NoEndpointCanOptOut()
     {
         Assert.Equal(
-            ["SessionRequired.cs", "SessionRequirement.cs"],
+            ["SensitiveBodyLogging.cs", "SessionRequired.cs", "SessionRequirement.cs"],
             Reading("GetEndpoint", "Metadata"));
 
         Assert.Empty(Reading("IConfigurationStore"));
@@ -479,12 +480,14 @@ public sealed class BrowserProfileTests : IDisposable
     /// configuration or attribute, no stage that enforces the token reading the
     /// endpoint or its metadata; the one thing a path decides is which profile carries
     /// a request, and that is settled in the one place the library names the routes.
+    /// The one other reader of the metadata is the logging of BFF-LOG-002, which
+    /// enforces no token and only ever takes a body out of a log.
     /// </summary>
     [Fact]
     public void BFF_CSRF_001_AC2_NoEndpointCanBeExcludedByConfigurationOrAttribute()
     {
         Assert.Equal(
-            ["SessionRequired.cs", "SessionRequirement.cs"],
+            ["SensitiveBodyLogging.cs", "SessionRequired.cs", "SessionRequirement.cs"],
             Reading("GetEndpoint", "Metadata"));
 
         Assert.Equal(["PipelineProfiles.cs"], Reading("Request.Path"));

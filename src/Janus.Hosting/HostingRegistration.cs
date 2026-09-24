@@ -160,6 +160,10 @@ public static class HostingRegistration
         services.AddScoped<SessionRequirement>();
         services.AddScoped<MachineProfile>();
 
+        // BFF-LOG-002: whatever request logging the host turns on, a marked body
+        // stays out of it.
+        services.AddHttpLoggingInterceptor<SensitiveBodyLogging>();
+
         // BFF-SESS-006: the client half of the sign-on is the library's, so what it
         // presents, where it presents it and the connection it presents it on are
         // registered here and a host supplies none of them.

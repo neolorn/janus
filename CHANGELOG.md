@@ -331,6 +331,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `SensitiveBodyAttribute` marks an endpoint whose request and response bodies never
+  reach the framework's request logging, whatever fields the deployment or the
+  endpoint asks it to record. Every endpoint the library maps carries it, and a
+  request the logging meets before its endpoint is known is treated as marked.
+
 - An administrator holding `membership:manage` can invite a person into an
   organization: `POST /admin/organizations/{id}/invitations` binds an `email`, a
   `phone`, both or neither, and may attach `roles` (which also asks `grant:manage`) and

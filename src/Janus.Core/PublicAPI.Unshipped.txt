@@ -2333,6 +2333,8 @@ Janus.Core.SendingRestrictionGranted.Reason.init -> void
 Janus.Core.SendingRestrictionGranted.Restriction.get -> string!
 Janus.Core.SendingRestrictionGranted.Restriction.init -> void
 Janus.Core.SendingRestrictionGranted.SendingRestrictionGranted(System.DateTimeOffset RaisedAt, string! IdempotencyKey, string! Restriction, int Credit, string! Reason) -> void
+Janus.Core.SensitiveBodyAttribute
+Janus.Core.SensitiveBodyAttribute.SensitiveBodyAttribute() -> void
 Janus.Core.SensitiveCategories
 Janus.Core.SessionDetail
 Janus.Core.SessionDetail.<Clone>$() -> Janus.Core.SessionDetail!
