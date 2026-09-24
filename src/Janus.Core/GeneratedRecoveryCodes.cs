@@ -13,6 +13,7 @@ namespace Janus.Core;
 /// from.
 /// </param>
 /// <remarks>Implements AUTH-FACT-008, AUTH-FACT-009 and AUTH-RECOV-006.</remarks>
+[NeverLogged]
 public sealed record GeneratedRecoveryCodes(
     IReadOnlyList<string> Codes,
     DateTimeOffset GeneratedAt);

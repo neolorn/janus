@@ -38,7 +38,7 @@ internal sealed class WordList(string directory) : IWordList
 
     /// <inheritdoc/>
     public async ValueTask<Result<bool>> MatchesAsync(
-        string password,
+        [NeverLogged] string password,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(password);

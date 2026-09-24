@@ -1,6 +1,7 @@
 using System;
 using System.Buffers.Text;
 using System.Globalization;
+using Janus.Core;
 using Janus.Core.Configuration;
 
 namespace Janus.Authentication.Passwords;
@@ -14,6 +15,7 @@ namespace Janus.Authentication.Passwords;
 /// read from configuration at verification, so raising them leaves every existing
 /// password verifiable and marks it for rehash on the next successful sign-in.
 /// </remarks>
+[NeverLogged]
 internal sealed record PasswordHash
 {
     private const string Prefix = "$argon2id$v=19$";

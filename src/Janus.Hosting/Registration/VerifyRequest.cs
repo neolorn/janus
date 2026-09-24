@@ -1,3 +1,5 @@
+using Janus.Core;
+
 namespace Janus.Hosting.Registration;
 
 /// <summary>
@@ -8,4 +10,7 @@ namespace Janus.Hosting.Registration;
 /// <param name="LinkToken">The token of the link, where one was opened.</param>
 /// <param name="Press">Whether the person pressed, rather than the page loading.</param>
 /// <remarks>Implements REG-SESS-003 and API-LAND-001.</remarks>
-internal sealed record VerifyRequest(string? Code, string? LinkToken, bool Press);
+internal sealed record VerifyRequest(
+    [property: NeverLogged] string? Code,
+    [property: NeverLogged] string? LinkToken,
+    bool Press);

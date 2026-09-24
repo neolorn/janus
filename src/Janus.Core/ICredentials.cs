@@ -31,7 +31,7 @@ public interface ICredentials
     /// </returns>
     ValueTask<Result> SetPasswordAsync(
         CredentialAuthority authority,
-        string password,
+        [NeverLogged] string password,
         string source,
         CancellationToken cancellationToken);
 
@@ -117,7 +117,7 @@ public interface ICredentials
     ValueTask<Result<EnrolledCredential>> ConfirmGeneratorAsync(
         CredentialAuthority authority,
         AuthenticatorId credential,
-        string code,
+        [NeverLogged] string code,
         string source,
         CancellationToken cancellationToken);
 

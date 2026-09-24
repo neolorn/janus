@@ -29,6 +29,6 @@ internal interface ILeakedPasswordCorpus
     /// </returns>
     ValueTask<Result<IReadOnlySet<string>>> RangeAsync(
         BlocklistSource source,
-        string prefix,
+        [NeverLogged] string prefix,
         CancellationToken cancellationToken);
 }

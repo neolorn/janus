@@ -16,7 +16,7 @@ internal sealed class LifecycleLink
     private LifecycleLink(
         SubjectId subject,
         LifecycleLinkKind kind,
-        byte[] token,
+        [NeverLogged] byte[] token,
         DateTimeOffset issuedAt)
     {
         Subject = subject;
@@ -38,6 +38,7 @@ internal sealed class LifecycleLink
     /// <summary>
     /// What the token in the notice hashes to.
     /// </summary>
+    [NeverLogged]
     public byte[] Token { get; }
 
     /// <summary>
@@ -72,7 +73,7 @@ internal sealed class LifecycleLink
     public static LifecycleLink Existing(
         SubjectId subject,
         LifecycleLinkKind kind,
-        byte[] token,
+        [NeverLogged] byte[] token,
         DateTimeOffset issuedAt)
     {
         ArgumentNullException.ThrowIfNull(token);

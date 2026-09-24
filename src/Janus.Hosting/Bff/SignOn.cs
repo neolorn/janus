@@ -116,7 +116,7 @@ internal sealed class SignOn(
     /// <exception cref="ArgumentNullException">The request is absent.</exception>
     public async Task<IResult> ReturnAsync(
         HttpContext context,
-        string? code,
+        [NeverLogged] string? code,
         string? state,
         string? error,
         CancellationToken cancellationToken)
@@ -172,7 +172,7 @@ internal sealed class SignOn(
     // sent back to is read from the registry and never from the request that asked.
     private static string Destination(OidcClient registered) => registered.Redirect;
 
-    private static string Challenge(string verifier) =>
+    private static string Challenge([NeverLogged] string verifier) =>
         Base64Url.EncodeToString(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
 
     // BFF-SESS-006: the browser is sent back onto this application and nowhere else, so
@@ -234,7 +234,7 @@ internal sealed class SignOn(
     private string Authorization(
         OidcClient registered,
         OpaqueToken state,
-        string verifier,
+        [NeverLogged] string verifier,
         bool silent) =>
         Address(addresses.Provider, "/oidc/authorize")
         + "?response_type=code"
@@ -250,7 +250,7 @@ internal sealed class SignOn(
         HttpContext context,
         OpaqueToken carried,
         SignOnAttempt attempt,
-        string code,
+        [NeverLogged] string code,
         CancellationToken cancellationToken)
     {
         if (await clients.FindAsync(client.ClientId, cancellationToken).ConfigureAwait(false)
@@ -305,7 +305,7 @@ internal sealed class SignOn(
     private async Task<string?> ExchangedAsync(
         OidcClient registered,
         SignOnAttempt attempt,
-        string code,
+        [NeverLogged] string code,
         CancellationToken cancellationToken)
     {
         using HttpClient requests = channel.CreateClient(Channel);

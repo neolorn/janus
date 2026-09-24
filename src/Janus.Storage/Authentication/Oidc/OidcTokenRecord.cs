@@ -45,6 +45,7 @@ internal sealed class OidcTokenRecord
     public string? ReferenceId { get; set; }
 
     /// <summary>The <c>payload</c> column, where the row carries the token itself.</summary>
+    [NeverLogged]
     public string? Payload { get; set; }
 
     /// <summary>The <c>created_at</c> column.</summary>

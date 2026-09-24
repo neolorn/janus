@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- Every public type and member that carries a password, a token, a code, a key or
+  the text of a notice is marked `[NeverLogged]`: `SessionId`,
+  `GeneratedRecoveryCodes`, `KeyEncryptionKeys`, the code of `LinkLanding` and
+  `SignInLanding`, the token of `IssuedInvitation`, the secret and address of
+  `GeneratorEnrolment`, the text of `DocumentVersion` and `DocumentTranslation`,
+  and the secret parameters of the service contracts. The marker states the rule
+  for the host as it does for the library's own build.
+
 - The shipped provider register, `ProviderRegister.Default`, is now the four rows the
   library's own processing makes true: the mail server, the SMS gateway, the hosting
   provider and password screening. The SMS gateway is now applied to every

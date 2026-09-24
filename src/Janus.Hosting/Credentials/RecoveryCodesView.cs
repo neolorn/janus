@@ -10,6 +10,7 @@ namespace Janus.Hosting.Credentials;
 /// <param name="Codes">The codes.</param>
 /// <param name="GeneratedAt">When the set was made.</param>
 /// <remarks>Implements AUTH-FACT-008 and AUTH-FACT-009.</remarks>
+[NeverLogged]
 internal sealed record RecoveryCodesView(IReadOnlyList<string> Codes, DateTimeOffset GeneratedAt)
 {
     /// <summary>

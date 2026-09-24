@@ -16,6 +16,7 @@ namespace Janus.Storage.Authentication.Recovery;
 internal sealed class RecoveryLinkRecord
 {
     /// <summary>The <c>token</c> column: what the link's token hashes to.</summary>
+    [NeverLogged]
     public byte[] Token { get; set; } = [];
 
     /// <summary>The <c>subject</c> column.</summary>

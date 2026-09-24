@@ -1,3 +1,5 @@
+using Janus.Core;
+
 namespace Janus.Authentication.Sessions;
 
 /// <summary>
@@ -22,4 +24,4 @@ namespace Janus.Authentication.Sessions;
 /// comes back to a browser that started nothing is refused before anything is
 /// exchanged.
 /// </remarks>
-internal sealed record SignOnAttempt(byte[] StateFingerprint, string Verifier, string ReturnTo);
+internal sealed record SignOnAttempt(byte[] StateFingerprint, [property: NeverLogged] string Verifier, string ReturnTo);

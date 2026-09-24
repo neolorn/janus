@@ -20,7 +20,7 @@ internal sealed class LockedDomain
 
     private const string ValuePrefix = "identity-domain-verification=";
 
-    private LockedDomain(OrganizationId organization, string domain, string token, DateTimeOffset addedAt)
+    private LockedDomain(OrganizationId organization, string domain, [NeverLogged] string token, DateTimeOffset addedAt)
     {
         Organization = organization;
         Domain = domain;
@@ -41,6 +41,7 @@ internal sealed class LockedDomain
     /// <summary>
     /// The 32 random bytes the record carries, base64url.
     /// </summary>
+    [NeverLogged]
     public string Token { get; }
 
     /// <summary>
@@ -125,7 +126,7 @@ internal sealed class LockedDomain
     public static LockedDomain Existing(
         OrganizationId organization,
         string domain,
-        string token,
+        [NeverLogged] string token,
         DateTimeOffset addedAt,
         DateTimeOffset? verifiedAt,
         DateTimeOffset? checkedAt,

@@ -13,7 +13,7 @@ namespace Janus.Hosting.Organizations;
 /// where it was sent.
 /// </param>
 /// <remarks>Implements chapter 09 section 8a, IDN-LIFE-009a and API-CONV-002.</remarks>
-internal sealed record IssuedInvitationView(Guid Id, DateTimeOffset ExpiresAt, string? Token)
+internal sealed record IssuedInvitationView(Guid Id, DateTimeOffset ExpiresAt, [property: NeverLogged] string? Token)
 {
     /// <summary>
     /// The view of one issued invitation.

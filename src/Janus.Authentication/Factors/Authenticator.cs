@@ -100,7 +100,7 @@ internal sealed class Authenticator
         AuthenticatorId id,
         SubjectId subject,
         CredentialLabel label,
-        ReadOnlyMemory<byte> secret,
+        [NeverLogged] ReadOnlyMemory<byte> secret,
         DateTimeOffset at) =>
         new(
             id,

@@ -87,7 +87,7 @@ internal sealed class CredentialService(
     /// <inheritdoc/>
     public async ValueTask<Result> SetPasswordAsync(
         CredentialAuthority authority,
-        string password,
+        [NeverLogged] string password,
         string source,
         CancellationToken cancellationToken)
     {
@@ -350,7 +350,7 @@ internal sealed class CredentialService(
     public async ValueTask<Result<EnrolledCredential>> ConfirmGeneratorAsync(
         CredentialAuthority authority,
         AuthenticatorId credential,
-        string code,
+        [NeverLogged] string code,
         string source,
         CancellationToken cancellationToken)
     {
@@ -785,7 +785,7 @@ internal sealed class CredentialService(
 
     private async ValueTask<Result> SetAsync(
         SubjectId subject,
-        string password,
+        [NeverLogged] string password,
         CancellationToken cancellationToken)
     {
         HeldIdentifiers channels = await identifiers.HeldAsync(subject, cancellationToken)

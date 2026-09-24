@@ -1,3 +1,5 @@
+using Janus.Core;
+
 namespace Janus.Authentication.SignIn;
 
 /// <summary>
@@ -16,4 +18,4 @@ namespace Janus.Authentication.SignIn;
 /// Implements AUTH-FACT-003 and REG-SESS-003. The contract method is this one without
 /// the secrets, because a caller in process has no cookie to write them to.
 /// </remarks>
-internal sealed record LandedSignIn(SignInOutcome? Outcome, bool SameBrowser, string? Code);
+internal sealed record LandedSignIn(SignInOutcome? Outcome, bool SameBrowser, [property: NeverLogged] string? Code);

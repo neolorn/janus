@@ -290,7 +290,7 @@ internal sealed class OidcApplicationStore(StoreContext context)
     /// <inheritdoc/>
     public ValueTask SetClientSecretAsync(
         OidcClientRecord application,
-        string? secret,
+        [NeverLogged] string? secret,
         CancellationToken cancellationToken) =>
         throw Unwritten();
 

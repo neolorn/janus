@@ -19,6 +19,7 @@ internal sealed class RecoveryCodeRecord
     public int Ordinal { get; set; }
 
     /// <summary>The <c>hash</c> column.</summary>
+    [NeverLogged]
     public string Hash { get; set; } = string.Empty;
 
     /// <summary>The <c>used_at</c> column, unset while the code is unspent.</summary>

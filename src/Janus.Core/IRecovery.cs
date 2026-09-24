@@ -47,8 +47,8 @@ public interface IRecovery
     /// or what the password screening refused.
     /// </returns>
     ValueTask<Result> CompleteAsync(
-        string token,
-        string password,
+        [NeverLogged] string token,
+        [NeverLogged] string password,
         string source,
         CancellationToken cancellationToken);
 
@@ -91,7 +91,7 @@ public interface IRecovery
     /// <c>auth.recovery.tokenexpired</c>.
     /// </returns>
     ValueTask<Result<EnrolmentSession>> BeginEnrolmentAsync(
-        string token,
+        [NeverLogged] string token,
         CancellationToken cancellationToken);
 
     /// <summary>

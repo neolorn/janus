@@ -34,6 +34,7 @@ internal sealed class RecoveryLink
     }
 
     /// <summary>What the token the message carried hashes to.</summary>
+    [NeverLogged]
     public byte[] Fingerprint { get; }
 
     /// <summary>Whose account it opens.</summary>

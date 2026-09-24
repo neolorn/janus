@@ -17,6 +17,7 @@ public sealed record FactorPresentation(Factor Factor)
     /// What was typed: a password, a code, a recovery code, or the token a link
     /// carried.
     /// </summary>
+    [NeverLogged]
     public string? Value { get; init; }
 
     /// <summary>What the authenticator answered, for a WebAuthn factor.</summary>

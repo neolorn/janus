@@ -104,7 +104,7 @@ internal sealed class SignInLinks(
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The pending sign-in, or nothing.</returns>
     public async ValueTask<PendingSignIn?> FindAsync(
-        string linkToken,
+        [NeverLogged] string linkToken,
         CancellationToken cancellationToken)
     {
         if (linkToken is not { Length: > 0 })
@@ -156,7 +156,7 @@ internal sealed class SignInLinks(
     /// <exception cref="ArgumentNullException">The pending sign-in is absent.</exception>
     public async ValueTask<Result> SpendCodeAsync(
         PendingSignIn held,
-        string entered,
+        [NeverLogged] string entered,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(held);
@@ -252,7 +252,7 @@ internal sealed class SignInLinks(
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Success, always.</returns>
     public async ValueTask<Result> AbandonAsync(
-        string linkToken,
+        [NeverLogged] string linkToken,
         CancellationToken cancellationToken)
     {
         if (linkToken is { Length: > 0 })

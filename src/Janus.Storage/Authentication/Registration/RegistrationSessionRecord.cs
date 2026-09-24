@@ -37,5 +37,6 @@ internal sealed class RegistrationSessionRecord
     public byte[] WrappedKey { get; set; } = [];
 
     /// <summary>The <c>enc_session</c> column: everything the steps collected.</summary>
+    [NeverLogged]
     public byte[] Session { get; set; } = [];
 }

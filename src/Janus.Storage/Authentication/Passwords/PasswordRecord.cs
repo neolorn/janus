@@ -22,6 +22,7 @@ internal sealed class PasswordRecord
     /// <summary>
     /// The <c>hash</c> column, holding the parameters the hash was computed at.
     /// </summary>
+    [NeverLogged]
     public string Hash { get; set; } = string.Empty;
 
     /// <summary>

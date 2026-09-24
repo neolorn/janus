@@ -1,4 +1,5 @@
 using System;
+using Janus.Core;
 
 namespace Janus.Authentication.Oidc;
 
@@ -13,4 +14,5 @@ namespace Janus.Authentication.Oidc;
 /// Implements AUTH-KEY-001 and AUTH-KEY-002. The material is handed to the one caller
 /// that signs and is never written anywhere unwrapped.
 /// </remarks>
+[NeverLogged]
 internal sealed record SigningMaterial(string KeyId, string Algorithm, byte[] PrivateKey);

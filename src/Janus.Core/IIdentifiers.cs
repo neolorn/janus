@@ -52,7 +52,7 @@ public interface IIdentifiers
     ValueTask<Result> VerifyAsync(
         AccessContext context,
         IdentifierId identifier,
-        string code,
+        [NeverLogged] string code,
         string source,
         CancellationToken cancellationToken);
 
@@ -73,7 +73,7 @@ public interface IIdentifiers
     /// </returns>
     ValueTask<Result<LinkLanding>> LandAsync(
         SessionId? session,
-        string linkToken,
+        [NeverLogged] string linkToken,
         bool press,
         string source,
         CancellationToken cancellationToken);
@@ -86,7 +86,7 @@ public interface IIdentifiers
     /// <param name="linkToken">The token the message carried.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Success.</returns>
-    ValueTask<Result> AbandonAsync(string linkToken, CancellationToken cancellationToken);
+    ValueTask<Result> AbandonAsync([NeverLogged] string linkToken, CancellationToken cancellationToken);
 
     /// <summary>
     /// Makes a verified identifier the primary of its kind, which needs neither
@@ -148,7 +148,7 @@ public interface IIdentifiers
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Success, or the refusal and its code.</returns>
     ValueTask<Result> UndoAsync(
-        string linkToken,
+        [NeverLogged] string linkToken,
         string source,
         CancellationToken cancellationToken);
 
@@ -204,7 +204,7 @@ public interface IIdentifiers
     ValueTask<Result> VerifyAsync(
         EnrolmentSessionId enrolment,
         IdentifierId identifier,
-        string code,
+        [NeverLogged] string code,
         string source,
         CancellationToken cancellationToken);
 }

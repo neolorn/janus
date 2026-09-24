@@ -14,6 +14,7 @@ namespace Janus.Storage.Authentication.Organizations;
 internal sealed class LockedDomainRecord
 {
     /// <summary>The <c>token</c> column, which is this table's key.</summary>
+    [NeverLogged]
     public string Token { get; set; } = string.Empty;
 
     /// <summary>The <c>organization</c> column.</summary>

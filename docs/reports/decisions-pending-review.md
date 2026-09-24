@@ -10194,6 +10194,62 @@ report.
 *Chapter text that should change.* None in the chapters; the instruction's search
 could name the business sense.
 
+---
+
+## 272. What carries `[NeverLogged]`
+
+**Corrections 3 · 2026-09-24 · Tier 2 · CONV-LOG-003 AC1, CONV-CODE-008 JAN0002**
+
+*The question.* CONV-LOG-003 lists what "SHALL NEVER be logged": "passwords, tokens,
+session identifiers, TOTP secrets or codes, recovery codes, verification codes, the
+hash prefix sent for password screening", "any field of a resource type the host
+declares sensitive", "the body of any endpoint the host marks `SensitiveBody`", and
+"the content of consent or notice text in any language". JAN0002 reports "A logging
+call whose argument is a type or member marked as never-logged". No chapter says
+which declarations carry the marker, and C# admits no attribute on a local variable.
+
+*The readings.*
+
+1. Mark the types whose whole value is forbidden, and nothing else.
+2. Mark those types, every property or field of another type that holds a forbidden
+   value, and every parameter through which one passes as a plain string or bytes.
+
+*Chosen: 2*, the strictest reading. A password is carried as a `string` far more
+often than as a `Password`, and the rule catches only what it can see marked. Under
+it:
+
+- Types: `Password`, `PasswordHash`, `OpaqueToken`, `TotpMaterial`, `TotpEnrolment`,
+  `VerificationCode`, `RecoveryCodeEntry`, `PreparedRecoveryCodes`, `SigningMaterial`,
+  `SessionId`, `GeneratedRecoveryCodes`, `KeyEncryptionKeys`, `SignOnSecret`,
+  `RecoveryCodesView`.
+- Members: every request member carrying a password, code, link token or invitation
+  token; every answer member carrying a code, secret, token or `otpauth` address; the
+  secret columns of the rows (hashes, tokens, codes, the client secret, the signing
+  key, the stored token payload, the staged password); the text of a notice and of
+  its translations.
+- Session identifiers are read to include the fingerprints a session, a
+  pre-authentication record or a link is found by, which identify it as surely as
+  the secret does.
+- Parameters: every `string`, `byte[]` or `ReadOnlyMemory<byte>` parameter carrying one
+  of those values, in the public service contracts and in their implementations
+  alike, since the rule reads the implementation's parameter and not the contract's.
+- Not marked: locals, which C# does not allow; spans, which cannot reach a logging
+  call; wrapped data keys, which are ciphertext; the send reference, which CONV-LOG-003
+  does not list. A host's own sensitive types and `SensitiveBody` endpoints are the
+  host's to mark; the library enforces the latter at runtime (BFF-LOG-002).
+
+*Tests that pin it.*
+`NeverLoggedValueAnalyzerTests.CONV_LOG_003_AC1_TheLibrarysOwnCarriersAreReportedAsync`,
+`NeverLoggedValueAnalyzerTests.CONV_LOG_003_AC1_TheVersionAndTheIdentifiersBesideThemAreNotReportedAsync`,
+`Janus.Authentication.Tests.NeverLoggedTests` (two tests),
+`Janus.Hosting.Tests.NeverLoggedTests` (two tests),
+`Janus.Storage.Tests.NeverLoggedTests.CONV_LOG_003_AC1_EveryColumnCarryingAForbiddenValueIsMarked`.
+
+*Chapter text that should change.* CONV-LOG-003 or CONV-CODE-008 could say which
+declarations carry the marker (types, members and parameters), that session
+identifiers include the fingerprints they are found by, and that locals cannot carry
+it.
+
 
 # Rows for chapter 10
 

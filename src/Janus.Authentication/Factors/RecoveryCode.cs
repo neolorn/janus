@@ -1,6 +1,7 @@
 using System;
 using System.Security.Cryptography;
 using System.Text;
+using Janus.Core;
 
 namespace Janus.Authentication.Factors;
 
@@ -59,7 +60,7 @@ internal static class RecoveryCode
     /// <param name="entered">The code as it was typed.</param>
     /// <returns>The canonical symbols, empty where none of it is a symbol.</returns>
     /// <exception cref="ArgumentNullException">The value is absent.</exception>
-    public static string Canonical(string entered)
+    public static string Canonical([NeverLogged] string entered)
     {
         ArgumentNullException.ThrowIfNull(entered);
 
@@ -85,7 +86,7 @@ internal static class RecoveryCode
     /// <param name="entered">The code as it was typed.</param>
     /// <returns>The bytes. The caller clears them.</returns>
     /// <exception cref="ArgumentNullException">The value is absent.</exception>
-    public static byte[] Presented(string entered) =>
+    public static byte[] Presented([NeverLogged] string entered) =>
         Encoding.UTF8.GetBytes(Canonical(entered));
 
     // Crockford base32 reads O as zero and I, L as one, and is case-insensitive.

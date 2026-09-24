@@ -1,3 +1,5 @@
+using Janus.Core;
+
 namespace Janus.Hosting.Registration;
 
 /// <summary>
@@ -7,4 +9,4 @@ namespace Janus.Hosting.Registration;
 /// The token of the link, where the ending control of another browser is pressing it.
 /// </param>
 /// <remarks>Implements REG-SESS-001 and REG-SESS-003.</remarks>
-internal sealed record AbandonRequest(string? LinkToken);
+internal sealed record AbandonRequest([property: NeverLogged] string? LinkToken);

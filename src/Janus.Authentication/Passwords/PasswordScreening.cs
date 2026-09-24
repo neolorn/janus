@@ -43,7 +43,7 @@ internal sealed class PasswordScreening(
     /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public async ValueTask<Result> ScreenAsync(
-        byte[] password,
+        [NeverLogged] byte[] password,
         IReadOnlyCollection<string> ownWords,
         CancellationToken cancellationToken)
     {
@@ -110,7 +110,7 @@ internal sealed class PasswordScreening(
     /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public async ValueTask<Result<bool>> ContextMatchesAsync(
-        byte[] password,
+        [NeverLogged] byte[] password,
         IReadOnlyCollection<string> ownWords,
         CancellationToken cancellationToken)
     {
@@ -143,7 +143,7 @@ internal sealed class PasswordScreening(
         return default!;
     }
 
-    private async ValueTask<Result> LeakedAsync(byte[] password, CancellationToken cancellationToken)
+    private async ValueTask<Result> LeakedAsync([NeverLogged] byte[] password, CancellationToken cancellationToken)
     {
         // INT-PWD-001: the prefix is the first five upper-case hexadecimal characters
         // of the hash, and the remaining thirty-five are matched here.
@@ -183,7 +183,7 @@ internal sealed class PasswordScreening(
 
     private async ValueTask<IReadOnlySet<string>?> AskAsync(
         BlocklistSource source,
-        string hash,
+        [NeverLogged] string hash,
         CancellationToken cancellationToken) =>
         (await corpus.RangeAsync(source, hash[..PrefixLength], cancellationToken).ConfigureAwait(false))
             .Match<IReadOnlySet<string>?>(value => value, _ => null);

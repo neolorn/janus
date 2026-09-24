@@ -21,6 +21,7 @@ internal sealed class LossReportRecord
     public SubjectId Subject { get; set; }
 
     /// <summary>The <c>enc_cancel</c> column.</summary>
+    [NeverLogged]
     public byte[] Cancel { get; set; } = [];
 
     /// <summary>The <c>reported_at</c> column.</summary>

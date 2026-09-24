@@ -25,6 +25,7 @@ internal sealed class OidcClientRecord
     public string Redirect { get; set; } = string.Empty;
 
     /// <summary>The <c>secret</c> column: what its secret hashes to.</summary>
+    [NeverLogged]
     public byte[] Secret { get; set; } = [];
 
     /// <summary>The <c>scopes</c> column: what it may ask for.</summary>

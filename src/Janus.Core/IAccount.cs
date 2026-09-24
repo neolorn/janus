@@ -169,7 +169,7 @@ public interface IAccount
     /// <param name="linkToken">The token the notice carried.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Success, or the refusal and its code.</returns>
-    ValueTask<Result> ReactivateAsync(string linkToken, CancellationToken cancellationToken);
+    ValueTask<Result> ReactivateAsync([NeverLogged] string linkToken, CancellationToken cancellationToken);
 
     /// <summary>
     /// Asks for the account's own erasure, which begins the grace window. This is
@@ -193,5 +193,5 @@ public interface IAccount
     /// <param name="linkToken">The token the notice carried.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Success, or the refusal and its code.</returns>
-    ValueTask<Result> CancelDeletionAsync(string linkToken, CancellationToken cancellationToken);
+    ValueTask<Result> CancelDeletionAsync([NeverLogged] string linkToken, CancellationToken cancellationToken);
 }

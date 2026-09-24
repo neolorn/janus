@@ -31,7 +31,7 @@ internal interface IInvitationStore
     /// <param name="token">What is stored against the token.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The invitation, or nothing where no invitation was issued with it.</returns>
-    ValueTask<Invitation?> FindByTokenAsync(byte[] token, CancellationToken cancellationToken);
+    ValueTask<Invitation?> FindByTokenAsync([NeverLogged] byte[] token, CancellationToken cancellationToken);
 
     /// <summary>
     /// Reads the invitation an account opened the link of most recently, among those

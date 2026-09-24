@@ -14,6 +14,7 @@ namespace Janus.Core;
 /// so the version a subject key was wrapped under is recorded beside it and the
 /// previous version stays here until the rotation reports complete.
 /// </remarks>
+[NeverLogged]
 public sealed record KeyEncryptionKeys(
     int CurrentVersion,
     IReadOnlyDictionary<int, ReadOnlyMemory<byte>> Versions)

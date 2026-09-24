@@ -468,7 +468,7 @@ internal sealed class OidcTokenStore(StoreContext context)
     /// <inheritdoc/>
     public ValueTask SetPayloadAsync(
         OidcTokenRecord token,
-        string? payload,
+        [NeverLogged] string? payload,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(token);

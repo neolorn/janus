@@ -451,7 +451,7 @@ internal sealed class AccountService(
         lifecycle.DeactivateAsync(context, session, source, cancellationToken);
 
     /// <inheritdoc/>
-    public ValueTask<Result> ReactivateAsync(string linkToken, CancellationToken cancellationToken) =>
+    public ValueTask<Result> ReactivateAsync([NeverLogged] string linkToken, CancellationToken cancellationToken) =>
         lifecycle.ReactivateAsync(linkToken, cancellationToken);
 
     /// <inheritdoc/>
@@ -464,7 +464,7 @@ internal sealed class AccountService(
 
     /// <inheritdoc/>
     public ValueTask<Result> CancelDeletionAsync(
-        string linkToken,
+        [NeverLogged] string linkToken,
         CancellationToken cancellationToken) =>
         lifecycle.CancelDeletionAsync(linkToken, cancellationToken);
 

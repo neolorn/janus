@@ -13,4 +13,5 @@ namespace Janus.Authentication.Factors;
 /// back.
 /// </param>
 /// <remarks>Implements AUTH-FACT-007.</remarks>
+[NeverLogged]
 internal sealed record TotpEnrolment(AuthenticatorId Id, ReadOnlyMemory<byte> Secret);

@@ -1,4 +1,5 @@
 using System;
+using Janus.Core;
 
 namespace Janus.Storage.Authentication.Oidc;
 
@@ -23,6 +24,7 @@ internal sealed class SigningKeyRecord
     public byte[] PublicKey { get; set; } = [];
 
     /// <summary>The <c>private_key</c> column, wrapped under the key-encryption key.</summary>
+    [NeverLogged]
     public byte[] PrivateKey { get; set; } = [];
 
     /// <summary>The <c>key_version</c> column: which key-encryption key wrapped it.</summary>

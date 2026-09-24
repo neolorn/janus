@@ -67,6 +67,7 @@ internal sealed class StagedIdentity
     /// The code last sent, absent where none is outstanding. It is held rather than
     /// fingerprinted because a link opened elsewhere shows it (REG-SESS-003).
     /// </summary>
+    [NeverLogged]
     public byte[]? Code { get; private set; }
 
     /// <summary>
@@ -77,6 +78,7 @@ internal sealed class StagedIdentity
     /// <summary>
     /// The fingerprint of the link token last sent, absent where none is outstanding.
     /// </summary>
+    [NeverLogged]
     public byte[]? Link { get; private set; }
 
     /// <summary>
@@ -150,9 +152,9 @@ internal sealed class StagedIdentity
         string canonical,
         bool isLocked,
         bool isExtra,
-        byte[]? code,
+        [NeverLogged] byte[]? code,
         DateTimeOffset? codeExpiresAt,
-        byte[]? link,
+        [NeverLogged] byte[]? link,
         int wrongAttempts,
         bool codeSpent,
         DateTimeOffset? verifiedAt)
@@ -179,7 +181,7 @@ internal sealed class StagedIdentity
     /// <param name="link">The fingerprint of the link token.</param>
     /// <param name="expiresAt">When both stop being accepted.</param>
     /// <exception cref="ArgumentNullException">Either is absent.</exception>
-    public void Sent(byte[] code, byte[] link, DateTimeOffset expiresAt)
+    public void Sent([NeverLogged] byte[] code, [NeverLogged] byte[] link, DateTimeOffset expiresAt)
     {
         ArgumentNullException.ThrowIfNull(code);
         ArgumentNullException.ThrowIfNull(link);

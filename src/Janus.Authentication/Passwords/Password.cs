@@ -11,6 +11,7 @@ namespace Janus.Authentication.Passwords;
 /// Implements AUTH-PASS-001a, AUTH-PASS-003 and AUTH-PASS-007. There is no expiry
 /// field: rotation is required on evidence of compromise and never on a schedule.
 /// </remarks>
+[NeverLogged]
 internal sealed class Password
 {
     private Password(

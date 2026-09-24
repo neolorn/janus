@@ -58,7 +58,7 @@ internal sealed class SigningKeyStore(
     /// <inheritdoc/>
     public async ValueTask AddAsync(
         SigningKey key,
-        byte[] privateKey,
+        [NeverLogged] byte[] privateKey,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(key);

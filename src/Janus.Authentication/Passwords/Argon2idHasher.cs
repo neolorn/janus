@@ -1,5 +1,6 @@
 using System;
 using System.Security.Cryptography;
+using Janus.Core;
 using Janus.Core.Configuration;
 using Konscious.Security.Cryptography;
 
@@ -25,7 +26,7 @@ internal sealed class Argon2idHasher(RandomNumberGenerator randomness)
     /// <param name="parallelism">The lanes.</param>
     /// <returns>The hash, with the parameters it was computed at.</returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
-    public PasswordHash Hash(byte[] password, Argon2StrengthClass parameters, int parallelism)
+    public PasswordHash Hash([NeverLogged] byte[] password, Argon2StrengthClass parameters, int parallelism)
     {
         ArgumentNullException.ThrowIfNull(password);
         ArgumentNullException.ThrowIfNull(parameters);
@@ -44,7 +45,7 @@ internal sealed class Argon2idHasher(RandomNumberGenerator randomness)
     /// <param name="hash">The stored hash.</param>
     /// <returns>Whether the password is the one the hash was computed over.</returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
-    public static bool Verify(byte[] password, PasswordHash hash)
+    public static bool Verify([NeverLogged] byte[] password, PasswordHash hash)
     {
         ArgumentNullException.ThrowIfNull(password);
         ArgumentNullException.ThrowIfNull(hash);
@@ -59,7 +60,7 @@ internal sealed class Argon2idHasher(RandomNumberGenerator randomness)
     }
 
     private static byte[] Digest(
-        byte[] password,
+        [NeverLogged] byte[] password,
         byte[] salt,
         Argon2StrengthClass parameters,
         int parallelism)

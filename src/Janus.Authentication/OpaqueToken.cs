@@ -2,6 +2,7 @@ using System;
 using System.Buffers.Text;
 using System.Security.Cryptography;
 using System.Text;
+using Janus.Core;
 
 namespace Janus.Authentication;
 
@@ -13,6 +14,7 @@ namespace Janus.Authentication;
 /// Implements AUTH-SESS-003, AUTH-FACT-015 and AUTH-FACT-016. The same shape serves
 /// the session cookie, the trusted-device token and the remembered browser.
 /// </remarks>
+[NeverLogged]
 internal readonly record struct OpaqueToken
 {
     private const int Length = 32;

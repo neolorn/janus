@@ -20,7 +20,7 @@ internal sealed class LossReport
     private LossReport(
         AuthenticatorId credential,
         SubjectId subject,
-        byte[] cancel,
+        [NeverLogged] byte[] cancel,
         DateTimeOffset reportedAt,
         DateTimeOffset invalidatesAt)
     {
@@ -44,6 +44,7 @@ internal sealed class LossReport
     /// store keeps it under the account's own key, where an erasure leaves it
     /// unreadable.
     /// </summary>
+    [NeverLogged]
     public byte[] Cancel { get; }
 
     /// <summary>When it was reported.</summary>
@@ -100,7 +101,7 @@ internal sealed class LossReport
     public static LossReport Existing(
         AuthenticatorId credential,
         SubjectId subject,
-        byte[] cancel,
+        [NeverLogged] byte[] cancel,
         DateTimeOffset reportedAt,
         DateTimeOffset invalidatesAt,
         DateTimeOffset notifiedAt,
@@ -122,7 +123,7 @@ internal sealed class LossReport
     /// </summary>
     /// <param name="presented">What was presented.</param>
     /// <returns>Whether it answers.</returns>
-    public bool Matches(string? presented) =>
+    public bool Matches([NeverLogged] string? presented) =>
         presented is { Length: > 0 } carried
         && CryptographicOperations.FixedTimeEquals(Cancel, Encoding.UTF8.GetBytes(carried));
 

@@ -16,6 +16,7 @@ namespace Janus.Storage.Authentication.SignIn;
 internal sealed class PendingSignInRecord
 {
     /// <summary>The <c>token</c> column: what the link's token hashes to.</summary>
+    [NeverLogged]
     public byte[] Token { get; set; } = [];
 
     /// <summary>The <c>subject</c> column.</summary>
@@ -28,6 +29,7 @@ internal sealed class PendingSignInRecord
     public IdentifierId? Email { get; set; }
 
     /// <summary>The <c>code</c> column.</summary>
+    [NeverLogged]
     public byte[] Code { get; set; } = [];
 
     /// <summary>The <c>browser</c> column: what the asking browser carried.</summary>

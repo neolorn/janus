@@ -22,5 +22,5 @@ internal interface IWordList
     /// <returns>
     /// Whether one appears, or the failure where the list could not be read.
     /// </returns>
-    ValueTask<Result<bool>> MatchesAsync(string password, CancellationToken cancellationToken);
+    ValueTask<Result<bool>> MatchesAsync([NeverLogged] string password, CancellationToken cancellationToken);
 }

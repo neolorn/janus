@@ -82,7 +82,7 @@ internal sealed class RegistrationService(
         string client,
         string language,
         string source,
-        string? invitationToken,
+        [NeverLogged] string? invitationToken,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(client);
@@ -152,7 +152,7 @@ internal sealed class RegistrationService(
     // bound phone is staged locked and verified by its code at the phone step.
     private async ValueTask<Result<Invitation>> InvitedAsync(
         RegistrationSession session,
-        string invitationToken,
+        [NeverLogged] string invitationToken,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -503,7 +503,7 @@ internal sealed class RegistrationService(
     public async ValueTask<Result<RegistrationState>> VerifyAsync(
         RegistrationSessionId session,
         IdentifierId identifier,
-        string code,
+        [NeverLogged] string code,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(code);
@@ -569,7 +569,7 @@ internal sealed class RegistrationService(
     /// <inheritdoc/>
     public async ValueTask<Result<LinkLanding>> LandAsync(
         RegistrationSessionId? session,
-        string linkToken,
+        [NeverLogged] string linkToken,
         bool press,
         CancellationToken cancellationToken)
     {
@@ -662,7 +662,7 @@ internal sealed class RegistrationService(
     /// <inheritdoc/>
     public async ValueTask<Result<RegistrationState>> SetPasswordAsync(
         RegistrationSessionId session,
-        string password,
+        [NeverLogged] string password,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(password);
@@ -959,7 +959,7 @@ internal sealed class RegistrationService(
     /// <inheritdoc/>
     public async ValueTask<Result> AbandonAsync(
         RegistrationSessionId? session,
-        string? linkToken,
+        [NeverLogged] string? linkToken,
         CancellationToken cancellationToken)
     {
         RegistrationSession? live = null;
