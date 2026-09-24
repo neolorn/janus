@@ -191,7 +191,7 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
         Invocation rotated = await Invocation.PipedAsync([Command], Rotating());
 
         Assert.Equal(0, rotated.ExitCode);
-        Assert.Equal(
+        Assert.True(JsonNode.DeepEquals(
             new JsonObject
             {
                 ["keyEncryptionKeys"] = new JsonObject
@@ -199,8 +199,8 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
                     ["current"] = 2,
                     ["versions"] = new JsonObject { ["2"] = Convert.ToBase64String(Next) },
                 },
-            }.ToJsonString(),
-            Lines(rotated)[0]);
+            },
+            JsonNode.Parse(Lines(rotated)[0])));
         Assert.Equal("""{"version":2,"processed":3}""", Lines(rotated)[1]);
         Assert.Null(await connection.ExecuteScalarAsync<DateTime?>("SELECT retired_at FROM identity.key_rotations"));
 
