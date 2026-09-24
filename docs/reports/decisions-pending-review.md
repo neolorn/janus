@@ -13140,6 +13140,72 @@ one export is, that the limit is per actor over a rolling hour and answered with
 `auth.throttled` and `retryAt`, what a system principal meets at the gate, and whether
 an export carries a reason (and so whether the gate should take one).
 
+---
+
+## 330. How the library learns of clock drift and a failed certificate renewal
+
+**Phase 9 · 2026-09-24 · Tier 2 · INF-HOST-001, INF-TLS-003, OPS-ALERT-001, LIB-EXT-001**
+
+*The question.* OPS-ALERT-001 lists `certificate-renewal-failed` (High, INF-TLS-003)
+and `clock-drift` (Normal, INF-HOST-001), and the phase 9 gate asks that every
+condition fire from a test. The clock and the certificates are the environment's: the
+plan says Milestone 1 touches no certificate and no host machine, and places TLS and
+clock synchronisation in Milestone 2 steps 3 and 4. No chapter says how the library
+learns that either has failed, and neither condition had a raise site.
+
+*The readings.*
+
+1. Leave both to the environment's own monitoring, outside the library's alerting;
+   neither condition is ever raised by the library.
+2. The library measures both itself: queries a time server and connects to the served
+   origins to read their certificates. This needs a time server address no `10` key
+   names, and makes the library the one component watching both.
+3. The deployment registers what the environment knows, through two optional seams in
+   the manner of `ILocationSource` (entry 325), and the library reads them on a
+   schedule and raises through its own channels.
+
+*Chosen: 3.* Reading 1 leaves two rows of the table with no way to reach the D-048
+channels, which INF-TLS-003 names. Reading 2 adds a key and a network dependency, and
+reads the certificate expiry through the same component that would report renewal,
+which INF-TLS-003 AC3 forbids. Reading 3 adds two public interfaces and no key.
+
+What is built:
+
+- `IClockReference.OffsetAsync`: the offset of this host's clock from the reference, as
+  the environment last measured it, positive where the host is ahead. The hourly
+  `clock-drift` job raises `clock-drift` where the offset's magnitude exceeds
+  `factor.totp.drift` steps of 30 seconds (INF-HOST-001 AC1 names the TOTP drift
+  tolerance), with details `offsetSeconds` and `toleranceSeconds`. The edge is within.
+- `ICertificateRenewal.LastFailureAsync`: when the most recent renewal failed, or
+  nothing where it succeeded. The hourly `certificate-renewal` job raises
+  `certificate-renewal-failed` with `failedAt` at every pass until a renewal succeeds;
+  OPS-ALERT-002 keeps it to one alert a window.
+- Fail closed: a deployment that registers neither, or whose seam answers a failure, is
+  raised as `degradation` with the scope `clock.reference.absent`,
+  `clock.reference.unread`, `certificate.renewal.absent` or
+  `certificate.renewal.unread`, as an absent location source is (entry 325). An
+  unwatched clock or renewer is not known to be sound.
+- The expiry of the served certificate (INF-TLS-003 AC1) and the separation of the two
+  checks (AC3) are the environment's: the expiry is read off-host from what is served,
+  by nothing that renews, which is the INF-OBS-003 reachability check's place. Keeping
+  the clock within the tolerance (INF-HOST-001 AC1) is the environment's clock
+  synchronisation. These are verified in Milestone 2 steps 3 and 4, not by a test here.
+
+*Tests that pin it.*
+`EnvironmentWatchTests.INF_HOST_001_AC2_DriftBeyondToleranceRaisesAnAlertAsync`,
+`EnvironmentWatchTests.INF_HOST_001_DriftWithinToleranceRaisesNothingAsync`,
+`EnvironmentWatchTests.INF_HOST_001_TheToleranceFollowsTheCodeDriftAsync`,
+`EnvironmentWatchTests.INF_HOST_001_AC2_AnUnmeasuredClockIsRaisedAsADegradationAsync`,
+`EnvironmentWatchTests.INF_TLS_003_AC2_ARenewalFailureRaisesAnAlertWithoutAnyoneCheckingAsync`,
+`EnvironmentWatchTests.INF_TLS_003_AC2_AnUnwatchedRenewalIsRaisedAsADegradationAsync`,
+`BackgroundJobsTests.INF_BG_001_AC1_EveryJobRunsWithoutAPersonAsync`.
+
+*Chapter text that should change.* INF-HOST-001 and INF-TLS-003 could say that the
+environment reports the measured offset and the renewal outcome to the library through
+the two seams, and LIB-EXT-001's table could list them with "None: the deployment
+supplies them; an absent one is raised as a degradation". OPS-OBS-002's list of
+degradations could name the four scopes.
+
 
 # Rows for chapter 10
 

@@ -4097,3 +4097,7 @@ virtual Janus.Core.SubjectEvent.Equals(Janus.Core.SubjectEvent? other) -> bool
 ~override Janus.Core.SubjectId.Equals(object obj) -> bool
 ~override Janus.Core.TakedownId.Equals(object obj) -> bool
 ~override Janus.Core.Username.Equals(object obj) -> bool
+Janus.Core.ICertificateRenewal
+Janus.Core.ICertificateRenewal.LastFailureAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.DateTimeOffset?>>
+Janus.Core.IClockReference
+Janus.Core.IClockReference.OffsetAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.TimeSpan>>

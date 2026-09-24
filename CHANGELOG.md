@@ -369,6 +369,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A deployment can register `IClockReference`, which reports how far the host's clock
+  stands from the time the environment keeps it to, and `ICertificateRenewal`, which
+  reports when the last certificate renewal failed. The hourly `clock-drift` job raises
+  `clock-drift` when the offset exceeds `factor.totp.drift` steps of 30 seconds, and the
+  hourly `certificate-renewal` job raises `certificate-renewal-failed` until a renewal
+  succeeds. Either one missing, or unable to answer, is raised as `degradation`.
 - A permission a host declares with the action `export` is an export operation. While
   `exfiltration.export.stepuprequired` is on, exercising one asks the session for
   step-up even where the host bound it to no gate, so a system principal cannot export

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.BreakGlass;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
@@ -44,6 +45,10 @@ internal static class BackgroundJobs
     // setting names. The watches over a list of dates (OPS-MAINT-001, PRIV-RIGHT-002)
     // run at the same pace, since the lead they measure is counted in days.
     private static readonly TimeSpan Daily = TimeSpan.FromDays(1);
+
+    // INF-TLS-003: a failed renewal is seen the day it happens, and INF-HOST-001: a clock
+    // drifts by seconds a day, so an hour finds either long before an outage.
+    private static readonly TimeSpan Hourly = TimeSpan.FromHours(1);
 
     // AUTH-OIDC-003: no refresh token outlives its session and no session outlives
     // this, so a redeemed token older than it can never be presented again and its row
@@ -225,6 +230,22 @@ internal static class BackgroundJobs
                 await services.GetRequiredService<HolidayListWatch>()
                     .WatchAsync(cancellationToken)
                     .ConfigureAwait(false))),
+        BackgroundJob.Every(
+            "clock-drift",
+            "INF-HOST-001",
+            SystemOperation.Monitoring,
+            Hourly,
+            async (services, _, cancellationToken) => await services.GetRequiredService<ClockDriftWatch>()
+                .WatchAsync(cancellationToken)
+                .ConfigureAwait(false)),
+        BackgroundJob.Every(
+            "certificate-renewal",
+            "INF-TLS-003",
+            SystemOperation.Monitoring,
+            Hourly,
+            async (services, _, cancellationToken) => await services.GetRequiredService<CertificateRenewalWatch>()
+                .WatchAsync(cancellationToken)
+                .ConfigureAwait(false)),
         BackgroundJob.Every(
             "licence-expiry",
             "OPS-MAINT-001",

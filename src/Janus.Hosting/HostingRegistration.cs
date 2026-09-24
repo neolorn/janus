@@ -259,6 +259,19 @@ public static class HostingRegistration
         // OPS-MAINT-001: the licences and permits warned of, and the maintenance log.
         services.AddScoped<MaintenanceRecords>();
         services.AddScoped<LicenceExpiry>();
+
+        // INF-HOST-001, INF-TLS-003: the clock and the renewer are the environment's, so
+        // what measures them is the deployment's to register, and one it does not
+        // register is raised as unwatched.
+        services.AddScoped(provider => new ClockDriftWatch(
+            provider.GetService<IClockReference>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<TimeProvider>()));
+        services.AddScoped(provider => new CertificateRenewalWatch(
+            provider.GetService<ICertificateRenewal>(),
+            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<AlertDestinationChange>();
         services.AddScoped<IAlertLog, AlertLog>();
         services.AddScoped<IConfigurationAdministration, ConfigurationService>();
