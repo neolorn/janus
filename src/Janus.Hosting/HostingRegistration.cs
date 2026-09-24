@@ -318,6 +318,7 @@ public static class HostingRegistration
         services.AddScoped<DeadlineSweep>();
         services.AddScoped<IPrivacyRequests, PrivacyRequestService>();
         services.AddScoped<ITakedowns, TakedownService>();
+        services.AddScoped<IErasures, ErasureService>();
         services.AddScoped<DeletionSweep>();
         services.AddScoped<OrganizationErasureSweep>();
         services.AddScoped<IExports, ExportService>();

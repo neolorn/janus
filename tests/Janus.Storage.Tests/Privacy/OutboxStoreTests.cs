@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Privacy.Outbox;
@@ -8,8 +9,8 @@ using Xunit;
 namespace Janus.Storage.Tests.Privacy;
 
 /// <summary>
-/// The takedown's delivery on the outbox, and what the takedown screen reads of it
-/// (IDN-LIFE-003, IDN-LIFE-003a).
+/// The takedown's and the erasure's deliveries on the outbox, and what the operator's
+/// screens read of them (IDN-LIFE-003, IDN-LIFE-003a, IDN-LIFE-003b).
 /// </summary>
 [Trait("kind", "integration")]
 public sealed class OutboxStoreTests(DatabaseFixture database)
@@ -81,6 +82,99 @@ public sealed class OutboxStoreTests(DatabaseFixture database)
         Assert.Null(await Store(reading, Noon).LatestAsync(
             subject,
             SubjectEventKind.TakedownExecuted,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003b AC2, chapter 09 section 8a: every erasure whose delivery is
+    /// outstanding, awaiting subscribers or failed, is read in one query with its
+    /// confirmations, and a completed erasure or a delivery of another kind is not.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_003b_AC2_EveryOutstandingErasureIsReadInOneQueryAsync()
+    {
+        SubjectId awaiting = await _deployment.AccountAsync(Noon);
+        SubjectId failed = await _deployment.AccountAsync(Noon);
+        SubjectId complete = await _deployment.AccountAsync(Noon);
+        var waiting = Delivery.Of(awaiting, SubjectEventKind.ErasureRequested, Noon);
+        var spent = Delivery.Of(failed, SubjectEventKind.ErasureRequested, Noon, reason: ErasureReason.MinorTakedown);
+        var done = Delivery.Of(complete, SubjectEventKind.ErasureRequested, Noon);
+        var takedown = Delivery.Of(awaiting, SubjectEventKind.TakedownExecuted, Noon);
+
+        spent.Fail();
+        done.Complete();
+
+        await using (StoreContext writing = database.Context())
+        {
+            OutboxStore outbox = Store(writing, Noon);
+
+            foreach (Delivery delivery in new[] { waiting, spent, done, takedown })
+            {
+                await outbox.AddAsync(delivery, TestContext.Current.CancellationToken);
+            }
+
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        DateTimeOffset confirmedAt = Noon + TimeSpan.FromMinutes(5);
+
+        await using (StoreContext confirming = database.Context())
+        {
+            waiting.Confirm("newsletter");
+
+            await Store(confirming, confirmedAt).RecordAsync(waiting, TestContext.Current.CancellationToken);
+            await confirming.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        IReadOnlyList<DeliveryProgress> outstanding = await Store(reading, Noon).OutstandingAsync(
+            SubjectEventKind.ErasureRequested,
+            TestContext.Current.CancellationToken);
+
+        DeliveryProgress first = Assert.Single(outstanding, progress => progress.Delivery.Id == waiting.Id);
+        DeliveryProgress second = Assert.Single(outstanding, progress => progress.Delivery.Id == spent.Id);
+
+        Assert.Equal(confirmedAt, Assert.Contains("newsletter", first.ConfirmedAt));
+        Assert.Equal(ErasureStatus.Failed, second.Delivery.Status);
+        Assert.Equal(ErasureReason.MinorTakedown, second.Delivery.Reason);
+        Assert.DoesNotContain(outstanding, progress => progress.Delivery.Id == done.Id);
+        Assert.DoesNotContain(outstanding, progress => progress.Delivery.Kind is not SubjectEventKind.ErasureRequested);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003b: one delivery is read by its identifier with its confirmations,
+    /// and an identifier naming no delivery reads nothing.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_003b_OneDeliveryIsReadWithItsConfirmationsAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        var delivery = Delivery.Of(subject, SubjectEventKind.ErasureRequested, Noon);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await Store(writing, Noon).AddAsync(delivery, TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (StoreContext confirming = database.Context())
+        {
+            delivery.Confirm("orders");
+
+            await Store(confirming, Noon + TimeSpan.FromMinutes(1))
+                .RecordAsync(delivery, TestContext.Current.CancellationToken);
+            await confirming.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        OutboxStore store = Store(reading, Noon);
+        DeliveryProgress progress = Assert.IsType<DeliveryProgress>(
+            await store.ProgressAsync(delivery.Id, TestContext.Current.CancellationToken));
+
+        Assert.Equal(subject, progress.Delivery.Subject);
+        Assert.Equal(Noon + TimeSpan.FromMinutes(1), Assert.Contains("orders", progress.ConfirmedAt));
+        Assert.Null(await store.ProgressAsync(
+            DeliveryId.Of(Noon),
             TestContext.Current.CancellationToken));
     }
 

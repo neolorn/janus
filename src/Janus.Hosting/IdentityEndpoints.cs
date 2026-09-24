@@ -47,6 +47,7 @@ public static class IdentityEndpoints
         _ = endpoints.MapRecovery();
         _ = endpoints.MapPrivacy();
         _ = endpoints.MapTakedowns();
+        _ = endpoints.MapErasures();
         _ = endpoints.MapSessionRevocation();
         _ = endpoints.MapExplanations();
         _ = endpoints.MapAuditTrail();

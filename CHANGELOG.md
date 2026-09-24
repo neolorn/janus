@@ -382,6 +382,16 @@ against the public contract of LIB-API-001.
   deployment that registers a mail server must declare `MailServerClient` or it does
   not start. `IAppPasswords` is the same operations in process.
 
+- `GET /admin/erasures` lists every erasure whose host-side work is outstanding,
+  oldest first, and `GET /admin/erasures/{id}` reads one, each with its subject,
+  reason, status, attempts and every registered subscriber with when it confirmed.
+  `POST /admin/erasures/{id}/complete` closes an erasure whose retries were spent,
+  asks the `erasure:complete` step-up, and is audited as `privacy.erasure.completed`
+  with the required subscribers that had not confirmed; one not yet failed is 409
+  `privacy.erasure.notfailed`. An erasure's `id` is the identifier of its delivery; an
+  identifier naming no erasure is 404 `privacy.erasure.notfound`. All three need
+  `privacyrequest:manage`. `IErasures` is the same operations in process.
+
 - Staff mailboxes are provisioned through `IMailServer`, which a deployment registers
   where its staff mail is hosted and which no package ships. A mailbox is owed
   `disabled` from its reservation, `enabled` while its holder is an active member of

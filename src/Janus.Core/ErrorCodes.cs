@@ -849,6 +849,13 @@ public static class ErrorCodes
     public static ErrorCode DocumentNotFound { get; } = ErrorCode.Parse("privacy.document.notfound");
 
     /// <summary>
+    /// No erasure is held under that identifier. Read the outstanding erasures for the
+    /// identifier of the one to act on.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-003b, chapter 10 section 1.4.</remarks>
+    public static ErrorCode ErasureNotFound { get; } = ErrorCode.Parse("privacy.erasure.notfound");
+
+    /// <summary>
     /// An erasure that has not exhausted its retries cannot be completed by hand.
     /// Let the deliveries run out first.
     /// </summary>

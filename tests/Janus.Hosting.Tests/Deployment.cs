@@ -349,6 +349,11 @@ internal sealed class Deployment : IAsyncDisposable
     public OutboxStoreInMemory Outbox { get; } = new();
 
     /// <summary>
+    /// The erasures rows, each carried in step with its delivery on the outbox.
+    /// </summary>
+    public Janus.Privacy.Tests.Erasures.ErasureStoreInMemory Erasures { get; } = new();
+
+    /// <summary>
     /// What the other areas hold of an export, so a test can arrange it.
     /// </summary>
     public ExportSourceInMemory ExportSource { get; } = new();
@@ -732,6 +737,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IExportLedger>(ExportLedger);
         _ = services.AddScoped<IExports, ExportService>();
         _ = services.AddScoped<ITakedowns, Janus.Privacy.Takedowns.TakedownService>();
+        _ = services.AddSingleton<Janus.Privacy.Erasures.IErasureStore>(Erasures);
+        _ = services.AddScoped<IErasures, Janus.Privacy.Erasures.ErasureService>();
         _ = services.AddSingleton(Janus.Privacy.Tests.Declaration.Reaching);
         _ = services.AddSingleton<Janus.Privacy.Records.IComplianceStore>(Compliance);
         _ = services.AddSingleton<Janus.Privacy.Records.IRegisterRoles>(RegisterRoles);

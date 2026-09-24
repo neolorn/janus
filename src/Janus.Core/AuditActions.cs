@@ -223,6 +223,12 @@ public static class AuditActions
     public static AuditAction DocumentTranslated { get; } = AuditAction.Parse("privacy.document.translated");
 
     /// <summary>
+    /// An erasure whose retries were spent was completed by hand.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-003a, chapter 10 section 5.</remarks>
+    public static AuditAction ErasureCompleted { get; } = AuditAction.Parse("privacy.erasure.completed");
+
+    /// <summary>
     /// An erasure was carried out, which destroys the subject key and leaves the trail resolving.
     /// </summary>
     /// <remarks>Implements PRIV-RIGHT-005, chapter 10 section 5.</remarks>

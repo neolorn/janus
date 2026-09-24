@@ -53,6 +53,27 @@ internal interface IOutboxStore
     ValueTask RecordAsync(Delivery delivery, CancellationToken cancellationToken);
 
     /// <summary>
+    /// One delivery, with when each subscriber confirmed it.
+    /// </summary>
+    /// <param name="delivery">What it is held under.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The delivery and its confirmations, or nothing where no such row exists.</returns>
+    ValueTask<DeliveryProgress?> ProgressAsync(
+        DeliveryId delivery,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Every delivery of one kind whose host-side work is outstanding, awaiting
+    /// subscribers or failed, with when each subscriber confirmed it, in one query.
+    /// </summary>
+    /// <param name="kind">Which fact.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The deliveries and their confirmations, oldest first.</returns>
+    ValueTask<IReadOnlyList<DeliveryProgress>> OutstandingAsync(
+        SubjectEventKind kind,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// The latest delivery of one kind about one subject, with when each subscriber
     /// confirmed it.
     /// </summary>

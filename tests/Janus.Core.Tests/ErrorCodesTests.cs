@@ -134,6 +134,7 @@ public sealed class ErrorCodesTests
         "privacy.consent.writtenrequired",
         "privacy.document.notfound",
         "privacy.erasure.notfailed",
+        "privacy.erasure.notfound",
         "privacy.notice.governingtextmissing",
         "privacy.notice.unpublished",
         "privacy.purpose.noconsent",

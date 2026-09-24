@@ -69,6 +69,7 @@ public sealed class AuditActionsTests
         "privacy.consent.withdrawn",
         "privacy.document.published",
         "privacy.document.translated",
+        "privacy.erasure.completed",
         "privacy.erasure.executed",
         "privacy.export.assembled",
         "privacy.objection.recorded",

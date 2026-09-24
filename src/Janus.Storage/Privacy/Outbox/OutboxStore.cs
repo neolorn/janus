@@ -121,15 +121,46 @@ internal sealed class OutboxStore(StoreContext context, TimeProvider time) : IOu
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return held is null
-            ? null
-            : new DeliveryProgress(
-                Read(held),
-                held.Confirmations.ToDictionary(
-                    confirmation => confirmation.Subscriber,
-                    confirmation => confirmation.ConfirmedAt,
-                    StringComparer.Ordinal));
+        return held is null ? null : Progress(held);
     }
+
+    /// <inheritdoc/>
+    public async ValueTask<DeliveryProgress?> ProgressAsync(
+        DeliveryId delivery,
+        CancellationToken cancellationToken)
+    {
+        DeliveryRecord? held = await context.Outbox
+            .AsNoTracking()
+            .Include(row => row.Confirmations)
+            .SingleOrDefaultAsync(row => row.Id == delivery, cancellationToken)
+            .ConfigureAwait(false);
+
+        return held is null ? null : Progress(held);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<DeliveryProgress>> OutstandingAsync(
+        SubjectEventKind kind,
+        CancellationToken cancellationToken) =>
+    [
+        .. (await context.Outbox
+                .AsNoTracking()
+                .Include(row => row.Confirmations)
+                .Where(row => row.Kind == kind && row.Status != Core.ErasureStatus.Complete)
+                .OrderBy(row => row.RaisedAt)
+                .ThenBy(row => row.Id)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .Select(Progress),
+    ];
+
+    private static DeliveryProgress Progress(DeliveryRecord held) =>
+        new(
+            Read(held),
+            held.Confirmations.ToDictionary(
+                confirmation => confirmation.Subscriber,
+                confirmation => confirmation.ConfirmedAt,
+                StringComparer.Ordinal));
 
     private static Delivery Read(DeliveryRecord row) =>
         Delivery.Existing(

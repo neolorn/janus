@@ -864,6 +864,30 @@ Janus.Core.EnrolmentSessionId.EnrolmentSessionId(System.Guid Value) -> void
 Janus.Core.EnrolmentSessionId.Equals(Janus.Core.EnrolmentSessionId other) -> bool
 Janus.Core.EnrolmentSessionId.Value.get -> System.Guid
 Janus.Core.EnrolmentSessionId.Value.init -> void
+Janus.Core.ErasureId
+Janus.Core.ErasureId.Deconstruct(out System.Guid Value) -> void
+Janus.Core.ErasureId.Equals(Janus.Core.ErasureId other) -> bool
+Janus.Core.ErasureId.ErasureId() -> void
+Janus.Core.ErasureId.ErasureId(System.Guid Value) -> void
+Janus.Core.ErasureId.Value.get -> System.Guid
+Janus.Core.ErasureId.Value.init -> void
+Janus.Core.ErasureProgress
+Janus.Core.ErasureProgress.<Clone>$() -> Janus.Core.ErasureProgress!
+Janus.Core.ErasureProgress.Attempts.get -> int
+Janus.Core.ErasureProgress.Attempts.init -> void
+Janus.Core.ErasureProgress.Deconstruct(out Janus.Core.ErasureId Id, out Janus.Core.SubjectId Subject, out Janus.Core.ErasureReason Reason, out Janus.Core.ErasureStatus Status, out int Attempts, out System.Collections.Generic.IReadOnlyList<Janus.Core.SubscriberConfirmation!>! Subscribers) -> void
+Janus.Core.ErasureProgress.Equals(Janus.Core.ErasureProgress? other) -> bool
+Janus.Core.ErasureProgress.ErasureProgress(Janus.Core.ErasureId Id, Janus.Core.SubjectId Subject, Janus.Core.ErasureReason Reason, Janus.Core.ErasureStatus Status, int Attempts, System.Collections.Generic.IReadOnlyList<Janus.Core.SubscriberConfirmation!>! Subscribers) -> void
+Janus.Core.ErasureProgress.Id.get -> Janus.Core.ErasureId
+Janus.Core.ErasureProgress.Id.init -> void
+Janus.Core.ErasureProgress.Reason.get -> Janus.Core.ErasureReason
+Janus.Core.ErasureProgress.Reason.init -> void
+Janus.Core.ErasureProgress.Status.get -> Janus.Core.ErasureStatus
+Janus.Core.ErasureProgress.Status.init -> void
+Janus.Core.ErasureProgress.Subject.get -> Janus.Core.SubjectId
+Janus.Core.ErasureProgress.Subject.init -> void
+Janus.Core.ErasureProgress.Subscribers.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.SubscriberConfirmation!>!
+Janus.Core.ErasureProgress.Subscribers.init -> void
 Janus.Core.ErasureReason
 Janus.Core.ErasureReason.ErasureRequest = 0 -> Janus.Core.ErasureReason
 Janus.Core.ErasureReason.MinorTakedown = 1 -> Janus.Core.ErasureReason
@@ -1138,6 +1162,10 @@ Janus.Core.IDerivationMaterialiser
 Janus.Core.IDerivationMaterialiser.RefreshAsync<TResource>(Janus.Core.AccessContext! context, string! derivation, Janus.Core.ResourceId resource, Janus.Core.FilterSources<TResource>! sources, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.DerivationRefresh!>>
 Janus.Core.IDnsResolver
 Janus.Core.IDnsResolver.TextRecordsAsync(string! name, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<string!>!>>
+Janus.Core.IErasures
+Janus.Core.IErasures.CompleteAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.ErasureId erasure, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IErasures.ListAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.ErasureProgress!>!>>
+Janus.Core.IErasures.ReadAsync(Janus.Core.AccessContext! context, Janus.Core.ErasureId erasure, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.ErasureProgress!>>
 Janus.Core.IEventConsumer<TEvent>
 Janus.Core.IEventConsumer<TEvent>.HandleAsync(TEvent! raised, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IEvents
@@ -2781,6 +2809,11 @@ override Janus.Core.EnrolmentSession.GetHashCode() -> int
 override Janus.Core.EnrolmentSession.ToString() -> string!
 override Janus.Core.EnrolmentSessionId.GetHashCode() -> int
 override Janus.Core.EnrolmentSessionId.ToString() -> string!
+override Janus.Core.ErasureId.GetHashCode() -> int
+override Janus.Core.ErasureId.ToString() -> string!
+override Janus.Core.ErasureProgress.Equals(object? obj) -> bool
+override Janus.Core.ErasureProgress.GetHashCode() -> int
+override Janus.Core.ErasureProgress.ToString() -> string!
 override Janus.Core.ErasureRequested.<Clone>$() -> Janus.Core.ErasureRequested!
 override Janus.Core.ErasureRequested.Equals(object? obj) -> bool
 override Janus.Core.ErasureRequested.GetHashCode() -> int
@@ -3193,6 +3226,7 @@ static Janus.Core.AuditActions.DeletionCancelled.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.DeletionRequested.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.DocumentPublished.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.DocumentTranslated.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.ErasureCompleted.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ErasureExecuted.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ExportAssembled.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.GroupCreated.get -> Janus.Core.AuditAction
@@ -3489,6 +3523,10 @@ static Janus.Core.EnrolmentSession.operator ==(Janus.Core.EnrolmentSession? left
 static Janus.Core.EnrolmentSessionId.New(System.TimeProvider! time) -> Janus.Core.EnrolmentSessionId
 static Janus.Core.EnrolmentSessionId.operator !=(Janus.Core.EnrolmentSessionId left, Janus.Core.EnrolmentSessionId right) -> bool
 static Janus.Core.EnrolmentSessionId.operator ==(Janus.Core.EnrolmentSessionId left, Janus.Core.EnrolmentSessionId right) -> bool
+static Janus.Core.ErasureId.operator !=(Janus.Core.ErasureId left, Janus.Core.ErasureId right) -> bool
+static Janus.Core.ErasureId.operator ==(Janus.Core.ErasureId left, Janus.Core.ErasureId right) -> bool
+static Janus.Core.ErasureProgress.operator !=(Janus.Core.ErasureProgress? left, Janus.Core.ErasureProgress? right) -> bool
+static Janus.Core.ErasureProgress.operator ==(Janus.Core.ErasureProgress? left, Janus.Core.ErasureProgress? right) -> bool
 static Janus.Core.ErasureRequested.operator !=(Janus.Core.ErasureRequested? left, Janus.Core.ErasureRequested? right) -> bool
 static Janus.Core.ErasureRequested.operator ==(Janus.Core.ErasureRequested? left, Janus.Core.ErasureRequested? right) -> bool
 static Janus.Core.Error.From(Janus.Core.ErrorCode code) -> Janus.Core.Error!
@@ -3531,6 +3569,7 @@ static Janus.Core.ErrorCodes.DomainUnverified.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.EndpointInsecure.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.EnrolmentTokenInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ErasureNotFailed.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.ErasureNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.FactorNotPermitted.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.FactorRejected.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.FactorRequired.get -> Janus.Core.ErrorCode
@@ -3934,6 +3973,7 @@ virtual Janus.Core.SubjectEvent.Equals(Janus.Core.SubjectEvent? other) -> bool
 ~override Janus.Core.DisplayName.Equals(object obj) -> bool
 ~override Janus.Core.EmailAddress.Equals(object obj) -> bool
 ~override Janus.Core.EnrolmentSessionId.Equals(object obj) -> bool
+~override Janus.Core.ErasureId.Equals(object obj) -> bool
 ~override Janus.Core.ErrorCode.Equals(object obj) -> bool
 ~override Janus.Core.ExplainedPrincipal.Equals(object obj) -> bool
 ~override Janus.Core.ExplainedPrincipal.ToString() -> string

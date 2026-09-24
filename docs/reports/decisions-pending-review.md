@@ -9726,6 +9726,87 @@ actions).
 other answers and say what "present only" answers; chapter 10 could hold the audit
 rows below.
 
+---
+
+## 264. What an erasure's identifier is, what the erasure endpoints read, and what the manual completion records
+
+**Phase 8 · 2026-09-24 · Tier 3 · IDN-LIFE-003a, IDN-LIFE-003b, chapter 09 section 8a, chapter 10 sections 1.4 and 5, entries 168 and 169**
+
+*The question.* Chapter 09 section 8a gives "`GET /admin/erasures` · `GET
+/admin/erasures/{id}` | Every incomplete erasure in one query; per-subscriber state for
+one (IDN-LIFE-003b): `{ id, subject, reason, status, attempts, subscribers: [ { name,
+required, confirmedAt } ] }` (D-153)" and "`POST /admin/erasures/{id}/complete` | The
+manual completion path after exhausted retries, itself recorded (IDN-LIFE-003a).
+Requires step-up". IDN-LIFE-003b gives the erasures table's columns, none of them an
+identifier; the table is keyed by the subject. IDN-LIFE-003a: "A manual completion path
+SHALL exist for permanent failure, itself recorded". Chapter 10 gives
+`privacy.erasure.notfailed` and `erasure:complete`. No chapter says what `id` names,
+what an identifier naming no erasure answers, what the completion answers or records,
+or whether the path closes a failed delivery that is not an erasure's.
+
+*The readings.*
+
+1. `id` is the subject, the erasures table's key.
+2. `id` is the identifier of the delivery the erasure's host-side work travels on, as
+   `takedownId` is the takedown's delivery (entry 168).
+
+And for the manual path: (a) it closes any failed delivery its identifier names; (b) it
+closes an erasure's and nothing else.
+
+*Chosen: 2 and (b), the strictest reading.* The shape carries `id` beside `subject`, so
+`id` is not the subject. The per-subscriber state the read must show lives on the
+delivery, which the erasures row follows step for step: the worker carries the
+attempts, the completion and the failure onto the row in the transaction that records
+them on the delivery. The path is named for erasures, and widening it to a takedown's
+cancellation or a restriction would be more than the chapter grants (entry 169 declined
+the same widening for the listing). Under this:
+
+- `IErasures` (`ListAsync`, `ReadAsync`, `CompleteAsync`), `ErasureId` and
+  `ErasureProgress`, every operation under `privacyrequest:manage`, **403**
+  `authz.denied` otherwise, with nothing read.
+- The listing answers **200**, every erasure awaiting subscribers or failed, oldest
+  first, read in one query with the confirmations. Each entry, and the read of one,
+  carries `{ id, subject, reason, status, attempts, subscribers: [ { name, required,
+  confirmedAt } ] }`, one line per registered subject-event subscriber, `confirmedAt`
+  absent where it has not confirmed, `reason` and `status` spelled as `10` sections
+  5.12a and 5.12 spell them.
+- An identifier that names no erasure, including one naming a takedown's or a
+  restriction's delivery, answers **404** `privacy.erasure.notfound`, a new code,
+  because no existing code says that no erasure is held under an identifier.
+- The completion asks the permission, then the step-up `erasure:complete` on the
+  caller's session (**403** `auth.stepup.required`), then answers **404** as above, then
+  **409** `privacy.erasure.notfailed` where the erasure is awaiting subscribers or
+  complete. Otherwise, in one transaction, the delivery and the erasures row are
+  completed and the completion is audited as `privacy.erasure.completed`, security
+  category, the operator as the acting subject and the erased subject as the effective
+  one, details `erasure` (the identifier) and `outstanding` (the required subscribers
+  that had not confirmed, by name). It answers **204**.
+- A failed delivery of another kind is not closed on this path; it stays failed and its
+  alert stands. The worker's own manual completion, which nothing reached, is removed,
+  so the manual path exists once.
+
+*Tests that pin it.*
+`ErasureServiceTests.IDN_LIFE_003b_AC2_EveryIncompleteErasureIsListedAsync`,
+`ErasureServiceTests.IDN_LIFE_003b_OneErasureIsReadWithEachSubscribersConfirmationAsync`,
+`ErasureServiceTests.IDN_LIFE_003b_AnIdentifierThatNamesNoErasureIsNotFoundAsync`,
+`ErasureServiceTests.IDN_LIFE_003a_AManualCompletionClosesAFailedErasureAndIsRecordedAsync`,
+`ErasureServiceTests.IDN_LIFE_003a_AManualCompletionRefusesAnErasureThatNeverFailedAsync`,
+`ErasureServiceTests.IDN_LIFE_003a_OnlyAnErasureIsCompletedByHandHereAsync`,
+`ErasureServiceTests.IDN_LIFE_003a_TheManualCompletionRequiresStepUpAsync`,
+`ErasureServiceTests.IDN_LIFE_003b_PrivacyRequestManageIsRequiredForEveryOperationAsync`,
+`OutboxStoreTests.IDN_LIFE_003b_AC2_EveryOutstandingErasureIsReadInOneQueryAsync`,
+`OutboxStoreTests.IDN_LIFE_003b_OneDeliveryIsReadWithItsConfirmationsAsync`,
+`ErasureEndpointTests.IDN_LIFE_003b_TheOutstandingErasuresAreListedAndReadAsync`,
+`ErasureEndpointTests.IDN_LIFE_003a_AFailedErasureIsCompletedByHandAsync`,
+`ErasureEndpointTests.IDN_LIFE_003b_TheEndpointsAreRefusedToACustomerAsync`,
+`SessionRequirementTests` (the list of session routes), `AuditActionsTests` and
+`ErrorCodesTests` (the lists).
+
+*Chapter text that should change.* Chapter 09 section 8a could say that an erasure's
+`id` is the identifier of its delivery and give the completion its **204** and its
+refusals; IDN-LIFE-003a could say whether a takedown's or a restriction's failed
+delivery has a manual path; chapter 10 could hold the rows below.
+
 
 # Rows for chapter 10
 
@@ -9749,6 +9830,7 @@ The subsection each row belongs in is named with it.
 | `privacy.purpose.noconsent` | 1.4 | 422 | A consent is granted or withdrawn on a purpose the deployment did not declare, or one that rests on a basis other than consent, so it is not the subject's to agree to (PRIV-CONS-008a). |
 | `privacy.request.notfound` | 1.4 | 404 | A decision is made on an identifier that names no privacy request, by a caller holding `privacyrequest:manage` (PRIV-RIGHT-001). |
 | `privacy.request.decided` | 1.4 | 409 | A decision is made on a privacy request that is already decided; the standing decision is not replaced (PRIV-RIGHT-002 AC5). |
+| `privacy.erasure.notfound` | 1.4 | 404 | An erasure is read or completed at `/admin/erasures/{id}` by a caller holding `privacyrequest:manage`, and no erasure is held under the identifier, including where it names a delivery of another kind (IDN-LIFE-003b, entry 264). |
 | `model.startup.redirectclient` | 1.5 | 500 | Startup: a registered client's return address is not an absolute address with a host, or `redirect.defaultclient` names no registered browser application. `details.client` names the client the bad address was read from; `details.key` names the setting where the configured default will not resolve (API-REDIR-001). |
 | `identity.identifier.invalid` | 1.1 | 422 | The value is not a well-formed identifier of its kind. (REG-IDENT-001, entry 40) |
 | `identity.identifier.locked` | 1.1 | 409 | The identifier is locked: an invitation bound it, a provider operates the mailbox, or it is the personal email a membership keeps and is removed, made primary or replaced during that membership, so nothing about it is the person's to change. (REG-IDENT-010, REG-MAIL-001, entries 40 and 243) |
@@ -9914,6 +9996,7 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `privacy.consent.withdrawn` | security | `AuditActions.ConsentWithdrawn` | A consent was withdrawn for a purpose. (PRIV-CONS-008) |
 | `privacy.document.published` | security | `AuditActions.DocumentPublished` | A version of a legal document was published in the governing language. (PRIV-CONS-005) |
 | `privacy.document.translated` | security | `AuditActions.DocumentTranslated` | A translation was filed against a published version of a legal document. (PRIV-CONS-005) |
+| `privacy.erasure.completed` | security | `AuditActions.ErasureCompleted` | An erasure whose retries were spent was completed by hand, with its erasures row. Details carry `erasure` and `outstanding`, the required subscribers that had not confirmed, by name; the acting subject is the operator, the effective subject the erased one. (IDN-LIFE-003a, entry 264) |
 | `privacy.erasure.executed` | security | `AuditActions.ErasureExecuted` | An erasure was carried out, which destroys the subject key and leaves the trail resolving. (PRIV-RIGHT-005) |
 | `privacy.export.assembled` | security | `AuditActions.ExportAssembled` | A subject export was assembled and made available to the subject. (PRIV-RIGHT-003) |
 | `privacy.objection.recorded` | security | `AuditActions.ObjectionRecorded` | An objection to a purpose was recorded. (PRIV-BASIS-003) |

@@ -82,14 +82,34 @@ internal sealed class OutboxStoreInMemory : IOutboxStore
             .OrderByDescending(delivery => delivery.RaisedAt)
             .FirstOrDefault();
 
-        return ValueTask.FromResult(
-            latest is null
-                ? null
-                : new DeliveryProgress(
-                    latest,
-                    latest.Confirmed.ToDictionary(
-                        subscriber => subscriber,
-                        subscriber => _confirmedAt[(latest.Id, subscriber)],
-                        StringComparer.Ordinal)));
+        return ValueTask.FromResult(latest is null ? null : Progress(latest));
     }
+
+    /// <inheritdoc/>
+    public ValueTask<DeliveryProgress?> ProgressAsync(
+        DeliveryId delivery,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(
+            _deliveries.Find(held => held.Id == delivery) is Delivery held ? Progress(held) : null);
+
+    /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<DeliveryProgress>> OutstandingAsync(
+        SubjectEventKind kind,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<DeliveryProgress>>(
+        [
+            .. _deliveries
+                .Where(delivery => delivery.Kind == kind
+                    && delivery.Status is not Core.ErasureStatus.Complete)
+                .OrderBy(delivery => delivery.RaisedAt)
+                .Select(Progress),
+        ]);
+
+    private DeliveryProgress Progress(Delivery delivery) =>
+        new(
+            delivery,
+            delivery.Confirmed.ToDictionary(
+                subscriber => subscriber,
+                subscriber => _confirmedAt[(delivery.Id, subscriber)],
+                StringComparer.Ordinal));
 }
