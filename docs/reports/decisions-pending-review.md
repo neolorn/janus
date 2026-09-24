@@ -11114,6 +11114,57 @@ be delivered again. Under it:
 *Chapter text that should change.* 10 could list the three audit actions and the
 `outcome` vocabulary.
 
+---
+
+## 290. How a raised condition reaches the alert channels
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-ALERT-001, OPS-ALERT-002, CONV-DESIGN-002**
+
+*The question.* OPS-ALERT-001: "The following conditions SHALL raise alerts." Chapter 10
+section 5b gives `AlertRaised` one consumer, "Alert channels", and CONV-DESIGN-002
+orders every operation "**commit**, **publish** (after commit, the in-process events of
+LIB-API-001, raised from the committed outbox row)". The library published each
+condition to the host's `IEvents` and nothing else; only a change of the alert
+destinations was routed to a destination. No chapter says whether the channels send
+inside the operation that raised the condition or after it commits. It is Tier 3
+because it decides when a security alert, the break-glass use among them, leaves.
+
+*The readings.*
+
+1. Route the condition to the destinations inside the raising operation.
+2. Write the condition as a row in the raising transaction, and carry it to the
+   destinations by a pass of the alert channels after commit.
+
+*Chosen: 2.* CONV-DESIGN-002 puts what is raised after commit and reads it from the
+committed row; the first reading sends an alert for an operation that then rolls back,
+and builds the router, and with it the whole sending pipeline, inside every operation
+that can raise. Under it:
+
+- Every raise site calls the alert channels, which write the row (`raised_alerts`)
+  and publish `AlertRaised` to the host inside the raising transaction; a host that
+  refuses the event fails the raise and nothing commits, as entry 121 has every
+  publication.
+- A pass takes the oldest 100 rows and, one transaction each, routes the row through
+  the alert router (OPS-ALERT-002 deduplication, the owner's destinations) and removes
+  it. A row the router refuses stays, and the pass stops there so the order holds.
+- "Immediately" (OPS-BOOT-002 AC3) is the next pass of the alert job.
+- The row holds the structured details the alert carries, and nothing more, until it
+  is carried.
+- The pass assumes one worker; a second pass reaching the same row is caught by the
+  router's deduplication ledger, whose key refuses the second delivery.
+
+*Tests that pin it.*
+`AlertChannelsTests.OPS_ALERT_001_AC1_ARaisedConditionWaitsForTheChannelsAsync`,
+`AlertChannelsTests.CONV_DESIGN_005_AC1_AnEventTheHostRefusedFailsTheRaiseAsync`,
+`AlertDispatchTests.OPS_ALERT_001_AC1_ARaisedConditionIsCarriedOnceAsync`,
+`AlertDispatchTests.OPS_ALERT_001_AConditionTheRouterRefusedWaitsAsync`,
+`RaisedAlertsTests.OPS_ALERT_001_AC1_ARaisedConditionReadsBackAsItWasRaisedAsync`,
+`RaisedAlertsTests.OPS_ALERT_001_AC1_ACarriedConditionIsRemovedAsync`.
+
+*Chapter text that should change.* OPS-ALERT-001 could say that a condition is carried
+after the transaction that raised it commits, and chapter 10 section 5b that the alert
+channels read it from the committed row.
+
 
 # Rows for chapter 10
 

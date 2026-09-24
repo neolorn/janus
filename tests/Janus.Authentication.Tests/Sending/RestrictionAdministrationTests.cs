@@ -73,6 +73,7 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
             RestrictionKeySuppliers.None,
             _work,
             _events,
+            _events,
             _clock);
 
     /// <inheritdoc/>

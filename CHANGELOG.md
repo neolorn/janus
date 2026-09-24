@@ -1582,6 +1582,12 @@ against the public contract of LIB-API-001.
 
 ### Fixed
 
+- Every alert condition the library raises reaches the alert destinations. It is
+  written in the transaction that raised it and carried by the alert channels after
+  that transaction commits, oldest first and once, so a condition raised by an
+  operation that then fails is never sent. Before, only a change of the alert
+  destinations reached anybody; every other condition reached the host's events
+  alone. One migration adds the table the raised conditions wait in.
 - An organization's policy that overrides the gates of some step-up actions resolves,
   every other action keeping the system's gate. Such a policy failed to resolve for
   every member of the organization.

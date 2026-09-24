@@ -17,7 +17,7 @@ namespace Janus.Authentication.Organizations;
 /// Where a domain's TXT record is read, absent where the deployment registered none.
 /// </param>
 /// <param name="configuration">Where the interval is read.</param>
-/// <param name="events">Where a failed check's alert goes.</param>
+/// <param name="alerts">Where a failed check's alert goes.</param>
 /// <param name="work">The one transaction each check is recorded in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -30,7 +30,7 @@ internal sealed class DomainReverification(
     IDomainStore domains,
     IDnsResolver? dns,
     IConfigurationStore configuration,
-    IEvents events,
+    IAlertChannels alerts,
     IUnitOfWork work,
     TimeProvider time)
 {
@@ -71,8 +71,8 @@ internal sealed class DomainReverification(
             await domains.RecordAsync(domain, cancellationToken).ConfigureAwait(false);
 
             if (!passed
-                && (await events
-                        .PublishAsync(
+                && (await alerts
+                        .RaiseAsync(
                             Alerts.Of(
                                 AlertCondition.DomainReverificationFailed,
                                 domain.Organization + ":" + domain.Domain,

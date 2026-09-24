@@ -24,6 +24,7 @@ namespace Janus.Authentication.Sending;
 /// <param name="suppliers">The host-registered key suppliers.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="events">Where the emitted events go.</param>
+/// <param name="alerts">Where a loosening's and a grant's alerts go.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements AUTH-ABUSE-004, OPS-CFG-002, OPS-CFG-008 and OPS-ALERT-001. A grant is
@@ -38,6 +39,7 @@ internal sealed class RestrictionAdministration(
     RestrictionKeySuppliers suppliers,
     IUnitOfWork work,
     IEvents events,
+    IAlertChannels alerts,
     TimeProvider time)
 {
     private const string Edit = "restriction:edit";
@@ -161,8 +163,8 @@ internal sealed class RestrictionAdministration(
 
         if (loosening)
         {
-            Result alerted = await events
-                .PublishAsync(
+            Result alerted = await alerts
+                .RaiseAsync(
                     Alerts.Of(AlertCondition.RestrictionLoosened, name, now, Named(name)),
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -273,8 +275,8 @@ internal sealed class RestrictionAdministration(
             return Result.Failure(unpublished);
         }
 
-        Result alerted = await events
-            .PublishAsync(
+        Result alerted = await alerts
+            .RaiseAsync(
                 Alerts.Of(AlertCondition.RestrictionGranted, name, now, Named(name)),
                 cancellationToken)
             .ConfigureAwait(false);

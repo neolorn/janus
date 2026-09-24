@@ -77,6 +77,7 @@ public sealed class HostCallbackTests : IAsyncDisposable
         services.AddSingleton<ICallbackReferenceStore>(_references);
         services.AddSingleton<IUnitOfWork>(_work);
         services.AddSingleton<IEvents>(_events);
+        services.AddSingleton<IAlertChannels>(_events);
         services.AddSingleton<TimeProvider>(_clock);
         services.AddSingleton(_randomness);
         services.AddScoped<CallbackAdmission>();

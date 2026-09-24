@@ -29,7 +29,7 @@ internal sealed class CallbackAdmission(
     IConfigurationStore configuration,
     ICallbackLedger callbacks,
     ICallbackEvents events,
-    IEvents alerts,
+    IAlertChannels alerts,
     TimeProvider time)
 {
     private static readonly TimeSpan Minute = TimeSpan.FromMinutes(1);
@@ -117,7 +117,7 @@ internal sealed class CallbackAdmission(
                     if (rejected > allowed)
                     {
                         Result published = await alerts
-                            .PublishAsync(
+                            .RaiseAsync(
                                 Alerts.Of(AlertCondition.CallbackVerificationFailed, source, now),
                                 cancellationToken)
                             .ConfigureAwait(false);

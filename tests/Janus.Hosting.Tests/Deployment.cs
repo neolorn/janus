@@ -476,6 +476,11 @@ internal sealed class Deployment : IAsyncDisposable
     public AlertLedgerInMemory Alerts { get; } = new();
 
     /// <summary>
+    /// The raised conditions the alert channels have not yet carried.
+    /// </summary>
+    public RaisedAlertsInMemory Raised { get; } = new();
+
+    /// <summary>
     /// The sends counted against the restrictions, which a delivery report can release.
     /// </summary>
     public SendLedgerInMemory SendLedger { get; } = new();
@@ -578,6 +583,22 @@ internal sealed class Deployment : IAsyncDisposable
         GateAdministrative.Organization = organization;
         Gate.Administrative = organization;
         Organizations.Seed(organization, administrative: true);
+    }
+
+    /// <summary>
+    /// Runs one pass of the alert channels, in a scope of its own as the worker would.
+    /// </summary>
+    /// <returns>How many raised conditions were carried.</returns>
+    public async Task<int> CarryAlertsAsync()
+    {
+        await using AsyncServiceScope scope = _application.Services.CreateAsyncScope();
+
+        return (await scope.ServiceProvider
+                .GetRequiredService<AlertDispatch>()
+                .CarryAsync(CancellationToken.None))
+            .Match(
+                carried => carried,
+                error => throw new InvalidOperationException("The alert channels refused: " + error.Code + "."));
     }
 
     /// <summary>
@@ -805,6 +826,9 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IAlertLedger>(Alerts);
         _ = services.AddSingleton<IAlertLog, AlertLogInMemory>();
         _ = services.AddScoped<AlertRouter>();
+        _ = services.AddScoped<IAlertChannels, AlertChannels>();
+        _ = services.AddSingleton<IRaisedAlerts>(Raised);
+        _ = services.AddScoped<AlertDispatch>();
         _ = services.AddScoped<AlertDestinationChange>();
         _ = services.AddScoped<IConfigurationAdministration, ConfigurationService>();
         _ = services.AddSingleton<ISendAudit, SendAuditInMemory>();

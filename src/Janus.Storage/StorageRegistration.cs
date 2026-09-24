@@ -297,6 +297,7 @@ internal static class StorageRegistration
             fingerprintKey));
         services.AddScoped<ISmsBalanceLedger, SmsBalanceLedger>();
         services.AddScoped<IAlertLedger, AlertLedger>();
+        services.AddScoped<IRaisedAlerts, RaisedAlerts>();
         services.AddScoped<IConfigurationAudit, ConfigurationAudit>();
         services.AddScoped<ISendAudit, SendAudit>();
         services.AddScoped<IBotDefenceAudit, BotDefenceAudit>();

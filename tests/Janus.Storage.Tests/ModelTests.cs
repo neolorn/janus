@@ -560,6 +560,14 @@ public sealed class ModelTests
             "profiles.enc_legal_name",
             "profiles.subject",
 
+            // Not an account field: a raised condition waiting for the alert channels,
+            // removed once they carry it (OPS-ALERT-001).
+            "raised_alerts.condition",
+            "raised_alerts.details",
+            "raised_alerts.id",
+            "raised_alerts.idempotency_key",
+            "raised_alerts.raised_at",
+
             // Not an account field: one approver standing behind one re-enrolment, on
             // the channel they confirmed the person on, which is held under the
             // account's key (AUTH-RECOV-002, AUTH-RECOV-003).

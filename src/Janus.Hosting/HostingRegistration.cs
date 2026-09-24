@@ -228,6 +228,8 @@ public static class HostingRegistration
             services.GetService<ChallengeVerifier>(),
             services.GetRequiredService<TimeProvider>()));
         services.AddScoped<AlertRouter>();
+        services.AddScoped<IAlertChannels, AlertChannels>();
+        services.AddScoped<AlertDispatch>();
         services.AddScoped<AlertDestinationChange>();
         services.AddScoped<IAlertLog, AlertLog>();
         services.AddScoped<IConfigurationAdministration, ConfigurationService>();
@@ -371,7 +373,7 @@ public static class HostingRegistration
             provider.GetRequiredService<ConfigurationAdministration>(),
             provider.GetService<IDnsResolver>(),
             provider.GetRequiredService<IOrganizationAudit>(),
-            provider.GetRequiredService<IEvents>(),
+            provider.GetRequiredService<IAlertChannels>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<RandomNumberGenerator>()));
@@ -379,7 +381,7 @@ public static class HostingRegistration
             provider.GetRequiredService<IDomainStore>(),
             provider.GetService<IDnsResolver>(),
             provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetRequiredService<IEvents>(),
+            provider.GetRequiredService<IAlertChannels>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>()));
 
@@ -389,14 +391,14 @@ public static class HostingRegistration
             provider.GetRequiredService<IMailboxStore>(),
             provider.GetService<IMailServer>(),
             provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetRequiredService<IEvents>(),
+            provider.GetRequiredService<IAlertChannels>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped(provider => new MailboxReconciliation(
             provider.GetRequiredService<IMailboxStore>(),
             provider.GetService<IMailServer>(),
-            provider.GetRequiredService<IEvents>(),
+            provider.GetRequiredService<IAlertChannels>(),
             provider.GetRequiredService<TimeProvider>()));
 
         // INT-MAIL-010: the app passwords are the mail server's, reached with a token

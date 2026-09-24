@@ -15,7 +15,7 @@ namespace Janus.Authentication.Mailboxes;
 /// </summary>
 /// <param name="mailboxes">Where the library's mailboxes are.</param>
 /// <param name="server">The mail server, absent where the deployment registered none.</param>
-/// <param name="events">Where the drift's alert goes.</param>
+/// <param name="alerts">Where the drift's alert goes.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements INT-MAIL-006 AC1b and AC1c, INT-MAIL-006a AC3, INT-MAIL-007 AC2 and
@@ -28,7 +28,7 @@ namespace Janus.Authentication.Mailboxes;
 internal sealed class MailboxReconciliation(
     IMailboxStore mailboxes,
     IMailServer? server,
-    IEvents events,
+    IAlertChannels alerts,
     TimeProvider time)
 {
     private const string Scope = "mailbox.reconciliation";
@@ -131,8 +131,8 @@ internal sealed class MailboxReconciliation(
         Dictionary<string, JsonElement> details,
         Result<MailboxDrift> outcome,
         CancellationToken cancellationToken) =>
-        (await events
-                .PublishAsync(Alerts.Of(AlertCondition.Degradation, Scope, now, details), cancellationToken)
+        (await alerts
+                .RaiseAsync(Alerts.Of(AlertCondition.Degradation, Scope, now, details), cancellationToken)
                 .ConfigureAwait(false))
             .Match(() => outcome, Result.Failure<MailboxDrift>);
 }

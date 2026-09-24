@@ -19,7 +19,7 @@ namespace Janus.Authentication.Mailboxes;
 /// <param name="mailboxes">Where the mailboxes are.</param>
 /// <param name="server">The mail server, absent where the deployment registered none.</param>
 /// <param name="configuration">Where the retry schedule is read.</param>
-/// <param name="events">Where a spent budget's alert goes.</param>
+/// <param name="alerts">Where a spent budget's alert goes.</param>
 /// <param name="work">The one transaction each mailbox's progress is recorded in.</param>
 /// <param name="time">The clock the schedule is computed against.</param>
 /// <param name="randomness">Where the full jitter of each delay comes from.</param>
@@ -35,7 +35,7 @@ internal sealed class MailboxPublisher(
     IMailboxStore mailboxes,
     IMailServer? server,
     IConfigurationStore configuration,
-    IEvents events,
+    IAlertChannels alerts,
     IUnitOfWork work,
     TimeProvider time,
     RandomNumberGenerator randomness)
@@ -123,8 +123,8 @@ internal sealed class MailboxPublisher(
             // INT-MAIL-007 AC3: a push the server never took is visible the moment
             // its budget is spent, and is recorded with the alert or not at all.
             if (spent
-                && (await events
-                        .PublishAsync(
+                && (await alerts
+                        .RaiseAsync(
                             Alerts.Of(AlertCondition.Degradation, Scope(mailbox), now, Exhausted(mailbox)),
                             cancellationToken)
                         .ConfigureAwait(false))

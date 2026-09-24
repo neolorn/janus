@@ -17,7 +17,7 @@ namespace Janus.Authentication.Sending;
 /// <param name="sms">What the gateway answers through.</param>
 /// <param name="readings">Where the readings are kept.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
-/// <param name="events">Where the alert goes.</param>
+/// <param name="alerts">Where the alert goes.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements AUTH-ABUSE-006, INT-SMS-004 and OPS-ALERT-001. The account is prepaid,
@@ -29,7 +29,7 @@ internal sealed class SmsBalance(
     ISmsTransport sms,
     ISmsBalanceLedger readings,
     IUnitOfWork work,
-    IEvents events,
+    IAlertChannels alerts,
     TimeProvider time)
 {
     private static readonly TimeSpan Baseline = TimeSpan.FromDays(7);
@@ -93,8 +93,8 @@ internal sealed class SmsBalance(
 
         if (Drained(balance, floor, recent, mean, factor))
         {
-            Result published = await events
-                .PublishAsync(
+            Result published = await alerts
+                .RaiseAsync(
                     Alerts.Of(AlertCondition.SmsBalance, null, now, Details(balance, floor, recent)),
                     cancellationToken)
                 .ConfigureAwait(false);

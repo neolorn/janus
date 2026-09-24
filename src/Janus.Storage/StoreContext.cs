@@ -318,6 +318,11 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     public DbSet<AlertRecord> Alerts => Set<AlertRecord>();
 
     /// <summary>
+    /// The conditions raised and not yet carried by the alert channels.
+    /// </summary>
+    public DbSet<RaisedAlertRecord> RaisedAlerts => Set<RaisedAlertRecord>();
+
+    /// <summary>
     /// The registrations in progress, each staging what its steps collected.
     /// </summary>
     public DbSet<RegistrationSessionRecord> RegistrationSessions =>
@@ -489,6 +494,7 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new CallbackReferenceConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationSourceConfiguration());
         modelBuilder.ApplyConfiguration(new AlertConfiguration());
+        modelBuilder.ApplyConfiguration(new RaisedAlertConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationSessionConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationLinkConfiguration());
         modelBuilder.ApplyConfiguration(new PreAuthenticationConfiguration());

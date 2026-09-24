@@ -10,7 +10,7 @@ namespace Janus.Hosting.Sessions;
 /// <summary>
 /// The local IP-to-city database, which no deployment holds yet.
 /// </summary>
-/// <param name="events">Where a raised condition is published.</param>
+/// <param name="alerts">Where a raised condition goes.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements INT-GEN-006. The file and the job that refreshes it are that item's own
@@ -18,7 +18,7 @@ namespace Janus.Hosting.Sessions;
 /// item already describes: no location is shown and the degradation is raised. Nothing
 /// here calls out to a third party, then or later.
 /// </remarks>
-internal sealed class LocationDatabase(IEvents events, TimeProvider time) : ILocationResolver
+internal sealed class LocationDatabase(IAlertChannels alerts, TimeProvider time) : ILocationResolver
 {
     private const string Absent = "location.database.absent";
 
@@ -33,8 +33,8 @@ internal sealed class LocationDatabase(IEvents events, TimeProvider time) : ILoc
         // raised under the absent file and the router carries one alert a window
         // rather than one a sign-in (OPS-ALERT-002). The session is recorded without
         // a location either way (INT-GEN-006).
-        Result published = await events
-            .PublishAsync(
+        Result published = await alerts
+            .RaiseAsync(
                 Alerts.Of(AlertCondition.Degradation, Absent, time.GetUtcNow()),
                 cancellationToken)
             .ConfigureAwait(false);

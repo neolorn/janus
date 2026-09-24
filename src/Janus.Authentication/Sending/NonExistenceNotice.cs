@@ -17,7 +17,7 @@ namespace Janus.Authentication.Sending;
 /// <param name="sending">What carries the message.</param>
 /// <param name="ledger">What remembers which addresses were told.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
-/// <param name="events">Where the enumeration-probe alert goes.</param>
+/// <param name="alerts">Where the enumeration-probe alert goes.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements AUTH-ABUSE-003 and OPS-ALERT-001. The real owner gets their answer and
@@ -29,7 +29,7 @@ internal sealed class NonExistenceNotice(
     INotificationHandler sending,
     INoticeLedger ledger,
     IUnitOfWork work,
-    IEvents events,
+    IAlertChannels alerts,
     TimeProvider time)
 {
     private static readonly TimeSpan Hour = TimeSpan.FromHours(1);
@@ -109,8 +109,8 @@ internal sealed class NonExistenceNotice(
 
         if (recent > threshold)
         {
-            Result published = await events
-                .PublishAsync(Alerts.Of(AlertCondition.NonexistentNoticeRate, null, now), cancellationToken)
+            Result published = await alerts
+                .RaiseAsync(Alerts.Of(AlertCondition.NonexistentNoticeRate, null, now), cancellationToken)
                 .ConfigureAwait(false);
 
             if (published.Match(() => (Error?)null, error => error) is Error unpublished)

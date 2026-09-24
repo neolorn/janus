@@ -38,7 +38,7 @@ public sealed class LocationDatabaseTests
             .GetParameters();
 
         Assert.Equal(
-            [typeof(IEvents), typeof(TimeProvider)],
+            [typeof(IAlertChannels), typeof(TimeProvider)],
             held.Select(parameter => parameter.ParameterType));
     }
 
