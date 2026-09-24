@@ -26,10 +26,10 @@ namespace Janus.Hosting.Oidc;
 /// <param name="addresses">Where the provider is, which is the token's issuer.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements INT-MAIL-010, AUTH-OIDC-001 AC4, AUTH-OIDC-004 and AUTH-KEY-001. The token
-/// carries the person the session is and nobody else, is issued only from a session
-/// record that still answers, lasts no longer than an access token may and no longer
-/// than the record, and leaves no row behind (INT-MAIL-010 AC1).
+/// Implements INT-MAIL-010, AUTH-OIDC-001 AC4, AUTH-OIDC-004, AUTH-OIDC-006 AC3 and
+/// AUTH-KEY-001. The token carries the person the session is and nobody else, is issued
+/// only from a session record that still answers, lasts no longer than an access token
+/// may and no longer than the record, and leaves no row behind (INT-MAIL-010 AC1).
 /// </remarks>
 internal sealed class MailServerTokens(
     IOpenIddictServerFactory factory,
@@ -108,8 +108,9 @@ internal sealed class MailServerTokens(
     }
 
     // What the provider's own preparation of an access-token principal gives a token
-    // for this client: the subject, the client as presenter and as client_id, the scopes
-    // it was registered with, and no audience, since the token names no resource.
+    // for this client: the subject, the client as presenter, as client_id and as the
+    // audience the mail server's adapter verifies (AUTH-OIDC-006 AC3), and the scopes it
+    // was registered with.
     private ClaimsPrincipal Principal(
         SubjectId subject,
         OidcClient registered,
@@ -127,6 +128,7 @@ internal sealed class MailServerTokens(
 
         _ = principal
             .SetPresenters(registered.ClientId)
+            .SetAudiences(registered.ClientId)
             .SetScopes(registered.Scopes)
             .SetClaim(OpenIddictConstants.Claims.ClientId, registered.ClientId)
             .SetClaim(OpenIddictConstants.Claims.Private.Issuer, new Uri(addresses.Provider, UriKind.Absolute).AbsoluteUri)

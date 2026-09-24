@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- Every access token now names the client it was issued to in `aud`, beside
+  `client_id`, as RFC 9068 has it; the token the library hands the mail server for app
+  passwords names the mail server's client. A party verifying a token offline can now
+  refuse one issued to any other client.
+
 - Every authorization request is now pushed first. A client posts the parameters it
   used to put in the address to `POST /oidc/par`, authenticated with its secret, and
   sends the browser to `/oidc/authorize` with its `client_id` and the `request_uri`

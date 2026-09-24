@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Core;
 using Microsoft.AspNetCore.Http;
+using Microsoft.IdentityModel.Tokens;
 using OpenIddict.Abstractions;
 using Xunit;
 
@@ -325,6 +326,95 @@ public sealed class ProviderConformanceTests
     }
 
     /// <summary>
+    /// AUTH-OIDC-006 AC3: every access token the token endpoint issues is typed
+    /// `at+jwt` and carries the seven claims, its audience the client it was issued to.
+    /// </summary>
+    /// <param name="clientId">The client the token is issued to.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(RelyingParty.Protocol)]
+    [InlineData(RelyingParty.Application)]
+    public async Task AUTH_OIDC_006_AC3_EveryAccessTokenIsTypedAndCarriesTheSevenClaimsAsync(string clientId)
+    {
+        await using var deployment = new Deployment();
+
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
+        string code = await RelyingParty.CodeAsync(deployment, browser, clientId);
+        Answer exchanged = await new Machine(deployment).PostAsync(
+            "/oidc/token",
+            RelyingParty.Code(code, clientId));
+
+        Typed(exchanged.Text("access_token"), clientId, deployment);
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-006 AC3: an access token issued on a refresh is typed and carries the
+    /// seven claims as the first was.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_006_AC3_ARefreshedAccessTokenIsTypedAndCarriesTheSevenClaimsAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
+        var machine = new Machine(deployment);
+        string code = await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Protocol);
+        Answer exchanged = await machine.PostAsync("/oidc/token", RelyingParty.Code(code, RelyingParty.Protocol));
+        Answer refreshed = await machine.PostAsync(
+            "/oidc/token",
+            ("grant_type", "refresh_token"),
+            ("refresh_token", exchanged.Text("refresh_token")),
+            ("client_id", RelyingParty.Protocol),
+            ("client_secret", RelyingParty.Secret));
+
+        Assert.Equal(StatusCodes.Status200OK, refreshed.Status);
+        Typed(refreshed.Text("access_token"), RelyingParty.Protocol, deployment);
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-006 AC3: the mail server's adapter takes the token issued to the mail
+    /// server's client and refuses a token issued to any other client, and an identity
+    /// token issued to the mail server's own client, however validly signed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_006_AC3_TheAdapterRefusesATokenForAnotherAudienceAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
+        var machine = new Machine(deployment);
+        Answer forMailServer = await machine.PostAsync(
+            "/oidc/token",
+            RelyingParty.Code(
+                await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Protocol),
+                RelyingParty.Protocol));
+        Answer forApplication = await machine.PostAsync(
+            "/oidc/token",
+            RelyingParty.Code(
+                await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Application),
+                RelyingParty.Application));
+
+        TokenValidationResult taken = await MailServerAdapter.VerifyAsync(
+            deployment,
+            forMailServer.Text("access_token"),
+            RelyingParty.Protocol);
+        TokenValidationResult elsewhere = await MailServerAdapter.VerifyAsync(
+            deployment,
+            forApplication.Text("access_token"),
+            RelyingParty.Protocol);
+        TokenValidationResult identity = await MailServerAdapter.VerifyAsync(
+            deployment,
+            forMailServer.Text("id_token"),
+            RelyingParty.Protocol);
+
+        Assert.True(taken.IsValid);
+        Assert.IsType<SecurityTokenInvalidAudienceException>(elsewhere.Exception);
+        Assert.IsType<SecurityTokenInvalidTypeException>(identity.Exception);
+    }
+
+    /// <summary>
     /// AUTH-OIDC-006 AC4: the discovery document names where a request is pushed and
     /// that every request must be.
     /// </summary>
@@ -351,6 +441,26 @@ public sealed class ProviderConformanceTests
             silent: true,
             RelyingParty.Destination,
             "openid email");
+
+    // AUTH-OIDC-006 AC3: RFC 9068 section 2, the header type and the seven claims,
+    // the audience and client the one the token was issued to, the subject the person
+    // signed in.
+    private static void Typed(string token, string clientId, Deployment deployment)
+    {
+        JsonElement claims = MailServerAdapter.Claims(token);
+
+        Assert.Equal("at+jwt", MailServerAdapter.Header(token).GetProperty("typ").GetString());
+        Assert.Subset(
+            MailServerAdapter.Named(token).ToHashSet(StringComparer.Ordinal),
+            MailServerAdapter.Required.ToHashSet(StringComparer.Ordinal));
+        Assert.Equal(clientId, claims.GetProperty("aud").GetString());
+        Assert.Equal(clientId, claims.GetProperty("client_id").GetString());
+        Assert.Equal(
+            deployment.Sessions.All.First().Subject.ToString(),
+            claims.GetProperty("sub").GetString());
+        Assert.NotEmpty(claims.GetProperty("jti").GetString()!);
+        Assert.True(claims.GetProperty("exp").GetInt64() > claims.GetProperty("iat").GetInt64());
+    }
 
     private static void Refused(Answer answered, string error)
     {

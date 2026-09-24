@@ -10721,6 +10721,52 @@ host-run suite runs the same refusals. Each named form is read at its widest:
 the library's own or part of LIB-TEST-001's package; 07 LIB-TEST-001 could name the
 provider's refusals among what the host-run suite verifies.
 
+---
+
+## 281. An access token's audience, and the adapter that verifies it
+
+**Corrections 3 · 2026-09-24 · Tier 3 · AUTH-OIDC-006 AC3, INT-MAIL-004, INT-MAIL-010, entry 215**
+
+*The question.* AUTH-OIDC-006 AC3: "Every access token carries `typ: at+jwt` and the
+seven claims; a token whose `aud` is not the mail server's client identifier is
+rejected by the adapter." No chapter says what `aud` names for a client other than the
+mail server's. The mail server's adapter is not built in Milestone 1 (entry 215), so
+there is no adapter in the library to reject anything.
+
+*The readings.*
+
+1. `aud` names the client the token was issued to, for every client; the adapter's
+   half of the criterion waits for the adapter.
+2. `aud` names the client the token was issued to, for every client; the adapter's
+   half is proved now by a verifier configured as the adapter must be, against what
+   the provider publishes, and the adapter built in Milestone 2 is held to the same
+   test.
+3. `aud` names a resource the deployment declares, one per relying party.
+
+*Chosen: 2, the strictest reading.* Reading 3 adds a declaration no chapter has.
+Reading 1 leaves a criterion untested. Under 2:
+
+- Every access token the token endpoint issues, on a code and on a refresh, names the
+  client it was issued to as `aud`, beside `client_id`. The token issued to the mail
+  server's client for app passwords (INT-MAIL-010) does the same.
+- The verifier the tests use reads the published key set and the issuer from the
+  discovery document, and requires the type `at+jwt`, the issuer, the audience of the
+  mail server's client and the lifetime on the deployment's clock. It takes the mail
+  server's token and refuses a token issued to a browser application's own layer and
+  an identity token issued to the mail server's own client.
+- The adapter built in Milestone 2 verifies the same things; its test is this one run
+  against it.
+
+*Tests that pin it.*
+`ProviderConformanceTests.AUTH_OIDC_006_AC3_EveryAccessTokenIsTypedAndCarriesTheSevenClaimsAsync`,
+`ProviderConformanceTests.AUTH_OIDC_006_AC3_ARefreshedAccessTokenIsTypedAndCarriesTheSevenClaimsAsync`,
+`ProviderConformanceTests.AUTH_OIDC_006_AC3_TheAdapterRefusesATokenForAnotherAudienceAsync`,
+`AppPasswordFlowTests.AUTH_OIDC_006_AC3_TheMailServersTokenIsOneItsAdapterTakesAsync`.
+
+*Chapter text that should change.* 02 AUTH-OIDC-006 could say that `aud` is the client
+identifier the token was issued to; 05 INT-MAIL-004 could list what the adapter
+verifies (signature, `typ`, issuer, audience, lifetime).
+
 
 # Rows for chapter 10
 
