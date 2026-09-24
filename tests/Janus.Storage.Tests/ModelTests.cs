@@ -152,6 +152,18 @@ public sealed class ModelTests
             "authenticators.totp_consumed_step",
             "authenticators.totp_secret",
 
+            // Not an account field: a host callback's provider events, each claimed once
+            // by the hash of the provider's identifier (BFF-MACH-002).
+            "callback_events.callback",
+            "callback_events.claimed_at",
+            "callback_events.identifier",
+
+            // Not an account field: the correlation references issued for a host's
+            // unsigned callbacks, each held by its hash (INT-GEN-003, BFF-MACH-003).
+            "callback_references.callback",
+            "callback_references.issued_at",
+            "callback_references.reference",
+
             // Not an account field: the inbound callbacks counted per source
             // (INT-GEN-003, BFF-MACH-003), the source held by its hash.
             "callbacks.at",

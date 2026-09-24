@@ -337,6 +337,25 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `UseCallback` mounts one of the host's own providers' callbacks on the machine
+  profile, at a path the host chooses and ahead of the browser profile. A signed
+  callback (`ISignedCallback`) names its provider's keyed hash, where the signature and
+  the signed bytes are, its secrets and its event identifier; the library verifies the
+  signature over the raw bytes in fixed time against the current secret and, for 24
+  hours after a rotation, the previous one, holds a five-minute window where the
+  scheme carries an instant, and carries each event once, giving the claim back when
+  the host's route does not answer with a 2xx. An unsigned callback
+  (`IUnsignedCallback`) reaches the route only with a reference issued for it and once
+  the host has confirmed it with the provider. Both are held to
+  `integration.callback.ratelimit` and to the provider's published ranges first, and
+  every refusal is answered 429 `integration.callback.rejected`, recorded against its
+  source and counted toward `alerting.callback.threshold`. Claimed events and issued
+  references are kept, as hashes, in the new `callback_events` and
+  `callback_references` tables.
+
+- `ICallbackReferences.IssueAsync` issues the correlation reference an unsigned
+  callback carries: 128 random bits in base64url, of which only the hash is kept.
+
 - `SensitiveBodyAttribute` marks an endpoint whose request and response bodies never
   reach the framework's request logging, whatever fields the deployment or the
   endpoint asks it to record. Every endpoint the library maps carries it, and a

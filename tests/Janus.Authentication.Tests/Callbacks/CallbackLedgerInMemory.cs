@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Janus.Authentication.Sending;
+using Janus.Authentication.Callbacks;
 
-namespace Janus.Authentication.Tests.Sending;
+namespace Janus.Authentication.Tests.Callbacks;
 
 /// <summary>
 /// Where inbound callbacks are counted, holding the source of each so a test can

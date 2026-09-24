@@ -1,9 +1,8 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Janus.Authentication.Alerting;
+using Janus.Authentication.Callbacks;
 using Janus.Core;
-using Janus.Core.Configuration;
 
 namespace Janus.Authentication.Sending;
 
@@ -12,29 +11,19 @@ namespace Janus.Authentication.Sending;
 /// over plain HTTP with its parameters in the query string. The one state it may
 /// change is to take a send back out of the buckets it counted against.
 /// </summary>
-/// <param name="configuration">Where the rate limit and the alert threshold come from.</param>
+/// <param name="admission">What counts callbacks per source and raises the alert.</param>
 /// <param name="ledger">Where the send was counted.</param>
-/// <param name="callbacks">What counts callbacks per source.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
-/// <param name="events">Where the repeated-failure alert goes.</param>
-/// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements AUTH-ABUSE-007, INT-SMS-005 and INT-GEN-003. A forged failure report
 /// gains an attacker at most one extra send to a number the restriction already
 /// allows; nothing here can mark a phone verified.
 /// </remarks>
 internal sealed class DeliveryReports(
-    IConfigurationStore configuration,
+    CallbackAdmission admission,
     ISendLedger ledger,
-    ICallbackLedger callbacks,
-    IUnitOfWork work,
-    IEvents events,
-    TimeProvider time)
+    IUnitOfWork work)
 {
-    private static readonly TimeSpan Minute = TimeSpan.FromMinutes(1);
-
-    private static readonly TimeSpan Hour = TimeSpan.FromHours(1);
-
     /// <summary>
     /// Takes one delivery report.
     /// </summary>
@@ -56,36 +45,15 @@ internal sealed class DeliveryReports(
     {
         ArgumentNullException.ThrowIfNull(source);
 
-        Error? failure = null;
-
-        int limit = (await configuration
-                .ReadAsync(Settings.IntegrationCallbackRateLimit, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(value => value, error => Held<int>(error, ref failure));
-
-        int threshold = (await configuration
-                .ReadAsync(Settings.AlertingCallbackThreshold, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(value => value, error => Held<int>(error, ref failure));
-
-        if (failure is not null)
-        {
-            return Result.Failure(failure);
-        }
-
-        DateTimeOffset now = time.GetUtcNow();
-
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
-        int made = await callbacks
-            .ReceivedAsync(source, now, Minute, cancellationToken)
-            .ConfigureAwait(false);
+        // Answered before any lookup, so a flood costs the deployment nothing beyond
+        // the count it was already keeping (INT-GEN-003).
+        Result admitted = await admission.AdmitAsync(source, cancellationToken).ConfigureAwait(false);
 
-        if (made > limit)
+        if (admitted.Match(() => false, _ => true))
         {
-            // Answered before any lookup, so a flood costs the deployment nothing
-            // beyond the count it was already keeping (INT-GEN-003).
-            return await RejectedAsync(source, now, threshold, cancellationToken).ConfigureAwait(false);
+            return await KeptAsync(admitted, cancellationToken).ConfigureAwait(false);
         }
 
         // A report that a message arrived advances nothing at all: the state it might
@@ -98,58 +66,27 @@ internal sealed class DeliveryReports(
             return Result.Success();
         }
 
-        if (string.IsNullOrWhiteSpace(reference))
-        {
-            return await RejectedAsync(source, now, threshold, cancellationToken).ConfigureAwait(false);
-        }
-
-        bool released = await ledger
-            .ReleaseAsync(SendReferences.Of(reference), cancellationToken)
-            .ConfigureAwait(false);
-
-        if (!released)
-        {
-            return await RejectedAsync(source, now, threshold, cancellationToken).ConfigureAwait(false);
-        }
-
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
-        return Result.Success();
-    }
-
-    private static TValue Held<TValue>(Error error, ref Error? failure)
-    {
-        failure = error;
-
-        return default!;
-    }
-
-    private async ValueTask<Result> RejectedAsync(
-        string source,
-        DateTimeOffset now,
-        int threshold,
-        CancellationToken cancellationToken)
-    {
-        int rejected = await callbacks
-            .RejectedAsync(source, now, now - Hour, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (rejected > threshold)
-        {
-            Result published = await events
-                .PublishAsync(
-                    Alerts.Of(AlertCondition.CallbackVerificationFailed, source, now),
-                    cancellationToken)
+        bool released = !string.IsNullOrWhiteSpace(reference)
+            && await ledger
+                .ReleaseAsync(SendReferences.Of(reference), cancellationToken)
                 .ConfigureAwait(false);
 
-            if (published.Match(() => (Error?)null, error => error) is Error unpublished)
-            {
-                return Result.Failure(unpublished);
-            }
+        Result outcome = released
+            ? Result.Success()
+            : await admission.RejectAsync(source, cancellationToken).ConfigureAwait(false);
+
+        return await KeptAsync(outcome, cancellationToken).ConfigureAwait(false);
+    }
+
+    // The counts are kept whenever the callback was answered, a rejection included;
+    // a failure of anything else leaves the transaction to roll back.
+    private async ValueTask<Result> KeptAsync(Result outcome, CancellationToken cancellationToken)
+    {
+        if (outcome.Match(() => true, error => error.Code == ErrorCodes.CallbackRejected))
+        {
+            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
-        return Result.Failure(Error.From(ErrorCodes.CallbackRejected));
+        return outcome;
     }
 }

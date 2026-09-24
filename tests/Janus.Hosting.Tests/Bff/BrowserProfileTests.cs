@@ -16,6 +16,7 @@ using Janus.Authentication.Tests.Sessions;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Callbacks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,7 +28,7 @@ namespace Janus.Hosting.Tests.Bff;
 /// <summary>
 /// The browser profile: what the pipeline refuses before an endpoint sees it, and
 /// what it lets through (BFF-CSRF-001 to BFF-CSRF-004, BFF-CSRF-006, BFF-CSRF-007,
-/// BFF-OWN-001, BFF-OWN-003).
+/// BFF-OWN-001, BFF-OWN-003, BFF-MACH-001).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class BrowserProfileTests : IDisposable
@@ -344,23 +345,36 @@ public sealed class BrowserProfileTests : IDisposable
     }
 
     /// <summary>
-    /// BFF-OWN-001 AC1 and AC3: mounting takes the pipeline and nothing else, so
-    /// there is no security-relevant value to get right and every application mounts
-    /// the same one implementation.
+    /// BFF-OWN-001 AC1 and AC3: mounting a profile takes the pipeline and nothing
+    /// else, so there is no security-relevant value to get right and every application
+    /// mounts the same one implementation. Mounting a host's callback takes where it is
+    /// and the provider's scheme, and nothing that could turn one of its checks off.
     /// </summary>
     [Fact]
     public void BFF_OWN_001_AC1_MountingTakesNoSecurityRelevantConfiguration()
     {
         MethodInfo[] mounting = typeof(PipelineProfiles).GetMethods(
             BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
+        Type[] callbacks = [typeof(ISignedCallback), typeof(IUnsignedCallback)];
 
         Assert.NotEmpty(mounting);
 
         foreach (MethodInfo mount in mounting)
         {
-            ParameterInfo only = Assert.Single(mount.GetParameters());
+            ParameterInfo[] parameters = mount.GetParameters();
 
-            Assert.Equal(typeof(IApplicationBuilder), only.ParameterType);
+            Assert.Equal(typeof(IApplicationBuilder), parameters[0].ParameterType);
+
+            if (mount.Name is not nameof(PipelineProfiles.UseCallback))
+            {
+                _ = Assert.Single(parameters);
+
+                continue;
+            }
+
+            Assert.Equal(3, parameters.Length);
+            Assert.Equal(typeof(PathString), parameters[1].ParameterType);
+            Assert.Contains(parameters[2].ParameterType, callbacks);
         }
     }
 
@@ -583,6 +597,26 @@ public sealed class BrowserProfileTests : IDisposable
         await pipeline(carried);
 
         Assert.True(_reached);
+    }
+
+    /// <summary>
+    /// BFF-MACH-001 AC3: a request the machine profile governs carries none of what the
+    /// browser profile asks for, and passes it untouched: nothing refused, nothing issued.
+    /// </summary>
+    [Fact]
+    public async Task BFF_MACH_001_AC3_ARequestTheMachineProfileGovernsPassesTheBrowserProfileAsync()
+    {
+        RequestDelegate pipeline = Mounted();
+        HttpContext context = Arriving("POST");
+
+        context.Features.Set(MachineGoverned.Mark);
+
+        await pipeline(context);
+
+        Assert.True(_reached);
+        Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
+        Assert.Equal(0, context.Response.Headers.SetCookie.Count);
+        Assert.Empty(_contacts.All);
     }
 
     /// <summary>

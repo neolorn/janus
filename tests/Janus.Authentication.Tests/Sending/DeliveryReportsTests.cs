@@ -2,7 +2,9 @@ using System;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
+using Janus.Authentication.Callbacks;
 using Janus.Authentication.Sending;
+using Janus.Authentication.Tests.Callbacks;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Xunit;
@@ -26,6 +28,7 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
     private readonly ConfigurationInMemory _configuration = new();
     private readonly SendLedgerInMemory _ledger = new();
     private readonly CallbackLedgerInMemory _callbacks = new();
+    private readonly CallbackEventsInMemory _claims = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
@@ -37,7 +40,7 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
     public DeliveryReportsTests() => _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
 
     private DeliveryReports Reports =>
-        new(_configuration, _ledger, _callbacks, _work, _events, _clock);
+        new(new CallbackAdmission(_configuration, _callbacks, _claims, _events, _clock), _ledger, _work);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()

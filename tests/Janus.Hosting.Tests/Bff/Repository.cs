@@ -32,6 +32,14 @@ internal static class Repository
     public static string Authentication(string path) => File.ReadAllText(
         Path.Combine(Root(), "src", "Janus.Authentication", Path.Combine(path.Split('/'))));
 
+    /// <summary>
+    /// What a named file of the hosting project holds.
+    /// </summary>
+    /// <param name="path">The path under the project, folders separated by a slash.</param>
+    /// <returns>What it holds.</returns>
+    public static string Hosting(string path) => File.ReadAllText(
+        Path.Combine(Root(), "src", "Janus.Hosting", Path.Combine(path.Split('/'))));
+
     private static string Root()
     {
         var at = new DirectoryInfo(System.AppContext.BaseDirectory);

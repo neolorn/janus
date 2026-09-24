@@ -3,10 +3,10 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Janus.Authentication.Sending;
+using Janus.Authentication.Callbacks;
 using Microsoft.EntityFrameworkCore;
 
-namespace Janus.Storage.Authentication.Sending;
+namespace Janus.Storage.Authentication.Callbacks;
 
 /// <summary>
 /// Where inbound callbacks are counted per source.

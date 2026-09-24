@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
+using Janus.Authentication.Callbacks;
 using Janus.Authentication.Configuration;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
@@ -205,6 +206,10 @@ public static class HostingRegistration
         services.AddScoped<IRestrictionSet, RestrictionSetService>();
         services.AddScoped<ThrottleService>();
         services.AddScoped<NonExistenceNotice>();
+        services.AddScoped<CallbackAdmission>();
+        services.AddScoped<CallbackReferences>();
+        services.AddScoped<ICallbackReferences>(
+            provider => provider.GetRequiredService<CallbackReferences>());
         services.AddScoped<DeliveryReports>();
         services.AddScoped(services => new BotDefence(
             services.GetRequiredService<IConfigurationStore>(),

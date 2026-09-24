@@ -4,11 +4,75 @@ Janus.Hosting.Bff.ApplicationKind
 Janus.Hosting.Bff.ApplicationKind.Management = 0 -> Janus.Hosting.Bff.ApplicationKind
 Janus.Hosting.Bff.ApplicationKind.Public = 1 -> Janus.Hosting.Bff.ApplicationKind
 Janus.Hosting.Bff.PipelineProfiles
+Janus.Hosting.Callbacks.CallbackDelivery
+Janus.Hosting.Callbacks.CallbackDelivery.<Clone>$() -> Janus.Hosting.Callbacks.CallbackDelivery!
+Janus.Hosting.Callbacks.CallbackDelivery.Body.get -> System.ReadOnlyMemory<byte>
+Janus.Hosting.Callbacks.CallbackDelivery.Body.init -> void
+Janus.Hosting.Callbacks.CallbackDelivery.CallbackDelivery(string! Method, Microsoft.AspNetCore.Http.IQueryCollection! Query, System.Collections.Generic.IReadOnlyDictionary<string!, Microsoft.Extensions.Primitives.StringValues>! Headers, System.ReadOnlyMemory<byte> Body) -> void
+Janus.Hosting.Callbacks.CallbackDelivery.Deconstruct(out string! Method, out Microsoft.AspNetCore.Http.IQueryCollection! Query, out System.Collections.Generic.IReadOnlyDictionary<string!, Microsoft.Extensions.Primitives.StringValues>! Headers, out System.ReadOnlyMemory<byte> Body) -> void
+Janus.Hosting.Callbacks.CallbackDelivery.Equals(Janus.Hosting.Callbacks.CallbackDelivery? other) -> bool
+Janus.Hosting.Callbacks.CallbackDelivery.Headers.get -> System.Collections.Generic.IReadOnlyDictionary<string!, Microsoft.Extensions.Primitives.StringValues>!
+Janus.Hosting.Callbacks.CallbackDelivery.Headers.init -> void
+Janus.Hosting.Callbacks.CallbackDelivery.Method.get -> string!
+Janus.Hosting.Callbacks.CallbackDelivery.Method.init -> void
+Janus.Hosting.Callbacks.CallbackDelivery.Query.get -> Microsoft.AspNetCore.Http.IQueryCollection!
+Janus.Hosting.Callbacks.CallbackDelivery.Query.init -> void
+Janus.Hosting.Callbacks.CallbackSecrets
+Janus.Hosting.Callbacks.CallbackSecrets.<Clone>$() -> Janus.Hosting.Callbacks.CallbackSecrets!
+Janus.Hosting.Callbacks.CallbackSecrets.CallbackSecrets(System.ReadOnlyMemory<byte> Current, System.DateTimeOffset CurrentSince, System.ReadOnlyMemory<byte>? Previous) -> void
+Janus.Hosting.Callbacks.CallbackSecrets.Current.get -> System.ReadOnlyMemory<byte>
+Janus.Hosting.Callbacks.CallbackSecrets.Current.init -> void
+Janus.Hosting.Callbacks.CallbackSecrets.CurrentSince.get -> System.DateTimeOffset
+Janus.Hosting.Callbacks.CallbackSecrets.CurrentSince.init -> void
+Janus.Hosting.Callbacks.CallbackSecrets.Deconstruct(out System.ReadOnlyMemory<byte> Current, out System.DateTimeOffset CurrentSince, out System.ReadOnlyMemory<byte>? Previous) -> void
+Janus.Hosting.Callbacks.CallbackSecrets.Equals(Janus.Hosting.Callbacks.CallbackSecrets? other) -> bool
+Janus.Hosting.Callbacks.CallbackSecrets.Previous.get -> System.ReadOnlyMemory<byte>?
+Janus.Hosting.Callbacks.CallbackSecrets.Previous.init -> void
+Janus.Hosting.Callbacks.CallbackSignature
+Janus.Hosting.Callbacks.CallbackSignature.<Clone>$() -> Janus.Hosting.Callbacks.CallbackSignature!
+Janus.Hosting.Callbacks.CallbackSignature.CallbackSignature(System.Collections.Generic.IReadOnlyList<System.ReadOnlyMemory<byte>>! Presented, System.ReadOnlyMemory<byte> Message, System.DateTimeOffset? SignedAt) -> void
+Janus.Hosting.Callbacks.CallbackSignature.Deconstruct(out System.Collections.Generic.IReadOnlyList<System.ReadOnlyMemory<byte>>! Presented, out System.ReadOnlyMemory<byte> Message, out System.DateTimeOffset? SignedAt) -> void
+Janus.Hosting.Callbacks.CallbackSignature.Equals(Janus.Hosting.Callbacks.CallbackSignature? other) -> bool
+Janus.Hosting.Callbacks.CallbackSignature.Message.get -> System.ReadOnlyMemory<byte>
+Janus.Hosting.Callbacks.CallbackSignature.Message.init -> void
+Janus.Hosting.Callbacks.CallbackSignature.Presented.get -> System.Collections.Generic.IReadOnlyList<System.ReadOnlyMemory<byte>>!
+Janus.Hosting.Callbacks.CallbackSignature.Presented.init -> void
+Janus.Hosting.Callbacks.CallbackSignature.SignedAt.get -> System.DateTimeOffset?
+Janus.Hosting.Callbacks.CallbackSignature.SignedAt.init -> void
+Janus.Hosting.Callbacks.ISignedCallback
+Janus.Hosting.Callbacks.ISignedCallback.Algorithm.get -> System.Security.Cryptography.HashAlgorithmName
+Janus.Hosting.Callbacks.ISignedCallback.EventOf(Janus.Hosting.Callbacks.CallbackDelivery! delivery) -> Janus.Core.Result<string!>
+Janus.Hosting.Callbacks.ISignedCallback.Name.get -> string!
+Janus.Hosting.Callbacks.ISignedCallback.Presented(Janus.Hosting.Callbacks.CallbackDelivery! delivery) -> Janus.Core.Result<Janus.Hosting.Callbacks.CallbackSignature!>
+Janus.Hosting.Callbacks.ISignedCallback.ReadSecretsAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Hosting.Callbacks.CallbackSecrets!>>
+Janus.Hosting.Callbacks.ISignedCallback.Sources.get -> System.Collections.Generic.IReadOnlyCollection<System.Net.IPNetwork>!
+Janus.Hosting.Callbacks.IUnsignedCallback
+Janus.Hosting.Callbacks.IUnsignedCallback.ConfirmAsync(Janus.Hosting.Callbacks.CallbackDelivery! delivery, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Hosting.Callbacks.IUnsignedCallback.Name.get -> string!
+Janus.Hosting.Callbacks.IUnsignedCallback.ReferenceOf(Janus.Hosting.Callbacks.CallbackDelivery! delivery) -> Janus.Core.Result<string!>
+Janus.Hosting.Callbacks.IUnsignedCallback.Sources.get -> System.Collections.Generic.IReadOnlyCollection<System.Net.IPNetwork>!
 Janus.Hosting.HostingRegistration
 Janus.Hosting.IdentityEndpoints
 static Janus.Hosting.AuthorizationTables.MapAuthorizationTables(this Microsoft.EntityFrameworkCore.ModelBuilder! builder) -> Microsoft.EntityFrameworkCore.ModelBuilder!
 static Janus.Hosting.Bff.PipelineProfiles.UseBrowserProfile(this Microsoft.AspNetCore.Builder.IApplicationBuilder! application) -> Microsoft.AspNetCore.Builder.IApplicationBuilder!
+static Janus.Hosting.Bff.PipelineProfiles.UseCallback(this Microsoft.AspNetCore.Builder.IApplicationBuilder! application, Microsoft.AspNetCore.Http.PathString path, Janus.Hosting.Callbacks.ISignedCallback! callback) -> Microsoft.AspNetCore.Builder.IApplicationBuilder!
+static Janus.Hosting.Bff.PipelineProfiles.UseCallback(this Microsoft.AspNetCore.Builder.IApplicationBuilder! application, Microsoft.AspNetCore.Http.PathString path, Janus.Hosting.Callbacks.IUnsignedCallback! callback) -> Microsoft.AspNetCore.Builder.IApplicationBuilder!
 static Janus.Hosting.Bff.PipelineProfiles.UseMachineProfile(this Microsoft.AspNetCore.Builder.IApplicationBuilder! application) -> Microsoft.AspNetCore.Builder.IApplicationBuilder!
+static Janus.Hosting.Callbacks.CallbackDelivery.operator !=(Janus.Hosting.Callbacks.CallbackDelivery? left, Janus.Hosting.Callbacks.CallbackDelivery? right) -> bool
+static Janus.Hosting.Callbacks.CallbackDelivery.operator ==(Janus.Hosting.Callbacks.CallbackDelivery? left, Janus.Hosting.Callbacks.CallbackDelivery? right) -> bool
+static Janus.Hosting.Callbacks.CallbackSecrets.operator !=(Janus.Hosting.Callbacks.CallbackSecrets? left, Janus.Hosting.Callbacks.CallbackSecrets? right) -> bool
+static Janus.Hosting.Callbacks.CallbackSecrets.operator ==(Janus.Hosting.Callbacks.CallbackSecrets? left, Janus.Hosting.Callbacks.CallbackSecrets? right) -> bool
+static Janus.Hosting.Callbacks.CallbackSignature.operator !=(Janus.Hosting.Callbacks.CallbackSignature? left, Janus.Hosting.Callbacks.CallbackSignature? right) -> bool
+static Janus.Hosting.Callbacks.CallbackSignature.operator ==(Janus.Hosting.Callbacks.CallbackSignature? left, Janus.Hosting.Callbacks.CallbackSignature? right) -> bool
 static Janus.Hosting.HostingRegistration.AddJanus(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! connectionString, Janus.Core.KeyEncryptionKeys! keyEncryptionKeys, System.ReadOnlyMemory<byte> fingerprintKey, System.ReadOnlyMemory<byte> signOnSecret, Janus.Core.AuthorizationDeclaration! declaration, Janus.Hosting.Bff.ApplicationKind application) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 static Janus.Hosting.IdentityEndpoints.MapIdentityEndpoints(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Routing.IEndpointRouteBuilder!
 static Janus.Hosting.IdentityEndpoints.MapIdentityWellKnown(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! endpoints) -> Microsoft.AspNetCore.Routing.IEndpointRouteBuilder!
+override Janus.Hosting.Callbacks.CallbackDelivery.Equals(object? obj) -> bool
+override Janus.Hosting.Callbacks.CallbackDelivery.GetHashCode() -> int
+override Janus.Hosting.Callbacks.CallbackDelivery.ToString() -> string!
+override Janus.Hosting.Callbacks.CallbackSecrets.Equals(object? obj) -> bool
+override Janus.Hosting.Callbacks.CallbackSecrets.GetHashCode() -> int
+override Janus.Hosting.Callbacks.CallbackSecrets.ToString() -> string!
+override Janus.Hosting.Callbacks.CallbackSignature.Equals(object? obj) -> bool
+override Janus.Hosting.Callbacks.CallbackSignature.GetHashCode() -> int
+override Janus.Hosting.Callbacks.CallbackSignature.ToString() -> string!

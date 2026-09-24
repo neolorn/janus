@@ -10404,6 +10404,116 @@ stage applies (the three header values, no session cookie, 303 to the same addre
 and BFF-CSRF-002 could name it as the one cross-site post answered other than by
 refusal.
 
+---
+
+## 276. The seam a host mounts its own callbacks on
+
+**Corrections 3 · 2026-09-24 · Tier 2, Tier 3 where marked · BFF-MACH-001, BFF-MACH-002, BFF-MACH-003, INT-GEN-003, BFF-OWN-001, CONV-DESIGN-005**
+
+*The question.* D-165 and 05 INT-GEN-003: "The library ships these controls as a
+host-mountable machine-profile pipeline (BFF-MACH-002, BFF-MACH-003): signature
+verification, correlation references, the rate limit and source restriction", and "A
+host mounts each of its own providers' callbacks on the same pipeline". No chapter
+names the mounting call, how a host states its provider's scheme, where the secret is
+read, how an event is claimed and what happens to a claim the host's route fails, what
+an unsigned callback is confirmed through, or what status a rejection answers.
+
+*The readings.*
+
+1. Hand the host the checks as separate middleware to arrange around its own routes.
+2. One mount per callback, where the callback is a contract the host implements to
+   declare its provider's scheme, and the library runs every check in a fixed order
+   before the host's route.
+
+*Chosen: 2.* Reading 1 leaves the presence and order of each check to every host,
+which is what BFF-OWN-001 refuses for the browser profile. Under it:
+
+- `UseCallback(PathString, ISignedCallback)` and `UseCallback(PathString,
+  IUnsignedCallback)` mount a callback before `UseBrowserProfile`, at a path the host
+  chooses (09 section 10, "under paths of its choosing"), matched without regard to
+  case in `PipelineProfiles` only.
+- The branch runs the machine profile's stages, so a request carrying a session cookie
+  is refused (BFF-MACH-001 AC2), then the callback's checks, then the host's route. It
+  marks the request with an internal feature the browser profile passes untouched; no
+  host code can set it, so no browser endpoint reaches the machine profile by
+  configuration (BFF-MACH-001 AC1).
+- The checks, in order: `integration.callback.ratelimit` per source, before anything
+  is read; the provider's published ranges where declared, an IPv4-mapped address
+  compared as IPv4; then, signed, a signature present, the five-minute window where
+  the scheme carries an instant, and verification; or, unsigned, a reference issued
+  for that callback, then the host's confirmation.
+- Tier 3. Signed: the host declares the hash of the provider's keyed-hash scheme
+  (`Algorithm`), where the signatures and the signed bytes are (`Presented`), the
+  secrets (`ReadSecretsAsync`) and the event identifier (`EventOf`). The library
+  computes the HMAC itself, compares every presented signature in fixed time against
+  the current secret and, for 24 hours after `CurrentSince`, the previous one,
+  whichever matches, and zeroes what it computed. A hash the platform cannot compute
+  fails at mount; secrets that cannot be read verify nothing. Only shared-secret
+  schemes are covered, which is what "Secret: from the secrets manager, rotatable with
+  an overlap window" describes.
+- Tier 3. Idempotency: the SHA-256 of the event identifier is claimed per callback in
+  `callback_events`, in one insert that does nothing on conflict, before the route
+  runs. A delivery of an event already claimed is answered 200 without reaching the
+  route and recorded at Information. A delivery the route does not answer with a 2xx,
+  or that throws, gives its claim back in a scope of its own under a token the
+  request's abandonment does not cancel, so the provider's retry is carried. A
+  verified delivery carrying no identifier is refused.
+- Unsigned: a reference is issued through the public `ICallbackReferences`: 128 random
+  bits, base64url, kept as its SHA-256 in `callback_references`, so the lookup is by
+  hash and nothing secret is compared in variable time. The route is reached only once
+  the host's `ConfirmAsync` succeeds. No claim is made, since the route acts only on
+  what the provider's API confirmed.
+- Every refusal is recorded against its source in the callbacks ledger (INT-GEN-003
+  AC3), counts toward `alerting.callback.threshold`, and is logged at Warning with the
+  callback's name, the check and the correlation identifier.
+- Tier 3. `integration.callback.rejected` answers 429 for every cause, the status 05
+  and 10 give it for the rate limit, where it answered 422 before. `ApiStatus` gives a
+  code one status, and one answer for a forged reference and a flood tells the sender
+  nothing of which it was. The rate-limited refusal carries `retryAt`, so the answer
+  carries `Retry-After`.
+- Every method of both contracts returns `Result` or `Result<T>` (CONV-DESIGN-005),
+  and a failure refuses the delivery. `BFF_OWN_001_AC1` now holds the two profile
+  mounts to the builder alone and `UseCallback` to the builder, a path and a callback
+  contract, with nothing that could turn a check off.
+- The public types are under `Janus.Hosting.Callbacks` as mounting types
+  (CONV-LAYOUT-002); admission, references and the ledgers are under
+  `Janus.Authentication.Callbacks`, where `ICallbackLedger` moved from `Sending`
+  (CONV-DESIGN-001 AC2).
+- Neither new table has a retention: a claimed event and an issued reference stay.
+
+*Tests that pin it.*
+`HostCallbackTests.BFF_MACH_002_AC1_AnUnsignedOrMisSignedCallbackIsRejectedBeforeParsingAsync`,
+`HostCallbackTests.BFF_MACH_002_AC2_AReplayOutsideTheWindowIsRejectedAsync`,
+`HostCallbackTests.BFF_MACH_002_AC3_ADuplicateEventIdentifierIsProcessedOnceAsync`,
+`HostCallbackTests.BFF_MACH_002_AC3_ADeliveryTheRouteFailedIsCarriedAgainAsync`,
+`HostCallbackTests.BFF_MACH_002_AC3_ADeliveryCarryingNoEventIdentifierIsRefusedAsync`,
+`HostCallbackTests.BFF_MACH_002_AC4_ComparisonIsConstantTime`,
+`HostCallbackTests.BFF_MACH_002_TheSecretReplacedVerifiesFor24HoursAsync`,
+`HostCallbackTests.BFF_MACH_002_SecretsTheManagerCannotGiveVerifyNothingAsync`,
+`HostCallbackTests.BFF_MACH_002_AnAlgorithmThePlatformCannotComputeFailsWhenMounted`,
+`HostCallbackTests.INT_GEN_003_AFloodIsAnsweredBeforeAnyLookupAsync`,
+`HostCallbackTests.INT_GEN_003_ACallbackFromOutsideThePublishedRangesIsRejectedAsync`,
+`HostCallbackTests.INT_GEN_003_AReferenceIs128RandomBitsKeptByItsHashAsync`,
+`HostCallbackTests.BFF_MACH_003_AC1_NoUnsignedCallbackAdvancesStateWithoutConfirmationAsync`,
+`HostCallbackTests.BFF_MACH_003_AC2_AForgedCallbackWithAGuessedReferenceIsRejectedAndLoggedAsync`,
+`HostCallbackTests.BFF_MACH_003_AC3_RepeatedVerificationFailuresRaiseAnAlertAsync`,
+`HostCallbackTests.BFF_MACH_001_AC2_AHostCallbackCarryingASessionCookieIsRefusedAsync`,
+`CallbackContractTests.CONV_DESIGN_005_AC1_EveryCallbackContractMethodReturnsAnOutcome`,
+`CallbackContractTests.CONV_DESIGN_005_AC2_NoCallbackContractReturnsNull`,
+`BrowserProfileTests.BFF_MACH_001_AC3_ARequestTheMachineProfileGovernsPassesTheBrowserProfileAsync`,
+`BrowserProfileTests.BFF_OWN_001_AC1_MountingTakesNoSecurityRelevantConfiguration`,
+`CallbackStoreTests.BFF_MACH_002_AC3_AnEventIsClaimedOnceAsync`,
+`CallbackStoreTests.BFF_MACH_002_AC3_AnEventGivenBackIsClaimedAgainAsync`,
+`CallbackStoreTests.INT_GEN_003_AReferenceIsHeldForItsCallbackOnlyAsync`,
+`CallbackStoreTests.INT_GEN_003_TheTablesHoldHashesAndTimesAndNothingElseAsync`.
+
+*Chapter text that should change.* 17 BFF-MACH-002 could name the mount, limit the
+item to shared-secret keyed hashes, and state what a failed route does to a claim and
+what a repeated delivery is answered; BFF-MACH-003 could name the reference issuer and
+the confirmation a host supplies; 10 section 1 could give `integration.callback.rejected`
+429 for every cause; 04 or 06 could give `callback_events` and `callback_references` a
+retention.
+
 
 # Rows for chapter 10
 
