@@ -785,7 +785,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
 
         Dictionary<string, bool> ticked = new(StringComparer.Ordinal)
         {
-            ["fulfilment"] = true,
+            ["performance"] = true,
         };
 
         Result<RegistrationCompleted> refused = await Service.AcceptTermsAsync(

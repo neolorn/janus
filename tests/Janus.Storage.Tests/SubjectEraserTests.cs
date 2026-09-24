@@ -444,7 +444,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await using (NpgsqlConnection writing = await database.OpenAsync())
         {
             await writing.ExecuteAsync(
-                "INSERT INTO host.orders (id, buyer, district, total) "
+                "INSERT INTO host.records (id, subject, locality, amount) "
                     + "VALUES (@id, @subject, 'Al Malaz', 249.50)",
                 new { id = Guid.CreateVersion7(), subject = subject.Value });
         }
@@ -456,28 +456,29 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         Assert.Equal(
             1,
             await connection.ExecuteScalarAsync<int>(
-                "SELECT count(*) FROM host.orders WHERE buyer = @subject",
+                "SELECT count(*) FROM host.records WHERE subject = @subject",
                 new { subject = subject.Value }));
 
         Assert.Equal(
             249.50m,
             await connection.ExecuteScalarAsync<decimal>(
-                "SELECT sum(total) FROM host.orders WHERE buyer = @subject",
+                "SELECT sum(amount) FROM host.records WHERE subject = @subject",
                 new { subject = subject.Value }));
 
         Assert.Equal(
             "Al Malaz",
             await connection.ExecuteScalarAsync<string>(
-                "SELECT district FROM host.orders WHERE buyer = @subject",
+                "SELECT locality FROM host.records WHERE subject = @subject",
                 new { subject = subject.Value }));
     }
 
     /// <summary>
-    /// PRIV-RIGHT-005 AC5: what the deployment counts is counted over its own rows,
-    /// and an erasure changes neither how many there are nor what they add up to.
+    /// PRIV-RIGHT-005 AC5: an aggregate over the non-encrypted columns of a host
+    /// record is counted over the host's own rows, and an erasure changes neither how
+    /// many there are nor what they add up to.
     /// </summary>
     [Fact]
-    public async Task PRIV_RIGHT_005_AC5_CountsAndTotalsAreUnchangedByAnErasureAsync()
+    public async Task PRIV_RIGHT_005_AC5_AggregatesOverPlainColumnsAreUnchangedByAnErasureAsync()
     {
         SubjectId going = await DeletingAccountAsync();
         SubjectId staying = await _deployment.AccountAsync(Noon);
@@ -487,7 +488,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await using (NpgsqlConnection writing = await database.OpenAsync())
         {
             await writing.ExecuteAsync(
-                "INSERT INTO host.orders (id, buyer, district, total) VALUES "
+                "INSERT INTO host.records (id, subject, locality, amount) VALUES "
                     + "(@first, @going, 'Al Malaz', 100.00), "
                     + "(@second, @staying, 'Al Olaya', 50.25)",
                 new
@@ -501,19 +502,19 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await using NpgsqlConnection connection = await database.OpenAsync();
 
-        int before = await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM host.orders");
+        int before = await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM host.records");
         decimal total = await connection.ExecuteScalarAsync<decimal>(
-            "SELECT sum(total) FROM host.orders");
+            "SELECT sum(amount) FROM host.records");
 
         await EraseAsync(going, ErasureReason.ErasureRequest);
 
         Assert.Equal(
             before,
-            await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM host.orders"));
+            await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM host.records"));
 
         Assert.Equal(
             total,
-            await connection.ExecuteScalarAsync<decimal>("SELECT sum(total) FROM host.orders"));
+            await connection.ExecuteScalarAsync<decimal>("SELECT sum(amount) FROM host.records"));
     }
 
     /// <summary>
@@ -928,8 +929,8 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     private MailboxStore Mailboxes(StoreContext context) =>
         new(context, _deployment.Keys, Deployment.FingerprintKey, _deployment.Randomness);
 
-    // The deployment's own records, which the library neither maps nor writes: an
-    // order names its buyer and outlives the buyer's erasure (PRIV-RIGHT-005).
+    // The deployment's own records, which the library neither maps nor writes: a
+    // record names its subject and outlives the subject's erasure (PRIV-RIGHT-005).
     private async ValueTask BusinessRecordsAsync()
     {
         await using NpgsqlConnection connection = await database.OpenAsync();
@@ -937,11 +938,11 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await connection.ExecuteAsync(
             """
             CREATE SCHEMA IF NOT EXISTS host;
-            CREATE TABLE IF NOT EXISTS host.orders (
+            CREATE TABLE IF NOT EXISTS host.records (
                 id uuid PRIMARY KEY,
-                buyer uuid NOT NULL,
-                district text NOT NULL,
-                total numeric(10, 2) NOT NULL);
+                subject uuid NOT NULL,
+                locality text NOT NULL,
+                amount numeric(10, 2) NOT NULL);
             """);
     }
 

@@ -10111,6 +10111,89 @@ unwarned until the next restart. Under it:
 change is checked, say that the warning stops neither a start nor a change, and say
 that domains compare without regard to case.
 
+---
+
+## 270. The shipped provider register is four rows; the developer row is the host's
+
+**Corrections 3 · 2026-09-24 · Tier 2 · PRIV-ROPA-002, LIB-HOST-001 Recipients, 05 section 6, D-165, D-029**
+
+*The question.* Chapter 05 section 6 tabulates five rows: mail server, SMS gateway,
+hosting provider, password screening and "Developer | Processor | All stored data |
+n/a | No", and says "These rows are the processors the library itself makes true and
+are shipped as defaults, each applied only while the integration it describes is
+configured". LIB-HOST-001 Recipients says "the library ships as the default set only
+the rows its own processing makes true (mail server, SMS gateway, hosting provider,
+password screening; `05` section 6, D-153, D-162)". D-165 says "the four library-true
+rows" and, under "Kept on purpose", "the recipient row for the developer
+relationship (D-029)". The corrections-3 instruction says the shipped defaults are
+"exactly the four library-true rows (mail server, SMS gateway, hosting provider,
+password screening), nothing else".
+
+*The readings.*
+
+1. Ship five rows, the developer row among them, as 05 section 6's table lists.
+2. Ship the four rows LIB-HOST-001 and D-165 name; the developer relationship is a
+   row the host declares through `recipients`, and D-165's "kept on purpose" keeps the
+   row in the chapter as the example of one.
+
+*Chosen: 2.* Three sources name four and the owner's instruction says "nothing else".
+The developer relationship is the deployment's contract (D-029), not something the
+library's own processing makes true, and a shipped row the library cannot make true is
+a register entry that may be false. Under it:
+
+- `ProviderRegister.Default` is the four rows in 05 section 6's order.
+- The SMS gateway row is applied to every deployment, as the hosting provider is:
+  `ISmsTransport` is a required registration (the sending service takes it), so the
+  integration it describes is always configured.
+- The unread second copy of the list (`Recipients`, `Recipient`, `RecipientLocation`)
+  is removed rather than kept beside the register.
+
+*Tests that pin it.*
+`ProcessingRecordsTests.PRIV_ROPA_002_TheShippedRegisterIsTheFourRowsTheLibraryMakesTrue`,
+`ProcessingRecordsTests.INT_GEN_004_AC1_AProviderAddedWithoutAnAgreementReferenceIsFlaggedAsync`,
+`ProcessingRecordsTests.PRIV_ROPA_002_TheRowsTheLibraryMakesTrueAreAppliedWithoutADeclarationAsync`.
+
+*Chapter text that should change.* 05 section 6 could drop the Developer row from the
+shipped table, or mark it as a row the host declares, and say that the SMS gateway row
+is always applied because an SMS transport is a required registration.
+
+---
+
+## 271. What the D-165 word search covers
+
+**Corrections 3 · 2026-09-24 · Tier 2 · D-165 code consequences, 08 CONV-NAME-001**
+
+*The question.* The corrections-3 instruction says "A repository-wide search for those
+words must come back empty outside docs/", the words being payment provider, courier,
+order, cart, product, checkout and cash on delivery. D-165's code consequences say "no
+fixture, test name, sample configuration or comment names a payment or shipping
+provider, an order, a cart, a courier or cash on delivery". A literal search for
+"order", "product" and "checkout" also finds words that are not business: sort order
+and ordering in prose, `ORDER BY`, the provider framework's handler `Order` constants,
+the lawful basis key `court-judgment-or-order` (10), the product name of CONV-NAME-001
+and the changelog lines about it, and the pinned platform action `actions/checkout` in
+the pipeline.
+
+*The readings.*
+
+1. Remove every literal occurrence, renaming the framework constants, the lawful-basis
+   key, CONV-NAME-001's vocabulary and the pipeline action.
+2. Remove every occurrence in the business sense D-165 names; keep the non-business
+   senses, which are fixed by a framework, by chapter 10, by CONV-NAME-001 or by the
+   platform.
+
+*Chosen: 2.* D-165 states the rule in the business sense ("names ... an order"), and
+reading 1 would break the OpenIddict handler contract, change a chapter 10 key and
+rename the pipeline's pinned action. The business senses are gone from code, tests,
+fixtures, comments, the changelog and NOTICE; the search script that checks it lists
+the non-business senses it passes, and the corrections-3 report lists them.
+
+*Tests that pin it.* None; verified by the search recorded in the corrections-3
+report.
+
+*Chapter text that should change.* None in the chapters; the instruction's search
+could name the business sense.
+
 
 # Rows for chapter 10
 

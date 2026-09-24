@@ -214,7 +214,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
 
         Result<TimeSpan> written = await new ConfigurationStore(writing).WriteAsync(
             Catalogue.HostCategoryRetention,
-            "invoices",
+            "ledgers",
             TimeSpan.FromDays(-1),
             TestContext.Current.CancellationToken);
 

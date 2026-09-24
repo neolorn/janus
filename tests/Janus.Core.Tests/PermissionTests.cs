@@ -16,11 +16,11 @@ public sealed class PermissionTests
     [Fact]
     public void Parse_AWellFormedPermission_CarriesItsResourceAndAction()
     {
-        var permission = Permission.Parse("order:read");
+        var permission = Permission.Parse("document:read");
 
-        Assert.Equal("order", permission.Resource);
+        Assert.Equal("document", permission.Resource);
         Assert.Equal("read", permission.Action);
-        Assert.Equal("order:read", permission.ToString());
+        Assert.Equal("document:read", permission.ToString());
     }
 
     /// <summary>
@@ -42,16 +42,16 @@ public sealed class PermissionTests
     /// </summary>
     /// <param name="value">The value offered.</param>
     [Theory]
-    [InlineData("Order:read")]
-    [InlineData("order:Read")]
-    [InlineData("order")]
-    [InlineData("order:")]
+    [InlineData("Document:read")]
+    [InlineData("document:Read")]
+    [InlineData("document")]
+    [InlineData("document:")]
     [InlineData(":read")]
-    [InlineData("order:read:branch")]
-    [InlineData("order read")]
-    [InlineData("order.read")]
+    [InlineData("document:read:branch")]
+    [InlineData("document read")]
+    [InlineData("document.read")]
     [InlineData("")]
-    [InlineData("-order:read")]
+    [InlineData("-document:read")]
     public void Parse_AStringOutsideTheFormat_IsRefused(string value)
     {
         Assert.Throws<ArgumentException>(() => Permission.Parse(value));

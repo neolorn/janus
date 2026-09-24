@@ -50,7 +50,7 @@ public sealed class OutboxStoreTests(DatabaseFixture database)
 
         await using (StoreContext confirming = database.Context())
         {
-            latest.Confirm("orders");
+            latest.Confirm("records");
 
             await Store(confirming, confirmedAt).RecordAsync(latest, TestContext.Current.CancellationToken);
             await confirming.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -65,7 +65,7 @@ public sealed class OutboxStoreTests(DatabaseFixture database)
 
         Assert.Equal(latest.Id, progress.Delivery.Id);
         Assert.Equal(SubjectEventKind.TakedownExecuted, progress.Delivery.Kind);
-        Assert.Equal(confirmedAt, Assert.Contains("orders", progress.ConfirmedAt));
+        Assert.Equal(confirmedAt, Assert.Contains("records", progress.ConfirmedAt));
         Assert.Single(progress.ConfirmedAt);
     }
 
@@ -159,7 +159,7 @@ public sealed class OutboxStoreTests(DatabaseFixture database)
 
         await using (StoreContext confirming = database.Context())
         {
-            delivery.Confirm("orders");
+            delivery.Confirm("records");
 
             await Store(confirming, Noon + TimeSpan.FromMinutes(1))
                 .RecordAsync(delivery, TestContext.Current.CancellationToken);
@@ -172,7 +172,7 @@ public sealed class OutboxStoreTests(DatabaseFixture database)
             await store.ProgressAsync(delivery.Id, TestContext.Current.CancellationToken));
 
         Assert.Equal(subject, progress.Delivery.Subject);
-        Assert.Equal(Noon + TimeSpan.FromMinutes(1), Assert.Contains("orders", progress.ConfirmedAt));
+        Assert.Equal(Noon + TimeSpan.FromMinutes(1), Assert.Contains("records", progress.ConfirmedAt));
         Assert.Null(await store.ProgressAsync(
             DeliveryId.Of(Noon),
             TestContext.Current.CancellationToken));

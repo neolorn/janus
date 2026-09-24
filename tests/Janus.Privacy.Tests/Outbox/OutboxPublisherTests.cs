@@ -53,15 +53,15 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
     [Fact]
     public async Task IDN_LIFE_003a_AC6_ASubscriberTheLibraryNeverNamedReceivesTheEventAsync()
     {
-        var storefront = new SubscriberInMemory("storefront", required: true);
+        var host = new SubscriberInMemory("host", required: true);
 
-        _subscribers.Add(storefront);
+        _subscribers.Add(host);
 
         Delivery delivery = await RaisedAsync(SubjectEventKind.ErasureRequested);
 
         Assert.Equal(1, await Publisher(_whole).PublishAsync(CancellationToken.None));
 
-        ErasureRequested raised = Assert.IsType<ErasureRequested>(Assert.Single(storefront.Offered));
+        ErasureRequested raised = Assert.IsType<ErasureRequested>(Assert.Single(host.Offered));
 
         Assert.Equal(Ahmed, raised.Subject);
         Assert.Equal(delivery.IdempotencyKey, raised.IdempotencyKey);
@@ -76,17 +76,17 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
     [Fact]
     public async Task PRIV_RIGHT_005b_AC1_TheDeliveryStaysOpenUntilEveryRequiredSubscriberConfirmsAsync()
     {
-        var storefront = new SubscriberInMemory("storefront", required: true);
+        var host = new SubscriberInMemory("host", required: true);
         var warehouse = new SubscriberInMemory("warehouse", required: true) { Confirms = false };
 
-        _subscribers.Add(storefront);
+        _subscribers.Add(host);
         _subscribers.Add(warehouse);
 
         Delivery delivery = await RaisedAsync(SubjectEventKind.ErasureRequested);
 
         Assert.Equal(0, await Publisher(_none).PublishAsync(CancellationToken.None));
         Assert.Equal(ErasureStatus.AwaitingSubscribers, delivery.Status);
-        Assert.Equal(["storefront"], delivery.Confirmed);
+        Assert.Equal(["host"], delivery.Confirmed);
 
         warehouse.Confirms = true;
 
@@ -102,7 +102,7 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
     [Fact]
     public async Task PRIV_RIGHT_005b_AC2_AnUnansweredDeliveryRetriesRatherThanBeingMarkedDoneAsync()
     {
-        _subscribers.Add(new SubscriberInMemory("storefront", required: true) { Confirms = false });
+        _subscribers.Add(new SubscriberInMemory("host", required: true) { Confirms = false });
 
         Delivery delivery = await RaisedAsync(SubjectEventKind.RestrictionChanged);
 
@@ -122,10 +122,10 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
     [Fact]
     public async Task PRIV_RIGHT_005b_AC2_ASubscriberThatFaultsIsRetriedRatherThanConfirmedAsync()
     {
-        var storefront = new SubscriberInMemory("storefront", required: true) { Faults = true };
+        var host = new SubscriberInMemory("host", required: true) { Faults = true };
         var warehouse = new SubscriberInMemory("warehouse", required: true);
 
-        _subscribers.Add(storefront);
+        _subscribers.Add(host);
         _subscribers.Add(warehouse);
 
         Delivery delivery = await RaisedAsync(SubjectEventKind.ErasureRequested);
@@ -134,7 +134,7 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
         Assert.Equal(ErasureStatus.AwaitingSubscribers, delivery.Status);
         Assert.Equal(["warehouse"], delivery.Confirmed);
 
-        storefront.Faults = false;
+        host.Faults = false;
 
         Assert.Equal(1, await Publisher(_none).PublishAsync(CancellationToken.None));
         Assert.Equal(ErasureStatus.Complete, delivery.Status);
@@ -149,10 +149,10 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
     [Fact]
     public async Task IDN_LIFE_003a_AC3_ASubscriberThatConfirmedIsNotOfferedTheEventAgainAsync()
     {
-        var storefront = new SubscriberInMemory("storefront", required: true);
+        var host = new SubscriberInMemory("host", required: true);
         var warehouse = new SubscriberInMemory("warehouse", required: true) { Confirms = false };
 
-        _subscribers.Add(storefront);
+        _subscribers.Add(host);
         _subscribers.Add(warehouse);
 
         Delivery delivery = await RaisedAsync(SubjectEventKind.ErasureRequested);
@@ -160,7 +160,7 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
         await Publisher(_none).PublishAsync(CancellationToken.None);
         await Publisher(_none).PublishAsync(CancellationToken.None);
 
-        Assert.Single(storefront.Offered);
+        Assert.Single(host.Offered);
         Assert.Equal(2, warehouse.Offered.Count);
         Assert.All(
             warehouse.Offered,
@@ -176,7 +176,7 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
     [Fact]
     public async Task IDN_LIFE_003a_TheRetryDelayGrowsByTheFactorWithFullJitterAsync()
     {
-        _subscribers.Add(new SubscriberInMemory("storefront", required: true) { Confirms = false });
+        _subscribers.Add(new SubscriberInMemory("host", required: true) { Confirms = false });
         _configuration.Set(Settings.OutboxRetryInitial, TimeSpan.FromSeconds(30));
         _configuration.Set(Settings.OutboxRetryFactor, 2.0m);
 
@@ -207,7 +207,7 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
     [Fact]
     public async Task IDN_LIFE_003a_AC4_ASpentRetryBudgetAlertsImmediatelyAsync()
     {
-        _subscribers.Add(new SubscriberInMemory("storefront", required: true) { Confirms = false });
+        _subscribers.Add(new SubscriberInMemory("host", required: true) { Confirms = false });
         _configuration.Set(Settings.OutboxRetryMaxAttempts, 2);
 
         Delivery delivery = await RaisedAsync(SubjectEventKind.ErasureRequested);
@@ -222,7 +222,7 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
 
         Assert.Equal(AlertCondition.ErasureDeliveryExhausted, raised.Condition);
         Assert.Equal(
-            ["storefront"],
+            ["host"],
             raised.Details["outstanding"].EnumerateArray().Select(name => name.GetString()));
     }
 
@@ -234,7 +234,7 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
     [Fact]
     public async Task IDN_LIFE_003a_AnOptionalSubscriberFailingDoesNotHoldTheDeliveryOpenAsync()
     {
-        _subscribers.Add(new SubscriberInMemory("storefront", required: true));
+        _subscribers.Add(new SubscriberInMemory("host", required: true));
         _subscribers.Add(new SubscriberInMemory("analytics", required: false) { Confirms = false });
 
         Delivery delivery = await RaisedAsync(SubjectEventKind.RestrictionChanged);
@@ -251,9 +251,9 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
     [Fact]
     public async Task IDN_LIFE_003b_TheErasureRowFollowsItsDeliveryToCompleteAsync()
     {
-        var storefront = new SubscriberInMemory("storefront", required: true) { Confirms = false };
+        var host = new SubscriberInMemory("host", required: true) { Confirms = false };
 
-        _subscribers.Add(storefront);
+        _subscribers.Add(host);
 
         Delivery delivery = await RaisedAsync(SubjectEventKind.ErasureRequested);
         var erasure = Erasure.Begun(Ahmed, Noon, ErasureReason.ErasureRequest);
@@ -265,7 +265,7 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
         Assert.Equal(1, erasure.Attempts);
         Assert.Equal(ErasureStatus.AwaitingSubscribers, erasure.Status);
 
-        storefront.Confirms = true;
+        host.Confirms = true;
 
         await Publisher(_none).PublishAsync(CancellationToken.None);
 

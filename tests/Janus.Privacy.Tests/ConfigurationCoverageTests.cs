@@ -34,7 +34,7 @@ public sealed class ConfigurationCoverageTests
             outcome.Match(() => (ErrorCode?)null, failure => failure.Code));
 
         Assert.Equal(
-            "retention.order",
+            "retention.statement",
             outcome.Match(() => null, failure => failure.Details["key"].GetString()));
     }
 
@@ -64,11 +64,11 @@ public sealed class ConfigurationCoverageTests
 
         AuthorizationDeclaration adults = new AuthorizationDeclarationBuilder()
             .LawfulBasis(new LawfulBasisDeclaration("contract", false, false, false, false))
-            .Permission("order:read")
-            .Resource<Declaration.Order>("order", order => order
+            .Permission("statement:read")
+            .Resource<Declaration.Statement>("statement", statement => statement
                 .BelongsToOrganization()
                 .Sensitive("financial")
-                .Purpose("fulfilment", "contract", data: ["identity", "order"], subjects: ["customers"]))
+                .Purpose("performance", "contract", data: ["identity", "statement"], subjects: ["customers"]))
             .Build();
 
         Result outcome = await ValidatedAsync(adults);
@@ -99,10 +99,10 @@ public sealed class ConfigurationCoverageTests
 
         AuthorizationDeclaration adults = new AuthorizationDeclarationBuilder()
             .LawfulBasis(new LawfulBasisDeclaration("contract", false, false, false, false))
-            .Permission("order:read")
-            .Resource<Declaration.Order>("order", order => order
+            .Permission("statement:read")
+            .Resource<Declaration.Statement>("statement", statement => statement
                 .BelongsToOrganization()
-                .Purpose("fulfilment", "contract", data: ["identity", "order"], subjects: ["customers"]))
+                .Purpose("performance", "contract", data: ["identity", "statement"], subjects: ["customers"]))
             .Build();
 
         Assert.True((await ValidatedAsync(adults)).Match(() => true, _ => false));
@@ -111,7 +111,7 @@ public sealed class ConfigurationCoverageTests
     private void Kept()
     {
         _configuration.Set(Settings.HostCategoryRetention, "identity", TimeSpan.FromDays(365));
-        _configuration.Set(Settings.HostCategoryRetention, "order", TimeSpan.FromDays(1826));
+        _configuration.Set(Settings.HostCategoryRetention, "statement", TimeSpan.FromDays(1826));
     }
 
     private ValueTask<Result> ValidatedAsync() => ValidatedAsync(Declaration.Authorization);

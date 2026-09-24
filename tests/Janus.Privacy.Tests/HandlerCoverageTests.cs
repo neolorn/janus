@@ -12,10 +12,10 @@ namespace Janus.Privacy.Tests;
 [Trait("kind", "unit")]
 public sealed class HandlerCoverageTests
 {
-    private static readonly ResourceType Order = ResourceType.Parse("order");
+    private static readonly ResourceType Statement = ResourceType.Parse("statement");
 
     /// <summary>
-    /// PRIV-RIGHT-005b AC3: the deployment declares its order sensitive and
+    /// PRIV-RIGHT-005b AC3: the deployment declares its statement sensitive and
     /// registers nothing that covers it, so it does not start, and the failure names
     /// the type whose handler is missing.
     /// </summary>
@@ -28,7 +28,7 @@ public sealed class HandlerCoverageTests
             ErrorCodes.StartupDeclarationMissing,
             outcome.Match(() => (ErrorCode?)null, failure => failure.Code));
         Assert.Equal(
-            "order",
+            "statement",
             outcome.Match(
                 () => null,
                 failure => failure.Details["handler"].GetString()));
@@ -42,7 +42,7 @@ public sealed class HandlerCoverageTests
     public void PRIV_RIGHT_005b_AC3_ASensitiveTypeASubscriberCoversStarts()
     {
         Result outcome = Coverage(
-            [Covering(Order)],
+            [Covering(Statement)],
             [new PurposeHandlerInMemory("security")]).Validate();
 
         Assert.True(outcome.Match(() => true, _ => false));
@@ -91,7 +91,7 @@ public sealed class HandlerCoverageTests
     [Fact]
     public void PRIV_RIGHT_001a_AC3_AnObjectablePurposeWithNoRegisteredHandlerFailsStartup()
     {
-        Result outcome = Coverage([Covering(Order)], []).Validate();
+        Result outcome = Coverage([Covering(Statement)], []).Validate();
 
         Assert.Equal(
             ErrorCodes.StartupDeclarationMissing,
@@ -111,14 +111,14 @@ public sealed class HandlerCoverageTests
     public void PRIV_RIGHT_001a_AC3_APurposeOnANonObjectableBasisNeedsNoHandler()
     {
         Result outcome = Coverage(
-            [Covering(Order)],
+            [Covering(Statement)],
             [new PurposeHandlerInMemory("security")]).Validate();
 
         Assert.True(outcome.Match(() => true, _ => false));
     }
 
     private static Outbox.SubscriberInMemory Covering(ResourceType type) =>
-        new("storefront", required: true) { Covers = [type] };
+        new("host", required: true) { Covers = [type] };
 
     private static HandlerCoverage Coverage(
         IEnumerable<ISubjectEventSubscriber> subscribers,

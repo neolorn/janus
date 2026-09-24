@@ -53,7 +53,7 @@ public sealed class PrivacyRequestEndpointTests : IAsyncDisposable
             "POST",
             "/privacy/requests",
             ("type", "restriction"),
-            ("detail", "the order total is disputed"));
+            ("detail", "the recorded date of birth is disputed"));
 
         JsonElement receipt = submitted.Json();
 
@@ -148,7 +148,7 @@ public sealed class PrivacyRequestEndpointTests : IAsyncDisposable
             "/admin/privacy/requests/",
             ("subject", subject.Value.ToString()),
             ("type", "restriction"),
-            ("detail", "a letter disputing an order"),
+            ("detail", "a letter disputing a recorded address"),
             ("receivedAt", "2099-01-01"),
             ("channel", "letter"),
             ("identityConfirmation", "national identity card seen"));

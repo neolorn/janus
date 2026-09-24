@@ -1017,9 +1017,9 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
         new(type, ResourceId.Parse(Guid.NewGuid().ToString()));
 
     /// <summary>
-    /// AUTHZ-GATE-006 AC1, AC2: a restricted account reads its own records and modifies
-    /// none of them, and the refusal is the restriction's own code rather than an
-    /// absent grant.
+    /// AUTHZ-GATE-006 AC1, AC2, IDN-ACCT-007 AC2: a restricted account reads its own
+    /// records and performs no host write on them, and the refusal is the
+    /// restriction's own code rather than an absent grant.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]

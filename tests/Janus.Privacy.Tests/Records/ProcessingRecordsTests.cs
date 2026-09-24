@@ -162,12 +162,12 @@ public sealed class ProcessingRecordsTests
         ProcessingRegister register = Generated(await Records(Declaration.Declared().Build())
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
 
-        ProcessingRecord fulfilment = Row(register, "fulfilment");
+        ProcessingRecord performance = Row(register, "performance");
         ProcessingRecord marketing = Row(register, "marketing");
 
-        Assert.True(fulfilment.Sensitive);
-        Assert.False(fulfilment.NonSensitive);
-        Assert.Equal(["financial"], fulfilment.SensitiveCategories);
+        Assert.True(performance.Sensitive);
+        Assert.False(performance.NonSensitive);
+        Assert.Equal(["financial"], performance.SensitiveCategories);
 
         Assert.False(marketing.Sensitive);
         Assert.True(marketing.NonSensitive);
@@ -535,23 +535,23 @@ public sealed class ProcessingRecordsTests
     public async Task PRIV_RET_001_AC3_TheRetentionOfEachCategoryIsOnTheRowAsync()
     {
         _configuration.Set(Settings.HostCategoryRetention, "identity", TimeSpan.FromDays(365));
-        _configuration.Set(Settings.HostCategoryRetention, "order", TimeSpan.FromDays(1826));
+        _configuration.Set(Settings.HostCategoryRetention, "statement", TimeSpan.FromDays(1826));
 
         ProcessingRegister register = Generated(await Records(Declaration.Declared().Build())
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
 
-        Assert.Equal(["order P1826D", "identity P365D"], Row(register, "fulfilment").Retention);
+        Assert.Equal(["statement P1826D", "identity P365D"], Row(register, "performance").Retention);
         Assert.DoesNotContain(
             register.Flags,
             flag => flag.Finding is RegisterFinding.RetentionMissing);
 
-        _configuration.Clear(Settings.HostCategoryRetention.For("order"));
+        _configuration.Clear(Settings.HostCategoryRetention.For("statement"));
 
         ProcessingRegister missing = Generated(await Records(Declaration.Declared().Build())
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
 
         Assert.Contains(
-            new RegisterFlag(RegisterFinding.RetentionMissing, "order"),
+            new RegisterFlag(RegisterFinding.RetentionMissing, "statement"),
             missing.Flags);
     }
 
@@ -563,17 +563,17 @@ public sealed class ProcessingRecordsTests
     [Fact]
     public async Task PRIV_ROPA_001_AC1_TheRolesWithAccessAreTheOnesHoldingAServingPermissionAsync()
     {
-        _roles.Allows("support", "order:read");
+        _roles.Allows("support", "statement:read");
         _roles.Allows("auditor", "audit:read");
 
         AuthorizationDeclaration declared = Declaration.Declared()
-            .ServesPurpose("order:read", "fulfilment")
+            .ServesPurpose("statement:read", "performance")
             .Build();
 
         ProcessingRegister register = Generated(await Records(declared)
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
 
-        Assert.Equal(["support"], Row(register, "fulfilment").RolesWithAccess);
+        Assert.Equal(["support"], Row(register, "performance").RolesWithAccess);
         Assert.Empty(Row(register, "marketing").RolesWithAccess);
     }
 
@@ -618,7 +618,7 @@ public sealed class ProcessingRecordsTests
         ProcessingRegister register = Generated(await Records(Declaration.Declared().Build())
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
 
-        Assert.Equal("contract", Row(register, "fulfilment").LawfulBasis);
+        Assert.Equal("contract", Row(register, "performance").LawfulBasis);
         Assert.Equal("agreement", Row(register, "marketing").LawfulBasis);
 
         AuthorizationDeclaration elsewhere = new AuthorizationDeclarationBuilder()
@@ -650,7 +650,7 @@ public sealed class ProcessingRecordsTests
             "The abuse controls are assessed annually.",
             Row(register, "security").Assessment);
 
-        Assert.Null(Row(register, "fulfilment").Assessment);
+        Assert.Null(Row(register, "performance").Assessment);
     }
 
     /// <summary>

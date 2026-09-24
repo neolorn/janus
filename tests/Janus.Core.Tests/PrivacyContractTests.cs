@@ -9,46 +9,12 @@ using Xunit;
 namespace Janus.Core.Tests;
 
 /// <summary>
-/// What the privacy contract cannot be made to do: bundle purposes, hold a card
-/// number, or name the transfer the deployment rests on a permit for
-/// (PRIV-CONS-002, PRIV-CONS-010, PRIV-SENS-004).
+/// What the privacy contract cannot be made to do: bundle purposes, or name the
+/// transfer the deployment rests on a permit for (PRIV-CONS-002, PRIV-CONS-010).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class PrivacyContractTests
 {
-    // What an order's contents would be named by, in the spellings a payload to a
-    // provider would use. PRIV-MIN-001 is a search of the codebase, so the search is
-    // written down here and run on every build.
-    private static readonly string[] OrderContents =
-    [
-        "productname",
-        "producttitle",
-        "lineitem",
-        "lineitems",
-        "cart",
-        "cartitems",
-        "sku",
-        "packagedescription",
-        "packagecontents",
-    ];
-
-    // The field names a card would be held under, in the spellings a schema or a
-    // request shape would use. PRIV-SENS-004 AC2 is a search of the codebase, so the
-    // search is written down here and run on every build.
-    private static readonly string[] CardData =
-    [
-        "cardnumber",
-        "cardno",
-        "pan",
-        "primaryaccountnumber",
-        "cvv",
-        "cvc",
-        "securitycode",
-        "expirymonth",
-        "expiryyear",
-        "cardholder",
-    ];
-
     /// <summary>
     /// PRIV-CONS-002 AC1, AC2: every operation that decides a purpose takes one
     /// purpose, so no record can reference two and no one control can be built that
@@ -85,39 +51,6 @@ public sealed class PrivacyContractTests
         string[] transfers = ["cross-border-transfer", "hosting-transfer", "transfer"];
 
         Assert.Empty(Naming(transfers));
-    }
-
-    /// <summary>
-    /// PRIV-SENS-004 AC1, AC2: no field of the library holds a card number, its
-    /// expiry or its verification value, and a search of the source finds none.
-    /// </summary>
-    [Fact]
-    public void PRIV_SENS_004_AC1_NoLibraryFieldOrSourceNamesCardData()
-    {
-        Assert.Empty(Naming(CardData));
-        Assert.DoesNotContain(
-            typeof(Result).Assembly.GetTypes().SelectMany(type => type.GetProperties()),
-            property => CardData.Contains(property.Name, StringComparer.OrdinalIgnoreCase));
-    }
-
-    /// <summary>
-    /// PRIV-MIN-001 AC1, AC2: nothing of an order's contents is reachable in the
-    /// library. It holds no cart, no line and no product, so no field of a payload it
-    /// composes could carry a product name to a provider, and what a recipient
-    /// receives is the categories the host declares and nothing derived.
-    /// </summary>
-    [Fact]
-    public void PRIV_MIN_001_AC1_NoLibrarySourceNamesAnOrdersContents()
-    {
-        Assert.Empty(Naming(OrderContents));
-
-        Assert.DoesNotContain(
-            typeof(Result).Assembly.GetTypes().SelectMany(type => type.GetProperties()),
-            property => OrderContents.Contains(property.Name, StringComparer.OrdinalIgnoreCase));
-
-        Assert.Equal(
-            typeof(IReadOnlyList<string>),
-            typeof(RecipientDeclaration).GetProperty("DataReceived")!.PropertyType);
     }
 
     /// <summary>

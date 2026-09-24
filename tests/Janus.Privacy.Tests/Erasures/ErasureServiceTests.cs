@@ -46,7 +46,7 @@ public sealed class ErasureServiceTests : IAsyncDisposable
     private readonly StepUpGateInMemory _stepUp = new();
     private readonly OutboxStoreInMemory _outbox = new();
     private readonly ErasureStoreInMemory _erasures = new();
-    private readonly SubscriberInMemory _orders = new("orders", required: true);
+    private readonly SubscriberInMemory _records = new("records", required: true);
     private readonly SubscriberInMemory _newsletter = new("newsletter", required: false);
     private readonly PrivacyAuditInMemory _audit = new();
     private readonly UnitOfWorkInMemory _work = new();
@@ -67,7 +67,7 @@ public sealed class ErasureServiceTests : IAsyncDisposable
             _stepUp,
             _outbox,
             _erasures,
-            [_orders, _newsletter],
+            [_records, _newsletter],
             _audit,
             _work,
             _clock);
@@ -97,7 +97,7 @@ public sealed class ErasureServiceTests : IAsyncDisposable
 
         Assert.Equal([failed.Id.Value, awaiting.Id.Value], listed.Select(erasure => erasure.Id.Value));
         Assert.Equal([Sara, Ahmed], listed.Select(erasure => erasure.Subject));
-        Assert.All(listed, erasure => Assert.Equal(["orders", "newsletter"], erasure.Subscribers.Select(subscriber => subscriber.Name)));
+        Assert.All(listed, erasure => Assert.Equal(["records", "newsletter"], erasure.Subscribers.Select(subscriber => subscriber.Name)));
     }
 
     /// <summary>
@@ -122,7 +122,7 @@ public sealed class ErasureServiceTests : IAsyncDisposable
         Assert.Equal(delivery.Attempts, progress.Attempts);
         Assert.Equal(
             [
-                new SubscriberConfirmation("orders", Required: true, ConfirmedAt: null),
+                new SubscriberConfirmation("records", Required: true, ConfirmedAt: null),
                 new SubscriberConfirmation("newsletter", Required: false, Noon.AddMinutes(-30)),
             ],
             progress.Subscribers);
@@ -172,7 +172,7 @@ public sealed class ErasureServiceTests : IAsyncDisposable
         Assert.Equal(Noon, entry.At);
         Assert.Equal(erasure.ToString(), entry.Details["erasure"].GetString());
         Assert.Equal(
-            ["orders"],
+            ["records"],
             entry.Details["outstanding"].EnumerateArray().Select(name => name.GetString()));
         Assert.Equal(1, _work.Opened);
         Assert.Equal(1, _work.Committed);

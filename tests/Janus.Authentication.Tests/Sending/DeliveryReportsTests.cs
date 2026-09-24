@@ -220,42 +220,6 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// PRIV-MIN-002 AC1, AC2, AC3: the one callback endpoint the library owns has
-    /// the three properties the item asks of a provider's: its reference is drawn and
-    /// a guessed one is rejected, a flood from one source is refused on the count
-    /// alone, and a report advances no state of its own.
-    /// </summary>
-    /// <returns>The work of the test.</returns>
-    [Fact]
-    public async Task PRIV_MIN_002_AC1_TheCallbackEndpointIsUnguessableCountedAndInertAsync()
-    {
-        _configuration.Set(Settings.IntegrationCallbackRateLimit, 2);
-
-        SendReference reference = await SentAsync();
-        int announced = _events.Published.Count;
-
-        Assert.Equal(
-            ErrorCodes.CallbackRejected,
-            Refusal(await Reports.ReportAsync(
-                Gateway,
-                SendReference.Draw(_randomness).Value,
-                delivered: false,
-                TestContext.Current.CancellationToken)));
-
-        await ReportedAsync(reference.Value, delivered: true);
-
-        Assert.Equal(announced, _events.Published.Count);
-
-        Assert.Equal(
-            ErrorCodes.CallbackRejected,
-            Refusal(await Reports.ReportAsync(
-                Gateway,
-                reference.Value,
-                delivered: true,
-                TestContext.Current.CancellationToken)));
-    }
-
-    /// <summary>
     /// OPS-ALERT-001 AC1: more rejections from one source in an hour than the
     /// deployment admits raises the repeated-failure alert.
     /// </summary>

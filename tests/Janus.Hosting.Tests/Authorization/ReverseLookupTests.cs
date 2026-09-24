@@ -198,7 +198,7 @@ public sealed class ReverseLookupTests(HostFixture host) : IClassFixture<HostFix
         Result<ResourceAccess> unregistered = await LookedUpAsync(deployed, Reference(Note), withRows: true);
         Result<ResourceAccess> undeclared = await LookedUpAsync(
             deployed,
-            Reference(ResourceType.Parse("invoice")),
+            Reference(ResourceType.Parse("ledger")),
             withRows: true);
 
         Assert.Equal(ErrorCodes.RequestMalformed, Refusal(unregistered));
