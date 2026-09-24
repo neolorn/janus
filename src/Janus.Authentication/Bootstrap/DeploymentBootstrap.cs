@@ -109,8 +109,8 @@ internal sealed class DeploymentBootstrap(
             ? Read(IdentifierKind.Phone, request.Phone, "phone")
                 .Match(value => value, error => Withheld<Entered>(error, ref failure))
             : null;
-        Entered? mailbox = failure is null && request.Mailbox is string corporate
-            ? Read(IdentifierKind.Email, corporate, "mailbox")
+        Entered? mailbox = failure is null && request.Mailbox is string requested
+            ? Read(IdentifierKind.Email, requested, "mailbox")
                 .Match(value => value, error => Withheld<Entered>(error, ref failure))
             : null;
 
@@ -206,7 +206,7 @@ internal sealed class DeploymentBootstrap(
 
         // INT-MAIL-006 AC1a: the membership is effective at once and the mailbox is only
         // queued, so the provisioning job creates it once the mail server is reachable.
-        if (mailbox is not null)
+        if (mailbox?.Address is EmailAddress corporate)
         {
             await identifiers
                 .TakeCorporateAsync(
@@ -220,7 +220,7 @@ internal sealed class DeploymentBootstrap(
                     cancellationToken)
                 .ConfigureAwait(false);
 
-            var provisioned = Mailbox.Reserved(mailbox.Canonical, now);
+            var provisioned = Mailbox.Reserved(corporate, now);
             provisioned.Hold(administrator);
 
             await mailboxes.AddAsync(provisioned, cancellationToken).ConfigureAwait(false);
@@ -312,8 +312,8 @@ internal sealed class DeploymentBootstrap(
         string entered = value?.Trim() ?? string.Empty;
 
         Entered? read = kind is IdentifierKind.Email
-            ? EmailAddress.TryParse(entered, out EmailAddress address) ? new Entered(entered, address.Value) : null
-            : PhoneNumber.TryParse(entered, out PhoneNumber number) ? new Entered(entered, number.Value) : null;
+            ? EmailAddress.TryParse(entered, out EmailAddress address) ? new Entered(entered, address.Value, address) : null
+            : PhoneNumber.TryParse(entered, out PhoneNumber number) ? new Entered(entered, number.Value, Address: null) : null;
 
         if (read is null)
         {
@@ -335,7 +335,7 @@ internal sealed class DeploymentBootstrap(
 
     private static Entered Canary() =>
         EmailAddress.TryParse(CanaryAddress, out EmailAddress address)
-            ? new Entered(CanaryAddress, address.Value)
+            ? new Entered(CanaryAddress, address.Value, address)
             : throw new InvalidOperationException("The canary's address is not an address.");
 
     private static DisplayName CanaryDisplayName() =>
@@ -375,5 +375,5 @@ internal sealed class DeploymentBootstrap(
                 .ConfigureAwait(false))
             .Match<Error?>(_ => null, error => error);
 
-    private sealed record Entered(string Value, string Canonical);
+    private sealed record Entered(string Value, string Canonical, EmailAddress? Address);
 }

@@ -85,9 +85,9 @@ internal sealed class MailboxReconciliation(
             Mailbox mailbox = standing.Mailbox;
             MailboxState owed = mailbox.Owed(standing.Stands);
 
-            _ = known.Add(mailbox.Address);
+            _ = known.Add(mailbox.Address.Value);
 
-            bool agrees = enabled.TryGetValue(mailbox.Address, out bool serving)
+            bool agrees = enabled.TryGetValue(mailbox.Address.Value, out bool serving)
                 ? owed is not MailboxState.Removed && serving == (owed is MailboxState.Enabled)
                 : owed is MailboxState.Removed;
 

@@ -24,10 +24,10 @@ internal sealed class LocationDatabase(IAlertChannels alerts, TimeProvider time)
 
     /// <inheritdoc/>
     public async ValueTask<Result<SessionLocation?>> ResolveAsync(
-        string address,
+        string ipAddress,
         CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(address);
+        ArgumentException.ThrowIfNullOrWhiteSpace(ipAddress);
 
         // What is degraded is the deployment and not the request, so the condition is
         // raised under the absent file and the router carries one alert a window

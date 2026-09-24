@@ -57,7 +57,7 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
         OrganizationId administrative = await AdministrativeAsync();
         SubjectId holder = await _deployment.AccountAsync(Noon);
         Guid membership = await MemberAsync(holder, administrative);
-        var mailbox = Mailbox.Reserved("stands@example.test", Noon);
+        var mailbox = Mailbox.Reserved(Parsed("stands@example.test"), Noon);
 
         mailbox.Hold(holder);
         await WrittenAsync(store => store.AddAsync(mailbox, TestContext.Current.CancellationToken));
@@ -97,7 +97,7 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
         OrganizationId customer = await _deployment.OrganizationAsync(Noon);
         SubjectId holder = await _deployment.AccountAsync(Noon);
         _ = await MemberAsync(holder, customer);
-        var mailbox = Mailbox.Reserved("elsewhere@example.test", Noon);
+        var mailbox = Mailbox.Reserved(Parsed("elsewhere@example.test"), Noon);
 
         mailbox.Hold(holder);
         await WrittenAsync(store => store.AddAsync(mailbox, TestContext.Current.CancellationToken));
@@ -115,7 +115,7 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
     {
         SubjectId holder = await _deployment.AccountAsync(Noon);
         SubjectId later = await _deployment.AccountAsync(Noon);
-        var mailbox = Mailbox.Reserved("held@example.test", Noon);
+        var mailbox = Mailbox.Reserved(Parsed("held@example.test"), Noon);
 
         mailbox.Hold(holder);
         await WrittenAsync(store => store.AddAsync(mailbox, TestContext.Current.CancellationToken));
@@ -145,7 +145,7 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
     [Fact]
     public async Task INT_MAIL_007_AnOutstandingPushKeepsItsKeyAsync()
     {
-        var mailbox = Mailbox.Reserved("kept@example.test", Noon);
+        var mailbox = Mailbox.Reserved(Parsed("kept@example.test"), Noon);
 
         await WrittenAsync(store => store.AddAsync(mailbox, TestContext.Current.CancellationToken));
 
@@ -181,11 +181,11 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
     public async Task INT_MAIL_006_AnAddressIsOneMailboxAsync()
     {
         await WrittenAsync(store => store.AddAsync(
-            Mailbox.Reserved("once@example.test", Noon),
+            Mailbox.Reserved(Parsed("once@example.test"), Noon),
             TestContext.Current.CancellationToken));
 
         await Assert.ThrowsAsync<DbUpdateException>(() => WrittenAsync(store => store.AddAsync(
-            Mailbox.Reserved("once@example.test", Noon),
+            Mailbox.Reserved(Parsed("once@example.test"), Noon),
             TestContext.Current.CancellationToken)));
     }
 
@@ -267,5 +267,12 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
         await using StoreContext context = database.Context();
 
         _ = await change(context);
+    }
+
+    private static EmailAddress Parsed(string value)
+    {
+        Assert.True(EmailAddress.TryParse(value, out EmailAddress address));
+
+        return address;
     }
 }

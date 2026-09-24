@@ -210,7 +210,7 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
     [Fact]
     public async Task REG_MAIL_001_AMailboxIsFoundByItsAddressAsync()
     {
-        var reserved = Mailbox.Reserved("found@example.test", Noon);
+        var reserved = Mailbox.Reserved(Parsed("found@example.test"), Noon);
 
         reserved.Release(Noon.AddHours(1));
 
@@ -222,13 +222,13 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
 
         await using StoreContext reading = database.Context();
 
-        Mailbox? byAddress = await Mailboxes(reading).FindAsync("found@example.test", TestContext.Current.CancellationToken);
+        Mailbox? byAddress = await Mailboxes(reading).FindAsync(Parsed("found@example.test"), TestContext.Current.CancellationToken);
         Mailbox? byId = await Mailboxes(reading).FindAsync(reserved.Id, TestContext.Current.CancellationToken);
 
         Assert.Equal(reserved.Id, byAddress?.Id);
         Assert.Equal(Noon.AddHours(1), byAddress?.ReleasedAt);
-        Assert.Equal("found@example.test", byId?.Address);
-        Assert.Null(await Mailboxes(reading).FindAsync("absent@example.test", TestContext.Current.CancellationToken));
+        Assert.Equal("found@example.test", byId?.Address.Value);
+        Assert.Null(await Mailboxes(reading).FindAsync(Parsed("absent@example.test"), TestContext.Current.CancellationToken));
     }
 
     /// <inheritdoc/>
@@ -274,7 +274,7 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
     {
         OrganizationId organization = await _deployment.OrganizationAsync(Noon);
         SubjectId inviter = await _deployment.AccountAsync(Noon);
-        Mailbox? mailbox = corporate is null ? null : Mailbox.Reserved(corporate, Noon);
+        Mailbox? mailbox = corporate is null ? null : Mailbox.Reserved(Parsed(corporate), Noon);
 
         var invitation = Invitation.Issued(
             InvitationId.New(TimeProvider.System),
@@ -319,5 +319,12 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
 
         await Store(writing).AddAsync(invitation, TestContext.Current.CancellationToken);
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    private static EmailAddress Parsed(string value)
+    {
+        Assert.True(EmailAddress.TryParse(value, out EmailAddress address));
+
+        return address;
     }
 }

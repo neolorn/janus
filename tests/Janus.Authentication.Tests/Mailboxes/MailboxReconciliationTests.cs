@@ -87,7 +87,7 @@ public sealed class MailboxReconciliationTests : IDisposable
     [Fact]
     public async Task INT_MAIL_006_AC1c_AReservedMailboxIsNoDriftAsync()
     {
-        await _mailboxes.AddAsync(Mailbox.Reserved(Address, Noon), TestContext.Current.CancellationToken);
+        await _mailboxes.AddAsync(Mailbox.Reserved(Parsed(Address), Noon), TestContext.Current.CancellationToken);
         _server.Set(Address, enabled: false);
 
         MailboxDrift drift = await ReconciledAsync();
@@ -125,7 +125,7 @@ public sealed class MailboxReconciliationTests : IDisposable
     [Fact]
     public async Task INT_MAIL_007_AReleasedMailboxIsExpectedGoneAsync()
     {
-        var released = Mailbox.Reserved(Address, Noon);
+        var released = Mailbox.Reserved(Parsed(Address), Noon);
 
         released.Release(Noon);
         await _mailboxes.AddAsync(released, TestContext.Current.CancellationToken);
@@ -165,12 +165,19 @@ public sealed class MailboxReconciliationTests : IDisposable
 
     private async Task<Mailbox> HeldAsync(bool enabledOnServer)
     {
-        var mailbox = Mailbox.Reserved(Address, Noon);
+        var mailbox = Mailbox.Reserved(Parsed(Address), Noon);
 
         mailbox.Hold(_holder);
         await _mailboxes.AddAsync(mailbox, TestContext.Current.CancellationToken);
         _server.Set(Address, enabledOnServer);
 
         return _mailboxes.Held.Single();
+    }
+
+    private static EmailAddress Parsed(string value)
+    {
+        Assert.True(EmailAddress.TryParse(value, out EmailAddress address));
+
+        return address;
     }
 }

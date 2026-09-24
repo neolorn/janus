@@ -69,10 +69,8 @@ internal sealed class MailboxStore(
     }
 
     /// <inheritdoc/>
-    public async ValueTask<Mailbox?> FindAsync(string address, CancellationToken cancellationToken)
+    public async ValueTask<Mailbox?> FindAsync(EmailAddress address, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(address);
-
         byte[] fingerprint = Fingerprinted(address);
 
         MailboxRecord? record = await Readable()
@@ -162,7 +160,7 @@ internal sealed class MailboxStore(
                 record.EncryptedCanonical = PersonalFieldCipher.Encrypt(
                     dataKey,
                     Located(mailbox.Holder),
-                    Encoding.UTF8.GetBytes(mailbox.Address),
+                    Encoding.UTF8.GetBytes(mailbox.Address.Value),
                     randomness);
             }
             finally
@@ -196,8 +194,8 @@ internal sealed class MailboxStore(
         {
             return Mailbox.Existing(
                 new MailboxId(record.Id),
-                Encoding.UTF8.GetString(
-                    PersonalFieldCipher.Decrypt(dataKey, Located(record.Holder), record.EncryptedCanonical)),
+                Address(Encoding.UTF8.GetString(
+                    PersonalFieldCipher.Decrypt(dataKey, Located(record.Holder), record.EncryptedCanonical))),
                 record.ReservedAt,
                 record.Holder,
                 record.RetiredAt,
@@ -232,6 +230,13 @@ internal sealed class MailboxStore(
                 || context.SubjectKeys.Any(key =>
                     key.Subject == mailbox.Holder && key.FormatMarker == PersonalDataFormat.Marker));
 
-    private byte[] Fingerprinted(string address) =>
-        Janus.Storage.Fingerprint.Compute(Encoding.UTF8.GetBytes(address), fingerprintKey.Span);
+    // What the row holds was canonical when it was written, so a form that no longer
+    // parses is a defect rather than a mailbox to read.
+    private static EmailAddress Address(string canonical) =>
+        EmailAddress.TryParse(canonical, out EmailAddress address)
+            ? address
+            : throw new InvalidOperationException("The mailbox's address is not an address.");
+
+    private byte[] Fingerprinted(EmailAddress address) =>
+        Janus.Storage.Fingerprint.Compute(Encoding.UTF8.GetBytes(address.Value), fingerprintKey.Span);
 }

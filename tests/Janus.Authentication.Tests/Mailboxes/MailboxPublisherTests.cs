@@ -287,7 +287,7 @@ public sealed class MailboxPublisherTests : IAsyncDisposable
 
     private async Task<Mailbox> ReservedAsync()
     {
-        var reserved = Mailbox.Reserved(Address, _clock.GetUtcNow());
+        var reserved = Mailbox.Reserved(Parsed(Address), _clock.GetUtcNow());
 
         await _mailboxes.AddAsync(reserved, TestContext.Current.CancellationToken);
 
@@ -306,5 +306,12 @@ public sealed class MailboxPublisherTests : IAsyncDisposable
         _ = await PassAsync();
 
         return _mailboxes.Held.Single();
+    }
+
+    private static EmailAddress Parsed(string value)
+    {
+        Assert.True(EmailAddress.TryParse(value, out EmailAddress address));
+
+        return address;
     }
 }

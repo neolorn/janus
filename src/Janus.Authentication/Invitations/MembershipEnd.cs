@@ -167,7 +167,7 @@ internal sealed class MembershipEnd(
         HeldIdentifiers held = await identifiers.HeldAsync(member, cancellationToken).ConfigureAwait(false);
 
         IdentifierId primary = await identifiers
-            .RetireCorporateAsync(member, mailbox.Address, cancellationToken)
+            .RetireCorporateAsync(member, mailbox.Address.Value, cancellationToken)
             .ConfigureAwait(false);
 
         mailbox.Retire(now);
@@ -181,7 +181,7 @@ internal sealed class MembershipEnd(
                 [
                     .. held.NoticeSet.Where(identifier =>
                         identifier.Kind is not IdentifierKind.Email
-                        || !string.Equals(identifier.Canonical, mailbox.Address, StringComparison.Ordinal)),
+                        || !string.Equals(identifier.Canonical, mailbox.Address.Value, StringComparison.Ordinal)),
                 ],
                 member,
                 source,

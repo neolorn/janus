@@ -62,12 +62,12 @@ internal sealed class AuthenticatorStore(
     /// <inheritdoc/>
     public async ValueTask<Authenticator?> ByProviderAsync(
         Factor provider,
-        string subject,
+        string providerSubject,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(subject);
+        ArgumentNullException.ThrowIfNull(providerSubject);
 
-        byte[] fingerprint = Fingerprinted(subject);
+        byte[] fingerprint = Fingerprinted(providerSubject);
 
         AuthenticatorRecord? record = await context.Authenticators
             .FirstOrDefaultAsync(
@@ -116,12 +116,12 @@ internal sealed class AuthenticatorStore(
     /// <inheritdoc/>
     public ValueTask LinkAsync(
         Authenticator authenticator,
-        string subject,
+        string providerSubject,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(subject);
+        ArgumentNullException.ThrowIfNull(providerSubject);
 
-        return AddedAsync(authenticator, Fingerprinted(subject), cancellationToken);
+        return AddedAsync(authenticator, Fingerprinted(providerSubject), cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -248,8 +248,8 @@ internal sealed class AuthenticatorStore(
         context.Authenticators.Add(record);
     }
 
-    private byte[] Fingerprinted(string subject) =>
-        Fingerprint.Compute(Encoding.UTF8.GetBytes(subject), fingerprintKey.Span);
+    private byte[] Fingerprinted(string providerSubject) =>
+        Fingerprint.Compute(Encoding.UTF8.GetBytes(providerSubject), fingerprintKey.Span);
 
     private async ValueTask<Authenticator> ReadAsync(
         AuthenticatorRecord record,

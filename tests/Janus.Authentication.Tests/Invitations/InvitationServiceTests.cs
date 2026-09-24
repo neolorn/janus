@@ -212,7 +212,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
         Mailbox reserved = Assert.Single(_mailboxes.Held);
 
-        Assert.Equal(Corporate, reserved.Address);
+        Assert.Equal(Corporate, reserved.Address.Value);
         Assert.Equal(reserved.Id, _invitations.Held[0].Mailbox);
 
         _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
@@ -343,7 +343,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
         Error open = Failure(await IssueAsync(Staff, Request(email: "other@elsewhere.test", corporate: Corporate)));
 
-        var held = Mailbox.Reserved("held@staff.test", Noon);
+        var held = Mailbox.Reserved(Parsed("held@staff.test"), Noon);
 
         held.Hold(SubjectId.New(_randomness));
         _mailboxes.Held.Add(held);
@@ -556,7 +556,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     [Fact]
     public async Task REG_MAIL_001_RevokingKeepsAMailboxSomeoneHeldAsync()
     {
-        var retired = Mailbox.Reserved(Corporate, Noon.AddYears(-1));
+        var retired = Mailbox.Reserved(Parsed(Corporate), Noon.AddYears(-1));
 
         retired.Hold(SubjectId.New(_randomness));
         retired.Retire(Noon.AddMonths(-1));
@@ -1351,5 +1351,12 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         _randomness.GetBytes(fingerprint);
 
         return fingerprint;
+    }
+
+    private static EmailAddress Parsed(string value)
+    {
+        Assert.True(EmailAddress.TryParse(value, out EmailAddress address));
+
+        return address;
     }
 }

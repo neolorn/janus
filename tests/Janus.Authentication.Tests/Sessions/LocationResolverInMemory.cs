@@ -34,13 +34,13 @@ internal sealed class LocationResolverInMemory : ILocationResolver
 
     /// <inheritdoc/>
     public ValueTask<Result<SessionLocation?>> ResolveAsync(
-        string address,
+        string ipAddress,
         CancellationToken cancellationToken)
     {
-        Asked.Add(address);
+        Asked.Add(ipAddress);
 
         return ValueTask.FromResult(Refusal is Error refused
             ? Result.Failure<SessionLocation?>(refused)
-            : Result.Success(_places.GetValueOrDefault(address)));
+            : Result.Success(_places.GetValueOrDefault(ipAddress)));
     }
 }

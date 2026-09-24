@@ -171,11 +171,18 @@ public sealed class AppPasswordFlowTests : IAsyncDisposable
         await RegisteredAsync();
 
         Browser browser = await Flow.SignedInAsync(_deployment);
-        var mailbox = Mailbox.Reserved("person@staff.example.test", _deployment.Clock.GetUtcNow());
+        var mailbox = Mailbox.Reserved(Parsed("person@staff.example.test"), _deployment.Clock.GetUtcNow());
 
         mailbox.Hold(_deployment.Directory.Created[^1].Subject);
         _deployment.Mailboxes.Held.Add(mailbox);
 
         return browser;
+    }
+
+    private static EmailAddress Parsed(string value)
+    {
+        Assert.True(EmailAddress.TryParse(value, out EmailAddress address));
+
+        return address;
     }
 }

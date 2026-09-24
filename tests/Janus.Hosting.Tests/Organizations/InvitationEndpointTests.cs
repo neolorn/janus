@@ -118,7 +118,7 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
             """{"email":"invited@elsewhere.test","corporateEmail":"invited@example.test"}""");
 
         Assert.Equal(StatusCodes.Status201Created, issued.Status);
-        Assert.Equal("invited@example.test", Assert.Single(_deployment.Mailboxes.Held).Address);
+        Assert.Equal("invited@example.test", Assert.Single(_deployment.Mailboxes.Held).Address.Value);
         Assert.Equal("invited@elsewhere.test", _deployment.Mail.Taken[^1].Destination.Value);
         Assert.DoesNotContain(_deployment.Mail.Taken, mail => mail.Destination.Value == "invited@example.test");
     }

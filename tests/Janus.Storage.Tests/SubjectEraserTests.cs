@@ -792,7 +792,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     public async Task PRIV_RIGHT_005c_TheAddressOfAMailboxGoesWithItsHolderAsync()
     {
         SubjectId subject = await DeletingAccountAsync();
-        var mailbox = Mailbox.Reserved("erased@example.test", Noon);
+        var mailbox = Mailbox.Reserved(Parsed("erased@example.test"), Noon);
 
         mailbox.Hold(subject);
 
@@ -813,7 +813,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         Assert.Empty(await Mailboxes(reading).AllAsync(TestContext.Current.CancellationToken));
 
         await Mailboxes(reading).AddAsync(
-            Mailbox.Reserved("erased@example.test", Noon),
+            Mailbox.Reserved(Parsed("erased@example.test"), Noon),
             TestContext.Current.CancellationToken);
         await reading.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
@@ -1187,5 +1187,12 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
                 new { subject = subject.Value, at = Noon }));
 
         Assert.Equal("23505", refusal.SqlState);
+    }
+
+    private static EmailAddress Parsed(string value)
+    {
+        Assert.True(EmailAddress.TryParse(value, out EmailAddress address));
+
+        return address;
     }
 }

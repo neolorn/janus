@@ -39,12 +39,12 @@ internal interface IAuthenticatorStore
     /// not the account (IDN-LIFE-012a, REG-IDENT-008).
     /// </summary>
     /// <param name="provider">Which social provider.</param>
-    /// <param name="subject">The provider's subject identifier.</param>
+    /// <param name="providerSubject">The provider's subject identifier.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The credential, or nothing where there is none.</returns>
     ValueTask<Authenticator?> ByProviderAsync(
         Factor provider,
-        string subject,
+        string providerSubject,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -70,12 +70,12 @@ internal interface IAuthenticatorStore
     /// identifier it is found by from then on.
     /// </summary>
     /// <param name="authenticator">The credential.</param>
-    /// <param name="subject">The provider's subject identifier.</param>
+    /// <param name="providerSubject">The provider's subject identifier.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of recording it.</returns>
     ValueTask LinkAsync(
         Authenticator authenticator,
-        string subject,
+        string providerSubject,
         CancellationToken cancellationToken);
 
     /// <summary>

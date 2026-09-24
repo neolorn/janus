@@ -28,13 +28,13 @@ internal interface IMailboxStore
     /// <summary>
     /// Reads the mailbox of one address, whatever state it is in.
     /// </summary>
-    /// <param name="address">The address, in its canonical form.</param>
+    /// <param name="address">The address.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// The mailbox, or nothing where the address never had one or its last holder was
     /// erased.
     /// </returns>
-    ValueTask<Mailbox?> FindAsync(string address, CancellationToken cancellationToken);
+    ValueTask<Mailbox?> FindAsync(EmailAddress address, CancellationToken cancellationToken);
 
     /// <summary>
     /// Reads one mailbox, whatever state it is in.

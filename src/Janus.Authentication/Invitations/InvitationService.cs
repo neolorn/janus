@@ -137,7 +137,7 @@ internal sealed class InvitationService(
 
         Reservation? reservation = null;
 
-        if (bound.Corporate is string corporate)
+        if (bound.Corporate is EmailAddress corporate)
         {
             reservation = (await ReservedAsync(corporate, now, cancellationToken).ConfigureAwait(false))
                 .Match(value => value, error => Withheld<Reservation>(error, ref failure));
@@ -381,7 +381,7 @@ internal sealed class InvitationService(
         return Result.Success(new Bound(
             new InvitedIdentifiers(email?.Value, phone?.Value, corporate?.Value),
             email?.Address,
-            corporate?.Canonical));
+            corporate?.Address));
     }
 
     // REG-INV-001: the roles attach across the organization with the membership, so
@@ -477,7 +477,7 @@ internal sealed class InvitationService(
     // mailbox an account holds is taken; an invitation still open over it is taken
     // too, until it is revoked; one that expired unacknowledged is replaced.
     private async ValueTask<Result<Reservation>> ReservedAsync(
-        string corporate,
+        EmailAddress corporate,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -699,7 +699,7 @@ internal sealed class InvitationService(
 
     private sealed record Entered(string Value, string Canonical, EmailAddress? Address);
 
-    private sealed record Bound(InvitedIdentifiers Identifiers, EmailAddress? Linked, string? Corporate);
+    private sealed record Bound(InvitedIdentifiers Identifiers, EmailAddress? Linked, EmailAddress? Corporate);
 
     private sealed record Reservation(Mailbox Mailbox, bool IsNew, IReadOnlyList<Invitation> Replaced);
 }
