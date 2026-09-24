@@ -69,6 +69,28 @@ public sealed class AccountAdministrationEndpointTests : IAsyncDisposable
         Assert.Equal("subject", unknown.Json().GetProperty("details").GetProperty("member").GetString());
     }
 
+    /// <summary>
+    /// PRIV-RIGHT-004 AC2: the lift makes a restricted account active, and a second
+    /// finds no restriction to lift.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_004_AC2_ARestrictionIsLiftedAsync()
+    {
+        Session member = await MemberAsync();
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _deployment.Accounts.Stands(member.Subject, AccountState.Restricted);
+        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Administration, Permissions.AccountManage);
+
+        Answer lifted = await browser.SendAsync("POST", PathOf(member.Subject, "restriction/lift"));
+        Answer again = await browser.SendAsync("POST", PathOf(member.Subject, "restriction/lift"));
+
+        Assert.Equal(StatusCodes.Status204NoContent, lifted.Status);
+        Assert.Equal(AccountState.Active, await StateAsync(member.Subject));
+        Assert.Equal(StatusCodes.Status403Forbidden, again.Status);
+    }
+
     private static string PathOf(SubjectId subject, string operation) =>
         "/admin/accounts/" + subject.Value + "/" + operation;
 

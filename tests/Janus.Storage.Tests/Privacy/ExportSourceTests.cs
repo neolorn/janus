@@ -29,6 +29,7 @@ using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Identity.Profiles;
 using Janus.Storage.Privacy.Exports;
+using Janus.Storage.Privacy.Outbox;
 using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -443,7 +444,8 @@ public sealed class ExportSourceTests(DatabaseFixture database)
                 new ProfilePhotoStore(reading, _deployment.Keys, _deployment.Randomness),
                 new SubjectKeyStore(reading, _deployment.Keys, _deployment.Randomness),
                 Preferences(reading),
-                Declared),
+                Declared,
+                new OutboxStore(reading, new FixedTime(Noon))),
             new IdentifierDirectory(Identifiers(reading), Preferences(reading)),
             new AuthenticatorStore(reading, _deployment.Keys, _deployment.Randomness),
             new PasswordStore(reading),

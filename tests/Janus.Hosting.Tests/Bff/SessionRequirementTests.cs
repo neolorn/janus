@@ -67,6 +67,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "POST /account/identifiers/{id:guid}/primary",
         "POST /account/invitation/acknowledge",
         "POST /admin/accounts/{subject:guid}/reactivate",
+        "POST /admin/accounts/{subject:guid}/restriction/lift",
         "POST /admin/accounts/{subject:guid}/suspend",
         "POST /admin/accounts/{subject:guid}/takedown/",
         "POST /admin/accounts/{subject:guid}/takedown/reverse",

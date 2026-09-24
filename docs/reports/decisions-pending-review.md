@@ -9449,6 +9449,76 @@ while the account is suspended or deleting is held and in force when it returns,
 chapter 09 section 8a could say that the takedown reversal restores `restricted` where
 the account was restricted.
 
+---
+
+## 258. What lifting a restriction answers, writes and asks
+
+**Phase 8 · 2026-09-24 · Tier 2 · PRIV-RIGHT-004, IDN-AUD-001, LIB-API-005, chapter 09 section 8a, chapter 10 section 5a**
+
+*The question.* Chapter 09 section 8a lists `POST /admin/accounts/{subject}/restriction/lift`
+under "Accounts: `account:manage`" with "Lifts a processing restriction
+(PRIV-RIGHT-004)". Chapter 10 section 5b has `RestrictionChanged` fire when
+"`restricted` set or lifted" to every registered subject-event handler, required. Nothing
+names the answers or the audit action, and the section's preamble says step-up applies
+where an operation "touches another person's account", while chapter 10 section 5a,
+"Listed once here so a builder does not have to infer them endpoint by endpoint", names
+no gate for the lift and the row marks none.
+
+*Chosen.*
+
+- `IAccounts.LiftRestrictionAsync`, under `account:manage` in the administrative
+  organization, as entry 254 has for the section's other account operations.
+- **204** where the restriction is lifted; **400** `api.request.malformed` naming
+  `subject` where no account bears it; **403** `authz.denied` without the permission,
+  where no person acts, or where the account is not restricted (entry 259). A second
+  lift is refused, as a second reactivation is.
+- No step-up and no reason. The gate is keyed by a name from chapter 10 section 5a, the
+  list says it is complete, and the row marks none; taking the preamble would need a
+  name no chapter holds. The same holds for the membership end (entry 250), the
+  deletion cancellation on the subject's behalf and the account session revocation,
+  which also touch another person's account without a gate.
+- In one transaction: the account becomes `active`, the `RestrictionChanged` delivery
+  with `restricted` false is written to the outbox, and the lift is audited as a new
+  action, `privacy.restriction.lifted`, security category, acting subject the
+  administrator and effective subject the account, no organization. The privacy request
+  that restricted the account is left as it was decided.
+
+*Tests that pin it.*
+`AccountAdministrationTests.PRIV_RIGHT_004_AC2_LiftingARestrictionRestoresTheAccountAsync`,
+`AccountAdministrationTests.PRIV_RIGHT_004_OnlyARestrictionInForceIsLiftedAsync`,
+`AccountDirectoryTests.PRIV_RIGHT_004_AC2_TheLiftTellsTheSubscribersAsync`,
+`AccountAdministrationEndpointTests.PRIV_RIGHT_004_AC2_ARestrictionIsLiftedAsync`,
+`SessionRequirementTests` (the list of session routes), `AuditActionsTests` (the list of
+actions).
+
+*Chapter text that should change.* Chapter 09 section 8a could give the endpoint its
+answers and say whether its preamble's "touches another person's account" adds gates
+chapter 10 section 5a does not list; chapter 10 could hold the audit row below.
+
+---
+
+## 259. Whether a restriction held away from the restricted state is lifted
+
+**Phase 8 · 2026-09-24 · Tier 3 · PRIV-RIGHT-004, entry 257**
+
+*The question.* Under entry 257 an account suspended or deleting may hold a restriction.
+Nothing says whether an administrator may lift it while the account is away.
+
+*The readings.*
+
+1. Lift it: clear what is held and tell the subscribers.
+2. Refuse until the account is back in `restricted`, where the lift applies as usual.
+
+*Chosen: 2, the strictest reading.* It keeps the restriction the subject asked for
+until it can be lifted from the state that shows it, and it keeps one path for a lift.
+The refusal is `authz.denied`, as for an account not restricted at all.
+
+*Tests that pin it.*
+`AccountAdministrationTests.PRIV_RIGHT_004_OnlyARestrictionInForceIsLiftedAsync`.
+
+*Chapter text that should change.* PRIV-RIGHT-004 could say that a restriction held
+while the account is suspended or deleting is lifted only once the account is back.
+
 
 # Rows for chapter 10
 
@@ -9643,6 +9713,7 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `privacy.request.lapsed` | security | `AuditActions.RequestLapsed` | A data subject request reached its deadline undecided. (PRIV-RIGHT-002) |
 | `privacy.request.refused` | security | `AuditActions.RequestRefused` | A data subject request was refused, with the reason recorded against it. (PRIV-RIGHT-002) |
 | `privacy.request.submitted` | security | `AuditActions.RequestSubmitted` | A data subject request was submitted by the subject. (PRIV-RIGHT-002) |
+| `privacy.restriction.lifted` | security | `AuditActions.RestrictionLifted` | An administrator lifted a restriction of processing and the subscribers were told. The acting subject is the administrator, the effective subject the account; the row names no organization. (PRIV-RIGHT-004, entry 258) |
 
 ## Message kinds
 

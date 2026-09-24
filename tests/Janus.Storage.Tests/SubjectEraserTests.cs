@@ -27,6 +27,7 @@ using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Identity.Profiles;
 using Janus.Storage.Privacy.Erasures;
+using Janus.Storage.Privacy.Outbox;
 using Janus.Storage.Privacy.SubjectKeys;
 using Janus.Storage.Settings;
 using Microsoft.EntityFrameworkCore;
@@ -858,7 +859,8 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         new ProfilePhotoStore(context, _deployment.Keys, _deployment.Randomness),
         new SubjectKeyStore(context, _deployment.Keys, _deployment.Randomness),
         new PreferenceStore(context, _deployment.Keys, _deployment.Randomness),
-        PreferenceDeclarations.None);
+        PreferenceDeclarations.None,
+        new OutboxStore(context, new FixedTime(Noon)));
 
     private static ErasureStore Store(StoreContext context) => new(context);
 

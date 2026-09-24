@@ -348,6 +348,13 @@ against the public contract of LIB-API-001.
   restriction decided while the account is suspended or deleting is held for when it
   returns, with `RestrictionChanged` delivered to the subscribers when it is decided.
 
+- `POST /admin/accounts/{subject}/restriction/lift` lifts a processing restriction
+  under `account:manage` (204): the account is active again, `RestrictionChanged` is
+  delivered to every subject-event handler in the same transaction, and the audit
+  trail records `privacy.restriction.lifted`. An account that is not restricted,
+  including one holding a restriction while suspended or deleting, answers 403
+  `authz.denied`. `IAccounts.LiftRestrictionAsync` is the same operation in process.
+
 - Staff mailboxes are provisioned through `IMailServer`, which a deployment registers
   where its staff mail is hosted and which no package ships. A mailbox is owed
   `disabled` from its reservation, `enabled` while its holder is an active member of

@@ -22,6 +22,14 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
     private readonly Dictionary<SubjectId, SuspensionOrigin> _suspensions = [];
 
     private readonly HashSet<SubjectId> _restrictionHeld = [];
+
+    private readonly List<(SubjectId Subject, DateTimeOffset At)> _lifted = [];
+
+    /// <summary>
+    /// Every restriction lifted, with when, in the order it was: each is what the
+    /// subscribers were told.
+    /// </summary>
+    public IReadOnlyList<(SubjectId Subject, DateTimeOffset At)> Lifted => _lifted;
     private readonly Dictionary<SubjectId, HeldDeletion> _deletions = [];
     private readonly Dictionary<SubjectId, ReadOnlyMemory<byte>> _photos = [];
 
@@ -124,6 +132,18 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
         ValueTask.FromResult(_deletions.TryGetValue(subject, out HeldDeletion? deleting)
             ? deleting
             : null);
+
+    /// <inheritdoc/>
+    public ValueTask LiftRestrictionAsync(
+        SubjectId subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        _states[subject] = AccountState.Active;
+        _lifted.Add((subject, at));
+
+        return ValueTask.CompletedTask;
+    }
 
     /// <inheritdoc/>
     public ValueTask DeactivateAsync(SubjectId subject, CancellationToken cancellationToken)

@@ -7,6 +7,7 @@ using Janus.Core;
 using Janus.Identity.Accounts;
 using Janus.Identity.Preferences;
 using Janus.Identity.Profiles;
+using Janus.Privacy.Outbox;
 using Janus.Privacy.SubjectKeys;
 
 namespace Janus.Storage.Authentication.Accounts;
@@ -21,10 +22,11 @@ namespace Janus.Storage.Authentication.Accounts;
 /// <param name="keys">Where a subject's key is read, to know whether it still reads.</param>
 /// <param name="preferences">Where the preferences are read and written.</param>
 /// <param name="declarations">The preference keys the host declared.</param>
+/// <param name="outbox">Where a lifted restriction is announced to the subscribers.</param>
 /// <remarks>
-/// Implements REG-ACCT-001, REG-PROF-001, REG-PREF-001 and CONV-LAYOUT-001. Every
-/// write runs inside the caller's transaction, so the whole of one operation commits
-/// or none of it does.
+/// Implements REG-ACCT-001, REG-PROF-001, REG-PREF-001, PRIV-RIGHT-004 and
+/// CONV-LAYOUT-001. Every write runs inside the caller's transaction, so the whole of
+/// one operation commits or none of it does.
 /// </remarks>
 internal sealed class AccountDirectory(
     IAccountStore accounts,
@@ -32,7 +34,8 @@ internal sealed class AccountDirectory(
     IProfilePhotoStore photos,
     ISubjectKeyStore keys,
     IPreferenceStore preferences,
-    PreferenceDeclarations declarations) : IAccountDirectory
+    PreferenceDeclarations declarations,
+    IOutboxStore outbox) : IAccountDirectory
 {
     /// <inheritdoc/>
     public async ValueTask<AccountState?> StateAsync(
@@ -84,6 +87,28 @@ internal sealed class AccountDirectory(
         account.Suspend();
 
         await accounts.RecordTransitionAsync(account, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask LiftRestrictionAsync(
+        SubjectId subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        if (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
+            is not Account account)
+        {
+            return;
+        }
+
+        account.LiftRestriction();
+
+        await accounts.RecordTransitionAsync(account, cancellationToken).ConfigureAwait(false);
+        await outbox
+            .AddAsync(
+                Delivery.Of(subject, SubjectEventKind.RestrictionChanged, at, restricted: false),
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>

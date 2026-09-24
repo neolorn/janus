@@ -266,6 +266,54 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
         Assert.Empty(_audit.Administered);
     }
 
+    /// <summary>
+    /// PRIV-RIGHT-004 AC2: lifting a restriction makes the account active again, tells
+    /// the subscribers, and is recorded as the administrator's act, with no step-up asked.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_004_AC2_LiftingARestrictionRestoresTheAccountAsync()
+    {
+        _directory.Stands(_member, AccountState.Restricted);
+
+        Accepted(await LiftAsync(_member));
+
+        Assert.Equal(AccountState.Active, await StateAsync(_member));
+        Assert.Equal((_member, Noon), Assert.Single(_directory.Lifted));
+        Assert.Equal(
+            new RecordedChange(AuditActions.RestrictionLifted, _administrator, _member, Noon),
+            Assert.Single(_audit.Administered));
+        Assert.Equal(1, _work.Committed);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-004: only a restriction in force is lifted here; one held while the
+    /// account is suspended stays until it comes back, an account with none has nothing
+    /// to lift, and without <c>account:manage</c> nothing is lifted.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_004_OnlyARestrictionInForceIsLiftedAsync()
+    {
+        var held = SubjectId.New(_randomness);
+        var restricted = SubjectId.New(_randomness);
+        var stranger = SubjectId.New(_randomness);
+
+        _directory.Stands(held, AccountState.Restricted);
+        _directory.Stands(restricted, AccountState.Restricted);
+        Accepted(await SuspendAsync(held));
+
+        Assert.Equal(ErrorCodes.Denied, Refused(await LiftAsync(held)));
+        Assert.Equal(ErrorCodes.Denied, Refused(await LiftAsync(_member)));
+        Assert.Equal(ErrorCodes.RequestMalformed, Refused(await LiftAsync(SubjectId.New(_randomness))));
+        Assert.Equal(
+            ErrorCodes.Denied,
+            Refused(await Administration.LiftRestrictionAsync(
+                AccessContext.Of(stranger),
+                restricted,
+                TestContext.Current.CancellationToken)));
+        Assert.Equal(AccountState.Restricted, await StateAsync(restricted));
+        Assert.Empty(_directory.Lifted);
+    }
+
     private static DateTimeOffset Stale =>
         Noon - Settings.SessionStepUpRecency.Default - TimeSpan.FromMinutes(1);
 
@@ -290,6 +338,9 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
             Opened(_administrator, Noon),
             subject,
             TestContext.Current.CancellationToken);
+
+    private async Task<Result> LiftAsync(SubjectId subject) =>
+        await Administration.LiftRestrictionAsync(Acting, subject, TestContext.Current.CancellationToken);
 
     private async Task<AccountState?> StateAsync(SubjectId subject) =>
         await _directory.StateAsync(subject, TestContext.Current.CancellationToken);

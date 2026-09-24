@@ -61,6 +61,16 @@ internal interface IAccountDirectory
     ValueTask SuspendAsync(SubjectId subject, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Lifts a restriction of processing and tells every subject-event handler that it
+    /// is lifted, in the caller's transaction (PRIV-RIGHT-004).
+    /// </summary>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="at">When it was lifted.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of lifting it.</returns>
+    ValueTask LiftRestrictionAsync(SubjectId subject, DateTimeOffset at, CancellationToken cancellationToken);
+
+    /// <summary>
     /// The deletion an account is in the grace window of, where it is in one.
     /// </summary>
     /// <param name="subject">Whose account.</param>

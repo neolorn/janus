@@ -11,11 +11,11 @@ using Janus.Core;
 namespace Janus.Authentication.Accounts;
 
 /// <summary>
-/// What an administrator does to the standing of someone else's account: suspends it
-/// and reactivates it.
+/// What an administrator does to the standing of someone else's account: suspends it,
+/// reactivates it and lifts its restriction.
 /// </summary>
 /// <param name="scope">Whether the caller administers accounts in the deployment.</param>
-/// <param name="stepUp">What the two operations ask of the administrator's session.</param>
+/// <param name="stepUp">What the gated operations ask of the administrator's session.</param>
 /// <param name="directory">Where the standing is read and the transition carried.</param>
 /// <param name="sessions">What a suspension ends.</param>
 /// <param name="events">Where the transition is announced.</param>
@@ -23,9 +23,10 @@ namespace Janus.Authentication.Accounts;
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements IDN-LIFE-013, AUTH-SESS-010, IDN-AUD-001 and chapter 09 section 8a. The
-/// grants of a suspended account are left in place, which is what lets reactivation
-/// restore them exactly; the gate confers nothing on an account that is not active.
+/// Implements IDN-LIFE-013, AUTH-SESS-010, PRIV-RIGHT-004, IDN-AUD-001 and chapter 09
+/// section 8a. The grants of a suspended account are left in place, which is what lets
+/// reactivation restore them exactly; the gate confers nothing on an account that is
+/// not active.
 /// </remarks>
 internal sealed class AccountAdministration(
     AdministrativeScope scope,
@@ -184,6 +185,50 @@ internal sealed class AccountAdministration(
             .AdministeredAsync(AuditActions.AccountReactivated, acting, subject, now, cancellationToken)
             .ConfigureAwait(false);
 
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        return Result.Success();
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result> LiftRestrictionAsync(
+        AccessContext context,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context.Acting is not SubjectId acting)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        if (await scope.RefusedAsync(context, Permissions.AccountManage, cancellationToken).ConfigureAwait(false)
+            is Error refused)
+        {
+            return Result.Failure(refused);
+        }
+
+        switch (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false))
+        {
+            case null:
+                return Result.Failure(Malformed("subject"));
+
+            // PRIV-RIGHT-004: a restriction held while the account is suspended or
+            // deleting stays until the account is back in the restricted state.
+            case not AccountState.Restricted:
+                return Result.Failure(Error.From(ErrorCodes.Denied));
+            default:
+                break;
+        }
+
+        DateTimeOffset now = time.GetUtcNow();
+
+        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        await directory.LiftRestrictionAsync(subject, now, cancellationToken).ConfigureAwait(false);
+        await audit
+            .AdministeredAsync(AuditActions.RestrictionLifted, acting, subject, now, cancellationToken)
+            .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success();

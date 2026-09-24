@@ -337,6 +337,13 @@ public static class AuditActions
     public static AuditAction RestrictionEdited { get; } = AuditAction.Parse("auth.restriction.edited");
 
     /// <summary>
+    /// An administrator lifted a restriction of processing, which tells every
+    /// subject-event handler it may act on the subject's records again.
+    /// </summary>
+    /// <remarks>Implements PRIV-RIGHT-004 and IDN-AUD-001.</remarks>
+    public static AuditAction RestrictionLifted { get; } = AuditAction.Parse("privacy.restriction.lifted");
+
+    /// <summary>
     /// A sending restriction was granted against an address or a number.
     /// </summary>
     /// <remarks>Implements AUTH-ABUSE-005, chapter 10 section 5.</remarks>

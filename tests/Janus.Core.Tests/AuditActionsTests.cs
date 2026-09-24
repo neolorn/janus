@@ -76,6 +76,7 @@ public sealed class AuditActionsTests
         "privacy.request.lapsed",
         "privacy.request.refused",
         "privacy.request.submitted",
+        "privacy.restriction.lifted",
     ];
 
     /// <summary>
