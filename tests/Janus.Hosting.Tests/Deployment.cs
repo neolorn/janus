@@ -793,6 +793,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<StepUpGuard>();
         _ = services.AddScoped<IStepUpGate, StepUpGate>();
         _ = services.AddScoped<ILocationResolver, LocationResolverInMemory>();
+        _ = services.AddScoped<ConcurrentSessions>();
         _ = services.AddScoped<SessionService>();
         _ = services.AddScoped<ISessions>(provider => provider.GetRequiredService<SessionService>());
         _ = services.AddScoped<PreAuthenticationService>();

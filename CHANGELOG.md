@@ -369,6 +369,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Two sessions of one account used inside `alerting.sessions.window` from cities
+  further apart than `alerting.sessions.distance`, or in different countries, raise
+  `concurrent-sessions-implausible` for the account, naming the two sessions and
+  neither place. Ordinary use on several devices in one city or nearby raises nothing.
 - A deployment can supply its IP-to-city file through `ILocationSource`, in the format
   the interface documents. Sessions then show the city and country each was used from,
   resolved in process against a copy read on first use and refreshed by the

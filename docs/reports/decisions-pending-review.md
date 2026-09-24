@@ -12848,6 +12848,64 @@ file's format, and say that a refused file is refused whole; LIB-HOST-001 could 
 the location file among the optional host declarations; `10` section 4 could say that
 the file's age is judged from its own date.
 
+---
+
+## 326. When two sessions are looked at together, and what is kept to measure them
+
+**Phase 9 · 2026-09-24 · Tier 2 · OPS-ALERT-007, AUTH-SESS-013, OPS-ALERT-002, CONV-DESIGN-005**
+
+*The question.* OPS-ALERT-007 raises `concurrent-sessions-implausible` when two sessions
+of one account are both used inside `alerting.sessions.window` and their resolved
+cities lie further apart than `alerting.sessions.distance` or in different countries;
+the same city, or an unresolved location on either side, never alerts. It does not say
+at which use the two are compared, how the distance between two cities is measured,
+what a session keeps to measure it by, whether sessions standing on one record count
+as two, what the alert names, or what becomes of the use when the alert cannot be
+raised.
+
+*The readings.*
+
+1. Compare at every use of every session against every other.
+2. Compare only when a use begins a stretch: a session begun or derived, a use from a
+   city other than the one it was last used from, or a use after a pause longer than
+   the window.
+
+*Chosen: 2.* Every pair that reading 1 would raise is raised by reading 2 at the later
+of the two stretches, since the earlier session was then used inside the window, and
+reading 2 reads the account's sessions once a stretch rather than once a request. A
+city is resolved when the database named it; a place with a country and no city is
+unresolved and never raises. Two places are the same city when country and city match
+without regard to case. The distance is the great-circle distance between the two
+cities' coordinates on a sphere of the Earth's mean radius; it is compared only where
+the countries do not already differ. Sessions standing on one record are one session
+held more than one way and are never compared with each other.
+
+To measure a distance a session keeps, beside the city and country it shows, where
+that city lies: the coordinates of the city from the location file (entry 325), stored
+in the place under the person's key and gone with it (AUTH-SESS-013 AC4). They are no
+finer than the city, never shown and never exported. A place written before they were
+kept reads back without them and is unresolved for this purpose.
+
+The alert is scoped to the account, so OPS-ALERT-002 keeps one account to one alert
+inside `alerting.dedupe.window`, and its details name the account and the two sessions
+and neither place, which stays the person's. The look runs in the transaction that
+records the use; an alert that cannot be raised fails the use, as a degradation the
+resolver cannot raise does (CONV-DESIGN-005 AC1).
+
+*Tests that pin it.*
+`SessionServiceTests.OPS_ALERT_007_AC1_SimultaneousSessionsFromImplausibleOriginsAlertAsync`,
+`SessionServiceTests.OPS_ALERT_007_AC1_CitiesFurtherApartThanTheDistanceAlertAsync`,
+`SessionServiceTests.OPS_ALERT_007_AC2_OrdinaryMultiDeviceUseDoesNotAsync`,
+`SessionServiceTests.OPS_ALERT_007_ASessionTakenUpAgainFarAwayAlertsAsync`,
+`SessionServiceTests.OPS_ALERT_007_TheDistanceIsTheConfiguredOneAsync`,
+`SessionStoreTests.OPS_ALERT_007_WhereACityLiesReadsBackAsWrittenAsync`.
+
+*Chapter text that should change.* OPS-ALERT-007 could say when two sessions are
+compared, that distance is great-circle between the cities, that sessions on one
+record are one session, and that the alert names the sessions and not the places;
+AUTH-SESS-013 could say that the place kept under the person's key includes where the
+city lies.
+
 
 # Rows for chapter 10
 

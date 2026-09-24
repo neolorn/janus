@@ -292,6 +292,7 @@ public static class HostingRegistration
             provider.GetRequiredService<IAlertChannels>(),
             provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<ILocationResolver>(provider => provider.GetRequiredService<LocationDatabase>());
+        services.AddScoped<ConcurrentSessions>();
         services.AddScoped<SessionService>();
         services.AddScoped<ISessions>(provider => provider.GetRequiredService<SessionService>());
         services.AddScoped<TotpService>();

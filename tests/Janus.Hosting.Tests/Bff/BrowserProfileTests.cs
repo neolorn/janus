@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using Janus.Authentication;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Sessions;
@@ -886,6 +887,8 @@ public sealed class BrowserProfileTests : IDisposable
         services.AddScoped<PolicyResolution>();
         services.AddSingleton<IAdministrativeOrganization>(new AdministrativeOrganizationInMemory());
         services.AddScoped<AdministrativeScope>();
+        services.AddSingleton<IAlertChannels, EventsInMemory>();
+        services.AddScoped<ConcurrentSessions>();
         services.AddScoped<SessionService>();
         services.AddScoped<PreAuthenticationService>();
         services.AddScoped<SynchronizerTokens>();
