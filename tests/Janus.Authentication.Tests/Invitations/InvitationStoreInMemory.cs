@@ -72,4 +72,19 @@ internal sealed class InvitationStoreInMemory : IInvitationStore
 
         return ValueTask.CompletedTask;
     }
+
+    /// <inheritdoc/>
+    public ValueTask<int> SweepAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        int swept = 0;
+
+        foreach (Invitation lapsed in Held.Where(invitation =>
+            invitation.HasExpired(now) && invitation.Identifiers is not null))
+        {
+            lapsed.Lapse(now);
+            swept++;
+        }
+
+        return ValueTask.FromResult(swept);
+    }
 }

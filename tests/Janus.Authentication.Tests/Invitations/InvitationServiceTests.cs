@@ -914,6 +914,27 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Assert.Empty(_events.Published);
     }
 
+    /// <summary>
+    /// PRIV-RIGHT-005a and REG-MAIL-001 AC1: the sweep forgets what an invitation that
+    /// expired unused bound, in one transaction, and leaves its mailbox reserved; one
+    /// still in time keeps what it binds.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_001_AC1_TheSweepForgetsWhatAnExpiredInvitationBoundAsync()
+    {
+        _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
+        _clock.Advance(TimeSpan.FromDays(1));
+        _ = Accepted(await IssueAsync(Customer, Request(phone: Number)));
+        _clock.Advance(Settings.LinkInvitationLifetime.Default - TimeSpan.FromDays(1));
+        _work.Reset();
+
+        Assert.Equal(1, await Service.SweepAsync(TestContext.Current.CancellationToken));
+        Assert.Null(_invitations.Held[0].Identifiers);
+        Assert.NotNull(_invitations.Held[1].Identifiers);
+        Assert.True(Assert.Single(_mailboxes.Held).IsRemovable);
+        Assert.Equal((1, 1), (_work.Opened, _work.Committed));
+    }
+
     private InvitationService Service => Serving(_server);
 
     private InvitationService ServiceWithout => Serving(server: null);

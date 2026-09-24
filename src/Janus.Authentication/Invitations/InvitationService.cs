@@ -600,6 +600,25 @@ internal sealed class InvitationService(
             invitation.ExpiresAt));
     }
 
+    /// <summary>
+    /// Forgets what every invitation that expired unused bound, leaving who invited
+    /// into what and the mailbox it reserved (PRIV-RIGHT-005a, REG-MAIL-001).
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>How many were swept.</returns>
+    public async ValueTask<int> SweepAsync(CancellationToken cancellationToken)
+    {
+        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+
+        int swept = await invitations
+            .SweepAsync(time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
+
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        return swept;
+    }
+
     /// <inheritdoc/>
     public ValueTask<Result> AcknowledgeAsync(
         AccessContext context,

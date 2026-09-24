@@ -293,6 +293,22 @@ internal sealed class Invitation
     }
 
     /// <summary>
+    /// Forgets what it bound once it has expired unused. It still names who invited
+    /// into what, and when, and its mailbox stays reserved.
+    /// </summary>
+    /// <param name="now">The instant it is judged at.</param>
+    /// <exception cref="InvalidOperationException">It has not expired.</exception>
+    public void Lapse(DateTimeOffset now)
+    {
+        if (!HasExpired(now))
+        {
+            throw new InvalidOperationException("The invitation has not expired.");
+        }
+
+        Identifiers = null;
+    }
+
+    /// <summary>
     /// Revokes it, forgetting what it bound.
     /// </summary>
     /// <param name="at">When.</param>

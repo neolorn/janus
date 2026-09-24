@@ -70,4 +70,12 @@ internal interface IInvitationStore
     /// <returns>The work of recording it.</returns>
     /// <exception cref="InvalidOperationException">No such row exists.</exception>
     ValueTask RecordAsync(Invitation invitation, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Forgets what every invitation that expired unused bound, keeping its row.
+    /// </summary>
+    /// <param name="now">The instant to judge them at.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>How many were swept.</returns>
+    ValueTask<int> SweepAsync(DateTimeOffset now, CancellationToken cancellationToken);
 }

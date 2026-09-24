@@ -124,6 +124,18 @@ internal sealed class InvitationStore(
         Carry(invitation, record);
     }
 
+    /// <inheritdoc/>
+    public async ValueTask<int> SweepAsync(DateTimeOffset now, CancellationToken cancellationToken) =>
+        await context.Invitations
+            .Where(invitation => invitation.ExpiresAt <= now && invitation.EncryptedIdentifiers != null)
+            .ExecuteUpdateAsync(
+                forgotten => forgotten
+                    .SetProperty(invitation => invitation.KeyVersion, (int?)null)
+                    .SetProperty(invitation => invitation.WrappedKey, (byte[]?)null)
+                    .SetProperty(invitation => invitation.EncryptedIdentifiers, (byte[]?)null),
+                cancellationToken)
+            .ConfigureAwait(false);
+
     private static PersonalFieldLocation Located() =>
         new(default, InvitationConfiguration.Table, InvitationConfiguration.IdentifiersColumn);
 

@@ -314,6 +314,9 @@ against the public contract of LIB-API-001.
   acknowledgement to the memberships table. `IInvitations.AcknowledgeAsync` is the same
   operation in process.
 
+- An invitation that expires unused forgets what it bound when the invitation sweep
+  runs; the row keeps who invited into what and when, and its mailbox stays reserved.
+
 - Staff mailboxes are provisioned through `IMailServer`, which a deployment registers
   where its staff mail is hosted and which no package ships. A mailbox is owed
   `disabled` from its reservation, `enabled` while its holder is an active member of

@@ -139,6 +139,33 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     /// <summary>
+    /// PRIV-RIGHT-005a and REG-MAIL-001: the sweep forgets what an invitation bound once
+    /// it has expired unused, and nothing sooner; the row still names who invited into
+    /// what, keeps its token's fingerprint and its mailbox, and a second sweep finds
+    /// nothing more.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_INV_001_AnExpiredInvitationForgetsWhatItBoundWhenSweptAsync()
+    {
+        Invitation issued = await IssuedAsync("lapsing@example.test", Fresh("lapsing"));
+
+        Assert.Equal(0, await SweptAsync(issued.ExpiresAt.AddSeconds(-1)));
+        Assert.NotNull((await RowAsync(issued.Id)).EncryptedIdentifiers);
+        Assert.True(await SweptAsync(issued.ExpiresAt) >= 1);
+
+        InvitationRecord row = await RowAsync(issued.Id);
+
+        Assert.Null(row.EncryptedIdentifiers);
+        Assert.Null(row.WrappedKey);
+        Assert.Null(row.KeyVersion);
+        Assert.Equal(issued.Token, row.Token);
+        Assert.Equal(issued.Mailbox?.Value, row.Mailbox);
+        Assert.Equal((issued.Inviter, issued.Organization), (row.Inviter, row.Organization));
+        Assert.Equal(0, await SweptAsync(issued.ExpiresAt.AddDays(1)));
+    }
+
+    /// <summary>
     /// REG-MAIL-001: one invitation at most stands over a mailbox's reservation, which
     /// the partial unique index holds whatever the service does; once it is revoked,
     /// the address is invited again.
@@ -220,8 +247,25 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
             Noon,
             TimeSpan.FromDays(7));
 
+    private static string Fresh(string name) => name + "." + Guid.NewGuid().ToString("N") + "@example.test";
+
     private InvitationStore Store(StoreContext context) =>
         new(context, _deployment.Keys, _deployment.Randomness);
+
+    private async Task<int> SweptAsync(DateTimeOffset now)
+    {
+        await using StoreContext writing = database.Context();
+
+        return await Store(writing).SweepAsync(now, TestContext.Current.CancellationToken);
+    }
+
+    private async Task<InvitationRecord> RowAsync(InvitationId id)
+    {
+        await using StoreContext reading = database.Context();
+
+        return await reading.Invitations
+            .SingleAsync(invitation => invitation.Id == id, TestContext.Current.CancellationToken);
+    }
 
     private MailboxStore Mailboxes(StoreContext context) =>
         new(context, _deployment.Keys, Deployment.FingerprintKey, _deployment.Randomness);
