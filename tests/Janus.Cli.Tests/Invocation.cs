@@ -4,6 +4,7 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
+using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -127,7 +128,21 @@ public sealed record Invocation(int ExitCode, string Output, string Error)
     /// <param name="document">What is piped in.</param>
     /// <returns>What came back.</returns>
     public static Task<Invocation> PipedAsync(IReadOnlyList<string> arguments, JsonNode document) =>
-        RunAsync(arguments, Encoding.UTF8.GetBytes(document.ToJsonString()), redirected: true);
+        StoppedAsync(arguments, document, TestContext.Current.CancellationToken);
+
+    /// <summary>
+    /// Runs the application with a document piped to standard input, until it ends or
+    /// the case stops it.
+    /// </summary>
+    /// <param name="arguments">The arguments, the command's name first.</param>
+    /// <param name="document">What is piped in.</param>
+    /// <param name="cancellationToken">Stops the run, as a process killed mid-run stops.</param>
+    /// <returns>What came back.</returns>
+    public static Task<Invocation> StoppedAsync(
+        IReadOnlyList<string> arguments,
+        JsonNode document,
+        CancellationToken cancellationToken) =>
+        RunAsync(arguments, Encoding.UTF8.GetBytes(document.ToJsonString()), redirected: true, cancellationToken);
 
     /// <summary>
     /// Runs the application from a terminal, with nothing piped in.
@@ -135,9 +150,13 @@ public sealed record Invocation(int ExitCode, string Output, string Error)
     /// <param name="arguments">The arguments, the command's name first.</param>
     /// <returns>What came back.</returns>
     public static Task<Invocation> TypedAsync(IReadOnlyList<string> arguments) =>
-        RunAsync(arguments, [], redirected: false);
+        RunAsync(arguments, [], redirected: false, TestContext.Current.CancellationToken);
 
-    private static async Task<Invocation> RunAsync(IReadOnlyList<string> arguments, byte[] input, bool redirected)
+    private static async Task<Invocation> RunAsync(
+        IReadOnlyList<string> arguments,
+        byte[] input,
+        bool redirected,
+        CancellationToken cancellationToken)
     {
         await using var piped = new MemoryStream(input);
         await using var output = new StringWriter();
@@ -146,7 +165,7 @@ public sealed record Invocation(int ExitCode, string Output, string Error)
         int exitCode = await Program.RunAsync(
             arguments,
             new Terminal(piped, redirected, output, error),
-            TestContext.Current.CancellationToken);
+            cancellationToken);
 
         return new Invocation(exitCode, output.ToString(), error.ToString());
     }

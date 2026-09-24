@@ -2578,6 +2578,7 @@ Janus.Core.SuspensionOrigin.Administrator = 1 -> Janus.Core.SuspensionOrigin
 Janus.Core.SuspensionOrigin.Self = 0 -> Janus.Core.SuspensionOrigin
 Janus.Core.SystemOperation
 Janus.Core.SystemOperation.Bootstrap = 6 -> Janus.Core.SystemOperation
+Janus.Core.SystemOperation.KeyRotation = 7 -> Janus.Core.SystemOperation
 Janus.Core.SystemOperation.Delivery = 4 -> Janus.Core.SystemOperation
 Janus.Core.SystemOperation.ExpirySweep = 3 -> Janus.Core.SystemOperation
 Janus.Core.SystemOperation.Monitoring = 5 -> Janus.Core.SystemOperation
@@ -3269,6 +3270,10 @@ static Janus.Core.AuditActions.BotDefenceSignalled.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.BreakGlassGenerated.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.BreakGlassUsed.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ConfigurationChanged.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.KeyRotationCompleted.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.KeyRotationResumed.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.KeyRotationRetired.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.KeyRotationStarted.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ConsentGranted.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ConsentWithdrawn.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.CredentialCounterMismatch.get -> Janus.Core.AuditAction

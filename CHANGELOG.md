@@ -360,6 +360,15 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `rotate-kek` rotates the key-encryption key from the command line under the
+  maintenance credential. Add the new version to the secrets manager as current, keep
+  the previous one, restart the application on it, and pipe the document to the
+  command: it re-wraps every value held under the key in batches of 500, resumes where
+  it stopped when run again, and prints the new version's escrow copy. Once the copy is
+  sealed, `rotate-kek --sealed` retires the previous versions and names them for
+  removal from the secrets manager; it refuses while anything is still wrapped under
+  them. Each step is audited under the `rotate-kek` principal. Refresh tokens issued
+  before the rotation stop reading once the previous version is removed.
 - A command-line application stands a fresh deployment up with `bootstrap`. It takes
   the organization's name, the first administrator's email and phone, optionally the
   corporate address whose mailbox is queued for them, and each required deployment

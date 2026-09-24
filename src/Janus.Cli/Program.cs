@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Cli.Bootstrap;
+using Janus.Cli.Rotation;
 using Janus.Core;
 
 namespace Janus.Cli;
@@ -40,6 +41,7 @@ internal static class Program
         new(StringComparer.Ordinal)
         {
             [BootstrapCommand.Name] = BootstrapCommand.RunAsync,
+            [RotateKeyEncryptionKeyCommand.Name] = RotateKeyEncryptionKeyCommand.RunAsync,
         };
 
     /// <summary>

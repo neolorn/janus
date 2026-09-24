@@ -365,6 +365,16 @@ public sealed class ModelTests
             "key_ceremonies.subject",
             "key_ceremonies.upgrading",
 
+            // Not an account field: each rotation of the key-encryption key or the
+            // fingerprint key and how far it has gone (OPS-SEC-003, D-153).
+            "key_rotations.completed_at",
+            "key_rotations.kind",
+            "key_rotations.last_subject",
+            "key_rotations.processed",
+            "key_rotations.retired_at",
+            "key_rotations.started_at",
+            "key_rotations.version",
+
             // Not an account field: the legal documents the deployment publishes, each
             // version binding in the one language it names (PRIV-CONS-005,
             // PRIV-CONS-006).

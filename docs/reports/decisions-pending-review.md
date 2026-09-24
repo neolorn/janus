@@ -12117,6 +12117,152 @@ with no record. Under 3:
 *Chapter text that should change.* OPS-CFG-005 could say how the values set at
 bootstrap are recorded, and what `before` holds where no value stood.
 
+---
+
+## 316. What the key-encryption key's rotation re-wraps, and what the maintenance credential reaches for it
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-SEC-003 AC2, AC3, AC5, OPS-MIG-003a AC4, DR-009a AC5, INF-BG-001**
+
+*The question.* OPS-SEC-003 has the command re-wrap "every subject key" and retire the
+previous version once the job reports complete, "a value still wrapped under it (there
+is none by construction)". The library also holds six other values wrapped directly
+under the key-encryption key with their version beside them: an invitation's, a
+reserved mailbox's, a staged registration's and a queued message's own data key, the
+sign-on proof of a pre-authentication session, and the private half of each token
+signing key. A signing key stays current for `token.signing.rotation`. OPS-MIG-003a AC4
+holds the maintenance credential to "the subject-key table and the rotation progress
+table, and ... no other table", INF-BG-001 says the re-wrap "is not background work of
+the worker", and DR-009a AC5 says it is performed through OPS-SEC-003 "and by no other
+path". OPS-SEC-003 AC5 has each step audited, and the maintenance credential holds no
+right on the trail.
+
+*The readings.*
+
+1. Re-wrap the subject keys alone. Once the operator removes the previous version, the
+   signing key and any mailbox, invitation or registration still under it no longer
+   unwrap, and on a suspected exposure they stay readable to whoever holds the old
+   version until they age out.
+2. Have the worker re-wrap the six under the application's credential, which INF-BG-001
+   and DR-009a AC5 refuse.
+3. Have the command re-wrap all seven under the maintenance credential, granted the row
+   key, the version and the wrapped value of each of the six tables and no other column,
+   and the append to the trail.
+
+*Chosen: 3*, the strictest where granting least and keeping most pull apart: reading 1
+keeps least, since the previous version is retired while values stand under it, and
+reading 2 goes round the one path. Under 3:
+
+- The command re-wraps the subject keys in the ordered pass of OPS-SEC-003, then sweeps
+  subject keys written under a previous version behind the point the pass had reached,
+  then the six other columns, each in batches of 500 committed on their own. Each
+  value is written back only where it still stands as it was read, so an erasure or a
+  newer wrapping made meanwhile is never overwritten and no value is re-wrapped twice.
+  An erased subject key is under no version and is left alone.
+- The processed count, and the count audited, is the subject keys re-wrapped, as
+  OPS-SEC-003 AC5 names it.
+- The maintenance credential gains, by migration: read and write of `key_rotations`;
+  `INSERT` on `audit_records`, as the application holds it; and column rights, the row's
+  key, the version and the wrapped value to read and the last two to write, on
+  `invitations`, `mailboxes`, `registration_sessions`, `send_outbox`, `signing_keys` and
+  `preauthentication_sessions`. The serialized model lists every grant and the role
+  tests hold the list against what the database grants. The application's credential
+  reaches nothing of `key_rotations`.
+- The codes and refresh tokens the OIDC server encrypts under keys derived from each
+  held version (entry 159) are not re-encrypted: once the previous version is removed,
+  a refresh token issued before the rotation no longer reads and its holder signs in
+  again. A code lives sixty seconds.
+
+*Tests that pin it.*
+`KeyRotationTests.OPS_SEC_003_AC3_AfterRetirementNoValueIsWrappedUnderThePreviousVersionAsync`,
+`KeyRotationTests.OPS_SEC_003_AC2_AKilledRunResumesFromItsProgressAndReWrapsEachKeyOnceAsync`,
+`DatabaseRoleTests.OPS_MIG_003a_AC4_TheMaintenanceRoleReachesTheWrappedValuesAndNoOtherColumnAsync`,
+`DatabaseRoleTests.OPS_MIG_003a_AC4_TheListedGrantsAreTheOnesTheDatabaseHoldsAsync`,
+`SerializedModelTests.OPS_MIG_003a_AC4_TheMaintenanceGrantsAreListedInTheSerializedModel`.
+
+*Chapter text that should change.* OPS-SEC-003 could name every value wrapped under the
+key rather than the subject keys alone, and say what becomes of tokens protected under
+a derived key; OPS-MIG-003a AC4 could list the column rights on the six tables and the
+append to the trail beside the subject-key and progress tables.
+
+---
+
+## 317. How a key-encryption key rotation starts, is confirmed and retires
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-SEC-003 AC1, AC3, AC4, DR-009, DR-009a, IDN-PRIN-001**
+
+*The question.* OPS-SEC-003 has the command "introduce a new key version in the secrets
+manager and record it as current for wrapping", produce the escrow copy, not report the
+operation complete "until the operator confirms it is sealed", and retire the previous
+version once the job reports complete. The library holds no client of any secrets
+manager (LIB-EXT-001, CONV-DESIGN-008) and reads its keys only from the document of
+entry 307. Nothing says how the confirmation is given, what "retired" does, what the
+escrow copy looks like, which refusals the command gives, or who the actor of its audit
+records is.
+
+*The readings.*
+
+1. For the new version: the command draws it and prints it for the operator to store,
+   and re-wraps under it at once; or the operator adds it to the secrets manager as
+   current, keeping the previous one, and pipes the document to the command.
+2. For the confirmation: an interactive prompt, or a second run with an argument.
+3. For retirement: the library drops the version itself, or records the retirement and
+   leaves the removal from the secrets manager to the operator.
+
+*Chosen: the operator adds the version, a second run confirms, and retirement is
+recorded*, the strictest: a key the command drew and re-wrapped under before it was
+stored anywhere is lost with the process, a prompt reads standard input that carries
+the keys, and the library cannot remove a secret it never wrote. Under this:
+
+- `rotate-kek` runs under the maintenance credential: the connection's role holds the
+  maintenance role's rights and has no path to the application's. Anything else,
+  including a superuser, is refused with `authz.denied` and no details, before anything
+  is read.
+- The document's current version is the one rotated to. A rotation starts only to a
+  version later than any rotated to before, and only where every value stored is under
+  a version the document holds and none under one later than the current; otherwise
+  `model.startup.kekunavailable` naming `keyEncryptionKeys`. A rotation that stopped is
+  resumed by a run whose document names its version current, and no other starts
+  while it stands.
+- A run that completes the re-wrap prints the escrow copy, then the report
+  `{"version":N,"processed":M}`. The escrow copy is the document member the version
+  would be restored from, `{"keyEncryptionKeys":{"current":N,"versions":{"N":"<base64>"}}}`,
+  written from a buffer cleared afterwards and never held in a string. A later run
+  before the seal prints it again, since a process that died after recording completion
+  may never have printed it.
+- `rotate-kek --sealed` confirms the seal. It is refused with `api.request.malformed`
+  naming `sealed` where no rotation has completed or the latest has already retired.
+  It sweeps once more; where it finds a value wrapped under a previous version since
+  the rotation completed, which is an application not yet handed the new version, it
+  re-wraps it and refuses with the same code and `pending` giving the count, and the
+  previous version stays. Otherwise it records `retired_at` and reports
+  `{"version":N,"processed":M,"retired":[...]}`, the versions the operator then removes
+  from the secrets manager. A value found under a removed version fails with the named
+  error "The subject's key is wrapped under a retired version."
+- The steps are audited as `ops.keyrotation.started`, `resumed`, `completed` and
+  `retired`, security category, with `kind`, `version`, `processed` and, on retirement,
+  `retired`. The actor is the deployment-scoped principal `rotate-kek` with the reason
+  `OPS-SEC-003` and the new operation `key-rotation`, since the command cannot know
+  which person runs it.
+- The runbook order this assumes: add the version as current and keep the previous;
+  restart the application on the new document; run `rotate-kek`; seal the copy; run
+  `rotate-kek --sealed`; remove the retired versions.
+
+*Tests that pin it.*
+`KeyRotationTests.OPS_SEC_003_AC1_TheCommandIsRefusedWithoutTheMaintenanceCredentialAsync`,
+`KeyRotationTests.OPS_SEC_003_AC4_TheEscrowCopyIsPrintedAndTheRotationRetiresOnlyOnceItIsSealedAsync`,
+`KeyRotationTests.OPS_SEC_003_AC4_ASealBeforeTheRotationCompletesIsRefusedAsync`,
+`KeyRotationTests.OPS_SEC_003_AC3_RetirementWaitsWhileValuesAreStillWrappedUnderThePreviousVersionAsync`,
+`KeyRotationTests.OPS_SEC_003_ARotationNeedsANewVersionAndEveryVersionInUseAsync`,
+`KeyRotationTests.OPS_SEC_003_AC5_EachStepIsRecordedWithTheVersionTheCountAndThePrincipalAsync`,
+`PersonalFieldCipherTests.OPS_SEC_003_AC3_AKeyUnderARetiredVersionFailsWithANamedError`,
+`LibraryStructureTests.OPS_SEC_003_AC1_OnlyTheCommandLineRunsTheRotation`.
+
+*Chapter text that should change.* OPS-SEC-003 could say that the operator adds the
+version to the secrets manager, how the seal is confirmed, what the escrow copy holds
+and that retirement is the operator's removal once the command records it; chapter 10
+could list the four `ops.keyrotation` actions and the `key-rotation` operation; the
+runbook's section 9 could give the order above.
+
 
 # Rows for chapter 10
 

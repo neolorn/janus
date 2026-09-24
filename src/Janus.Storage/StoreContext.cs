@@ -454,6 +454,12 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     /// </summary>
     public DbSet<BackgroundJobRecord> BackgroundJobs => Set<BackgroundJobRecord>();
 
+    /// <summary>
+    /// The rotations of the key-encryption key and the fingerprint key, with how far
+    /// each has gone.
+    /// </summary>
+    public DbSet<KeyRotationRecord> KeyRotations => Set<KeyRotationRecord>();
+
     /// <inheritdoc/>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -546,5 +552,6 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new ExportConfiguration());
         modelBuilder.ApplyConfiguration(new ComplianceConfiguration());
         modelBuilder.ApplyConfiguration(new BackgroundJobConfiguration());
+        modelBuilder.ApplyConfiguration(new KeyRotationConfiguration());
     }
 }

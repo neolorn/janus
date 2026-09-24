@@ -304,6 +304,22 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
+    /// OPS-SEC-003 AC1, DR-009a AC5: the key-encryption key's rotation is run by the
+    /// command line and by nothing else, so no endpoint of the management application,
+    /// no job of the worker and no host reaches it.
+    /// </summary>
+    [Fact]
+    public void OPS_SEC_003_AC1_OnlyTheCommandLineRunsTheRotation()
+    {
+        Assert.Equal(
+            ["KeyRotation.cs", "RotateKeyEncryptionKeyCommand.cs"],
+            Named(text => Regex.IsMatch(text, @"(?<!SystemOperation\.)\bKeyRotation\b(?!\s*=\s*\d)", RegexOptions.None, TimeSpan.FromSeconds(5))));
+        Assert.Equal(
+            ["IKeyRotationStore.cs", "KeyRotation.cs", "KeyRotationStore.cs", "RotateKeyEncryptionKeyCommand.cs"],
+            Named(text => Regex.IsMatch(text, @"\bIKeyRotationStore\b", RegexOptions.None, TimeSpan.FromSeconds(5))));
+    }
+
+    /// <summary>
     /// IDN-LIFE-009a AC1: a membership is made in one place, the attachment of an
     /// acknowledged invitation, and the acknowledgement is the one thing that runs it,
     /// beside bootstrap, which makes the first administrator's (OPS-BOOT-001,

@@ -302,15 +302,51 @@ internal sealed class AuthorizationModel
 
     // OPS-MIG-003a AC2, AC4: what the maintenance credential may reach, written out
     // here so it is read in the serialized model and not only in the migration that
-    // grants it. DatabaseRoleTests holds the two against each other.
+    // grants it. DatabaseRoleTests holds the two against each other. The columns and
+    // the audit append are the key rotation's (entry 316 of the decisions pending
+    // review).
     private static readonly SerializedModel.MaintenanceGrant[] MaintenanceGrants =
     [
+        new("COLUMN identity.invitations.id", "SELECT"),
+        new("COLUMN identity.invitations.key_version", "SELECT"),
+        new("COLUMN identity.invitations.key_version", "UPDATE"),
+        new("COLUMN identity.invitations.wrapped_key", "SELECT"),
+        new("COLUMN identity.invitations.wrapped_key", "UPDATE"),
+        new("COLUMN identity.mailboxes.id", "SELECT"),
+        new("COLUMN identity.mailboxes.key_version", "SELECT"),
+        new("COLUMN identity.mailboxes.key_version", "UPDATE"),
+        new("COLUMN identity.mailboxes.wrapped_key", "SELECT"),
+        new("COLUMN identity.mailboxes.wrapped_key", "UPDATE"),
+        new("COLUMN identity.preauthentication_sessions.fingerprint", "SELECT"),
+        new("COLUMN identity.preauthentication_sessions.signon_key_version", "SELECT"),
+        new("COLUMN identity.preauthentication_sessions.signon_key_version", "UPDATE"),
+        new("COLUMN identity.preauthentication_sessions.signon_verifier", "SELECT"),
+        new("COLUMN identity.preauthentication_sessions.signon_verifier", "UPDATE"),
+        new("COLUMN identity.registration_sessions.id", "SELECT"),
+        new("COLUMN identity.registration_sessions.key_version", "SELECT"),
+        new("COLUMN identity.registration_sessions.key_version", "UPDATE"),
+        new("COLUMN identity.registration_sessions.wrapped_key", "SELECT"),
+        new("COLUMN identity.registration_sessions.wrapped_key", "UPDATE"),
+        new("COLUMN identity.send_outbox.id", "SELECT"),
+        new("COLUMN identity.send_outbox.key_version", "SELECT"),
+        new("COLUMN identity.send_outbox.key_version", "UPDATE"),
+        new("COLUMN identity.send_outbox.wrapped_key", "SELECT"),
+        new("COLUMN identity.send_outbox.wrapped_key", "UPDATE"),
+        new("COLUMN identity.signing_keys.key_id", "SELECT"),
+        new("COLUMN identity.signing_keys.key_version", "SELECT"),
+        new("COLUMN identity.signing_keys.key_version", "UPDATE"),
+        new("COLUMN identity.signing_keys.private_key", "SELECT"),
+        new("COLUMN identity.signing_keys.private_key", "UPDATE"),
         new(
             "FUNCTION identity.audit_drop_expired_partitions("
             + "security_retention interval, routine_retention interval)",
             "EXECUTE"),
         new("FUNCTION identity.audit_ensure_partitions()", "EXECUTE"),
         new("SCHEMA identity", "USAGE"),
+        new("TABLE identity.audit_records", "INSERT"),
+        new("TABLE identity.key_rotations", "INSERT"),
+        new("TABLE identity.key_rotations", "SELECT"),
+        new("TABLE identity.key_rotations", "UPDATE"),
         new("TABLE identity.subject_keys", "SELECT"),
         new("TABLE identity.subject_keys", "UPDATE"),
     ];

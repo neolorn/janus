@@ -55,4 +55,11 @@ public enum SystemOperation
     /// </summary>
     [JsonStringEnumMemberName("bootstrap")]
     Bootstrap = 6,
+
+    /// <summary>
+    /// Rotating the key-encryption key or the fingerprint key: re-wrapping or
+    /// re-computing what the previous version produced, and retiring it.
+    /// </summary>
+    [JsonStringEnumMemberName("key-rotation")]
+    KeyRotation = 7,
 }

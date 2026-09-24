@@ -59,6 +59,33 @@ public static class AuditActions
     public static AuditAction ConfigurationChanged { get; } = AuditAction.Parse("ops.configuration.changed");
 
     /// <summary>
+    /// A rotation of the key-encryption key or the fingerprint key started, with the key,
+    /// the version it rotates to and the count processed.
+    /// </summary>
+    /// <remarks>Implements OPS-SEC-003 AC5.</remarks>
+    public static AuditAction KeyRotationStarted { get; } = AuditAction.Parse("ops.keyrotation.started");
+
+    /// <summary>
+    /// A rotation that had stopped was taken up again from its recorded progress, with
+    /// the count it had processed.
+    /// </summary>
+    /// <remarks>Implements OPS-SEC-003 AC2, AC5.</remarks>
+    public static AuditAction KeyRotationResumed { get; } = AuditAction.Parse("ops.keyrotation.resumed");
+
+    /// <summary>
+    /// A rotation reported every value under its version, with the count it processed.
+    /// </summary>
+    /// <remarks>Implements OPS-SEC-003 AC5.</remarks>
+    public static AuditAction KeyRotationCompleted { get; } = AuditAction.Parse("ops.keyrotation.completed");
+
+    /// <summary>
+    /// The versions before a completed rotation's were retired once its escrow copy was
+    /// confirmed sealed, with the versions retired.
+    /// </summary>
+    /// <remarks>Implements OPS-SEC-003 AC3, AC4, AC5.</remarks>
+    public static AuditAction KeyRotationRetired { get; } = AuditAction.Parse("ops.keyrotation.retired");
+
+    /// <summary>
     /// A consent was granted for a purpose, naming the document version it was given against.
     /// </summary>
     /// <remarks>Implements PRIV-CONS-004, chapter 10 section 5.</remarks>
