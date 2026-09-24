@@ -8,13 +8,13 @@ namespace Janus.Core;
 /// administrative organization.
 /// </summary>
 /// <remarks>
-/// Implements LIB-API-005, IDN-LIFE-013, AUTH-SESS-010, PRIV-RIGHT-004 and chapter 09
-/// section 8a. Suspension and reactivation are the <c>account:suspend</c> and
-/// <c>account:reactivate</c> step-up actions; lifting a restriction is none. Suspension
-/// ends every session of the account in the transaction that suspends it, and
-/// reactivation restores what the account held exactly as it held it, a restriction in
-/// force included. Every change is audited as the administrator's, on the account it
-/// was made on.
+/// Implements LIB-API-005, IDN-LIFE-003, IDN-LIFE-013, AUTH-SESS-010, PRIV-RIGHT-004
+/// and chapter 09 section 8a. Suspension and reactivation are the
+/// <c>account:suspend</c> and <c>account:reactivate</c> step-up actions; lifting a
+/// restriction and cancelling a deletion are none. Suspension ends every session of the
+/// account in the transaction that suspends it, and reactivation restores what the
+/// account held exactly as it held it, a restriction in force included. Every change is
+/// audited as the administrator's, on the account it was made on.
 /// </remarks>
 public interface IAccounts
 {
@@ -69,6 +69,25 @@ public interface IAccounts
     /// restricted, including one that holds a restriction while suspended or deleting.
     /// </returns>
     ValueTask<Result> LiftRestrictionAsync(
+        AccessContext context,
+        SubjectId subject,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Cancels a deletion inside its grace window on the subject's behalf, which restores
+    /// the account as it stood. A window an out-of-band erasure request began is recorded
+    /// against that request.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal: <c>identity.takedown.active</c> where a takedown began
+    /// the window, <c>identity.deletion.windowelapsed</c> where it has closed,
+    /// <c>api.request.malformed</c> naming <c>subject</c> where no account bears it,
+    /// <c>authz.denied</c> where the account is not in a grace window.
+    /// </returns>
+    ValueTask<Result> CancelDeletionAsync(
         AccessContext context,
         SubjectId subject,
         CancellationToken cancellationToken);

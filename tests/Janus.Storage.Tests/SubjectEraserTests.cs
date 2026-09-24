@@ -854,6 +854,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     }
 
     private AccountDirectory Directory(StoreContext context) => new(
+        context,
         new AccountStore(context),
         new ProfileStore(context, _deployment.Keys, _deployment.Randomness),
         new ProfilePhotoStore(context, _deployment.Keys, _deployment.Randomness),

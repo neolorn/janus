@@ -355,6 +355,14 @@ against the public contract of LIB-API-001.
   including one holding a restriction while suspended or deleting, answers 403
   `authz.denied`. `IAccounts.LiftRestrictionAsync` is the same operation in process.
 
+- `POST /admin/accounts/{subject}/delete/cancel` cancels a deletion inside its grace
+  window on the subject's behalf under `account:manage` (204), whether the subject or
+  an out-of-band erasure request began it; the account comes back as it stood and the
+  audit trail records `identity.deletion.cancelled` naming the erasure request where
+  one began the window. A takedown answers 409 `identity.takedown.active`, a closed
+  window 422 `identity.deletion.windowelapsed`, and an account in no window 403
+  `authz.denied`. `IAccounts.CancelDeletionAsync` is the same operation in process.
+
 - Staff mailboxes are provisioned through `IMailServer`, which a deployment registers
   where its staff mail is hosted and which no package ships. A mailbox is owed
   `disabled` from its reservation, `enabled` while its holder is an active member of

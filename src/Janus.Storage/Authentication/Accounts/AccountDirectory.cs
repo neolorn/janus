@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Accounts;
@@ -9,6 +10,7 @@ using Janus.Identity.Preferences;
 using Janus.Identity.Profiles;
 using Janus.Privacy.Outbox;
 using Janus.Privacy.SubjectKeys;
+using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Authentication.Accounts;
 
@@ -16,6 +18,7 @@ namespace Janus.Storage.Authentication.Accounts;
 /// What the account operations ask of the account directory, over the identity
 /// stores.
 /// </summary>
+/// <param name="context">Where the erasure request behind a grace window is read.</param>
 /// <param name="accounts">Where the account row is read.</param>
 /// <param name="profiles">Where the profile is read and written.</param>
 /// <param name="photos">Where the photo is read and written.</param>
@@ -24,11 +27,12 @@ namespace Janus.Storage.Authentication.Accounts;
 /// <param name="declarations">The preference keys the host declared.</param>
 /// <param name="outbox">Where a lifted restriction is announced to the subscribers.</param>
 /// <remarks>
-/// Implements REG-ACCT-001, REG-PROF-001, REG-PREF-001, PRIV-RIGHT-004 and
+/// Implements REG-ACCT-001, REG-PROF-001, REG-PREF-001, PRIV-RIGHT-004, IDN-LIFE-003 and
 /// CONV-LAYOUT-001. Every write runs inside the caller's transaction, so the whole of
 /// one operation commits or none of it does.
 /// </remarks>
 internal sealed class AccountDirectory(
+    StoreContext context,
     IAccountStore accounts,
     IProfileStore profiles,
     IProfilePhotoStore photos,
@@ -74,6 +78,22 @@ internal sealed class AccountDirectory(
             is { DeletingBy: DeletionOrigin by, DeletingSince: DateTimeOffset since }
             ? new HeldDeletion(by, since)
             : null;
+
+    /// <inheritdoc/>
+    public async ValueTask<PrivacyRequestId?> ErasureRequestAsync(
+        SubjectId subject,
+        DateTimeOffset since,
+        CancellationToken cancellationToken) =>
+        await context.PrivacyRequests
+            .AsNoTracking()
+            .Where(request => request.Subject == subject
+                && request.Type == PrivacyRequestType.Erasure
+                && request.Status == PrivacyRequestStatus.Fulfilled
+                && request.DecidedAt <= since)
+            .OrderByDescending(request => request.DecidedAt)
+            .Select(request => (PrivacyRequestId?)request.Id)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
 
     /// <inheritdoc/>
     public async ValueTask SuspendAsync(SubjectId subject, CancellationToken cancellationToken)

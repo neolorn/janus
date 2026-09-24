@@ -9519,6 +9519,55 @@ The refusal is `authz.denied`, as for an account not restricted at all.
 *Chapter text that should change.* PRIV-RIGHT-004 could say that a restriction held
 while the account is suspended or deleting is lifted only once the account is back.
 
+---
+
+## 260. What a deletion cancelled on the subject's behalf answers and records
+
+**Phase 8 · 2026-09-24 · Tier 2 · IDN-LIFE-003, IDN-LIFE-014, IDN-AUD-001, chapter 09 section 8a, chapter 10 section 5a**
+
+*The question.* Chapter 09 section 8a has `POST /admin/accounts/{subject}/delete/cancel`
+cancel "a pending deletion on the subject's behalf", with **409**
+`identity.takedown.active` for a takedown. IDN-LIFE-003 has the cancellation of a window
+an out-of-band request began made by "the administrator handling the request ... recorded
+against the request". Nothing names the other answers, whether a window the subject
+began may be cancelled here, or what "recorded against the request" writes, since the
+request's status vocabulary has no value for it.
+
+*Chosen.*
+
+- `IAccounts.CancelDeletionAsync`, under `account:manage` in the administrative
+  organization; no step-up (entry 258) and no reason, the endpoint naming no body.
+- A window the subject began and one an out-of-band request began are both cancelled:
+  the row says "on the subject's behalf" without limiting the origin, and the subject
+  whose link is lost has no other way back inside the window.
+- **204** where cancelled; **409** `identity.takedown.active` for a takedown, answered
+  before the window is looked at, as the link-borne cancellation does; **422**
+  `identity.deletion.windowelapsed` where the window has closed; **400**
+  `api.request.malformed` naming `subject` where no account bears it; **403**
+  `authz.denied` where the account is in no window, without the permission, or where no
+  person acts.
+- In one transaction: the account comes back as it stood (entry 257), the link a
+  self-deletion notice carried is spent, `AccountDeletionCancelled` is published with the
+  administrator as actor, and the cancellation is audited as `identity.deletion.cancelled`
+  in the security category, acting subject the administrator and effective subject the
+  account. "Recorded against the request" is the audit row's `request` detail, naming the
+  fulfilled erasure request whose decision began the window (the latest fulfilled erasure
+  request of the subject decided no later than the window began). The request itself
+  keeps its status: chapter 09 section 8a lists no status for it.
+
+*Tests that pin it.*
+`AccountAdministrationTests.IDN_LIFE_003_AnOutOfBandDeletionIsCancelledAgainstItsRequestAsync`,
+`AccountAdministrationTests.IDN_LIFE_014_ASelfDeletionIsCancelledOnTheSubjectsBehalfAsync`,
+`AccountAdministrationTests.IDN_LIFE_003_ATakedownOrAClosedWindowIsNotCancelledAsync`,
+`AccountDirectoryTests.IDN_LIFE_003_TheErasureRequestBehindTheWindowIsFoundAsync`,
+`AccountDirectoryTests.IDN_LIFE_003_TheCancellationIsRecordedAgainstTheRequestAsync`,
+`AccountAdministrationEndpointTests.IDN_LIFE_003_ADeletionIsCancelledOnTheSubjectsBehalfAsync`,
+`SessionRequirementTests` (the list of session routes).
+
+*Chapter text that should change.* Chapter 09 section 8a could give the endpoint its
+answers and say which origins it cancels, and IDN-LIFE-003 could say that "recorded
+against the request" is the audit row naming it.
+
 
 # Rows for chapter 10
 
@@ -9680,7 +9729,7 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `identity.account.reactivated` | routine, or security where an administrator acted | `AuditActions.AccountReactivated` | A suspended account was stood back up: by its owner from a deactivation (routine), or by an administrator from an administrator's suspension (security, the acting subject the administrator and the effective subject the account). (IDN-LIFE-013, entry 254) |
 | `identity.account.suspended` | security | `AuditActions.AccountSuspended` | An administrator suspended an account, or took over the suspension of one its owner deactivated. The acting subject is the administrator, the effective subject the account; the row names no organization. (IDN-LIFE-013, AUTH-SESS-010, entries 254 and 255) |
 | `identity.credential.labelled` | routine | `AuditActions.CredentialLabelled` | A credential was given or renamed a label by its holder. (REG-PM-002) |
-| `identity.deletion.cancelled` | routine | `AuditActions.DeletionCancelled` | A deletion was cancelled inside its grace window. (IDN-LIFE-014) |
+| `identity.deletion.cancelled` | routine, or security where an administrator acted | `AuditActions.DeletionCancelled` | A deletion was cancelled inside its grace window: by the subject from the link (routine), or by an administrator on the subject's behalf (security, the acting subject the administrator; details carry `request` where an out-of-band erasure request began the window). (IDN-LIFE-014, IDN-LIFE-003, entry 260) |
 | `identity.deletion.requested` | routine | `AuditActions.DeletionRequested` | A deletion was requested, which opens the grace window it can be brought back from. (IDN-LIFE-014) |
 | `identity.invitation.issued` | security | `AuditActions.InvitationIssued` | An invitation into an organization was issued. Details carry `invitation` and nothing it binds; the row is filed under the organization. (IDN-LIFE-009a, REG-INV-001, entry 234) |
 | `identity.invitation.revoked` | security | `AuditActions.InvitationRevoked` | An invitation nobody had acknowledged was revoked, or replaced by a later one for the same corporate address. Details carry `invitation`. (IDN-LIFE-009a, REG-MAIL-001, entries 231 and 233) |

@@ -25,6 +25,15 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
 
     private readonly List<(SubjectId Subject, DateTimeOffset At)> _lifted = [];
 
+    private readonly Dictionary<SubjectId, PrivacyRequestId> _erasures = [];
+
+    /// <summary>
+    /// Names the out-of-band erasure request an account's grace window was begun for.
+    /// </summary>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="request">The request.</param>
+    public void ErasedFor(SubjectId subject, PrivacyRequestId request) => _erasures[subject] = request;
+
     /// <summary>
     /// Every restriction lifted, with when, in the order it was: each is what the
     /// subscribers were told.
@@ -144,6 +153,15 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
 
         return ValueTask.CompletedTask;
     }
+
+    /// <inheritdoc/>
+    public ValueTask<PrivacyRequestId?> ErasureRequestAsync(
+        SubjectId subject,
+        DateTimeOffset since,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_erasures.TryGetValue(subject, out PrivacyRequestId request)
+            ? request
+            : (PrivacyRequestId?)null);
 
     /// <inheritdoc/>
     public ValueTask DeactivateAsync(SubjectId subject, CancellationToken cancellationToken)

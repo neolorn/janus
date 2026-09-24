@@ -439,6 +439,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
         var source = new ExportSource(
             new AccountStore(reading),
             new AccountDirectory(
+                reading,
                 new AccountStore(reading),
                 new ProfileStore(reading, _deployment.Keys, _deployment.Randomness),
                 new ProfilePhotoStore(reading, _deployment.Keys, _deployment.Randomness),

@@ -79,6 +79,19 @@ internal interface IAccountDirectory
     ValueTask<HeldDeletion?> DeletingAsync(SubjectId subject, CancellationToken cancellationToken);
 
     /// <summary>
+    /// The out-of-band erasure request whose fulfilment began an account's grace window,
+    /// which a cancellation on the subject's behalf is recorded against (IDN-LIFE-003).
+    /// </summary>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="since">When the window began.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The request, or nothing where no fulfilled erasure request began it.</returns>
+    ValueTask<PrivacyRequestId?> ErasureRequestAsync(
+        SubjectId subject,
+        DateTimeOffset since,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Takes an account down at its own request, which is the <c>self</c> entry into
     /// the suspended state.
     /// </summary>

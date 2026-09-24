@@ -13,8 +13,8 @@ namespace Janus.Hosting.Accounts;
 /// The account endpoints of chapter 09 section 8a, under <c>account:manage</c>.
 /// </summary>
 /// <remarks>
-/// Implements CONV-DESIGN-006, LIB-API-005, IDN-LIFE-013, AUTH-SESS-010 and
-/// PRIV-RIGHT-004. Each is one line to <see cref="IAccounts"/>; the permission, the
+/// Implements CONV-DESIGN-006, LIB-API-005, IDN-LIFE-003, IDN-LIFE-013, AUTH-SESS-010
+/// and PRIV-RIGHT-004. Each is one line to <see cref="IAccounts"/>; the permission, the
 /// step-up and the state are the service's to judge, so a host calling it in process
 /// meets the same refusals.
 /// </remarks>
@@ -37,6 +37,7 @@ internal static class AccountAdministrationEndpoints
         _ = SessionRequired.On(group.MapPost("/suspend", SuspendAsync));
         _ = SessionRequired.On(group.MapPost("/reactivate", ReactivateAsync));
         _ = SessionRequired.On(group.MapPost("/restriction/lift", LiftRestrictionAsync));
+        _ = SessionRequired.On(group.MapPost("/delete/cancel", CancelDeletionAsync));
 
         return endpoints;
     }
@@ -93,6 +94,25 @@ internal static class AccountAdministrationEndpoints
         return Answers.Of(
             await accounts
                 .LiftRestrictionAsync(
+                    AccessContext.Of(browser.Required.Subject),
+                    new SubjectId(subject),
+                    cancellationToken)
+                .ConfigureAwait(false),
+            Nothing);
+    }
+
+    private static async Task<IResult> CancelDeletionAsync(
+        IAccounts accounts,
+        RequestSession browser,
+        Guid subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        return Answers.Of(
+            await accounts
+                .CancelDeletionAsync(
                     AccessContext.Of(browser.Required.Subject),
                     new SubjectId(subject),
                     cancellationToken)

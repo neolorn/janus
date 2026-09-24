@@ -35,6 +35,7 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
 
     private readonly AccountDirectoryInMemory _directory = new(Declared);
     private readonly SessionStoreInMemory _sessions = new();
+    private readonly LifecycleLinkStoreInMemory _links = new();
     private readonly AccountAuditInMemory _audit = new();
     private readonly AuthenticatorStoreInMemory _authenticators = new();
     private readonly PasswordStoreInMemory _passwords = new();
@@ -79,6 +80,8 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
                 _clock),
             _directory,
             _sessions,
+            _links,
+            _configuration,
             _events,
             _audit,
             _work,
@@ -314,6 +317,76 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
         Assert.Empty(_directory.Lifted);
     }
 
+    /// <summary>
+    /// IDN-LIFE-003: a window an out-of-band erasure request began is cancelled on the
+    /// subject's behalf and recorded against that request, and the account comes back
+    /// as it stood.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_003_AnOutOfBandDeletionIsCancelledAgainstItsRequestAsync()
+    {
+        var request = PrivacyRequestId.Of(Noon.AddDays(-1));
+
+        _directory.Deleting(_member, DeletionOrigin.OutOfBandRequest, Noon.AddDays(-1));
+        _directory.ErasedFor(_member, request);
+
+        Accepted(await CancelAsync(_member));
+
+        Assert.Equal(AccountState.Active, await StateAsync(_member));
+        Assert.Equal(_administrator, Assert.Single(_events.Of<AccountDeletionCancelled>()).Actor);
+        Assert.Equal(
+            new RecordedChange(AuditActions.DeletionCancelled, _administrator, _member, Noon),
+            Assert.Single(_audit.Administered));
+        Assert.Equal(request, Assert.Single(_audit.Against));
+        Assert.Equal(1, _work.Committed);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-014: a window the subject began is cancelled on their behalf, which spends
+    /// the link their notice carried and records no request.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_014_ASelfDeletionIsCancelledOnTheSubjectsBehalfAsync()
+    {
+        _directory.Deleting(_member, DeletionOrigin.Self, Noon.AddDays(-1));
+        await _links.ReplaceAsync(
+            LifecycleLink.Issued(
+                _member,
+                LifecycleLinkKind.DeletionCancellation,
+                OpaqueToken.Draw(_randomness),
+                Noon.AddDays(-1)),
+            TestContext.Current.CancellationToken);
+
+        Accepted(await CancelAsync(_member));
+
+        Assert.Equal(AccountState.Active, await StateAsync(_member));
+        Assert.Empty(_links.Links);
+        Assert.Null(Assert.Single(_audit.Against));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003: a takedown is refused as one, a window that has closed is refused as
+    /// closed, an account in no window has nothing to cancel, and an unknown subject is
+    /// named; none changes anything.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_003_ATakedownOrAClosedWindowIsNotCancelledAsync()
+    {
+        var takenDown = SubjectId.New(_randomness);
+        var closed = SubjectId.New(_randomness);
+
+        _directory.Deleting(takenDown, DeletionOrigin.Takedown, Noon.AddDays(-1));
+        _directory.Deleting(closed, DeletionOrigin.Self, Noon - Settings.AccountDeletionGrace.Default);
+
+        Assert.Equal(ErrorCodes.TakedownActive, Refused(await CancelAsync(takenDown)));
+        Assert.Equal(ErrorCodes.DeletionWindowElapsed, Refused(await CancelAsync(closed)));
+        Assert.Equal(ErrorCodes.Denied, Refused(await CancelAsync(_member)));
+        Assert.Equal(ErrorCodes.RequestMalformed, Refused(await CancelAsync(SubjectId.New(_randomness))));
+        Assert.Equal(AccountState.Deleting, await StateAsync(takenDown));
+        Assert.Equal(AccountState.Deleting, await StateAsync(closed));
+        Assert.Empty(_audit.Administered);
+    }
+
     private static DateTimeOffset Stale =>
         Noon - Settings.SessionStepUpRecency.Default - TimeSpan.FromMinutes(1);
 
@@ -338,6 +411,9 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
             Opened(_administrator, Noon),
             subject,
             TestContext.Current.CancellationToken);
+
+    private async Task<Result> CancelAsync(SubjectId subject) =>
+        await Administration.CancelDeletionAsync(Acting, subject, TestContext.Current.CancellationToken);
 
     private async Task<Result> LiftAsync(SubjectId subject) =>
         await Administration.LiftRestrictionAsync(Acting, subject, TestContext.Current.CancellationToken);

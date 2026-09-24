@@ -91,6 +91,32 @@ public sealed class AccountAdministrationEndpointTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status403Forbidden, again.Status);
     }
 
+    /// <summary>
+    /// IDN-LIFE-003: a deletion is cancelled on the subject's behalf, and one a takedown
+    /// began is refused as a conflict naming the takedown.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_ADeletionIsCancelledOnTheSubjectsBehalfAsync()
+    {
+        Session member = await MemberAsync();
+        Session takenDown = await MemberAsync();
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        DateTimeOffset since = _deployment.Clock.GetUtcNow().AddDays(-1);
+
+        _deployment.Accounts.Deleting(member.Subject, DeletionOrigin.Self, since);
+        _deployment.Accounts.Deleting(takenDown.Subject, DeletionOrigin.Takedown, since);
+        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Administration, Permissions.AccountManage);
+
+        Answer cancelled = await browser.SendAsync("POST", PathOf(member.Subject, "delete/cancel"));
+        Answer refused = await browser.SendAsync("POST", PathOf(takenDown.Subject, "delete/cancel"));
+
+        Assert.Equal(StatusCodes.Status204NoContent, cancelled.Status);
+        Assert.Equal(AccountState.Active, await StateAsync(member.Subject));
+        Assert.Equal(StatusCodes.Status409Conflict, refused.Status);
+        Assert.Equal("identity.takedown.active", refused.Text("code"));
+    }
+
     private static string PathOf(SubjectId subject, string operation) =>
         "/admin/accounts/" + subject.Value + "/" + operation;
 
