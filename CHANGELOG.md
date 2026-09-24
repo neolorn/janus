@@ -1670,6 +1670,9 @@ against the public contract of LIB-API-001.
 
 ### Fixed
 
+- The fields of the records of processing a person supplies through
+  `PUT /admin/compliance/assessments` are committed. They were handed to the store and
+  never saved, so a deployment's register reported them missing whatever was supplied.
 - A change to the system policy is judged field by field, as an organization's policy
   is: a change that only asks more is a tightening and is made without step-up or a
   reason. Any change to the system policy used to be treated as a loosening.
