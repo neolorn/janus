@@ -174,6 +174,8 @@ internal sealed class OidcApplicationStore(StoreContext context)
 
         ImmutableArray<string>.Builder permitted = ImmutableArray.CreateBuilder<string>();
 
+        // AUTH-OIDC-006 AC2: every client pushes its authorization request first.
+        permitted.Add(OpenIddictConstants.Permissions.Endpoints.PushedAuthorization);
         permitted.Add(OpenIddictConstants.Permissions.Endpoints.Authorization);
         permitted.Add(OpenIddictConstants.Permissions.Endpoints.Token);
         permitted.Add(OpenIddictConstants.Permissions.GrantTypes.AuthorizationCode);

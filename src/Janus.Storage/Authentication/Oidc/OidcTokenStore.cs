@@ -270,7 +270,7 @@ internal sealed class OidcTokenStore(StoreContext context)
     {
         ArgumentNullException.ThrowIfNull(token);
 
-        return ValueTask.FromResult<string?>(token.Subject.ToString());
+        return ValueTask.FromResult<string?>(token.Subject?.ToString());
     }
 
     /// <inheritdoc/>
@@ -538,7 +538,9 @@ internal sealed class OidcTokenStore(StoreContext context)
     {
         ArgumentNullException.ThrowIfNull(token);
 
-        token.Subject = OidcSubjects.Of(subject);
+        // AUTH-OIDC-006 AC2: a pushed request names nobody; anything named is an
+        // account of this deployment or is refused.
+        token.Subject = subject is null ? null : OidcSubjects.Of(subject);
 
         return ValueTask.CompletedTask;
     }

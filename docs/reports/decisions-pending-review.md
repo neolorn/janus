@@ -10604,6 +10604,69 @@ AC3 keeps out, and puts host code ahead of the machine profile. Under it:
 transport reads the report; 09 section 10 could give the answer to a report taken (200,
 no body) and the status of a refused one.
 
+---
+
+## 279. When a pushed request is spent, and where its destination is judged
+
+**Corrections 3 · 2026-09-24 · Tier 2 · AUTH-OIDC-006 AC2, API-REDIR-001, 09 section 9, BFF-SESS-006**
+
+*The question.* AUTH-OIDC-006 AC2: "the `request_uri` is single use and expires in 60
+seconds." The protocol server the library is built on spends a reference only when it
+issues a code against it, so a reference answered with `login_required`, or one that
+forwarded the browser to sign in, could be presented again for the rest of its minute.
+Separately, API-REDIR-001 replaces a destination that is not the registered one rather
+than refusing it, and every authorization request now reaches `/oidc/authorize` as a
+reference whose parameters were read at the push.
+
+*The readings.*
+
+1. A reference is spent when a code is issued against it; any other answer leaves it
+   presentable until it lapses.
+2. A reference is spent by the first answer it is given, whatever that answer is.
+
+For the destination:
+
+1. It is judged at the push, where the parameters are read, and the replacement of
+   API-REDIR-001 applies there.
+2. A push naming another destination is refused, since RFC 9126 has the server
+   validate it at the push.
+
+*Chosen: 2, and 1 for the destination.* "Single use" says nothing of the answer, and
+a copy of a reference that can still be presented is what the criterion exists to
+prevent; the strictest reading is taken. For the destination, API-REDIR-001 AC1 is the
+chapters' rule and the push is where the parameters are now read; replacing still
+sends the code nowhere but the registered destination. Under it:
+
+- The server spends the reference when it issues a code. Every other answer of
+  `/oidc/authorize` spends it too: a refusal as the answer is applied, a browser
+  forwarded to sign in before it is forwarded. A reference presented a second time is
+  refused 400 and forwards nowhere.
+- The reference lapses 60 seconds after issue; the push answers `expires_in: 60`.
+- The pushed request is kept as a row of `oidc_tokens` taken before anyone is known,
+  so the row's `subject` is nullable (migration `AllowPushedRequestTokens`). A subject
+  that names no account of this deployment is still refused where it arrives.
+- The destination check runs on the push only. At `/oidc/authorize` the parameters are
+  the ones the push kept, so nothing there can name another destination.
+- Every registered client holds the permission to push. The browser application's
+  own sign-on pushes on the same back channel and with the same secret as its
+  exchange; a push the provider refuses answers `session.expired`, forwards nowhere
+  and is logged (`BrowserProfileLog` event 14).
+
+*Tests that pin it.*
+`ProviderConformanceTests.AUTH_OIDC_006_AC2_ADirectAuthorizationRequestIsRefusedAsync`,
+`ProviderConformanceTests.AUTH_OIDC_006_AC2_AReferenceIsTakenOnceAsync`,
+`ProviderConformanceTests.AUTH_OIDC_006_AC2_AReferenceAnsweredWithoutACodeIsSpentAsync`,
+`ProviderConformanceTests.AUTH_OIDC_006_AC2_AReferenceLapsesAfterSixtySecondsAsync`,
+`ProviderConformanceTests.AUTH_OIDC_006_AC4_TheDocumentRequiresPushedRequestsAsync`,
+`OidcFlowTests.API_REDIR_001_AC1_AnUnknownDestinationIsReplacedAndLoggedAsync`,
+`SignOnTests.AUTH_OIDC_006_AC2_TheBrowserCarriesOnlyThePushedReferenceAsync`,
+`SignOnTests.AUTH_OIDC_006_AC2_ARequestThePushRefusesIsNotForwardedAsync`,
+`OidcStoreTests.AUTH_OIDC_006_AC2_APushedRequestIsKeptNamingNobodyAsync`.
+
+*Chapter text that should change.* 02 AUTH-OIDC-006 could say that a `request_uri` is
+spent by the first answer it is given; 09 section 9 could say that API-REDIR-001's
+replacement applies at `POST /oidc/par`.
+
 
 # Rows for chapter 10
 

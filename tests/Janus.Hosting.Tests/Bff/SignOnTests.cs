@@ -68,7 +68,9 @@ public sealed class SignOnTests
         var arriving = new Browser(deployment);
         Answer established = await SignedOnAsync(deployment, arriving, holder);
 
-        Assert.Equal("/oidc/token", Assert.Single(deployment.Provider.Asked).AbsolutePath);
+        Assert.Equal(
+            ["/oidc/par", "/oidc/token"],
+            deployment.Provider.Asked.Select(asked => asked.AbsolutePath));
         Assert.Empty(established.Body);
         Assert.DoesNotContain(
             "token",
@@ -135,7 +137,9 @@ public sealed class SignOnTests
         Answer again = await arriving.SendAsync("GET", Local(Where(issued)));
 
         Assert.Equal(StatusCodes.Status403Forbidden, again.Status);
-        _ = Assert.Single(deployment.Provider.Asked);
+        _ = Assert.Single(
+            deployment.Provider.Asked,
+            asked => string.Equals(asked.AbsolutePath, "/oidc/token", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -205,14 +209,13 @@ public sealed class SignOnTests
 
         var arriving = new Browser(deployment);
         Answer forwarded = await arriving.SendAsync("GET", Start);
-
-        Assert.Contains("prompt=none", Where(forwarded), StringComparison.Ordinal);
-
         Answer refused = await new Browser(deployment).SendAsync("GET", Local(Where(forwarded)));
         Answer again = await arriving.SendAsync("GET", Local(Where(refused)));
 
         Assert.Equal("login_required", Parameter(Where(refused), "error"));
-        Assert.DoesNotContain("prompt=none", Where(again), StringComparison.Ordinal);
+        Assert.Equal(
+            ["none", string.Empty],
+            deployment.Provider.Carried.Select(carried => Parameter(carried, "prompt")));
 
         Answer screen = await new Browser(deployment).SendAsync("GET", Local(Where(again)));
 
@@ -235,7 +238,63 @@ public sealed class SignOnTests
             "GET",
             Start + "&redirect_uri=" + Uri.EscapeDataString("https://attacker.test/collect"));
 
-        Assert.Equal(Return, Parameter(Where(forwarded), "redirect_uri"));
+        Assert.Equal(Return, Parameter(Assert.Single(deployment.Provider.Carried), "redirect_uri"));
+        Assert.Equal(string.Empty, Parameter(Where(forwarded), "redirect_uri"));
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-006 AC2: the authorization request is pushed on this server's own
+    /// connection, and the browser is forwarded carrying the client and the reference
+    /// it was answered with and nothing of the request itself.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_006_AC2_TheBrowserCarriesOnlyThePushedReferenceAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await RegisteredAsync(deployment);
+
+        Answer forwarded = await new Browser(deployment).SendAsync("GET", Start);
+        string where = Where(forwarded);
+
+        Assert.Equal("/oidc/par", Assert.Single(deployment.Provider.Asked).AbsolutePath);
+        Assert.Equal(
+            ["client_id", "request_uri"],
+            where[(where.IndexOf('?', StringComparison.Ordinal) + 1)..]
+                .Split('&')
+                .Select(pair => pair[..pair.IndexOf('=', StringComparison.Ordinal)])
+                .Order(StringComparer.Ordinal));
+        Assert.Equal(Client, Parameter(where, "client_id"));
+        Assert.StartsWith(
+            "urn:ietf:params:oauth:request_uri:",
+            Parameter(where, "request_uri"),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-006 AC2: a request the provider will not take when it is pushed
+    /// forwards the browser nowhere and is recorded.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_006_AC2_ARequestThePushRefusesIsNotForwardedAsync()
+    {
+        await using var deployment = new Deployment();
+
+        await deployment.Clients.RecordAsync(
+            new OidcClient(Client, Client, OidcClientKind.BrowserApplication, Return, ["openid"]),
+            OpaqueToken.Of("a-secret-the-deployment-did-not-set").Fingerprint(),
+            TestContext.Current.CancellationToken);
+
+        Answer refused = await new Browser(deployment).SendAsync("GET", Start);
+
+        Assert.Null(refused.Location);
+        Assert.Equal(
+            ErrorCodes.SessionExpired.ToString(),
+            refused.Json().GetProperty("code").GetString());
+        Assert.Contains((LogLevel.Warning, 14), deployment.SignOnLog.Entries);
+        Assert.DoesNotContain(deployment.Contacts.All, contact => contact.SignOn is not null);
     }
 
     /// <summary>

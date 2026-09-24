@@ -24,12 +24,7 @@ namespace Janus.Hosting.Tests.Oidc;
 [Trait("kind", "unit")]
 public sealed class OidcFlowTests
 {
-    private const string Application = "browser-app";
-    private const string Protocol = "mail-server";
     private const string Second = "another-browser-app";
-    private const string Destination = "https://app.example.test/signin/callback";
-    private const string Secret = "a-secret-the-deployment-set";
-    private const string Verifier = "a-verifier-of-at-least-forty-three-characters-long";
     private const string Prefix = "/identity/v1";
 
     /// <summary>
@@ -124,10 +119,12 @@ public sealed class OidcFlowTests
     {
         await using var deployment = new Deployment();
 
-        Browser browser = await PreparedAsync(deployment);
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
         var machine = new Machine(deployment);
-        string code = await CodeAsync(browser, Application);
-        Answer exchanged = await machine.PostAsync("/oidc/token", Code(code, Application));
+        string code = await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Application);
+        Answer exchanged = await machine.PostAsync(
+            "/oidc/token",
+            RelyingParty.Code(code, RelyingParty.Application));
         JsonElement published = (await machine.GetAsync("/oidc/jwks", bearer: string.Empty))
             .Json()
             .GetProperty("keys")[0];
@@ -150,13 +147,18 @@ public sealed class OidcFlowTests
     {
         await using var deployment = new Deployment();
 
-        Browser browser = await PreparedAsync(deployment);
-        Answer answered = await browser.SendAsync("GET", Authorize(Application, silent: true));
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
+        Answer answered = await browser.SendAsync(
+            "GET",
+            await RelyingParty.AuthorizeAsync(deployment, RelyingParty.Application, silent: true));
 
         Assert.Equal(StatusCodes.Status302Found, answered.Status);
-        Assert.StartsWith(Destination + "?", Where(answered), StringComparison.Ordinal);
-        Assert.NotEmpty(Returned(answered, "code"));
-        Assert.Equal("the-state", Returned(answered, "state"));
+        Assert.StartsWith(
+            RelyingParty.Destination + "?",
+            RelyingParty.Where(answered),
+            StringComparison.Ordinal);
+        Assert.NotEmpty(RelyingParty.Returned(answered, "code"));
+        Assert.Equal("the-state", RelyingParty.Returned(answered, "state"));
     }
 
     /// <summary>
@@ -169,13 +171,15 @@ public sealed class OidcFlowTests
     {
         await using var deployment = new Deployment();
 
-        await RegisteredAsync(deployment);
+        await RelyingParty.RegisteredAsync(deployment);
 
         Answer answered = await new Browser(deployment)
-            .SendAsync("GET", Authorize(Application, silent: true));
+            .SendAsync(
+                "GET",
+                await RelyingParty.AuthorizeAsync(deployment, RelyingParty.Application, silent: true));
 
         Assert.Equal(StatusCodes.Status302Found, answered.Status);
-        Assert.Equal("login_required", Returned(answered, "error"));
+        Assert.Equal("login_required", RelyingParty.Returned(answered, "error"));
     }
 
     /// <summary>
@@ -192,18 +196,20 @@ public sealed class OidcFlowTests
                 "https://identity.example.test/signin",
                 "https://identity.example.test"));
 
-        await RegisteredAsync(deployment);
+        await RelyingParty.RegisteredAsync(deployment);
 
         Answer answered = await new Browser(deployment)
-            .SendAsync("GET", Authorize(Application, silent: false));
+            .SendAsync(
+                "GET",
+                await RelyingParty.AuthorizeAsync(deployment, RelyingParty.Application, silent: false));
 
         Assert.Equal(StatusCodes.Status302Found, answered.Status);
         Assert.StartsWith(
             "https://identity.example.test/signin",
-            Where(answered),
+            RelyingParty.Where(answered),
             StringComparison.Ordinal);
 
-        Assert.DoesNotContain("login_required", Where(answered), StringComparison.Ordinal);
+        Assert.DoesNotContain("login_required", RelyingParty.Where(answered), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -216,20 +222,28 @@ public sealed class OidcFlowTests
     {
         await using var deployment = new Deployment();
 
-        Browser browser = await PreparedAsync(deployment);
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
         Answer answered = await browser.SendAsync(
             "GET",
-            Authorize(Application, silent: true, redirect: "https://attacker.test/collect"));
+            await RelyingParty.AuthorizeAsync(
+                deployment,
+                RelyingParty.Application,
+                silent: true,
+                redirect: "https://attacker.test/collect"));
 
         Assert.Equal(StatusCodes.Status302Found, answered.Status);
-        Assert.StartsWith(Destination + "?", Where(answered), StringComparison.Ordinal);
-        Assert.NotEmpty(Returned(answered, "code"));
+        Assert.StartsWith(
+            RelyingParty.Destination + "?",
+            RelyingParty.Where(answered),
+            StringComparison.Ordinal);
+        Assert.NotEmpty(RelyingParty.Returned(answered, "code"));
         Assert.Contains((Microsoft.Extensions.Logging.LogLevel.Warning, 1), deployment.OidcLog.Entries);
     }
 
     /// <summary>
     /// AUTH-OIDC-001 AC2 and API-REDIR-001 AC1: a client the registry does not hold is
-    /// refused before any destination is resolved, so nothing is forwarded anywhere.
+    /// refused where it pushes, before any destination is resolved, and a reference it
+    /// names at the endpoint forwards nothing anywhere.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -237,9 +251,18 @@ public sealed class OidcFlowTests
     {
         await using var deployment = new Deployment();
 
-        Browser browser = await PreparedAsync(deployment);
-        Answer answered = await browser.SendAsync("GET", Authorize("nobody", silent: true));
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
+        Answer pushed = await RelyingParty.PushAsync(
+            deployment,
+            "nobody",
+            silent: true,
+            RelyingParty.Destination,
+            "openid email");
+        Answer answered = await browser.SendAsync(
+            "GET",
+            RelyingParty.Authorization("nobody", "urn:ietf:params:oauth:request_uri:guessed"));
 
+        Assert.Equal("invalid_client", pushed.Text("error"));
         Assert.Equal(StatusCodes.Status400BadRequest, answered.Status);
         Assert.Null(answered.Location);
         Assert.Empty(deployment.Tokens.All);
@@ -256,9 +279,11 @@ public sealed class OidcFlowTests
     {
         await using var deployment = new Deployment();
 
-        Browser browser = await PreparedAsync(deployment);
-        string code = await CodeAsync(browser, Application);
-        Answer exchanged = await new Machine(deployment).PostAsync("/oidc/token", Code(code, Application));
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
+        string code = await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Application);
+        Answer exchanged = await new Machine(deployment).PostAsync(
+            "/oidc/token",
+            RelyingParty.Code(code, RelyingParty.Application));
 
         Assert.Equal(StatusCodes.Status200OK, exchanged.Status);
         Assert.NotEmpty(exchanged.Text("access_token"));
@@ -280,10 +305,12 @@ public sealed class OidcFlowTests
     {
         await using var deployment = new Deployment();
 
-        Browser browser = await PreparedAsync(deployment);
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
         var machine = new Machine(deployment);
-        string code = await CodeAsync(browser, Protocol);
-        Answer exchanged = await machine.PostAsync("/oidc/token", Code(code, Protocol));
+        string code = await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Protocol);
+        Answer exchanged = await machine.PostAsync(
+            "/oidc/token",
+            RelyingParty.Code(code, RelyingParty.Protocol));
 
         string first = exchanged.Text("refresh_token");
 
@@ -310,10 +337,12 @@ public sealed class OidcFlowTests
     {
         await using var deployment = new Deployment();
 
-        Browser browser = await PreparedAsync(deployment);
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
         var machine = new Machine(deployment);
-        string code = await CodeAsync(browser, Application);
-        Answer exchanged = await machine.PostAsync("/oidc/token", Code(code, Application));
+        string code = await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Application);
+        Answer exchanged = await machine.PostAsync(
+            "/oidc/token",
+            RelyingParty.Code(code, RelyingParty.Application));
         Answer read = await machine.GetAsync("/oidc/userinfo", exchanged.Text("access_token"));
 
         Assert.Equal(StatusCodes.Status200OK, read.Status);
@@ -333,21 +362,21 @@ public sealed class OidcFlowTests
     {
         await using var deployment = new Deployment();
 
-        Browser browser = await PreparedAsync(deployment);
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
 
         await deployment.Clients.RecordAsync(
             new OidcClient(
                 Second,
                 Second,
                 OidcClientKind.BrowserApplication,
-                Destination,
+                RelyingParty.Destination,
                 ["openid", "email"]),
-            OpaqueToken.Of(Secret).Fingerprint(),
+            OpaqueToken.Of(RelyingParty.Secret).Fingerprint(),
             TestContext.Current.CancellationToken);
 
         var machine = new Machine(deployment);
-        string first = await CodeAsync(browser, Application);
-        string second = await CodeAsync(browser, Second);
+        string first = await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Application);
+        string second = await RelyingParty.CodeAsync(deployment, browser, Second);
 
         Assert.NotEqual(first, second);
 
@@ -355,10 +384,16 @@ public sealed class OidcFlowTests
 
         Assert.Equal(
             held,
-            Claim((await machine.PostAsync("/oidc/token", Code(first, Application))).Text("id_token"), "sid"));
+            Claim(
+                (await machine.PostAsync("/oidc/token", RelyingParty.Code(first, RelyingParty.Application)))
+                    .Text("id_token"),
+                "sid"));
         Assert.Equal(
             held,
-            Claim((await machine.PostAsync("/oidc/token", Code(second, Second))).Text("id_token"), "sid"));
+            Claim(
+                (await machine.PostAsync("/oidc/token", RelyingParty.Code(second, Second)))
+                    .Text("id_token"),
+                "sid"));
     }
 
     /// <summary>
@@ -372,22 +407,24 @@ public sealed class OidcFlowTests
     {
         await using var deployment = new Deployment();
 
-        Browser browser = await PreparedAsync(deployment);
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
         var machine = new Machine(deployment);
-        string code = await CodeAsync(browser, Protocol);
+        string code = await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Protocol);
 
         Answer refused = await machine.PostAsync(
             "/oidc/token",
             ("grant_type", "authorization_code"),
             ("code", code),
-            ("client_id", Protocol),
+            ("client_id", RelyingParty.Protocol),
             ("client_secret", "not-the-registered-secret"),
-            ("redirect_uri", Destination),
-            ("code_verifier", Verifier));
+            ("redirect_uri", RelyingParty.Destination),
+            ("code_verifier", RelyingParty.Verifier));
 
         Assert.Equal(StatusCodes.Status401Unauthorized, refused.Status);
 
-        Answer taken = await machine.PostAsync("/oidc/token", Code(code, Protocol));
+        Answer taken = await machine.PostAsync(
+            "/oidc/token",
+            RelyingParty.Code(code, RelyingParty.Protocol));
 
         Assert.Equal(StatusCodes.Status200OK, taken.Status);
         Assert.NotEmpty(taken.Text("access_token"));
@@ -429,9 +466,11 @@ public sealed class OidcFlowTests
     {
         await using var deployment = new Deployment();
 
-        Browser browser = await PreparedAsync(deployment);
-        string code = await CodeAsync(browser, Protocol);
-        Answer exchanged = await new Machine(deployment).PostAsync("/oidc/token", Code(code, Protocol));
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
+        string code = await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Protocol);
+        Answer exchanged = await new Machine(deployment).PostAsync(
+            "/oidc/token",
+            RelyingParty.Code(code, RelyingParty.Protocol));
 
         Session live = Single(deployment.Sessions.All);
 
@@ -451,10 +490,12 @@ public sealed class OidcFlowTests
     {
         await using var deployment = new Deployment();
 
-        Browser browser = await PreparedAsync(deployment);
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
         var machine = new Machine(deployment);
-        string code = await CodeAsync(browser, Application);
-        Answer exchanged = await machine.PostAsync("/oidc/token", Code(code, Application));
+        string code = await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Application);
+        Answer exchanged = await machine.PostAsync(
+            "/oidc/token",
+            RelyingParty.Code(code, RelyingParty.Application));
 
         string token = exchanged.Text("access_token");
 
@@ -479,14 +520,14 @@ public sealed class OidcFlowTests
     {
         await using var deployment = new Deployment();
 
-        Browser browser = await PreparedAsync(deployment);
-        string code = await CodeAsync(browser, Application);
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
+        string code = await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Application);
         string cookie = Janus.Hosting.Bff.BrowserCookies.Session
             + "="
             + browser.Cookies[Janus.Hosting.Bff.BrowserCookies.Session];
 
         Answer refused = await new Machine(deployment)
-            .PostCarryingAsync("/oidc/token", cookie, Code(code, Application));
+            .PostCarryingAsync("/oidc/token", cookie, RelyingParty.Code(code, RelyingParty.Application));
 
         Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
         Assert.Equal(ErrorCodes.Denied.ToString(), refused.Text("code"));
@@ -533,13 +574,18 @@ public sealed class OidcFlowTests
     {
         await using var deployment = new Deployment();
 
-        Browser browser = await PreparedAsync(deployment);
-        Answer answered = await browser.SendAsync(
-            "GET",
-            Authorize(Application, silent: true, Destination, "openid email offline_access"));
+        await RelyingParty.RegisteredAsync(deployment);
+
+        Answer answered = await RelyingParty.PushAsync(
+            deployment,
+            RelyingParty.Application,
+            silent: true,
+            RelyingParty.Destination,
+            "openid email offline_access");
 
         Assert.Equal(StatusCodes.Status400BadRequest, answered.Status);
         Assert.Null(answered.Location);
+        Assert.False(answered.Json().TryGetProperty("request_uri", out _));
         Assert.Empty(deployment.Tokens.All);
     }
 
@@ -553,11 +599,13 @@ public sealed class OidcFlowTests
     {
         await using var deployment = new Deployment();
 
-        Browser browser = await PreparedAsync(deployment);
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
         var machine = new Machine(deployment);
-        string code = await CodeAsync(browser, Application);
+        string code = await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Application);
 
-        Answer exchanged = await machine.PostAsync("/oidc/token", Code(code, Application));
+        Answer exchanged = await machine.PostAsync(
+            "/oidc/token",
+            RelyingParty.Code(code, RelyingParty.Application));
 
         Assert.Equal(StatusCodes.Status200OK, exchanged.Status);
         Assert.NotEmpty(exchanged.Text("access_token"));
@@ -575,59 +623,31 @@ public sealed class OidcFlowTests
     {
         await using var deployment = new Deployment();
 
-        Browser browser = await PreparedAsync(deployment);
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
 
-        _ = await browser.SendAsync("GET", Authorize(Application, silent: true));
+        _ = await browser.SendAsync(
+            "GET",
+            await RelyingParty.AuthorizeAsync(deployment, RelyingParty.Application, silent: true));
 
         Assert.Empty(deployment.OidcLog.Entries);
 
         _ = await browser.SendAsync(
             "GET",
-            Authorize(Application, silent: true, redirect: "https://attacker.test/collect"));
+            await RelyingParty.AuthorizeAsync(
+                deployment,
+                RelyingParty.Application,
+                silent: true,
+                redirect: "https://attacker.test/collect"));
 
         Assert.Equal(LogLevel.Warning, Assert.Single(deployment.OidcLog.Entries).Level);
     }
-
-    private static string Challenge =>
-        Base64Url.EncodeToString(SHA256.HashData(Encoding.ASCII.GetBytes(Verifier)));
-
-    private static string Authorize(string clientId, bool silent, string redirect = Destination) =>
-        Authorize(
-            clientId,
-            silent,
-            redirect,
-            // 09 section 9: what may be asked for is what the kind of client may hold,
-            // and a browser application's own layer holds nothing after the exchange.
-            string.Equals(clientId, Protocol, StringComparison.Ordinal)
-                ? "openid email offline_access"
-                : "openid email");
-
-    private static string Authorize(string clientId, bool silent, string redirect, string scope) =>
-        "/oidc/authorize?response_type=code"
-        + "&client_id=" + Uri.EscapeDataString(clientId)
-        + "&redirect_uri=" + Uri.EscapeDataString(redirect)
-        + "&scope=" + Uri.EscapeDataString(scope)
-        + "&state=the-state"
-        + "&code_challenge=" + Challenge
-        + "&code_challenge_method=S256"
-        + (silent ? "&prompt=none" : string.Empty);
-
-    private static (string Name, string? Value)[] Code(string code, string clientId) =>
-    [
-        ("grant_type", "authorization_code"),
-        ("code", code),
-        ("client_id", clientId),
-        ("client_secret", Secret),
-        ("redirect_uri", Destination),
-        ("code_verifier", Verifier),
-    ];
 
     private static (string Name, string? Value)[] Refresh(string token) =>
     [
         ("grant_type", "refresh_token"),
         ("refresh_token", token),
-        ("client_id", Protocol),
-        ("client_secret", Secret),
+        ("client_id", RelyingParty.Protocol),
+        ("client_secret", RelyingParty.Secret),
     ];
 
     private static Session Single(IReadOnlyCollection<Session> sessions)
@@ -638,27 +658,6 @@ public sealed class OidcFlowTests
         }
 
         throw new InvalidOperationException("The deployment holds no session.");
-    }
-
-    private static string Where(Answer answered) =>
-        answered.Location ?? throw new InvalidOperationException("The answer forwarded nowhere.");
-
-    private static string Returned(Answer answered, string name) =>
-        QueryHelpers(Where(answered)).TryGetValue(name, out string? held) ? held : string.Empty;
-
-    private static Dictionary<string, string> QueryHelpers(string where)
-    {
-        var read = new Dictionary<string, string>(StringComparer.Ordinal);
-        int at = where.IndexOf('?', StringComparison.Ordinal);
-
-        foreach (string pair in where[(at + 1)..].Split('&', StringSplitOptions.RemoveEmptyEntries))
-        {
-            int equals = pair.IndexOf('=', StringComparison.Ordinal);
-
-            read[pair[..equals]] = Uri.UnescapeDataString(pair[(equals + 1)..]);
-        }
-
-        return read;
     }
 
     private static string Header(string token, string name) =>
@@ -689,43 +688,5 @@ public sealed class OidcFlowTests
         }
 
         return read;
-    }
-
-    private static async Task RegisteredAsync(Deployment deployment)
-    {
-        foreach ((string clientId, OidcClientKind kind) in new[]
-        {
-            (Application, OidcClientKind.BrowserApplication),
-            (Protocol, OidcClientKind.Protocol),
-        })
-        {
-            await deployment.Clients.RecordAsync(
-                new OidcClient(
-                    clientId,
-                    clientId,
-                    kind,
-                    Destination,
-                    ["openid", "email", "offline_access"]),
-                OpaqueToken.Of(Secret).Fingerprint(),
-                TestContext.Current.CancellationToken);
-        }
-    }
-
-    private static async Task<Browser> PreparedAsync(Deployment deployment)
-    {
-        await RegisteredAsync(deployment);
-
-        Flow.Prepare(deployment);
-
-        return await Flow.SignedInAsync(deployment);
-    }
-
-    private static async Task<string> CodeAsync(Browser browser, string clientId)
-    {
-        Answer answered = await browser.SendAsync("GET", Authorize(clientId, silent: true));
-
-        Assert.Equal(StatusCodes.Status302Found, answered.Status);
-
-        return Returned(answered, "code");
     }
 }

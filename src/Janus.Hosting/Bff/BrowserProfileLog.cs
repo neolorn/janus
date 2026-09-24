@@ -148,6 +148,18 @@ internal static partial class BrowserProfileLog
     public static partial void SignOnExchangeRejected(ILogger log, string correlationId);
 
     /// <summary>
+    /// An authorization request the provider would not take when it was pushed
+    /// (AUTH-OIDC-006 AC2).
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    [LoggerMessage(
+        EventId = 14,
+        Level = LogLevel.Warning,
+        Message = "A sign-on request was not taken by the provider when it was pushed ({CorrelationId}).")]
+    public static partial void SignOnPushRejected(ILogger log, string correlationId);
+
+    /// <summary>
     /// A sign-on by an application the provider's registry does not hold, which is a
     /// registration the deployment has not made.
     /// </summary>

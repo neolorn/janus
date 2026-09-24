@@ -10,6 +10,17 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- Every authorization request is now pushed first. A client posts the parameters it
+  used to put in the address to `POST /oidc/par`, authenticated with its secret, and
+  sends the browser to `/oidc/authorize` with its `client_id` and the `request_uri`
+  it was answered with. `/oidc/authorize` refuses a request that carries its
+  parameters instead, with `invalid_request`. A `request_uri` is taken once, whatever
+  it is answered with, and lapses 60 seconds after it is issued. A browser
+  application's own sign-on pushes its request on the back channel as it exchanges
+  its code, so the browser carries nothing of the request. The discovery document
+  names `pushed_authorization_request_endpoint` and
+  `require_pushed_authorization_requests`.
+
 - `ISmsTransport` has a new member, `ReadReport`, which reads a delivery report from
   the parameters the gateway puts in the query string. Every transport implements it.
 

@@ -272,6 +272,57 @@ public sealed class OidcStoreTests(DatabaseFixture database)
             await two.UpdateAsync(same, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// AUTH-OIDC-006 AC2: a pushed request is kept before anyone is known, so its row
+    /// names nobody, and a subject that names no account of this deployment is still
+    /// refused where it arrives.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_OIDC_006_AC2_APushedRequestIsKeptNamingNobodyAsync()
+    {
+        await RegisteredAsync(Browser, OidcClientKind.BrowserApplication);
+
+        Guid pushed;
+
+        await using (StoreContext writing = database.Context())
+        {
+            var tokens = new OidcTokenStore(writing);
+            OidcTokenRecord token = await tokens.InstantiateAsync(TestContext.Current.CancellationToken);
+
+            await tokens.SetApplicationIdAsync(token, Browser, TestContext.Current.CancellationToken);
+            await tokens.SetSubjectAsync(token, subject: null, TestContext.Current.CancellationToken);
+            await tokens.SetStatusAsync(
+                token,
+                OpenIddictConstants.Statuses.Valid,
+                TestContext.Current.CancellationToken);
+            await tokens.SetTypeAsync(
+                token,
+                OpenIddictConstants.TokenTypeIdentifiers.Private.RequestToken,
+                TestContext.Current.CancellationToken);
+            await tokens.SetCreationDateAsync(token, Noon, TestContext.Current.CancellationToken);
+            await tokens.SetExpirationDateAsync(
+                token,
+                Noon + TimeSpan.FromSeconds(60),
+                TestContext.Current.CancellationToken);
+            await tokens.CreateAsync(token, TestContext.Current.CancellationToken);
+
+            _ = await Assert.ThrowsAsync<ArgumentException>(async () =>
+                await tokens.SetSubjectAsync(
+                    token,
+                    "someone-else",
+                    TestContext.Current.CancellationToken));
+
+            pushed = token.Id;
+        }
+
+        await using StoreContext reading = database.Context();
+
+        var read = new OidcTokenStore(reading);
+        OidcTokenRecord held = (await FoundAsync(read, pushed))!;
+
+        Assert.Null(await read.GetSubjectAsync(held, TestContext.Current.CancellationToken));
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 

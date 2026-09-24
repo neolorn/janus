@@ -14,6 +14,7 @@ internal static class MachineRoutes
 {
     private static readonly PathString[] Governed =
     [
+        new("/oidc/par"),
         new("/oidc/token"),
         new("/oidc/userinfo"),
         new("/callbacks/sms/dlr"),

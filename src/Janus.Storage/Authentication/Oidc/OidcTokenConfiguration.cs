@@ -40,7 +40,7 @@ internal sealed class OidcTokenConfiguration : IEntityTypeConfiguration<OidcToke
 
         builder.Property(token => token.Subject)
             .HasColumnName("subject")
-            .HasConversion(subject => subject.Value, value => new SubjectId(value));
+            .HasConversion(subject => subject!.Value.Value, value => new SubjectId(value));
 
         builder.Property(token => token.Status).HasColumnName("status");
         builder.Property(token => token.Type).HasColumnName("type");

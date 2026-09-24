@@ -29,8 +29,11 @@ internal sealed class OidcTokenRecord
     /// <summary>The <c>authorization_id</c> column: the grant it was issued under.</summary>
     public Guid? AuthorizationId { get; set; }
 
-    /// <summary>The <c>subject</c> column: whose account it is for.</summary>
-    public SubjectId Subject { get; set; }
+    /// <summary>
+    /// The <c>subject</c> column: whose account it is for, and nothing for a pushed
+    /// request, which is taken before anyone is known.
+    /// </summary>
+    public SubjectId? Subject { get; set; }
 
     /// <summary>The <c>status</c> column: what the server last made of it.</summary>
     public string Status { get; set; } = string.Empty;
