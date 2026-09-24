@@ -255,6 +255,65 @@ against the public contract of LIB-API-001.
   document, which put an account's own details on a registration route. Nothing is
   staged for it either way; the frontend navigates to the account application.
 
+- How long a send counter is kept now follows the restrictions as they stand rather than
+  the interval the send was counted under. The record holds the keyed hash and the times
+  and nothing else, and the read before every send takes with it every record whose
+  newest time is older than the longest interval now declared, so shortening an interval
+  reaches the sends already counted.
+- Notification handling is now a contract a deployment can replace: `INotificationHandler`
+  in `Janus.Core` takes which message goes to which destination in which language, and
+  the shipped handler that renders the deployment's templates and hands them to the mail
+  and SMS transports is registered only if the deployment registers none of its own.
+- The city shown on a session is now resolved by the library from the address the
+  session was used from, and no longer given by the caller: it is not a field on any
+  request. While no location database is present the listing shows no city and the
+  `degradation` condition is raised once a window.
+- A verification code is now an aggregate with a table of its own. It lives
+  `code.verification.lifetime` whatever issued it, dies on the try that reaches
+  `code.verification.attempts`, and is spent by the first right one. The new-device
+  check issues and answers through it, and a sign-in in progress no longer carries a
+  code or a count of wrong ones.
+- The offline leaked-password list now travels in the package. A deployment that holds
+  no corpus file of its own still falls back to a dated list when the range API cannot
+  answer, and the list is refreshed with each release rather than by the operator.
+- The self-hosted compromised-password corpus is now reached at the address
+  `password.blocklist.selfhosted.address` names, over the same range protocol the
+  primary source uses, rather than read from a second file beside the application. A
+  deployment that names `selfHosted` and no address does not start.
+- A password longer than `password.maximum` is now refused with
+  `auth.password.toolong` rather than with the configuration code for a value above a
+  ceiling. A password field no longer answers with a sentence about configuration.
+- A check, a capability page or an explanation on a type a derivation reaches is now
+  refused without the host's rows whatever that derivation confers, rather than only
+  where the role it confers allows what is being asked. A call site that passes today
+  can no longer start faulting because an administrator edited a role.
+- An explanation can now be asked with the host's own rows, and on a type a derivation
+  reaches it names the grant the fact produced: no identifier, the derived kind, the
+  role the derivation confers, and the container it was inherited from. Asked without
+  those rows such a type is refused rather than answered from the stored grants alone.
+  The identifier an explained grant carries is optional for the same reason: a derived
+  grant is a fact being true and no row holds it.
+- A page of capabilities now costs one query over the host's own rows however many
+  permissions it asks for. Every derivation reaching the type is evaluated in that one
+  query, and what the role each confers allows is read from the model, so a page that
+  offers three actions costs what a page offering one costs.
+- A sign-in whose password an invalidation left below the single-factor floor now
+  completes and says so, so the person is asked for a new password at the next
+  sign-in rather than being locked out.
+- The case-insensitive collation is created in the schema the library owns, like
+  everything else of the library's, and a column names it by that schema.
+- A configuration key loosens the way its row states. Where a row states nothing, a
+  key with only a ceiling loosens upward, a key with only a floor loosens downward,
+  and a flag loosens away from its default, so a tightening no longer costs the
+  friction a loosening does.
+- A duration written in years or months is held at 366 days a year and 31 days a
+  month, so a retention floor stated in years is never shorter than the calendar
+  span it names.
+- `ThrowIfIncomplete` now takes the screening sources and whether the records of
+  processing are generated, because `service.name` and `hosting.environment` are
+  named only by a deployment that uses them. A missing declaration now fails with
+  `model.startup.declarationmissing` naming the key.
+
 ### Added
 
 - An administrator holding `membership:manage` can invite a person into an
@@ -1428,67 +1487,6 @@ against the public contract of LIB-API-001.
   an address is still displaced only by a session that has stepped up, and still asks
   the old address where the account has no other channel at all. A deployment applies
   one further migration, which lets a staged verification record no browser.
-
-### Changed
-
-- How long a send counter is kept now follows the restrictions as they stand rather than
-  the interval the send was counted under. The record holds the keyed hash and the times
-  and nothing else, and the read before every send takes with it every record whose
-  newest time is older than the longest interval now declared, so shortening an interval
-  reaches the sends already counted.
-- Notification handling is now a contract a deployment can replace: `INotificationHandler`
-  in `Janus.Core` takes which message goes to which destination in which language, and
-  the shipped handler that renders the deployment's templates and hands them to the mail
-  and SMS transports is registered only if the deployment registers none of its own.
-- The city shown on a session is now resolved by the library from the address the
-  session was used from, and no longer given by the caller: it is not a field on any
-  request. While no location database is present the listing shows no city and the
-  `degradation` condition is raised once a window.
-- A verification code is now an aggregate with a table of its own. It lives
-  `code.verification.lifetime` whatever issued it, dies on the try that reaches
-  `code.verification.attempts`, and is spent by the first right one. The new-device
-  check issues and answers through it, and a sign-in in progress no longer carries a
-  code or a count of wrong ones.
-- The offline leaked-password list now travels in the package. A deployment that holds
-  no corpus file of its own still falls back to a dated list when the range API cannot
-  answer, and the list is refreshed with each release rather than by the operator.
-- The self-hosted compromised-password corpus is now reached at the address
-  `password.blocklist.selfhosted.address` names, over the same range protocol the
-  primary source uses, rather than read from a second file beside the application. A
-  deployment that names `selfHosted` and no address does not start.
-- A password longer than `password.maximum` is now refused with
-  `auth.password.toolong` rather than with the configuration code for a value above a
-  ceiling. A password field no longer answers with a sentence about configuration.
-- A check, a capability page or an explanation on a type a derivation reaches is now
-  refused without the host's rows whatever that derivation confers, rather than only
-  where the role it confers allows what is being asked. A call site that passes today
-  can no longer start faulting because an administrator edited a role.
-- An explanation can now be asked with the host's own rows, and on a type a derivation
-  reaches it names the grant the fact produced: no identifier, the derived kind, the
-  role the derivation confers, and the container it was inherited from. Asked without
-  those rows such a type is refused rather than answered from the stored grants alone.
-  The identifier an explained grant carries is optional for the same reason: a derived
-  grant is a fact being true and no row holds it.
-- A page of capabilities now costs one query over the host's own rows however many
-  permissions it asks for. Every derivation reaching the type is evaluated in that one
-  query, and what the role each confers allows is read from the model, so a page that
-  offers three actions costs what a page offering one costs.
-- A sign-in whose password an invalidation left below the single-factor floor now
-  completes and says so, so the person is asked for a new password at the next
-  sign-in rather than being locked out.
-- The case-insensitive collation is created in the schema the library owns, like
-  everything else of the library's, and a column names it by that schema.
-- A configuration key loosens the way its row states. Where a row states nothing, a
-  key with only a ceiling loosens upward, a key with only a floor loosens downward,
-  and a flag loosens away from its default, so a tightening no longer costs the
-  friction a loosening does.
-- A duration written in years or months is held at 366 days a year and 31 days a
-  month, so a retention floor stated in years is never shorter than the calendar
-  span it names.
-- `ThrowIfIncomplete` now takes the screening sources and whether the records of
-  processing are generated, because `service.name` and `hosting.environment` are
-  named only by a deployment that uses them. A missing declaration now fails with
-  `model.startup.declarationmissing` naming the key.
 
 ### Fixed
 
