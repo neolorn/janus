@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using DotNet.Testcontainers.Containers;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Testcontainers.PostgreSql;
@@ -20,6 +21,8 @@ namespace Janus.Storage.Tests;
 public sealed class DatabaseFixture : IAsyncLifetime
 {
     private const string Database = "identity";
+
+    private const string BackupScript = "/tmp/backup.sql";
 
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:17-alpine").Build();
 
@@ -59,6 +62,26 @@ public sealed class DatabaseFixture : IAsyncLifetime
         await connection.OpenAsync(TestContext.Current.CancellationToken);
 
         return connection;
+    }
+
+    /// <summary>
+    /// Takes a backup of the whole instance, its roles and every database, as the script
+    /// that replays it into a new instance.
+    /// </summary>
+    /// <returns>The script.</returns>
+    /// <exception cref="InvalidOperationException">The backup could not be taken.</exception>
+    public async ValueTask<byte[]> BackupAsync()
+    {
+        string superuser = new NpgsqlConnectionStringBuilder(_container.GetConnectionString()).Username
+            ?? throw new InvalidOperationException("The instance names no superuser.");
+
+        ExecResult taken = await _container.ExecAsync(
+            ["pg_dumpall", "--username", superuser, "--file", BackupScript],
+            TestContext.Current.CancellationToken);
+
+        return taken.ExitCode == 0
+            ? await _container.ReadFileAsync(BackupScript, TestContext.Current.CancellationToken)
+            : throw new InvalidOperationException("The backup could not be taken.");
     }
 
     /// <inheritdoc/>

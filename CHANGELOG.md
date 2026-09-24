@@ -373,6 +373,16 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The restore test runs by itself every `backup.restoretest.interval`. A deployment
+  registers `IRestoreTestInstance`, which restores its latest backup into a throwaway
+  instance and tears it down again; the library opens the restored database with the
+  keys it runs on, decrypts the canary's field, finds the canary's account by its
+  verified email, and times the whole against `backup.restoretest.objective`. Every
+  run is recorded as `ops.restoretest.completed` with its outcome, the seconds it took
+  and the objective. A run that restores nothing, cannot decrypt, cannot find the
+  account, runs past the objective (it is abandoned there) or whose instance may still
+  stand raises `restore-test-failed`. Without an `IRestoreTestInstance`, every run
+  raises it.
 - `replay-erasures <ledger path>` carries out again, after a restore, every erasure
   the off-host ledger records and the restored database does not: from whatever state
   the restore left the account in, with the host told again, audited under the

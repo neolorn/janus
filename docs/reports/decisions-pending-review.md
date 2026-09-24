@@ -13405,6 +13405,103 @@ operations. The restore procedure (`12` section 4) could say the ledger is copie
 its storage and replayed under the application's credential before cutting over, and
 DR-006a AC1 could name the ledger in place of the erasures table.
 
+---
+
+## 334. How the restore test is run, proved, timed and recorded
+
+**Phase 9 · 2026-09-25 · Tier 3 · DR-007, DR-008, DR-010 AC2, DR-017 AC2, OPS-ALERT-001, INF-BG-001, LIB-EXT-001**
+
+*The question.* DR-007 names the job's steps: restore the latest base backup and logs
+into a throwaway instance, decrypt the canary's field with the live key-encryption key,
+verify a fingerprint resolves, record the elapsed time against the objective, tear the
+instance down, and alert on failure or overrun. A library cannot restore a backup:
+where the backups are, how they are opened and what the instance is built on are the
+environment's (DR-010, DR-017). No chapter says how the library is handed the instance,
+where the measured time is recorded, what a deployment that cannot restore at all
+becomes, whether a restore running past the objective is waited for, or what proves "a
+known account can sign in" for a canary that holds no credential (entry 312). It
+touches the keys, so the strictest reading is taken.
+
+*The readings.*
+
+1. A host seam the library asks to restore into a throwaway instance and to tear it
+   down; the library opens the restored database with the keys it runs on and proves
+   the canary itself; a deployment that registers no seam fails every run.
+2. As 1, but a deployment with no seam skips the test and raises a degradation.
+3. The host runs the whole test and reports its outcome and time; the library records
+   and raises.
+
+For the record: an audit row per run, the maintenance log, or a table of its own. For a
+restore still running at the objective: wait for it, or abandon it.
+
+*Chosen: 1, an audit row, and abandoning at the objective.* Reading 3 leaves the
+decryption under the live key, the half DR-007 exists to prove, to code the library
+never sees. Reading 2 lets a deployment that never tested a backup pass quietly, where
+DR-007 calls an untested backup a hypothesis. The maintenance log is for the human
+tasks and DR-007 says this job is not one; an audit row needs no new table and is kept
+for the security period. A restore that hangs would otherwise never be raised, and the
+test has failed by then in any case.
+
+What is built:
+
+- Public `IRestoreTestInstance`. `RestoreAsync` builds an instance from the committed
+  infrastructure definition, never over the running database, restores the latest
+  base backup and the logs after it, and returns how to reach the restored database.
+  `TearDownAsync` tears down whatever the last restore built, however far it got. The
+  backup's private key is the implementation's to fetch when it restores and to hold
+  in memory only (DR-010 AC2).
+- The job `restore-test`, reason `DR-007`, operation `monitoring`, every
+  `backup.restoretest.interval`. It reads `backup.restoretest.objective` (the default,
+  which is its ceiling, where unreadable) and `backup.restoretest.canary`, and asks for
+  a restore under a cancellation that fires at the objective. It opens the restored
+  database as a storage area of its own under the keys the process holds, with pooled
+  connections off, so no connection to the instance is left open when the teardown is
+  asked. Then:
+  - it decrypts the canary's display name (entry 312); none there, a canary setting
+    naming no subject, or a fault is `undecrypted`;
+  - it reads the canary's verified email and finds its account by it as sign-in does,
+    the canonical form looked up by its fingerprint; not found, found as another
+    account, or a fault is `unresolved`. This is what AC4's "a known account can sign
+    in" is proved by: sign-in's resolution of an identifier to its account, since the
+    canary holds no credential;
+  - nothing registered, a restore that failed, or one that threw is `unrestored`; a run
+    that took longer than the objective, whatever step it reached, is `overrun`; any
+    other run is `passed`.
+- A step that throws is read as the failure of that step and logged by the type of what
+  was thrown only (hosting background event 3, a warning).
+- The teardown is asked after every restore attempted, with no cancellation, so the
+  worker stopping does not leave the instance standing. One that fails or throws is
+  recorded as `outlived`.
+- Every run is recorded as `ops.restoretest.completed`, security category, under the
+  job's principal, with details `outcome`, `elapsedSeconds`, `objectiveSeconds` and
+  `outlived`, and nothing of the canary. A run short of a pass, or whose instance may
+  have outlived it, raises `restore-test-failed` with the same details in the same
+  transaction.
+- A run holds its own process's worker for as long as it takes. The deployment's other
+  process keeps taking the other jobs' runs, since the database decides which process
+  takes each run, and the objective bounds how long any run holds one.
+- `backup.restoretest.interval` is `P3M`, which the chapter 10 holding rule reads as 93
+  days (D-152), so a calendar quarter of 90 days can pass without a run.
+
+*Tests that pin it.*
+`RestoreTestTests.DR_007_AC1_TheTestRunsAtItsIntervalWithoutAPersonAsync`,
+`RestoreTestTests.DR_007_AC4_TheRestoredCanaryDecryptsAndItsAccountIsFoundAsync`,
+`RestoreTestTests.DR_007_AC2_TheMeasuredTimeIsRecordedAgainstTheObjectiveAsync`,
+`RestoreTestTests.DR_007_AC3_ABackupTheLiveKeyCannotOpenIsRaisedAsync`,
+`RestoreTestTests.DR_007_AC3_ABackupWhoseAccountsTheLiveFingerprintKeyCannotFindIsRaisedAsync`,
+`RestoreTestTests.DR_007_AC3_ARunThatRestoresNothingIsRaisedAsync`,
+`RestoreTestTests.DR_008_AC1_TheTestReadsTheRestoredInstanceAndLeavesTheRunningOneAsync`,
+`RestoreTestTests.DR_008_AC2_TheInstanceDoesNotOutliveTheTestAsync`,
+`BackgroundJobsTests.INF_BG_001_AC1_EveryJobRunsWithoutAPersonAsync`.
+
+*Chapter text that should change.* DR-007 could name the host seam and what it returns,
+the outcomes, the record and its details, that the test is abandoned at the objective,
+and that "a known account can sign in" is proved by resolving the canary's verified
+email to its account. DR-008 could say the teardown is asked whatever became of the
+test and that a failed one raises. Chapter 10 could list `ops.restoretest.completed`.
+If "at least quarterly" means once in every calendar quarter, the
+`backup.restoretest.interval` row could be written as `P90D`.
+
 
 # Rows for chapter 10
 
@@ -13598,6 +13695,11 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `identity.takedown.reversed` | security | `AuditActions.TakedownReversed` | A takedown was reversed inside its window and the account restored to active. Details carry `reason`. (IDN-LIFE-003) |
 | `identity.username.changed` | routine | `AuditActions.UsernameChanged` | The account's username was changed, which holds the old one for as long as the retention says. (REG-IDENT-009) |
 | `ops.configuration.changed` | security | `AuditActions.ConfigurationChanged` | A runtime setting is put in force through the one configuration operation, or a value is set by bootstrap or by `configure` from the server under that command's principal. Details carry `key`, `before`, `after`, `loosening` and, where the change is a loosening or is made from the server, `reason`. (OPS-CFG-002, OPS-CFG-004, OPS-CFG-005, entries 315 and 319) |
+| `ops.keyrotation.completed` | security | `AuditActions.KeyRotationCompleted` | A rotation of the key-encryption key or the fingerprint key reached every value under its version. Details carry `kind`, `version` and `processed`; the principal is the command's, `rotate-kek` or `rotate-fingerprint-key`, reason `OPS-SEC-003`; the row names no subject and no organization. (OPS-SEC-003 AC5, entries 316 and 318) |
+| `ops.keyrotation.resumed` | security | `AuditActions.KeyRotationResumed` | A rotation that had stopped was taken up again from its recorded progress. Details carry `kind`, `version` and `processed`, under the command's principal. (OPS-SEC-003 AC2, AC5, entries 316 and 318) |
+| `ops.keyrotation.retired` | security | `AuditActions.KeyRotationRetired` | The versions before a completed rotation's were retired once its escrow copy was confirmed sealed. Details carry `kind`, `version`, `processed` and `retired`, the versions retired, under the command's principal. (OPS-SEC-003 AC3, AC4, AC5, entries 316 and 318) |
+| `ops.keyrotation.started` | security | `AuditActions.KeyRotationStarted` | A rotation of the key-encryption key or the fingerprint key started. Details carry `kind`, `version` and `processed`, under the command's principal. (OPS-SEC-003 AC5, entries 316 and 318) |
+| `ops.restoretest.completed` | security | `AuditActions.RestoreTestCompleted` | A run of the automated restore test ended, passed or not. Details carry `outcome` (`passed`, `unrestored`, `undecrypted`, `unresolved` or `overrun`), `elapsedSeconds`, `objectiveSeconds` and `outlived`; the principal is the job's, `restore-test`, reason `DR-007`; the row names no subject and no organization. (DR-007 AC2, DR-008 AC2, entry 334) |
 | `privacy.consent.granted` | security | `AuditActions.ConsentGranted` | A consent was granted for a purpose, naming the document version it was given against. (PRIV-CONS-004) |
 | `privacy.consent.withdrawn` | security | `AuditActions.ConsentWithdrawn` | A consent was withdrawn for a purpose. (PRIV-CONS-008) |
 | `privacy.document.published` | security | `AuditActions.DocumentPublished` | A version of a legal document was published in the governing language. (PRIV-CONS-005) |

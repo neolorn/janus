@@ -47,6 +47,13 @@ public sealed class HostFixture : IAsyncLifetime
     public async ValueTask<NpgsqlConnection> OpenAsync() => await _database.OpenAsync();
 
     /// <summary>
+    /// Takes a backup of the whole instance the database lives in, as the script that
+    /// replays it into a new instance.
+    /// </summary>
+    /// <returns>The script.</returns>
+    public async ValueTask<byte[]> BackupAsync() => await _database.BackupAsync();
+
+    /// <summary>
     /// Opens a context over the host's own tables, with the library's two contract
     /// tables mapped into it.
     /// </summary>

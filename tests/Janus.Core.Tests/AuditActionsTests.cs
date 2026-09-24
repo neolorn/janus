@@ -75,6 +75,7 @@ public sealed class AuditActionsTests
         "ops.keyrotation.resumed",
         "ops.keyrotation.retired",
         "ops.keyrotation.started",
+        "ops.restoretest.completed",
         "privacy.consent.granted",
         "privacy.consent.withdrawn",
         "privacy.document.published",

@@ -4105,3 +4105,7 @@ Janus.Core.IClockReference
 Janus.Core.IClockReference.OffsetAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.TimeSpan>>
 Janus.Core.IErasureLedger
 Janus.Core.IErasureLedger.AppendAsync(string! line, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IRestoreTestInstance
+Janus.Core.IRestoreTestInstance.RestoreAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<string!>>
+Janus.Core.IRestoreTestInstance.TearDownAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+static Janus.Core.AuditActions.RestoreTestCompleted.get -> Janus.Core.AuditAction

@@ -253,7 +253,7 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
         {
             Assert.True(job.Principal.IsDeploymentScoped);
             Assert.Single(job.Principal.Operations);
-            Assert.Matches("^[A-Z]+(-[A-Z]+)+-[0-9]{3}[a-z]?$", job.Principal.Reason);
+            Assert.Matches("^[A-Z]+(-[A-Z]+)*-[0-9]{3}[a-z]?$", job.Principal.Reason);
         });
     }
 

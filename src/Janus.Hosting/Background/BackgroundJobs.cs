@@ -256,6 +256,14 @@ internal static class BackgroundJobs
                 .WatchAsync(cancellationToken)
                 .ConfigureAwait(false)),
         BackgroundJob.Every(
+            "restore-test",
+            "DR-007",
+            SystemOperation.Monitoring,
+            Settings.BackupRestoreTestInterval,
+            async (services, context, cancellationToken) => await services.GetRequiredService<RestoreTest>()
+                .RunAsync(context, cancellationToken)
+                .ConfigureAwait(false)),
+        BackgroundJob.Every(
             "licence-expiry",
             "OPS-MAINT-001",
             SystemOperation.Monitoring,

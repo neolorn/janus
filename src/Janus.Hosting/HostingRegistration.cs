@@ -274,6 +274,21 @@ public static class HostingRegistration
             provider.GetService<ICertificateRenewal>(),
             provider.GetRequiredService<IAlertChannels>(),
             provider.GetRequiredService<TimeProvider>()));
+
+        // DR-007, DR-008: the backups and the throwaway instance are the environment's,
+        // so what restores into one is the deployment's to register, and one it does not
+        // register fails every test; what is restored is opened with the keys this
+        // process holds, which is what the test proves the backup readable with.
+        services.AddScoped(provider => new RestoreTest(
+            provider.GetService<IRestoreTestInstance>(),
+            keyEncryptionKeys,
+            fingerprintKeys,
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IPrivacyAudit>(),
+            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<ILogger<RestoreTest>>()));
         services.AddScoped<AlertDestinationChange>();
         services.AddScoped<IAlertLog, AlertLog>();
         services.AddScoped<IConfigurationAdministration, ConfigurationService>();
