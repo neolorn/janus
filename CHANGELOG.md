@@ -373,6 +373,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `replay-erasures <ledger path>` carries out again, after a restore, every erasure
+  the off-host ledger records and the restored database does not: from whatever state
+  the restore left the account in, with the host told again, audited under the
+  principal `replay-erasures`. The whole ledger is read first and a line in any other
+  form refuses it whole; a second run changes nothing more. It prints how many lines
+  were carried out again, stood already, or named no account.
 - A deployment can register `IErasureLedger` over storage that does not share fate
   with the database host. Every erasure's line (its instant to the second, the subject
   identifier and the reason) is appended to it before the erasure completes: the line

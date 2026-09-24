@@ -68,4 +68,11 @@ public enum SystemOperation
     /// </summary>
     [JsonStringEnumMemberName("configuration")]
     Configuration = 8,
+
+    /// <summary>
+    /// Carrying out again, after a restore, the erasures the off-host ledger records and
+    /// the restored database does not.
+    /// </summary>
+    [JsonStringEnumMemberName("erasure-replay")]
+    ErasureReplay = 9,
 }

@@ -13334,6 +13334,77 @@ never vouches for it, and could show its illustration to the second with one spa
 IDN-LIFE-003a could say that subscriber names are distinct and that `erasure-ledger` is
 the library's. `10` section 1.5 could add `model.startup.subscribername`.
 
+---
+
+## 333. What the replay of the erasure ledger does to a restored database
+
+**Phase 9 · 2026-09-24 · Tier 3 · DR-016 AC3, DR-006a AC1, IDN-PRIN-001, INF-BG-002, IDN-LIFE-003**
+
+*The question.* DR-016 names the replay (`janus replay-erasures <ledger path>`,
+idempotent over every line) and says only "for every identifier in the ledger, confirm
+the key is destroyed and the erasure recorded; complete anything the restore forgot".
+No chapter says what a line whose account the restore brought back live becomes, since
+the only transition into `deleted` is from `deleting`; whether the host is told again;
+under which principal the replay acts; or what becomes of a ledger that cannot be read
+whole. It touches erasure, so the strictest reading is taken.
+
+*The readings.*
+
+1. For each line: where the erasures row stands, nothing (the row commits with the
+   key's destruction, IDN-LIFE-003b AC4); otherwise carry the erasure out again, from
+   whatever state the restore left the account in, and tell the host again.
+2. As 1, but carry out only an account the restore left `deleting`, and report the rest
+   for the operator to put into deletion by hand.
+3. As 1, but leave the host's own tables to the operator.
+
+*Chosen: 1.* The erasure was carried out and reported complete before the restore, so
+no state the restore brought back is one the account may stay in; reading 2 leaves a
+person's data readable until someone acts. The restore brought the host's rows back as
+well, so reading 3 leaves the host's half undone.
+
+What is built:
+
+- `janus replay-erasures <path>` reads the whole ledger before anything else: UTF-8
+  with no byte order mark read as another encoding, each line in the one form entry 332
+  writes. A file that cannot be opened or decoded, or no path, is refused as
+  `api.request.malformed` with `details.member` `ledger`; a line in any other form
+  refuses the whole ledger with `details.line` its number, and nothing is written. The
+  key document is piped as for every command; the connection is the application's own
+  credential, which holds every right the erasure writes with.
+- A line whose erasures row stands, a repeated line included, is left as it is. A line
+  naming an account the restored database does not hold is counted and left. Every
+  other line is carried out again in one transaction: the account enters the deletion
+  the line records where it was not already deleting (`takedown` for `minor-takedown`,
+  `oob-request` for the other two reasons, since the ledger and not the person asks
+  now), at the line's instant, from `active`, `restricted` or `suspended`, and is
+  erased by the same writes as the sweep's; the `ErasureRequested` record goes on the
+  outbox again at the line's instant and reason, so the host redoes its half and the
+  line is appended again unchanged; and the erasure is audited as
+  `privacy.erasure.executed` under the deployment-scoped principal `replay-erasures`,
+  reason `DR-016`, with details `reason` and `erasedAt`.
+- `SystemOperation` gains `ErasureReplay` (`erasure-replay`), the one operation that
+  principal may run, as bootstrap (entry 314) and key rotation have theirs.
+- The command prints `{"reapplied": n, "standing": n, "absent": n}` and nothing of a
+  subject. A second run over the same ledger carries out nothing more.
+- DR-006a AC1 speaks of erasures "recorded in the erasures table ... where that table
+  survives the restore"; a restore of the one database restores that table with it, so
+  the replay reads the ledger, which DR-006a names as what re-applies them.
+
+*Tests that pin it.*
+`ErasureReplayTests.DR_016_AC3_TheWholeLedgerIsReplayedAndASecondReplayChangesNothingAsync`,
+`ErasureReplayTests.DR_016_AC3_ALedgerWithALineInAnotherFormIsRefusedWholeAsync`,
+`ErasureReplayTests.DR_016_AC3_AnUnreadableLedgerIsRefusedAsync`,
+`AccountTests.DR_016_AC3_AnErasureIsReappliedFromTheStateARestoreLeft`,
+`AccountTests.DR_016_AC3_AnAccountLeftDeletingKeepsItsDeletion`,
+`AccountTests.DR_016_AC3_AnErasedOrEmergencyAccountIsNotReapplied`.
+
+*Chapter text that should change.* DR-016 could say what a replayed line becomes (the
+deletion origin recorded, the host told again, the audit and its principal) and what
+the command prints and refuses. IDN-PRIN-001 could list `erasure-replay` among the
+operations. The restore procedure (`12` section 4) could say the ledger is copied from
+its storage and replayed under the application's credential before cutting over, and
+DR-006a AC1 could name the ledger in place of the erasures table.
+
 
 # Rows for chapter 10
 
@@ -13532,7 +13603,7 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `privacy.document.published` | security | `AuditActions.DocumentPublished` | A version of a legal document was published in the governing language. (PRIV-CONS-005) |
 | `privacy.document.translated` | security | `AuditActions.DocumentTranslated` | A translation was filed against a published version of a legal document. (PRIV-CONS-005) |
 | `privacy.erasure.completed` | security | `AuditActions.ErasureCompleted` | An erasure whose retries were spent was completed by hand, with its erasures row. Details carry `erasure` and `outstanding`, the required subscribers that had not confirmed, by name; the acting subject is the operator, the effective subject the erased one. (IDN-LIFE-003a, entry 264) |
-| `privacy.erasure.executed` | security | `AuditActions.ErasureExecuted` | An erasure was carried out, which destroys the subject key and leaves the trail resolving. (PRIV-RIGHT-005) |
+| `privacy.erasure.executed` | security | `AuditActions.ErasureExecuted` | An erasure was carried out, which destroys the subject key and leaves the trail resolving. A replay of the off-host ledger records each erasure it carries out again under the principal `replay-erasures`, reason `DR-016`, with details `reason` and `erasedAt`. (PRIV-RIGHT-005, DR-016, entry 333) |
 | `privacy.export.assembled` | security | `AuditActions.ExportAssembled` | A subject export was assembled and made available to the subject. (PRIV-RIGHT-003) |
 | `privacy.objection.recorded` | security | `AuditActions.ObjectionRecorded` | An objection to a purpose was recorded. (PRIV-BASIS-003) |
 | `privacy.objection.withdrawn` | security | `AuditActions.ObjectionWithdrawn` | An objection to a purpose was withdrawn and the purpose resumed. (PRIV-BASIS-003) |

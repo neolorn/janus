@@ -27,7 +27,7 @@ namespace Janus.Storage.Privacy.Erasures;
 /// <param name="configuration">Where the username hold's length is read.</param>
 /// <remarks>
 /// Implements PRIV-RIGHT-005, PRIV-RIGHT-005a, PRIV-RIGHT-005c, IDN-LIFE-003b,
-/// IDN-LIFE-014, IDN-ACCT-002 and IDN-PRIN-003. Every write here is made on one
+/// IDN-LIFE-014, IDN-ACCT-002, IDN-PRIN-003 and DR-016. Every write here is made on one
 /// context and committed by the caller's unit of work, so the three writes and the
 /// erasures row reach the database together or not at all. No row is removed: the
 /// photo's bytes are held under the same key as every other personal field, so
@@ -41,10 +41,27 @@ internal sealed class SubjectEraser(
     IConfigurationStore configuration) : ISubjectEraser
 {
     /// <inheritdoc/>
-    public async ValueTask<Erasure> EraseAsync(
+    public ValueTask<Erasure> EraseAsync(
         SubjectId subject,
         ErasureReason reason,
         DateTimeOffset at,
+        CancellationToken cancellationToken) =>
+        ErasedAsync(subject, reason, at, account => account.MarkErased(), cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Erasure> ReapplyAsync(
+        SubjectId subject,
+        ErasureReason reason,
+        DeletionOrigin by,
+        DateTimeOffset at,
+        CancellationToken cancellationToken) =>
+        ErasedAsync(subject, reason, at, account => account.ReapplyErasure(by, at), cancellationToken);
+
+    private async ValueTask<Erasure> ErasedAsync(
+        SubjectId subject,
+        ErasureReason reason,
+        DateTimeOffset at,
+        Action<Account> erased,
         CancellationToken cancellationToken)
     {
         if (await context.Erasures.FindAsync([subject], cancellationToken).ConfigureAwait(false)
@@ -54,7 +71,7 @@ internal sealed class SubjectEraser(
         }
 
         await sessions.EndAccountAsync(subject, at, cancellationToken).ConfigureAwait(false);
-        await MarkErasedAsync(subject, cancellationToken).ConfigureAwait(false);
+        await MarkErasedAsync(subject, erased, cancellationToken).ConfigureAwait(false);
         await DestroyKeyAsync(subject, cancellationToken).ConfigureAwait(false);
         await HoldUsernameAsync(subject, at, cancellationToken).ConfigureAwait(false);
         await NeutraliseFingerprintsAsync(subject, cancellationToken).ConfigureAwait(false);
@@ -77,7 +94,10 @@ internal sealed class SubjectEraser(
         return erasure;
     }
 
-    private async ValueTask MarkErasedAsync(SubjectId subject, CancellationToken cancellationToken)
+    private async ValueTask MarkErasedAsync(
+        SubjectId subject,
+        Action<Account> erased,
+        CancellationToken cancellationToken)
     {
         AccountRecord record = await context.Accounts
             .FindAsync([subject], cancellationToken)
@@ -95,9 +115,11 @@ internal sealed class SubjectEraser(
             registration: null,
             record.IsEmergency);
 
-        account.MarkErased();
+        erased(account);
 
         record.State = account.State;
+        record.DeletingBy = account.DeletingBy;
+        record.DeletingSince = account.DeletingSince;
         record.RestrictionHeld = account.RestrictionHeld;
     }
 

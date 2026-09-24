@@ -333,6 +333,31 @@ internal sealed class Account
         RestrictionHeld = false;
     }
 
+    /// <summary>
+    /// Records an erasure again after a restore to a point before it took the erasure
+    /// away. The account enters the deletion the ledger records from whatever state the
+    /// restore left it in, keeping the deletion it was already in, and is erased.
+    /// </summary>
+    /// <param name="by">The origin the deletion is recorded under where it was not already deleting.</param>
+    /// <param name="at">The instant of the erasure, as the ledger records it.</param>
+    /// <exception cref="InvalidOperationException">
+    /// The account is already deleted, or is the reserved emergency account.
+    /// </exception>
+    /// <remarks>
+    /// Implements DR-016 and DR-006a. The erasure was carried out and reported complete
+    /// before the restore, so no state the restore brought back is one it may stay in.
+    /// </remarks>
+    public void ReapplyErasure(DeletionOrigin by, DateTimeOffset at)
+    {
+        if (State is not AccountState.Deleting)
+        {
+            Require(AccountState.Active, AccountState.Restricted, AccountState.Suspended);
+            EnterDeletion(by, at);
+        }
+
+        MarkErased();
+    }
+
     private void EnterSuspension(SuspensionOrigin by, params AccountState[] from)
     {
         Unreserved();
