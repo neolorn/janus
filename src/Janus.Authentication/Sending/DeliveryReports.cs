@@ -32,7 +32,7 @@ internal sealed class DeliveryReports(
     /// <param name="delivered">What it says became of the message.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// Nothing where a failed send was released, or
+    /// Nothing where a failed send was released or a delivered one is held, or
     /// <c>integration.callback.rejected</c> where the callback was rate-limited or
     /// carried a reference no live send answers to.
     /// </returns>
@@ -58,25 +58,25 @@ internal sealed class DeliveryReports(
 
         // A report that a message arrived advances nothing at all: the state it might
         // seem to confirm is proved by the code the person types, never by the
-        // gateway saying so (AUTH-ABUSE-007).
-        if (delivered)
-        {
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
-            return Result.Success();
-        }
-
-        bool released = !string.IsNullOrWhiteSpace(reference)
-            && await ledger
-                .ReleaseAsync(SendReferences.Of(reference), cancellationToken)
+        // gateway saying so (AUTH-ABUSE-007). It is still held to a live send, so a
+        // guessed reference is refused whatever it reports (INT-GEN-003 AC1).
+        bool answered = !string.IsNullOrWhiteSpace(reference)
+            && await AnsweredAsync(SendReferences.Of(reference), delivered, cancellationToken)
                 .ConfigureAwait(false);
 
-        Result outcome = released
+        Result outcome = answered
             ? Result.Success()
             : await admission.RejectAsync(source, cancellationToken).ConfigureAwait(false);
 
         return await KeptAsync(outcome, cancellationToken).ConfigureAwait(false);
     }
+
+    // A report of delivery is checked against the send and changes nothing of it; a
+    // report of failure releases it.
+    private ValueTask<bool> AnsweredAsync(byte[] reference, bool delivered, CancellationToken cancellationToken) =>
+        delivered
+            ? ledger.HoldsAsync(reference, cancellationToken)
+            : ledger.ReleaseAsync(reference, cancellationToken);
 
     // The counts are kept whenever the callback was answered, a rejection included;
     // a failure of anything else leaves the transaction to roll back.

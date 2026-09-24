@@ -126,10 +126,14 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
 
     /// <summary>
     /// INT-GEN-003 AC1: a reference of the right shape that nobody drew is rejected,
-    /// so knowing what a reference looks like buys nothing.
+    /// whatever the report says became of the message, so knowing what a reference
+    /// looks like buys nothing.
     /// </summary>
-    [Fact]
-    public async Task INT_GEN_003_AC1_ACallbackWithAGuessedReferenceIsRejectedAsync()
+    /// <param name="delivered">What the report says.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task INT_GEN_003_AC1_ACallbackWithAGuessedReferenceIsRejectedAsync(bool delivered)
     {
         await SentAsync();
 
@@ -138,7 +142,7 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
             Refusal(await Reports.ReportAsync(
                 Gateway,
                 SendReference.Draw(_randomness).Value,
-                delivered: false,
+                delivered,
                 TestContext.Current.CancellationToken)));
 
         Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
@@ -164,7 +168,7 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
 
     /// <summary>
     /// INT-SMS-005 AC1: a forged report verifies no phone. A report of delivery for
-    /// a reference nobody drew is taken and does nothing: no count moves, nothing is
+    /// a reference nobody drew is refused and does nothing: no count moves, nothing is
     /// announced, and there is no state a phone could be marked verified in.
     /// </summary>
     [Fact]
@@ -173,7 +177,13 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
         await SentAsync();
         int announced = _events.Published.Count;
 
-        await ReportedAsync(SendReference.Draw(_randomness).Value, delivered: true);
+        Assert.Equal(
+            ErrorCodes.CallbackRejected,
+            Refusal(await Reports.ReportAsync(
+                Gateway,
+                SendReference.Draw(_randomness).Value,
+                delivered: true,
+                TestContext.Current.CancellationToken)));
 
         Assert.Equal(announced, _events.Published.Count);
         Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));

@@ -10514,6 +10514,50 @@ the confirmation a host supplies; 10 section 1 could give `integration.callback.
 429 for every cause; 04 or 06 could give `callback_events` and `callback_references` a
 retention.
 
+---
+
+## 277. A report of delivery is held to a live send
+
+**Corrections 3 · 2026-09-24 · Tier 3 · INT-GEN-003 AC1, 09 section 10 AC1, INT-SMS-005, AUTH-ABUSE-007**
+
+*The question.* INT-GEN-003 AC1: "A callback with a guessed reference is rejected." 09
+section 10 AC1: "A forged callback with a guessed reference is rejected and logged."
+INT-SMS-005 gives a report of failed delivery one effect and says nothing of a report
+of delivery. Since phase 4 a report of delivery was taken and did nothing whatever its
+reference, so a guessed reference reporting delivery was answered as a genuine one
+and never counted toward `alerting.callback.threshold`. The endpoint answers on the
+wire for the first time in this run. The item touches rejection and alerting, so the
+strictest reading is taken.
+
+*The readings.*
+
+1. A report of delivery changes nothing, so its reference is not looked up and it is
+   always taken.
+2. Every report is held to a live send, whatever it says: a report of delivery is
+   checked against the send and changes nothing of it; one whose reference no send
+   holds is rejected, recorded against its source and counted, as a failure report
+   with a guessed reference already was.
+
+*Chosen: 2.* Both criteria name a callback with a guessed reference without regard to
+what it reports. Under it:
+
+- `ISendLedger.HoldsAsync(reference)` answers whether a send the transport took under
+  that reference is still held, reading the same `sends` row a release removes. It
+  writes nothing.
+- A genuine report of delivery that arrives after its send settled is refused. A send
+  is held for as long as any bucket it counted against decides anything, which is
+  hours, and a gateway reports within minutes.
+
+*Tests that pin it.*
+`DeliveryReportsTests.INT_GEN_003_AC1_ACallbackWithAGuessedReferenceIsRejectedAsync`
+(both reports), `DeliveryReportsTests.INT_SMS_005_AC1_AForgedReportVerifiesNoPhoneAsync`,
+`DeliveryReportsTests.INT_GEN_003_AC2_ACallbackAdvancesNoStateOfItsOwnAsync`,
+`SendLedgerTests.HoldsAsync_ASendCounted_IsHeldUntilItIsReleasedAsync`.
+
+*Chapter text that should change.* 05 INT-SMS-005 could say that a report of delivery
+is checked against the send it names and is rejected where no send holds its
+reference.
+
 
 # Rows for chapter 10
 

@@ -114,6 +114,10 @@ internal sealed class SendLedgerInMemory : ISendLedger
     }
 
     /// <inheritdoc/>
+    public ValueTask<bool> HoldsAsync(byte[] reference, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_records.ContainsKey(Convert.ToHexString(reference)));
+
+    /// <inheritdoc/>
     public ValueTask<bool> ReleaseAsync(byte[] reference, CancellationToken cancellationToken)
     {
         string held = Convert.ToHexString(reference);

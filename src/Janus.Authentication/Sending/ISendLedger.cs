@@ -47,6 +47,18 @@ internal interface ISendLedger
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Whether a send the transport took under a reference is still held, which a
+    /// delivery report indicating delivery is checked against and changes nothing of.
+    /// </summary>
+    /// <param name="reference">The hash of the reference the report carried.</param>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    /// <returns>
+    /// Whether it is; false where the reference is unknown or the send is already
+    /// settled.
+    /// </returns>
+    ValueTask<bool> HoldsAsync(byte[] reference, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Takes one send back out of every bucket it counted against, which a delivery
     /// report indicating failure causes and nothing else does.
     /// </summary>
