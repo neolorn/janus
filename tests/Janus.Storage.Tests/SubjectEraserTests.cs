@@ -38,8 +38,8 @@ namespace Janus.Storage.Tests;
 
 /// <summary>
 /// The erasure: one transaction that leaves a subject's fields unrecoverable and every
-/// row where it was (PRIV-RIGHT-005, PRIV-RIGHT-005a, IDN-LIFE-003b, IDN-LIFE-014,
-/// IDN-ACCT-002, IDN-PRIN-003).
+/// row where it was (PRIV-RIGHT-005, PRIV-RIGHT-005a, IDN-LIFE-003a, IDN-LIFE-003b,
+/// IDN-LIFE-014, IDN-ACCT-002, IDN-PRIN-003).
 /// </summary>
 [Trait("kind", "integration")]
 public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture<DatabaseFixture>, IDisposable
@@ -112,6 +112,47 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             .SingleAsync(row => row.Subject == subject, TestContext.Current.CancellationToken);
 
         Assert.Equal(PersonalDataFormat.Marker, key.FormatMarker);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003a AC5: the state change, the key's destruction and the fingerprints'
+    /// neutralisation commit together or not at all. The erasure that commits leaves an
+    /// erased subject whose key is gone and whose address belongs to nobody; the one
+    /// that rolls back leaves a live subject whose key and address read as before.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_003a_AC5_TheStateTheKeyAndTheFingerprintsCommitTogetherAsync()
+    {
+        (SubjectId erased, string gone) = await AddressedAsync();
+        (SubjectId kept, string held) = await AddressedAsync();
+
+        await EraseAsync(erased, ErasureReason.ErasureRequest);
+
+        await using (StoreContext erasing = database.Context())
+        await using (var work = new UnitOfWork(erasing))
+        {
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            await Eraser(erasing).EraseAsync(
+                kept,
+                ErasureReason.ErasureRequest,
+                Noon,
+                TestContext.Current.CancellationToken);
+            await erasing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Equal(
+            (AccountState.Deleted, false, (SubjectId?)null),
+            await StandingAsync(reading, erased, gone));
+        Assert.Equal(
+            (AccountState.Deleting, true, (SubjectId?)kept),
+            await StandingAsync(reading, kept, held));
+        Assert.Equal(
+            held,
+            Assert.Single((await Identifiers(reading).FindBySubjectAsync(
+                kept,
+                TestContext.Current.CancellationToken)).All).Entered);
     }
 
     /// <summary>
@@ -964,6 +1005,48 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await deleting.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         return subject;
+    }
+
+    // An account on its way out that holds one verified email, and that email.
+    private async ValueTask<(SubjectId Subject, string Address)> AddressedAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        string entered = "erasing-" + Guid.NewGuid().ToString("N")[..12] + "@example.test";
+
+        Assert.True(EmailAddress.TryParse(entered, out EmailAddress address));
+
+        await using StoreContext writing = database.Context();
+        IdentifierStore store = Identifiers(writing);
+        IdentifierSet set = await store.FindBySubjectAsync(subject, TestContext.Current.CancellationToken);
+        var email = Identifier.Email(IdentifierId.New(TimeProvider.System), subject, address, entered, Noon);
+
+        set.Add(email, maximum: 5);
+        set.Verify(email.Id, Noon);
+
+        await store.RecordAsync(set, TestContext.Current.CancellationToken);
+        await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        return (subject, address.Value);
+    }
+
+    // The account's state, whether its key still unwraps, and who owns the address.
+    private async ValueTask<(AccountState State, bool Readable, SubjectId? Owner)> StandingAsync(
+        StoreContext reading,
+        SubjectId subject,
+        string address)
+    {
+        AccountRecord account = await reading.Accounts
+            .SingleAsync(row => row.Subject == subject, TestContext.Current.CancellationToken);
+        SubjectKeyRecord key = await reading.SubjectKeys
+            .SingleAsync(row => row.Subject == subject, TestContext.Current.CancellationToken);
+
+        return (
+            account.State,
+            key.FormatMarker == PersonalDataFormat.Marker,
+            await Identifiers(reading).FindOwnerAsync(
+                IdentifierKind.Email,
+                address,
+                TestContext.Current.CancellationToken));
     }
 
     private async ValueTask<byte[]> StoredImageAsync(SubjectId subject)

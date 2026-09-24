@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Privacy.Erasures;
 using Janus.Privacy.Outbox;
 using Janus.Privacy.Policies;
 using Janus.Privacy.Takedowns;
@@ -114,6 +115,26 @@ public sealed class TakedownServiceTests : IAsyncDisposable
 
         Assert.DoesNotContain(_outbox.Deliveries, held => held.Kind is SubjectEventKind.ErasureRequested);
         Assert.Equal(Ahmed, Assert.IsType<TakedownExecuted>(delivery.Raised()).Subject);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003a AC1: the trigger's identity change and its outbox record are one
+    /// transaction, and it writes no erasures row: the operation is handed nothing that
+    /// could write one, and the account is left in its window, not erased.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003a_AC1_TheTriggerWritesItsDeliveryAndNoErasureInOneTransactionAsync()
+    {
+        _ = Held(await ExecutedAsync());
+
+        Assert.Equal((1, 1), (_work.Opened, _work.Committed));
+        Assert.Equal(SubjectEventKind.TakedownExecuted, Assert.Single(_outbox.Deliveries).Kind);
+        Assert.Equal(AccountState.Deleting, _accounts.Of(Ahmed));
+        Assert.DoesNotContain(
+            typeof(TakedownService).GetConstructors().Single().GetParameters(),
+            parameter => parameter.ParameterType == typeof(ISubjectEraser)
+                || parameter.ParameterType == typeof(IErasureStore));
     }
 
     /// <summary>

@@ -150,6 +150,28 @@ public sealed class DeletionSweepTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-003a AC1: the erasure the takedown's window ends in writes the identity
+    /// change with its erasures row and its outbox record, all in one transaction.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003a_AC1_TheTakedownsErasureWritesItsRowAndDeliveryInOneTransactionAsync()
+    {
+        _accounts.Deletes(Ahmed, DeletionOrigin.Takedown, Noon);
+
+        _clock.Advance(Settings.TakedownGrace.Default);
+
+        Assert.Equal(1, await Sweep.SweepAsync(TestContext.Current.CancellationToken));
+
+        Erasure erased = Assert.Single(_eraser.Erased);
+        Delivery delivery = Assert.Single(_outbox.Deliveries);
+
+        Assert.Equal((Ahmed, ErasureReason.MinorTakedown), (erased.Subject, erased.Reason));
+        Assert.Equal((Ahmed, SubjectEventKind.ErasureRequested), (delivery.Subject, delivery.Kind));
+        Assert.Equal((1, 1), (_work.Opened, _work.Committed));
+    }
+
+    /// <summary>
     /// IDN-AUD-001: what the pass did is written down against the account it was
     /// done to, with no acting person, because nobody acted.
     /// </summary>
