@@ -80,6 +80,7 @@ public sealed class HostFixture : IAsyncLifetime
                 INSERT INTO identity.settings (key, value)
                 VALUES
                     ('notification.languages', '["en"]'),
+                    ('notification.email.sendingdomain', 'mail.example.test'),
                     ('retention.identity', 'P7Y'),
                     ('retention.history', 'P2Y');
 

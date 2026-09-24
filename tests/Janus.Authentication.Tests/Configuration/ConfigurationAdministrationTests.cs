@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Janus.Authentication.Configuration;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Sending;
 using Janus.Authentication.Tests.Policies;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -14,7 +16,9 @@ namespace Janus.Authentication.Tests.Configuration;
 
 /// <summary>
 /// The one operation a runtime setting changes through: what the direction costs, what
-/// is written down, and how it reads back (OPS-CFG-002, OPS-CFG-005).
+/// is written down, and how it reads back (OPS-CFG-002, OPS-CFG-005), and what a change
+/// to the sending domain, its relay declaration or the system policy warns of
+/// (INT-MAIL-011).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class ConfigurationAdministrationTests : IAsyncDisposable
@@ -35,16 +39,22 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
     private readonly AccessGateInMemory _gate = new();
     private readonly AdministrativeOrganizationInMemory _administrative = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
+    private readonly EventsInMemory _events = new();
     private readonly OrganizationId _administering;
 
     /// <summary>
     /// A deployment with an administrative organization, in which a test grants the
-    /// permission to loosen to whoever it has make a change.
+    /// permission to loosen to whoever it has make a change, sending from a domain it
+    /// declared as registered with the relay.
     /// </summary>
     public ConfigurationAdministrationTests()
     {
         _administering = OrganizationId.New(_clock);
         _administrative.Organization = _administering;
+        _configuration.Set(Settings.NotificationEmailSendingDomain, "mail.example.test");
+        _configuration.Set<IReadOnlySet<string>>(
+            Settings.NotificationEmailRelayRegistered,
+            new HashSet<string>(["mail.example.test"], StringComparer.Ordinal));
     }
 
     private ConfigurationAdministration Administration =>
@@ -53,6 +63,7 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
             _changes,
             new AdministrativeScope(_gate, _administrative),
             new PolicyResolution(new MembershipLookupInMemory(), _configuration, _raises),
+            new RelayRegistration(_configuration, _events, _clock),
             _work,
             _clock);
 
@@ -387,6 +398,96 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
         }
 
         return keys;
+    }
+
+    /// <summary>
+    /// INT-MAIL-011 AC2: moving the sending domain to one not declared as registered
+    /// with the relay, while Continue with Apple is a way in, raises the warning the
+    /// start raises, naming the domain, and the change is made.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_MAIL_011_AC2_ChangingTheSendingDomainToAnUndeclaredOneWarnsAsync()
+    {
+        await ChangedAsync(Settings.NotificationEmailSendingDomain, "news.example.test", "a separate stream", Satisfied);
+
+        AlertRaised raised = Assert.Single(_events.Of<AlertRaised>());
+
+        Assert.Equal(AlertCondition.RelayDomainUnregistered, raised.Condition);
+        Assert.Equal(AlertSeverity.Normal, raised.Severity);
+        Assert.Equal("news.example.test", raised.Details["domain"].GetString());
+        Assert.Equal("news.example.test", await InForceAsync(Settings.NotificationEmailSendingDomain));
+        Assert.Single(_changes.Written);
+    }
+
+    /// <summary>
+    /// INT-MAIL-011 AC2 (entry 269): withdrawing the declaration, or making Continue
+    /// with Apple a way in again over a domain not declared, warns as well.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_MAIL_011_AC2_EveryChangeThatLeavesTheDomainUndeclaredWarnsAsync()
+    {
+        Policy withoutApple = Janus.Core.Policies.SystemDefault with
+        {
+            LoginFactors = Janus.Core.Policies.SystemDefault.LoginFactors.Where(factor => factor is not Factor.Apple).ToHashSet(),
+        };
+
+        await ChangedAsync(Settings.PolicyDefault, withoutApple, "no Apple sign-in", Satisfied);
+        await ChangedAsync<IReadOnlySet<string>>(
+            Settings.NotificationEmailRelayRegistered,
+            new HashSet<string>(StringComparer.Ordinal),
+            "the registration lapsed",
+            Satisfied);
+
+        Assert.Empty(_events.Published);
+
+        await ChangedAsync(Settings.PolicyDefault, Janus.Core.Policies.SystemDefault, "Apple sign-in again", Satisfied);
+
+        AlertRaised raised = Assert.Single(_events.Of<AlertRaised>());
+
+        Assert.Equal(AlertCondition.RelayDomainUnregistered, raised.Condition);
+        Assert.Equal("mail.example.test", raised.Details["domain"].GetString());
+    }
+
+    /// <summary>
+    /// INT-MAIL-011 AC3: the declaration is configuration: declaring the new domain as
+    /// registered, the way any runtime setting changes, is what quiets the warning.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_MAIL_011_AC3_DeclaringTheDomainIsAConfigurationChangeAsync()
+    {
+        await ChangedAsync<IReadOnlySet<string>>(
+            Settings.NotificationEmailRelayRegistered,
+            new HashSet<string>(["mail.example.test", "News.Example.Test"], StringComparer.Ordinal),
+            "the second stream is registered",
+            Satisfied);
+        await ChangedAsync(Settings.NotificationEmailSendingDomain, "news.example.test", "a separate stream", Satisfied);
+
+        Assert.Empty(_events.Published);
+        Assert.Equal(2, _changes.Written.Count);
+    }
+
+    /// <summary>
+    /// A warning no consumer took leaves the change unmade and unwritten, as any
+    /// publication inside a transaction does (entry 269).
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task ChangeAsync_AWarningThatIsNotTaken_IsRefusedAndNotWrittenDownAsync()
+    {
+        _events.Refusal = Error.From(ErrorCodes.Denied);
+
+        Error refusal = await RefusedAsync(
+            Settings.NotificationEmailSendingDomain,
+            "news.example.test",
+            "a separate stream",
+            Satisfied);
+
+        Assert.Equal(ErrorCodes.Denied, refusal.Code);
+        Assert.Empty(_changes.Written);
+        Assert.Equal(0, _work.Committed);
     }
 
     private async Task<TValue> InForceAsync<TValue>(Setting<TValue> setting) =>

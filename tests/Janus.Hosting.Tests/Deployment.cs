@@ -146,9 +146,14 @@ internal sealed class Deployment : IAsyncDisposable
         Accounts = new AccountDirectoryInMemory(Declared);
 
         // Two of the keys a deployment names or does not start, which a ceremony and
-        // the challenge every sign-in carries are read from (OPS-CFG-001).
+        // the challenge every sign-in carries are read from (OPS-CFG-001), and the
+        // domain it sends from, declared as registered with the relay (INT-MAIL-011).
         Configuration.Set(Settings.WebAuthnRelyingPartyId, "identity.example.test");
         Configuration.Set(Settings.WebAuthnOrigins, ["https://identity.example.test"]);
+        Configuration.Set(Settings.NotificationEmailSendingDomain, "mail.example.test");
+        Configuration.Set<IReadOnlySet<string>>(
+            Settings.NotificationEmailRelayRegistered,
+            new HashSet<string>(["mail.example.test"], StringComparer.Ordinal));
 
         Register(
             builder.Services,
@@ -658,6 +663,7 @@ internal sealed class Deployment : IAsyncDisposable
             .ConfigurePrimaryHttpMessageHandler(() => Provider);
 
         _ = services.AddScoped<SmsBalance>();
+        _ = services.AddScoped<RelayRegistration>();
         _ = services.AddScoped<SendingService>();
         _ = services.AddScoped<INotificationHandler>(
             provider => provider.GetRequiredService<SendingService>());

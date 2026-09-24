@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Authentication.Tests;
 using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Mailboxes;
 using Janus.Authentication.Tests.Sending;
@@ -21,7 +22,7 @@ namespace Janus.Hosting.Tests.Authorization;
 
 /// <summary>
 /// What the checks that read the database decide over a deployment, and where they run
-/// (AUTHZ-MODEL-004, AUTHZ-DERIVE-004).
+/// (AUTHZ-MODEL-004, AUTHZ-DERIVE-004), and what they warn of (INT-MAIL-011).
 /// </summary>
 /// <param name="host">The deployment the checks read.</param>
 [Trait("kind", "integration")]
@@ -39,6 +40,18 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         + "', 'nobody');";
 
     private const string Unmigrated = "behind";
+
+    private static readonly string Declaring =
+        "INSERT INTO identity.settings (key, value) VALUES ('"
+        + Settings.NotificationEmailRelayRegistered.Key
+        + "', '[\"mail.example.test\"]');";
+
+    private static readonly string Undeclaring =
+        "DELETE FROM identity.settings WHERE key = '"
+        + Settings.NotificationEmailRelayRegistered.Key
+        + "';";
+
+    private readonly EventsInMemory _events = new();
 
     private static readonly string Undefaulted =
         "DELETE FROM identity.settings WHERE key = '"
@@ -367,6 +380,46 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         Assert.False(served.Started);
     }
 
+    /// <summary>
+    /// INT-MAIL-011 AC1: a deployment in which Continue with Apple is a way in and whose
+    /// sending domain is not declared as registered with the relay starts, and warns as
+    /// it does, naming the domain; declaring it quiets the warning.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_MAIL_011_AC1_AnUndeclaredSendingDomainWarnsAsTheDeploymentStartsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using (IHost undeclared = Deployed())
+        {
+            await undeclared.StartAsync(cancellationToken);
+            await undeclared.StopAsync(cancellationToken);
+        }
+
+        AlertRaised raised = Assert.Single(_events.Of<AlertRaised>());
+
+        Assert.Equal(AlertCondition.RelayDomainUnregistered, raised.Condition);
+        Assert.Equal(AlertSeverity.Normal, raised.Severity);
+        Assert.Equal("mail.example.test", raised.Details["domain"].GetString());
+
+        await WriteAsync(Declaring, cancellationToken);
+
+        try
+        {
+            using IHost declared = Deployed();
+
+            await declared.StartAsync(cancellationToken);
+            await declared.StopAsync(cancellationToken);
+
+            Assert.Single(_events.Published);
+        }
+        finally
+        {
+            await WriteAsync(Undeclaring, cancellationToken);
+        }
+    }
+
     private IHost Deployed(
         bool catalogue = true,
         bool handlers = true,
@@ -395,6 +448,9 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool mailClient = false,
         string? connection = null)
     {
+        // Where what the library announces goes, the host's own (LIB-HOST-001).
+        services.AddSingleton<IEvents>(_events);
+
         if (codec)
         {
             services.AddSingleton(new ImageCodecInMemory().Declared);

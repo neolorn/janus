@@ -10045,6 +10045,72 @@ serves both, under the permission 10 already names for viewing grants. Under it:
 `GET /admin/grants?organization=...&subjectType=...&subjectId=...` with its response
 shape and `grant:read`, and 16 section 3 step 4 could name it.
 
+---
+
+## 269. When and how the relay registration warning is raised
+
+**Phase 8 · 2026-09-24 · Tier 2 · INT-MAIL-011 AC1 to AC3, 10 section 4 `notification.email.relayregistered`, AUTH-STEP-002a, D-162**
+
+*The question.* INT-MAIL-011: "configuration validation SHALL surface, at startup and
+when the setting changes, a sending domain that is not declared as registered while
+Continue with Apple is enabled." Its values paragraph: "When `apple` is in any effective
+`loginFactors` and the sending domain is not in that set, startup raises the Normal
+condition `relay-domain-unregistered` with `details.domain`." AC2: "Changing the sending
+domain to an undeclared one produces the same warning at the point of change." No
+chapter says which changes count as "the setting changes", whether the warning stops a
+start or a change, what happens when it cannot be raised, or how two spellings of one
+domain compare.
+
+*The readings.*
+
+1. Raise at startup and on a change of `notification.email.sendingdomain` only, the one
+   AC2 names.
+2. Raise at startup and on a change of any of the three values the condition reads:
+   the sending domain, `notification.email.relayregistered`, and the system policy
+   (`policy.default`), whose `loginFactors` decides whether Apple is a way in.
+
+*Chosen: 2.* Withdrawing the declaration or enabling Apple over an undeclared domain
+leaves the same silent failure AC2 exists to surface; reading 1 lets either pass
+unwarned until the next restart. Under it:
+
+- "Any effective `loginFactors`" is read as the system policy's: an organization's
+  override can only narrow it (AUTH-STEP-002a, refused by the policy strictness check
+  otherwise), so Apple in any effective policy is Apple in the system's.
+- Whether Continue with Apple is a way in is read from a property of the catalogue
+  entry, `RelaysAddress` (the identity it asserts may carry a relay address,
+  REG-IDENT-008), and not from the entry's name: AUTH-FACT-001 AC1 says "No
+  conditional anywhere in the library tests for a factor by name". The property is
+  internal and Apple is the one entry carrying it.
+- A domain in the declaration matches the sending domain in any case, since a domain
+  name is one name whatever its case (RFC 4343); nothing else is normalised.
+- The warning is raised under the domain (`relay-domain-unregistered:<domain>`), so
+  OPS-ALERT-002 deduplicates it per domain across restarts and changes.
+- The warning stops nothing: the deployment starts and the change is made, as a
+  "warning" and a Normal condition say.
+- A warning that cannot be raised does stop them, the strictest reading of D-162: at
+  startup it is a `StartupException` carrying the failure (an unset sending domain is
+  `model.startup.declarationmissing`), and at a change the change is refused and
+  nothing is written, as any publication inside a transaction is.
+- The start check runs among the library's hosted checks, after the others, and
+  reads the database as they do.
+
+*Tests that pin it.*
+`RelayRegistrationTests.INT_MAIL_011_AC1_AnUndeclaredSendingDomainIsNamedInTheWarningAsync`,
+`RelayRegistrationTests.CheckAsync_TheDomainDeclaredInAnotherCase_RaisesNothingAsync`,
+`RelayRegistrationTests.CheckAsync_AppleIsNoWayIn_RaisesNothingAsync`,
+`RelayRegistrationTests.CheckAsync_NoSendingDomainNamed_IsRefusedAsUndeclaredAsync`,
+`FactorCatalogueTests.INT_MAIL_011_TheOneEntryWhoseAddressMayBeARelayIsApple`,
+`FactorCatalogueTests.AUTH_FACT_001_AC1_NoConditionalTestsForAFactorByName`,
+`StartupValidationTests.INT_MAIL_011_AC1_AnUndeclaredSendingDomainWarnsAsTheDeploymentStartsAsync`,
+`ConfigurationAdministrationTests.INT_MAIL_011_AC2_ChangingTheSendingDomainToAnUndeclaredOneWarnsAsync`,
+`ConfigurationAdministrationTests.INT_MAIL_011_AC2_EveryChangeThatLeavesTheDomainUndeclaredWarnsAsync`,
+`ConfigurationAdministrationTests.INT_MAIL_011_AC3_DeclaringTheDomainIsAConfigurationChangeAsync`,
+`ConfigurationAdministrationTests.ChangeAsync_AWarningThatIsNotTaken_IsRefusedAndNotWrittenDownAsync`.
+
+*Chapter text that should change.* INT-MAIL-011 could name the three values whose
+change is checked, say that the warning stops neither a start nor a change, and say
+that domains compare without regard to case.
+
 
 # Rows for chapter 10
 

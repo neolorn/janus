@@ -413,6 +413,13 @@ against the public contract of LIB-API-001.
   owed and raises `degradation` on any difference without changing either side. The
   address is held encrypted under its holder's key and is erased with them.
 
+- Where Continue with Apple is among the system policy's `loginFactors` and
+  `notification.email.sendingdomain` is not in `notification.email.relayregistered`,
+  the deployment raises `relay-domain-unregistered` with the domain as it starts and
+  whenever a change to either key or to `policy.default` leaves it so. The warning
+  stops neither the start nor the change; a warning that cannot be raised stops both.
+  A host now registers `IEvents` for the start to complete.
+
 - An organization can lock its members to email domains it has proved by DNS:
   `POST /admin/organizations/{id}/domains` lists a domain and answers the TXT record to
   publish, `POST .../domains/{domain}/verify` looks for it (422

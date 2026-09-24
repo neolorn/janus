@@ -176,6 +176,7 @@ public static class HostingRegistration
         // AUTH-ABUSE-004, OPS-ALERT-001: the one path every message takes, and what
         // decides whether it goes.
         services.AddScoped<SmsBalance>();
+        services.AddScoped<RelayRegistration>();
         services.AddScoped<SendingService>();
 
         // LIB-EXT-001: the shipped handler carries email and SMS; a deployment that
@@ -447,6 +448,7 @@ public static class HostingRegistration
         services.Insert(5, ServiceDescriptor.Singleton<IHostedService, DeclarationValidationService>());
         services.Insert(6, ServiceDescriptor.Singleton<IHostedService, RedirectValidationService>());
         services.Insert(7, ServiceDescriptor.Singleton<IHostedService, SigningKeyValidationService>());
+        services.Insert(8, ServiceDescriptor.Singleton<IHostedService, RelayValidationService>());
 
         return services;
     }

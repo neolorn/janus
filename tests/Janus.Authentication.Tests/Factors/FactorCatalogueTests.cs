@@ -33,6 +33,18 @@ public sealed class FactorCatalogueTests
         Assert.Equal([Path.Combine("Janus.Core", "Policy.cs")], BranchingOnAFactor());
 
     /// <summary>
+    /// INT-MAIL-011 and REG-IDENT-008: the one entry whose asserted address may be at
+    /// a private relay is Continue with Apple, which is what the relay warning reads.
+    /// </summary>
+    [Fact]
+    public void INT_MAIL_011_TheOneEntryWhoseAddressMayBeARelayIsApple() =>
+        Assert.Equal(
+            [Factor.Apple],
+            FactorCatalogue.Entries
+                .Where(entry => entry.Value.RelaysAddress)
+                .Select(entry => entry.Key));
+
+    /// <summary>
     /// AUTH-STEP-008 invariants 1 and 2: no rule about a step-up gate names a factor,
     /// and none reads what the account has enrolled by name; the one file that tests
     /// for an entry is the policy object, which chapter 10 section 4.1a states by
@@ -102,7 +114,8 @@ public sealed class FactorCatalogueTests
             IsDiscoverable: false,
             Channel: null,
             Restricted: false,
-            SingleUse: false);
+            SingleUse: false,
+            RelaysAddress: false);
 
         Assert.Null(Assurance.Reached([code]));
         Assert.Null(Assurance.Proved([code]));
