@@ -389,6 +389,11 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     public DbSet<KeyCeremonyRecord> KeyCeremonies => Set<KeyCeremonyRecord>();
 
     /// <summary>
+    /// The round trips to social providers browsers have in flight.
+    /// </summary>
+    public DbSet<ProviderAttemptRecord> ProviderAttempts => Set<ProviderAttemptRecord>();
+
+    /// <summary>
     /// The sign-in links and codes that have gone out.
     /// </summary>
     public DbSet<PendingSignInRecord> SignInLinks => Set<PendingSignInRecord>();
@@ -563,6 +568,7 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new VerificationCodeConfiguration());
         modelBuilder.ApplyConfiguration(new SendDeliveryConfiguration());
         modelBuilder.ApplyConfiguration(new KeyCeremonyConfiguration());
+        modelBuilder.ApplyConfiguration(new ProviderAttemptConfiguration());
         modelBuilder.ApplyConfiguration(new PendingSignInConfiguration());
         modelBuilder.ApplyConfiguration(new PolicyRaiseConfiguration());
         modelBuilder.ApplyConfiguration(new LockedDomainConfiguration());

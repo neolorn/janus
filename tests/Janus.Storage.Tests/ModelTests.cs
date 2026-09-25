@@ -643,6 +643,21 @@ public sealed class ModelTests
             "profiles.enc_legal_name",
             "profiles.subject",
 
+            // Not an account field: a round trip to a social provider in flight, bound
+            // to what the browser carries, its proof key under the key-encryption key
+            // (IDN-LIFE-012, BFF-CSRF-005a, OPS-SEC-001).
+            "provider_attempts.created_at",
+            "provider_attempts.id",
+            "provider_attempts.intent",
+            "provider_attempts.key_version",
+            "provider_attempts.nonce",
+            "provider_attempts.preauthentication",
+            "provider_attempts.provider",
+            "provider_attempts.return_to",
+            "provider_attempts.session",
+            "provider_attempts.state",
+            "provider_attempts.verifier",
+
             // Not an account field: a raised condition waiting for the alert channels,
             // removed once they carry it (OPS-ALERT-001).
             "raised_alerts.condition",

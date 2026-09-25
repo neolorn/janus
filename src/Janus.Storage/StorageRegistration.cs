@@ -230,6 +230,10 @@ internal static class StorageRegistration
         services.AddScoped<IChallengeStore, ChallengeStore>();
         services.AddScoped<IVerificationCodeStore, VerificationCodeStore>();
         services.AddScoped<IKeyCeremonyStore, KeyCeremonyStore>();
+        services.AddScoped<IProviderAttemptStore>(provider => new ProviderAttemptStore(
+            provider.GetRequiredService<StoreContext>(),
+            keyEncryptionKeys,
+            provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<IPendingSignInStore>(provider => new PendingSignInStore(
             provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,

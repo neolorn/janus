@@ -381,6 +381,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The library's schema gains the table a round trip to a social provider is kept in
+  while the browser is away, one row per browser, so a deployment applies one new
+  migration. The proof key is kept wrapped under the key-encryption key and is
+  re-wrapped with the rest when the key is rotated; the row goes when it is taken or
+  when the session it belongs to ends.
+
 - The annual operation on the envelope, in which the key-encryption key is rotated, is
   warned of: a daily job, `envelope-rotation`, raises `expiry-approaching` from
   `maintenance.expiry.warninglead` before a year has passed since the last
