@@ -15716,6 +15716,112 @@ permissions.
 *Chapter text that should change.* REF-001 AC2 could say the bump is judged at the
 release commit, against the previous release, by the contract files.
 
+---
+
+## 383. Every path of the library is a security path for a catch, and a catch ends the operation
+
+**Phase 10 · 2026-09-25 · Tier 2 · CONV-ERR-003 AC2**
+
+*The question.* CONV-ERR-003 AC2 says that catch-and-log-and-continue does not appear
+on a security path. JAN0006 accepts a catch that only logs. The chapter does not say
+which paths are security paths.
+
+*The readings.*
+
+1. Security paths are those of the authentication, authorization and privacy areas. The
+   scan runs over those folders.
+2. Every path of the library is a security path. Every catch in `src/` must end the
+   operation: its last statement throws or returns a failure, or it answers the request
+   with a refusal as the last act of the block that holds it.
+
+*Chosen: 2.*
+
+- The library is an identity and access library. A catch in hosting, storage, the
+  command line or the background jobs can decide what a security path sees, such as a
+  failed outbox publish or an unread key document.
+- A folder list would need to be kept up to date, and a new folder would fall outside
+  it silently. Holding every catch fails closed.
+- All 23 catches already meet it, so the reading costs nothing now.
+- A catch that throws only under a condition is flagged, because its other branch
+  carries on.
+
+*Tests that pin it.* `LibraryStructureTests.CONV_ERR_003_AC2_NoCatchOfTheLibraryCarriesOnAfterTheException`.
+
+*Chapter text that should change.* CONV-ERR-003 AC2 could read "No catch block of the
+library carries on after the exception: each throws, returns a failure result, or
+answers the request with a refusal as its last act."
+
+---
+
+## 384. The constant-time scan covers every in-process comparison of a secret-named value
+
+**Phase 10 · 2026-09-25 · Tier 2 · CONV-CODE-007 AC1**
+
+*The question.* AC1 says no string comparison is used on a hash, token or code. The
+chapter does not say whether byte and object equality count, how a value is known to
+be a hash, token or code, or whether a lookup by fingerprint inside a database query
+counts.
+
+*The readings.*
+
+1. Only `string` comparisons of values named hash, token or code.
+2. Every comparison other than `FixedTimeEquals`, by any operator or method, where
+   either operand is named for a secret (hash, token, code, digest, fingerprint,
+   signature, secret, nonce, challenge, verifier, password, otp, mac). Three cases are
+   exempt:
+   - the other operand is compiled in or published (a literal, `null`, a same-file
+     `const`, or a member of `ErrorCodes` or `FactorCatalogue`);
+   - the equality stands inside an EF Core query a store sends to the database;
+   - the value is a third party's to compare.
+
+*Chosen: 2.*
+
+- The item's body says every security-sensitive comparison. A byte-array
+  `SequenceEqual` leaks timing in the same way a string comparison does, and the one
+  site found was of that kind.
+- A query's equality runs in the database, as an index lookup by the keyed fingerprint
+  the store is handed. The library does not compare in process there, and no
+  constant-time primitive applies to SQL.
+- A compiled-in or published value is secret to nobody.
+- The scan reads names, not types. A secret held under a name without one of the words
+  is not seen. 08 names no analyser for this, so no analyser was added.
+
+*Tests that pin it.* `LibraryStructureTests.CONV_CODE_007_AC1_NoHashTokenOrCodeIsComparedButInConstantTime`.
+
+*Chapter text that should change.* CONV-CODE-007 AC1 could read "No equality or
+comparison other than `CryptographicOperations.FixedTimeEquals` is applied in process
+to a hash, token, code, fingerprint or signature; a lookup a query performs in the
+database is not such a comparison."
+
+---
+
+## 385. A denial for CONV-ERR-001 AC1 is a code of the authentication or authorization families
+
+**Phase 10 · 2026-09-25 · Tier 2 · CONV-ERR-001 AC1**
+
+*The question.* AC1 says no authentication or authorization denial is signalled by an
+exception. The task allowed deciding it either by a source scan or by a test over each
+contract method's refusals.
+
+*The readings.*
+
+1. A behavioural test per contract method, provoking each refusal and asserting a
+   result.
+2. A source scan. No throw or exception construction in `src/` names a member of
+   `ErrorCodes` whose code is in the `auth.` or `authz.` family, and none raises an
+   exception whose type is itself a refusal of access.
+
+*Chosen: 2.*
+
+- Every denial the library signals is one of those codes, read from the catalogue
+  itself, so a new denial code is covered without a list.
+- A per-method test would cover only the refusals someone thought to provoke.
+- The scan and CONV-ERR-001 AC2 (a result cannot be ignored) together decide AC1.
+
+*Tests that pin it.* `LibraryStructureTests.CONV_ERR_001_AC1_NoDenialIsSignalledByAnException`.
+
+*Chapter text that should change.* None.
+
 
 # Rows for chapter 10
 
