@@ -269,6 +269,17 @@ public sealed class SettingsTests
     }
 
     /// <summary>
+    /// LIB-SEAM-002 AC1: the two capabilities that are built and disabled rather than
+    /// absent ship switched off, several memberships refused and one approver enough.
+    /// </summary>
+    [Fact]
+    public void LIB_SEAM_002_AC1_ABuiltButDisabledCapabilityDefaultsOff()
+    {
+        Assert.False(Settings.OrganizationMultipleMemberships.Default);
+        Assert.Equal(1, Settings.RecoveryApproversRequired.Default);
+    }
+
+    /// <summary>
     /// A key the deployment has to name has no default to fall back to, so reading
     /// one is a fault rather than a silent empty value.
     /// </summary>
