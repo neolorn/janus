@@ -73,7 +73,11 @@ jobs:
         with:
           global-json-file: global.json
       - run: dotnet restore Janus.slnx --locked-mode
-      - run: dotnet test tests/Janus.Core.Tests --no-restore -- --filter-trait "kind=contract"
+      # A project holding no test of the kind being run is not a failing gate, and
+      # exit code 8 is the platform saying the filter matched nothing there.
+      - run: >
+          dotnet test Janus.slnx --no-restore --
+          --filter-trait "kind=contract" --ignore-exit-code 8
 
   unicode-tables:
     name: Unicode tables regenerate without a diff
