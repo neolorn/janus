@@ -14827,6 +14827,44 @@ on the default branch, where a red check blocks the merge.
 *Chapter text that should change.* CONV-TEST-002 could say that a contract test which
 needs the database is of the integration kind.
 
+---
+
+## 361. The first version's section is prepared as what 1.0.0 holds, under Added alone
+
+**Phase 10 · 2026-09-25 · Tier 2 · CONV-VCS-005, LIB-VER-001, the plan's phase 10 row and Milestone 2 step 12**
+
+*The question.* The plan has phase 10 deliver "`CHANGELOG.md` with the first version
+section prepared under `Unreleased`", and Milestone 2 step 12 releases 1.0.0 by moving
+`Unreleased` to `1.0.0`. CONV-VCS-005 has every behaviour change add its line under
+`Unreleased`, written for a reader. Nothing has been released, so the section had
+grown by one entry a commit: 232 entries under Added, and 66 under Changed, 17 under
+Fixed and 3 under Removed that describe states of the library no release ever held.
+
+*The readings.*
+
+1. `Unreleased` is already the prepared section: every behaviour change carries its
+   line there, and step 12 moves it as it stands.
+2. `Unreleased` is rewritten to read as the first version's notes: what 1.0.0 holds,
+   under Added, each Changed and Fixed entry folded into the entry it amends as the
+   behaviour it states, and the Removed entries dropped, since against no earlier
+   version nothing was changed, fixed or removed.
+
+*Chosen: 2.* A reader of 1.0.0 never met the states the Changed, Fixed and Removed
+entries are measured against, and an entry saying a type was removed or a fault fixed
+tells them of a package they could not have installed. Keep a Changelog groups a
+version's changes against the version before it, and 1.0.0 has none. Reading 1 would
+leave step 12 to publish notes about unreleased history. Every fact about current
+behaviour is kept: a code, a key, a path, a type or member name, a status or a
+duration in a folded entry is in the Added entry it now amends; 212 remain. From here to 1.0.0 a
+behaviour change adds its line as CONV-VCS-005 has it, and the release gate of entry
+359 judges the release commit.
+
+*Tests that pin it.* None: the section is prose. The `Changelog line present` job
+still requires a line from every change to the library's code.
+
+*Chapter text that should change.* CONV-VCS-005 could say that the first version's
+section records what the version holds rather than its changes.
+
 
 # Rows for chapter 10
 
