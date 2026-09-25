@@ -87,6 +87,10 @@ public sealed class HostCallbackTests : IAsyncDisposable
         services.AddSingleton<ILogger<MalformedRequest>>(new LogInMemory<MalformedRequest>());
         services.AddSingleton<ILogger<MachineProfile>>(new LogInMemory<MachineProfile>());
         services.AddTransient<IMiddlewareFactory, MiddlewareFactory>();
+
+        // The writer logs every refusal it answers (BFF-LOG-001), through the logging
+        // every host registers.
+        services.AddLogging();
         services.AddScoped<MalformedRequest>();
         services.AddScoped<MachineProfile>();
 

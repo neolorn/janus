@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Text.Json;
 using Janus.Core;
 using Microsoft.Extensions.Logging;
 
@@ -8,9 +10,9 @@ namespace Janus.Hosting.Bff;
 /// What the browser profile records when it refuses a request.
 /// </summary>
 /// <remarks>
-/// Implements BFF-CSRF-001, BFF-CSRF-004, CONV-LOG-001, CONV-LOG-002 and
-/// CONV-LOG-005. Which layer refused is recorded and never answered, and no entry
-/// carries a cookie, a token or an address.
+/// Implements BFF-CSRF-001, BFF-CSRF-004, BFF-ERR-002, BFF-LOG-001, CONV-LOG-001,
+/// CONV-LOG-002 and CONV-LOG-005. Which layer refused is recorded and never answered,
+/// and no entry carries a cookie, a token or an address.
 /// </remarks>
 internal static partial class BrowserProfileLog
 {
@@ -274,4 +276,35 @@ internal static partial class BrowserProfileLog
         Level = LogLevel.Error,
         Message = "A sign-in at {Provider} could not be started: it is not declared or its discovery document could not be read ({CorrelationId}).")]
     public static partial void ProviderUnavailable(ILogger log, string correlationId, Factor provider);
+
+    /// <summary>
+    /// A request answered with a refusal, by the code the answer carried
+    /// (BFF-LOG-001).
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    /// <param name="code">The code the answer carried.</param>
+    [LoggerMessage(
+        EventId = 22,
+        Level = LogLevel.Information,
+        Message = "A request was refused with {Code} ({CorrelationId}).")]
+    public static partial void Refused(ILogger log, string correlationId, ErrorCode code);
+
+    /// <summary>
+    /// A fault, by the code and the context the answer withheld, which are recorded
+    /// here and nowhere else (BFF-ERR-002).
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    /// <param name="code">The code behind the fault.</param>
+    /// <param name="details">The fault's structured context.</param>
+    [LoggerMessage(
+        EventId = 23,
+        Level = LogLevel.Error,
+        Message = "A fault {Code} with {Details} was answered with neither ({CorrelationId}).")]
+    public static partial void Faulted(
+        ILogger log,
+        string correlationId,
+        ErrorCode code,
+        IReadOnlyDictionary<string, JsonElement> details);
 }

@@ -43,6 +43,10 @@ public sealed class BrowserProfileTests : IDisposable
     // The audit record a concealed refusal was written as.
     private static readonly AuditRecordId Concealed = new(Guid.Parse("01990a1c-7c00-7000-8000-00000000c0de"));
 
+    // What a request handed straight to one stage carries: the logging every host
+    // registers, which the writer logs each refusal through (BFF-LOG-001).
+    private static readonly ServiceProvider Logging = new ServiceCollection().AddLogging().BuildServiceProvider();
+
     private readonly FixedClock _clock = new(Noon);
 
     private readonly SessionStoreInMemory _sessions = new();
@@ -871,6 +875,7 @@ public sealed class BrowserProfileTests : IDisposable
     {
         var context = new DefaultHttpContext
         {
+            RequestServices = Logging,
             Response = { Body = new MemoryStream() },
         };
 
@@ -926,6 +931,10 @@ public sealed class BrowserProfileTests : IDisposable
         var services = new ServiceCollection();
 
         services.AddTransient<IMiddlewareFactory, MiddlewareFactory>();
+
+        // The writer logs every refusal it answers (BFF-LOG-001), through the logging
+        // every host registers.
+        _ = services.AddLogging();
 
         // The profile ends at the stage the authorization endpoint is answered from,
         // which the host's own registration brings; here nothing answers, and the

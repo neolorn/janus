@@ -15168,6 +15168,53 @@ change and break-glass use. AC1 says raising the minimum level does not suppress
 | `auth.authentication.failed` | security | `AuditActions.AuthenticationFailed` | A factor presented at sign-in, or the break-glass credential, was refused. The acting subject is the nil subject; the effective subject is the account the attempt was made against, or the nil subject where the identifier resolved to none or the break-glass code was refused before the reserved account was read; `details.factor` names the factor. Nothing that was typed is written. The row names no organization. (CONV-LOG-005) |
 | `auth.stepup.failed` | security | `AuditActions.StepUpFailed` | A factor presented to step a live session up was refused, including against a challenge that is not the asker's. The acting and effective subject is the session's account; `details.session` names the session and `details.factor` the factor. The row names no organization. (CONV-LOG-005) |
 
+---
+
+## 368. The library opens no log scope, and its refusal entries name the identifier in the message
+
+**Phase 10 · 2026-09-25 · Tier 2 · BFF-LOG-001 AC1, CONV-LOG-002 AC1, BFF-ERR-002 AC2**
+
+*The question.* CONV-LOG-002 says every log entry carries a correlation identifier, the
+one a concealment response carries. BFF-LOG-001 says every request carries it through
+logging. The identifier is `HttpContext.TraceIdentifier`, which the server assigns. No
+chapter says whether the library opens a scope to carry it. An endpoint refusal logged
+nothing, so a denial's identifier resolved to no entry of the library's.
+
+*The readings.*
+
+1. The library opens a scope at the first stage of each profile, carrying
+   `CorrelationId`.
+2. The library opens no scope. The server opens one per request, carrying `RequestId`
+   equal to `TraceIdentifier`, so every entry of the request carries the identifier
+   wherever the host's provider records scopes. The library's refusal entries also
+   carry `{CorrelationId}` in their message, so they resolve even where the provider
+   does not record scopes. The one writer logs every refusal it answers.
+
+*Chosen: 2.*
+
+- The identifier is assigned where the server's scope opens, and that scope is opened
+  once. A second scope would carry the same value under a second name.
+- A scope cannot help a provider that drops scopes. The message can.
+- The server's behaviour was checked against Kestrel on the ASP.NET Core 10 shared
+  framework with a scratch app outside the repository. Every framework and application
+  entry of a request carried `RequestId` equal to `TraceIdentifier`.
+- A refusal is logged at Information, so a default configuration keeps a denial
+  resolvable. A fault is logged at Error, with its code and its structured details. A
+  cost: an anonymous `GET /auth/session`, answered `auth.session.expired`, now writes
+  one Information line.
+
+*Tests that pin it.* `RequestLoggingTests.BFF_LOG_001_AC1_ADenialsIdentifierResolvesToThatRequestsEntriesAsync`,
+`ConcealmentTests.CONV_LOG_002_AC1_TheIdentifierInADenialResolvesToThatRequestsEntriesAsync`,
+`RequestLoggingTests.BFF_ERR_002_AC2_AFaultsDetailIsRetrievableByItsCorrelationIdentifierAsync`.
+
+*Chapter text that should change.*
+
+- CONV-LOG-002 could say the identifier is the server's request identifier. Entries
+  carry it through the host's request scope, and the library's own refusal entries also
+  name it in their message.
+- BFF-LOG-001 could say every refusal is logged by its code, and a fault with its
+  details.
+
 
 # Rows for chapter 10
 

@@ -1163,6 +1163,10 @@ against the public contract of LIB-API-001.
   identifier to the permission and the principal, whichever organization the refusal was
   recorded in; it says nothing about whether the record exists. A permission that names
   no record is refused as a permission the caller does not hold, with nothing concealed.
+- A refusal the library answers is logged under the correlation identifier the answer
+  carries, by its code. A fault is logged at error with the code and the structured
+  context the answer withholds, so a `system.fault` is traced to its cause by that
+  identifier alone.
 - The audit trail records a factor refused at sign-in, or a refused break-glass code, as
   `auth.authentication.failed`, and a factor refused at a step-up as
   `auth.stepup.failed`, whatever the host's log level. Each record names the factor, and

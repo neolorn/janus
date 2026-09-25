@@ -9,6 +9,7 @@ using Janus.Core;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
@@ -25,6 +26,10 @@ public sealed class ConcealmentTests
 
     private static readonly AuditRecordId Recorded =
         new(Guid.Parse("01990a1c-7c00-7000-8000-00000000c0de"));
+
+    // The logging every host registers, which the writer logs each refusal through
+    // (BFF-LOG-001).
+    private static readonly ServiceProvider Logging = new ServiceCollection().AddLogging().BuildServiceProvider();
 
     private readonly LogInMemory<Concealment> _log = new();
 
@@ -83,6 +88,40 @@ public sealed class ConcealmentTests
         Assert.Equal(Traced, answered.GetProperty("correlationId").GetString());
         Assert.Equal(Recorded.Value, answered.GetProperty("details").GetProperty("correlation").GetGuid());
         Assert.Contains((LogLevel.Information, 15), _log.Entries);
+    }
+
+    /// <summary>
+    /// CONV-LOG-002 AC1: the identifier a concealed denial answers with resolves to
+    /// the entries that request wrote, which name the refusal it was recorded as and
+    /// the absence it was answered as.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_LOG_002_AC1_TheIdentifierInADenialResolvesToThatRequestsEntriesAsync()
+    {
+        using var logs = new LogsInMemory();
+
+        await using ServiceProvider logging = new ServiceCollection()
+            .AddLogging(builder => builder.SetMinimumLevel(LogLevel.Trace).AddProvider(logs))
+            .BuildServiceProvider();
+
+        HttpContext context = await ConcealedAsync(
+            (_, refusals) =>
+            {
+                refusals.Concealed(Recorded);
+
+                return Task.CompletedTask;
+            },
+            logging: logging);
+
+        string answered = Answered(context).GetProperty("correlationId").GetString()!;
+        string[] resolved = [.. logs.Lines.Where(line => line.Contains(answered, StringComparison.Ordinal))];
+
+        Assert.Contains(resolved, line => line.Contains(Recorded.Value.ToString(), StringComparison.Ordinal));
+        Assert.Contains(
+            resolved,
+            line => line.Contains(ErrorCodes.ResourceNotFound.ToString(), StringComparison.Ordinal));
+        Assert.Equal(logs.Lines.Count, resolved.Length);
     }
 
     /// <summary>
@@ -189,13 +228,15 @@ public sealed class ConcealmentTests
         JsonDocument.Parse(Written(context)).RootElement.Clone();
 
     // One request through the layer: the stages write a cookie, the endpoint runs,
-    // and the layer answers.
+    // and the layer answers. Given logging, the layer and the writer log through it.
     private async Task<HttpContext> ConcealedAsync(
         Func<HttpContext, ConcealedRefusals, Task> endpoint,
-        Lifetime? lifetime = null)
+        Lifetime? lifetime = null,
+        ServiceProvider? logging = null)
     {
         var context = new DefaultHttpContext
         {
+            RequestServices = logging ?? Logging,
             TraceIdentifier = Traced,
             Response = { Body = new MemoryStream() },
         };
@@ -204,7 +245,9 @@ public sealed class ConcealmentTests
 
         var refusals = new ConcealedRefusals();
 
-        await new Concealment(refusals, _log).InvokeAsync(context, async reached =>
+        ILogger<Concealment> log = logging?.GetRequiredService<ILogger<Concealment>>() ?? _log;
+
+        await new Concealment(refusals, log).InvokeAsync(context, async reached =>
         {
             reached.Response.Headers.SetCookie = "stage=written; path=/";
             refusals.Reached(reached.Response.Headers);
