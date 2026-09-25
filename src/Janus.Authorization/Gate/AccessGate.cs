@@ -110,6 +110,10 @@ internal sealed class AccessGate(
     {
         ArgumentNullException.ThrowIfNull(sources);
 
+        // CONV-ERR-001, AUTHZ-PRIN-003: a type the model does not declare is the calling
+        // code's fault, raised before anything is read or recorded.
+        Declared(resource.Type);
+
         if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
         {
             return Result.Failure(Error.From(ErrorCodes.Restricted));
@@ -349,6 +353,10 @@ internal sealed class AccessGate(
         FilterSources<TResource> sources,
         CancellationToken cancellationToken)
     {
+        // CONV-ERR-001, AUTHZ-PRIN-003: a type the model does not declare is the calling
+        // code's fault, raised before anything is read or recorded.
+        Declared(type);
+
         if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
         {
             return Result.Success<Expression<Func<TResource, bool>>>(_ => false);
@@ -383,6 +391,10 @@ internal sealed class AccessGate(
         string column,
         CancellationToken cancellationToken)
     {
+        // CONV-ERR-001, AUTHZ-PRIN-003: a type the model does not declare is the calling
+        // code's fault, raised before anything is read or recorded.
+        Declared(type);
+
         if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
         {
             return Result.Success(MatchesNothing);

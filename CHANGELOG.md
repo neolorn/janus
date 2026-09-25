@@ -1167,6 +1167,9 @@ against the public contract of LIB-API-001.
   identifier to the permission and the principal, whichever organization the refusal was
   recorded in; it says nothing about whether the record exists. A permission that names
   no record is refused as a permission the caller does not hold, with nothing concealed.
+- A check, a filter or a fragment naming a resource type the model does not declare
+  raises at the request, before the caller's restriction is read or anything is
+  recorded, so the calling code's fault is the same whoever asks.
 - A refusal the library answers is logged under the correlation identifier the answer
   carries, by its code. A fault is logged at error with the code and the structured
   context the answer withholds, so a `system.fault` is traced to its cause by that

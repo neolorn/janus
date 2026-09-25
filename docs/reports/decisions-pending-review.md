@@ -15859,6 +15859,47 @@ calls, and the criterion does not say whether they are service contracts:
 LIB-HOST-002, LIB-HOST-004, and the receivers of LIB-API-001) are not service
 contracts".
 
+---
+
+## 387. A type the model does not declare, named at a gate request, is a programming fault raised before anything is read
+
+**Phase 10 · 2026-09-25 · Tier 3 · CONV-ERR-001 AC3, AUTHZ-PRIN-003 AC1**
+
+*The question.* `AccessGate.Declared` throws at the first request that names an
+undeclared resource type. AC3 says configuration faults surface at startup, never at
+first request. Is such a request a host programming error, a configuration fault, or a
+denial?
+
+*The readings.*
+
+1. It is a configuration fault. It must surface at startup, which would mean scanning
+   the host's call sites. No startup check can see them.
+2. It is a denial. The gate refuses and records the refusal.
+3. It is a programming fault in the calling code. The gate raises at the request, on
+   every entry point, before it reads the caller's restriction or records anything.
+
+*Chosen: 3.*
+
+- The model is configuration, and startup already validates it whole (AUTHZ-MODEL-004,
+  LIB-HOST-001). A type named in code at a call site is code, and CONV-ERR-001 lists a
+  "missing policy registration" among the faults that throw.
+- AUTHZ-PRIN-003 AC1 asks that an unregistered type raise rather than permit.
+- A denial would record a refusal against the caller for the host's bug and hide the
+  bug behind an ordinary answer.
+- Raising first means a restricted caller meets the same fault as any other. The fault
+  does not depend on who asks, and nothing is written for it. This is the reading that
+  refuses most.
+- `WhoCanAccessAsync` keeps answering `api.request.malformed`, because there the type
+  comes from request input, not from code.
+
+*Tests that pin it.* `GateBehaviourTests.CONV_ERR_001_AC3_AnUndeclaredTypeRaisesAtTheRequestBeforeTheGateReadsAsync`,
+and the existing `GateBehaviourTests.AUTHZ_PRIN_003_AC1_AnUndeclaredResourceTypeRaisesAsync`.
+
+*Chapter text that should change.* CONV-ERR-001's table could list "a resource type
+named at a request that the model does not declare" as a fault that throws at the
+request, and AC3 could say "Configuration faults in what the host declares surface at
+startup".
+
 
 # Rows for chapter 10
 
