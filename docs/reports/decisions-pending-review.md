@@ -15284,6 +15284,41 @@ the standard.
 spent, lapsed, foreign or mismatched code, and `invalid_request` for a missing
 verifier.
 
+---
+
+## 371. Host middleware "before stage 1" means before every stage the profile mounts
+
+**Phase 10 · 2026-09-25 · Tier 2 · BFF-ORDER-001 AC2**
+
+*The question.* BFF-ORDER-001 AC2 allows host middleware only before stage 1 or after
+stage 9. Stage 1, the correlation identifier, is `HttpContext.TraceIdentifier`, which
+the server assigns before any middleware runs; `UseBrowserProfile` mounts no stage 1
+of its own. Concealment (stage 11) is the profile's outermost stage.
+
+*The readings.*
+
+1. The profile mounts a stage 1 of its own, and the test shows host middleware running
+   ahead of it. This needs a runtime change.
+2. Stage 1 is the server's identifier, which nothing can run before. "Before stage 1"
+   means before every stage the profile mounts; "after stage 9" means after every
+   security stage, inside concealment.
+
+*Chosen: 2.* It needs no runtime change, and every request carries the identifier
+before any middleware runs. The test mounts a probe on each side of
+`UseBrowserProfile`:
+
+- the probe before the profile sees no session resolved, and gets back the answer the
+  profile settled: 403 for a cross-site POST, 404 for a request that passes;
+- the probe after the profile runs only on the request that passed every stage, sees
+  the session resolved, and its own refusal is concealed.
+
+*Tests that pin it.*
+`BrowserProfileTests.BFF_ORDER_001_AC2_HostMiddlewareRunsBeforeEveryStageOrAfterThemAllAsync`.
+
+*Chapter text that should change.* BFF-ORDER-001 could say that stage 1 is the
+server's request identifier, that host middleware goes before the profile's one
+mounting call or after it, and that middleware after it runs inside stage 11.
+
 
 # Rows for chapter 10
 

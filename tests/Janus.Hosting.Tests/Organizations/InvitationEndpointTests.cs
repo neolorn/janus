@@ -170,6 +170,41 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// BFF-STEP-001 AC2: an invitation refused for step-up is issued when the same
+    /// request, carrying the same body, is sent again once the session has stepped up,
+    /// so nothing the administrator entered is entered again.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_STEP_001_AC2_ARequestRefusedForStepUpSucceedsWhenRetriedAfterItAsync()
+    {
+        Browser administrator = await AuthorisedAsync();
+
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(16));
+
+        Answer refused = await administrator.SendAsync("POST", PathOf(Branch), Personal);
+        Answer began = await administrator.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
+        Answer stepped = await administrator.SendAsync(
+            "POST",
+            "/auth/step-up",
+            ("challengeId", began.Text("challengeId")),
+            ("factor", "password"),
+            ("value", Flow.Password));
+        Answer retried = await administrator.SendAsync("POST", PathOf(Branch), Personal);
+
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(ErrorCodes.StepUpRequired.ToString(), refused.Text("code"));
+        Assert.Equal(StatusCodes.Status200OK, stepped.Status);
+        Assert.Equal("complete", stepped.Text("status"));
+        Assert.Equal(StatusCodes.Status201Created, retried.Status);
+
+        Invitation issued = Assert.Single(_deployment.Invitations.Held);
+
+        Assert.Equal(Branch, issued.Organization);
+        Assert.Equal("invited@elsewhere.test", issued.Identifiers?.Email);
+    }
+
+    /// <summary>
     /// 09 section 8a: revoking an unused invitation answers <c>204</c>, and again;
     /// one the organization never issued is a <c>400</c> naming it.
     /// </summary>

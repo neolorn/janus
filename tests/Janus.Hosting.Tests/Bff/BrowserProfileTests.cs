@@ -657,6 +657,65 @@ public sealed class BrowserProfileTests : IDisposable
     }
 
     /// <summary>
+    /// BFF-ORDER-001 AC2: the host's middleware goes before the profile or after it.
+    /// Mounted before, it runs ahead of every stage: it sees a request the first
+    /// rejection then refuses, sees no session resolved, and receives back the answer
+    /// the profile settled. Mounted after, it runs only once every stage has passed,
+    /// sees the session resolved, and stands inside concealment, which has the last
+    /// word on what it writes.
+    /// </summary>
+    [Fact]
+    public async Task BFF_ORDER_001_AC2_HostMiddlewareRunsBeforeEveryStageOrAfterThemAllAsync()
+    {
+        (OpaqueToken secret, OpaqueToken _) = await LiveAsync();
+        var before = new List<(bool Resolved, int Answered)>();
+        var after = new List<bool>();
+
+        RequestDelegate mounted = Mounted(
+            next => async context =>
+            {
+                bool resolved = context.RequestServices.GetRequiredService<RequestSession>().Live is not null;
+
+                await next(context);
+
+                before.Add((resolved, context.Response.StatusCode));
+            },
+            next => async context =>
+            {
+                after.Add(context.RequestServices.GetRequiredService<RequestSession>().Live is not null);
+
+                context.RequestServices.GetRequiredService<ConcealedRefusals>().Concealed(Concealed);
+                await context.Response.WriteAsJsonAsync(
+                    new { title = "Quarterly" },
+                    TestContext.Current.CancellationToken);
+            });
+
+        HttpContext refused = Arriving(
+            "POST",
+            ("Sec-Fetch-Site", "cross-site"),
+            ("Origin", "https://elsewhere.example"));
+        HttpContext passed = Arriving("GET", ("Sec-Fetch-Site", "same-origin"));
+
+        Carrying(refused, secret);
+        Carrying(passed, secret);
+
+        await mounted(refused);
+        await mounted(passed);
+
+        await AssertRefusedAsync(refused);
+        Assert.Equal(StatusCodes.Status404NotFound, passed.Response.StatusCode);
+        Assert.Contains(
+            "\"code\":\"authz.resource.notfound\"",
+            await AnsweredAsync(passed),
+            StringComparison.Ordinal);
+        Assert.Equal(
+            [(false, StatusCodes.Status403Forbidden), (false, StatusCodes.Status404NotFound)],
+            before);
+        Assert.Equal([true], after);
+        Assert.False(_reached);
+    }
+
+    /// <summary>
     /// BFF-CSRF-007 AC1: the token is drawn from the framework's generator and
     /// compared by the framework's fixed-time comparison; nothing here writes either.
     /// </summary>
@@ -922,11 +981,25 @@ public sealed class BrowserProfileTests : IDisposable
         new LogInMemory<OriginValidation>(),
         new LogInMemory<SynchronizerToken>());
 
+    // BFF-ORDER-001 AC2: the host's own middleware, mounted where a host may mount it,
+    // before the profile and after it.
+    private RequestDelegate Mounted(
+        Func<RequestDelegate, RequestDelegate> before,
+        Func<RequestDelegate, RequestDelegate> after) => Mounted(
+        new LogInMemory<ResourceIsolation>(),
+        new LogInMemory<CustomRequestHeader>(),
+        new LogInMemory<OriginValidation>(),
+        new LogInMemory<SynchronizerToken>(),
+        before,
+        after);
+
     private RequestDelegate Mounted(
         ILogger<ResourceIsolation> isolation,
         ILogger<CustomRequestHeader> header,
         ILogger<OriginValidation> origin,
-        ILogger<SynchronizerToken> token)
+        ILogger<SynchronizerToken> token,
+        Func<RequestDelegate, RequestDelegate>? before = null,
+        Func<RequestDelegate, RequestDelegate>? after = null)
     {
         var services = new ServiceCollection();
 
@@ -985,7 +1058,18 @@ public sealed class BrowserProfileTests : IDisposable
         ServiceProvider provider = services.BuildServiceProvider();
         var building = new ApplicationBuilder(provider);
 
+        if (before is not null)
+        {
+            _ = building.Use(before);
+        }
+
         _ = building.UseBrowserProfile();
+
+        if (after is not null)
+        {
+            _ = building.Use(after);
+        }
+
         _ = building.Use(_ => Endpoint);
 
         RequestDelegate built = building.Build();
