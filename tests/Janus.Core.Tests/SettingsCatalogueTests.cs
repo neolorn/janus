@@ -9,7 +9,8 @@ namespace Janus.Core.Tests;
 /// <summary>
 /// The catalogue as a contract: which keys exist, which the deployment has to name,
 /// which the application cannot change, and that every other key resolves with a
-/// default (LIB-API-001, LIB-HOST-001, OPS-CFG-001, OPS-CFG-004).
+/// default, and that each is a row of chapter 10 (LIB-API-001, LIB-HOST-001,
+/// OPS-CFG-001, OPS-CFG-004, REF-001).
 /// </summary>
 [Trait("kind", "contract")]
 public sealed class SettingsCatalogueTests
@@ -20,13 +21,7 @@ public sealed class SettingsCatalogueTests
     private static readonly string[] Protected =
     [
         .. ProtectedBySectionFourEight,
-        "hosting.crossborderbasis",
-        "hosting.location",
-        "integration.mail.endpoint",
-        "integration.sms.endpoint",
-        "redirect.defaultclient",
-        "webauthn.algorithms",
-        "webauthn.origins",
+        .. DeclaredAboutTheDeployment,
     ];
 
     // The eleven keys of LIB-HOST-001 that name the deployment, and the three that
@@ -65,6 +60,23 @@ public sealed class SettingsCatalogueTests
         "token.signature.verification",
         "token.signing.algorithm",
         "webauthn.rpid",
+    ];
+
+    // The protected keys outside the OPS-CFG-004 list, each a fact the deployment
+    // declares about itself: the origins, the hosting location and the cross-border
+    // basis LIB-HOST-001 names; the algorithms AUTH-FACT-010 fixes beside the relying
+    // party identifier; the two endpoints the shipped transports call (ledger entry
+    // 140); and the client the registry answers for an identifier it does not hold
+    // (ledger entry 145).
+    private static string[] DeclaredAboutTheDeployment =>
+    [
+        "hosting.crossborderbasis",
+        "hosting.location",
+        "integration.mail.endpoint",
+        "integration.sms.endpoint",
+        "redirect.defaultclient",
+        "webauthn.algorithms",
+        "webauthn.origins",
     ];
 
     /// <summary>
@@ -110,6 +122,31 @@ public sealed class SettingsCatalogueTests
     }
 
     /// <summary>
+    /// OPS-CFG-001 AC1: a key the application cannot change is on the OPS-CFG-004
+    /// list or is a fact the deployment declares about itself, and each of the seven
+    /// that are the latter is marked P where its row stands, in chapter 10 section 4
+    /// or among the rows the ledger owes it. Every other key is runtime-changeable.
+    /// </summary>
+    [Fact]
+    public void OPS_CFG_001_AC1_ARedeployScopedKeyIsOnTheOpsCfg004ListOrDeclared()
+    {
+        string[] redeployScoped =
+        [
+            .. Settings.All
+                .Where(setting => setting.Scope == SettingScope.Protected)
+                .Select(setting => setting.Key.ToString())
+                .Concat(Settings.Families
+                    .Where(family => family.Scope == SettingScope.Protected)
+                    .Select(family => family.Prefix))
+                .Except(ProtectedBySectionFourEight, StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal),
+        ];
+
+        Assert.Equal(DeclaredAboutTheDeployment, redeployScoped);
+        Assert.All(DeclaredAboutTheDeployment, key => Assert.Contains(key, ReferenceRows.MarkedProtected));
+    }
+
+    /// <summary>
     /// LIB-API-001: the key names are the contract, so a key that is renamed, added or
     /// dropped fails here and carries its version bump.
     /// </summary>
@@ -135,6 +172,27 @@ public sealed class SettingsCatalogueTests
         string[] declared = [.. Settings.Families.Select(family => family.Prefix).Order(StringComparer.Ordinal)];
 
         Assert.Equal(["photo.enabled", "policy", "retention", "stepup.enforcement"], declared);
+    }
+
+    /// <summary>
+    /// REF-001 AC1: a key or a family the catalogue holds and chapter 10 does not
+    /// fails here, unless the ledger owes chapter 10 its row. A row the ledger owes
+    /// that names nothing the catalogue holds fails as well, so what is owed cannot
+    /// outlive the key it is owed for.
+    /// </summary>
+    [Fact]
+    public void REF_001_AC1_EveryKeyInTheSourceIsARowOfTheReference()
+    {
+        string[] declared =
+        [
+            .. Settings.All.Select(setting => setting.Key.ToString()),
+            .. Settings.Families.Select(family => ReferenceRows.Family(family.Prefix)),
+        ];
+
+        Assert.Empty(declared.Except(
+            ReferenceRows.ChapterKeys.Concat(ReferenceRows.OwedKeys),
+            StringComparer.Ordinal));
+        Assert.Empty(ReferenceRows.OwedKeys.Except(declared, StringComparer.Ordinal));
     }
 
     /// <summary>

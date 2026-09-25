@@ -11,7 +11,7 @@ using Xunit;
 namespace Janus.Storage.Tests;
 
 /// <summary>
-/// What the one context maps (CONV-DESIGN-003).
+/// What the one context maps (CONV-DESIGN-003, OPS-DB-002).
 /// </summary>
 /// <remarks>
 /// The model is built from the design-time factory, which connects to nothing, so this
@@ -35,11 +35,14 @@ public sealed class ModelTests
     }
 
     /// <summary>
-    /// CONV-DESIGN-003: every table the library owns is mapped in the schema the library
-    /// owns, so nothing of the host's is ever read or written through this context.
+    /// OPS-DB-002 AC2: every table the context maps is in the schema the library owns,
+    /// so nothing of the host's is ever read or written through it. A statement written
+    /// by hand naming a relation outside that schema is what
+    /// <c>IntegrationBoundaryTests.INT_MAIL_003_AC1_NoStatementNamesARelationOutsideTheLibrarysSchema</c>
+    /// refuses, over the whole source.
     /// </summary>
     [Fact]
-    public void CONV_DESIGN_003_EveryMappedTableIsInTheLibrarysOwnSchema() =>
+    public void OPS_DB_002_AC2_EveryMappedTableIsInTheLibrarysOwnSchema() =>
         Assert.All(
             Model().GetEntityTypes(),
             entity => Assert.Equal(StoreContext.Schema, entity.GetSchema()));

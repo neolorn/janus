@@ -269,11 +269,11 @@ public sealed class LegalDocumentTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// LIB-API-005: publishing is gated, so calling the service in process is no way
-    /// round the permission the endpoint applies.
+    /// LIB-API-005 AC2: publishing is gated, so calling the service in process is no
+    /// way round the permission the endpoint applies.
     /// </summary>
     [Fact]
-    public async Task LIB_API_005_AC1_PublishingWithoutThePermissionIsRefusedAsync()
+    public async Task LIB_API_005_AC2_PublishingWithoutThePermissionIsRefusedAsync()
     {
         Result<DocumentVersion> refused = await Documents.PublishAsync(
             Acting,
@@ -285,11 +285,11 @@ public sealed class LegalDocumentTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// LIB-API-005: attaching a translation is gated on the same permission as
-    /// publishing the version it attaches to.
+    /// LIB-API-005 AC2: attaching a translation is gated on the same permission as
+    /// publishing the version it attaches to, in process as over HTTP.
     /// </summary>
     [Fact]
-    public async Task LIB_API_005_AC1_TranslatingWithoutThePermissionIsRefusedAsync()
+    public async Task LIB_API_005_AC2_TranslatingWithoutThePermissionIsRefusedAsync()
     {
         await _store.AddAsync(
             new DocumentVersion(Notice, "1", "ar", "النص", [], Noon),

@@ -16604,6 +16604,79 @@ could say "A factor presented at sign-in, device verification, a sign-in link pr
 or a provider's round trip, or the break-glass credential, was refused". CONV-LOG-005
 could name these as failed authentication.
 
+---
+
+## 403. The rows REF-001 counts are chapter 10's live rows and the ledger's owed rows, and the boundary's codes are the literals parsed
+
+**Phase 10 · 2026-09-25 · Tier 2 · REF-001 AC1, BFF-ERR-001 AC3**
+
+*The question.* The lead decided this (entry 403). What is recorded here is the shape applied: which rows count, how families match, and what BFF-ERR-001 AC3 adds.
+
+*The readings.*
+
+1. Count chapter 10 alone.
+2. Count chapter 10 and the rows the ledger owes it under `# Rows for chapter 10`, in both directions.
+
+*Chosen: 2.*
+- A struck-through row, or one whose description opens "Retired" or "Withdrawn", is not counted.
+- A family is compared as its prefix and one placeholder.
+- BFF-ERR-001 AC3 has its own method. It reads every `ErrorCode.Parse` argument in `src/`, requires each to be a literal, and requires each literal to be documented. `ErrorCode` has no public constructor, so these are all the codes a response can carry.
+
+*Tests that pin it.*
+`ErrorCodesTests.REF_001_AC1_EveryCodeInTheSourceIsARowOfTheReference`,
+`SettingsCatalogueTests.REF_001_AC1_EveryKeyInTheSourceIsARowOfTheReference`,
+`ErrorCodesTests.BFF_ERR_001_AC3_EveryCodeTheBoundaryCanAnswerIsInTheReference`.
+
+*Chapter text that should change.* REF-001 AC1 could say that a row owed in the ledger counts until the chapter takes it. Permissions, which the REF-001 statement names, have no criterion.
+
+---
+
+## 404. The seven protected keys outside OPS-CFG-004 are facts the deployment declares
+
+**Phase 10 · 2026-09-25 · Tier 2 · OPS-CFG-001 AC1**
+
+*The question.* OPS-CFG-001 AC1 allows a redeploy-scoped key only where OPS-CFG-004 or "the model declaration" lists it. Seven protected keys are on neither list by name: `hosting.crossborderbasis`, `hosting.location`, `integration.mail.endpoint`, `integration.sms.endpoint`, `redirect.defaultclient`, `webauthn.algorithms`, `webauthn.origins`.
+
+*The readings.*
+
+1. "The model declaration" is the authorization model only, and the seven break the criterion.
+2. It is the deployment's declaration, meaning the facts it states about itself. The sources are:
+   - LIB-HOST-001 for the origins, the hosting location and the basis
+   - AUTH-FACT-010 for the algorithms beside the relying-party identifier
+   - entry 140 for the endpoints
+   - entry 145 for the default client
+
+*Chosen: 2.* Each of the seven is marked P in chapter 10 section 4 or in the ledger's owed rows. The test reads those marks, so a key made protected without a P row fails.
+
+*Tests that pin it.*
+`SettingsCatalogueTests.OPS_CFG_001_AC1_ARedeployScopedKeyIsOnTheOpsCfg004ListOrDeclared`.
+
+*Chapter text that should change.* OPS-CFG-001 AC1 could read "listed in OPS-CFG-004 or marked P in `10` section 4 as a fact the deployment declares".
+
+---
+
+## 405. The products searched for in the core are the caches and secrets managers in use, not the catalogue factors or the database
+
+**Phase 10 · 2026-09-25 · Tier 2 · LIB-EXT-001 AC3**
+
+*The question.* "No provider name appears in a core namespace." No list of provider names exists for the cache or secret-source extension points.
+
+*The readings.*
+
+1. Search a fixed list of cache and secrets-manager products and their client libraries.
+2. As 1, and also Google, Apple and PostgreSQL.
+
+*Chosen: 1.*
+- Caches: Redis, StackExchange, Valkey, Memcached, Garnet, KeyDB, Dragonfly, Hazelcast.
+- Secret sources: HashiCorp, OpenBao, KeyVault, "Key Vault", Azure, Amazon, AWSSDK, Google.Cloud, GoogleCloud, SecretManager, Infisical, Doppler, 1Password, Bitwarden, CyberArk, Akeyless, Delinea, Thycotic.
+- Google and Apple are factors of the catalogue chapter 02 fixes, not products behind an extension point.
+- PostgreSQL is named by the contract under LIB-API-004.
+- "AWS" is left out because it matches "draws" and "withdraws"; "Amazon" and "AWSSDK" stand for the vendor.
+
+*Tests that pin it.*
+`IntegrationBoundaryTests.LIB_EXT_001_AC3_NoProviderNameAppearsInTheCoreNamespace`.
+
+*Chapter text that should change.* None.
 
 # Rows for chapter 10
 

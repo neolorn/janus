@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
@@ -13,7 +14,7 @@ namespace Janus.Authorization.Tests.Gate;
 /// <summary>
 /// What the one rule renders, read as text rather than run
 /// (AUTHZ-GATE-002, AUTHZ-GATE-003, AUTHZ-PRIN-001, AUTHZ-PRIN-002, AUTHZ-GATE-005,
-/// LIB-HOST-002).
+/// LIB-HOST-002, LIB-PKG-002).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class PermissionRuleTests
@@ -149,6 +150,37 @@ public sealed class PermissionRuleTests
     }
 
     /// <summary>
+    /// LIB-PKG-002 AC2: the expression and the SQL fragment are two methods of the one
+    /// rule, each rendering the state the rule was built with, and no other type in the
+    /// area renders an expression, so neither rendering is a bolt-on to the other.
+    /// That no other type renders SQL is AUTHZ-PRIN-001 AC2's.
+    /// </summary>
+    [Fact]
+    public void LIB_PKG_002_AC2_BothRenderingsAreMethodsOfTheOneRule()
+    {
+        MethodInfo[] rendering = typeof(PermissionRule).GetMethods(
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+
+        Assert.Contains(
+            rendering,
+            method => method.Name == nameof(PermissionRule.ToExpression) && RendersAnExpression(method.ReturnType));
+        Assert.Contains(
+            rendering,
+            method => method.Name == nameof(PermissionRule.ToFragment) && method.ReturnType == typeof(SqlFilter));
+
+        Assert.All(
+            typeof(PermissionRule).Assembly.GetTypes()
+                .Where(type => type != typeof(PermissionRule))
+                .SelectMany(type => type.GetMethods(
+                    BindingFlags.Public
+                    | BindingFlags.NonPublic
+                    | BindingFlags.Instance
+                    | BindingFlags.Static
+                    | BindingFlags.DeclaredOnly)),
+            method => Assert.False(RendersAnExpression(method.ReturnType), method.DeclaringType + "." + method.Name));
+    }
+
+    /// <summary>
     /// LIB-HOST-002 AC1: every relation a rendering reads is the library's own, the
     /// host's row reaching it only as the alias the caller passed in.
     /// </summary>
@@ -232,6 +264,14 @@ public sealed class PermissionRuleTests
     // follows from.
     private static RelationshipDeclaration Reviewer() =>
         HostDomain.Declared().Build().Relationships.Single();
+
+    // A predicate over one record, which is what the expression rendering answers.
+    private static bool RendersAnExpression(Type type) =>
+        type.IsGenericType
+        && type.GetGenericTypeDefinition() == typeof(Expression<>)
+        && type.GetGenericArguments()[0] is { IsGenericType: true } lambda
+        && lambda.GetGenericTypeDefinition() == typeof(Func<,>)
+        && lambda.GetGenericArguments()[1] == typeof(bool);
 
     private static string[] Renderings(PermissionRule rule) =>
     [
