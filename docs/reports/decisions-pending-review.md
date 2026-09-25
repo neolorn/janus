@@ -15252,6 +15252,38 @@ sensitive type is registered only for a subject whose account is neither being d
 nor deleted, and LIB-HOST-002 could name `subject` among the members a registration is
 refused on.
 
+---
+
+## 370. A code presented without a verifier is refused as `invalid_request`
+
+**Phase 10 · 2026-09-25 · Tier 2 · AUTH-SESS-012 AC4**
+
+*The question.* AUTH-SESS-012 AC4 has an authorization code "rejected when presented
+... without the matching PKCE verifier". The provider answers a verifier that does not
+match with `invalid_grant` (RFC 7636 section 4.6), and a missing verifier with
+`invalid_request`, the code RFC 6749 section 5.2 gives for a missing required
+parameter. No chapter says whether every AC4 case answers one code.
+
+*The readings.*
+
+1. Every AC4 case answers `invalid_grant`, which needs a runtime change rewriting the
+   provider's answer to a missing verifier.
+2. AC4 asks for a rejection, and each case carries the code the standards give it.
+
+*Chosen: 2.* The criterion says "rejected" and names no code. Both answers refuse the
+exchange with 400 and issue no token. Reading 1 changes runtime code to depart from
+the standard.
+
+*Tests that pin it.* `OidcFlowTests.AUTH_SESS_012_AC4_ACodeIsExchangedOnceAsync`,
+`OidcFlowTests.AUTH_SESS_012_AC4_ACodeLapsesAtTheCodeLifetimeAsync`,
+`OidcFlowTests.AUTH_SESS_012_AC4_ACodeIsRefusedToAnotherClientAsync`,
+`OidcFlowTests.AUTH_SESS_012_AC4_ACodeIsRefusedWithAnotherVerifierAsync`,
+`OidcFlowTests.AUTH_SESS_012_AC4_ACodeIsRefusedWithoutAVerifierAsync`.
+
+*Chapter text that should change.* AUTH-SESS-012 AC4 could name `invalid_grant` for a
+spent, lapsed, foreign or mismatched code, and `invalid_request` for a missing
+verifier.
+
 
 # Rows for chapter 10
 

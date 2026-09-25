@@ -9,6 +9,7 @@ using Janus.Authentication;
 using Janus.Authentication.Oidc;
 using Janus.Authentication.Sessions;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Xunit;
@@ -210,6 +211,141 @@ public sealed class OidcFlowTests
             StringComparison.Ordinal);
 
         Assert.DoesNotContain("login_required", RelyingParty.Where(answered), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// AUTH-SESS-012 AC4: a code is exchanged once, and presenting it again is refused
+    /// as a grant the provider no longer holds.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_SESS_012_AC4_ACodeIsExchangedOnceAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
+        var machine = new Machine(deployment);
+        string code = await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Application);
+
+        Answer first = await machine.PostAsync("/oidc/token", RelyingParty.Code(code, RelyingParty.Application));
+        Answer again = await machine.PostAsync("/oidc/token", RelyingParty.Code(code, RelyingParty.Application));
+
+        Assert.Equal(StatusCodes.Status200OK, first.Status);
+        Assert.Equal(StatusCodes.Status400BadRequest, again.Status);
+        Assert.Equal("invalid_grant", again.Text("error"));
+        Assert.False(again.Json().TryGetProperty("access_token", out _));
+    }
+
+    /// <summary>
+    /// AUTH-SESS-012 AC4: a code lives for `oidc.code.lifetime` on the deployment's
+    /// clock, so one exchanged inside it is taken and one exchanged after it is refused.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_SESS_012_AC4_ACodeLapsesAtTheCodeLifetimeAsync()
+    {
+        await using var deployment = new Deployment();
+
+        deployment.Configuration.Set(Settings.OidcCodeLifetime, TimeSpan.FromSeconds(30));
+
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
+        var machine = new Machine(deployment);
+        string kept = await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Application);
+        string lapsed = await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Application);
+
+        deployment.Clock.Advance(TimeSpan.FromSeconds(29));
+
+        Answer inTime = await machine.PostAsync("/oidc/token", RelyingParty.Code(kept, RelyingParty.Application));
+
+        deployment.Clock.Advance(TimeSpan.FromSeconds(2));
+
+        Answer late = await machine.PostAsync("/oidc/token", RelyingParty.Code(lapsed, RelyingParty.Application));
+
+        Assert.Equal(StatusCodes.Status200OK, inTime.Status);
+        Assert.Equal(StatusCodes.Status400BadRequest, late.Status);
+        Assert.Equal("invalid_grant", late.Text("error"));
+        Assert.False(late.Json().TryGetProperty("access_token", out _));
+    }
+
+    /// <summary>
+    /// AUTH-SESS-012 AC4: a code issued to one registered client is refused when another
+    /// registered client presents it, though that client authenticates with its own
+    /// secret and carries the verifier.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_SESS_012_AC4_ACodeIsRefusedToAnotherClientAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
+
+        await deployment.Clients.RecordAsync(
+            new OidcClient(
+                Second,
+                Second,
+                OidcClientKind.BrowserApplication,
+                RelyingParty.Destination,
+                ["openid", "email"]),
+            OpaqueToken.Of(RelyingParty.Secret).Fingerprint(),
+            DateTimeOffset.MinValue,
+            TestContext.Current.CancellationToken);
+
+        var machine = new Machine(deployment);
+        string code = await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Application);
+
+        Answer elsewhere = await machine.PostAsync("/oidc/token", RelyingParty.Code(code, Second));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, elsewhere.Status);
+        Assert.Equal("invalid_grant", elsewhere.Text("error"));
+        Assert.False(elsewhere.Json().TryGetProperty("access_token", out _));
+    }
+
+    /// <summary>
+    /// AUTH-SESS-012 AC4: a code presented with a verifier that is not the one its
+    /// challenge was made from is refused as a grant that does not match.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_SESS_012_AC4_ACodeIsRefusedWithAnotherVerifierAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
+        string code = await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Application);
+
+        Answer refused = await new Machine(deployment).PostAsync(
+            "/oidc/token",
+            RelyingParty.With(
+                RelyingParty.Code(code, RelyingParty.Application),
+                "code_verifier",
+                "another-verifier-of-at-least-forty-three-characters-long"));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
+        Assert.Equal("invalid_grant", refused.Text("error"));
+        Assert.False(refused.Json().TryGetProperty("access_token", out _));
+    }
+
+    /// <summary>
+    /// AUTH-SESS-012 AC4: a code presented with no verifier at all is refused, as a
+    /// request missing a parameter every exchange must carry (RFC 6749 section 5.2).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_SESS_012_AC4_ACodeIsRefusedWithoutAVerifierAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
+        string code = await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Application);
+
+        Answer refused = await new Machine(deployment).PostAsync(
+            "/oidc/token",
+            RelyingParty.With(RelyingParty.Code(code, RelyingParty.Application), "code_verifier", null));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
+        Assert.Equal("invalid_request", refused.Text("error"));
+        Assert.False(refused.Json().TryGetProperty("access_token", out _));
     }
 
     /// <summary>
