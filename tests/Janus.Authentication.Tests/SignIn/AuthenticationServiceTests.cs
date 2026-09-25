@@ -117,6 +117,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             Devices,
             _live,
             Sessions,
+            _audit,
             Policies,
             Lock,
             Throttle,
@@ -225,6 +226,27 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.FactorRejected, Refused(nowhere));
         Assert.Equal(ErrorCodes.FactorRejected, Refused(wrong));
         Assert.NotEqual(default, subject);
+    }
+
+    /// <summary>
+    /// CONV-LOG-005: a refused factor is written to the trail whether or not an account
+    /// holds the identifier, against the account where one does and against none where
+    /// none does, so the two refusals of AUTH-ABUSE-003 do the same work.
+    /// </summary>
+    [Fact]
+    public async Task PresentAsync_ARefusedFactor_IsRecordedWhetherOrNotAnAccountHoldsTheIdentifierAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        SignInChallenge none = await BeganAsync(Elsewhere);
+        _ = await PresentAsync(none.Challenge, Factor.Password, Secret);
+
+        SignInChallenge held = await BeganAsync(Address);
+        _ = await PresentAsync(held.Challenge, Factor.Password, "wrong" + Secret);
+
+        Assert.Equal<(SubjectId?, Factor)>(
+            [(null, Factor.Password), (subject, Factor.Password)],
+            _audit.Failed);
     }
 
     /// <summary>

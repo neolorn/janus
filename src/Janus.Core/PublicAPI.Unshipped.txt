@@ -3330,6 +3330,7 @@ static Janus.Core.AuditActions.AccountDeactivated.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.AccountReactivated.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.AccountSuspended.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.AuditPartitionsMaintained.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.AuthenticationFailed.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.BotDefenceSignalled.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.BreakGlassGenerated.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.BreakGlassUsed.get -> Janus.Core.AuditAction
@@ -3396,6 +3397,7 @@ static Janus.Core.AuditActions.RoleDefined.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.RoleRemoved.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.SecondStepPreferred.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.SessionPresented.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.StepUpFailed.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.TakedownExecuted.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.TakedownReversed.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.UsernameChanged.get -> Janus.Core.AuditAction

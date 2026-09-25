@@ -1163,6 +1163,11 @@ against the public contract of LIB-API-001.
   identifier to the permission and the principal, whichever organization the refusal was
   recorded in; it says nothing about whether the record exists. A permission that names
   no record is refused as a permission the caller does not hold, with nothing concealed.
+- The audit trail records a factor refused at sign-in, or a refused break-glass code, as
+  `auth.authentication.failed`, and a factor refused at a step-up as
+  `auth.stepup.failed`, whatever the host's log level. Each record names the factor, and
+  the account the attempt was made against where there was one, and nothing that was
+  typed.
 - Inheritance is resolved through an ancestry closure maintained in the same transaction
   as the create or the move that changes it, so a permission query joins one table
   rather than walking the tree, and permission data and business data cannot diverge.

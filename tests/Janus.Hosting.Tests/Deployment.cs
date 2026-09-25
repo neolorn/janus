@@ -130,6 +130,9 @@ internal sealed class Deployment : IAsyncDisposable
     /// The social providers whose security events the host takes; both, unless it says
     /// otherwise.
     /// </param>
+    /// <param name="logging">
+    /// The least level the host logs at; every level, unless it says otherwise.
+    /// </param>
     public Deployment(
         ApplicationKind application = ApplicationKind.Public,
         PasskeyAddresses? addresses = null,
@@ -137,12 +140,13 @@ internal sealed class Deployment : IAsyncDisposable
         PreferenceDeclarations? preferences = null,
         AuthenticationAddresses? signIn = null,
         SignOnClient? client = null,
-        IReadOnlyList<SocialProvider>? providers = null)
+        IReadOnlyList<SocialProvider>? providers = null,
+        LogLevel logging = LogLevel.Trace)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
         builder.Logging.ClearProviders();
-        builder.Logging.SetMinimumLevel(LogLevel.Trace).AddProvider(Logs);
+        builder.Logging.SetMinimumLevel(logging).AddProvider(Logs);
 
         Signals = new RegistrationSignalsInMemory(Clock);
         Grants = new OidcAuthorizationStoreInMemory(Tokens);
@@ -446,9 +450,15 @@ internal sealed class Deployment : IAsyncDisposable
     public LogInMemory<RegisteredDestination> OidcLog { get; } = new();
 
     /// <summary>
-    /// Every other line the deployment logged, at every level.
+    /// Every other line the deployment logged, at every level the host logs at.
     /// </summary>
     public LogsInMemory Logs { get; } = new();
+
+    /// <summary>
+    /// What authentication wrote to the audit trail: each combination presented and
+    /// each factor refused (AUTH-SESS-002, CONV-LOG-005).
+    /// </summary>
+    public SessionAuditInMemory SessionAudit { get; } = new();
 
     /// <summary>
     /// What the sign-on recorded when it would not carry a return (BFF-SESS-006 AC3).
@@ -731,7 +741,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IScreeningLog, ScreeningLogInMemory>();
         _ = services.AddSingleton<IRecoveryCodeStore, RecoveryCodeStoreInMemory>();
         _ = services.AddSingleton<IDeviceStore, DeviceStoreInMemory>();
-        _ = services.AddSingleton<ISessionAudit, SessionAuditInMemory>();
+        _ = services.AddSingleton<ISessionAudit>(SessionAudit);
         _ = services.AddSingleton<IMembershipLookup>(Memberships);
         _ = services.AddSingleton(Codec.Declared);
         _ = services.AddSingleton<IPolicyRaiseStore>(Raises);

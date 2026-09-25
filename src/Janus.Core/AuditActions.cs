@@ -41,6 +41,13 @@ public static class AuditActions
     public static AuditAction AccountSuspended { get; } = AuditAction.Parse("identity.account.suspended");
 
     /// <summary>
+    /// A factor presented to authenticate was refused: at sign-in, against an account or
+    /// an identifier no account holds, or as the break-glass credential.
+    /// </summary>
+    /// <remarks>Implements CONV-LOG-005.</remarks>
+    public static AuditAction AuthenticationFailed { get; } = AuditAction.Parse("auth.authentication.failed");
+
+    /// <summary>
     /// The bot defence answered a send with a signal, which is recorded without the signal's own detail.
     /// </summary>
     /// <remarks>Implements AUTH-ABUSE-009, chapter 10 section 5.</remarks>
@@ -479,6 +486,12 @@ public static class AuditActions
     /// </summary>
     /// <remarks>Implements AUTH-SESS-010, chapter 10 section 5.</remarks>
     public static AuditAction SessionPresented { get; } = AuditAction.Parse("auth.session.presented");
+
+    /// <summary>
+    /// A factor presented to step a live session up was refused.
+    /// </summary>
+    /// <remarks>Implements CONV-LOG-005.</remarks>
+    public static AuditAction StepUpFailed { get; } = AuditAction.Parse("auth.stepup.failed");
 
     /// <summary>
     /// The account's username was changed, which holds the old one for as long as the retention says.

@@ -15073,6 +15073,101 @@ stays.
 delivered outbox records removed when spent, and say that the erasures table
 (IDN-LIFE-003b) is kept.
 
+---
+
+## 367. Failed authentication and failed step-up are recorded in the audit trail, under two new actions
+
+**Phase 10 · 2026-09-25 · Tier 3 · CONV-LOG-005 AC1, IDN-AUD-001 AC1, AUTH-ABUSE-001, AUTH-ABUSE-003, CONV-LOG-003, CONV-LOG-004**
+
+*The question.* CONV-LOG-005 says security events SHALL be logged regardless of level
+configuration: failed authentication, denied authorization, step-up, configuration
+change and break-glass use. AC1 says raising the minimum level does not suppress them.
+
+- Every level is subject to a host's filter (`LogLevel.None` drops Critical), so no
+  `ILogger` call can meet AC1.
+- Denied authorization (`authz.access.denied`), configuration change
+  (`ops.configuration.changed`), break-glass use (`auth.breakglass.used`) and step-up
+  (`auth.session.presented`) are already in the audit trail, which no log level governs.
+- Failed authentication and failed step-up were recorded nowhere.
+- No chapter spells an action for either. Chapter 10 holds no list of audit actions; the
+  list is this ledger's "Rows for chapter 10".
+
+*The readings.*
+
+1. "Logged" means an `ILogger` call at a level no filter drops. That cannot be built.
+2. "Logged" means recorded where no log level reaches, which is the audit trail. Failed
+   authentication and failed step-up each gain an action.
+3. As 2, but "step-up" means only the step-up that succeeded, so a failed step-up needs
+   nothing.
+
+*Chosen: 2 (Tier 3, the strictest reading, which keeps most).*
+
+- **Spellings.** The spellings are invented here: `auth.authentication.failed`
+  (`AuditActions.AuthenticationFailed`) and `auth.stepup.failed`
+  (`AuditActions.StepUpFailed`), both in the security category. They follow the
+  `area.object.pastverb` shape of the catalogue. The contract test
+  (`AuditActionsTests.Catalogue`) and the rows below are the reference.
+- **What counts as a failed authentication.** Two cases:
+  - A factor presented at sign-in and refused, whether the identifier resolved to no
+    account, the account is not active, or the factor itself was refused.
+  - A refused break-glass code.
+- **What counts as a failed step-up.** A factor presented at `/auth/step-up` and
+  refused, including against a challenge that is not the asker's.
+- **What a failed-authentication row holds.**
+  - The acting subject is the nil subject, because no actor was established.
+  - The effective subject is the account the challenge resolved to (an inactive one
+    included), or the reserved account for a break-glass code, or the nil subject where
+    there is none.
+  - The details hold `factor` alone.
+  - The row holds no identifier as typed, no presented value, no source address and no
+    organization.
+- **What a failed-step-up row holds.** The session's account as both subjects, and the
+  details `session` and `factor`.
+- **Identities.** IDN-AUD-001 AC1 holds, since both identity fields are populated. The
+  nil subject is what a system-principal row carries as its acting subject. The
+  database constraint that admits a row naming nobody stays limited to
+  `authz.access.denied` (entry 136).
+- **AUTH-ABUSE-003.** Both sign-in refusals reach `CountedAsync` and each writes one
+  row. An identifier that resolves to nothing therefore costs the same work as one that
+  resolves to an account.
+- **What limits the rate.**
+  - Sign-in rows are written after the throttle's delay check, so the progressive delay
+    of AUTH-ABUSE-001 bounds them.
+  - Break-glass rows are written after the global limit (five an hour) and the source's
+    delay.
+  - Step-up refusals are not throttled: AUTH-ABUSE-001 names sign-in, so a live session
+    presents step-up factors with no delay and each refusal is a row, bounded only by
+    the request rate. That is left for the owner.
+- **Order.** The row is written in a transaction of its own, before the attempt is
+  counted, so a failure to count does not lose the record.
+- **Not recorded.** A wrong device-verification code, a sign-in link that does not
+  land, a refused delegated sign-in, a refused provider sign-in, and an unknown or
+  expired challenge handle at `PresentAsync`. The handle path runs before the throttle,
+  so recording it would let anyone write rows without limit into a table under security
+  retention; the others are not a factor presented against a challenge, and the device
+  check has no `Factor` that names it. Which of them CONV-LOG-005 means is left for the
+  owner.
+
+*Tests that pin it.* `RequestLoggingTests.CONV_LOG_005_AC1_RaisingTheLogLevelSuppressesNoSecurityEventAsync`,
+`AuthenticationServiceTests.PresentAsync_ARefusedFactor_IsRecordedWhetherOrNotAnAccountHoldsTheIdentifierAsync`,
+`SessionAuditTests.FailedAsync_AgainstAnAccount_NamesTheAccountAndTheFactorAloneAsync`,
+`SessionAuditTests.FailedAsync_AgainstNoAccount_IsTakenNamingNoAccountAsync`,
+`SessionAuditTests.StepUpFailedAsync_NamesTheAccountAndTheSessionAsync`,
+`AuditActionsTests.IDN_AUD_001_TheSetOfActionsIsClosed`.
+
+*Chapter text that should change.*
+
+- CONV-LOG-005 could say "recorded in the audit trail" where it says "logged", and name
+  the action for each of the five events.
+- IDN-AUD-001 could say that a failed authentication names no acting identity (the nil
+  subject), and the account attempted where there is one.
+- Chapter 10 could carry the two rows below.
+
+| Action | Category | Catalogue member | Written when |
+| --- | --- | --- | --- |
+| `auth.authentication.failed` | security | `AuditActions.AuthenticationFailed` | A factor presented at sign-in, or the break-glass credential, was refused. The acting subject is the nil subject; the effective subject is the account the attempt was made against, or the nil subject where the identifier resolved to none or the break-glass code was refused before the reserved account was read; `details.factor` names the factor. Nothing that was typed is written. The row names no organization. (CONV-LOG-005) |
+| `auth.stepup.failed` | security | `AuditActions.StepUpFailed` | A factor presented to step a live session up was refused, including against a challenge that is not the asker's. The acting and effective subject is the session's account; `details.session` names the session and `details.factor` the factor. The row names no organization. (CONV-LOG-005) |
+
 
 # Rows for chapter 10
 

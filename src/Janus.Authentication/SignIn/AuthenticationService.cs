@@ -38,6 +38,7 @@ namespace Janus.Authentication.SignIn;
 /// <param name="devices">The browsers the account knows.</param>
 /// <param name="sessionStore">Where a live session is read.</param>
 /// <param name="sessions">What begins and raises a session.</param>
+/// <param name="audit">Where a refused factor is written down.</param>
 /// <param name="policies">What policy governs the account, and what it has raised.</param>
 /// <param name="domainLock">Whether the address a sign-in was opened with is one a member may use.</param>
 /// <param name="throttle">The progressive delay.</param>
@@ -50,11 +51,12 @@ namespace Janus.Authentication.SignIn;
 /// <param name="randomness">Where a handle and a code are drawn from.</param>
 /// <remarks>
 /// Implements LIB-API-005, AUTH-FACT-001 to AUTH-FACT-004, AUTH-FACT-015 to
-/// AUTH-FACT-017, AUTH-STEP-001, AUTH-ABUSE-001 to AUTH-ABUSE-003 and REG-DOM-001. An
-/// identifier that resolves to nothing is carried through every step exactly as one
-/// that resolves to an account, so that nothing in the shape of an answer tells the two
-/// apart. A domain lock is judged once a factor has succeeded, as everything else about
-/// the account is.
+/// AUTH-FACT-017, AUTH-STEP-001, AUTH-ABUSE-001 to AUTH-ABUSE-003, REG-DOM-001 and
+/// CONV-LOG-005. An identifier that resolves to nothing is carried through every step
+/// exactly as one that resolves to an account, so that nothing in the shape of an answer
+/// tells the two apart. A domain lock is judged once a factor has succeeded, as
+/// everything else about the account is. A factor refused at sign-in or at a step-up is
+/// written to the audit trail, which no log level governs.
 /// </remarks>
 internal sealed class AuthenticationService(
     IChallengeStore challenges,
@@ -70,6 +72,7 @@ internal sealed class AuthenticationService(
     DeviceService devices,
     ISessionStore sessionStore,
     SessionService sessions,
+    ISessionAudit audit,
     PolicyResolution policies,
     DomainLock domainLock,
     ThrottleService throttle,
@@ -341,7 +344,7 @@ internal sealed class AuthenticationService(
                 is not AccountState.Active)
         {
             return Result.Failure<SignInOutcome>(
-                await CountedAsync(attempt, null, null, cancellationToken).ConfigureAwait(false)
+                await CountedAsync(attempt, presented.Factor, null, null, cancellationToken).ConfigureAwait(false)
                 ?? Error.From(ErrorCodes.FactorRejected));
         }
 
@@ -354,7 +357,7 @@ internal sealed class AuthenticationService(
         if (refusal is not null)
         {
             return Result.Failure<SignInOutcome>(
-                await CountedAsync(attempt, subject, trusted, cancellationToken).ConfigureAwait(false)
+                await CountedAsync(attempt, presented.Factor, subject, trusted, cancellationToken).ConfigureAwait(false)
                 ?? refusal);
         }
 
@@ -479,6 +482,8 @@ internal sealed class AuthenticationService(
 
         if (open is null || open.Subject != asking)
         {
+            await StepUpRefusedAsync(session, asking, presented.Factor, cancellationToken).ConfigureAwait(false);
+
             return Result.Failure<SignInOutcome>(Error.From(ErrorCodes.FactorRejected));
         }
 
@@ -489,6 +494,8 @@ internal sealed class AuthenticationService(
 
         if (refusal is not null)
         {
+            await StepUpRefusedAsync(session, asking, presented.Factor, cancellationToken).ConfigureAwait(false);
+
             return Result.Failure<SignInOutcome>(refusal);
         }
 
@@ -1382,13 +1389,23 @@ internal sealed class AuthenticationService(
     }
 
     // A failure to count an attempt is a failure of the gate itself, so it is what the
-    // caller is told rather than the refusal it was counting (AUTH-ABUSE-001).
+    // caller is told rather than the refusal it was counting (AUTH-ABUSE-001). The
+    // refusal is written to the trail first, against the account the challenge
+    // resolved to or none, and never with the identifier as typed (CONV-LOG-005); an
+    // identifier that resolved to nothing reaches this point as one that resolved to
+    // an account does, so the record costs the one what it costs the other
+    // (AUTH-ABUSE-003).
     private async ValueTask<Error?> CountedAsync(
         ThrottleAttempt attempt,
+        Factor presented,
         SubjectId? subject,
         string? trusted,
         CancellationToken cancellationToken)
     {
+        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        await audit.FailedAsync(attempt.Account, presented, time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
         Error? failure = null;
 
         _ = (await throttle.FailedAsync(attempt, cancellationToken).ConfigureAwait(false))
@@ -1405,5 +1422,20 @@ internal sealed class AuthenticationService(
             .Match(() => true, error => Withheld<bool>(error, ref revoked));
 
         return failure ?? revoked;
+    }
+
+    // CONV-LOG-005: a factor refused at a step-up is written to the trail against the
+    // session it was presented on, whatever the log level.
+    private async ValueTask StepUpRefusedAsync(
+        SessionId session,
+        SubjectId asking,
+        Factor presented,
+        CancellationToken cancellationToken)
+    {
+        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        await audit
+            .StepUpFailedAsync(session, asking, presented, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 }
