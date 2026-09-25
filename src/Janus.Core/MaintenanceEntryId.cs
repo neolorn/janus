@@ -1,14 +1,14 @@
 using System;
 using System.Globalization;
 
-namespace Janus.Authentication.Maintenance;
+namespace Janus.Core;
 
 /// <summary>
 /// What one entry of the maintenance log is held under.
 /// </summary>
 /// <param name="Value">The identifier.</param>
 /// <remarks>Implements OPS-MAINT-001.</remarks>
-internal readonly record struct MaintenanceEntryId(Guid Value)
+public readonly record struct MaintenanceEntryId(Guid Value)
 {
     /// <summary>
     /// A new identifier, ordered by when the entry was recorded.

@@ -1,5 +1,5 @@
 using System;
-using Janus.Authentication.Maintenance;
+using Janus.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 

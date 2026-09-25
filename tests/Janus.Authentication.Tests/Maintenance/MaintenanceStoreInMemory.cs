@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Maintenance;
+using Janus.Core;
 
 namespace Janus.Authentication.Tests.Maintenance;
 

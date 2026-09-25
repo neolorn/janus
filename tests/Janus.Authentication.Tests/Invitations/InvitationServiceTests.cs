@@ -1262,7 +1262,8 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Service.AttachedAsync(AccessContext.Of(holder), TestContext.Current.CancellationToken);
 
     private ValueTask<Result> OpenAsync(SubjectId holder, string token) =>
-        Service.OpenAsync(AccessContext.Of(holder), token, TestContext.Current.CancellationToken);
+        new InvitationOpening(_invitations, _work, _clock)
+            .OpenAsync(AccessContext.Of(holder), token, TestContext.Current.CancellationToken);
 
     private ValueTask<Result<IssuedInvitation>> IssueAsync(OrganizationId organization, InvitationRequest request) =>
         Service.IssueAsync(

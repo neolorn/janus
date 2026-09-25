@@ -35,6 +35,7 @@ namespace Janus.Authentication.Registration;
 /// <param name="clients">The registry the originating client is resolved against.</param>
 /// <param name="policies">Where the policy in force is resolved.</param>
 /// <param name="invitations">Where the invitation a registration was opened by is kept.</param>
+/// <param name="opening">What attaches an invitation a signed-in person opens to their account.</param>
 /// <param name="locks">Whether the inviting organization's domain lock admits an address.</param>
 /// <param name="issuing">What issues the session the person is signed in on.</param>
 /// <param name="devices">What remembers the registering browser.</param>
@@ -46,8 +47,8 @@ namespace Janus.Authentication.Registration;
 /// <param name="randomness">Where the codes and the tokens are drawn from.</param>
 /// <remarks>
 /// Implements REG-SESS-001 to REG-SESS-008, REG-PROF-002, REG-IDENT-010, REG-INV-001,
-/// REG-MAIL-001, REG-DOM-001, IDN-LIFE-009a, API-REDIR-002, AUTH-FACT-004 and
-/// AUTH-ABUSE-003. Every answer is the same whether or not the identifier presented
+/// REG-INV-002, REG-MAIL-001, REG-DOM-001, IDN-LIFE-009a, API-REDIR-002, AUTH-FACT-004
+/// and AUTH-ABUSE-003. Every answer is the same whether or not the identifier presented
 /// belongs to an account already: the lookup decides only whether a code goes out and
 /// whether the holder is told. The one exception is the email an invitation binds,
 /// whose link only its mailbox received.
@@ -65,6 +66,7 @@ internal sealed class RegistrationService(
     IOidcClientStore clients,
     PolicyResolution policies,
     IInvitationStore invitations,
+    InvitationOpening opening,
     DomainLock locks,
     SessionService issuing,
     DeviceService devices,
@@ -79,6 +81,7 @@ internal sealed class RegistrationService(
 
     /// <inheritdoc/>
     public async ValueTask<Result<RegistrationSessionId>> BeginAsync(
+        AccessContext? signedIn,
         string client,
         string language,
         string source,
@@ -88,6 +91,11 @@ internal sealed class RegistrationService(
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(language);
         ArgumentNullException.ThrowIfNull(source);
+
+        if (signedIn is not null)
+        {
+            return await SignedInAsync(signedIn, invitationToken, cancellationToken).ConfigureAwait(false);
+        }
 
         Error? failure = null;
 
@@ -143,6 +151,22 @@ internal sealed class RegistrationService(
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success(session.Id);
+    }
+
+    // REG-SESS-002: a person already signed in is refused and sent to their account,
+    // and no registration session is created for them. An invitation link they press
+    // attaches to that account, whose membership step reads it (REG-INV-002).
+    private async ValueTask<Result<RegistrationSessionId>> SignedInAsync(
+        AccessContext signedIn,
+        [NeverLogged] string? invitationToken,
+        CancellationToken cancellationToken)
+    {
+        Error? unopened = invitationToken is null
+            ? null
+            : (await opening.OpenAsync(signedIn, invitationToken, cancellationToken).ConfigureAwait(false))
+                .Match(() => (Error?)null, error => error);
+
+        return Result.Failure<RegistrationSessionId>(unopened ?? Error.From(ErrorCodes.RegistrationSignedIn));
     }
 
     // REG-INV-001 and REG-MAIL-001: the token is single use, so pressing it attaches the

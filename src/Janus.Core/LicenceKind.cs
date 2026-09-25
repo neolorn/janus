@@ -1,12 +1,12 @@
 using System.Text.Json.Serialization;
 
-namespace Janus.Authentication.Maintenance;
+namespace Janus.Core;
 
 /// <summary>
 /// Whether a dated authorisation is the regulatory licence or a permit.
 /// </summary>
 /// <remarks>Implements OPS-MAINT-001 (D-153).</remarks>
-internal enum LicenceKind
+public enum LicenceKind
 {
     /// <summary>The regulatory licence.</summary>
     [JsonStringEnumMemberName("licence")]

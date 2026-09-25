@@ -277,7 +277,7 @@ public static class HostingRegistration
         // OPS-MAINT-001: the licences and permits warned of, and the maintenance log.
         // DR-009a: the annual operation the key-encryption key is rotated in, warned of
         // from the log.
-        services.AddScoped<MaintenanceRecords>();
+        services.AddScoped<IMaintenanceRecords, MaintenanceRecords>();
         services.AddScoped<LicenceExpiry>();
         services.AddScoped<EnvelopeRotationWatch>();
 
@@ -577,6 +577,7 @@ public static class HostingRegistration
 
         services.AddScoped<InvitationAcknowledgement>();
         services.AddScoped<MembershipEnd>();
+        services.AddScoped<InvitationOpening>();
 
         // REG-MAIL-001: an invitation reserves a mailbox only where there is a mail
         // server to create it on.

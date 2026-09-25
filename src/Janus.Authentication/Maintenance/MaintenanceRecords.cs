@@ -18,22 +18,17 @@ namespace Janus.Authentication.Maintenance;
 /// <param name="work">The one transaction a change is written in.</param>
 /// <param name="time">The clock a performed task is judged against.</param>
 /// <remarks>
-/// Implements OPS-MAINT-001 and chapter 09 section 8a. Every operation answers to
-/// <c>compliance:manage</c> in the administrative organization. The log is appended to
-/// and read; nothing here removes or changes an entry.
+/// Implements LIB-API-005, OPS-MAINT-001 and chapter 09 section 8a. Every operation
+/// answers to <c>compliance:manage</c> in the administrative organization. The log is
+/// appended to and read; nothing here removes or changes an entry.
 /// </remarks>
 internal sealed class MaintenanceRecords(
     AdministrativeScope scope,
     IMaintenanceStore store,
     IUnitOfWork work,
-    TimeProvider time)
+    TimeProvider time) : IMaintenanceRecords
 {
-    /// <summary>
-    /// The licences and permits, soonest to lapse first.
-    /// </summary>
-    /// <param name="context">Who is asking.</param>
-    /// <param name="cancellationToken">Abandons the read.</param>
-    /// <returns>The licences and permits, or the refusal.</returns>
+    /// <inheritdoc/>
     /// <exception cref="ArgumentNullException">The context is absent.</exception>
     public async ValueTask<Result<IReadOnlyList<Licence>>> LicencesAsync(
         AccessContext context,
@@ -51,13 +46,7 @@ internal sealed class MaintenanceRecords(
         return Result.Success(await store.LicencesAsync(cancellationToken).ConfigureAwait(false));
     }
 
-    /// <summary>
-    /// Replaces the licences and permits with the list given.
-    /// </summary>
-    /// <param name="context">Who is asking.</param>
-    /// <param name="licences">What now stands.</param>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Nothing, or the refusal.</returns>
+    /// <inheritdoc/>
     /// <exception cref="ArgumentNullException">The context or the list is absent.</exception>
     public async ValueTask<Result> ReplaceLicencesAsync(
         AccessContext context,
@@ -88,12 +77,7 @@ internal sealed class MaintenanceRecords(
         return Result.Success();
     }
 
-    /// <summary>
-    /// The maintenance log, most recently performed first.
-    /// </summary>
-    /// <param name="context">Who is asking.</param>
-    /// <param name="cancellationToken">Abandons the read.</param>
-    /// <returns>The entries, or the refusal.</returns>
+    /// <inheritdoc/>
     /// <exception cref="ArgumentNullException">The context is absent.</exception>
     public async ValueTask<Result<IReadOnlyList<MaintenanceEntry>>> LogAsync(
         AccessContext context,
@@ -111,15 +95,7 @@ internal sealed class MaintenanceRecords(
         return Result.Success(await store.LogAsync(cancellationToken).ConfigureAwait(false));
     }
 
-    /// <summary>
-    /// Records a task performed or a review made, under the person who asks.
-    /// </summary>
-    /// <param name="context">Who is asking, who is the one recorded as having performed it.</param>
-    /// <param name="task">Which task or review.</param>
-    /// <param name="performedAt">When it was performed.</param>
-    /// <param name="note">What they noted, where they noted anything.</param>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The entry, or the refusal.</returns>
+    /// <inheritdoc/>
     /// <exception cref="ArgumentNullException">The context is absent.</exception>
     public async ValueTask<Result<MaintenanceEntry>> RecordAsync(
         AccessContext context,

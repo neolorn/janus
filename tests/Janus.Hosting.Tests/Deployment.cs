@@ -949,12 +949,13 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<Janus.Authentication.Mailboxes.IMailboxStore>(Mailboxes);
         _ = services.AddSingleton<IMailServer>(MailServer);
         _ = services.AddSingleton<Janus.Authentication.Maintenance.IMaintenanceStore>(Maintenance);
-        _ = services.AddScoped<Janus.Authentication.Maintenance.MaintenanceRecords>();
+        _ = services.AddScoped<IMaintenanceRecords, Janus.Authentication.Maintenance.MaintenanceRecords>();
         _ = services.AddScoped<Janus.Authentication.Maintenance.LicenceExpiry>();
         _ = services.AddSingleton<Janus.Authentication.Invitations.IMembershipAttachment>(Attachments);
         _ = services.AddScoped<Janus.Authentication.Invitations.InvitationAcknowledgement>();
         _ = services.AddSingleton<Janus.Authentication.Invitations.IMembershipEnding>(Endings);
         _ = services.AddScoped<Janus.Authentication.Invitations.MembershipEnd>();
+        _ = services.AddScoped<Janus.Authentication.Invitations.InvitationOpening>();
         _ = services.AddScoped<IInvitations, Janus.Authentication.Invitations.InvitationService>();
         _ = services.AddScoped<SigningKeys>();
         _ = services.AddScoped<OidcService>();

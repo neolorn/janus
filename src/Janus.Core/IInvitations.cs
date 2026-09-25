@@ -62,23 +62,6 @@ public interface IInvitations
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Attaches the invitation a link opens to the signed-in person's account, which
-    /// then reaches the membership step without a registration (REG-INV-002). The
-    /// link is spent.
-    /// </summary>
-    /// <param name="context">Who is signed in.</param>
-    /// <param name="token">The token the link carried.</param>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>
-    /// Success, or the refusal: <c>identity.invitation.expired</c> where the token opens
-    /// no invitation.
-    /// </returns>
-    ValueTask<Result> OpenAsync(
-        AccessContext context,
-        [NeverLogged] string token,
-        CancellationToken cancellationToken);
-
-    /// <summary>
     /// Reads the invitation attached to the signed-in person's account, which the
     /// membership step shows before it is acknowledged (REG-INV-002): the one whose
     /// link the account opened most recently, among those neither acknowledged nor

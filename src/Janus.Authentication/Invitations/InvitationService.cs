@@ -527,44 +527,6 @@ internal sealed class InvitationService(
     }
 
     /// <inheritdoc/>
-    /// <exception cref="ArgumentNullException">A part is absent.</exception>
-    public async ValueTask<Result> OpenAsync(
-        AccessContext context,
-        [NeverLogged] string token,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(token);
-
-        if (context.Effective is not SubjectId invitee)
-        {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
-        }
-
-        DateTimeOffset now = time.GetUtcNow();
-
-        // IDN-LIFE-009a AC2: the link is single use, so the account that presses it is
-        // the one it attaches to, and every token that opens nothing is answered alike.
-        Invitation? invitation = await invitations
-            .FindByTokenAsync(OpaqueToken.Of(token).Fingerprint(), cancellationToken)
-            .ConfigureAwait(false);
-
-        if (invitation is null || !invitation.Opens(now))
-        {
-            return Result.Failure(Error.From(ErrorCodes.InvitationExpired));
-        }
-
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-
-        invitation.AttachTo(invitee, now);
-
-        await invitations.RecordAsync(invitation, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
-        return Result.Success();
-    }
-
-    /// <inheritdoc/>
     /// <exception cref="ArgumentNullException">The context is absent.</exception>
     public async ValueTask<Result<AttachedInvitation>> AttachedAsync(
         AccessContext context,

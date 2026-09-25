@@ -16750,6 +16750,58 @@ Every request that was refused is still refused; only which refusal comes first 
 - `09` section 8's `422` line could read "`auth.restriction.reasonrequired` where a change arrives without a reason", matching its body.
 - OPS-CFG-002 could say that a tightening costs a reason but no step-up.
 
+---
+
+## 408. Which endpoints are operations, what an endpoint may take beside its contract, and the nine that broke the rule put right
+
+**Phase 10 · 2026-09-25 · Tier 2 · LIB-API-005 AC1, AC2, AC3**
+
+*The question.* LIB-API-005 says every library-owned operation is one `Janus.Core` contract, which its endpoint maps. Three things are unsettled:
+- Which mounted endpoints are operations.
+- What an endpoint may take besides the contract.
+- Where the provider's OIDC endpoints stand.
+
+*The readings.*
+
+1. Every mounted endpoint is an operation.
+2. Some endpoints are named as outside the rule, each on the ground cited:
+   - The endpoints that establish the browser's session, where the session and its cookie are what the browser holds, not a result a host calling in process could use (BFF-SESS-001, BFF-SESS-006). These are `GET /auth/providers/{apple,google}` and their returns, `GET /auth/signon` and its return, `GET,POST /callbacks/providers/{apple,google}/return` (BFF-MACH-001, entry 344), `POST /auth/break-glass`, `/auth/device/verify`, `/auth/factor`, `/auth/step-up` and `/register/terms`.
+   - `POST /admin/break-glass/generate`, whose service entry 297 keeps off the contract.
+   - The callbacks a gateway or a provider sends, which no person and no host calls: `GET /callbacks/sms/dlr` (chapter 09 section 10) and `POST /callbacks/providers/{apple,google}` (IDN-LIFE-012a AC3, entry 282).
+   - The three well-known documents, which answer the host's declarations and settings and perform nothing (REG-PM-001, AUTH-FACT-012).
+
+   The OIDC protocol endpoints are outside the enumeration, because the provider's middleware serves them and the deployment mounts no route for them. Userinfo and jwks answer from `IOidc` (entry 160).
+
+   Beside the contract, an endpoint may take the browser's own records:
+   - `PreAuthenticationService.CarryAsync`, which binds a registration or an enrolment to the browser that started it (BFF-CSRF-005b, AUTH-RECOV-002)
+   - `SessionService.RotateAsync` (entry 363)
+   - `IRegistrationSignals.WaitAsync`, which reads the state only through the contract (REG-SESS-003)
+
+*Chosen: 2.* Every other mounted endpoint resolves one contract, with no exception list.
+
+Nine endpoints broke the rule. Listing them as owed would have been a workaround, so each is put right:
+- `POST /register/` now resolves `IRegistration` alone. `BeginAsync` takes the signed-in context and the invitation, and `IInvitations.OpenAsync` is gone.
+- `POST` and `DELETE /account/link/{apple,google}` resolve `ICredentials`, which gains `LinkableAsync` and `UnlinkAsync`.
+- `GET` and `PUT /admin/compliance/licences` and `GET` and `POST /admin/compliance/maintenance` resolve the new `IMaintenanceRecords`.
+
+In each case the permission check stays in the service and none is in the endpoint.
+
+*Tests that pin it.*
+`IdentityEndpointsTests.LIB_API_005_AC3_EveryEndpointResolvesExactlyOneServiceOfTheContractAsync`,
+`IdentityEndpointsTests.LIB_API_005_AC1_NoEndpointCarriesLogicItsServiceDoesNotAsync`,
+`IdentityEndpointsTests.LIB_API_005_AC2_NoEndpointChecksAPermissionOfItsOwnAsync`,
+`LegalDocumentTests.LIB_API_005_AC2_PublishingWithoutThePermissionIsRefusedAsync`,
+`LegalDocumentTests.LIB_API_005_AC2_TranslatingWithoutThePermissionIsRefusedAsync`,
+`RegistrationServiceTests.REG_SESS_002_ABrowserSignedInAlreadyIsRefusedAndStagesNothingAsync`,
+`RegistrationServiceTests.REG_INV_002_AC1_ALinkPressedWhileSignedInAttachesToTheAccountAsync`,
+`MaintenanceRecordsTests.OPS_MAINT_001_EveryOperationAnswersToComplianceManageAsync`.
+
+*Chapter text that should change.*
+- LIB-API-005 could name the endpoints that are not operations: session establishment, callbacks, well-known documents and the provider's protocol endpoints.
+- `09` could list the contract each endpoint maps.
+- `09` `POST /register` could say that a signed-in request carrying an invitation token attaches the invitation to the account (REG-INV-002 AC1) before the `409`.
+
+
 # Rows for chapter 10
 
 D-162 section E names codes, keys, declarations and vocabularies the library now

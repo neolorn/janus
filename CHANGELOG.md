@@ -1019,6 +1019,16 @@ against the public contract of LIB-API-001.
 - A runtime setting changed in process is refused without a reason,
   `auth.restriction.reasonrequired` naming the key, whichever way it moves, as over
   HTTP; the named restriction set asks a reason of a loosening only.
+- Every endpoint the library mounts calls its operation through a public service
+  contract. `ICredentials.LinkableAsync` and `ICredentials.UnlinkAsync` check and unlink
+  an identity at a social provider in process, under the same checks as `POST` and
+  `DELETE /account/link/{provider}`. `IMaintenanceRecords` reads and replaces the
+  licences and permits and reads and appends the maintenance log in process, under
+  `compliance:manage`, and `Licence`, `LicenceId`, `LicenceKind`, `MaintenanceEntry`,
+  `MaintenanceEntryId` and `MaintenanceTask` are public. `IRegistration.BeginAsync`
+  takes the access context of a browser already signed in: it creates no registration
+  session for it, attaches the invitation its link carried to that account, and answers
+  `identity.registration.signedin`.
 - Under the mount, a path no endpoint serves and a method a path does not take answer
   404 `authz.resource.notfound` in the error envelope, and a fault answers 500
   `system.fault` with the correlation identifier and nothing of what was thrown; the

@@ -1,6 +1,6 @@
 using System;
 using Janus.Authentication;
-using Janus.Authentication.Maintenance;
+using Janus.Core;
 
 namespace Janus.Hosting.Maintenance;
 

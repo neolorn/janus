@@ -126,6 +126,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             _clients,
             new PolicyResolution(_memberships, _configuration, _raises),
             _invitations,
+            new InvitationOpening(_invitations, _work, _clock),
             new DomainLock(_memberships, _configuration, _domains),
             new SessionService(
                 _live,
@@ -1579,6 +1580,42 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-SESS-002 and chapter 09 <c>POST /register</c>: a browser signed in already is
+    /// refused, and no registration session is created for it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_SESS_002_ABrowserSignedInAlreadyIsRefusedAndStagesNothingAsync()
+    {
+        Assert.Equal(
+            ErrorCodes.RegistrationSignedIn,
+            Refused(await SignedInAsync(SubjectId.New(_randomness), invitationToken: null)));
+        Assert.Empty(_sessions.All);
+    }
+
+    /// <summary>
+    /// REG-INV-002 AC1: a link pressed while signed in attaches its invitation to that
+    /// account without a registration session, and the browser is still refused
+    /// registration; a token that opens nothing is refused as such.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_INV_002_AC1_ALinkPressedWhileSignedInAttachesToTheAccountAsync()
+    {
+        var holder = SubjectId.New(_randomness);
+        string token = Issued(email: Address);
+
+        Assert.Equal(ErrorCodes.RegistrationSignedIn, Refused(await SignedInAsync(holder, token)));
+        Assert.Equal(ErrorCodes.InvitationExpired, Refused(await SignedInAsync(holder, "no-such-token")));
+
+        Invitation attached = _invitations.Held.Single();
+
+        Assert.Equal(holder, attached.Invitee);
+        Assert.Null(attached.Session);
+        Assert.Empty(_sessions.All);
+    }
+
+    /// <summary>
     /// REG-DOM-001 AC2: an email the person chooses at an invitation, where the
     /// invitation left the email open, is refused outside the inviting organization's
     /// verified domains.
@@ -1688,7 +1725,16 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     private async Task<Result<RegistrationSessionId>> InvitedAsync(string token) =>
-        await Service.BeginAsync(Client, Language, Source, token, TestContext.Current.CancellationToken);
+        await Service.BeginAsync(signedIn: null, Client, Language, Source, token, TestContext.Current.CancellationToken);
+
+    private async Task<Result<RegistrationSessionId>> SignedInAsync(SubjectId holder, string? invitationToken) =>
+        await Service.BeginAsync(
+            AccessContext.Of(holder),
+            Client,
+            Language,
+            Source,
+            invitationToken,
+            TestContext.Current.CancellationToken);
 
     // An organization locked to one domain, verified.
     private async Task LockedAsync(OrganizationId organization, string domain)
@@ -1718,7 +1764,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     private async Task<RegistrationSessionId> StartedAsync()
     {
         Result<RegistrationSessionId> begun = await Service
-            .BeginAsync(Client, Language, Source, invitationToken: null, TestContext.Current.CancellationToken);
+            .BeginAsync(signedIn: null, Client, Language, Source, invitationToken: null, TestContext.Current.CancellationToken);
 
         return begun.Match(session => session, Throw<RegistrationSessionId>);
     }

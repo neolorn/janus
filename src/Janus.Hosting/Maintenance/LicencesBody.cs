@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using Janus.Authentication.Maintenance;
+using Janus.Core;
 
 namespace Janus.Hosting.Maintenance;
 

@@ -80,12 +80,12 @@ internal static class ProviderSignInEndpoints
 
             _ = SessionRequired.On(endpoints.MapPost(
                 Link + route,
-                (CredentialService credentials, RequestSession browser, CancellationToken cancellationToken) =>
+                (ICredentials credentials, RequestSession browser, CancellationToken cancellationToken) =>
                     LinkableAsync(credentials, browser, provider, cancellationToken)));
 
             _ = SessionRequired.On(endpoints.MapDelete(
                 Link + route,
-                (CredentialService credentials,
+                (ICredentials credentials,
                     RequestSession browser,
                     HttpContext context,
                     CancellationToken cancellationToken) =>
@@ -130,7 +130,7 @@ internal static class ProviderSignInEndpoints
     // the start of the round trip asks again, so a browser learns it must step up
     // before it leaves for the provider rather than after it returns.
     private static async Task<IResult> LinkableAsync(
-        CredentialService credentials,
+        ICredentials credentials,
         RequestSession browser,
         Factor provider,
         CancellationToken cancellationToken)
@@ -146,7 +146,7 @@ internal static class ProviderSignInEndpoints
     }
 
     private static async Task<IResult> UnlinkAsync(
-        CredentialService credentials,
+        ICredentials credentials,
         RequestSession browser,
         HttpContext context,
         Factor provider,

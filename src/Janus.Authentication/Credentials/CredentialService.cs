@@ -504,19 +504,8 @@ internal sealed class CredentialService(
         return Result.Success();
     }
 
-    /// <summary>
-    /// Whether the account may link an identity at a provider now: the session has
-    /// passed the step-up the action asks for, and the policy lists the provider.
-    /// </summary>
-    /// <param name="authority">The session acting.</param>
-    /// <param name="provider">Which provider.</param>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Nothing, or the refusal.</returns>
+    /// <inheritdoc/>
     /// <exception cref="ArgumentNullException">The authority is absent.</exception>
-    /// <remarks>
-    /// Implements IDN-LIFE-012 and <c>10</c> section 5a <c>provider:link</c>. An
-    /// enrolment session links nothing: it exists to replace what was lost.
-    /// </remarks>
     public async ValueTask<Result> LinkableAsync(
         CredentialAuthority authority,
         Factor provider,
@@ -604,21 +593,8 @@ internal sealed class CredentialService(
             .ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// Unlinks the account's identity at a provider.
-    /// </summary>
-    /// <param name="authority">The session acting.</param>
-    /// <param name="provider">Which provider.</param>
-    /// <param name="source">Where the request came from.</param>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Nothing, or the refusal.</returns>
+    /// <inheritdoc/>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
-    /// <remarks>
-    /// Implements IDN-LIFE-012, IDN-ACCT-001 and <c>10</c> section 5a
-    /// <c>provider:unlink</c>. The account stays as it is and is reached by what it
-    /// keeps (AC2); where nothing that can be presented first would remain, the
-    /// identity stays linked (AC3).
-    /// </remarks>
     public async ValueTask<Result> UnlinkAsync(
         CredentialAuthority authority,
         Factor provider,
