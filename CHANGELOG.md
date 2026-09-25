@@ -389,6 +389,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `IResources` in `Janus.Core`: a host registers each record it creates, many at once
+  for an import, and moves one, inside its own unit of work, and the ancestry the
+  permission filter reads is written in the same transaction. A record is placed only
+  in a container of the type its own is declared contained in and of the same
+  organization; anything else is refused as `api.request.malformed` naming
+  `resourceType`, `resourceId` or `containedIn`, and a refused batch writes nothing.
 - A person signs in, registers or links an identity with Google or Apple.
   `GET /auth/providers/{provider}` with `intent` of `signin`, `register` or `link` and
   a local `returnTo` sends the browser to the provider with a single-use state and

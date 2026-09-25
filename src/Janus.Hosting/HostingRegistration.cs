@@ -30,6 +30,7 @@ using Janus.Authorization.Gate;
 using Janus.Authorization.Grants;
 using Janus.Authorization.Groups;
 using Janus.Authorization.Model;
+using Janus.Authorization.Resources;
 using Janus.Authorization.Roles;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -485,6 +486,10 @@ public static class HostingRegistration
         services.AddScoped<ConcealedRefusals>();
         services.AddScoped<IConcealedRefusals>(provider => provider.GetRequiredService<ConcealedRefusals>());
         services.AddScoped<IAccessGate, AccessGate>();
+
+        // AUTHZ-INHERIT-002: the host says where each of its records sits, and the
+        // ancestry the gate reads is written from that and nothing else.
+        services.AddScoped<IResources, ResourceService>();
 
         // OPS-ALERT-005: the host says how many records a filtered query of its own
         // returned, and the library counts them against the person given them.

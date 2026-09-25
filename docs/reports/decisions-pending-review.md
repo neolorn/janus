@@ -14405,6 +14405,62 @@ so CONV-DESIGN-008 AC1 holds, and no project references it.
 client, or keep it and say the handler is not used because of BFF-SESS-002 and
 BFF-CSRF-005, naming `Microsoft.IdentityModel` as what validates the provider's token.
 
+---
+
+## 352. A host registers and moves its records through `IResources`
+
+**Phase 10 · 2026-09-25 · Tier 3 · AUTHZ-INHERIT-001, AUTHZ-INHERIT-002, AUTHZ-SCOPE-001, AUTHZ-MODEL-003, LIB-API-001, LIB-API-005, LIB-HOST-002, PRIV-SENS-002**
+
+*The question.* AUTHZ-INHERIT-002 has the ancestry written in the same transaction as
+the resource create or move, and LIB-HOST-002 has the library read nothing of the
+host's, so the host has to tell the library when it creates or moves a record. Phases
+3 and 4 built that as the internal `IResourceStore`; no public type reached it, and the
+tests wrote `identity.resources` and `identity.ancestry` by hand. A host built on the
+package had no way to register a record, so no grant on a container reached anything
+in it. This is a latent defect from phase 3, found while building the conformance
+sample host. No chapter names the call.
+
+*The readings.* (1) The host writes the two tables itself, since LIB-API-001 makes the
+ancestry closure's structure and semantics public: the ancestry is then the host's
+arithmetic, and nothing stops a record being placed in a container of another
+organization or of a type the declaration does not contain it in. (2) A public
+operation in `Janus.Core` the host calls inside its own unit of work, registering one
+record, many at once, or moving one, which judges each placement against the
+declaration and the organization before writing. (3) Reading 2 with a removal as well.
+
+*Chosen: 2 (Tier 3, the strictest reading).* `IResources` with `RegisterAsync`,
+`RegisterManyAsync` and `MoveAsync`, each returning a `Result`, registered scoped by
+`AddJanus` and joining the host's open `IUnitOfWork` (the outermost transaction wins,
+so a host rollback leaves neither the record nor its ancestry). A registration carries
+the record, its organization, its container and, for PRIV-SENS-002, whose data it is.
+Refusals are `api.request.malformed` naming the member: `resourceType` for a type the
+declaration does not name; `resourceId` for a record already registered, or listed
+twice in one batch, or a move of one never registered; `containedIn` for a container
+of a type other than the one declared, no container where the type does not belong to
+the organization, a container not registered (or later in the same batch), or a
+container of another organization. A bulk batch is judged whole before anything is
+written, and its lookups are one query per type. The call checks no permission: it
+grants nothing, and whether a caller may create a record in a container is the
+host's own permission, asked of `IAccessGate` before the host writes. No removal is
+added, since chapter 03 names only create and move; a removed host row leaves an
+ancestry row that no host query can reach, and a reused identifier is refused. A
+containment cycle is not checked per record, because AUTHZ-MODEL-004 refuses one among
+the types and a record is only placed in a container of its declared type.
+
+*Tests that pin it.*
+`ResourceRegistrationTests.AUTHZ_INHERIT_002_AC1_ARecordTheHostRegistersInheritsFromItsContainerAsync`,
+`ResourceRegistrationTests.AUTHZ_INHERIT_002_AC1_AHostsRollbackLeavesNeitherTheRecordNorItsAncestryAsync`,
+`ResourceRegistrationTests.AUTHZ_INHERIT_002_AMovedRecordInheritsFromItsNewContainerAloneAsync`,
+`ResourceRegistrationTests.AUTHZ_INHERIT_002_ABulkRegistrationTakesContainersBeforeContentsAsync`,
+`ResourceRegistrationTests.AUTHZ_SCOPE_001_ARecordIsNotPlacedInAnotherOrganizationsContainerAsync`,
+`ResourceRegistrationTests.AUTHZ_MODEL_003_ARecordSitsOnlyWhereItsTypeIsDeclaredToAsync`,
+`ResourceRegistrationTests.AUTHZ_MODEL_001_OnlyADeclaredTypeIsRegisteredAndOnlyOnceAsync`.
+
+*Chapter text that should change.* AUTHZ-INHERIT-002 could name `IResources` as the
+create and move it speaks of, with the refusals above; LIB-API-005 could list it among
+the operations contract; chapter 10 section 1 could list `resourceType`, `resourceId`
+and `containedIn` as the members `api.request.malformed` names for it.
+
 
 # Rows for chapter 10
 
