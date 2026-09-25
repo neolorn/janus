@@ -23,4 +23,8 @@ internal enum SubjectEventKind
     /// <summary>A subject's export is being assembled.</summary>
     [JsonStringEnumMemberName("export-requested")]
     ExportRequested = 2,
+
+    /// <summary>A subject's account was taken down.</summary>
+    [JsonStringEnumMemberName("takedown-executed")]
+    TakedownExecuted = 3,
 }

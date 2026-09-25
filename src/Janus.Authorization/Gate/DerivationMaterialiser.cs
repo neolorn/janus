@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Linq.Expressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authorization.Grants;
@@ -117,14 +116,8 @@ internal sealed class DerivationMaterialiser(
                 nameof(sources));
         }
 
-        string named = resource.ToString();
-        Expression<Func<string, bool>> names = value => value == named;
-        ParameterExpression row = relationship.Resource.Parameters[0];
-
         IAsyncEnumerable<SubjectId> holders = rows.HeldBy(
-            Expression.Lambda(
-                new Substitution(names.Parameters[0], relationship.Resource.Body).Visit(names.Body),
-                row),
+            Substitution.HeldOn(relationship, resource),
             relationship.Holder);
 
         var subjects = new HashSet<SubjectId>();

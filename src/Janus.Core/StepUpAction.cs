@@ -211,4 +211,12 @@ public enum StepUpAction
     /// <remarks>Named <c>breakglass:replace</c>.</remarks>
     [JsonStringEnumMemberName("breakglass:replace")]
     BreakGlassReplace = 28,
+
+    /// <summary>
+    /// Request an organization's deletion, which suspends it and ends the sessions of
+    /// its members, or cancel the request, which gives back every grant it holds.
+    /// </summary>
+    /// <remarks>Named <c>organization:delete</c>.</remarks>
+    [JsonStringEnumMemberName("organization:delete")]
+    OrganizationDelete = 29,
 }

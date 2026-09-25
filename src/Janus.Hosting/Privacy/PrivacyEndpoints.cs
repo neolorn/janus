@@ -517,15 +517,7 @@ internal static class PrivacyEndpoints
 
     private static IResult Published(DocumentVersion version) =>
         TypedResults.Json(
-            new DocumentVersionView(
-                version.DocumentName,
-                version.Version,
-                version.GoverningLanguage,
-                version.Text,
-                [
-                    .. version.Translations.Select(translation =>
-                        new DocumentTranslationView(translation.Language, translation.Text)),
-                ]),
+            DocumentVersionView.Of(version),
             PrivacyJson.Default.DocumentVersionView,
             contentType: null,
             StatusCodes.Status200OK);

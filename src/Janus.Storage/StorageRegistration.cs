@@ -6,7 +6,10 @@ using Janus.Authentication.Configuration;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
+using Janus.Authentication.Invitations;
+using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Oidc;
+using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Recovery;
@@ -28,6 +31,7 @@ using Janus.Identity.Identifiers;
 using Janus.Identity.Organizations;
 using Janus.Identity.Preferences;
 using Janus.Identity.Profiles;
+using Janus.Privacy.Breaches;
 using Janus.Privacy.Consents;
 using Janus.Privacy.Documents;
 using Janus.Privacy.Erasures;
@@ -41,7 +45,10 @@ using Janus.Storage.Authentication.Configuration;
 using Janus.Storage.Authentication.Credentials;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Identifiers;
+using Janus.Storage.Authentication.Invitations;
+using Janus.Storage.Authentication.Mailboxes;
 using Janus.Storage.Authentication.Oidc;
+using Janus.Storage.Authentication.Organizations;
 using Janus.Storage.Authentication.Passwords;
 using Janus.Storage.Authentication.Policies;
 using Janus.Storage.Authentication.Recovery;
@@ -62,6 +69,7 @@ using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Identity.Profiles;
 using Janus.Storage.Privacy;
+using Janus.Storage.Privacy.Breaches;
 using Janus.Storage.Privacy.Consents;
 using Janus.Storage.Privacy.Documents;
 using Janus.Storage.Privacy.Erasures;
@@ -182,7 +190,8 @@ internal static class StorageRegistration
             provider.GetRequiredService<IAccountStore>(),
             provider.GetRequiredService<IIdentifierStore>(),
             provider.GetRequiredService<IProfileStore>(),
-            provider.GetRequiredService<ISubjectKeyStore>()));
+            provider.GetRequiredService<ISubjectKeyStore>(),
+            provider.GetRequiredService<IPreferenceStore>()));
         services.AddScoped<IPendingVerificationStore>(provider => new PendingVerificationStore(
             provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
@@ -195,6 +204,7 @@ internal static class StorageRegistration
         services.AddScoped<IRecoveryCodeStore, RecoveryCodeStore>();
         services.AddScoped<IDeviceStore, DeviceStore>();
         services.AddScoped<IMembershipLookup, MembershipLookup>();
+        services.AddScoped<Janus.Authentication.Policies.IAdministrativeOrganization, AdministrativeOrganization>();
         services.AddScoped<IPreAuthenticationStore, PreAuthenticationStore>();
         services.AddScoped<IChallengeStore, ChallengeStore>();
         services.AddScoped<IVerificationCodeStore, VerificationCodeStore>();
@@ -228,18 +238,38 @@ internal static class StorageRegistration
         services.AddScoped<ILegalDocumentStore, LegalDocumentStore>();
         services.AddScoped<IConsentStore, ConsentStore>();
         services.AddScoped<Janus.Privacy.IPrivacyAudit, PrivacyAudit>();
-        services.AddScoped<Janus.Privacy.Policies.IMembershipLookup, PrivacyMembershipLookup>();
+        services.AddScoped<Janus.Privacy.Policies.IAdministrativeOrganization, PrivacyAdministrativeOrganization>();
+        services.AddScoped<IAuditTrailStore, AuditTrailStore>();
 
         services.AddScoped<IRoleStore, RoleStore>();
+        services.AddScoped<IRoleAudit, RoleAudit>();
         services.AddScoped<IGrantStore, GrantStore>();
         services.AddScoped<IGroupStore, GroupStore>();
+        services.AddScoped<IGroupAudit, GroupAudit>();
+        services.AddScoped<IOrganizationDirectory, OrganizationDirectory>();
+        services.AddScoped<IOrganizationAudit, OrganizationAudit>();
+        services.AddScoped<IDomainStore, DomainStore>();
+        services.AddScoped<IMailboxStore>(provider => new MailboxStore(
+            provider.GetRequiredService<StoreContext>(),
+            keyEncryptionKeys,
+            fingerprintKey,
+            provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<IInvitationStore>(provider => new InvitationStore(
+            provider.GetRequiredService<StoreContext>(),
+            keyEncryptionKeys,
+            provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<IMembershipAttachment, MembershipAttachment>();
+        services.AddScoped<IMembershipEnding, MembershipEnding>();
+        services.AddScoped<IRoleCatalogue, RoleCatalogue>();
         services.AddScoped<IResourceStore, ResourceStore>();
 
         services.AddScoped<IAccessEvaluator, AccessEvaluator>();
         services.AddScoped<IIndexCatalogue, IndexCatalogue>();
         services.AddScoped<ISubjectRestrictions, SubjectRestrictions>();
+        services.AddScoped<IOrganizationSuspensions, OrganizationSuspensions>();
         services.AddScoped<IRecordedConsents, RecordedConsents>();
         services.AddScoped<IAccessAudit, AccessAudit>();
+        services.AddScoped<Janus.Authorization.Gate.IAdministrativeOrganization, GateAdministrativeOrganization>();
 
         services.AddScoped<ISendOutbox>(provider => new SendDeliveryStore(
             provider.GetRequiredService<StoreContext>(),

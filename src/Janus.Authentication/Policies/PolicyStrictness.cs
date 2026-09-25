@@ -17,7 +17,9 @@ internal static class PolicyStrictness
     /// <summary>
     /// The policy an organization's overrides produce over the system policy. A field
     /// the organization left absent inherits, and one that would loosen is ignored, so
-    /// a value written before the system default rose cannot take effect.
+    /// a value written before the system default rose cannot take effect. The gates are
+    /// overridden action by action: an action the organization does not name keeps the
+    /// system's gate.
     /// </summary>
     /// <param name="system">The system policy.</param>
     /// <param name="overrides">What the organization overrides.</param>
@@ -33,7 +35,7 @@ internal static class PolicyStrictness
             new Policy(
                 overrides.RequiredAssurance ?? system.RequiredAssurance,
                 overrides.LoginFactors ?? system.LoginFactors,
-                overrides.Gates ?? system.Gates,
+                Overridden(system.Gates, overrides.Gates),
                 overrides.CredentialRedundancy ?? system.CredentialRedundancy,
                 overrides.SelfServiceRecovery ?? system.SelfServiceRecovery,
                 overrides.EmailDomains ?? system.EmailDomains));
@@ -66,6 +68,121 @@ internal static class PolicyStrictness
     }
 
     /// <summary>
+    /// The first field an organization's overrides state looser than the system
+    /// policy, which an organization may not do.
+    /// </summary>
+    /// <param name="system">The system policy.</param>
+    /// <param name="overrides">What the organization would override.</param>
+    /// <returns>The field's name as chapter 10 section 4.1a writes it, or nothing.</returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    public static string? BelowSystem(Policy system, PolicyOverride overrides)
+    {
+        ArgumentNullException.ThrowIfNull(system);
+        ArgumentNullException.ThrowIfNull(overrides);
+
+        if (overrides.RequiredAssurance is { } floor && floor < system.RequiredAssurance)
+        {
+            return "requiredAssurance";
+        }
+
+        if (overrides.LoginFactors is { } factors && !factors.IsSubsetOf(system.LoginFactors))
+        {
+            return "loginFactors";
+        }
+
+        if (overrides.Gates is { } gates
+            && gates.Any(stated => Strictest(system.Gates[stated.Key], stated.Value) != stated.Value))
+        {
+            return "gates";
+        }
+
+        if (overrides.CredentialRedundancy is CredentialRedundancy.Advisory
+            && system.CredentialRedundancy is CredentialRedundancy.Enforced)
+        {
+            return "credentialRedundancy";
+        }
+
+        return overrides.SelfServiceRecovery is true && !system.SelfServiceRecovery
+            ? "selfServiceRecovery"
+            : null;
+    }
+
+    /// <summary>
+    /// Whether one policy grants anything another did not: a lower floor, another
+    /// factor, a gate that asks less, redundancy advised where it was enforced,
+    /// recovery offered where it was withdrawn, or a domain lock that admits more.
+    /// </summary>
+    /// <param name="before">What was in force.</param>
+    /// <param name="after">What would be.</param>
+    /// <returns>Whether the change is a loosening (OPS-CFG-002).</returns>
+    /// <exception cref="ArgumentNullException">A policy is absent.</exception>
+    public static bool Loosens(Policy before, Policy after)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+        ArgumentNullException.ThrowIfNull(after);
+
+        Policy stricter = Strictest(before, after);
+
+        return stricter.RequiredAssurance != after.RequiredAssurance
+            || !stricter.LoginFactors.SetEquals(after.LoginFactors)
+            || Enum.GetValues<StepUpAction>().Any(action => stricter.Gates[action] != after.Gates[action])
+            || stricter.CredentialRedundancy != after.CredentialRedundancy
+            || stricter.SelfServiceRecovery != after.SelfServiceRecovery
+            || !Admitting(stricter.EmailDomains).SetEquals(after.EmailDomains);
+    }
+
+    /// <summary>
+    /// What of a resolved policy is the organization's own: a field, or a gate by
+    /// action, the organization states whose value in force is the one it stated, or
+    /// is not the system's.
+    /// </summary>
+    /// <param name="system">The system policy.</param>
+    /// <param name="resolved">What the organization's members resolve to.</param>
+    /// <param name="stated">What the organization overrides.</param>
+    /// <returns>
+    /// The value in force of each such field and gate; a field the system policy has
+    /// since overtaken is absent, since the value in force is then the system's.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    public static PolicyOverride InForce(Policy system, Policy resolved, PolicyOverride stated)
+    {
+        ArgumentNullException.ThrowIfNull(system);
+        ArgumentNullException.ThrowIfNull(resolved);
+        ArgumentNullException.ThrowIfNull(stated);
+
+        var gates = (stated.Gates ?? FrozenDictionary<StepUpAction, Gate>.Empty)
+            .Where(bound => resolved.Gates[bound.Key] == bound.Value
+                || resolved.Gates[bound.Key] != system.Gates[bound.Key])
+            .ToFrozenDictionary(bound => bound.Key, bound => resolved.Gates[bound.Key]);
+
+        return new PolicyOverride(
+            stated.RequiredAssurance is { } floor
+                && (floor == resolved.RequiredAssurance || resolved.RequiredAssurance != system.RequiredAssurance)
+                ? resolved.RequiredAssurance
+                : null,
+            stated.LoginFactors is { } factors
+                && (factors.SetEquals(resolved.LoginFactors) || !system.LoginFactors.SetEquals(resolved.LoginFactors))
+                ? resolved.LoginFactors
+                : null,
+            gates.Count > 0 ? gates : null,
+            stated.CredentialRedundancy is { } redundancy
+                && (redundancy == resolved.CredentialRedundancy
+                    || resolved.CredentialRedundancy != system.CredentialRedundancy)
+                ? resolved.CredentialRedundancy
+                : null,
+            stated.SelfServiceRecovery is { } recovery
+                && (recovery == resolved.SelfServiceRecovery
+                    || resolved.SelfServiceRecovery != system.SelfServiceRecovery)
+                ? resolved.SelfServiceRecovery
+                : null,
+            stated.EmailDomains is { } domains
+                && (Admitting(domains).SetEquals(resolved.EmailDomains)
+                    || !Admitting(system.EmailDomains).SetEquals(resolved.EmailDomains))
+                ? resolved.EmailDomains
+                : null);
+    }
+
+    /// <summary>
     /// How strict a gate's level is. A stated tier of one factor asks least; the
     /// account's reachable assurance asks at least that and never less, because it
     /// has that tier as its floor; a stated two factors asks most, since it holds an
@@ -79,6 +196,21 @@ internal static class PolicyStrictness
         GateLevel.Reachable => 1,
         _ => 2,
     };
+
+    // Chapter 10 section 4.1a: an organization stores only what it overrides, so its
+    // gates name the actions it tightens and no others.
+    private static FrozenDictionary<StepUpAction, Gate> Overridden(
+        IReadOnlyDictionary<StepUpAction, Gate> system,
+        IReadOnlyDictionary<StepUpAction, Gate>? overrides) =>
+        Enum.GetValues<StepUpAction>()
+            .ToFrozenDictionary(
+                action => action,
+                action => overrides is not null && overrides.TryGetValue(action, out Gate? stated)
+                    ? stated
+                    : system[action]);
+
+    // Which domains a lock names, whatever order it names them in.
+    private static HashSet<string> Admitting(IEnumerable<string> domains) => new(domains, StringComparer.Ordinal);
 
     // A locked list admits only what it names, so any lock beats no lock and two
     // locks admit only what both name.

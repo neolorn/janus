@@ -11,6 +11,13 @@ namespace Janus.Hosting.Privacy;
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     UseStringEnumConverter = true)]
+[JsonSerializable(typeof(PrivacyDecisionBody))]
+[JsonSerializable(typeof(PrivacyEntryBody))]
+[JsonSerializable(typeof(PrivacyRequestBody))]
+[JsonSerializable(typeof(PublicationBody))]
+[JsonSerializable(typeof(TakedownBody))]
+[JsonSerializable(typeof(TakedownReversalBody))]
+[JsonSerializable(typeof(AssessmentsRequest))]
 [JsonSerializable(typeof(DocumentVersionView))]
 [JsonSerializable(typeof(IReadOnlyList<ConsentView>))]
 [JsonSerializable(typeof(IReadOnlyList<ObjectionView>))]
@@ -19,4 +26,9 @@ namespace Janus.Hosting.Privacy;
 [JsonSerializable(typeof(ExportView))]
 [JsonSerializable(typeof(PortableExportView))]
 [JsonSerializable(typeof(ProcessingRegisterView))]
+[JsonSerializable(typeof(ExecutedTakedownView))]
+[JsonSerializable(typeof(TakedownProgressView))]
+[JsonSerializable(typeof(ErasureProgressView))]
+[JsonSerializable(typeof(IReadOnlyList<ErasureProgressView>))]
+[JsonSerializable(typeof(IReadOnlyList<AuditEntryView>))]
 internal sealed partial class PrivacyJson : JsonSerializerContext;

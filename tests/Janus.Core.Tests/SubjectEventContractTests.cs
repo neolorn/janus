@@ -15,14 +15,15 @@ public sealed class SubjectEventContractTests
 {
     /// <summary>
     /// IDN-LIFE-003a AC2: the event says that an account was erased, that a
-    /// restriction changed or that an export was asked for, and a second application
+    /// restriction changed, that an export was asked for or that an account was taken
+    /// down, and a second application
     /// registers as another subscriber without the library changing at all.
     /// </summary>
     [Fact]
     public void IDN_LIFE_003a_AC2_NoSubjectEventNamesAConsumerOrItsDomain()
     {
         Assert.Equal(
-            ["ErasureRequested", "ExportRequested", "RestrictionChanged"],
+            ["ErasureRequested", "ExportRequested", "RestrictionChanged", "TakedownExecuted"],
             Raised().Select(type => type.Name).Order(StringComparer.Ordinal));
 
         Assert.Equal(
@@ -36,6 +37,10 @@ public sealed class SubjectEventContractTests
         Assert.Equal(
             ["Actor", "Effective", "IdempotencyKey", "RaisedAt", "Subject"],
             Carried(typeof(ExportRequested)));
+
+        Assert.Equal(
+            ["Actor", "Effective", "IdempotencyKey", "RaisedAt", "Subject"],
+            Carried(typeof(TakedownExecuted)));
     }
 
     /// <summary>

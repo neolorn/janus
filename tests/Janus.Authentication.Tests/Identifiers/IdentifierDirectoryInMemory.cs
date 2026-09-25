@@ -44,12 +44,14 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
     /// <param name="kind">Which kind.</param>
     /// <param name="canonical">Its canonical form.</param>
     /// <param name="isLocked">Whether it is locked against change.</param>
+    /// <param name="isPersonal">Whether it is the personal email a membership keeps.</param>
     /// <returns>What it answers to.</returns>
     public IdentifierId Verified(
         SubjectId subject,
         IdentifierKind kind,
         string canonical,
-        bool isLocked = false)
+        bool isLocked = false,
+        bool isPersonal = false)
     {
         var id = new IdentifierId(Guid.NewGuid());
 
@@ -61,11 +63,32 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
             IsVerified: true,
             IsPrimary: false,
             isLocked,
+            isPersonal,
             DateTimeOffset.UnixEpoch));
 
         Settle(subject, id);
 
         return id;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<(SubjectId Subject, IdentifierId Identifier)?> HolderAsync(
+        IdentifierKind kind,
+        string canonical,
+        CancellationToken cancellationToken)
+    {
+        foreach (KeyValuePair<SubjectId, List<HeldIdentifier>> account in _held)
+        {
+            if (account.Value.FirstOrDefault(identifier =>
+                    identifier.Kind == kind
+                    && string.Equals(identifier.Canonical, canonical, StringComparison.Ordinal))
+                is HeldIdentifier held)
+            {
+                return ValueTask.FromResult<(SubjectId, IdentifierId)?>((account.Key, held.Id));
+            }
+        }
+
+        return ValueTask.FromResult<(SubjectId, IdentifierId)?>(null);
     }
 
     /// <inheritdoc/>
@@ -147,6 +170,7 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
             IsVerified: false,
             IsPrimary: false,
             IsLocked: false,
+            IsPersonal: false,
             VerifiedAt: null));
 
         return ValueTask.CompletedTask;
@@ -171,11 +195,83 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
             IsVerified: true,
             IsPrimary: false,
             IsLocked: false,
+            IsPersonal: false,
             at));
 
         Settle(subject, id);
 
         return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask TakeCorporateAsync(
+        SubjectId subject,
+        IdentifierId id,
+        string entered,
+        string canonical,
+        IdentifierId personal,
+        DateTimeOffset at,
+        int maximum,
+        CancellationToken cancellationToken)
+    {
+        List<HeldIdentifier> all = Of(subject);
+        HeldIdentifier kept = Required(subject, personal);
+
+        if (all.Count(identifier => identifier.Kind is IdentifierKind.Email) >= maximum)
+        {
+            throw new InvalidOperationException("The account holds as many of that kind as it may.");
+        }
+
+        if (!kept.IsVerified || kept.Kind is not IdentifierKind.Email)
+        {
+            throw new InvalidOperationException("Only a verified email is kept.");
+        }
+
+        for (int place = 0; place < all.Count; place++)
+        {
+            if (all[place].Kind is IdentifierKind.Email)
+            {
+                all[place] = all[place] with { IsPrimary = false, IsPersonal = all[place].Id == personal };
+            }
+        }
+
+        all.Add(new HeldIdentifier(
+            id,
+            IdentifierKind.Email,
+            entered,
+            canonical,
+            IsVerified: true,
+            IsPrimary: true,
+            IsLocked: true,
+            IsPersonal: false,
+            at));
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<IdentifierId> RetireCorporateAsync(
+        SubjectId subject,
+        string canonical,
+        CancellationToken cancellationToken)
+    {
+        List<HeldIdentifier> all = Of(subject);
+        HeldIdentifier personal = all.SingleOrDefault(identifier => identifier.IsPersonal)
+            ?? throw new InvalidOperationException("No personal email is kept for the account to continue on.");
+
+        _ = all.RemoveAll(identifier =>
+            identifier.Kind is IdentifierKind.Email
+            && string.Equals(identifier.Canonical, canonical, StringComparison.Ordinal));
+
+        for (int place = 0; place < all.Count; place++)
+        {
+            if (all[place].Kind is IdentifierKind.Email)
+            {
+                all[place] = all[place] with { IsPrimary = all[place].Id == personal.Id, IsPersonal = false };
+            }
+        }
+
+        return ValueTask.FromResult(personal.Id);
     }
 
     /// <inheritdoc/>
@@ -358,6 +454,7 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
                 IsVerified: true,
                 IsPrimary: false,
                 IsLocked: false,
+                IsPersonal: false,
                 _proved[id]));
 
             Settle(given.Subject, id);
@@ -380,6 +477,11 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
         if (!identifier.IsVerified || identifier.Kind is IdentifierKind.Username)
         {
             return false;
+        }
+
+        if (identifier.IsPersonal)
+        {
+            return true;
         }
 
         HeldBackup setting = Backup(subject, identifier.Kind);

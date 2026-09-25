@@ -57,6 +57,26 @@ public sealed class SendOutboxTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// IDN-ATTR-001: a message undertaken with no language of the recipient's known
+    /// reads back with none, so it is still carried in every declared language.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ATTR_001_AMessageInEveryLanguageReadsBackWithNoneAsync()
+    {
+        SendDelivery undertaken = Delivery("every@example.test", subject: null, language: null);
+
+        await WrittenAsync(undertaken);
+
+        await using StoreContext reading = database.Context();
+
+        SendDelivery held = await Outbox(reading)
+            .FindAsync(undertaken.Id, TestContext.Current.CancellationToken)
+            ?? throw new Xunit.Sdk.XunitException("The message was not written.");
+
+        Assert.Null(held.Requested.Language);
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-005a AC8: the message is held under the row's own key, so a dump of
     /// the table without the key-encryption key yields no destination.
     /// </summary>
@@ -105,7 +125,7 @@ public sealed class SendOutboxTests(DatabaseFixture database)
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
-    private static SendDelivery Delivery(string address, SubjectId? subject)
+    private static SendDelivery Delivery(string address, SubjectId? subject, string? language = "ar")
     {
         if (!EmailAddress.TryParse(address, out EmailAddress destination))
         {
@@ -118,7 +138,7 @@ public sealed class SendOutboxTests(DatabaseFixture database)
                 MessageKind.SecondStepCode,
                 RestrictionPurpose.SignIn,
                 "198.51.100.7",
-                "ar")
+                language)
             {
                 Subject = subject,
                 Values = new Dictionary<string, string>(StringComparer.Ordinal) { ["code"] = "482913" },

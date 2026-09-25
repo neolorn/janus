@@ -40,13 +40,35 @@ internal interface IAccountDirectory
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Stands a self-deactivated account back up, which completing recovery does
-    /// (D-140).
+    /// Stands a suspended account back up: a self-deactivated one from its link or at
+    /// the completion of recovery (D-140), an administratively suspended one by an
+    /// administrator. A restriction in force when it was suspended is in force again
+    /// (IDN-LIFE-013).
     /// </summary>
     /// <param name="subject">Whose account.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of standing it up.</returns>
     ValueTask ReinstateAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Suspends an account as an administrator, which is the <c>administrator</c> entry
+    /// into the suspended state; an account its owner deactivated stays suspended and
+    /// becomes the administrator's to reactivate.
+    /// </summary>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of suspending it.</returns>
+    ValueTask SuspendAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Lifts a restriction of processing and tells every subject-event handler that it
+    /// is lifted, in the caller's transaction (PRIV-RIGHT-004).
+    /// </summary>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="at">When it was lifted.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of lifting it.</returns>
+    ValueTask LiftRestrictionAsync(SubjectId subject, DateTimeOffset at, CancellationToken cancellationToken);
 
     /// <summary>
     /// The deletion an account is in the grace window of, where it is in one.
@@ -55,6 +77,19 @@ internal interface IAccountDirectory
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The deletion, or nothing where the account is not deleting.</returns>
     ValueTask<HeldDeletion?> DeletingAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The out-of-band erasure request whose fulfilment began an account's grace window,
+    /// which a cancellation on the subject's behalf is recorded against (IDN-LIFE-003).
+    /// </summary>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="since">When the window began.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The request, or nothing where no fulfilled erasure request began it.</returns>
+    ValueTask<PrivacyRequestId?> ErasureRequestAsync(
+        SubjectId subject,
+        DateTimeOffset since,
+        CancellationToken cancellationToken);
 
     /// <summary>
     /// Takes an account down at its own request, which is the <c>self</c> entry into

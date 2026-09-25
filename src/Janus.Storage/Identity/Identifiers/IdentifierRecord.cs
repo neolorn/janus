@@ -71,4 +71,9 @@ internal sealed class IdentifierRecord
     /// The <c>is_locked</c> column.
     /// </summary>
     public bool IsLocked { get; set; }
+
+    /// <summary>
+    /// The <c>is_personal</c> column.
+    /// </summary>
+    public bool IsPersonal { get; set; }
 }

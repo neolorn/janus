@@ -103,6 +103,18 @@ internal sealed class GrantStore(StoreContext context, DataConnections connectio
     }
 
     /// <inheritdoc/>
+    public async ValueTask<bool> NamesAsync(RoleName role, CancellationToken cancellationToken) =>
+        await context.Grants
+            .AnyAsync(row => row.Role == role, cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> NamesAsync(GrantSubject holder, CancellationToken cancellationToken) =>
+        await context.Grants
+            .AnyAsync(row => row.SubjectType == holder.Type && row.SubjectId == holder.Value, cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<Grant>> HeldByAsync(
         IReadOnlyList<GrantSubject> holders,
         OrganizationId organization,
@@ -169,10 +181,15 @@ internal sealed class GrantStore(StoreContext context, DataConnections connectio
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
+        // IDN-ORG-003 AC1, entry 196: what the view confers, which leaves out a
+        // suspended organization's grants and a role that allows nothing.
         List<GrantRecord> records = await context.Grants
             .Where(row => row.Organization == organization
                 && row.RevokedAt == null
                 && (row.ExpiresAt == null || row.ExpiresAt > at)
+                && context.Organizations.Any(held => held.Id == row.Organization
+                    && held.DeletionRequestedAt == null)
+                && context.RolePermissions.Any(allowed => allowed.Role == row.Role)
                 && (row.ResourceType == null
                     || context.Ancestry.Any(entry => entry.Type == reference.Type
                         && entry.Id == reference.Id

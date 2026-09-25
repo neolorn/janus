@@ -7,6 +7,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Accounts;
+using Janus.Authentication.Alerting;
+using Janus.Authentication.Configuration;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
@@ -20,6 +22,8 @@ using Janus.Authentication.Sessions;
 using Janus.Authentication.SignIn;
 using Janus.Authentication.Tests;
 using Janus.Authentication.Tests.Accounts;
+using Janus.Authentication.Tests.Alerting;
+using Janus.Authentication.Tests.Configuration;
 using Janus.Authentication.Tests.Credentials;
 using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Identifiers;
@@ -34,8 +38,10 @@ using Janus.Authentication.Tests.SignIn;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Accounts;
+using Janus.Hosting.Alerting;
 using Janus.Hosting.Authentication;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Configuration;
 using Janus.Hosting.Credentials;
 using Janus.Hosting.Oidc;
 using Janus.Hosting.Privacy;
@@ -45,11 +51,13 @@ using Janus.Hosting.Sending;
 using Janus.Hosting.Tests.Bff;
 using Janus.Hosting.Tests.Oidc;
 using Janus.Privacy;
+using Janus.Privacy.Breaches;
 using Janus.Privacy.Consents;
 using Janus.Privacy.Documents;
 using Janus.Privacy.Exports;
 using Janus.Privacy.Records;
 using Janus.Privacy.Requests;
+using Janus.Privacy.Tests.Breaches;
 using Janus.Privacy.Tests.Consents;
 using Janus.Privacy.Tests.Documents;
 using Janus.Privacy.Tests.Exports;
@@ -94,6 +102,11 @@ internal sealed class Deployment : IAsyncDisposable
     // is a declaration no deployment starts without either.
     private static readonly SignOnClient Registered = new("this-application");
 
+    // LIB-HOST-001, INT-MAIL-010: a deployment that registers a mail server declares
+    // which client of the provider the server is, and every deployment here registers
+    // one.
+    private static readonly MailServerClient MailClient = new("mail-server");
+
     // LIB-HOST-001: the frontend's pages are a declaration no deployment starts
     // without, so every deployment here carries one (REG-PM-001).
     private static readonly PasskeyAddresses Pages = new(
@@ -121,18 +134,27 @@ internal sealed class Deployment : IAsyncDisposable
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
         builder.Logging.ClearProviders();
+        builder.Logging.SetMinimumLevel(LogLevel.Trace).AddProvider(Logs);
 
         Signals = new RegistrationSignalsInMemory(Clock);
         Grants = new OidcAuthorizationStoreInMemory(Tokens);
         Provider = new ProviderInMemory(this);
+        Organizations = new Janus.Authentication.Tests.Organizations.OrganizationsInMemory(Memberships);
+        Attachments = new Janus.Authentication.Tests.Invitations.MembershipAttachmentInMemory(Memberships);
+        Endings = new Janus.Authentication.Tests.Invitations.MembershipEndingInMemory(Memberships);
 
         Declared = preferences ?? PreferenceDeclarations.None;
         Accounts = new AccountDirectoryInMemory(Declared);
 
         // Two of the keys a deployment names or does not start, which a ceremony and
-        // the challenge every sign-in carries are read from (OPS-CFG-001).
+        // the challenge every sign-in carries are read from (OPS-CFG-001), and the
+        // domain it sends from, declared as registered with the relay (INT-MAIL-011).
         Configuration.Set(Settings.WebAuthnRelyingPartyId, "identity.example.test");
         Configuration.Set(Settings.WebAuthnOrigins, ["https://identity.example.test"]);
+        Configuration.Set(Settings.NotificationEmailSendingDomain, "mail.example.test");
+        Configuration.Set<IReadOnlySet<string>>(
+            Settings.NotificationEmailRelayRegistered,
+            new HashSet<string>(["mail.example.test"], StringComparer.Ordinal));
 
         Register(
             builder.Services,
@@ -201,6 +223,11 @@ internal sealed class Deployment : IAsyncDisposable
     /// Which organizations a principal belongs to.
     /// </summary>
     public MembershipLookupInMemory Memberships { get; } = new();
+
+    /// <summary>
+    /// What each policy has raised, by scope.
+    /// </summary>
+    public PolicyRaiseStoreInMemory Raises { get; } = new();
 
     /// <summary>
     /// What an uploaded image is read and re-encoded by.
@@ -303,9 +330,14 @@ internal sealed class Deployment : IAsyncDisposable
     public AccessGateInMemory Gate { get; } = new();
 
     /// <summary>
-    /// The organizations the privacy area reads a caller's memberships from.
+    /// The administrative organization as the authentication area reads it.
     /// </summary>
-    public Janus.Privacy.Tests.MembershipLookupInMemory PrivacyMemberships { get; } = new();
+    private AdministrativeOrganizationInMemory Administrative { get; } = new();
+
+    /// <summary>
+    /// The administrative organization as the privacy area reads it.
+    /// </summary>
+    private Janus.Privacy.Tests.AdministrativeOrganizationInMemory PrivacyAdministrative { get; } = new();
 
     /// <summary>
     /// The data subject request queue, so a test can read what was put on it.
@@ -321,6 +353,11 @@ internal sealed class Deployment : IAsyncDisposable
     /// The outbox, so a test can read what was announced.
     /// </summary>
     public OutboxStoreInMemory Outbox { get; } = new();
+
+    /// <summary>
+    /// The erasures rows, each carried in step with its delivery on the outbox.
+    /// </summary>
+    public Janus.Privacy.Tests.Erasures.ErasureStoreInMemory Erasures { get; } = new();
 
     /// <summary>
     /// What the other areas hold of an export, so a test can arrange it.
@@ -378,6 +415,11 @@ internal sealed class Deployment : IAsyncDisposable
     public LogInMemory<RegisteredDestination> OidcLog { get; } = new();
 
     /// <summary>
+    /// Every other line the deployment logged, at every level.
+    /// </summary>
+    public LogsInMemory Logs { get; } = new();
+
+    /// <summary>
     /// What the sign-on recorded when it would not carry a return (BFF-SESS-006 AC3).
     /// </summary>
     public LogInMemory<SignOn> SignOnLog { get; } = new();
@@ -397,6 +439,121 @@ internal sealed class Deployment : IAsyncDisposable
     /// The events the operations published.
     /// </summary>
     public EventsInMemory Events { get; } = new();
+
+    /// <summary>
+    /// The audit trail as the privacy area reads it by subject.
+    /// </summary>
+    public AuditTrailStoreInMemory Trail { get; } = new();
+
+    /// <summary>
+    /// The record of every runtime configuration change.
+    /// </summary>
+    public ConfigurationAuditInMemory Changes { get; } = new();
+
+    /// <summary>
+    /// The alerts the deployment raised.
+    /// </summary>
+    public AlertLedgerInMemory Alerts { get; } = new();
+
+    /// <summary>
+    /// The stored grants the deployment holds.
+    /// </summary>
+    public Janus.Authorization.Tests.Gate.GrantsInMemory AccessGrants { get; } = new();
+
+    /// <summary>
+    /// The roles the deployment holds.
+    /// </summary>
+    public Janus.Authorization.Tests.Roles.RolesInMemory Roles { get; } = new();
+
+    /// <summary>
+    /// The groups the deployment holds.
+    /// </summary>
+    public Janus.Authorization.Tests.Gate.GroupsInMemory Groups { get; } = new();
+
+    /// <summary>
+    /// The changes to roles the deployment wrote down.
+    /// </summary>
+    public Janus.Authorization.Tests.Roles.RoleAuditInMemory RoleChanges { get; } = new();
+
+    /// <summary>
+    /// The changes to groups the deployment wrote down.
+    /// </summary>
+    public Janus.Authorization.Tests.Groups.GroupAuditInMemory GroupChanges { get; } = new();
+
+    /// <summary>
+    /// The organizations the deployment holds, their members those placed in
+    /// <see cref="Memberships"/>.
+    /// </summary>
+    public Janus.Authentication.Tests.Organizations.OrganizationsInMemory Organizations { get; }
+
+    /// <summary>
+    /// The changes to organizations the deployment wrote down.
+    /// </summary>
+    public Janus.Authentication.Tests.Organizations.OrganizationAuditInMemory OrganizationChanges { get; } = new();
+
+    /// <summary>
+    /// The invitations the organizations issued.
+    /// </summary>
+    public Janus.Authentication.Tests.Invitations.InvitationStoreInMemory Invitations { get; } = new();
+
+    /// <summary>
+    /// The memberships the acknowledged invitations attached.
+    /// </summary>
+    public Janus.Authentication.Tests.Invitations.MembershipAttachmentInMemory Attachments { get; }
+
+    /// <summary>
+    /// The memberships administrators ended.
+    /// </summary>
+    public Janus.Authentication.Tests.Invitations.MembershipEndingInMemory Endings { get; }
+
+    /// <summary>
+    /// The roles an invitation may name.
+    /// </summary>
+    public Janus.Authentication.Tests.Invitations.RoleCatalogueInMemory RoleCatalogue { get; } = new();
+
+    /// <summary>
+    /// The mailboxes the invitations reserved.
+    /// </summary>
+    public Janus.Authentication.Tests.Mailboxes.MailboxStoreInMemory Mailboxes { get; } = new();
+
+    /// <summary>
+    /// The mail server the administrative organization's mail is integrated with.
+    /// </summary>
+    public Janus.Authentication.Tests.Mailboxes.MailServerInMemory MailServer { get; } = new();
+
+    /// <summary>
+    /// The domains organizations lock their members to.
+    /// </summary>
+    public Janus.Authentication.Tests.Organizations.DomainStoreInMemory Domains { get; } = new();
+
+    /// <summary>
+    /// The TXT records the deployment's resolver answers.
+    /// </summary>
+    public Janus.Authentication.Tests.Organizations.DnsResolverInMemory Dns { get; } = new();
+
+    /// <summary>
+    /// The records the host registered.
+    /// </summary>
+    public Janus.Authorization.Tests.Resources.ResourcesInMemory Resources { get; } = new();
+
+    /// <summary>
+    /// The administrative organization as the authorization area reads it.
+    /// </summary>
+    private Janus.Authorization.Tests.Gate.AdministrativeOrganizationInMemory GateAdministrative { get; } = new();
+
+    /// <summary>
+    /// Names the organization that administers the deployment, as bootstrap does, so a
+    /// permission granted there is one an administrative operation honours.
+    /// </summary>
+    /// <param name="organization">The organization.</param>
+    public void Administers(OrganizationId organization)
+    {
+        Administrative.Organization = organization;
+        PrivacyAdministrative.Organization = organization;
+        GateAdministrative.Organization = organization;
+        Gate.Administrative = organization;
+        Organizations.Seed(organization, administrative: true);
+    }
 
     /// <summary>
     /// Runs one request through routing, the pipeline and the endpoint, in a scope
@@ -467,7 +624,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<ISessionAudit, SessionAuditInMemory>();
         _ = services.AddSingleton<IMembershipLookup>(Memberships);
         _ = services.AddSingleton(Codec.Declared);
-        _ = services.AddSingleton<IPolicyRaiseStore, PolicyRaiseStoreInMemory>();
+        _ = services.AddSingleton<IPolicyRaiseStore>(Raises);
         _ = services.AddSingleton<IChallengeStore, ChallengeStoreInMemory>();
         _ = services.AddSingleton<IVerificationCodeStore, VerificationCodeStoreInMemory>();
         _ = services.AddSingleton<IPendingSignInStore, PendingSignInStoreInMemory>();
@@ -500,6 +657,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton(addresses);
         _ = services.AddSingleton(signIn);
         _ = services.AddSingleton(client);
+        _ = services.AddSingleton(MailClient);
 
         // BFF-SESS-006: the client half of the sign-on is the library's, and the
         // connection it trades a code on reaches this same deployment's machine
@@ -511,6 +669,7 @@ internal sealed class Deployment : IAsyncDisposable
             .ConfigurePrimaryHttpMessageHandler(() => Provider);
 
         _ = services.AddScoped<SmsBalance>();
+        _ = services.AddScoped<RelayRegistration>();
         _ = services.AddScoped<SendingService>();
         _ = services.AddScoped<INotificationHandler>(
             provider => provider.GetRequiredService<SendingService>());
@@ -530,6 +689,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<RecoveryCodeService>();
         _ = services.AddScoped<DeviceService>();
         _ = services.AddScoped<PolicyResolution>();
+        _ = services.AddSingleton<IAdministrativeOrganization>(Administrative);
+        _ = services.AddScoped<AdministrativeScope>();
         _ = services.AddScoped<StepUpGuard>();
         _ = services.AddScoped<IStepUpGate, StepUpGate>();
         _ = services.AddScoped<ILocationResolver, LocationResolverInMemory>();
@@ -553,6 +714,7 @@ internal sealed class Deployment : IAsyncDisposable
             provider.GetRequiredService<TimeProvider>()));
         _ = services.AddScoped<AccountService>();
         _ = services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
+        _ = services.AddScoped<IAccounts, AccountAdministration>();
         _ = services.AddScoped<TotpService>();
         _ = services.AddScoped<WebAuthnService>();
         _ = services.AddScoped<SignInLinks>();
@@ -567,7 +729,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<ICredentials, CredentialService>();
         _ = services.AddSingleton<ILegalDocumentStore>(Documents);
         _ = services.AddSingleton<IPrivacyAudit, Janus.Privacy.Tests.PrivacyAuditInMemory>();
-        _ = services.AddSingleton<Janus.Privacy.Policies.IMembershipLookup>(PrivacyMemberships);
+        _ = services.AddSingleton<Janus.Privacy.Policies.IAdministrativeOrganization>(PrivacyAdministrative);
         _ = services.AddScoped<IPrivacyAlerts, PrivacyAlerts>();
         _ = services.AddScoped<Janus.Privacy.Policies.AdministrativeScope>();
         _ = services.AddScoped<ILegalDocuments, LegalDocumentService>();
@@ -586,14 +748,61 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IExportSource>(ExportSource);
         _ = services.AddSingleton<IExportLedger>(ExportLedger);
         _ = services.AddScoped<IExports, ExportService>();
+        _ = services.AddScoped<ITakedowns, Janus.Privacy.Takedowns.TakedownService>();
+        _ = services.AddSingleton<Janus.Privacy.Erasures.IErasureStore>(Erasures);
+        _ = services.AddScoped<IErasures, Janus.Privacy.Erasures.ErasureService>();
         _ = services.AddSingleton(Janus.Privacy.Tests.Declaration.Reaching);
         _ = services.AddSingleton<Janus.Privacy.Records.IComplianceStore>(Compliance);
         _ = services.AddSingleton<Janus.Privacy.Records.IRegisterRoles>(RegisterRoles);
         _ = services.AddScoped<IProcessingRecords, ProcessingRecordsService>();
+        _ = services.AddSingleton<IAuditTrailStore>(Trail);
+        _ = services.AddScoped<IAuditTrail, AuditTrailService>();
+        _ = services.AddSingleton<IConfigurationAudit>(Changes);
+        _ = services.AddScoped<ConfigurationAdministration>();
+        _ = services.AddSingleton<IAlertLedger>(Alerts);
+        _ = services.AddSingleton<IAlertLog, AlertLogInMemory>();
+        _ = services.AddScoped<AlertRouter>();
+        _ = services.AddScoped<AlertDestinationChange>();
+        _ = services.AddScoped<IConfigurationAdministration, ConfigurationService>();
+        _ = services.AddSingleton<ISendAudit, SendAuditInMemory>();
+        _ = services.AddScoped<RestrictionAdministration>();
+        _ = services.AddScoped<IRestrictionSet, RestrictionSetService>();
+        _ = services.AddSingleton<Janus.Authorization.Gate.IAdministrativeOrganization>(GateAdministrative);
+        _ = services.AddSingleton<Janus.Authorization.Grants.IGrantStore>(AccessGrants);
+        _ = services.AddSingleton<Janus.Authorization.Roles.IRoleStore>(Roles);
+        _ = services.AddSingleton<Janus.Authorization.Groups.IGroupStore>(Groups);
+        _ = services.AddSingleton<Janus.Authorization.Resources.IResourceStore>(Resources);
+        _ = services.AddSingleton(Janus.Authorization.Model.AuthorizationModel.Of(
+            Janus.Authorization.Tests.HostDomain.Declared().Build()));
+        _ = services.AddSingleton<Janus.Authorization.Roles.IRoleAudit>(RoleChanges);
+        _ = services.AddSingleton<Janus.Authorization.Groups.IGroupAudit>(GroupChanges);
+        _ = services.AddScoped<Janus.Authorization.Gate.AdministrativeScope>();
+        _ = services.AddScoped<IGrants, Janus.Authorization.Grants.GrantService>();
+        _ = services.AddScoped<IRoles, Janus.Authorization.Roles.RoleService>();
+        _ = services.AddScoped<IGroups, Janus.Authorization.Groups.GroupService>();
+        _ = services.AddSingleton<Janus.Authentication.Organizations.IOrganizationDirectory>(Organizations);
+        _ = services.AddSingleton<Janus.Authentication.Organizations.IOrganizationAudit>(OrganizationChanges);
+        _ = services.AddScoped<IOrganizations, Janus.Authentication.Organizations.OrganizationService>();
+        _ = services.AddSingleton<Janus.Authentication.Organizations.IDomainStore>(Domains);
+        _ = services.AddSingleton<IDnsResolver>(Dns);
+        _ = services.AddScoped<Janus.Authentication.Organizations.DomainLock>();
+        _ = services.AddScoped<Janus.Authentication.Organizations.DomainReverification>();
+        _ = services.AddScoped<IOrganizationDomains, Janus.Authentication.Organizations.OrganizationDomainService>();
+        _ = services.AddSingleton<Janus.Authentication.Invitations.IInvitationStore>(Invitations);
+        _ = services.AddSingleton<Janus.Authentication.Invitations.IRoleCatalogue>(RoleCatalogue);
+        _ = services.AddSingleton<Janus.Authentication.Mailboxes.IMailboxStore>(Mailboxes);
+        _ = services.AddSingleton<IMailServer>(MailServer);
+        _ = services.AddSingleton<Janus.Authentication.Invitations.IMembershipAttachment>(Attachments);
+        _ = services.AddScoped<Janus.Authentication.Invitations.InvitationAcknowledgement>();
+        _ = services.AddSingleton<Janus.Authentication.Invitations.IMembershipEnding>(Endings);
+        _ = services.AddScoped<Janus.Authentication.Invitations.MembershipEnd>();
+        _ = services.AddScoped<IInvitations, Janus.Authentication.Invitations.InvitationService>();
         _ = services.AddScoped<SigningKeys>();
         _ = services.AddScoped<OidcService>();
         _ = services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
         _ = services.AddOidc(Wrapping);
+        _ = services.AddScoped<Janus.Authentication.Mailboxes.IMailServerTokens, Janus.Hosting.Oidc.MailServerTokens>();
+        _ = services.AddScoped<IAppPasswords, Janus.Authentication.Mailboxes.AppPasswords>();
 
         _ = services.AddSingleton(new BrowserSessionCookies(application));
         _ = services.AddScoped<SynchronizerTokens>();
@@ -610,21 +819,7 @@ internal sealed class Deployment : IAsyncDisposable
 
         _ = services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
 
-        _ = services.ConfigureHttpJsonOptions(options =>
-        {
-            // The contexts spell an enum as the contract spells it, and a request is
-            // read through these options rather than through a context, so the same
-            // converter stands here (API-CONV-002).
-            options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<IdentifierKind>());
-            options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<Factor>());
-            options.SerializerOptions.TypeInfoResolverChain.Add(RegistrationJson.Default);
-            options.SerializerOptions.TypeInfoResolverChain.Add(AuthenticationJson.Default);
-            options.SerializerOptions.TypeInfoResolverChain.Add(AccountJson.Default);
-            options.SerializerOptions.TypeInfoResolverChain.Add(RecoveryJson.Default);
-            options.SerializerOptions.TypeInfoResolverChain.Add(CredentialsJson.Default);
-            options.SerializerOptions.TypeInfoResolverChain.Add(WellKnownJson.Default);
-            options.SerializerOptions.TypeInfoResolverChain.Add(PrivacyJson.Default);
-        });
+        _ = services.ConfigureHttpJsonOptions(HostingRegistration.ReadThroughContexts);
     }
 
     /// <inheritdoc/>

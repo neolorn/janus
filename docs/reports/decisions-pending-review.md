@@ -6153,6 +6153,3964 @@ requires, is unchanged); and the double-migration gate's worktree folder, now
 reads, and that the solution file and the lock files' lower-case identifiers count as
 project and package identifiers.
 
+---
+
+## 168. A takedown is identified by the outbox record its trigger writes
+
+**Phase 8 · 2026-09-23 · Tier 2 · IDN-LIFE-003, 09 section 8a**
+
+*The question.* 09 section 8a answers the trigger with "**202** `{ takedownId,
+erasureDue }`". No chapter says what a `takedownId` identifies. IDN-LIFE-003 names one
+record the trigger writes for the takedown: "That outbox record is the per-subscriber
+completion record of the cancellation: it is written in the trigger transaction, the
+worker delivers it and each required subscriber confirms against it (IDN-LIFE-003a),
+and it is what the takedown screen reads during the window (D-148). No erasures row
+exists yet".
+
+*The readings.*
+
+1. A takedowns table of its own, keyed by a new identifier.
+2. The identifier of the `TakedownExecuted` outbox record written in the trigger
+   transaction.
+
+*Chosen: 2.* The chapter names that record as the takedown's record during the window
+and names no other. A table of its own would be a second record of the same fact and a
+schema no chapter describes.
+
+*Tests that pin it.*
+`TakedownServiceTests.IDN_LIFE_003_AC4_TheTriggerTakesTheAccountIntoItsWindowInOneTransactionAsync`,
+`TakedownEndpointTests.IDN_LIFE_003_TheTriggerIsAnsweredWithTheTakedownAndItsErasureDueAsync`.
+
+*Chapter text that should change.* 09 section 8a could say that `takedownId` is the
+identifier of the outbox record the trigger writes.
+
+---
+
+## 169. The takedown screen reads the latest takedown at `GET /admin/accounts/{subject}/takedown`
+
+**Phase 8 · 2026-09-23 · Tier 2 · IDN-LIFE-003 AC2, PRIV-MINOR-002 AC2, 09 section 8a**
+
+*The question.* IDN-LIFE-003 AC2 requires "per-subscriber completion visible" and says
+"the cancellation's completion is read from its outbox record from the moment of
+trigger, the erasure's from the erasures row once phase two has run." The chapter
+speaks of "the takedown screen". 09 section 8a lists the trigger and the reversal and
+no read, and `GET /admin/erasures` reads the erasures table, which holds no row until
+phase two.
+
+*The readings.*
+
+1. No read: the cancellation's completion is not visible through the library until
+   phase two.
+2. A read beside the trigger, `GET /admin/accounts/{subject}/takedown`, under the same
+   `takedown:execute`, answering the account's latest takedown from its outbox record.
+3. The erasures listing extended to outbox records of kind `takedown-executed`.
+
+*Chosen: 2.* Reading 1 fails AC2 as written. Reading 3 widens an endpoint over a table
+the chapter keeps separate (IDN-LIFE-003b). Reading 2 adds one read, gated by the
+permission that already sees the takedown, and nothing else. It answers **200**
+`{ takedownId, subject, triggeredAt, erasureDue, status, attempts, subscribers: [{
+name, required, confirmedAt }] }`, one line per registered subject-event subscriber,
+`confirmedAt` absent where that subscriber has not confirmed; `status` is spelled as
+`10` section 5.12 spells erasure status. An account never taken down answers **404**
+`identity.takedown.notfound`, a new code, because no existing code says that the
+account holds no takedown.
+
+*Tests that pin it.*
+`TakedownServiceTests.IDN_LIFE_003_AC2_TheHostsProgressIsReadableFromTheTriggerAsync`,
+`TakedownServiceTests.IDN_LIFE_003_AnAccountNeverTakenDownHasNoProgressAsync`,
+`TakedownServiceTests.IDN_LIFE_003_TakedownExecuteIsRequiredForEveryOperationAsync`,
+`TakedownEndpointTests.IDN_LIFE_003_TheTriggerIsAnsweredWithTheTakedownAndItsErasureDueAsync`,
+`OutboxStoreTests.IDN_LIFE_003_AC2_TheLatestTakedownIsReadWithItsConfirmationsAsync`,
+`OutboxStoreTests.IDN_LIFE_003_AnAccountNeverTakenDownHasNoTakedownToReadAsync`.
+
+*Chapter text that should change.* 09 section 8a gains the row for
+`GET /admin/accounts/{subject}/takedown`; 10 section 1.1 gains
+`identity.takedown.notfound` (404), listed below under the rows for chapter 10.
+
+---
+
+## 170. A takedown starts from active, restricted or suspended, and from nothing else
+
+**Phase 8 · 2026-09-23 · Tier 3 · IDN-LIFE-003, IDN-LIFE-003b**
+
+*The question.* IDN-LIFE-003 gives the "State sequence: `active → suspended → deleting
+→ deleted`, the first two transitions in the trigger transaction", and IDN-LIFE-003b
+says access stopped "for a takedown from `suspended` (IDN-LIFE-003)". No chapter says
+what a trigger does on an account that is restricted, already taken down, in a
+deletion window of another origin, or deleted. `10` section 1.1 gives
+`identity.takedown.active` for "Deletion cancellation attempted on a
+takedown-originated `deleting`; use `/takedown/reverse`", which is not a second
+trigger.
+
+*The readings.*
+
+1. Only from `active`.
+2. From `active`, `restricted` and `suspended`; a second trigger refused; an account
+   deleting by another origin or deleted refused.
+3. As 2, and an account deleting by `self` or `oob-request` converted into a takedown.
+4. As 2, and a second trigger answered with the running takedown as a success.
+
+*Chosen: 2, the strictest reading.* A restricted or suspended account is still an
+account whose data the takedown must stop and remove, so refusing it (reading 1) would
+leave a minor's account outside the procedure. Converting a running deletion
+(reading 3) rewrites why the account is leaving and its clock, which is more than any
+chapter grants a trigger. A second trigger writes nothing and answers **409**
+`identity.takedown.active`, the code that already names a takedown-originated
+`deleting`. An account deleting by another origin, or deleted, answers **403**
+`authz.denied` and nothing is written. The aggregate enforces the same three states.
+
+*Tests that pin it.*
+`TakedownServiceTests.IDN_LIFE_003_AnAccountIsTakenDownFromWhereverItStandsAsync`,
+`TakedownServiceTests.IDN_LIFE_003_ASecondTriggerAnswersTakedownActiveAsync`,
+`TakedownServiceTests.IDN_LIFE_003_AnAccountAlreadyLeavingIsNotTakenDownAsync`,
+`AccountStatesTests.IDN_LIFE_003_AnAccountInItsOwnWindowIsNotTakenDownAsync`.
+
+*Chapter text that should change.* IDN-LIFE-003 could name the states a takedown
+starts from, and `10` section 1.1 could widen `identity.takedown.active` to a second
+trigger.
+
+---
+
+## 171. `AccountSuspended` is published after the trigger commits, and `TakedownExecuted` travels on the outbox
+
+**Phase 8 · 2026-09-23 · Tier 2 · IDN-LIFE-003 AC6, IDN-LIFE-003a, CONV-DESIGN-002**
+
+*The question.* IDN-LIFE-003 says "`AccountSuspended` and `TakedownExecuted` fire at
+trigger; no `AccountDeletionRequested` fires", and `10` section 5b says
+`TakedownExecuted` "fires with `AccountSuspended`; `AccountDeletionRequested` does
+**not** fire for a takedown". IDN-LIFE-003a delivers the cancellation through the
+outbox. No chapter says how the two travel or what the caller is told when the
+publication of the first is refused after the commit.
+
+*The readings.*
+
+1. Both on the outbox.
+2. `TakedownExecuted` on the outbox, written in the trigger transaction (it is a
+   subject event the hosts confirm); `AccountSuspended` published through `IEvents`
+   after the commit, as every other state change is (CONV-DESIGN-002: commit, then
+   publish), with a refused publication answered to the caller while the takedown
+   stands.
+3. As 2, with a refused publication swallowed and the trigger answered 202.
+
+*Chosen: 2.* `AccountSuspended` is not a subject event and carries no per-subscriber
+confirmation, so it travels as the library's other domain events do. The takedown has
+committed by the time the publication is refused; undoing it is not possible and
+hiding the refusal would tell the operator that everything was announced. The
+refusal is answered, the account stays taken down and the progress read (entry 169)
+shows the delivery.
+
+*Tests that pin it.*
+`TakedownServiceTests.IDN_LIFE_003_AC6_TheSuspensionIsAnnouncedAndNoDeletionIsAsync`,
+`TakedownServiceTests.IDN_LIFE_003_AC4_NoErasureIsRequestedAtTheTriggerAsync`,
+`TakedownServiceTests.IDN_LIFE_003_AnUnannouncedTriggerStillStandsAsync`.
+
+*Chapter text that should change.* IDN-LIFE-003 could say that `TakedownExecuted` is
+the outbox record and `AccountSuspended` follows the commit.
+
+---
+
+## 172. A reversal publishes `TakedownReversed` and nothing else
+
+**Phase 8 · 2026-09-23 · Tier 2 · IDN-LIFE-003 AC5, 10 section 5b**
+
+*The question.* `10` section 5b raises `TakedownReversed` when "A takedown reversed
+inside its window", and `AccountSuspended` · `AccountReactivated` when "State enters or
+leaves `suspended`, by the subject or an administrator". A reversal moves the account
+from `deleting` to `active`.
+
+*The readings.*
+
+1. `TakedownReversed` only.
+2. `TakedownReversed` and `AccountReactivated`.
+
+*Chosen: 1.* The reversal leaves `deleting`, not `suspended`, and `10` names the one
+event for it. A consumer that acted on `AccountSuspended` at the trigger, such as mail
+provisioning, undoes it on `TakedownReversed`; the library's own mail provisioning,
+when it is built in this phase, consumes it so.
+
+*Tests that pin it.*
+`TakedownServiceTests.IDN_LIFE_003_AC5_AReversalInsideTheWindowRestoresActiveAsync`.
+
+*Chapter text that should change.* `10` section 5b could add mail provisioning to the
+consumers of `TakedownReversed`.
+
+---
+
+## 173. The reversal window closes at the start of the window plus `takedown.grace`, whether or not the sweep has run
+
+**Phase 8 · 2026-09-23 · Tier 3 · IDN-LIFE-003 AC5, 09 section 8a**
+
+*The question.* 09 section 8a answers a reversal after the window with "**422**
+`identity.takedown.windowelapsed`", and `10` section 4 gives `takedown.grace` "`P7D` |
+R, floor `P7D`". The erasure runs when the sweep reaches the account. No chapter says
+whether a reversal between the end of the window and the sweep is honoured.
+
+*The readings.*
+
+1. Honoured until the sweep has erased the account.
+2. Refused from the instant the window ends, measured from when the account entered
+   `deleting` with the `takedown.grace` in force when the reversal is asked.
+
+*Chosen: 2, the strictest reading.* The window is what the chapters grant; a reversal
+after it would race the erasure the chapter says is due. The deletion sweep measures a
+takedown by the same `takedown.grace`, and the progress read (entry 169) reports the
+same instant as `erasureDue`. An erased account answers the same code.
+
+*Tests that pin it.*
+`TakedownServiceTests.IDN_LIFE_003_AC5_AReversalAfterTheWindowIsRefusedAsync`,
+`TakedownEndpointTests.IDN_LIFE_003_AC5_TheReversalIsAnsweredInsideAndAfterItsWindowAsync`,
+`DeletionSweepTests.IDN_LIFE_003_AC5_ATakedownIsErasedWhenItsOwnWindowElapsesAsync`.
+
+*Chapter text that should change.* IDN-LIFE-003 could say that the window ends at the
+trigger plus `takedown.grace` whatever the sweep has done.
+
+---
+
+## 174. A trigger and a reversal carry a reason, and the trigger one of the four spellings
+
+**Phase 8 · 2026-09-23 · Tier 2 · IDN-LIFE-003, 09 section 8a, 10 section 5.12d**
+
+*The question.* 09 section 8a says the trigger "records `reason` and `trigger`", and
+IDN-LIFE-003 says the only way back is the reversal "under `takedown:execute`, with a
+reason." Neither says what a body without a reason, or with a trigger outside `10`
+section 5.12d, is answered.
+
+*The readings.*
+
+1. An absent or blank reason accepted and recorded empty; an unknown trigger refused.
+2. Both refused with **400** `api.request.malformed`, `details.member` naming the member.
+
+*Chosen: 2, the smaller surface.* A takedown recorded without its reason fails
+IDN-LIFE-003 AC3. The reason is recorded trimmed; the trigger is recorded in the
+spelling of `10` section 5.12d.
+
+*Tests that pin it.*
+`TakedownServiceTests.IDN_LIFE_003_ATriggerWithoutAReasonIsMalformedAsync`,
+`TakedownServiceTests.IDN_LIFE_003_AReversalWithoutAReasonIsMalformedAsync`,
+`TakedownServiceTests.IDN_LIFE_003_AC3_TheTriggerIsAuditedWithItsReasonAsync`,
+`TakedownEndpointTests.IDN_LIFE_003_ATriggerOutsideTheFourSpellingsIsMalformedAsync`.
+
+*Chapter text that should change.* 09 section 8a could mark `reason` required on both
+endpoints.
+
+---
+
+## 175. An operation of the deployment asks for its permission in the administrative organization
+
+**Phase 8 · 2026-09-23 · Tier 3 · AUTHZ-SCOPE-001, IDN-ORG-001, LIB-API-005, 09 section 8**
+
+*The question.* AUTHZ-SCOPE-001 says "Every permission evaluation SHALL be scoped to the
+organization owning the resource, resolved from the resource and never from the
+session." 09 section 8 says "All endpoints under `/admin` require the corresponding
+permission." Many administrative operations act on the deployment or on an account
+rather than on a record an organization owns: session revocation, configuration, the
+restriction set, account suspension, the takedown, the privacy request queue, erasures,
+the audit trail, compliance text and records, recovery approval. A customer holds no
+membership (AUTH-PRIN-002: "A principal holding **no membership** (an individual user)
+follows the **system policy**"), so the account acted on names no organization either.
+IDN-ORG-001 says "Organization #1 is the **administrative organization**; its members
+are what would elsewhere be called staff." No chapter says in which organization the
+gate is asked for such an operation. Phases 6 and 7 asked it in every organization the
+caller belongs to and accepted the first that granted; no report recorded that choice.
+
+*The readings.*
+
+1. In every organization the caller belongs to, the first grant deciding (what phases 6
+   and 7 built for recovery approval and the privacy area).
+2. In the administrative organization only.
+3. In an organization the target account belongs to, or in the administrative
+   organization for an account holding none.
+
+*Chosen: 2, the strictest reading.* Reading 1 lets a role granted inside any
+organization, for that organization's own members, act on every account in the pool and
+on the deployment's settings. Reading 3 still lets a manager of one organization act on
+the deployment wherever no target account exists. Reading 2 grants least: the deployment
+is administered by the organization the chapters name for that purpose, and before
+bootstrap has marked one, every such operation is refused. Operations on an
+organization's own records (grants, groups, memberships, invitations, policy, domains)
+are asked in that organization, as AUTHZ-SCOPE-001 says, and are not affected.
+
+*What changed with it.* The privacy area's scope and recovery approval now ask the
+administrative organization, and `ISessions.RevokeAccountAsync` and
+`ISessions.RevokeEveryAsync` no longer take an organization. Each area reads the
+administrative organization through a port of its own, as each reads memberships.
+
+*Tests that pin it.*
+`Janus.Authentication.Tests.Policies.AdministrativeScopeTests` (all three),
+`Janus.Privacy.Tests.Policies.AdministrativeScopeTests` (all three),
+`AdministrativeOrganizationTests.IDN_ORG_001_TheMarkedOrganizationIsTheAdministrativeOneAsync`,
+`SessionServiceTests.AUTH_SESS_011_AC2_RevokingOneAccountWithoutThePermissionIsRefusedAsync`.
+
+*Chapter text that should change.* AUTHZ-SCOPE-001 could say that an operation on the
+deployment, or on an account, is scoped to the administrative organization.
+
+---
+
+## 176. A correlation identifier resolves for `audit:read` in the administrative organization, and for its own principal only on a disclosing type
+
+**Phase 8 · 2026-09-23 · Tier 3 · AUTHZ-GATE-004, AUTHZ-CONCEAL-004, AUTHZ-SCOPE-001, 09 section 8a**
+
+*The question.* 09 section 8a mounts `GET /admin/explanations/{correlationId}` under
+`audit:read` and says "Self-service explanation for **non-concealed** types is
+`GET /account/explanations/{correlationId}`, requiring only the subject's own session."
+Neither route names an organization. AUTHZ-GATE-004 says "Those resolve only for a
+support role, from the correlation identifier." The contract built in phase 2 took the
+organization the support role is held in and resolved only a refusal recorded in that
+organization or in none. `10` section 2.1 gives `audit:read` as "Reading the audit
+trail, querying it by subject, and resolving a concealed denial's correlation
+identifier", and entry 175 already places the audit trail with the deployment. No
+chapter says whose refusal the self-service route resolves.
+
+*The readings.*
+
+1. The support resolution asks `audit:read` in the administrative organization and
+   resolves any recorded refusal.
+2. It asks `audit:read` in the organization the refusal was recorded in, and in the
+   administrative organization for one recorded in none.
+3. As 1, resolving only refusals recorded in the administrative organization or in
+   none.
+
+For the self-service route: (a) the caller is the acting principal of the refusal;
+(b) the caller is both its acting and its effective principal.
+
+*Chosen: 1 and (b).* Every refusal is written to the audit trail under the refused
+subject, so `audit:read` in the administrative organization already reads it through
+`GET /admin/audit?subject=`; reading 1 grants nothing entry 175 has not. Reading 2 adds
+a reader in every customer organization. Reading 3 leaves a refusal recorded in a
+customer organization resolvable by nobody, which fails AUTHZ-CONCEAL-004 AC1 for it.
+On the self-service route, (b) grants least: a refusal taken while acting for another
+account resolves for neither party alone. A type the model declares concealing, or no
+longer declares at all, answers `authz.denied` with no correlation; a refusal tied to no
+record (AUTHZ-CONCEAL-005) discloses. `IAccessGate.ResolveAsync` no longer takes an
+organization, and `IAccessGate.ResolveOwnAsync` is added.
+
+*Tests that pin it.*
+`ExplanationTests.AUTHZ_GATE_004_AC4_ACorrelationIdentifierResolvesOnlyForASupportRoleAsync`,
+`ExplanationTests.AUTHZ_GATE_004_AC4_AReadRoleOutsideTheAdministrativeOrganizationResolvesNothingAsync`,
+`ExplanationTests.AUTHZ_GATE_004_AC3_AnIdentifierResolvesForItsOwnerOnlyWhereTheTypeDisclosesAsync`,
+`ExplanationTests.AUTHZ_GATE_004_AC3_AnotherPrincipalsIdentifierDoesNotResolveForTheCallerAsync`,
+`ExplanationEndpointTests` (all three).
+
+*Chapter text that should change.* 09 section 8a could say that the support resolution
+is held in the administrative organization, and that the self-service route resolves a
+refusal of the caller acting as themselves.
+
+---
+
+## 177. The audit trail read by subject carries each record's codes and never what it holds under the subject's key
+
+**Phase 8 · 2026-09-23 · Tier 3 · PRIV-BREACH-002, IDN-AUD-001, 09 section 8a**
+
+*The question.* 09 section 8a mounts `GET /admin/audit?subject=...` under `audit:read`:
+"Every audit record for one subject, without a full scan (PRIV-BREACH-002)."
+PRIV-BREACH-002 AC2 says "The query works after erasure, returning anonymised records."
+An audit record holds its codes and references in the clear and, where an event has to
+carry a personal value, holds that value under the subject's key (IDN-AUD-001). No
+chapter says whether the read hands the personal values to the reader while the key
+still exists.
+
+*The readings.*
+
+1. Every field of the record, the personal values included while the key exists.
+2. The codes, identities, organization and plain details only; the values held under
+   the key never cross into the answer.
+
+*Chosen: 2, the strictest reading.* The read serves "who was affected", which the codes
+and identities answer. Reading 1 hands a person holding `audit:read` personal values the
+operation does not need, and makes the same query answer differently before and after
+erasure. Reading 2 grants least, and an entry reads the same either side of erasure, so
+AC2 holds by construction. The contract is `IAuditTrail.OfSubjectAsync`, asked in the
+administrative organization as entry 175 places the audit trail.
+
+*Tests that pin it.*
+`AuditStoreTests.PRIV_BREACH_002_AC2_TheTrailReadsTheSameBeforeAndAfterErasureAsync`,
+`AuditTrailServiceTests` (both),
+`AuditTrailEndpointTests` (all three).
+
+*Chapter text that should change.* 09 section 8a could say that the entries carry the
+record's codes and plain details and not the values held under the subject's key.
+
+---
+
+## 178. Every loosening of runtime configuration also needs `system:administer`
+
+**Phase 8 · 2026-09-23 · Tier 3 · OPS-CFG-002, 10 section 2.1, AUTH-ABUSE-004, OPS-ALERT-004a**
+
+*The question.* 10 section 2.1 gives `system:administer` as governing "**Loosening**
+configuration changes (OPS-CFG-002) and granting the seeded administrative role", and
+`config:manage` as "Changing configuration". The `restriction:edit` row says "Every
+edit is a step-up action; a loosening also needs a reason and alerts" and names no
+second permission. The alerting destination keys change through
+`PUT /admin/config/{key}` (10 section 5, `alerting:destinations`). No chapter says
+where the permission to loosen is asked, or whether the restriction set, which is
+runtime configuration (D-142), is one of the "configuration changes" it governs.
+
+*The readings.*
+
+1. `config:manage` alone; `system:administer` is never asked on a change.
+2. `system:administer` asked on a loosening through `PUT /admin/config/{key}` only.
+3. `system:administer` asked on every loosening of runtime configuration, the
+   restriction set and the alerting destinations included, where the direction is
+   classified.
+
+*Chosen: 3, the strictest reading.* The one operation every runtime write goes through
+(`ConfigurationAdministration`) asks it in the administrative organization as soon as
+it has read the value in force and found the change to be a loosening, before the
+step-up and the reason. It is asked in the same transaction as the read that decides
+the direction, so a concurrent change cannot turn a tightening into an unpermitted
+loosening. A tightening asks nothing more than the route's own permission. Reading 1
+lets a holder of `config:manage` loosen what 10 section 2.1 reserves; reading 2 leaves
+the restriction set, the widest loosening a send can meet, to `restriction:edit` alone.
+
+*Tests that pin it.*
+`ConfigurationAdministrationTests.OPS_CFG_002_ALooseningIsRefusedWithoutSystemAdministerAsync`,
+`ConfigurationAdministrationTests.OPS_CFG_002_ATighteningNeedsNoSystemAdministerAsync`,
+`ConfigurationEndpointTests.OPS_CFG_002_ALooseningRequiresSystemAdministerAsync`.
+
+*Chapter text that should change.* The `restriction:edit` row of 10 section 2.1 could
+say that a loosening also needs `system:administer`, or say that it does not.
+
+---
+
+## 179. A change through the configuration route carries a reason whichever way it moves
+
+**Phase 8 · 2026-09-23 · Tier 2 · 09 section 8, OPS-CFG-002, OPS-CFG-005, D-147**
+
+*The question.* 09 section 8 says of `PUT /admin/config/{key}` that "`reason` is
+required on every change and recorded in the audit entry (OPS-CFG-005, OPS-CFG-008;
+D-147)". Its 422 row lists "`auth.restriction.reasonrequired` where a loosening arrives
+without a reason", and the closing paragraph says "Tightening requires no step-up.
+Loosening requires step-up, a reason, and produces an audit entry."
+
+*The readings.*
+
+1. A reason only on a loosening; a tightening may arrive without one.
+2. A reason on every change through the route; the 422 row names the case where it
+   costs most.
+
+*Chosen: 2.* The request shape states it for every change and the audit entry records
+it; a tightening that carries no reason is a record that answers "why" with nothing.
+The route refuses a blank or missing reason with `auth.restriction.reasonrequired`
+(422) naming the key, before the value is read. The one operation underneath still
+asks a reason only of a loosening, because the restriction set, which 09 section 8
+asks a reason of only on a loosening, goes through it too.
+
+*Tests that pin it.*
+`ConfigurationEndpointTests.OPS_CFG_005_EveryChangeCarriesAReasonAsync`.
+
+*Chapter text that should change.* The 422 row of `GET|PUT /admin/config/{key}` could
+read "`auth.restriction.reasonrequired` where a change arrives without a reason".
+
+---
+
+## 180. The configuration route serves the deployment's own keys, the restriction set excepted
+
+**Phase 8 · 2026-09-23 · Tier 2 · 09 section 8, 10 section 4, AUTH-ABUSE-004, D-151**
+
+*The question.* 09 section 8 mounts `GET|PUT /admin/config/{key}` and says "`value`
+takes the key's type (`10` section 4)". 10 section 4 holds keys that exist once for the
+deployment, the named restriction set (`restrictions`, which 09 section 8 edits through
+`/admin/restrictions` under `restriction:edit`), and keys that exist once per
+organization or per declared category (D-151: `policy.{organization}`,
+`photo.enabled.{organization}`, `stepup.enforcement.{organization}`,
+`retention.{category}`). The route lists no answer for a name that is no key.
+
+*The readings.*
+
+1. Every key of 10 section 4 through this route, the restriction set and the family
+   members included.
+2. The keys that exist once for the deployment, less the restriction set; any other
+   name is not a key of this route.
+
+*Chosen: 2, the smaller surface.* Serving the restriction set here would let a holder
+of `config:manage` edit it round `restriction:edit` and round the alert its loosening
+raises. A family member belongs to its organization or category, and the organization
+policy has its own route under `organization:manage`. A name the route does not serve,
+and a name outside the catalogue, answer 400 `api.request.malformed` naming `key`: the
+route lists no 404, and the name is part of the request.
+
+*Tests that pin it.*
+`ConfigurationEndpointTests.AUTH_ABUSE_004_TheRestrictionSetIsNoKeyOfTheConfigurationRouteAsync`,
+`ConfigurationEndpointTests.LIB_API_005_ANameOutsideTheCatalogueIsMalformedAsync`.
+
+*Chapter text that should change.* 09 section 8 could say which keys the route serves
+and add the 400 for a name that is not one of them.
+
+---
+
+## 181. A configuration value crosses the interface in its own JSON type
+
+**Phase 8 · 2026-09-23 · Tier 2 · 09 section 8, 10 section 4, 10 section 1.5, D-153**
+
+*The question.* 09 section 8 says `GET` returns "`{ key, value, default, protected,
+direction }` (D-153)" and that "`value` takes the key's type (`10` section 4)". The
+chapters do not say how each type is written in JSON, what `default` is for a key the
+deployment names, or how `direction` is spelled.
+
+*The readings.*
+
+1. Every value as the text the settings table stores, in a JSON string.
+2. Every value in its own JSON type: text, durations and enum members as strings in the
+   form 10 section 4 writes them; flags as booleans; numbers as numbers; lists and sets
+   as arrays; a policy as its object.
+
+*Chosen: 2.* "Takes the key's type" is a type, not a string holding one. A value of
+another JSON type is refused with `config.value.notallowed` naming the key, which 10
+section 1.5 gives for a value "of the wrong type": a number for a duration, a string
+for a number. `default` is null for a key the deployment names (LIB-HOST-001), since
+it has none. `direction` is the member name (`Increase`, `Decrease`, `AnyChange`), as
+every other view writes an enum.
+
+*Tests that pin it.*
+`ConfigurationEndpointTests.OPS_CFG_004_AKeyReadsWithItsDefaultAndWhetherItIsProtectedAsync`,
+`ConfigurationEndpointTests.OPS_CFG_008_AChangedKeyReadsBackBesideItsDefaultAsync`,
+`ConfigurationEndpointTests.OPS_CFG_003_AValueOfTheWrongTypeIsNotAllowedAsync`.
+
+*Chapter text that should change.* 09 section 8 could show one `GET` answer and name
+the spelling of `direction`.
+
+---
+
+## 182. A host key with no supplier is refused at the edit as a value the set does not admit
+
+**Phase 8 · 2026-09-23 · Tier 2 · 09 section 8, LIB-HOST-001, 10 section 1.5, AUTH-ABUSE-004**
+
+*The question.* 09 section 8 answers `PUT /admin/restrictions/{name}` with "**422**: a
+`host:<name>` key with no registered supplier (LIB-HOST-001); an empty bucket list" and
+names no code. The only code 10 gives the absence is `model.startup.declarationmissing`:
+"Startup: a required deployment value, subject-event handler or restriction key
+supplier is absent; `details.key`, `details.handler` or `details.supplier` names it",
+which the library answers 500 wherever a request meets it, since at request time it is
+a fault of the deployment.
+
+*The readings.*
+
+1. `model.startup.declarationmissing`, answered 422 on this route and 500 elsewhere.
+2. `model.startup.declarationmissing` as it stands, answered 500.
+3. `config.value.notallowed` (422), naming the key `restrictions` and the `supplier`.
+
+*Chosen: 3.* The status of a code is one status wherever it is raised, so reading 1
+would turn every request-time missing declaration into a 422 the caller is told to fix.
+Reading 2 answers what 09 gives as 422 with a server fault. At the edit the supplier's
+absence makes the restriction a value the set does not admit, which is what
+`config.value.notallowed` means; `details.supplier` names it as the startup code
+would. A send that meets a host key with no supplier is still refused with the startup
+code, because there the deployment is at fault.
+
+*Tests that pin it.*
+`RestrictionEndpointTests.LIB_HOST_001_AHostKeyWithNoSupplierIsRefusedAsync`.
+
+*Chapter text that should change.* The 422 row of `PUT /admin/restrictions/{name}`
+could name `config.value.notallowed` with `details.supplier`.
+
+---
+
+## 183. What the restriction routes read, and what they answer for a name the set does not hold
+
+**Phase 8 · 2026-09-23 · Tier 2 · 09 section 8, 10 section 4 `restrictions`, API-CONV-001**
+
+*The question.* 09 section 8 gives the body of `PUT /admin/restrictions/{name}` as
+`{ key, purpose, buckets }` and says a loosening "also requires a reason (OPS-CFG-002)",
+without a field for it; it mounts `DELETE /admin/restrictions/{name}`, which "is a
+loosening, not an error" for a shipped default and so needs a reason, without a body;
+10 section 4 calls the purpose optional. No answer is listed for a `GET` or a `DELETE`
+of a name the set does not hold.
+
+*The readings and the choices.*
+
+1. The reason travels as `reason` in the body of `PUT` and in a JSON body
+   `{ "reason": "..." }` of `DELETE`, not in the query, where free text would sit in
+   every access log. Chosen.
+2. An absent `purpose` reads as `any`, which is what an optional purpose means. Chosen.
+3. A `GET` or `DELETE` of a name the set does not hold answers 400
+   `api.request.malformed` naming `name`, as entry 180 answers a name outside the
+   configuration catalogue: no 404 is listed, and a deletion of nothing would otherwise
+   write down and announce a change that changed nothing. Chosen.
+4. A key or window outside the vocabulary, a negative `max`, or an `interval` that is
+   no positive ISO 8601 duration is malformed, naming `key`, `purpose` or `buckets`;
+   an empty bucket list is refused with `config.value.notallowed` (422) as 09 gives it.
+   Chosen.
+
+*Tests that pin it.*
+`RestrictionEndpointTests.AUTH_ABUSE_004_OneRestrictionReadsByItsNameAsync`,
+`RestrictionEndpointTests.AUTH_ABUSE_004_DeletingAShippedDefaultIsALooseningAsync`,
+`RestrictionEndpointTests.AUTH_ABUSE_004_DeletingAnUnknownNameIsMalformedAsync`,
+`RestrictionEndpointTests.AUTH_ABUSE_004_AnUnreadableRestrictionIsMalformedAsync`,
+`RestrictionEndpointTests.AUTH_ABUSE_004_AnEmptyBucketListIsRefusedAsync`.
+
+*Chapter text that should change.* 09 section 8 could show `reason` in the `PUT` body,
+give `DELETE` its body, and add the 400 for a name the set does not hold.
+
+---
+
+## 184. How a grant names the whole organization, and what else it must name
+
+**Phase 8 · 2026-09-23 · Tier 2 · 09 section 8, AUTHZ-GRANT-001, AUTHZ-SCOPE-001, API-CONV-001**
+
+*The question.* 09 section 8 gives the body of `POST /admin/grants` as `subjectType`,
+`subjectId`, `resourceType`, `resourceId`, `role`, `deny`, `expiresAt` and `reason`.
+AUTHZ-GRANT-001 AC2 says "A grant with a null resource scopes to the whole
+organization", and AUTHZ-SCOPE-001 that every evaluation is "scoped to the organization
+owning the resource, resolved from the resource and never from the session". The body
+has no member naming an organization, so a grant on the whole organization has no way
+to say which. No answer is listed for a role, record or group the deployment does not
+hold.
+
+*The readings and the choices.*
+
+1. A grant on the whole organization is written `resourceType: "organization"` and
+   `resourceId` the organization's identifier, the type the gate already asks an
+   organization-wide question under; it is stored with no resource. Chosen. The other
+   reading, an `organizationId` member beside absent resource members, adds a member 09
+   does not give.
+2. `grant:manage` is asked in the organization the grant is scoped to: the one a record
+   was registered in, or the one named. Chosen, as AUTHZ-SCOPE-001 reads; asking it in
+   the administrative organization instead would leave no organization able to manage
+   its own grants.
+3. A record that is not registered, or an organization identifier that is not one,
+   answers 400 `api.request.malformed` naming `resourceId`; a role the deployment does
+   not hold names `role`; a group that does not exist or belongs to another
+   organization names `subjectId`, since a group's members hold what it holds in its
+   own organization. Chosen, as entry 180 answers a name outside the catalogue.
+4. A user subject is taken as given. The area holds no port to accounts, and a grant to
+   an identifier no account carries reaches nobody. Chosen.
+
+*Tests that pin it.*
+`GrantEndpointTests.AUTHZ_GRANT_001_AC2_AnOrganizationWideGrantIsWrittenWithNoResourceAsync`,
+`GrantEndpointTests.AUTHZ_SCOPE_001_ARecordGrantIsScopedToTheRecordsOrganizationAsync`,
+`GrantEndpointTests.AUTHZ_SCOPE_001_GrantManageElsewhereDoesNotReachTheRecordAsync`,
+`GrantEndpointTests.AUTHZ_GRANT_001_WhatAGrantNamesMustExistAsync`.
+
+*Chapter text that should change.* 09 section 8 could say how the body names the whole
+organization, that `grant:manage` is asked in the grant's organization, and add the 400
+for a role, record or group the deployment does not hold.
+
+---
+
+## 185. Which grants of system administration need system administration
+
+**Phase 8 · 2026-09-23 · Tier 3 · OPS-CFG-007, 10 section 2.1, AUTHZ-GRANT-002**
+
+*The question.* OPS-CFG-007 says "Granting or revoking system administration SHALL
+require system administration", and 10 section 2.1 that `system:administer` governs
+"granting the seeded administrative role". Permissions reach a principal through
+roles, and a deny takes one away (AUTHZ-GRANT-002). Neither text says whether the rule
+covers a role other than the seeded one that carries the permission, a deny, or a
+grant in an organization other than the administrative one, where the permission is
+never asked.
+
+*The readings.*
+
+1. Only an allow of the seeded `system-administrator` role in the administrative
+   organization needs it.
+2. Any allow of a role carrying `system:administer`, in the administrative
+   organization.
+3. Any grant or revocation, allow or deny, in any organization, of a role carrying
+   `system:administer` needs that permission in the administrative organization; a
+   role that cannot be read counts as carrying it.
+
+*Chosen: 3, the strictest reading.* Reading 1 is the "one step removed" OPS-CFG-007
+exists to prevent, reached by copying the role under another name. A deny of it takes
+system administration away, which is the revocation the item names. A grant in
+another organization is still a record of the permission held, so no organization is
+left out. The check fails closed where the role cannot be read.
+
+*Tests that pin it.*
+`GrantEndpointTests.OPS_CFG_007_AC1_AGrantManagerWithoutSystemAdministerCannotConferItAsync`,
+`GrantEndpointTests.OPS_CFG_007_RevokingSystemAdministrationRequiresItAsync`.
+
+*Chapter text that should change.* OPS-CFG-007 could say that it covers every role
+carrying the permission, deny grants, and every organization.
+
+---
+
+## 186. What the grant routes answer beyond the rows 09 lists
+
+**Phase 8 · 2026-09-23 · Tier 2 · 09 section 8, 10 section 1.3, AUTHZ-GRANT-003, API-CONV-002**
+
+*The question.* 09 section 8 lists **201** / **204** and **409**
+`authz.grant.duplicate` for `POST /admin/grants` and `DELETE /admin/grants/{id}`, and
+says "`reason` is recorded. Revocation records the revoking actor", without a body for
+`DELETE`. 10 section 1.3 gives `authz.grant.expired` ("Grant past its expiry"),
+`authz.grant.notfound` ("No such grant") and `authz.grant.reasonrequired`, 422, and
+API-CONV-002 bounds every free-text field at 1 to 1024 characters after trimming.
+
+*The readings and the choices.*
+
+1. A grant whose `expiresAt` is at or before the present is refused with
+   `authz.grant.expired`, 409 as the status map already answers it, rather than written
+   as a row that confers nothing. Chosen.
+2. `DELETE` of an identifier that is unknown, already revoked, or a derived or
+   materialised grant answers 404 `authz.grant.notfound`: only a row someone wrote is
+   revoked by someone, and a derivation's refresh would write the other back. Chosen.
+3. The revocation's reason travels as `{ "reason": "..." }` in the body of `DELETE`, as
+   entry 183 carries a deletion's reason. Chosen.
+4. A blank reason is `authz.grant.reasonrequired` (422); one longer than 1024
+   characters is 400 `api.request.malformed` naming `reason`. Chosen.
+5. The 201 body is `{ "id": "..." }`, the camelCase noun API-CONV-002 gives. Chosen.
+6. The step-up is judged after everything else, so nobody is asked to prove themselves
+   for a request that would be refused. Chosen.
+
+*Tests that pin it.*
+`GrantEndpointTests.AUTHZ_GRANT_003_AnExpiryIsRecordedAndOneAlreadyPassedIsRefusedAsync`,
+`GrantEndpointTests.AUTHZ_GRANT_001_OnlyAnUnrevokedStoredGrantIsRevokedAsync`,
+`GrantEndpointTests.AUTHZ_GRANT_003_ABlankReasonIsRefusedAsync`,
+`GrantEndpointTests.API_CONV_002_AReasonPastTheLimitIsMalformedAsync`,
+`GrantEndpointTests.AUTHZ_GRANT_003_AC2_TheRevocationRecordsWhoWhenAndWhyAsync`,
+`GrantEndpointTests.AUTH_STEP_001_GrantingAndRevokingAreStepUpActionsAsync`.
+
+*Chapter text that should change.* 09 section 8 could list the 404, the 409
+`authz.grant.expired`, the 422 and the 400, show the 201 body, and give `DELETE` its
+body.
+
+---
+
+## 187. What the role routes carry, and where `role:manage` is asked
+
+**Phase 8 · 2026-09-23 · Tier 2 · 09 section 8, AUTHZ-GRANT-004, 10 section 2.1, API-CONV-001**
+
+*The question.* 09 section 8 gives `GET|POST|DELETE /admin/roles` as "Runtime role
+management" with no body, no answers and no path for one role. 10 section 2.1 gives
+`role:manage` as governing "Creating and changing roles", and 10 section 3 says the
+seeded roles are "editable after bootstrap". No route changes a role that stands, and
+no chapter says where the permission is asked for a role, which belongs to no
+organization.
+
+*The readings and the choices.*
+
+1. `role:manage` is asked in the administrative organization, for reading as well as
+   for changing: a role is the deployment's, as the restriction set is (entry 175).
+   Chosen. Reading the roles under `grant:read` was the other reading; it lets the
+   auditor read what only role managers change, and 10 does not name it.
+2. `POST /admin/roles` carries `{ name, permissions, reason }` and either creates the
+   role (201) or gives the one by that name the permissions stated (204). Chosen, as
+   the only way to change a role within the three methods 09 lists; a `PUT` route would
+   add one 09 does not have.
+3. `DELETE /admin/roles/{name}` names the role in the path, as `DELETE /admin/grants/{id}`
+   does, and carries `{ "reason": "..." }` in its body (entry 183). Chosen.
+4. A name that is not a role name, or a role the deployment does not hold, answers 400
+   `api.request.malformed` naming `name`; a permission neither the library nor the
+   host declares names `permissions` (AUTHZ-MODEL-004), where startup would refuse the
+   same role with `model.role.undeclaredpermission`. Chosen, as entry 182 keeps the
+   startup code for a fault of the deployment.
+
+*Tests that pin it.*
+`RoleEndpointTests.AUTHZ_GRANT_004_AC1_ARoleIsCreatedWithItsPermissionsWithoutARestartAsync`,
+`RoleEndpointTests.AUTHZ_GRANT_004_ARoleIsChangedInPlaceAsync`,
+`RoleEndpointTests.AUTHZ_MODEL_004_ARoleNamesOnlyDeclaredPermissionsAsync`,
+`RoleEndpointTests.AUTHZ_CONCEAL_005_AC1_RoleManageIsAskedInTheAdministrativeOrganizationAsync`,
+`RoleEndpointTests.AUTHZ_GRANT_004_OnlyARoleNothingNamesIsRemovedAsync`.
+
+*Chapter text that should change.* 09 section 8 could give the body of `POST`, its 201
+and 204, the path and body of `DELETE`, the 400s, and say that `role:manage` is asked
+in the administrative organization.
+
+---
+
+## 188. A change to a role is reasoned, audited, and guarded as a grant of what it carries
+
+**Phase 8 · 2026-09-23 · Tier 3 · AUTHZ-GRANT-004, OPS-CFG-007, OPS-CFG-005, IDN-AUD-001, 10 section 5a**
+
+*The question.* 10 section 5a makes `/admin/roles/*` the `grant:manage` step-up
+action. No chapter says whether a change to a role needs a reason or is audited, though
+AUTHZ-GRANT-003 requires both of a grant and OPS-CFG-005 describes grants as audited
+"who, what, from, to, when, why". OPS-CFG-007 says granting or revoking system
+administration requires it; adding `system:administer` to a role, or taking it out of
+one, confers or removes it for every holder at once.
+
+*The readings.*
+
+1. A role change is stepped up and nothing more: no reason, no record, and
+   `role:manage` alone suffices whatever the role carries.
+2. A role change is stepped up and audited, with no reason.
+3. A role change is stepped up, carries a reason of 1 to 1024 characters (400
+   `api.request.malformed` naming `reason` otherwise, as the takedown's does), and is
+   audited as `authz.role.defined` or `authz.role.removed` with the role, its
+   permissions before and after, the reason and the actor; a change to a role that
+   carries `system:administer` before or after the change also needs that permission
+   in the administrative organization.
+
+*Chosen: 3, the strictest reading.* A role change moves what every holder may do in
+one write, which is a grant in all but name, so it keeps what a grant keeps. Reading 1
+lets a role manager make any grant-holder a system administrator by editing their role,
+which is the "one step removed" OPS-CFG-007 exists to prevent, and would let the seeded
+`system-administrator` role be narrowed by someone who does not hold it.
+
+*Tests that pin it.*
+`RoleEndpointTests.OPS_CFG_007_AC1_ARoleCarryingSystemAdministrationNeedsItAsync`,
+`RoleEndpointTests.AUTH_STEP_001_DefiningAndRemovingARoleAreStepUpActionsAsync`,
+`RoleEndpointTests.AUTHZ_MODEL_004_ARoleNamesOnlyDeclaredPermissionsAsync`,
+`RoleAuditTests.AUTHZ_GRANT_004_ADefinitionRecordsWhatTheRoleWasAndBecameAsync`,
+`RoleAuditTests.AUTHZ_GRANT_004_ARemovalRecordsWhatTheRolePermittedAsync`.
+
+*Chapter text that should change.* AUTHZ-GRANT-004 could require the reason and the
+audit record of a role change, and OPS-CFG-007 could name role changes.
+
+---
+
+## 189. A role a grant or a derivation names is not removed, and the refusal has a code of its own
+
+**Phase 8 · 2026-09-23 · Tier 2 · AUTHZ-GRANT-004, AUTHZ-GRANT-003 AC3, AUTHZ-DERIVE-001, 10 section 1.3**
+
+*The question.* 09 section 8 mounts `DELETE /admin/roles` and says nothing of a role in
+use. Every grant row names its role and keeps it after revocation, since AUTHZ-GRANT-003
+AC3 asks that "who granted this and when" stay answerable by query, and the schema
+holds the reference; a derivation confers a role from the host's data. 10 section 1.3
+has no code for a role that cannot be removed.
+
+*The readings.*
+
+1. Removing a role revokes its live grants and deletes every row that names it.
+2. Removing a role that anything names is refused as a malformed request.
+3. Removing a role that a grant (live, expired or revoked) or a declared derivation
+   names is refused with a new code `authz.role.inuse`, 409; the way to take its access
+   away is to change its permissions or revoke its grants.
+
+*Chosen: 3.* Reading 1 destroys the grant history AUTHZ-GRANT-003 keeps. Reading 2 tells
+the caller the request was unreadable when it was read and refused. A removed role a
+derivation still names would make that derivation confer nothing without any error,
+so it is in use as much as one a grant names. The code is new and follows the shape of
+the others in 10 section 1.3.
+
+*Tests that pin it.*
+`RoleEndpointTests.AUTHZ_GRANT_004_OnlyARoleNothingNamesIsRemovedAsync`,
+`GrantStoreTests.AUTHZ_GRANT_004_ARoleAnyGrantConfersIsNamedAsync`.
+
+*Chapter text that should change.* 10 section 1.3 could add
+`authz.role.inuse`: "A grant or a derivation names the role, so it cannot be removed;
+409", and 09 section 8 could list it under `DELETE /admin/roles`.
+
+---
+
+## 190. What the group routes carry, and where `group:manage` is asked
+
+**Phase 8 · 2026-09-23 · Tier 2 · 09 section 8a, AUTHZ-GROUP-001, AUTHZ-SCOPE-001, 10 section 2.1, API-CONV-002**
+
+*The question.* 09 section 8a gives `GET|POST|DELETE /admin/groups` and
+`POST|DELETE /admin/groups/{id}/members` with no body, no answer and no path naming the
+group to remove. 10 section 2.1 gives `group:manage` as governing "Creating groups,
+nesting them, and changing their members". A group belongs to one organization, and no
+chapter says where the permission is asked or which organization a listing reads.
+
+*The readings and the choices.*
+
+1. `group:manage` is asked in the organization the group belongs to, read from its row
+   and never from the caller, as `grant:manage` is asked in the grant's (entry 184).
+   Chosen. Asking it in the administrative organization was the other reading; it
+   would put every organization's groups behind one permission a branch administrator
+   does not hold.
+2. `GET /admin/groups?organization={id}` answers 200 with
+   `[ { id, name, members: [ { subjectType, subjectId } ] } ]`, the members being those
+   the group holds directly. Chosen: no other route reads a group's members, and the
+   transitive set is the gate's, not the management application's.
+3. `POST /admin/groups` carries `{ organization, name, reason }` and answers 201
+   `{ id }`. `DELETE /admin/groups/{id}` names the group in the path, as
+   `DELETE /admin/grants/{id}` does, and carries `{ "reason": "..." }` in its body
+   (entry 183). Chosen.
+4. `POST` and `DELETE /admin/groups/{id}/members` both carry
+   `{ subjectType, subjectId, reason }`, the member shape a grant's holder has, and
+   answer 204. Adding a member already held, or taking out one that is not, answers 204
+   and writes and records nothing. Chosen: the one address 09 gives serves both, and the
+   state asked for holds.
+5. A member group of another organization, a group the deployment does not hold, a
+   name or reason blank or past 1024 characters, and an absent or unreadable
+   `organization`, `subjectType` or `subjectId` answer 400 `api.request.malformed`
+   naming the field (`subjectId`, `id`, `name`, `reason`, `organization`,
+   `subjectType`). A member account is not looked up, as a grant's holder is not.
+   Chosen.
+
+*Tests that pin it.*
+`GroupEndpointTests.AUTHZ_GROUP_001_AGroupIsCreatedAndReadWithItsMembersAsync`,
+`GroupEndpointTests.AUTHZ_SCOPE_001_GroupManageIsAskedInTheGroupsOrganizationAsync`,
+`GroupEndpointTests.AUTHZ_GROUP_001_AChangeThatChangesNothingRecordsNothingAsync`,
+`GroupEndpointTests.AUTHZ_GROUP_001_WhatAChangeNamesMustBeReadableAsync`,
+`GroupEndpointTests.AUTHZ_GROUP_001_AGroupThatWouldContainItselfIsRefusedAsync`,
+`GroupClosureStoreTests.AUTHZ_GROUP_001_AnOrganizationsGroupsAreReadByNameAsync`.
+
+*Chapter text that should change.* 09 section 8a could give the query of `GET`, the
+bodies of `POST` and of both member routes, the path and body of `DELETE`, the 201 and
+204 answers and the 400s, and say that `group:manage` is asked in the group's
+organization.
+
+---
+
+## 191. A change of members is stepped up, reasoned, audited, and guarded as a grant of what the group holds
+
+**Phase 8 · 2026-09-23 · Tier 3 · AUTHZ-GROUP-001, OPS-CFG-007, AUTH-STEP-001, 10 section 5a, IDN-AUD-001**
+
+*The question.* 10 section 5a lists no step-up action for the group routes, and no
+chapter says whether a change to a group carries a reason or is audited. A member
+holds what the group holds and what every group holding it holds, so adding an account
+to a group confers every grant the group reaches, and taking it out removes them.
+OPS-CFG-007 says granting or revoking system administration requires it.
+
+*The readings.*
+
+1. The group routes ask `group:manage` and nothing more: no step-up, no reason, no
+   record, whatever the group holds.
+2. As 1, with every change audited.
+3. Every write (create, remove, add a member, take one out) carries a reason of 1 to
+   1024 characters (400 `api.request.malformed` naming `reason` otherwise) and is
+   audited as `authz.group.created`, `authz.group.removed`,
+   `authz.group.memberadded` or `authz.group.memberremoved` with the group, its name,
+   the member where one changed, the reason, the actor and the group's organization. A
+   change of members is the `grant:manage` step-up action, judged last as for a grant;
+   where the group, or any group holding it, holds a live grant (allow or deny) of a
+   role carrying `system:administer`, or of a role that cannot be read, the change
+   also needs `system:administer` in the administrative organization. Creating a group
+   and removing one nothing names (entry 192) confer and remove nothing, and are not
+   stepped up.
+
+*Chosen: 3, the strictest reading.* A change of members is a grant in all but name,
+as a change to a role is (entry 188), so it keeps what a grant keeps. Reading 1 lets a
+group manager make anyone a system administrator by adding them to the group that
+holds it, which is the "one step removed" OPS-CFG-007 exists to prevent. The step-up
+reuses the `grant:manage` gate name 10 section 5a already defines rather than
+inventing one.
+
+*Tests that pin it.*
+`GroupEndpointTests.OPS_CFG_007_AC1_ChangingAnAdministeringGroupNeedsSystemAdministrationAsync`,
+`GroupEndpointTests.AUTH_STEP_001_AChangeOfMembersIsAStepUpActionAsync`,
+`GroupEndpointTests.AUTHZ_GROUP_001_AGroupIsCreatedAndReadWithItsMembersAsync`,
+`GroupAuditTests.AUTHZ_GROUP_001_AMemberAddedIsRecordedWithTheGroupAndTheMemberAsync`,
+`GroupAuditTests.AUTHZ_GROUP_001_AGroupCreatedIsRecordedWithoutAMemberAsync`.
+
+*Chapter text that should change.* 10 section 5a could list
+`POST|DELETE /admin/groups/{id}/members` under `grant:manage`; AUTHZ-GROUP-001 could
+require the reason and the audit record of every change to a group; OPS-CFG-007 could
+name a change of members of a group that reaches system administration; 10 section 5
+could list the four audit actions.
+
+---
+
+## 192. A group anything names is not removed, and the refusal has a code of its own
+
+**Phase 8 · 2026-09-23 · Tier 2 · AUTHZ-GROUP-001, AUTHZ-GRANT-003 AC3, 10 section 1.3**
+
+*The question.* 09 section 8a mounts `DELETE /admin/groups` and says nothing of a
+group in use. A grant given to a group names it and keeps it after revocation, since
+AUTHZ-GRANT-003 AC3 asks that "who granted this and when" stay answerable by query. A
+group's members lose what it holds when it goes, and a group it belongs to loses a
+member, with no change of members recording either. 10 section 1.3 has no code for a
+group that cannot be removed.
+
+*The readings.*
+
+1. Removing a group takes its members out, takes it out of every group holding it and
+   revokes its live grants, each recorded.
+2. Removing a group that anything names is refused as a malformed request.
+3. Removing a group that holds a member, belongs to a group, or was given any grant
+   (live, expired or revoked) is refused with a new code `authz.group.inuse`, 409;
+   the members are taken out through the member route first, which is stepped up and
+   recorded (entry 191).
+
+*Chosen: 3*, as entry 189 chose for a role. Reading 1 does in one write, without its
+step-up, what entry 191 guards change by change, and loses the grant history
+AUTHZ-GRANT-003 keeps. Reading 2 tells the caller the request was unreadable when it
+was read and refused.
+
+*Tests that pin it.*
+`GroupEndpointTests.AUTHZ_GROUP_001_OnlyAGroupNothingNamesIsRemovedAsync`,
+`GrantStoreTests.AUTHZ_GROUP_001_AGroupAnyGrantWasGivenToIsNamedAsync`,
+`GroupClosureStoreTests.AUTHZ_GROUP_001_ARemovedGroupIsGoneAsync`.
+
+*Chapter text that should change.* 10 section 1.3 could add `authz.group.inuse`: "The
+group holds a member, belongs to a group, or was given a grant, so it cannot be
+removed; 409", and 09 section 8a could list it under `DELETE /admin/groups`.
+
+---
+
+## 193. What the organization lifecycle routes carry, and the policy row a new organization gets
+
+**Phase 8 · 2026-09-23 · Tier 2 · 09 section 8a, IDN-ORG-002, IDN-ORG-003, 10 section 4, API-CONV-002**
+
+*The question.* 09 section 8a gives `POST /admin/organizations`, which "Creates an
+organization with its policy row (IDN-ORG-002)", and
+`POST /admin/organizations/{id}/delete` · `/delete/cancel`, "Request → suspend → grace
+→ erasure, cancellable (IDN-ORG-003)", with no body, no answer and no word on a repeat.
+10 section 4 gives `policy.<organization>` a default of "`{}` (no override: every field
+inherits `policy.default`)", "one key per organization identifier, created empty when the
+organization is". The configuration store had no write for one member of such a key.
+
+*The readings and the choices.*
+
+1. `POST /admin/organizations` carries `{ name, reason }` and answers 201 `{ id }`.
+   Chosen, as `POST /admin/groups` answers (entry 190).
+2. The policy row: written as `{}` in the transaction that creates the organization,
+   through a new `IConfigurationStore.WriteAsync` for one member of a family, or left
+   unwritten since an unwritten member already reads as `{}`. Chosen: written. The
+   chapter says the key is created with the organization, and a row the deployment
+   holds is what `ReadWrittenAsync` answers for. It is written through the one
+   configuration operation every runtime write goes through (OPS-CFG-005), so it is
+   recorded as `ops.configuration.changed` with `{}` before and after, not a loosening,
+   carrying the creation's reason.
+3. `/delete` and `/delete/cancel` carry `{ "reason": "..." }` and answer 204. A request
+   for an organization already being deleted, and a cancellation for one that is not,
+   answer 204 and write and record nothing. Chosen: the state asked for holds, as for a
+   group member already held (entry 190).
+4. A name or reason blank or past 1024 characters after trimming, and an organization
+   the deployment does not hold, answer 400 `api.request.malformed` naming `name`,
+   `reason` or `id`. Chosen.
+
+*Tests that pin it.*
+`OrganizationEndpointTests.IDN_ORG_002_AnOrganizationIsCreatedAsync`,
+`OrganizationEndpointTests.IDN_ORG_003_ASecondRequestChangesNothingAsync`,
+`OrganizationEndpointTests.IDN_ORG_004_ARequestIsCancelledOnlyWithinTheWindowAsync`,
+`OrganizationEndpointTests.IDN_ORG_002_WhatAChangeNamesMustBeReadableAsync`,
+`OrganizationDirectoryTests.IDN_ORG_002_AnOrganizationCreatedIsFoundAsync`,
+`ConfigurationStoreTests.OPS_CFG_008_AC1_AWrittenMemberOfAFamilyIsInForceForTheNextReadAsync`,
+`ConfigurationStoreTests.WriteAsync_AMemberOfAProtectedFamily_IsRefusedAndWritesNothingAsync`,
+`ConfigurationStoreTests.WriteAsync_AMemberValueTheFamilyDoesNotAdmit_IsRefusedAsync`,
+`ConfigurationAdministrationTests.OPS_CFG_005_AChangedMemberOfAFamilyIsWrittenDownAsync`,
+`ConfigurationAdministrationTests.OPS_CFG_004_AMemberOfAProtectedFamilyIsRefusedAsync`.
+
+*Chapter text that should change.* 09 section 8a could give the bodies of the three
+routes, the 201 and 204 answers, the 400s and the answer to a repeat, and say the policy
+row is `{}` and recorded as a configuration change.
+
+---
+
+## 194. `organization:manage` is asked in the administrative organization
+
+**Phase 8 · 2026-09-23 · Tier 3 · 10 section 2.1, IDN-ORG-003, AUTHZ-SCOPE-001**
+
+*The question.* 10 section 2.1 gives `organization:manage` as "Organization lifecycle,
+policy, and deletion cancellation" and does not say where it is asked. IDN-ORG-003 says
+of a deletion request "Organization suspends immediately; access stops", which the
+effective grants view now makes true of every grant of the organization (commit
+`0f80902`, entry 196).
+
+*The readings.*
+
+1. Asked in the organization named in the path, as `group:manage` is asked in the
+   group's (entry 190); creation, which names none, asked in the administrative one.
+2. Asked in the administrative organization for all three routes.
+
+*Chosen: 2, the strictest reading.* Under 1 an organization's own administrators could
+delete it, and once they had, the grant that would cancel the request confers nothing,
+so the request could only be undone by carving an exception into the suspension. Under
+2 the permission to end an organization's access and to give it back sits where a
+suspension never reaches, and a permission held in the organization itself grants
+nothing here.
+
+*Tests that pin it.*
+`OrganizationEndpointTests.IDN_ORG_002_TheLifecycleIsGovernedFromTheAdministrativeOrganizationAsync`.
+
+*Chapter text that should change.* 10 section 2.1 could say that `organization:manage`
+is asked in the administrative organization.
+
+---
+
+## 195. A deletion request and its cancellation are stepped up under a new gate `organization:delete`
+
+**Phase 8 · 2026-09-23 · Tier 3 · 09 section 8a, 10 section 5a, AUTH-STEP-001, IDN-LIFE-013**
+
+*The question.* 10 section 5a lists the library's step-up actions "once here so a
+builder does not have to infer them endpoint by endpoint", and names none for
+`/admin/organizations/{id}/delete` or `/delete/cancel`. 09 section 8a says "step-up
+applies where the operation loosens a control (OPS-CFG-002) or touches another person's
+account". A deletion request ends every member's sessions (entry 196); a cancellation
+gives every member back what the organization grants. 09 section 8a steps up the same
+pair for one account: `POST /admin/accounts/{subject}/suspend` · `/reactivate`,
+"reactivation restores grants exactly (IDN-LIFE-013). Requires step-up".
+
+*The readings.*
+
+1. Neither is stepped up, since 10 section 5a names no gate for them.
+2. Both are stepped up under a gate name 10 section 5a already has (`grant:manage` or
+   `account:suspend`).
+3. Both are stepped up under a new gate `organization:delete`, "Request or cancel an
+   organization's deletion", judged last as every step-up is; creating an organization,
+   which touches no account, is not stepped up.
+
+*Chosen: 3, the strictest reading.* 09 section 8a's own rule reaches both routes, and
+the account pair it steps up is the same change made to one person. A borrowed name
+would let a host that loosens the gate for grants or for one account loosen it for a
+whole organization without saying so. One name for the pair is the smaller surface, as
+`identifier:add` covers an add and a replace; `StepUpAction.OrganizationDelete` is
+added to the closed set.
+
+*Tests that pin it.*
+`OrganizationEndpointTests.AUTH_STEP_001_ADeletionAndItsCancellationAreAStepUpActionAsync`,
+`VocabularyContractTests` (the step-up names).
+
+*Chapter text that should change.* 10 section 5a could add the row `organization:delete`
+| Request or cancel an organization's deletion | `POST /admin/organizations/{id}/delete`,
+`/delete/cancel`; 09 section 8a could say "Requires step-up" on that row.
+
+---
+
+## 196. A deletion request ends every member session, and a suspended organization's grants confer nothing
+
+**Phase 8 · 2026-09-23 · Tier 3 · IDN-ORG-003 AC1 and AC2, IDN-ORG-001, entry 155**
+
+*The question.* IDN-ORG-003 AC1: "Requesting deletion halts member access within one
+request cycle: the first request on any member session that reaches the session record
+after the commit is refused." AC2: "Cancelling on day 29 restores all memberships and
+grants intact." Entry 155 recorded this criterion as "the one point of the three that
+leaves a hole". Sessions carry no organization, and
+IDN-ORG-001 makes an organization "NOT a tenancy or isolation boundary".
+
+*The readings.*
+
+1. Only the grants stop: the effective grants view leaves out every grant of an
+   organization whose deletion was requested, and sessions live on.
+2. As 1, and every live session of every current member ends in the transaction that
+   suspends, the requester's own where they are a member.
+3. As 2, and a member cannot sign in again while the organization is suspended.
+
+*Chosen: 2, the strictest reading the chapters allow.* Reading 1 leaves a member's
+session answering every request that needs no grant, which AC1 refuses. Reading 3 would
+shut a person out of their own account, which belongs to the pool and not the
+organization (IDN-ORG-001), including the privacy rights exercised through it and any
+other membership they hold; no chapter ties signing in to an organization. The grants
+half shipped in commit `0f80902` (`identity.effective_grants` joins the organization and
+leaves out a row whose `deletion_requested_at` is set, so checks, filters and
+capability arrays all see nothing); the sessions half ships with the lifecycle routes.
+Ended sessions are not given back on cancellation: AC2 names memberships and grants,
+and both are untouched. The "who can access" read of `GrantStore.OnAsync` still reads
+the grants table; it is brought onto the view with the reverse lookup of
+AUTHZ-DERIVE-007 in this phase.
+
+*Tests that pin it.*
+`GateBehaviourTests.IDN_ORG_003_AC1_ASuspendedOrganizationConfersNothingAsync`,
+`OrganizationEndpointTests.IDN_ORG_003_AC1_ADeletionRequestEndsEveryMemberSessionAsync`,
+`OrganizationDirectoryTests.IDN_ORG_003_AC1_OnlyCurrentMembersAreNamedAsync`,
+`OrganizationDirectoryTests.IDN_ORG_004_ARequestIsKeptUntilItIsCancelledAsync`.
+
+*Chapter text that should change.* IDN-ORG-003 could say that the request ends every
+member session and that the organization's grants confer nothing while it is
+suspended, and that a member may still sign in to their own account.
+
+---
+
+## 197. Every lifecycle change carries a reason and is audited under the organization
+
+**Phase 8 · 2026-09-23 · Tier 3 · IDN-AUD-001, IDN-ORG-003, 10 section 5**
+
+*The question.* No chapter says whether creating an organization, requesting its
+deletion or cancelling the request carries a reason or is audited, and 10 section 5 has
+no audit action for any of them. Only the erasure is recorded
+(`identity.organization.erased`).
+
+*The readings.*
+
+1. No reason and no record.
+2. A record without a reason.
+3. Each carries a reason of 1 to 1024 characters (400 `api.request.malformed` naming
+   `reason` otherwise) and is recorded as `identity.organization.created`,
+   `identity.organization.deletionrequested` or
+   `identity.organization.deletioncancelled`, security category, filed under the
+   organization, the actor as both identities, details `{ reason }`.
+
+*Chosen: 3, the strictest reading*, as for a grant (entry 183) and a group (entry 191).
+A request ends every member session and a cancellation gives back every grant; both
+are changes someone must answer for. A repeat that changes nothing records nothing
+(entry 193).
+
+*Tests that pin it.*
+`OrganizationEndpointTests.IDN_ORG_002_AnOrganizationIsCreatedAsync`,
+`OrganizationDirectoryTests.IDN_ORG_003_AChangeIsRecordedUnderTheOrganizationAsync`,
+`AuditActionsTests.IDN_AUD_001_TheSetOfActionsIsClosed`.
+
+*Chapter text that should change.* 10 section 5 could list the three actions (rows
+under "Rows for chapter 10"); 09 section 8a could name the reason on each route.
+
+---
+
+## 198. A cancellation after the window answers `identity.deletion.windowelapsed`
+
+**Phase 8 · 2026-09-23 · Tier 2 · IDN-ORG-003, 10 section 1.1, 10 section 4**
+
+*The question.* IDN-ORG-003 is cancellable "at any point before the window closes"
+and names no refusal for after it. 10 section 1.1 has
+`identity.deletion.windowelapsed`, "The deletion grace window has closed; cancellation
+is no longer possible", sourced to the account's deletion.
+
+*The readings.*
+
+1. A new code `identity.organization.windowelapsed`.
+2. The existing code, 422, for an organization whose request is at least
+   `organization.deletion.grace` old or that was erased, whether or not the pass that
+   erases has reached it yet.
+
+*Chosen: 2*, the smaller surface; the row's meaning holds word for word for an
+organization.
+
+*Tests that pin it.*
+`OrganizationEndpointTests.IDN_ORG_004_ARequestIsCancelledOnlyWithinTheWindowAsync`.
+
+*Chapter text that should change.* The source column of
+`identity.deletion.windowelapsed` in 10 section 1.1 could add IDN-ORG-003, and 09
+section 8a could list it under `/delete/cancel`.
+
+---
+
+## 199. The resolved policy marks each field and each gate `{ value, overridden }`
+
+**Phase 8 · 2026-09-23 · Tier 2 · AUTH-STEP-002a, D-143, 09 section 8a, 10 section 4.1a**
+
+*The question.* 09 section 8a: "`GET` returns the resolved policy with each field
+marked inherited or overridden (D-143)". D-143 says the same, "each field marked
+inherited/overridden". Neither gives the shape of the mark, whether `gates` is marked
+as one field or per action, or what an override the system policy has since overtaken
+shows as.
+
+*The readings.*
+
+1. The resolved object as 10 section 4.1a writes it, beside a list of overridden
+   field names.
+2. Each field as `{ value, overridden }`, `value` in the form 10 section 4.1a writes
+   it; `gates` an object keyed by action name, each action `{ value, overridden }`
+   with `value` its `{ level, phishingResistant, maxAge }`. `overridden` is true where
+   the organization states the field (or the action) and the value in force is its
+   own: the value it stated, or one that differs from the system's. A stated value the
+   system policy has since raised past shows as inherited, since the system's is what
+   is in force.
+
+*Chosen: 2.* 10 section 4.1a stores gates per action ("an organization stores only
+what it overrides"), so a gate is overridden per action, and a mark that said
+"overridden" over a value the organization did not choose would mislead the reader
+about where the value comes from.
+
+*Tests that pin it.*
+`OrganizationPolicyEndpointTests.AUTH_STEP_002a_ThePolicyIsReadWithEachFieldMarkedAsync`,
+`OrganizationPolicyEndpointTests.AUTH_STEP_002a_AFieldTheSystemHasOvertakenIsInheritedAsync`,
+`PolicyStrictnessTests.AUTH_STEP_002a_AStatedFieldIsTheOrganizationsOwnWhileItIsInForce`.
+
+*Chapter text that should change.* 09 section 8a could give the response shape of
+`GET /admin/organizations/{id}/policy`.
+
+---
+
+## 200. Every change of an organization's policy is stepped up and reasoned
+
+**Phase 8 · 2026-09-23 · Tier 3 · OPS-CFG-002, AUTH-STEP-001, 09 section 8a, 10 section 5a**
+
+*The question.* OPS-CFG-002: "**Tightening** a security control at runtime is free.
+**Loosening** SHALL require step-up authentication, a written reason, and an audit
+entry." 09 section 8a: "loosening any field requires step-up and a reason
+(OPS-CFG-002)". 10 section 5a lists `policy:change`, "Change an organization's
+policy", against `PUT /admin/organizations/{id}/policy` with no direction.
+
+*The readings.*
+
+1. Only a loosening is stepped up and needs a reason; a tightening is free.
+2. Every replacement is the `policy:change` step-up action and carries a reason of 1
+   to 1024 characters (400 `api.request.malformed` naming `reason` otherwise); every
+   replacement is written down as `ops.configuration.changed` with its `loosening`
+   flag (OPS-CFG-005, entry 193).
+
+*Chosen: 2, the strictest reading.* The gate is a security control and the two
+chapters differ on whether a tightening passes it; the gate that asks is the one kept.
+The configuration route already takes a reason on every change (D-147).
+
+*Tests that pin it.*
+`OrganizationPolicyEndpointTests.AUTH_STEP_001_AChangeOfPolicyIsAStepUpActionAsync`,
+`OrganizationPolicyEndpointTests.AUTH_STEP_002a_ATighteningIsWrittenDownAsync`,
+`OrganizationPolicyEndpointTests.AUTH_STEP_002a_WhatAReplacementNamesMustBeReadableAsync`.
+
+*Chapter text that should change.* 09 section 8a could say whether a tightening is
+stepped up, in the same words as 10 section 5a.
+
+---
+
+## 201. A loosening of an organization's policy also needs `system:administer`
+
+**Phase 8 · 2026-09-23 · Tier 3 · OPS-CFG-002, 10 section 2.1, 10 section 4.1a**
+
+*The question.* 10 section 2.1 gives `organization:manage` "Organization lifecycle,
+policy, and deletion cancellation" and `system:administer` "**Loosening**
+configuration changes (OPS-CFG-002)". An organization's policy is the runtime key
+`policy.<organization>` (10 section 4.1). Nothing says whether the second row reaches
+it.
+
+*The readings.*
+
+1. `organization:manage` alone, in either direction.
+2. `organization:manage` in the administrative organization always, and
+   `system:administer` there as well where the replacement loosens. A replacement
+   loosens where the policy the organization's members resolve to after it grants
+   more on any field than before it, by the direction column of 10 section 4.1a;
+   sets compare without order, and dropping an override loosens where the value in
+   force falls. Refused 403 `authz.denied` before the step-up.
+
+*Chosen: 2, the strictest reading*, which is also the one the configuration route
+applies to every key.
+
+*Tests that pin it.*
+`OrganizationPolicyEndpointTests.OPS_CFG_002_ALooseningAlsoNeedsTheSystemPermissionAsync`,
+`OrganizationPolicyEndpointTests.AUTH_STEP_002a_ThePolicyIsGovernedFromTheAdministrativeOrganizationAsync`,
+`PolicyStrictnessTests.OPS_CFG_002_AChangeIsALooseningWhereAnyFieldGrantsMore`.
+
+*Chapter text that should change.* The `system:administer` row of 10 section 2.1
+could name `policy.<organization>`.
+
+---
+
+## 202. `config.policy.belowsystem` names the first looser field as `details.field`
+
+**Phase 8 · 2026-09-23 · Tier 2 · AUTH-STEP-002a, 09 section 8a, 10 section 1**
+
+*The question.* 09 section 8a: "**422** `config.policy.belowsystem` where a field is
+looser than the system default (AUTH-STEP-002a)". No detail is named, and nothing says
+whether the fields stated or the policy resolved are judged.
+
+*The readings.*
+
+1. The code alone.
+2. The code with `details.field`, the first field the replacement states looser than
+   the system policy, in the order of 10 section 4.1a (`requiredAssurance`,
+   `loginFactors`, `gates`, `credentialRedundancy`, `selfServiceRecovery`). What the
+   replacement states is judged; a field it leaves out inherits and cannot be looser.
+
+*Chosen: 2*, as `api.request.malformed` names its member; the name is the field's,
+never its value.
+
+*Tests that pin it.*
+`OrganizationPolicyEndpointTests.AUTH_STEP_002a_AFieldLooserThanTheSystemIsRefusedAsync`,
+`PolicyStrictnessTests.AUTH_STEP_002a_AFieldStatedLooserThanTheSystemIsNamed`,
+`PolicyStrictnessTests.AUTH_STEP_002a_AnOverrideNoLooserThanTheSystemIsAllowed`.
+
+*Chapter text that should change.* The row of `config.policy.belowsystem` in 10
+section 1 could name `details.field`.
+
+---
+
+## 203. The administrative organization's policy never resolves below `aal2`
+
+**Phase 8 · 2026-09-23 · Tier 3 · AUTH-SESS-005b, 10 section 4.1a**
+
+*The question.* AUTH-SESS-005b: "Administrative-organization sessions SHALL be held to
+a **stated assurance floor of AAL2**, the policy's `requiredAssurance` field ... set to
+`aal2` at bootstrap". A replacement "omitted fields inherit `policy.default`" (09
+section 8a), so a replacement of the administrative organization's policy that does
+not restate `requiredAssurance` would drop the floor to the system's `aal1`, and
+nothing forbids it.
+
+*The readings.*
+
+1. Allowed: the floor is stated at bootstrap and the administrator may change it.
+2. Refused: a replacement for the administrative organization under which its
+   members resolve below `aal2` is 422 `config.value.belowfloor` with
+   `details.field` `requiredAssurance`, before the step-up; nothing is written.
+
+*Chosen: 2, the strictest reading.* The requirement says the floor SHALL hold, not
+that it holds at bootstrap.
+
+*Tests that pin it.*
+`OrganizationPolicyEndpointTests.AUTH_SESS_005b_TheAdministrativeOrganizationKeepsItsFloorAsync`.
+
+*Chapter text that should change.* AUTH-SESS-005b or 10 section 4.1a could say that no
+change of the administrative organization's policy lowers `requiredAssurance` below
+`aal2`, and name the refusal.
+
+---
+
+## 204. A replacement names only the policy's fields, never `emailDomains`
+
+**Phase 8 · 2026-09-23 · Tier 2 · 10 section 4.1a, API-CONV-002, 09 section 8a**
+
+*The question.* 10 section 4.1a: `emailDomains` is "Written only through
+`/admin/organizations/{id}/domains`, never through `PUT .../policy`". 09 section 8a
+lists it among the body's fields "(managed through the domain endpoints below, never
+written here)". Neither says what a body carrying it, or carrying a member the object
+does not have, answers.
+
+*The readings.*
+
+1. Ignore both; the lock in force is kept.
+2. Refuse both with 400 `api.request.malformed` naming the member; a body that is no
+   object is the code alone; a field whose value the object does not take is 422
+   `config.value.notallowed`, as the configuration route answers. The lock in force
+   is carried into the new override unchanged.
+
+*Chosen: 2.* A misspelt tightening passed over would answer 204 and leave the
+organization under a looser policy than its administrator wrote; refusing it fails
+closed.
+
+*Tests that pin it.*
+`OrganizationPolicyEndpointTests.AUTH_STEP_002a_WhatAReplacementNamesMustBeReadableAsync`.
+
+*Chapter text that should change.* 09 section 8a could list the refusals of
+`PUT /admin/organizations/{id}/policy`.
+
+---
+
+## 205. The domain lock is governed from the administrative organization, and verifying is a loosening
+
+**Phase 8 · 2026-09-23 · Tier 3 · REG-DOM-001, IDN-ORG-006, OPS-CFG-002, 09 section 8a, 10 sections 2.1 and 5a**
+
+*The question.* 10 section 2.1: `domain:manage` is "Adding, verifying and removing an
+organization's locked email domains (REG-DOM-001, IDN-ORG-006, D-146). Adding is a
+loosening under OPS-CFG-002". 10 section 5a makes `domain:manage` the step-up gate for
+"Add, verify or remove a locked domain". Neither says in which organization the
+permission is asked, whether verifying (which is what makes a listed domain admit
+addresses) is a loosening, or whether removing the last domain, which turns the lock
+off, is one.
+
+*The readings.*
+
+1. `domain:manage` in the organization named by the path; only adding is a loosening.
+2. `domain:manage` in the administrative organization, as `organization:manage` is for
+   the rest of the policy (entry 201); adding and verifying are loosenings and also
+   need `system:administer`; removing a domain is a loosening only where it leaves the
+   list empty. Every change is the `domain:manage` step-up action and carries a reason.
+
+*Chosen: 2, the strictest reading.* The list is a field of the organization's policy,
+which is governed from the administrative organization. Verifying is the step that
+widens what the lock admits, so it is at least as loose as adding. Emptying the list
+turns the lock off for every member, which is the widest loosening the field has.
+
+*Tests that pin it.*
+`OrganizationDomainEndpointTests.OPS_CFG_002_ListingADomainIsASteppedUpLooseningAsync`,
+`OrganizationDomainEndpointTests.REG_DOM_001_TheLockIsGovernedFromTheAdministrativeOrganizationAsync`,
+`OrganizationDomainEndpointTests.IDN_ORG_006_AC3_TheLockIsAPolicyValueChangedWithoutADeployAsync`.
+
+*Chapter text that should change.* 10 section 2.1 could say `domain:manage` is asked in
+the administrative organization and that verifying, and removing the last domain, are
+loosenings.
+
+---
+
+## 206. A lock whose listed domains are all unverified admits no address
+
+**Phase 8 · 2026-09-23 · Tier 3 · REG-DOM-001 AC1, IDN-ORG-006, 10 section 4.1a**
+
+*The question.* REG-DOM-001 AC1: "A domain listed but not yet verified does not admit
+any address." 10 section 4.1a: `emailDomains` is "`off`, or the list of domains
+**verified by DNS** whose addresses members may sign in with". Neither says whether the
+lock is on while the list holds only unverified domains, in which case it admits
+nobody, or off until a domain is verified.
+
+*The readings.*
+
+1. The lock is on only once a listed domain is verified.
+2. The lock is on as soon as the list holds a domain; while none is verified it admits
+   no address.
+
+*Chosen: 2, the strictest reading.* Reading 1 lets a member sign in with any address
+between the add and the verification, which is the window the lock exists to close.
+The administrator adds, publishes the record and verifies; members outside the
+organization's mail are refused from the add on.
+
+*Tests that pin it.*
+`OrganizationDomainEndpointTests.REG_DOM_001_AC1_AListedDomainAdmitsNothingUntilVerifiedAsync`.
+
+*Chapter text that should change.* REG-DOM-001 could say the lock is on from the first
+domain listed, verified or not.
+
+---
+
+## 207. A removed domain goes on refusing its addresses until it is listed anew
+
+**Phase 8 · 2026-09-23 · Tier 3 · REG-DOM-001 AC4, 09 section 8a**
+
+*The question.* 09 section 8a: "removal stops new sign-ins with addresses in the domain
+and raises an alert (OPS-ALERT-001)". REG-DOM-001 AC4: "After a domain is removed,
+sign-in with an address in it is refused and an alert is raised." Where the removal
+leaves the list empty, the lock is off (10 section 4.1a), and nothing else would refuse
+the domain's addresses.
+
+*The readings.*
+
+1. A removal takes the domain out of the list and nothing more; removing the last
+   domain admits every address again.
+2. The removed domain's row is kept with the moment of removal, and an address in it
+   is refused for every member of the organization until the domain is listed anew,
+   whether or not the list still holds other domains.
+
+*Chosen: 2, the strictest reading.* It is the only reading under which AC4 holds for
+the last domain. The kept row is also what holds D-153's "never reused": the token it
+was drawn with stays drawn, and a domain listed again draws a new one.
+
+*Tests that pin it.*
+`OrganizationDomainEndpointTests.REG_DOM_001_AC4_ARemovedDomainRefusesSignInAndAlertsAsync`,
+`OrganizationDomainEndpointTests.REG_DOM_001_AnUnprovedDomainIsNotVerifiedAsync`,
+`DomainStoreTests.REG_DOM_001_ARemovedDomainIsKeptBesideItsSuccessorAsync`.
+
+*Chapter text that should change.* REG-DOM-001 could say a removed domain refuses its
+addresses until it is listed again.
+
+---
+
+## 208. What the lock judges, when, and how a refusal is told
+
+**Phase 8 · 2026-09-23 · Tier 3 · REG-DOM-001, IDN-ORG-006 AC2, AUTH-ABUSE-003, AUTH-FACT-003, REG-MAIL-001 AC5**
+
+*The question.* REG-DOM-001: "While the lock is on, every member's sign-in email and
+any open email chosen at invitation acceptance SHALL be in the list
+(`identity.identifier.domainnotallowed`)." The chapters do not say which address is a
+member's "sign-in email", whose memberships count, at which step of a sign-in the
+lock is told, or what a sign-in link asked for a refused address does. AUTH-ABUSE-003
+requires that nothing before a factor succeeds tells an address apart.
+
+*The readings.*
+
+1. Judge the account's primary email at every sign-in, whatever identifier opened it,
+   and refuse at `/auth/begin`.
+2. Judge the email a sign-in was opened with, and the email a link or code went to,
+   once a factor has succeeded; refuse with `identity.identifier.domainnotallowed`
+   (422). A link or code asked for a refused address is answered as any other ask and
+   sends nothing, as a factor the policy has not enabled is (AUTH-FACT-003 AC5). A
+   link or code that went out before the lock changed is judged again when it is
+   used. The lock reaches an account through its current memberships only, and each
+   organization's lock is judged on its own. A sign-in opened with a username, a
+   phone number or a discoverable passkey is not judged, since no email opened it.
+
+*Chosen: 2.* Refusing at `/auth/begin` tells anyone who types an address whether an
+account holds it and is under a lock, which AUTH-ABUSE-003 forbids. The challenge and
+the pending link each keep the identifier of the address, never the address.
+
+*Tests that pin it.*
+`OrganizationDomainEndpointTests.REG_DOM_001_TheLockIsToldOnlyAfterAFactorSucceedsAsync`,
+`OrganizationDomainEndpointTests.REG_DOM_001_AC4_ALinkNoLongerSignsInToARemovedDomainAsync`,
+`OrganizationDomainEndpointTests.IDN_ORG_006_AC2_AnAddressOutsideTheVerifiedListIsRefusedAsync`,
+`OrganizationDomainEndpointTests.IDN_ORG_006_AC1_WithTheLockOffNoAddressIsRefusedAsync`.
+
+*Chapter text that should change.* REG-DOM-001 could define "sign-in email" as the
+address a sign-in is opened with or a link is sent to, and say the refusal follows a
+successful factor.
+
+---
+
+## 209. Verifying a domain, and the new code `identity.domain.unverified`
+
+**Phase 8 · 2026-09-23 · Tier 2 · REG-DOM-001, D-153, 09 section 8a, 10 section 1.1**
+
+*The question.* 09 section 8a: the domain is verified "by the DNS TXT record the add
+response names". Nothing says what a verification that does not find the record
+answers, what a lookup that fails answers, or what a repeated add, a verify of a
+domain not listed, or a removal of one not listed answers. 10 section 1.1 holds no
+code for a failed verification.
+
+*The readings.*
+
+1. A failed verification answers `config.value.notallowed`.
+2. A new code `identity.domain.unverified` (422). The record proves the domain where
+   one TXT value at `_identity-verify.<domain>` equals
+   `identity-domain-verification=<token>` exactly; a lookup that could not be made
+   proves nothing and is answered the same way; a failed verification writes nothing.
+   Listing a domain already listed, and verifying one already verified, answer the
+   domain as it stands and change nothing; verifying a domain the organization does
+   not list is 400 `api.request.malformed` naming `domain`; removing one it does not
+   list is 204 and changes nothing.
+
+*Chosen: 2.* No value was written, so `config.value.notallowed` would mislead; the
+failure is about the domain's proof.
+
+*Tests that pin it.*
+`OrganizationDomainEndpointTests.REG_DOM_001_AnUnprovedDomainIsNotVerifiedAsync`,
+`OrganizationDomainEndpointTests.REG_DOM_001_WhatAChangeNamesMustBeReadableAsync`,
+`ErrorCodesTests.CONV_NAME_003_AC2_ChangingACodeFailsTheContractTest`.
+
+*Chapter text that should change.* 10 section 1.1 needs the row for
+`identity.domain.unverified` (below, under the rows for chapter 10).
+
+---
+
+## 210. A failed scheduled check keeps the domain verified; only verified domains are re-checked
+
+**Phase 8 · 2026-09-23 · Tier 2 · REG-DOM-001 AC3, 09 section 8a, 10 section 4**
+
+*The question.* REG-DOM-001: "A failed re-verification SHALL raise an alert
+(OPS-ALERT-001) and SHALL revoke nothing by itself." 10 section 4:
+`domain.reverify.interval` "the sweep re-verifies every locked domain's TXT record at
+this interval". Neither says whether a domain whose check failed goes on admitting
+addresses, or whether a domain never verified is re-checked by the sweep.
+
+*The readings.*
+
+1. A failed check unverifies the domain, so its addresses are refused until an
+   administrator verifies it again.
+2. A failed check is recorded (`lastCheckPassed` false, shown by `GET`) and alerts
+   with `domain-reverification-failed`; the domain stays verified and admitting. The
+   sweep re-checks every listed, verified domain last checked an interval ago or
+   more; an unverified domain waits for the administrator's verify.
+
+*Chosen: 2.* Unverifying a domain refuses every member's sign-in with it, which is a
+revocation in all but name, and AC3 says a failure "leaves every membership and
+session intact". A resolver outage would otherwise lock a whole organization out.
+
+*Tests that pin it.*
+`OrganizationDomainEndpointTests.REG_DOM_001_AC3_AFailedReverificationAlertsAndRevokesNothingAsync`,
+`OrganizationDomainEndpointTests.REG_DOM_001_AScheduledCheckRunsOncePerIntervalAsync`,
+`DomainStoreTests.REG_DOM_001_AC3_OnlyAVerifiedListedDomainIsDueAsync`.
+
+*Chapter text that should change.* REG-DOM-001 could say a domain whose scheduled check
+failed stays verified.
+
+---
+
+## 211. A domain's canonical form
+
+**Phase 8 · 2026-09-23 · Tier 2 · REG-DOM-001, IDN-ACCT-004, D-153**
+
+*The question.* The chapters do not say how a domain is entered, compared or stored,
+nor how an address's domain is compared with a listed one.
+
+*The readings.*
+
+1. Compare the text as entered, ignoring case.
+2. The canonical form of IDN-ACCT-004 (NFKC case fold), then its IDNA ASCII form under
+   the STD3 rules; at least two labels, no trailing dot, and at most 236 octets so
+   that `_identity-verify.<domain>` fits DNS's 253. An address's domain is read the
+   same way. An address whose domain does not read is admitted only where no lock
+   applies.
+
+*Chosen: 2.* The Unicode and the ASCII forms of one domain are one domain; comparing
+entered text would let `Bücher.example` and `xn--bcher-kva.example` be listed as two
+and verified under different tokens.
+
+*Tests that pin it.*
+`OrganizationDomainEndpointTests.REG_DOM_001_WhatAChangeNamesMustBeReadableAsync`.
+
+*Chapter text that should change.* REG-DOM-001 could name the domain's form.
+
+---
+
+## 212. The resolver is the host's; none is shipped
+
+**Phase 8 · 2026-09-23 · Tier 2 · LIB-EXT-001, REG-DOM-001, implementation plan section 3**
+
+*The question.* The plan: "What Milestone 1 does **not** touch: a real mail server,
+SMS gateway, secrets manager, DNS, ... Each is met at its abstraction (LIB-EXT-001)
+with a fake that honours the contract". LIB-EXT-001's table has no DNS row, so nothing
+says whether the library ships a resolver or what happens without one.
+
+*The readings.*
+
+1. Ship a default resolver.
+2. `IDnsResolver` is an extension point the host registers, optional as the phone
+   signal provider is; without one, every verification answers
+   `identity.domain.unverified` and every scheduled check fails and alerts. A
+   deployment that never locks a domain needs none.
+
+*Chosen: 2.* The plan keeps DNS out of Milestone 1, and CONV-DESIGN-008 names no DNS
+package. Failing closed without a resolver can never admit an unproved domain.
+
+*Tests that pin it.*
+`OrganizationDomainEndpointTests.REG_DOM_001_AnUnprovedDomainIsNotVerifiedAsync` (a
+resolver that cannot be reached).
+
+*Chapter text that should change.* LIB-EXT-001's table could carry a row: DNS TXT
+lookup, none shipped. Milestone 2 supplies the resolver.
+
+---
+
+## 213. The system policy locks no domain
+
+**Phase 8 · 2026-09-23 · Tier 3 · 10 section 4.1a, REG-DOM-001, OPS-CFG-002**
+
+*The question.* 10 section 4.1a: `emailDomains` is "Written only through
+`/admin/organizations/{id}/domains`, never through `PUT .../policy`". It says nothing
+of `PUT /admin/config/policy.default`, which writes the same object for the system
+policy. A domain verified nowhere could be listed there and inherited by every
+organization.
+
+*The readings.*
+
+1. Accept the list on the system policy.
+2. Refuse a system policy whose `emailDomains` is not empty with 422
+   `config.value.notallowed`, `details.field` `emailDomains`, as entry 202 names a
+   field.
+
+*Chosen: 2, the strictest reading.* A domain is verified for one organization (one
+token per organization and domain, D-153); a system list could be verified nowhere,
+so it would either admit unproved domains or lock every member of every organization
+out.
+
+*Tests that pin it.*
+`OrganizationDomainEndpointTests.IDN_ORG_006_AC3_TheLockIsAPolicyValueChangedWithoutADeployAsync`.
+
+*Chapter text that should change.* 10 section 4.1a could say the system policy's
+`emailDomains` is always `off`.
+
+---
+
+## 214. The domain endpoints' shapes and what each change writes down
+
+**Phase 8 · 2026-09-23 · Tier 2 · 09 section 8a, API-CONV-002, IDN-AUD-001, OPS-CFG-005**
+
+*The question.* 09 section 8a: "`GET` returns each domain with its verification state
+and last check". No shape is given for it, for the add response that "names" the
+record, for the verify response, or for the bodies; no audit action is named.
+
+*The readings.*
+
+1. Answer the domain names only.
+2. `GET` answers an array of `{ domain, recordName, recordValue, addedAt, verifiedAt,
+   checkedAt, lastCheckPassed }`, the domain in its ASCII form; `POST .../domains`
+   takes `{ domain, reason }` and answers 201 with one such object; `POST
+   .../{domain}/verify` takes `{ reason }` and answers 200 with it; `DELETE
+   .../{domain}` takes `{ reason }` in the body and answers 204. Each change writes
+   `identity.organization.domainadded`, `.domainverified` or `.domainremoved` with
+   details `{ domain, reason }`, and each change to the list is also written down as a
+   runtime configuration change of `policy.<organization>`.
+
+*Chosen: 2.* The record is what the administrator publishes, so the response carries
+it; the audit actions follow the organization's own (entry 197).
+
+*Tests that pin it.*
+`OrganizationDomainEndpointTests.REG_DOM_001_EveryChangeIsWrittenDownAsync`,
+`OrganizationDomainEndpointTests.REG_DOM_001_AC1_AListedDomainAdmitsNothingUntilVerifiedAsync`,
+`AuditActionsTests.IDN_AUD_001_TheSetOfActionsIsClosed`.
+
+*Chapter text that should change.* 09 section 8a could give the shapes; chapter 10
+needs the three audit rows (below).
+
+---
+
+## 215. The mail server is a port the host registers, and no adapter ships in Milestone 1
+
+**Phase 8 · 2026-09-24 · Tier 3 · INT-MAIL-001, INT-MAIL-008, INT-MAIL-009, LIB-EXT-001**
+
+*The question.* The plan's phase 8 names "mail server integration (JMAP provisioning,
+disabled at invitation, enabled at membership, lifecycle push, reconciliation, app
+passwords through the first-party client)". INT-MAIL-001 AC3: "Every provisioning and
+app-password operation is a JMAP request; no other management interface of the mail
+server is called." INT-MAIL-008: "No library dependency SHALL be on a specific mail
+server", AC1 "No provider name appears in a core namespace". The plan, section 3:
+"What Milestone 1 does **not** touch: a real mail server, ... Each is met at its
+abstraction (LIB-EXT-001) with a fake that honours the contract". 08 places "the
+default mail and SMS transports and the mail-server adapter (chapter `05`, LIB-EXT-001
+defaults)" in `Janus.Hosting`. INT-MAIL-001 names "JMAP objects through the JMAP
+management API"; neither chapter `05` nor the decision log gives the objects (D-006
+says only "`stalwart-cli apply` or the JMAP management API").
+
+*The readings.*
+
+1. Write the JMAP adapter in phase 8, in `Janus.Hosting` as 08 places it, tested
+   against a fake HTTP endpoint.
+2. Define the abstraction only: `IMailServer` in `Janus.Core` with
+   `ProvisionAsync(MailboxPush, CancellationToken)` answering `ValueTask<Result>` and
+   `MailboxesAsync(CancellationToken)` answering
+   `ValueTask<Result<IReadOnlyList<HostedMailbox>>>`; `MailboxPush(Guid Key, string
+   Address, MailboxState State)`; `MailboxState` `disabled` · `enabled` · `removed`;
+   `HostedMailbox(string Address, bool Enabled)`. The host registers it; the library
+   ships none. Integration tests run against a fake that honours the contract.
+
+*Chosen: 2, the strictest reading.* The adapter would have to send objects whose shape
+no chapter states and no source in front of this run confirms, which is a claim about
+a product the working guide does not let a run make; a fake HTTP endpoint built to the
+same guess would test nothing. The plan puts the real server out of Milestone 1. An
+absent registration is not a refusal at startup: nothing is pushed and nothing is
+compared, mailbox rows are still written, and the first pass after a registration
+pushes every state owed (INT-MAIL-009 AC1: hosting is a registration of its own,
+independent of outbound delivery). INT-MAIL-001 AC3 is verified by the adapter in
+Milestone 2 step 5, not by a test in this phase. The app-password members join the
+port with REG-MAIL-002.
+
+*Tests that pin it.*
+`MailboxPublisherTests.INT_MAIL_009_AC1_MailboxHostingIsARegistrationOfItsOwnAsync`.
+
+*Chapter text that should change.* `05` INT-MAIL-001 could give the JMAP objects and
+methods the adapter sends, and 07 LIB-HOST-001 the declaration (row below); the plan's
+phase 8 line could say "provisioning through the mail-server abstraction, the adapter
+in Milestone 2 step 5".
+
+---
+
+## 216. Which organization's mail is integrated
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-MAIL-001, INT-MAIL-006, INT-MAIL-009**
+
+*The question.* REG-MAIL-001: "Where the organization's mail server is integrated (`05`
+INT-MAIL)" and "Where the organization runs its own mail, the corporate address SHALL
+be verified by the person like any other." INT-MAIL-006: "**Human
+administrative-organization members** SHALL have a mailbox pre-created in the mail
+server". Nothing says how the library knows an organization is integrated.
+
+*The readings.*
+
+1. A per-organization setting declares integration.
+2. Integrated means the administrative organization, in a deployment that registered
+   `IMailServer` (entry 215); every other organization runs its own mail.
+
+*Chosen: 2.* INT-MAIL-006 and the INT-MAIL-009 table scope mailbox hosting to the
+administrative organization, and a per-organization key would be a setting chapter 10
+does not hold. A holder stands, and the mailbox is owed `enabled`, only while the
+account is `active` and a membership of the administrative organization is current;
+a membership of any other organization does not count.
+
+*Tests that pin it.*
+`MailboxStoreTests.INT_MAIL_006_AMembershipElsewhereDoesNotStandAsync`,
+`MailboxStoreTests.INT_MAIL_006a_AHolderStandsOnlyWhileActiveAndAMemberAsync`.
+
+*Chapter text that should change.* REG-MAIL-001 could say "where the invitation is into
+the administrative organization and the deployment registers a mail server".
+
+---
+
+## 217. The mailbox row is its own outbox, and the state owed is read, not published
+
+**Phase 8 · 2026-09-24 · Tier 2 · INT-MAIL-006, INT-MAIL-006a, INT-MAIL-007, 10 section 5b**
+
+*The question.* INT-MAIL-006: "the provisioning request is written to the retried
+outbox (D-022, INT-MAIL-008), so the mailbox is created the moment the mail server is
+reachable." INT-MAIL-006a AC1: "the disable request is published on the first outbox
+publisher run (`outbox.poll.interval`) after the suspension commits." 10 section 5b
+names "Mail provisioning" as a consumer of `AccountSuspended`, `AccountReactivated`,
+`MembershipChanged` and the `Identifier*` events. The event outbox is phase 9's
+(entry 121).
+
+*The readings.*
+
+1. Every operation that suspends, reactivates, deactivates, deletes, takes down or ends
+   a membership writes a provisioning record into the outbox in its own transaction.
+2. Each `mailboxes` row carries the state the server last confirmed and the one push
+   outstanding with its key; the state owed is read on every pass from the account's
+   state and its memberships in the same query, and the publisher pushes the
+   difference.
+
+*Chosen: 2.* With 1, a path that forgot the record would leave a former employee
+reading mail, which is the failure INT-MAIL-006a names; with 2 nothing can forget, and
+the first pass after any change commits pushes it, which is AC1. The schedule is the
+outbox's own: `outbox.retry.initial`, `outbox.retry.factor`,
+`outbox.retry.maxattempts`, full jitter. `MailboxPublisher.PublishAsync` and
+`MailboxReconciliation.ReconcileAsync` are registered here and scheduled by phase 9's
+worker, at `outbox.poll.interval` and daily.
+
+*Tests that pin it.*
+`MailboxPublisherTests.INT_MAIL_006a_AC1_ASuspendedHolderIsDisabledOnTheFirstPassAsync`,
+`MailboxPublisherTests.INT_MAIL_006_AC1c_AReservedMailboxIsCreatedDisabledAsync`,
+`MailboxPublisherTests.INT_MAIL_006a_TheLastStateOwedIsTheOneTheServerEndsInAsync`,
+`MailboxPublisherTests.PublishAsync_ASettledMailbox_IsLeftAloneAsync`,
+`MailboxStoreTests.INT_MAIL_007_AnOutstandingPushKeepsItsKeyAsync`.
+
+*Chapter text that should change.* 10 section 5b could mark mail provisioning as
+reading the state those events announce rather than consuming them.
+
+---
+
+## 218. A push is written down before it leaves, and a lost answer is never assumed
+
+**Phase 8 · 2026-09-24 · Tier 3 · INT-MAIL-007 AC1, INT-MAIL-006a**
+
+*The question.* INT-MAIL-007: "Lifecycle events SHALL carry a **stable idempotency
+key**", AC1 "Replaying an event produces no duplicate." A push the server applies
+while its answer is lost, or while the process stops, leaves the server's state
+unknown. Nothing says what the library then assumes.
+
+*The readings.*
+
+1. Keep the push in memory until the server answers; where the state owed returns to
+   the one last confirmed, drop the outstanding push.
+2. Write the push and its key down, and commit, before it leaves; keep the key until
+   the server confirms; where the state owed returns to the one last confirmed while a
+   push is outstanding, push that state again under a key of its own.
+
+*Chosen: 2, the strictest reading.* Under 1, an enable the server applied and whose
+answer was lost is dropped when the holder is suspended before the retry: the library
+believes the mailbox disabled and the suspended person goes on reading mail. Under 2 a
+retry is always under the same key, and the server ends in the last state owed.
+
+*Tests that pin it.*
+`MailboxPublisherTests.INT_MAIL_007_AC1_APushIsWrittenDownBeforeItLeavesAsync`,
+`MailboxPublisherTests.INT_MAIL_007_AC1_APushMadeAgainProducesNothingTwiceAsync`,
+`MailboxPublisherTests.INT_MAIL_007_AC1_AReturnWhileAPushIsOutstandingIsPushedAgainAsync`.
+
+*Chapter text that should change.* INT-MAIL-007 could state that a push is recorded
+before it is made.
+
+---
+
+## 219. A push that spends its budget stays failed and is not retried
+
+**Phase 8 · 2026-09-24 · Tier 3 · INT-MAIL-007 AC3, OPS-OBS-002, OPS-ALERT-001**
+
+*The question.* INT-MAIL-007 AC3: "Propagation failures are visible in monitoring."
+OPS-ALERT-001 lists "Degradation: blocklist fallback, failed provider push,
+undelivered notification, reconciliation drift" as Normal. `outbox.retry.maxattempts`
+is "attempts before `failed`". Nothing says what follows a spent budget for a push.
+
+*The readings.*
+
+1. Start a fresh budget on the next pass.
+2. Mark the push failed, raise `degradation` in the same transaction as the mark, and
+   make no further attempt until the state owed changes, which begins a push of its
+   own; reconciliation goes on reporting the difference.
+
+*Chosen: 2, the strictest reading.* INT-MAIL-007: "Silent auto-correction conceals a
+broken pipeline." A retried push that finally lands would clear the difference nobody
+looked at. The alert's scope is `mailbox.push:<mailbox id>` and its details are
+`{ mailbox, state, attempts }`: the mailbox is named by its identifier and never by its
+address, because the address is personal data and an alert travels to channels that
+are not the account's. A server that throws is a server that did not confirm.
+
+*Tests that pin it.*
+`MailboxPublisherTests.INT_MAIL_007_AC3_APushThatSpendsItsBudgetIsVisibleAsync`.
+
+*Chapter text that should change.* INT-MAIL-007 could name the end of the budget; 10
+section 5.23 could give `degradation`'s details for a push.
+
+---
+
+## 220. What reconciliation compares and what it reports
+
+**Phase 8 · 2026-09-24 · Tier 3 · INT-MAIL-006 AC1b, AC1c, INT-MAIL-006a AC3, INT-MAIL-007 AC2, OPS-OBS-002**
+
+*The question.* INT-MAIL-007: "Reconciliation SHALL run daily, comparing both sides
+and **flagging drift without auto-correcting**." INT-MAIL-006a AC3: "Reconciliation
+compares enabled state and flags drift." INT-MAIL-006 AC1c: "reconciliation treats a
+reserved mailbox for an open or expired invitation as expected, not as drift."
+Nothing says whether a mailbox with a push outstanding is compared, what an address
+the library does not know is, or what a failed listing is.
+
+*The readings.*
+
+1. Skip mailboxes with a push outstanding, ignore addresses the library does not know,
+   and stay silent when the server cannot be listed.
+2. Compare every mailbox the library reads with what the server lists: `enabled` must
+   be listed enabled, `disabled` listed disabled (a reservation included), `removed`
+   absent; count every address the server lists and the library does not read; raise
+   `degradation` with scope `mailbox.reconciliation` and details
+   `{ mailboxes: [ids], unknown: count }`; raise it with `{ listed: false }` where the
+   listing fails; change nothing on either side.
+
+*Chosen: 2, the strictest reading.* A push outstanding for a day is itself the
+failure the comparison exists to show, and an address nobody provisioned is the one a
+former employee might still be reading. Addresses are compared ordinally in their
+canonical form and never written into the alert.
+
+*Tests that pin it.*
+`MailboxReconciliationTests.INT_MAIL_007_AC2_ADriftIsReportedAndNothingIsChangedAsync`,
+`MailboxReconciliationTests.INT_MAIL_006a_AC3_AnEnabledMailboxOwedDisabledIsDriftAsync`,
+`MailboxReconciliationTests.INT_MAIL_006_AC1c_AReservedMailboxIsNoDriftAsync`,
+`MailboxReconciliationTests.INT_MAIL_006_AC1b_OnlyWhatEitherSideHoldsIsComparedAsync`,
+`MailboxReconciliationTests.INT_MAIL_007_AReleasedMailboxIsExpectedGoneAsync`,
+`MailboxReconciliationTests.INT_MAIL_007_AC3_AComparisonThatCouldNotBeMadeIsVisibleAsync`.
+
+*Chapter text that should change.* INT-MAIL-007 could list what is compared and what
+the report carries.
+
+---
+
+## 221. One mailbox per address, for good
+
+**Phase 8 · 2026-09-24 · Tier 3 · INT-MAIL-006, REG-MAIL-001, REG-MAIL-003**
+
+*The question.* REG-MAIL-001: "An expired invitation SHALL leave the mailbox reserved
+and disabled until the administrator re-invites or deletes it." REG-MAIL-003: "A
+retired corporate address SHALL be available to a later invitation." Nothing says
+what deleting a reservation does to a mailbox someone once held, or whether a later
+invitation gets a new mailbox or the old one.
+
+*The readings.*
+
+1. Each invitation provisions a mailbox of its own, and revoking one removes it.
+2. An address is one row and one mailbox on the server for good. A reservation nobody
+   ever held is removed when its invitation is revoked; a mailbox anyone has held is
+   never removed by the library, and a retired one is reserved again, disabled, for a
+   later invitation of the same address. A mailbox held now cannot be reserved.
+
+*Chosen: 2, the strictest reading.* Removing a mailbox someone held destroys company
+mail no chapter lets the library destroy, and a second mailbox for the same address is
+one the server cannot hold. The unique index on the address's fingerprint holds it
+whatever a service does.
+
+*Tests that pin it.*
+`MailboxStoreTests.INT_MAIL_006_AnAddressIsOneMailboxAsync`,
+`MailboxReconciliationTests.INT_MAIL_007_AReleasedMailboxIsExpectedGoneAsync`; the
+revoke and re-invite tests land with the invitation endpoints.
+
+*Chapter text that should change.* REG-MAIL-003 could say the retired mailbox is
+reserved again rather than recreated.
+
+---
+
+## 222. The mailbox address is its holder's personal field
+
+**Phase 8 · 2026-09-24 · Tier 3 · PRIV-RIGHT-005a, PRIV-RIGHT-005c, INT-MAIL-007, REG-MAIL-003**
+
+*The question.* The corporate address is an identifier of the account (REG-MAIL-003)
+and the mailbox must be found by it. PRIV-RIGHT-005c: "Searchable identifiers SHALL
+be stored as a **keyed fingerprint** ... alongside their encrypted form. Erasure SHALL
+**neutralise** the fingerprint", "with the canonicalisation version (the pinned
+Unicode version) stored alongside". Nothing says whose field the mailbox's address is.
+
+*The readings.*
+
+1. Store the address in plaintext: it is the organization's, not the person's.
+2. Store it as `enc_canonical` under the holder's data key, or under a key of the
+   row's own while nobody holds it, with `fingerprint` and `canonicalisation_version`
+   beside it; erasure neutralises the fingerprint of every mailbox the subject holds or
+   last held and leaves the row where it is.
+
+*Chosen: 2, the strictest reading.* The address names the person, and a plaintext copy
+would survive their erasure. Consequences: a row whose holder was erased is not read
+again, so a push outstanding at erasure is abandoned and the server's mailbox is then
+reported by reconciliation as an address the library does not know (entry 220); the
+neutralised fingerprint leaves the address free for a later invitation, which reserves
+it as a row of its own (REG-MAIL-003).
+
+*Tests that pin it.*
+`SubjectEraserTests.PRIV_RIGHT_005c_TheAddressOfAMailboxGoesWithItsHolderAsync`,
+`ModelTests` (the `mailboxes` columns).
+
+*Chapter text that should change.* PRIV-RIGHT-005a's list of personal fields could name
+the mailbox address.
+
+---
+
+## 223. The invitation names its corporate address as `corporateEmail`
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-INV-001, REG-MAIL-001, IDN-LIFE-009a**
+
+*The question.* 09 section 8a: "Where the mail server is integrated, the invitation
+names a personal `email` (required; the link goes to it and its press verifies it, so
+the account is created with a verified personal email), and a corporate `email` is
+asserted and its mailbox provisioned disabled (REG-MAIL-001, D-148)." and "An
+integrated-mail invitation without a personal `email` is refused as a validation error
+(**422**)." One body cannot hold two members named `email`, and chapter 10 holds no
+code for the validation error. REG-MAIL-001: "Where the organization runs its own mail,
+the corporate address SHALL be verified by the person like any other."
+
+*The readings.*
+
+1. `email` is the personal address, the one every invitation sends its link to, and
+   `corporateEmail` the asserted one.
+2. `email` is the corporate address and `personalEmail` the personal one.
+3. An `emails` object with two members.
+
+*Chosen: 1.* `email` keeps one meaning across every invitation: the address the link
+goes to. Where the mail is integrated (entry 216) both are required: a missing one is
+`422 identity.identifier.invalid` with `details.member` naming `email` or
+`corporateEmail`, the 422 code chapter 10 holds for an identifier that is not a
+well-formed identifier of its kind; a personal `email` equal to the corporate address
+is refused the same way naming `email`, since the link would go to a mailbox that is
+disabled. Where the mail is not integrated, `corporateEmail` is
+`400 api.request.malformed` naming it: there is nothing for an administrator to assert.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_001_AC4_AnIntegratedInvitationNeedsAPersonalEmailAsync`,
+`InvitationServiceTests.REG_MAIL_001_ACorporateAddressIsRefusedWhereTheMailIsNotIntegratedAsync`,
+`InvitationEndpointTests.REG_INV_001_AC4_AnIntegratedInvitationWithoutAPersonalEmailIsRefusedAsync`,
+`InvitationEndpointTests.IDN_LIFE_009a_WhatAnInvitationNamesMustBeReadableAsync`.
+
+*Chapter text that should change.* 09 section 8a could name the members `email`,
+`phone`, `corporateEmail`, `roles` and `documents`, and the 422 code.
+
+---
+
+## 224. Which address the domain lock judges at issue, and what a refusal names
+
+**Phase 8 · 2026-09-24 · Tier 3 · REG-DOM-001, REG-MAIL-001, REG-INV-001**
+
+*The question.* REG-DOM-001: "While the lock is on, every member's sign-in email and
+any open email chosen at invitation acceptance SHALL be in the list
+(`identity.identifier.domainnotallowed`)." REG-MAIL-001 of the personal email: "while
+the membership lasts the organization's domain lock (REG-DOM-001) prevents sign-in with
+it". Nothing says whether an address the invitation binds is judged when it is issued.
+Up to three identifiers are read from one body, and chapter 10's identifier codes carry
+no detail naming which.
+
+*The readings.*
+
+1. Issue judges nothing; the lock judges at registration and sign-in only.
+2. Issue judges the address the member will sign in with: the corporate address where
+   the mail is integrated, the bound `email` otherwise. The personal email of an
+   integrated invitation is not judged.
+3. Issue judges every bound email.
+
+*Chosen: 2, the strictest reading that can issue at all.* Reading 3 refuses every
+integrated invitation whose personal address lies outside the list, which REG-MAIL-001
+expects it to; reading 1 issues an invitation whose bound and locked email could never
+sign in. The lock's rule is read through `DomainLock.RefusedInAsync`, the same rule
+sign-in and registration apply. `identity.identifier.invalid` and
+`identity.identifier.mixedscript` carry `details.member` naming `email`, `phone` or
+`corporateEmail`; `identity.identifier.domainnotallowed` carries none, since one address
+alone is judged.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_DOM_001_TheLockJudgesTheAddressTheMemberWillSignInWithAsync`,
+`InvitationServiceTests.REG_INV_001_AnIdentifierThatDoesNotReadIsRefusedByMemberAsync`.
+
+*Chapter text that should change.* REG-DOM-001 could say a bound email is judged when
+the invitation is issued; chapter 10 could note the `member` detail of the two
+identifier codes.
+
+---
+
+## 225. A phone the deployment does not collect is not bound
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-INV-001, REG-MAIL-001**
+
+*The question.* REG-INV-001: "An invitation MAY name the email, the phone, both, or
+neither." REG-MAIL-001 AC3: "A bound phone is verified before the membership step can
+be reached." A registration where `registration.phone` is `off` collects no phone.
+
+*The readings.*
+
+1. Bind it anyway.
+2. Refuse it: `400 api.request.malformed` naming `phone`.
+
+*Chosen: 2.* A bound phone is one the registration must verify, and one that collects
+none never would, so the membership step would be unreachable.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_001_APhoneIsNotBoundWhereTheDeploymentCollectsNoneAsync`.
+
+*Chapter text that should change.* REG-INV-001 could say a phone is bound only where
+`registration.phone` is not `off`.
+
+---
+
+## 226. Where the link goes, and the token answered once where no email is bound
+
+**Phase 8 · 2026-09-24 · Tier 3 · IDN-LIFE-009a, REG-INV-001**
+
+*The question.* 09 section 8a: "Issues a time-boxed, single-use enrolment link
+(IDN-LIFE-009a). MAY bind `email`, `phone`, both or neither". REG-INV-001: "Binding the
+phone means the link alone is not enough to accept, and gives the invitation a second,
+personal channel." Nothing says where the link goes when no email is bound, and 09
+gives no response body.
+
+*The readings.*
+
+1. The link goes to the bound email; with none, to the bound phone by SMS; with
+   neither, the token is answered to the administrator.
+2. The link goes to the bound email alone. With no email bound the token is answered
+   once, in the `201`, for the administrator to hand over; the phone is never sent it.
+3. Refuse an invitation that binds no email.
+
+*Chosen: 2, the strictest reading.* Reading 1 carries the link on the channel binding
+the phone makes the second one, so the link alone would again be enough; reading 3
+forbids what REG-INV-001 allows. The `201` body is `id`, `expiresAt` and `token`, which
+is `null` wherever the link was sent. The token is held only as its fingerprint.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_001_TheLinkGoesToTheBoundEmailOrToTheAdministratorAsync`,
+`InvitationServiceTests.REG_MAIL_001_AC2_TheCorporateAddressIsSentNothingAsync`,
+`InvitationEndpointTests.IDN_LIFE_009a_AnInvitationIsIssuedAndItsLinkSentAsync`,
+`InvitationStoreTests.REG_INV_001_AnInvitationReadsBackAsItWasIssuedAsync`.
+
+*Chapter text that should change.* 09 section 8a could give the `201` body and say the
+link is sent to the bound email only.
+
+---
+
+## 227. How the link is sent, and a link that cannot be sent issues nothing
+
+**Phase 8 · 2026-09-24 · Tier 2 · IDN-LIFE-009a, REG-MAIL-001**
+
+*The question.* REG-MAIL-001: "the invitation SHALL name a **personal email**, to
+which the invitation link is sent". Nothing says under which purpose the sending
+restrictions judge the link, or what an unsent link does to the invitation. The
+invitee holds no account.
+
+*The readings.*
+
+1. Write the invitation, then send the link, and keep the invitation where the send
+   fails.
+2. Send the link before the transaction, as the recovery link is, and issue nothing
+   where the send is refused.
+
+*Chosen: 2.* An invitation whose link never left cannot be accepted and would hold
+its mailbox reserved for its whole lifetime. The link is sent as the message kind
+`invitation-link` (row below) with the purpose `notification` and no subject, so the
+restrictions a notification answers to judge it, as they judge a recovery link
+(chapter 10: "A recovery link carries the `notification` purpose").
+
+*Tests that pin it.*
+`InvitationServiceTests.IDN_LIFE_009a_ALinkThatCouldNotBeSentIssuesNothingAsync`.
+
+*Chapter text that should change.* Chapter 10 could list the message kind (row below).
+
+---
+
+## 228. The roles an invitation attaches ask what a grant asks
+
+**Phase 8 · 2026-09-24 · Tier 3 · REG-INV-001, AUTHZ-GRANT-004, IDN-LIFE-009a**
+
+*The question.* REG-INV-001: "At the membership step the person SHALL be shown who
+invited them, the organization, the roles and grants that will attach". Chapter 10
+gives `membership:manage` "Adding and removing members; issuing and revoking
+invitations, bound or open", and a grant is `grant:manage`. 09 names no member for the
+roles.
+
+*The readings.*
+
+1. `membership:manage` alone attaches any role.
+2. The body names organization-wide role names in `roles`. Naming any asks
+   `grant:manage` in the organization; a role carrying `system:administer` asks what a
+   grant of it asks, `system:administer` in the administrative organization; a role the
+   deployment does not define is `400 api.request.malformed` naming `roles`; a name
+   given twice counts once; no `roles` attaches none.
+3. Nothing attaches at issue; grants are made after acknowledgement.
+
+*Chosen: 2, the strictest reading.* Reading 1 lets a holder of `membership:manage`
+grant what `grant:manage` withholds; reading 3 contradicts "the roles and grants that
+will attach". The roles are read through a port of their own, `IRoleCatalogue`, which
+the store implements over the roles tables.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_001_TheRolesAttachedAskWhatAGrantAsksAsync`,
+`InvitationEndpointTests.IDN_LIFE_009a_WhatAnInvitationNamesMustBeReadableAsync`.
+
+*Chapter text that should change.* 09 section 8a could name `roles` and say that
+naming one asks `grant:manage`.
+
+---
+
+## 229. The documents an invitation attaches, at the version current when it is issued
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-INV-001**
+
+*The question.* REG-INV-001: "the documents the organization attached to the
+invitation, each with a version", and AC3 "The membership record carries the
+acknowledgement with the document versions shown." Nothing says whether the body names
+the version.
+
+*The readings.*
+
+1. The body names each document and its version.
+2. The body names each document; the version is the one current when the invitation
+   is issued, and is what is shown and recorded.
+
+*Chosen: 2.* What is shown is what the organization attached, not what was published
+after it. A document never published, or a blank name, is
+`400 api.request.malformed` naming `documents`; a name given twice counts once; no
+`documents` attaches none.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_001_TheInvitationKeepsWhatItBindsAndTheVersionsShownAsync`,
+`InvitationServiceTests.REG_INV_001_AnUnpublishedDocumentIsRefusedAsync`.
+
+*Chapter text that should change.* 09 section 8a could name `documents` and say the
+version is fixed at issue.
+
+---
+
+## 230. An organization on its way out takes no invitation
+
+**Phase 8 · 2026-09-24 · Tier 3 · IDN-ORG-003, IDN-LIFE-009a**
+
+*The question.* IDN-ORG-003: "Deletion requested | Organization suspends immediately;
+access stops". Nothing says whether an invitation is issued into it.
+
+*The readings.*
+
+1. Issue it; the membership fails when it would attach.
+2. Refuse it: `400 api.request.malformed` naming `id`, as an organization that does
+   not exist is.
+
+*Chosen: 2, the strictest reading.* A suspended organization admits nobody, and a
+link sent into it could not be kept.
+
+*Tests that pin it.*
+`InvitationServiceTests.IDN_LIFE_009a_IssuingIsGatedAndSteppedUpAsync`.
+
+*Chapter text that should change.* IDN-ORG-003 could say a suspended organization is
+invited into by nobody.
+
+---
+
+## 231. One standing invitation per mailbox, and re-inviting an expired one
+
+**Phase 8 · 2026-09-24 · Tier 3 · REG-MAIL-001, INT-MAIL-006**
+
+*The question.* REG-MAIL-001: "An expired invitation SHALL leave the mailbox reserved
+and disabled until the administrator re-invites or deletes it." Nothing says what an
+invitation over an address another invitation already reserves does, or what becomes
+of the expired invitation when the address is invited again.
+
+*The readings.*
+
+1. Several invitations may stand over one mailbox; the first acknowledged wins.
+2. One invitation stands over a mailbox at a time. An open one, or a mailbox a member
+   holds, refuses a second with `400 api.request.malformed` naming `corporateEmail`.
+   An expired one is revoked in the transaction that issues the new one, and audited as
+   revoked, and the mailbox is kept.
+
+*Chosen: 2, the strictest reading.* Two invitations over one mailbox would let two
+people race for one address. A partial unique index on the mailbox, over invitations
+neither revoked nor acknowledged, holds it whatever a service does.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_MAIL_001_AC1_ExpiryLeavesTheMailboxReservedUntilTheAddressIsInvitedAgainAsync`,
+`InvitationServiceTests.REG_MAIL_001_AnAddressAlreadyTakenIsRefusedAsync`,
+`InvitationStoreTests.REG_MAIL_001_OneInvitationStandsOverAMailboxAsync`.
+
+*Chapter text that should change.* REG-MAIL-001 could say re-inviting revokes the
+expired invitation.
+
+---
+
+## 232. Issuing says nothing about who holds an account
+
+**Phase 8 · 2026-09-24 · Tier 3 · REG-INV-001, REG-INV-002, D-076**
+
+*The question.* 09 section 8a: "The identifier-mismatch refusal belongs to acceptance
+(`POST /account/invitation/acknowledge`), not to issue". Nothing says whether issue
+checks a bound identifier against the accounts.
+
+*The readings.*
+
+1. Refuse at issue an identifier another account holds.
+2. Check nothing at issue; the mismatch is refused at acceptance.
+
+*Chosen: 2.* 09 places the refusal at acceptance, and an answer at issue would tell
+the administrator which addresses hold accounts, which D-076 closes everywhere else.
+
+*Tests that pin it.* None at issue: nothing is read, so nothing can be answered. The
+acceptance refusal is pinned with the acknowledgement endpoint.
+
+*Chapter text that should change.* None.
+
+---
+
+## 233. What revoking takes, and what an acknowledged invitation answers
+
+**Phase 8 · 2026-09-24 · Tier 3 · IDN-LIFE-009a, REG-MAIL-001**
+
+*The question.* 09 section 8a: "`DELETE /admin/organizations/{id}/invitations/{invitationId}`
+| Revokes an unused invitation". Nothing says when an invitation stops being unused,
+what a used one answers, or whether revoking is a step-up action; chapter 10's step-up
+table lists `invitation:issue` alone.
+
+*The readings.*
+
+1. Unused until its token attaches to a registration.
+2. Unused until it is acknowledged: an invitation attached but not acknowledged is
+   revoked, and the membership never attaches.
+
+*Chosen: 2, the strictest reading.* The administrator keeps the power to withdraw
+until the moment the membership exists. An acknowledged invitation answers
+`422 identity.invitation.expired` ("already used"); one of another organization, or
+none, is `400 api.request.malformed` naming `invitationId`; a second revoke answers
+`204` again. No step-up is asked: revoking takes access away and chapter 10 lists no
+action for it. What the invitation bound is forgotten, and its mailbox is released only
+where nobody ever held it (entry 221).
+
+*Tests that pin it.*
+`InvitationServiceTests.IDN_LIFE_009a_OnlyAnUnacknowledgedInvitationOfTheOrganizationIsRevokedAsync`,
+`InvitationServiceTests.REG_MAIL_001_RevokingGivesUpAMailboxNobodyHeldAsync`,
+`InvitationServiceTests.REG_MAIL_001_RevokingKeepsAMailboxSomeoneHeldAsync`,
+`InvitationEndpointTests.IDN_LIFE_009a_AnUnusedInvitationIsRevokedAsync`.
+
+*Chapter text that should change.* 09 section 8a could define unused as not yet
+acknowledged, and give the `204` and the refusals.
+
+---
+
+## 234. What an invitation row keeps, and for how long
+
+**Phase 8 · 2026-09-24 · Tier 3 · PRIV-RIGHT-005a, PRIV-RIGHT-005c, REG-INV-001, IDN-LIFE-009a**
+
+*The question.* An invitation binds a person's addresses before any account holds
+them, so no subject key exists to encrypt them under. PRIV-RIGHT-005a lists the
+personal fields that are encrypted; nothing says where an invitation's are held, or
+how long.
+
+*The readings.*
+
+1. Hold the bound identifiers in plaintext until the invitation is used.
+2. Hold them as one encrypted document under a key of the row's own, and forget the
+   document and the key when the invitation is revoked, acknowledged or swept after
+   expiry. The token is held only as its fingerprint. The audit record names the
+   invitation and not what it bound.
+
+*Chosen: 2, the strictest reading.* Nothing about a person survives an invitation that
+led nowhere, and what stays is who invited into what, and when.
+
+*Tests that pin it.*
+`InvitationStoreTests.REG_INV_001_AnInvitationReadsBackAsItWasIssuedAsync`,
+`InvitationStoreTests.REG_INV_001_ARevokedInvitationForgetsWhatItBoundAsync`,
+`ModelTests` (the `invitations` columns).
+
+*Chapter text that should change.* PRIV-RIGHT-005a could name an invitation's bound
+identifiers among the personal fields and when they are forgotten.
+
+---
+
+## 235. Which language a message goes out in, and how a message in every language counts
+
+**Phase 8 · 2026-09-24 · Tier 3 · IDN-ATTR-001, AUTH-ABUSE-004, AUTH-ABUSE-005**
+
+*The question.* IDN-ATTR-001 gives the "Resolution order for any outbound message":
+"1. Stored account preference, where set 2. The current request's locale, where a
+request exists 3. **Every language in `notification.languages`** (the deployment
+declares them, D-153), only when there is neither", and "**Registration SHALL set the
+preference from the request locale**". AC2: "A background-triggered notification
+resolves language without a request." AC3: "An account with no preference and no
+request receives every declared language." Phase 1 sent every message in one
+language and fell back to the first declared one, so AC2 and AC3 were not met;
+registration settled no preference. Four points are open. Whose request step 2
+reads. How a request's tag meets the declared list. Whether the approval of a
+recovery carries the approver's locale. And how step 3 counts against the
+restrictions, where AUTH-ABUSE-004 AC1 counts messages: "a second email to one
+address inside 60 seconds is refused", and `email.destination` holds "1 per 60 s,
+fixed", which would refuse the second language of one message judged language by
+language.
+
+*The readings.*
+
+1. *Whose request.* (a) Any request in progress when the message is sent, including
+   an administrator's. (b) Only a request the recipient made: registration, an
+   anonymous sign-in link or code, a recovery request, the notice that no account
+   holds an address, and the notice to the holder of an address someone tried to
+   register (whose request is the registrant's, so the holder's stored preference
+   answers first and the registrant's locale second).
+2. *Matching.* (a) Exactly as written. (b) By the lookup of RFC 4647 section 3.4:
+   case-insensitive, truncating a subtag at a time and a trailing singleton with it,
+   so `en-GB` finds a declared `en`; what is found is always a declared tag, which
+   the catalogue then answers exactly as entry 123 decided.
+3. *Approval.* (a) `IRecovery.ApproveAsync` keeps its language argument. (b) It
+   loses it: the approver's locale says nothing of the person recovered.
+4. *Counting step 3.* (a) Judge and count each language as a send of its own, which
+   refuses the second language inside the minute and leaves AC3 unreachable for
+   mail. (b) Judge once and count once under one reference, which counts two mails
+   as one. (c) Judge the request once, then count each language a transport takes
+   as a message of its own, under its own reference and announcement, so a failed
+   delivery report releases that one alone; where a transport takes one language
+   and refuses the next, what it took counts and the row stays for the retry.
+
+*Chosen: 1b, 2b, 3b and 4c; 4c is the strictest reading AC3 leaves open.* An
+administrator's locale is not the recipient's, so it never decides the language, and
+the public surface is smaller for it. A signed-in person's own operations carry no
+locale either: registration settles the preference, so step 1 answers them. Exact
+matching would send a person whose browser says `ar-EG` every language instead of
+the Arabic declared. Counting once would let one request put two mails in a bucket
+that holds one; judging each language would make AC3 impossible for mail. Under 4c
+every message a transport took is in the buckets, and the next request inside the
+minute is refused. `SendRequest.Language` is nullable, and null means every declared
+language. Alerts, which were sent once per language, and an invitation link (entry
+227), which names no request of the invitee's, now take step 3.
+
+*Tests that pin it.*
+`RecipientLanguageTests.IDN_ATTR_001_ThePreferenceComesBeforeTheRequestAndEitherBeforeEveryLanguage`,
+`RecipientLanguageTests.IDN_ATTR_001_ATagFindsTheDeclaredLanguageItNarrows`,
+`SendingServiceTests.IDN_ATTR_001_AC3_NoKnownLanguageGoesOutInEveryDeclaredOneAsync`,
+`SendingServiceTests.IDN_ATTR_001_ALanguageTheTransportRefusedLeavesTheMessageRecordedAsync`,
+`SendingServiceTests.IDN_ATTR_001_AKnownLanguageIsTheOnlyOneSentAsync`,
+`LossReportsTests.IDN_ATTR_001_AC2_ANoticeTheSweepSendsResolvesItsLanguageWithoutARequestAsync`,
+`RegistrationServiceTests.IDN_ATTR_001_RegistrationSettlesTheLanguageItWasBegunInAsync`,
+`RegistrationServiceTests.IDN_ATTR_001_ALocaleTheDeploymentDoesNotWriteInSettlesNoneAsync`,
+`RegistrationServiceTests.IDN_ATTR_001_TheHolderIsToldInTheirOwnLanguageAsync`,
+`RegistrationDirectoryTests.IDN_ATTR_001_TheAccountKeepsTheLanguageItsRegistrationFoundAsync`,
+`SendOutboxTests.IDN_ATTR_001_AMessageInEveryLanguageReadsBackWithNoneAsync`.
+
+*Chapter text that should change.* IDN-ATTR-001 could say that step 2 reads only a
+request the recipient made, and that a tag is matched against
+`notification.languages` by RFC 4647 lookup. The `notification.languages` row in
+chapter 10 could say that step 3 is one message per language. AUTH-ABUSE-004 could
+say that such a request is judged once and each language counts as one send.
+
+---
+
+## 236. The token a registration is begun with travels as `invitationToken`
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-INV-001, REG-SESS-001**
+
+*The question.* 09 section 3: "A staff invitation token is not an enrolment token: it
+opens a registration session (`POST /register` with the token, REG-INV-001)". The
+body 09 section 2 gives `POST /register` is `{ "clientId": "..." }` and names no member
+for the token. REG-SESS-001 lists "the invitation token" among what the session
+stages.
+
+*The readings.*
+
+1. A member `token`.
+2. A member `invitationToken`, as `POST /register/verify/{id}` names its token
+   `linkToken`.
+3. An endpoint of its own.
+
+*Chosen: 2.* It names what the token is and adds no endpoint. The session stages the
+invitation it opened, never the token: the token is a credential and the session
+document outlives the request.
+
+*Tests that pin it.*
+`RegistrationFlowTests.IDN_LIFE_009a_AC2_AnInvitationTokenThatOpensNothingIsRefusedAsync`,
+`RegistrationSessionStoreTests.IDN_LIFE_009a_ARegistrationKeepsTheInvitationThatOpenedItAsync`.
+
+*Chapter text that should change.* 09 section 2 could add `invitationToken` to the
+`POST /register` body.
+
+---
+
+## 237. What the press on the link verifies, and a bound email an account holds
+
+**Phase 8 · 2026-09-24 · Tier 3 · REG-INV-001, REG-MAIL-001, REG-INV-002, REG-SESS-005, D-076**
+
+*The question.* REG-MAIL-001: "the press on the invitation link in the registering
+browser (REG-SESS-003) is the verification, and the person does nothing further for
+it". REG-INV-002: "A person who already holds an account SHALL accept an invitation by
+**signing in**". REG-SESS-005 answers a registration identically whether an
+identifier is held. Nothing says what a registration begun with a link whose bound
+email an account already holds does: the press verifies the address, so the terms
+step would create a second holder of it.
+
+*The readings.*
+
+1. Stage the bound email verified and let the terms step fail.
+2. Refuse at `POST /register` with `identity.invitation.identifiermismatch`, before
+   the invitation is spent. Check the bound phone the same way.
+3. As 2 for the email only. The phone is staged locked and goes through its step as
+   any phone does, so where an account holds it the holder is told instead of sent a
+   code (REG-SESS-005).
+
+*Chosen: 3, the strictest reading.* `POST /register` with the token is the press: it
+comes from the browser the session is then bound to, and a plain open of the landing
+does nothing. The link went to the bound email alone (entry 226), so only that
+mailbox can learn that an account holds the address, and it learns it in the code
+chapter 10 gives for "An identifier bound to the invitation is verified on a different
+account than the one accepting". Where no email is bound the administrator holds the
+token (entry 226), so checking the phone would answer the administrator whether a
+number holds an account, which entry 232 refuses.
+
+*Tests that pin it.*
+`RegistrationServiceTests.REG_MAIL_001_AC4_ThePressVerifiesTheBoundEmailWithoutACodeAsync`,
+`RegistrationServiceTests.REG_INV_002_ABoundEmailAnAccountHoldsOpensNoRegistrationAsync`.
+
+*Chapter text that should change.* REG-INV-001 could say that beginning a
+registration with the token is the press, and that a bound email an account holds is
+refused there with the mismatch code.
+
+---
+
+## 238. A token that opens nothing, and a link spent by a registration never finished
+
+**Phase 8 · 2026-09-24 · Tier 3 · IDN-LIFE-009a, REG-INV-001, REG-SESS-001**
+
+*The question.* IDN-LIFE-009a AC2: "The enrolment link is time-boxed and single-use."
+Chapter 10: `identity.invitation.expired` is "Invitation link past its lifetime or
+already used". Nothing names the answer to a token nobody issued or one revoked, or
+says whether a registration abandoned or swept gives its link back. REG-SESS-001: an
+expired or abandoned session "SHALL leave nothing behind".
+
+*The readings.*
+
+1. Distinguish an unknown token from a spent one.
+2. Answer every token that opens nothing `identity.invitation.expired`. The press
+   spends the link, and a registration that never finishes does not give it back.
+3. As 2, but an abandoned or swept registration releases its invitation.
+
+*Chosen: 2, the strictest reading.* One answer tells a guesser nothing, and a link
+that could be used again after its registration ended would not be single use. What
+the abandoned registration leaves is the invitation's own record that its link was
+used, not anything of the person. The administrator revokes it and invites again
+(entries 231 and 233).
+
+*Tests that pin it.*
+`RegistrationServiceTests.IDN_LIFE_009a_AC2_TheLinkOpensItsInvitationOnceAndInTimeAsync`,
+`RegistrationFlowTests.IDN_LIFE_009a_AC2_AnInvitationTokenThatOpensNothingIsRefusedAsync`.
+
+*Chapter text that should change.* Chapter 10's row for `identity.invitation.expired`
+could add a token that opens no invitation, and IDN-LIFE-009a could say the press
+spends the link.
+
+---
+
+## 239. A bound phone at its step
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-INV-001, REG-IDENT-010, REG-MAIL-001, REG-SESS-002**
+
+*The question.* REG-INV-001: "A named identifier SHALL be pre-filled and locked at
+registration". REG-MAIL-001 AC3: "A bound phone is verified before the membership step
+can be reached." REG-IDENT-010 gives every other identifier "its own Change". Nothing
+says how the code reaches a bound phone, or how a new one is asked for when Change is
+what asks for one and a locked identifier has none.
+
+*The readings.*
+
+1. Send the code when the token is pressed.
+2. Stage the phone locked at the press. `PUT /register/phone` at the phone step takes
+   the bound number and no other, and sends the code. Change on it takes its own
+   number and no other, and sends a new code while it is unverified. Anything else is
+   `identity.identifier.locked`. The phone step cannot be skipped.
+
+*Chosen: 2.* Nothing goes to an identifier before its step (REG-PROF-002 AC1), the
+person asks for each code as for any other, and the lock refuses every other value.
+An email the invitation bound was verified by the press, so the age step leads past
+the email step.
+
+*Tests that pin it.*
+`RegistrationServiceTests.REG_INV_001_AC1_ABoundIdentifierCannotBeChangedAndAnOpenOneCanAsync`,
+`RegistrationServiceTests.REG_MAIL_001_AC3_ABoundPhoneIsVerifiedBeforeTheRegistrationGoesOnAsync`.
+
+*Chapter text that should change.* 09 section 2 could say `PUT /register/phone` and
+Change take a bound phone's own number and send its code.
+
+---
+
+## 240. What of the inviting organization's policy governs the registration
+
+**Phase 8 · 2026-09-24 · Tier 3 · IDN-LIFE-009a, REG-INV-001, REG-INV-002, REG-DOM-001, REG-SESS-001**
+
+*The question.* REG-INV-001: "The organization's policy SHALL govern every step from
+the moment the token attaches (IDN-LIFE-009a)." REG-SESS-001 AC4: "no account exists in
+a state that is not `active` immediately after creation, save where an invitation's
+policy holds it at enrolment (AUTH-RECOV-001 enforced)". 09 section 6a gives the
+acknowledgement "**403** `auth.stepup.required` with outcome `enrol` when the account
+does not yet satisfy the organization's `requiredAssurance` or
+`credentialRedundancy`". REG-DOM-001: "any open email chosen at invitation acceptance
+SHALL be in the list". Nothing says which fields a registration step reads.
+
+*The readings.*
+
+1. Only the acknowledgement reads the policy.
+2. Every field at the step it bears on: the security step refuses to complete below
+   `requiredAssurance`.
+3. The policy in force for the registration is the one a member of the inviting
+   organization resolves to. It decides which login factors complete the security
+   step and which addresses the lock admits: every email the person chooses at step
+   2, among the extras of step 4, or by a Change. `requiredAssurance` and
+   `credentialRedundancy` are judged at the acknowledgement, which 09 gives the refusal
+   for, and the membership attaches only once they are met.
+
+*Chosen: 3, the strictest reading the chapters leave consistent.* Reading 1 lets a
+registration finish on a factor the organization forbids. Reading 2 contradicts
+REG-SESS-001 AC4, which lets an invitation's policy hold a created account at
+enrolment. Under 3 nothing of the organization is granted before the acknowledgement,
+and the acknowledgement grants nothing below the policy. An email the invitation bound
+is not held to the lock at registration: it was judged at issue where it is the
+sign-in address (entry 224).
+
+*Tests that pin it.*
+`RegistrationServiceTests.IDN_LIFE_009a_TheInvitingOrganizationsPolicyGovernsTheRegistrationAsync`,
+`RegistrationServiceTests.REG_DOM_001_AC2_AnOpenEmailOutsideTheListIsRefusedAsync`,
+`RegistrationServiceTests.REG_INV_001_AC2_TheAccountHoldsTheInvitationAndNoMembershipAsync`.
+
+*Chapter text that should change.* REG-INV-001 could list which policy fields a
+registration step reads and leave `requiredAssurance` and `credentialRedundancy` to the
+acknowledgement.
+
+---
+
+## 241. Where a signed-in person's press on the link attaches the invitation
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-INV-002, IDN-LIFE-009a, REG-SESS-002**
+
+*The question.* REG-INV-002 AC1: "Opening an invitation while signed in, or signing in
+from the invitation landing page, reaches the membership step without a registration
+session." 09 section 3: the token opens "for a person who already holds an account, a
+sign-in followed by the membership step (REG-INV-002)". 09 section 2: a `POST
+/register` that "arrives with a live session creates no registration session and is
+answered with the account landing (REG-SESS-002)". No endpoint is named that attaches
+the invitation to an account.
+
+*The readings.*
+
+1. A new endpoint under `/account` that takes the token.
+2. Every sign-in endpoint takes the token.
+3. `POST /register` with `invitationToken` from a signed-in browser attaches the
+   invitation to that account and is answered as any signed-in request to it is,
+   `registration.signedin`, which sends the frontend to the account; the landing page
+   presses it again after a sign-in. `IInvitations.OpenAsync` is the operation in
+   process.
+
+*Chosen: 3.* It is the one route 09 gives the token, it adds no endpoint, and both
+cases of AC1 reach it. The press spends the link as a registration's does (entry
+238), and every token that opens nothing is answered alike. Nothing is checked of the
+account's identifiers here: the mismatch is the acknowledgement's (09 section 8a).
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_002_AC1_ALinkPressedWhileSignedInAttachesToThatAccountAsync`,
+`RegistrationFlowTests.REG_INV_002_AC1_ALinkPressedWhileSignedInAttachesToTheAccountAsync`.
+
+*Chapter text that should change.* 09 section 2 could say that a signed-in `POST
+/register` carrying `invitationToken` attaches the invitation to the account before it
+answers.
+
+---
+
+## 242. What the membership step reads, and the answer where nothing is attached
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-INV-002, REG-INV-001, chapter 09 section 6a**
+
+*The question.* 09 section 6a: `GET /account/invitation` "Returns, for the invitation
+attached to the signed-in person's registration or sign-in (REG-INV-001, REG-INV-002):
+who invited them, the organization, the roles and grants that will attach, and the
+documents attached to the invitation with their versions. **404** when no invitation
+is attached." No member names are given, no code for the 404 is named, nothing says
+which invitation is read where an account opened more than one link, or what "who
+invited them" carries.
+
+*The readings.*
+
+1. A bare 404, as the photo read answers, and the inviter's display name, else their
+   primary email.
+2. `identity.invitation.notfound` for the 404, as every other absent record of 09 is
+   answered (`identity.takedown.notfound`, `auth.credential.notfound`). The body is
+   `{ id, organization, organizationName, invitedBy, roles, documents: [{ document,
+   version }], expiresAt }`. `invitedBy` is the display name the inviter's account
+   shows, or null. The invitation read is the standing one (neither acknowledged nor
+   revoked) whose link the account opened last, expired or not.
+
+*Chosen: 2.* A code is how every other absent record is answered, and the in-process
+operation needs one to refuse with. The inviter's email is theirs and not the
+organization's, so nothing of the inviter is shown that their account does not
+already show others. An expired invitation is still read, so the frontend can say
+it expired rather than that there is none; the acknowledgement refuses it. The
+grants that attach are the roles, each granted across the organization, so `roles`
+carries both.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_002_TheMembershipStepReadsTheInvitationOpenedLastAsync`,
+`InvitationStoreTests.REG_INV_002_AnAccountReadsTheInvitationItOpenedLastAsync`,
+`InvitationAcknowledgementFlowTests.REG_INV_002_TheMembershipStepReadsTheAttachedInvitationAsync`.
+
+*Chapter text that should change.* 09 section 6a could give the body and the code
+`identity.invitation.notfound` for the 404, and say which invitation is read.
+Chapter 10 section 1.1 could add the row for `identity.invitation.notfound`.
+
+---
+
+## 243. How the account keeps the personal email through the membership
+
+**Phase 8 · 2026-09-24 · Tier 3 · REG-MAIL-001, REG-MAIL-003, REG-IDENT-002, REG-IDENT-005, REG-IDENT-006**
+
+*The question.* REG-MAIL-001: "The personal email SHALL stay on the account as a
+verified, non-primary email for the whole membership and SHALL be in the
+security-notice set (REG-IDENT-002) whatever the backup setting". REG-MAIL-003: the
+personal email "SHALL become the primary email **automatically, in the same
+operation**" when the membership ends. The invitation forgets what it bound at the
+acknowledgement, so nothing records which email that is, and nothing says what the
+person is told on trying to remove it, make it primary or replace it.
+
+*The readings.*
+
+1. Derive it when needed: the verified email that is not the corporate address.
+2. Record it on the membership row.
+3. A flag on the identifier row, `is_personal`, set at the acknowledgement and held to
+   a verified email that is not the primary by a check constraint. While it is set the
+   security-notice set holds the email whatever the backup setting, and removing it,
+   making it primary or replacing it is refused with `identity.identifier.locked`. The
+   account view shows it `locked`.
+
+*Chosen: 3, the strictest reading.* Reading 1 has no answer where the account holds
+two other emails. Reading 2 makes the identifier rules read the memberships. The
+flag keeps every rule over identifiers in the set. The person cannot remove the one
+address a compromised corporate mailbox cannot silence, cannot make it primary while
+the corporate address is, and cannot replace it with an address the invitation never
+proved; `identity.identifier.locked` already says nothing about it is theirs to
+change.
+
+*Tests that pin it.*
+`IdentifierSetTests.REG_MAIL_001_AC5_ThePersonalEmailStaysVerifiedNonPrimaryAndNotified`,
+`IdentifierSetTests.REG_MAIL_001_OnlyAVerifiedEmailOtherThanThePrimaryIsKept`,
+`IdentifierServiceTests.REG_MAIL_001_AC5_ThePersonalEmailStaysAsTheMembershipKeepsItAsync`,
+`IdentifierStoreTests.REG_MAIL_001_ThePersonalEmailAMembershipKeepsReadsBackKeptAsync`.
+
+*Chapter text that should change.* REG-MAIL-001 could say that removing, promoting or
+replacing the personal email during the membership is refused with
+`identity.identifier.locked`, and chapter 10's row for that code could name it.
+
+---
+
+## 244. What the acknowledgement names, and what it answers where the invitation no longer stands
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-INV-001, REG-INV-002, IDN-LIFE-009a, IDN-MEM-002, chapter 09 section 6a**
+
+*The question.* Chapter 09 gives `POST /account/invitation/acknowledge` its answers
+(**204**, **422** `identity.invitation.expired`, **422**
+`identity.invitation.identifiermismatch`, **403** `auth.stepup.required`) and no
+request body. It does not say which invitation is acknowledged where more than one is
+attached to the account, what is answered where none is, or whether an organization
+whose deletion is requested takes the member.
+
+*The readings.*
+
+1. No body: the acknowledgement takes whatever `GET /account/invitation` would answer at
+   that moment.
+2. The body names the invitation the membership step showed, `{ "invitationId": "..." }`,
+   required (`api.request.malformed` where absent).
+
+*Chosen: 2.* What REG-INV-001 has the person acknowledge is what they were shown; under
+reading 1 a link opened in another tab between the read and the press would attach a
+membership, roles and documents the person never saw. The answers:
+
+- `identity.invitation.notfound` (**404**, the code of entry 242) where the invitation
+  does not exist or is attached to another account, so nothing is learned of anyone
+  else's invitation.
+- `identity.invitation.expired` (**422**) where it was revoked, was acknowledged
+  already, is past `expiresAt`, or its organization has a deletion requested or was
+  erased: an organization on its way out takes no new member, as it issues no new
+  invitation.
+- `identity.membership.limitreached` where `organization.multiplememberships` leaves
+  the account no room (IDN-MEM-002), with nothing written and the invitation standing.
+- `identity.identifier.maximum` where the corporate address would take the account past
+  `identifiers.email.max`.
+
+Everything the acknowledgement writes is written in one transaction, and a refusal
+writes nothing.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_002_OnlyAStandingInvitationOfTheAccountIsAcknowledgedAsync`,
+`InvitationServiceTests.IDN_MEM_002_AnAccountAtItsMembershipLimitIsRefusedAsync`,
+`MembershipAttachmentTests.IDN_MEM_002_AnAccountThatMayHoldNoMoreIsRefusedAsync`,
+`InvitationAcknowledgementFlowTests.REG_INV_002_TheAcknowledgedInvitationIsNamedAsync`,
+`InvitationServiceTests.REG_MAIL_001_TheCorporateAddressCountsAgainstTheEmailMaximumAsync`.
+
+*Chapter text that should change.* Chapter 09 section 6a could give the body
+`{ "invitationId" }`, and add **404** `identity.invitation.notfound`,
+`identity.membership.limitreached` and `identity.identifier.maximum` to the answers.
+
+---
+
+## 245. Which identifiers must match at the acknowledgement
+
+**Phase 8 · 2026-09-24 · Tier 3 · REG-INV-001, REG-INV-002, REG-MAIL-001, REG-DOM-001**
+
+*The question.* Chapter 09 section 6a: `identity.invitation.identifiermismatch` is
+answered where "a bound identifier is verified on a different account than the one
+accepting". REG-INV-001: "Binding the phone means the link alone is not enough to
+accept". Neither says what is answered where the accepting account does not hold the
+bound identifier and no other account does either, nor what happens where the corporate
+address the organization asserts is already held.
+
+*The readings.*
+
+1. Refuse only where another account holds a bound identifier verified.
+2. Refuse unless the accepting account holds every bound email and phone verified, and
+   refuse where any account, this one included, already holds the corporate address.
+
+*Chosen: 2, the strictest reading.* Under reading 1 an account holding neither the
+bound phone nor any claim to it accepts an invitation whose phone was bound precisely
+so that the link alone would not be enough. Reading 2 grants least. On registration
+from an invitation the bound email is verified by the press and the bound phone before
+the membership step, so reading 2 refuses nothing there that reading 1 admits. The
+values are compared in canonical form. The domain lock is not read at the
+acknowledgement: REG-DOM-001 governs the sign-in email and an open email chosen at
+registration, and both are already enforced where they are used.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_002_AnIdentifierTheInvitationBindsIsVerifiedOnTheAccountAsync`.
+
+*Chapter text that should change.* Chapter 09 section 6a could read "a bound identifier
+is not verified on the account accepting, or the corporate address is already held".
+
+---
+
+## 246. How the credential policy is met before the membership attaches
+
+**Phase 8 · 2026-09-24 · Tier 3 · REG-INV-002, IDN-LIFE-009a, IDN-LIFE-009b, AUTH-FACT-002**
+
+*The question.* REG-INV-002: the organization's `requiredAssurance`,
+`credentialRedundancy` and `loginFactors` "SHALL be satisfied before the membership
+attaches"; chapter 09 section 6a answers **403** `auth.stepup.required` "with outcome
+`enrol`". Neither says which credentials count, which policy is read where the account
+already belongs elsewhere, or what the refusal carries beside `outcome`.
+
+*The readings.*
+
+1. Count every credential the account holds against the organization's own policy.
+2. Count only the credentials whose factor the policy in force once the membership
+   attaches permits, against that policy (the strictest of the organization's and of
+   every organization the account already belongs to).
+
+*Chosen: 2, the strictest reading.* A credential the organization does not permit stops
+signing in once the membership attaches (IDN-LIFE-009b), so counting it would attach a
+membership the account then cannot sign in under. The refusal carries `outcome`
+(`enrol`), `field` (`requiredAssurance` or `credentialRedundancy`, the `PolicyField`
+vocabulary a policy hold already uses) and `value` (the level or `enforced`).
+`policy.enforcement.grace` is not applied: it is the run-up for people already under a
+policy that is raised, and an account joining is not yet under it. IDN-LIFE-009b needs
+nothing written: the session gate refuses any factor outside the policy in force, and
+the membership makes the organization's policy the one in force.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_002_AC2_AnAccountBelowTheRequiredAssuranceIsHeldAtEnrolmentAsync`,
+`InvitationServiceTests.REG_INV_002_EnforcedRedundancyAsksForASecondCredentialAsync`,
+`SessionServiceTests.IDN_LIFE_009a_AC3_APasswordHeldBeforeTheMembershipNoLongerAuthenticatesAsync`.
+
+*Chapter text that should change.* Chapter 09 section 6a could name the details of the
+**403** and say that only the factors the policy permits are counted.
+
+---
+
+## 247. How the roles of an invitation are granted
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-INV-001, IDN-LIFE-009a, AUTHZ-GRANT-001**
+
+*The question.* REG-INV-001: on acknowledgement "the membership SHALL attach" with "the
+roles and grants that will attach". Nothing says in what scope, of what kind, granted by
+whom, with what reason, or what happens to a role the account already holds.
+
+*The readings.*
+
+1. Each role as a stored grant across the organization, granted by who issued the
+   invitation, with the machine reason `invitation:<id>` in the precedent of
+   `derivation:<relationship>`, once however often the invitation names it, and not
+   again where the account already holds the same live grant.
+2. The same, granted by the person acknowledging.
+
+*Chosen: 1.* The inviter is who decided the grant and whose permission to grant it was
+checked at issue (a role asks what a grant asks, entry 228); the person acknowledging
+decided nothing but to accept. The reason names the invitation so that the audit record
+of the issue explains the grant; the words are the frontend's (CONV-CONTENT-001).
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_001_AC3_AcknowledgingAttachesTheMembershipThatWasShownAsync`,
+`MembershipAttachmentTests.REG_INV_001_AC3_TheMembershipCarriesTheAcknowledgementAndTheGrantsAsync`,
+`MembershipAttachmentTests.REG_INV_001_AGrantTheAccountHoldsIsNotWrittenAgainAsync`.
+
+*Chapter text that should change.* REG-INV-001 could state the scope, the grantor and
+the reason of the grants an invitation attaches.
+
+---
+
+## 248. What the corporate address does at the acknowledgement
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-MAIL-001, REG-INV-001, REG-IDENT-004, INT-MAIL-006**
+
+*The question.* Chapter 09 section 6a: the acknowledgement "makes the corporate address
+primary where one exists, enables the pre-provisioned mailbox" and "Emits
+`MembershipChanged` and, where the primary email changed, `IdentifierPrimaryChanged`".
+Nothing says whether the person is told of the address as of any identifier added
+(REG-IDENT-004), or which email the membership keeps where the account holds several.
+
+*Chosen.* The corporate address is added verified, locked and primary; the email the
+membership keeps (entry 243) is the personal email the invitation bound, which entry 245
+has made sure the account holds verified. The security-notice set as it stood before
+the change is told of the address once, as `IdentifierAdded`, which is what any added
+identifier sends, so a person whose account gained an address they did not expect hears
+of it at the address they already had. The mailbox becomes the person's in the same
+transaction and is owed enabled from then on; the provisioning pass pushes it. The two
+events of chapter 09 are the only ones published.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_001_AC4_TheCorporateAddressBecomesPrimaryBesideThePersonalEmailAsync`,
+`IdentifierStoreTests.REG_MAIL_001_TheCorporateAddressIsTakenOnPrimaryBesideThePersonalEmailAsync`.
+
+*Chapter text that should change.* REG-MAIL-001 could say that the security-notice set
+is told of the corporate address when it is taken on.
+
+---
+
+## 249. How the acknowledgement is audited and exported
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-INV-001, IDN-AUD-001, PRIV-RIGHT-003, REG-ACCT-001**
+
+*The question.* IDN-AUD-001 has every organization change recorded, and entry 150 has
+the export carry everything held about the person. Chapter 10 has no audit action for
+an acknowledgement, and the export has no place for what REG-INV-001 AC3 records on the
+membership.
+
+*Chosen.* A new audit action, `identity.invitation.acknowledged`, security category,
+filed under the organization with the person as the actor and the invitation in the
+details, as its issue and revocation are (entries 231 and 234). The export's
+`memberships` record gains `acknowledgedAt`, and a new section,
+`membership-acknowledgements`, follows it with one record per document acknowledged:
+`membership`, `document`, `version`, `acknowledgedAt`.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_INV_001_AC3_AcknowledgingAttachesTheMembershipThatWasShownAsync`,
+`ExportSourceTests.REG_INV_001_AC3_TheExportCarriesWhatWasAcknowledgedAsync`,
+`AuditActionsTests` (the list of actions).
+
+*Chapter text that should change.* Chapter 10 could hold the audit action row below,
+and chapter 09's export description could name the new section.
+
+---
+
+## 250. Where a membership is ended, and what it answers
+
+**Phase 8 · 2026-09-24 · Tier 2 · IDN-MEM-001, REG-MAIL-003, LIB-API-005, chapter 09 section 8a**
+
+*The question.* Chapter 09 section 8a lists `DELETE /admin/organizations/{id}/memberships/{subject}`
+in its table of memberships and invitations under `membership:manage`, with "Ends a membership; the
+account and organization persist (IDN-MEM-001)". It names no answers, and no service
+contract carries the operation. Chapter 10 section 5a lists no step-up action for it,
+and no chapter asks a reason.
+
+*The readings.*
+
+1. A method on `IInvitations`, the contract that already carries the section's other
+   operations under the same permission.
+2. A method on `IOrganizations`, whose operations are `organization:manage` in the
+   administrative organization.
+3. A new public contract for memberships.
+
+*Chosen: 1.* It adds one method and no type, and keeps one contract per permission of
+the section. `membership:manage` is asked in the organization the membership is of, as
+it is for issuing and revoking. No step-up is asked, because chapter 10 section 5a lists
+none, and no reason, because the endpoint names no body. The answers:
+
+- **204** where the membership ended.
+- **400** `api.request.malformed` naming `subject` where the account holds no current
+  membership of the organization, in the precedent of revoking an invitation the
+  organization never issued (`invitationId`), so ending twice is refused the second time.
+- **403** `authz.denied` without the permission, or where no person acts.
+
+The end is written in one transaction with everything it changes. It is audited as a new
+action, `identity.membership.ended`, security category, filed under the organization,
+with the administrator as the acting subject, the member as the effective subject, and
+`membership` in the details, in the precedent of an administrator acting on someone
+else's account (the recovery audit). `MembershipChanged` is published with `change`
+`ended` under the key `membership-ended:<membership>@<ticks>` the organization erasure
+already uses for the same event. The account's state is not read or written
+(REG-MAIL-003: "Membership end SHALL NOT by itself change the account's state").
+
+*Tests that pin it.*
+`InvitationServiceTests.IDN_MEM_001_OnlyACurrentMembershipIsEndedAsync`,
+`InvitationServiceTests.REG_MAIL_003_AC2_EndingTheMembershipRetiresTheCorporateAddressAsync`,
+`InvitationEndpointTests.IDN_MEM_001_AMembershipIsEndedAsync`,
+`MembershipEndingTests.IDN_MEM_001_AC2_TheMembershipEndsAndItsRecordStaysAsync`,
+`SessionRequirementTests` (the list of session routes), `AuditActionsTests` (the list of
+actions).
+
+*Chapter text that should change.* Chapter 09 section 8a could give the endpoint its
+answers, and chapter 10 could hold the audit action row below.
+
+---
+
+## 251. What the end of a membership does to the corporate address
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-MAIL-003, REG-IDENT-005, INT-MAIL-006a, chapter 10 section 5b**
+
+*The question.* REG-MAIL-003: "the corporate address SHALL stop being a valid identifier
+of the account and the mailbox SHALL be disabled (INT-MAIL-006a)", the personal email
+"SHALL become the primary email **automatically, in the same operation**", and "A
+retired corporate address SHALL be available to a later invitation". Chapter 10 section
+5b has `IdentifierPrimaryChanged` fire "when a membership ends (REG-MAIL-003)". REG-IDENT-005
+has setting the primary "produce one notice to the security-notice set". Nothing says
+which set is told where the primary moves because the old one left, whether the address
+is removed or kept unusable, or which membership's end retires the mailbox where the
+account holds more than one.
+
+*Chosen.*
+
+- Only the end of a membership of the administrative organization retires anything,
+  because the mailboxes are that organization's (INT-MAIL-006); ending another
+  membership of the same account leaves the address, the primary and the mailbox where
+  they were.
+- The corporate address is removed from the account, so it resolves to nobody at every
+  path, including recovery (REG-MAIL-003 AC1: it "behaves as an unknown identifier").
+  No removal record is written: the address was never the person's to take back, and
+  REG-MAIL-003 makes it free for a later invitation.
+- The personal email becomes the primary and is kept by no membership from then on; a
+  phone is not touched.
+- The mailbox is retired, which leaves it owed disabled whatever its holder's standing;
+  the provisioning pass pushes the disable, which ends every app password (INT-MAIL-006a).
+- The set as it stands after the change is told once, as `IdentifierSettingsChanged`:
+  the set before, less the address that left, since the personal email was in it and no
+  backup setting changed. The retired address is told nothing, because it behaves as
+  unknown and its mailbox is the organization's.
+- `IdentifierPrimaryChanged` is published for the personal email, keyed
+  `<identifier>@<ticks>` as the acknowledgement keys it.
+
+*Tests that pin it.*
+`InvitationServiceTests.REG_MAIL_003_AC2_EndingTheMembershipRetiresTheCorporateAddressAsync`,
+`InvitationServiceTests.IDN_MEM_001_AC1_EndingAnotherMembershipLeavesTheCorporateAddressAsync`,
+`IdentifierSetTests.REG_MAIL_003_AC2_ThePersonalEmailBecomesPrimaryAndTheCorporateAddressLeaves`,
+`IdentifierStoreTests.REG_MAIL_003_TheCorporateAddressLeavesAndThePersonalEmailIsPrimaryAsync`,
+`MailboxStoreTests.REG_MAIL_003_TheMailboxAnAccountHoldsIsReadUntilRetiredAsync`.
+
+*Chapter text that should change.* REG-MAIL-003 could say that the security-notice set
+as it stands after the change is told once, and that only the end of the administrative
+organization's membership retires the address.
+
+---
+
+## 252. Whether the end of a membership removes the member's grants
+
+**Phase 8 · 2026-09-24 · Tier 3 · IDN-MEM-001, REG-MAIL-003, chapter 16 section 3**
+
+*The question.* No chapter says whether ending a membership removes the grants the
+account holds in the organization. The gate does not ask for a membership, so a grant
+kept after the end still confers once the account is active.
+
+*The readings.*
+
+1. Ending the membership removes the account's grants in the organization: the reading
+   that grants least.
+2. Ending the membership changes only what REG-MAIL-003 and chapter 16 step 3 list, and
+   the grants stay until an administrator removes or transfers them.
+
+*Chosen: 2.* Reading 1 is not open. Chapter 16 section 3 orders the steps of a departure
+and makes the grants a step of their own after the end of membership: "Remove or transfer
+their grants", with "If they were the sole holder of a permission, transfer it before
+removing". Removing them at step 3 would make that instruction impossible to follow, and
+chapter 16 step 3 and REG-MAIL-003 list what the end does without the grants. The risk
+the owner should see: an account whose suspension (step 2) is reversed before step 4 is
+done holds its former organization's grants again, since IDN-LIFE-013 suspends grants
+and does not remove them.
+
+*Tests that pin it.* None writes a grant: `MembershipEnd` holds no grant store, and
+`InvitationServiceTests.REG_MAIL_003_AC2_EndingTheMembershipRetiresTheCorporateAddressAsync`
+pins everything the end writes.
+
+*Chapter text that should change.* IDN-MEM-001 could state that ending a membership does
+not remove the account's grants in the organization, pointing at chapter 16 step 4, or
+the owner could decide that it does and reorder chapter 16.
+
+---
+
+## 253. What an erasure does to an invitation attached to the subject
+
+**Phase 8 · 2026-09-24 · Tier 3 · PRIV-RIGHT-005, PRIV-RIGHT-005a, REG-INV-001**
+
+*The question.* Entry 234 holds what an invitation binds under a key of the row's own
+and forgets it when the invitation is revoked, acknowledged or swept after expiry. An
+invitation attached to an account that is erased before any of those happens still
+holds the person's addresses, readable, until it expires. PRIV-RIGHT-005 has an erasure
+leave nothing of the subject readable; nothing names the invitation.
+
+*The readings.*
+
+1. Leave the invitation to the expiry sweep.
+2. Forget what every invitation attached to the subject binds, and its key, in the
+   erasure's own transaction, keeping the row that names who invited into what.
+
+*Chosen: 2, the strictest reading.* The addresses are the subject's, and under reading 1
+they outlive the erasure by up to `link.invitation.lifetime`. An invitation attached to
+nobody cannot be tied to the subject and keeps what it binds until it is used or expires,
+as entry 234 has it.
+
+*Tests that pin it.*
+`SubjectEraserTests.PRIV_RIGHT_005a_WhatAnAttachedInvitationBindsGoesWithTheSubjectAsync`.
+
+*Chapter text that should change.* PRIV-RIGHT-005a could name the identifiers an
+attached invitation binds among what an erasure makes unreadable.
+
+---
+
+## 254. What an administrator's suspension and reactivation answer and record
+
+**Phase 8 · 2026-09-24 · Tier 2 · IDN-LIFE-013, AUTH-SESS-010, IDN-AUD-001, LIB-API-005, chapter 09 section 8a, chapter 10 section 5a**
+
+*The question.* Chapter 09 section 8a lists `POST /admin/accounts/{subject}/suspend` and
+`/reactivate` under "Accounts: `account:manage`", with "Suspension ends sessions in the
+same operation (AUTH-SESS-010); reactivation restores grants exactly (IDN-LIFE-013).
+Requires step-up". Chapter 10 section 5a names the step-up actions `account:suspend` and
+`account:reactivate`. Nothing names the service contract, the answers, what either
+announces or what either writes to the audit trail, and chapter 10 holds audit rows only
+for the owner's own deactivation and reactivation, both routine.
+
+*Chosen.*
+
+- A new public contract, `IAccounts`, carries both, in the pattern of `IOrganizations`
+  for the section's organization operations; the section's other account operations
+  join it as they are built. `account:manage` is asked in the administrative
+  organization, as every deployment operation is.
+- **204** where the change is made; **400** `api.request.malformed` naming `subject`
+  where no account bears it, in the precedent of entry 250; **403** `authz.denied`
+  without the permission, where no person acts, or where the account is in a state the
+  operation does not apply to (deleting or deleted for suspension, anything but an
+  administrator's suspension for reactivation), in the takedown precedent; **403**
+  `auth.stepup.required` where the session has not stepped up.
+- Suspending an account an administrator already suspended changes nothing and answers
+  204 before step-up is asked, in the precedent of requesting an organization's deletion
+  twice.
+- No reason is asked, because the endpoint names no body, unlike the takedown and the
+  organization operations beside it.
+- Suspension ends every session of the account in its transaction and publishes
+  `AccountSuspended` with `by` `administrator` and the administrator as actor;
+  reactivation publishes `AccountReactivated` with the administrator as actor.
+- Both are audited in the transaction that makes the change, security category,
+  acting subject the administrator and effective subject the account, no organization:
+  suspension as a new action, `identity.account.suspended`, and reactivation as the existing
+  `identity.account.reactivated`. An administrator acting on another person's standing
+  is a security event (chapter 04, retention "Security events, permission changes"),
+  while the owner's own reactivation stays routine as it was, so the category of an
+  `identity.account.reactivated` row follows who acted.
+
+*Tests that pin it.*
+`AccountAdministrationTests.AUTH_SESS_010_SuspensionEndsTheSessionsOfTheAccountAsync`,
+`AccountAdministrationTests.IDN_LIFE_013_AnAccountBeingDeletedOrUnknownIsNotSuspendedAsync`,
+`AccountAdministrationTests.IDN_LIFE_013_SuspendingTwiceChangesNothingAsync`,
+`AccountAdministrationTests.IDN_LIFE_013_WithoutThePermissionOrAStepUpNothingChangesAsync`,
+`AccountAdministrationEndpointTests.AUTH_SESS_010_AnAccountIsSuspendedAndReactivatedAsync`,
+`SessionRequirementTests` (the list of session routes), `AuditActionsTests` (the list of
+actions).
+
+*Chapter text that should change.* Chapter 09 section 8a could give the two endpoints
+their answers, and chapter 10 could hold the audit rows below, with the category of
+`identity.account.reactivated` depending on who acted.
+
+---
+
+## 255. An administrator's suspension of an account its owner deactivated
+
+**Phase 8 · 2026-09-24 · Tier 3 · IDN-LIFE-013, D-140, chapter 16 section 3 step 2**
+
+*The question.* IDN-LIFE-013 has the account record who suspended it "because the two
+are reversed differently", and the self suspension reversed by its owner's link or by
+recovery (D-140). Chapter 16 step 2 has the administrator suspend a departing person's
+account so that "only an administrator can reverse it". Nothing says what suspending an
+account its owner has already deactivated does, or whether an administrator may
+reactivate an account its owner deactivated.
+
+*The readings.*
+
+1. Refuse the suspension, since the account is not active or restricted; the owner can
+   still stand it back up with the link or by recovery.
+2. The account stays suspended and becomes the administrator's: `suspendedBy` becomes
+   `administrator`, so neither the link nor recovery stands it back up.
+3. Answer success and change nothing.
+
+*Chosen: 2, the strictest reading.* Readings 1 and 3 leave the departing person able to
+reverse what the administrator meant only an administrator to reverse. The link the
+deactivation notice carried is kept, so presenting it answers
+`identity.account.adminsuspended` as it does for any account an administrator suspended.
+The sessions are ended in the transaction as for any suspension, though a suspended
+account holds none. `AccountSuspended` is not published, because chapter 10 section 5b
+fires it when the "State enters or leaves `suspended`" and the state did not change; the
+change is audited as `identity.account.suspended`.
+
+For the reverse, an administrator reactivates only what an administrator suspended; an
+account its owner deactivated answers `authz.denied`, since reversing the owner's own
+choice is theirs, by the link or by recovery.
+
+*Tests that pin it.*
+`AccountAdministrationTests.IDN_LIFE_013_ADeactivatedAccountBecomesTheAdministratorsAsync`,
+`AccountAdministrationTests.IDN_LIFE_013_OnlyAnAdministratorsSuspensionIsReactivatedAsync`,
+`AccountTests.IDN_LIFE_013_AC1_ReactivationRestoresARestrictionInForce`,
+`AccountLifecycleTests.IDN_LIFE_013_AdministrativeSuspensionIsNotReversedByALinkAsync`.
+
+*Chapter text that should change.* IDN-LIFE-013 could say that an administrator's
+suspension of a self-deactivated account makes it the administrator's to reverse, and
+that an administrator does not reactivate an account its owner deactivated.
+
+---
+
+## 256. What reactivation restores to an account suspended while restricted
+
+**Phase 8 · 2026-09-24 · Tier 3 · IDN-LIFE-013, PRIV-RIGHT-004, IDN-ACCT-007**
+
+*The question.* The account already let an administrator suspend a restricted account,
+and IDN-LIFE-013 AC1 has "Reactivation restores prior access exactly". IDN-ACCT-007 has
+an account "in exactly one state at any time", so once it was suspended the restriction
+was recorded nowhere, and reactivation made every suspended account `active`.
+
+*The readings.*
+
+1. Reactivation makes the account `active`, which lifts the restriction as a side
+   effect of the suspension.
+2. The account remembers that it was restricted when an administrator suspended it,
+   and reactivation makes it `restricted` again.
+
+*Chosen: 2, the strictest reading.* Reading 1 ends a restriction the subject asked for
+without the decision PRIV-RIGHT-004 requires to lift it, and it is not "prior access
+exactly". The account carries a new column, `restriction_held`, which can be true only
+while the account is suspended or in its deletion window (a check constraint pins it).
+An administrator's suspension of a restricted account sets it and the reactivation
+clears it on the way back to `restricted`. Nothing is sent to the privacy subscribers on
+either side: the restriction was never lifted.
+
+*Tests that pin it.*
+`AccountTests.IDN_LIFE_013_AC1_ReactivationRestoresARestrictionInForce`,
+`AccountStoreTests.IDN_LIFE_013_AC1_TheRowCarriesTheRestrictionToRestoreAsync`,
+`AccountAdministrationTests.IDN_LIFE_013_AC1_ReactivationRestoresPriorAccessExactlyAsync`,
+`ModelTests` (the list of columns).
+
+*Chapter text that should change.* IDN-LIFE-013 could say that reactivation returns an
+account suspended while restricted to `restricted`, and chapter 10 section 5.12b could
+name the recorded fact beside `suspendedBy`.
+
+---
+
+## 257. A restriction held while the account is away from the restricted state
+
+**Phase 8 · 2026-09-24 · Tier 3 · PRIV-RIGHT-004, PRIV-RIGHT-002, IDN-LIFE-003, IDN-LIFE-014, chapter 09 section 8a**
+
+*The question.* PRIV-RIGHT-004 AC2 has "Lifting it restores prior behaviour exactly",
+and nothing but a decision lifts a restriction. Three paths lost one without a decision:
+
+- a restricted account that entered its deletion window and cancelled it came back
+  `active` (IDN-LIFE-014 cancellation restores "the account exactly as it stood");
+- a restricted account taken down and reversed came back `active`, which is what chapter
+  09 section 8a says of the reversal ("Restores `active`");
+- a restriction fulfilled, or granted by lapse (PRIV-RIGHT-002), while the account was
+  suspended or in its deletion window was recorded nowhere: the request was fulfilled,
+  the subscribers were told nothing, and the account later came back `active`.
+
+*The readings.*
+
+1. Leave the three paths as they were: a restriction is only a state, and a state the
+   account leaves is gone.
+2. Hold the restriction on the account while it is suspended or deleting, tell the
+   subscribers when it is decided, and bring the account back `restricted` from any of
+   the three.
+
+*Chosen: 2, the strictest reading.* Reading 1 ends a restriction the subject asked for
+without a decision, and in the third path acts on records the company decided not to
+act on. The column entry 256 added, `restriction_held`, carries it: entering the
+deletion window or a takedown from `restricted` sets it, a restriction decided while the
+account is suspended (by either origin) or deleting sets it and writes the
+`RestrictionChanged` delivery with `restricted` true in the same transaction, leaving the
+window by cancellation or reversal and reactivation return the account to `restricted`,
+and the erasure clears it. The reversal of a takedown restores `active` as chapter 09
+section 8a says except where a restriction is held, where it restores `restricted`. A
+restriction decided twice is recorded and announced once.
+
+*Tests that pin it.*
+`AccountTests.PRIV_RIGHT_004_AC2_ARestrictionIsHeldThroughADeletionWindow`,
+`AccountTests.PRIV_RIGHT_004_ARestrictionDecidedAwayFromActiveIsHeld`,
+`AccountStatesTests.PRIV_RIGHT_004_ARestrictionIsHeldThroughATakedownAsync`,
+`PrivacyRequestTests.PRIV_RIGHT_004_ARestrictionFulfilledWhileSuspendedIsHeldAsync`,
+`AccountTests.Transitions_FromAStateThatDoesNotMakeThem_Throw` (restriction of a
+deleting account still refused by `Restrict`, which is the active path).
+
+*Chapter text that should change.* PRIV-RIGHT-004 could say that a restriction decided
+while the account is suspended or deleting is held and in force when it returns, and
+chapter 09 section 8a could say that the takedown reversal restores `restricted` where
+the account was restricted.
+
+---
+
+## 258. What lifting a restriction answers, writes and asks
+
+**Phase 8 · 2026-09-24 · Tier 2 · PRIV-RIGHT-004, IDN-AUD-001, LIB-API-005, chapter 09 section 8a, chapter 10 section 5a**
+
+*The question.* Chapter 09 section 8a lists `POST /admin/accounts/{subject}/restriction/lift`
+under "Accounts: `account:manage`" with "Lifts a processing restriction
+(PRIV-RIGHT-004)". Chapter 10 section 5b has `RestrictionChanged` fire when
+"`restricted` set or lifted" to every registered subject-event handler, required. Nothing
+names the answers or the audit action, and the section's preamble says step-up applies
+where an operation "touches another person's account", while chapter 10 section 5a,
+"Listed once here so a builder does not have to infer them endpoint by endpoint", names
+no gate for the lift and the row marks none.
+
+*Chosen.*
+
+- `IAccounts.LiftRestrictionAsync`, under `account:manage` in the administrative
+  organization, as entry 254 has for the section's other account operations.
+- **204** where the restriction is lifted; **400** `api.request.malformed` naming
+  `subject` where no account bears it; **403** `authz.denied` without the permission,
+  where no person acts, or where the account is not restricted (entry 259). A second
+  lift is refused, as a second reactivation is.
+- No step-up and no reason. The gate is keyed by a name from chapter 10 section 5a, the
+  list says it is complete, and the row marks none; taking the preamble would need a
+  name no chapter holds. The same holds for the membership end (entry 250), the
+  deletion cancellation on the subject's behalf and the account session revocation,
+  which also touch another person's account without a gate.
+- In one transaction: the account becomes `active`, the `RestrictionChanged` delivery
+  with `restricted` false is written to the outbox, and the lift is audited as a new
+  action, `privacy.restriction.lifted`, security category, acting subject the
+  administrator and effective subject the account, no organization. The privacy request
+  that restricted the account is left as it was decided.
+
+*Tests that pin it.*
+`AccountAdministrationTests.PRIV_RIGHT_004_AC2_LiftingARestrictionRestoresTheAccountAsync`,
+`AccountAdministrationTests.PRIV_RIGHT_004_OnlyARestrictionInForceIsLiftedAsync`,
+`AccountDirectoryTests.PRIV_RIGHT_004_AC2_TheLiftTellsTheSubscribersAsync`,
+`AccountAdministrationEndpointTests.PRIV_RIGHT_004_AC2_ARestrictionIsLiftedAsync`,
+`SessionRequirementTests` (the list of session routes), `AuditActionsTests` (the list of
+actions).
+
+*Chapter text that should change.* Chapter 09 section 8a could give the endpoint its
+answers and say whether its preamble's "touches another person's account" adds gates
+chapter 10 section 5a does not list; chapter 10 could hold the audit row below.
+
+---
+
+## 259. Whether a restriction held away from the restricted state is lifted
+
+**Phase 8 · 2026-09-24 · Tier 3 · PRIV-RIGHT-004, entry 257**
+
+*The question.* Under entry 257 an account suspended or deleting may hold a restriction.
+Nothing says whether an administrator may lift it while the account is away.
+
+*The readings.*
+
+1. Lift it: clear what is held and tell the subscribers.
+2. Refuse until the account is back in `restricted`, where the lift applies as usual.
+
+*Chosen: 2, the strictest reading.* It keeps the restriction the subject asked for
+until it can be lifted from the state that shows it, and it keeps one path for a lift.
+The refusal is `authz.denied`, as for an account not restricted at all.
+
+*Tests that pin it.*
+`AccountAdministrationTests.PRIV_RIGHT_004_OnlyARestrictionInForceIsLiftedAsync`.
+
+*Chapter text that should change.* PRIV-RIGHT-004 could say that a restriction held
+while the account is suspended or deleting is lifted only once the account is back.
+
+---
+
+## 260. What a deletion cancelled on the subject's behalf answers and records
+
+**Phase 8 · 2026-09-24 · Tier 2 · IDN-LIFE-003, IDN-LIFE-014, IDN-AUD-001, chapter 09 section 8a, chapter 10 section 5a**
+
+*The question.* Chapter 09 section 8a has `POST /admin/accounts/{subject}/delete/cancel`
+cancel "a pending deletion on the subject's behalf", with **409**
+`identity.takedown.active` for a takedown. IDN-LIFE-003 has the cancellation of a window
+an out-of-band request began made by "the administrator handling the request ... recorded
+against the request". Nothing names the other answers, whether a window the subject
+began may be cancelled here, or what "recorded against the request" writes, since the
+request's status vocabulary has no value for it.
+
+*Chosen.*
+
+- `IAccounts.CancelDeletionAsync`, under `account:manage` in the administrative
+  organization; no step-up (entry 258) and no reason, the endpoint naming no body.
+- A window the subject began and one an out-of-band request began are both cancelled:
+  the row says "on the subject's behalf" without limiting the origin, and the subject
+  whose link is lost has no other way back inside the window.
+- **204** where cancelled; **409** `identity.takedown.active` for a takedown, answered
+  before the window is looked at, as the link-borne cancellation does; **422**
+  `identity.deletion.windowelapsed` where the window has closed; **400**
+  `api.request.malformed` naming `subject` where no account bears it; **403**
+  `authz.denied` where the account is in no window, without the permission, or where no
+  person acts.
+- In one transaction: the account comes back as it stood (entry 257), the link a
+  self-deletion notice carried is spent, `AccountDeletionCancelled` is published with the
+  administrator as actor, and the cancellation is audited as `identity.deletion.cancelled`
+  in the security category, acting subject the administrator and effective subject the
+  account. "Recorded against the request" is the audit row's `request` detail, naming the
+  fulfilled erasure request whose decision began the window (the latest fulfilled erasure
+  request of the subject decided no later than the window began). The request itself
+  keeps its status: chapter 09 section 8a lists no status for it.
+
+*Tests that pin it.*
+`AccountAdministrationTests.IDN_LIFE_003_AnOutOfBandDeletionIsCancelledAgainstItsRequestAsync`,
+`AccountAdministrationTests.IDN_LIFE_014_ASelfDeletionIsCancelledOnTheSubjectsBehalfAsync`,
+`AccountAdministrationTests.IDN_LIFE_003_ATakedownOrAClosedWindowIsNotCancelledAsync`,
+`AccountDirectoryTests.IDN_LIFE_003_TheErasureRequestBehindTheWindowIsFoundAsync`,
+`AccountDirectoryTests.IDN_LIFE_003_TheCancellationIsRecordedAgainstTheRequestAsync`,
+`AccountAdministrationEndpointTests.IDN_LIFE_003_ADeletionIsCancelledOnTheSubjectsBehalfAsync`,
+`SessionRequirementTests` (the list of session routes).
+
+*Chapter text that should change.* Chapter 09 section 8a could give the endpoint its
+answers and say which origins it cancels, and IDN-LIFE-003 could say that "recorded
+against the request" is the audit row naming it.
+
+---
+
+## 261. What reading an account's photo as an administrator answers and whose policy withholds it
+
+**Phase 8 · 2026-09-24 · Tier 2 · IDN-ATTR-002, IDN-ATTR-003, IDN-AUD-001, chapter 09 sections 6 and 8a**
+
+*The question.* Chapter 09 section 8a lists `GET /admin/accounts/{subject}/photo` under
+"Accounts: `account:manage`" with "**404** where none is set or the policy does not
+enable photos (D-147)", and section 6 has staff photos read through it "under the same
+rule" as the account's own read. Nothing says whose policy is meant, since the
+administrator and the account may stand in different organizations, what an unknown
+subject answers, or whether the read is audited.
+
+*The readings.*
+
+1. The account's own organizations decide, as for its own read: every organization it
+   belongs to must show photos.
+2. The administrative organization's key decides.
+3. Both must show photos.
+
+*Chosen: 1.* IDN-ATTR-002 makes photos an organization's to show for its members, and
+the administrative organization is not the account's; under 1 a photo the account's
+policy withholds is withheld from every read, the administrator's included, which is
+the rule the account's own read already follows. Reading 3 would add a key the
+administrative organization never declared for anyone but its own members.
+
+- `IAccounts.ReadPhotoAsync`, under `account:manage` in the administrative
+  organization; no step-up, as chapter 10 section 5a names no gate for it.
+- **200** with the stored JPEG as `image/jpeg` and `Cache-Control: no-store`, no `ETag`;
+  **404** where the account shows none or its policy withholds photos, alike; **400**
+  `api.request.malformed` naming `subject` where no account bears it (entry 254);
+  **403** `authz.denied` without the permission or where no person acts.
+- Not audited: IDN-AUD-001 records lifecycle events, and a read changes nothing.
+
+*Tests that pin it.*
+`AccountAdministrationTests.IDN_ATTR_003_AC3_AnAccountsPhotoIsReadThroughTheGateAsync`,
+`AccountAdministrationTests.IDN_ATTR_002_APhotoThePolicyWithholdsIsNotReadAsync`,
+`AccountAdministrationEndpointTests.IDN_ATTR_003_AC3_AnAccountsPhotoIsServedToAnAdministratorAsync`,
+`SessionRequirementTests` (the list of session routes).
+
+*Chapter text that should change.* Chapter 09 section 8a could say that "the policy" is
+that of the account's organizations and give the endpoint its other answers.
+
+---
+
+## 262. How the library obtains the person's token for the mail server
+
+**Phase 8 · 2026-09-24 · Tier 3 · INT-MAIL-010, REG-MAIL-002, AUTH-OIDC-001 AC4, AUTH-OIDC-004, LIB-HOST-001, entries 71 and 215**
+
+*The question.* INT-MAIL-010: app passwords are managed through the mail server's call
+"made by the library with a token obtained for the signed-in person through the
+library's **first-party OIDC client** for the mail server", AC1 "one call to the mail
+server's app-password call carrying the person's token, and no row in the library's
+schema". AUTH-OIDC-001 AC4: "the token it obtains is scoped to the signed-in person".
+No chapter says how the library, being both the provider and that client, comes by the
+token, which client in the registry is the mail server's, what the token carries, or
+how long it lasts.
+
+*The readings.*
+
+1. Run the authorization code flow against the library's own provider from inside the
+   request, as an outside client would.
+2. Issue the token in process from the person's session record, through the provider's
+   own token generation, to the client the deployment declares as the mail server's.
+3. Sign a token with the provider's key outside the provider's pipeline.
+
+*Chosen: 2, the strictest reading.* Reading 1 needs a redirect back to an address the
+library would have to register and serve for itself, which no chapter names. Reading 3
+would be a second way of issuing a token beside the provider's, with its own claims.
+Under 2:
+
+- The token stands on the session the request came in under, as every token the
+  provider issues does (entry 71): a session that is ended, expired or not the
+  person's issues nothing (`auth.session.expired`, `authz.denied`), and the server is
+  not called.
+- It is generated by the provider's own handlers, so it is signed with the key the
+  provider signs with now (AUTH-KEY-001) and carries what the provider's access tokens
+  carry for that client: the person as `sub`, the client as `client_id` and presenter,
+  the scopes the client was registered with, the provider as issuer, and no audience.
+  The provider's own validation accepts it.
+- It lasts `oidc.accesstoken.lifetime`, or less where the session record ends sooner,
+  so it never outlives the record (AUTH-OIDC-004).
+- No token entry is written: AC1 allows no row, and the token is used for the one call
+  it was issued for.
+- Which client is the mail server's is a new host declaration, `MailServerClient`
+  (`clientId`), required where a mail server is registered, so a deployment that
+  registers one and declares no client is stopped at startup with
+  `model.startup.declarationmissing` naming `mailServerClient.clientId`. A declared
+  client the registry does not hold as a `protocol` client is a deployment put
+  together wrongly and faults; bootstrap registers it (AUTH-OIDC-001 AC4).
+
+Whether the mail server accepts this token is a claim about the product, verified by
+the adapter in Milestone 2 step 5 (entry 215).
+
+*Tests that pin it.*
+`AppPasswordFlowTests.INT_MAIL_010_AC1_TheServerIsCalledWithThePersonsTokenAsync`,
+`AppPasswordsTests.AUTH_OIDC_001_AC4_OnlyThePersonsLiveSessionObtainsATokenAsync`,
+`StartupValidationTests.INT_MAIL_010_ADeploymentHostingMailDeclaresTheMailServersClientAsync`,
+`ModelTests.REG_MAIL_002_AC1_NoTableHoldsAnAppPassword`.
+
+*Chapter text that should change.* INT-MAIL-010 could say that the token is issued in
+process from the session record to the declared client and is not stored, and
+LIB-HOST-001 could hold the declaration (row below).
+
+---
+
+## 263. What the app-password endpoints answer and record
+
+**Phase 8 · 2026-09-24 · Tier 2 · REG-MAIL-002, INT-MAIL-006, INT-MAIL-010, IDN-AUD-001, chapter 09 section 6, chapter 10 section 5a**
+
+*The question.* Chapter 09 section 6 gives the three endpoints, "Present only where the
+account holds a mailbox (INT-MAIL-006)", **200** for the listing and the creation,
+**204** for the revocation and **403** `auth.stepup.required`. Nothing names what an
+account without a mailbox is answered, how the label is bounded, what an unknown
+identifier answers, or the audit actions.
+
+*Chosen.*
+
+- `IAppPasswords` (`ListAsync`, `CreateAsync`, `RevokeAsync`), and three members on
+  `IMailServer` (`AppPasswordsAsync`, `CreateAppPasswordAsync`,
+  `RevokeAppPasswordAsync`), each carrying the person's token and acting on the account
+  the server finds in it. `AppPassword` (`id`, `label`, `createdAt`, `expiresAt`) and
+  `IssuedAppPassword` (`id`, `secret`) are what the server answers.
+- Present only where the account is `active` and holds a mailbox not retired, which is
+  a mailbox the server is told to enable; otherwise, and where the deployment
+  registers no mail server, **403** `authz.denied`, the refusal for an operation the
+  account is not in a state for.
+- The label is bounded as a credential label is (`CredentialLabel`), **422**
+  `auth.credential.labelinvalid` otherwise; an absent label is **400**
+  `api.request.malformed` naming `label`. Uniqueness is not checked, since that would
+  be a second call to the server (AC1). The expiry is passed as given and the server
+  judges it.
+- Creation and revocation are the `mailcredential:create` and `mailcredential:revoke`
+  gates; the listing asks for none, as chapter 10 section 5a names none for it.
+- A revocation of an identifier the server does not hold for the person answers **404**
+  `auth.credential.notfound`, which the port's contract asks the server to answer.
+  Any other failure of the server is answered as it came.
+- Once the server has acted, in one transaction: the security-notice set is sent
+  `security-notice`, and the change is audited as `auth.mailcredential.created` or
+  `auth.mailcredential.revoked`, security category, the account as both subjects, no
+  organization, the detail `credential` naming the server's identifier and nothing the
+  person typed. The creation answer carries `Cache-Control: no-store`.
+
+*Tests that pin it.*
+`AppPasswordsTests.REG_MAIL_002_AC1_TheServerGeneratesTheSecretAndTheLibraryKeepsNoneAsync`,
+`AppPasswordsTests.REG_MAIL_002_AC2_CreationAndRevocationAskForAStepUpAsync`,
+`AppPasswordsTests.INT_MAIL_010_AC3_TheRevokedAppPasswordIsGoneAtTheServerAsync`,
+`AppPasswordsTests.INT_MAIL_010_AC2_TheListingIsWhatTheServerHoldsNowAsync`,
+`AppPasswordsTests.INT_MAIL_006_WithoutAnEnabledMailboxThereAreNoAppPasswordsAsync`,
+`AppPasswordsTests.REG_MAIL_002_AnAppPasswordCarriesALabelAsync`,
+`AppPasswordFlowTests.INT_MAIL_006_AnAccountWithoutAMailboxIsRefusedAsync`,
+`SessionRequirementTests` (the list of session routes), `AuditActionsTests` (the list of
+actions).
+
+*Chapter text that should change.* Chapter 09 section 6 could give the endpoints their
+other answers and say what "present only" answers; chapter 10 could hold the audit
+rows below.
+
+---
+
+## 264. What an erasure's identifier is, what the erasure endpoints read, and what the manual completion records
+
+**Phase 8 · 2026-09-24 · Tier 3 · IDN-LIFE-003a, IDN-LIFE-003b, chapter 09 section 8a, chapter 10 sections 1.4 and 5, entries 168 and 169**
+
+*The question.* Chapter 09 section 8a gives "`GET /admin/erasures` · `GET
+/admin/erasures/{id}` | Every incomplete erasure in one query; per-subscriber state for
+one (IDN-LIFE-003b): `{ id, subject, reason, status, attempts, subscribers: [ { name,
+required, confirmedAt } ] }` (D-153)" and "`POST /admin/erasures/{id}/complete` | The
+manual completion path after exhausted retries, itself recorded (IDN-LIFE-003a).
+Requires step-up". IDN-LIFE-003b gives the erasures table's columns, none of them an
+identifier; the table is keyed by the subject. IDN-LIFE-003a: "A manual completion path
+SHALL exist for permanent failure, itself recorded". Chapter 10 gives
+`privacy.erasure.notfailed` and `erasure:complete`. No chapter says what `id` names,
+what an identifier naming no erasure answers, what the completion answers or records,
+or whether the path closes a failed delivery that is not an erasure's.
+
+*The readings.*
+
+1. `id` is the subject, the erasures table's key.
+2. `id` is the identifier of the delivery the erasure's host-side work travels on, as
+   `takedownId` is the takedown's delivery (entry 168).
+
+And for the manual path: (a) it closes any failed delivery its identifier names; (b) it
+closes an erasure's and nothing else.
+
+*Chosen: 2 and (b), the strictest reading.* The shape carries `id` beside `subject`, so
+`id` is not the subject. The per-subscriber state the read must show lives on the
+delivery, which the erasures row follows step for step: the worker carries the
+attempts, the completion and the failure onto the row in the transaction that records
+them on the delivery. The path is named for erasures, and widening it to a takedown's
+cancellation or a restriction would be more than the chapter grants (entry 169 declined
+the same widening for the listing). Under this:
+
+- `IErasures` (`ListAsync`, `ReadAsync`, `CompleteAsync`), `ErasureId` and
+  `ErasureProgress`, every operation under `privacyrequest:manage`, **403**
+  `authz.denied` otherwise, with nothing read.
+- The listing answers **200**, every erasure awaiting subscribers or failed, oldest
+  first, read in one query with the confirmations. Each entry, and the read of one,
+  carries `{ id, subject, reason, status, attempts, subscribers: [ { name, required,
+  confirmedAt } ] }`, one line per registered subject-event subscriber, `confirmedAt`
+  absent where it has not confirmed, `reason` and `status` spelled as `10` sections
+  5.12a and 5.12 spell them.
+- An identifier that names no erasure, including one naming a takedown's or a
+  restriction's delivery, answers **404** `privacy.erasure.notfound`, a new code,
+  because no existing code says that no erasure is held under an identifier.
+- The completion asks the permission, then the step-up `erasure:complete` on the
+  caller's session (**403** `auth.stepup.required`), then answers **404** as above, then
+  **409** `privacy.erasure.notfailed` where the erasure is awaiting subscribers or
+  complete. Otherwise, in one transaction, the delivery and the erasures row are
+  completed and the completion is audited as `privacy.erasure.completed`, security
+  category, the operator as the acting subject and the erased subject as the effective
+  one, details `erasure` (the identifier) and `outstanding` (the required subscribers
+  that had not confirmed, by name). It answers **204**.
+- A failed delivery of another kind is not closed on this path; it stays failed and its
+  alert stands. The worker's own manual completion, which nothing reached, is removed,
+  so the manual path exists once.
+
+*Tests that pin it.*
+`ErasureServiceTests.IDN_LIFE_003b_AC2_EveryIncompleteErasureIsListedAsync`,
+`ErasureServiceTests.IDN_LIFE_003b_OneErasureIsReadWithEachSubscribersConfirmationAsync`,
+`ErasureServiceTests.IDN_LIFE_003b_AnIdentifierThatNamesNoErasureIsNotFoundAsync`,
+`ErasureServiceTests.IDN_LIFE_003a_AManualCompletionClosesAFailedErasureAndIsRecordedAsync`,
+`ErasureServiceTests.IDN_LIFE_003a_AManualCompletionRefusesAnErasureThatNeverFailedAsync`,
+`ErasureServiceTests.IDN_LIFE_003a_OnlyAnErasureIsCompletedByHandHereAsync`,
+`ErasureServiceTests.IDN_LIFE_003a_TheManualCompletionRequiresStepUpAsync`,
+`ErasureServiceTests.IDN_LIFE_003b_PrivacyRequestManageIsRequiredForEveryOperationAsync`,
+`OutboxStoreTests.IDN_LIFE_003b_AC2_EveryOutstandingErasureIsReadInOneQueryAsync`,
+`OutboxStoreTests.IDN_LIFE_003b_OneDeliveryIsReadWithItsConfirmationsAsync`,
+`ErasureEndpointTests.IDN_LIFE_003b_TheOutstandingErasuresAreListedAndReadAsync`,
+`ErasureEndpointTests.IDN_LIFE_003a_AFailedErasureIsCompletedByHandAsync`,
+`ErasureEndpointTests.IDN_LIFE_003b_TheEndpointsAreRefusedToACustomerAsync`,
+`SessionRequirementTests` (the list of session routes), `AuditActionsTests` and
+`ErrorCodesTests` (the lists).
+
+*Chapter text that should change.* Chapter 09 section 8a could say that an erasure's
+`id` is the identifier of its delivery and give the completion its **204** and its
+refusals; IDN-LIFE-003a could say whether a takedown's or a restriction's failed
+delivery has a manual path; chapter 10 could hold the rows below.
+
+---
+
+## 265. What the "who can access this?" view reads, whom it answers, and what it answers over HTTP
+
+**Phase 8 · 2026-09-24 · Tier 3 · AUTHZ-DERIVE-007, AUTHZ-GATE-004, chapter 09 section 8, chapter 10 sections 3 and 4.5a, D-161, D-162, entry 196**
+
+*The question.* Chapter 09 section 8 answers `GET /admin/access?resourceType=...&resourceId=...`
+with **200**, "who can access this resource, and through which grant or container", and
+"Stored and derived grants are reported **distinctly**", with `partial: true` and
+`unevaluated` past `authz.reverselookup.budget`. AUTHZ-DERIVE-007 (D-161) says it
+"answers stored grants by query, materialised derived grants by query (they are rows),
+and unmaterialised derivations by evaluating each declared derivation over the
+host-supplied relation for the resource and its ancestors". Chapter 10 section 3 gives
+`grant:read` as "Viewing grants and the \"who can access this?\" view". No chapter says:
+in which organization `grant:read` is asked; what each grant in the answer carries;
+whether a grant that confers nothing (a suspended organization's, a role allowing
+nothing) is reported; what `unevaluated` names; or how the HTTP view reaches the
+host-supplied relation, since the library holds no host rows and a request carries none.
+
+*The readings.*
+
+1. Over HTTP, answer the stored and materialised grants and mark every unmaterialised
+   derivation reaching the record as `unevaluated`, with `partial: true`.
+2. Over HTTP, answer only the stored grants, silently.
+3. Over HTTP, refuse a record a non-materialised derivation reaches with
+   `authz.derivation.sourcesmissing`, as every other path without the host's rows is
+   refused (D-162), and answer it in full through the library call the host makes with
+   its rows.
+
+*Chosen: 3, the strictest reading.* Reading 2 is the silent partial answer AC2
+forbids. Reading 1 widens `partial` and `unevaluated`, which the chapter ties to the
+budget alone, to a second meaning, and hands an administrator a list that looks
+complete for every host that never mounts its own call. D-162: "No path answers from
+stored grants alone." Under this:
+
+- `IAccessGate.WhoCanAccessAsync(context, resource)` and
+  `WhoCanAccessAsync<TResource>(context, resource, sources)` answer `ResourceAccess
+  { Resource, Grants, Partial, Unevaluated }`, each grant in the `ExplainedGrant` shape
+  an explanation carries (AUTHZ-GATE-004): identifier (none for a derived one), kind,
+  subject type and identifier, role, deny, and the container it sits on (none where it
+  sits on the record itself or on the whole organization).
+- The view is `grant:read` in the organization the record sits in, read from the
+  registry; `resourceType` `organization` with the organization's identifier asks for
+  the whole of it. A caller without it is refused **403** `authz.denied` with the
+  refusal recorded as every refusal is; nothing is concealed (AUTHZ-CONCEAL-005). A type
+  the host did not declare, or a record the registry does not hold, is **400**
+  `api.request.malformed` naming `resourceType` or `resourceId`.
+- Without the host's rows, a record a non-materialised derivation reaches is refused
+  **500** `authz.derivation.sourcesmissing`; the whole organization, which no derivation
+  reaches, and a type no such derivation reaches are answered. `GET /admin/access` has
+  no rows to give, so it answers those and refuses the rest; a host wanting the full
+  view on a derived type makes the library call with its `FilterSources`.
+- Stored grants, materialised ones among them, are read in one query, as the effective
+  grants view confers them (entry 196): live, not revoked, of a role that allows
+  something, in an organization whose deletion is not requested. They are ordered: on
+  the record, then on each container nearest first, then on the whole organization.
+- Each non-materialised derivation reaching the record is evaluated over the host's
+  relation for the record and each container of the type the relationship is declared
+  on, and each holder is reported as a derived grant of the role the derivation
+  confers. The bound is `authz.reverselookup.budget`, read on the injected clock across
+  all derivations and checked between rows; a derivation it stops contributes nothing
+  and its relationship's name is added once to `unevaluated`, with `partial: true`.
+- The HTTP answer is `{ resource: { resourceType, resourceId }, grants: [ { id, kind,
+  subjectType, subjectId, role, deny, inheritedFrom } ], partial, unevaluated }`.
+
+*Tests that pin it.*
+`ReverseLookupTests.AUTHZ_DERIVE_007_AC1_StoredAndDerivedGrantsAreReportedDistinctlyAsync`,
+`ReverseLookupTests.AUTHZ_DERIVE_007_AC2_PastTheBudgetTheAnswerIsPartialAndNamesWhatWentUnevaluatedAsync`,
+`ReverseLookupTests.AUTHZ_DERIVE_007_WithoutTheHostsRowsARecordADerivationReachesIsRefusedAsync`,
+`ReverseLookupTests.AUTHZ_DERIVE_007_TheViewRequiresGrantReadInTheRecordsOrganizationAsync`,
+`ReverseLookupTests.AUTHZ_DERIVE_007_AGrantThatConfersNothingIsNotReportedAsync`,
+`ReverseLookupTests.AUTHZ_DERIVE_007_AnUnknownRecordOrTypeIsRefusedAsMalformedAsync`,
+`MaterialisationTests.AUTHZ_DERIVE_007_AMaterialisedGrantIsReportedAsARowAsync`,
+`GrantStoreTests.AUTHZ_DERIVE_007_ASuspendedOrganizationsGrantsAreNotReadOnARecordAsync`,
+`AccessEndpointTests.AUTHZ_DERIVE_007_TheViewAnswersTheRecordItsGrantsAndWhatWentUnevaluatedAsync`,
+`AccessEndpointTests.AUTHZ_DERIVE_007_ARecordNotNamedIsRefusedAsMalformedAsync`,
+`AccessEndpointTests.AUTHZ_DERIVE_007_TheViewIsRefusedWithoutGrantReadAsync`,
+`SessionRequirementTests` (the list of session routes).
+
+*Chapter text that should change.* Chapter 09 section 8 could give the response shape
+above, the permission and the organization it is asked in, the 400 and 500 refusals,
+and say how the HTTP view reaches the host's relation, or that it does not and the
+view on a derived type is the host's own call; AUTHZ-DERIVE-007 could say that a grant
+conferring nothing is not reported and that `unevaluated` names relationships.
+
+---
+
+## 266. A derivation confers nothing in a suspended organization
+
+**Phase 8 · 2026-09-24 · Tier 3 · IDN-ORG-003 AC1 and AC2, AUTHZ-TEST-001 AC3, AUTHZ-DERIVE-001, entry 196**
+
+*The question.* IDN-ORG-003 gives the stage "Deletion requested | Organization suspends
+immediately; access stops". Entry 196 stopped the organization's grants by leaving
+them out of `identity.effective_grants`, which also stops a materialised derivation,
+whose grants are rows there. A derivation evaluated per request has no row: its clause
+reads the host's relation and the ancestry and nothing of the organization, so a
+holder of the host's fact kept access to a suspended organization's records.
+AUTHZ-TEST-001 AC3: "Where a derivation is materialised, the same cases pass
+identically before and after materialisation." No chapter says whether a derived grant
+confers while the organization is suspended.
+
+*The readings.*
+
+1. A derivation confers as before; only written and materialised grants stop.
+2. A derivation reaching a record of a suspended organization confers nothing, on the
+   check, the filter, the fragment, the capability page and the explanation, and
+   confers again once the request is cancelled.
+
+*Chosen: 2, the strictest reading.* Reading 1 leaves access running after "access
+stops", and makes materialising a derivation change who gets in, which AC3 forbids.
+Under this:
+
+- The gate reads the organization's `deletion_requested_at` through a port of its own,
+  `IOrganizationSuspensions`, as it reads a restriction (CONV-DESIGN-003), since the
+  organization is another area's aggregate.
+- It is read where the derivations reaching a type are gathered for one organization,
+  once per operation and only where a non-materialised derivation reaches the type, so
+  a type no derivation reaches costs no query. While the organization is suspended no
+  derivation is gathered, and every path built on them admits nothing through one.
+- A path still refuses a type a derivation reaches without the host's rows
+  (`authz.derivation.sourcesmissing`, D-162); suspension does not excuse the sources.
+- The host's fact is untouched; cancelling the request (AC2) restores the access with
+  nothing to rebuild.
+- The "who can access this?" view needs `grant:read` in the organization, which a
+  suspended organization's grants do not confer, so it is refused there before any
+  derivation is evaluated (entry 265).
+
+*Tests that pin it.*
+`GateBehaviourTests.IDN_ORG_003_AC1_ASuspendedOrganizationsDerivationsConferNothingAsync`,
+`GateBehaviourTests.IDN_ORG_003_AC1_ASuspendedOrganizationConfersNothingAsync` (the
+written grants, unchanged).
+
+*Chapter text that should change.* IDN-ORG-003 could say that a suspended
+organization's records admit no one through any grant, derived ones included, and that
+cancellation restores derived access with the host's facts as they stand.
+
+---
+
+## 267. The audit trail by subject names what the subject did as well as what was done to it
+
+**Phase 8 · 2026-09-24 · Tier 3 · PRIV-BREACH-002, 09 section 8a, 16 sections 3 and 5, D-014, entry 177**
+
+*The question.* 09 section 8a: "`GET /admin/audit?subject=...` | Every audit record for
+one subject, without a full scan (PRIV-BREACH-002)". Chapter 16 section 3 step 5: "If
+they held `recovery:approve`, review their recent approvals." Section 5, for a hostile
+departure: "Review their audit trail for the preceding weeks". D-014: "Audit records
+both" the acting and the effective identity. The read built in this phase (entry 177)
+answered the records naming the subject as the effective identity only, so an
+approval, a grant or any action a person took on someone else's account was not in
+their trail, and no other read in 09 reaches it. No chapter says which identity "for
+one subject" means.
+
+*The readings.*
+
+1. The records naming the subject as the effective identity only.
+2. Every record naming the subject as either identity.
+
+*Chosen: 2, the strictest reading.* Reading 1 leaves the review chapter 16 asks for
+without a query, which is the "access that survives departure" and the "data leaving
+with them" the procedure exists to catch. No record is disclosed that `audit:read`
+could not already read under the other subject. Under this:
+
+- `IAuditStore.FindNamingAsync` reads every record whose acting or effective identity
+  is the subject, most recent first, through `ix_audit_records_effective_subject` and
+  `ix_audit_records_acting_subject` (the second written by the configuration change
+  index migration for OPS-CFG-005, now also declared on the model), with no key read:
+  what a record holds under any subject's key never comes back, as entry 177 holds for
+  the trail.
+- The trail (`IAuditTrail`, `GET /admin/audit?subject=...`) reads through it; the
+  entry shape is unchanged. The port's read by effective identity with the personal
+  values (`FindBySubjectAsync`) is unchanged.
+
+*Tests that pin it.*
+`AuditStoreTests.PRIV_BREACH_002_TheTrailNamesWhatTheSubjectDidToOthersAsync`,
+`AuditStoreTests.PRIV_BREACH_002_AC1_TheTrailNamingASubjectEitherWayTakesTheIndexesAsync`,
+`AuditStoreTests.PRIV_BREACH_002_AC2_TheTrailReadsTheSameBeforeAndAfterErasureAsync`,
+`AuditRecordTests.PRIV_RET_002_AC1_TheAuditPortOffersNoWriteButAnAppend` (the port's
+methods).
+
+*Chapter text that should change.* 09 section 8a could say "every audit record naming
+one subject, as the acting or the effective identity".
+
+---
+
+## 268. The grants one user or group holds in its own name are read under `grant:read`
+
+**Phase 8 · 2026-09-24 · Tier 2 · AUTHZ-GRANT-003 AC3, 09 section 8, 10 `grant:read`, 16 section 3 step 4**
+
+*The question.* Chapter 16 section 3 step 4, "Remove or transfer their grants", reads:
+"Anything granted directly to them rather than through a group." AUTHZ-GRANT-003 AC3:
+"\"Who granted this and when\" is answerable by query." Chapter 10 gives `grant:read`
+as "Viewing grants and the \"who can access this?\" view". Chapter 09 section 8 names
+`POST /admin/grants` and `DELETE /admin/grants/{id}` and no read of grants, and the
+revocation needs the grant's identifier, which only its creation returned. The "who
+can access this?" view (entry 265) answers per record, so the grants one person holds
+across an organization could be found only record by record, and an organization-wide
+grant only by asking for the organization.
+
+*The readings.*
+
+1. No listing: 09 names none; the operator finds a person's grants through the "who can
+   access this?" view, record by record.
+2. `GET /admin/grants?organization=...&subjectType=user|group&subjectId=...` and
+   `IGrants.HeldAsync`, under `grant:read` in that organization: the live grants the
+   user or group holds in its own name there, oldest first, each in the shape a grant
+   is written in, with its identifier, kind, who granted it, when, why and its expiry.
+
+*Chosen: 2.* Reading 1 leaves step 4 without a way to know what to remove, and a
+revocation without the identifier it needs. Reading 2 is the smallest surface that
+serves both, under the permission 10 already names for viewing grants. Under it:
+
+- It is read per organization, as a grant is scoped (AUTHZ-SCOPE-001), and the
+  permission is asked there; `grant:read` elsewhere, or `grant:manage` alone, is
+  `authz.denied` (AUTHZ-CONCEAL-005).
+- It lists grants naming the holder itself; a grant reaching a user through a group is
+  read under the group, which is the step's "rather than through a group".
+- Revoked and expired grants are left out, as the gate leaves them out; the full history
+  of a grant stays in the audit trail (entry 267).
+- An organization-wide grant reads as `resourceType` `organization` with the
+  organization's identifier, as it is written (AUTHZ-GRANT-001 AC2).
+- A materialised grant is listed with `kind` `materialised`, so the one a revocation
+  refuses as `authz.grant.notfound` is told apart; the host's data answers for it.
+- A malformed `organization`, `subjectType` or `subjectId` is `api.request.malformed`
+  naming the member (API-CONV-002).
+- Nothing is written, so it is not audited, as the other reads under `grant:read` are
+  not.
+
+*Tests that pin it.*
+`GrantEndpointTests.AUTHZ_GRANT_003_AC3_WhoGrantedWhatAHolderHoldsAndWhenIsReadAsync`,
+`GrantEndpointTests.AUTHZ_GRANT_003_AC3_AGroupsAndAMaterialisedGrantAreReadWithTheirKindAsync`,
+`GrantEndpointTests.AUTHZ_GRANT_003_AC3_ReadingWhatAHolderHoldsNeedsGrantReadThereAsync`,
+`GrantEndpointTests.API_CONV_002_AReadOfHeldGrantsNamesWhoseAndWhereAsync`,
+`SessionRequirementTests` (the route).
+
+*Chapter text that should change.* 09 section 8 could add
+`GET /admin/grants?organization=...&subjectType=...&subjectId=...` with its response
+shape and `grant:read`, and 16 section 3 step 4 could name it.
+
+---
+
+## 269. When and how the relay registration warning is raised
+
+**Phase 8 · 2026-09-24 · Tier 2 · INT-MAIL-011 AC1 to AC3, 10 section 4 `notification.email.relayregistered`, AUTH-STEP-002a, D-162**
+
+*The question.* INT-MAIL-011: "configuration validation SHALL surface, at startup and
+when the setting changes, a sending domain that is not declared as registered while
+Continue with Apple is enabled." Its values paragraph: "When `apple` is in any effective
+`loginFactors` and the sending domain is not in that set, startup raises the Normal
+condition `relay-domain-unregistered` with `details.domain`." AC2: "Changing the sending
+domain to an undeclared one produces the same warning at the point of change." No
+chapter says which changes count as "the setting changes", whether the warning stops a
+start or a change, what happens when it cannot be raised, or how two spellings of one
+domain compare.
+
+*The readings.*
+
+1. Raise at startup and on a change of `notification.email.sendingdomain` only, the one
+   AC2 names.
+2. Raise at startup and on a change of any of the three values the condition reads:
+   the sending domain, `notification.email.relayregistered`, and the system policy
+   (`policy.default`), whose `loginFactors` decides whether Apple is a way in.
+
+*Chosen: 2.* Withdrawing the declaration or enabling Apple over an undeclared domain
+leaves the same silent failure AC2 exists to surface; reading 1 lets either pass
+unwarned until the next restart. Under it:
+
+- "Any effective `loginFactors`" is read as the system policy's: an organization's
+  override can only narrow it (AUTH-STEP-002a, refused by the policy strictness check
+  otherwise), so Apple in any effective policy is Apple in the system's.
+- Whether Continue with Apple is a way in is read from a property of the catalogue
+  entry, `RelaysAddress` (the identity it asserts may carry a relay address,
+  REG-IDENT-008), and not from the entry's name: AUTH-FACT-001 AC1 says "No
+  conditional anywhere in the library tests for a factor by name". The property is
+  internal and Apple is the one entry carrying it.
+- A domain in the declaration matches the sending domain in any case, since a domain
+  name is one name whatever its case (RFC 4343); nothing else is normalised.
+- The warning is raised under the domain (`relay-domain-unregistered:<domain>`), so
+  OPS-ALERT-002 deduplicates it per domain across restarts and changes.
+- The warning stops nothing: the deployment starts and the change is made, as a
+  "warning" and a Normal condition say.
+- A warning that cannot be raised does stop them, the strictest reading of D-162: at
+  startup it is a `StartupException` carrying the failure (an unset sending domain is
+  `model.startup.declarationmissing`), and at a change the change is refused and
+  nothing is written, as any publication inside a transaction is.
+- The start check runs among the library's hosted checks, after the others, and
+  reads the database as they do.
+
+*Tests that pin it.*
+`RelayRegistrationTests.INT_MAIL_011_AC1_AnUndeclaredSendingDomainIsNamedInTheWarningAsync`,
+`RelayRegistrationTests.CheckAsync_TheDomainDeclaredInAnotherCase_RaisesNothingAsync`,
+`RelayRegistrationTests.CheckAsync_AppleIsNoWayIn_RaisesNothingAsync`,
+`RelayRegistrationTests.CheckAsync_NoSendingDomainNamed_IsRefusedAsUndeclaredAsync`,
+`FactorCatalogueTests.INT_MAIL_011_TheOneEntryWhoseAddressMayBeARelayIsApple`,
+`FactorCatalogueTests.AUTH_FACT_001_AC1_NoConditionalTestsForAFactorByName`,
+`StartupValidationTests.INT_MAIL_011_AC1_AnUndeclaredSendingDomainWarnsAsTheDeploymentStartsAsync`,
+`ConfigurationAdministrationTests.INT_MAIL_011_AC2_ChangingTheSendingDomainToAnUndeclaredOneWarnsAsync`,
+`ConfigurationAdministrationTests.INT_MAIL_011_AC2_EveryChangeThatLeavesTheDomainUndeclaredWarnsAsync`,
+`ConfigurationAdministrationTests.INT_MAIL_011_AC3_DeclaringTheDomainIsAConfigurationChangeAsync`,
+`ConfigurationAdministrationTests.ChangeAsync_AWarningThatIsNotTaken_IsRefusedAndNotWrittenDownAsync`.
+
+*Chapter text that should change.* INT-MAIL-011 could name the three values whose
+change is checked, say that the warning stops neither a start nor a change, and say
+that domains compare without regard to case.
+
 
 # Rows for chapter 10
 
@@ -6170,12 +10128,27 @@ The subsection each row belongs in is named with it.
 | `api.request.malformed` | 1.5 | 400 | The request could not be read: its body is not the shape the endpoint takes, or a member it requires is absent or empty. `details.member` names the member the reader stopped at, or the one the endpoint required, and carries nothing of its value; where the body failed before any member, the refusal carries the code alone (API-CONV-002). |
 | `identity.registration.signedin` | 1.1 | 409 | `POST /register` arrives from a browser holding a live session. Nothing is staged and no account document is answered; the frontend navigates to the account application (REG-SESS-002). |
 | `auth.password.toolong` | 1.2 | 422 | A password longer than `password.maximum` is set, at registration, at a password change or at a reset. Nothing is truncated. |
+| `identity.takedown.notfound` | 1.1 | 404 | The takedown of an account is read at `GET /admin/accounts/{subject}/takedown`, by a caller holding `takedown:execute`, and the account was never taken down (IDN-LIFE-003 AC2, entry 169). |
 | `privacy.document.notfound` | 1.4 | 404 | A legal document, or a named version of one, that does not exist or was never published is read, or a translation is filed against one. |
 | `privacy.notice.unpublished` | 1.4 | 409 | A consent is granted before any privacy-notice version has been published, so there is no version for it to stand against (PRIV-CONS-005). |
 | `privacy.purpose.noconsent` | 1.4 | 422 | A consent is granted or withdrawn on a purpose the deployment did not declare, or one that rests on a basis other than consent, so it is not the subject's to agree to (PRIV-CONS-008a). |
 | `privacy.request.notfound` | 1.4 | 404 | A decision is made on an identifier that names no privacy request, by a caller holding `privacyrequest:manage` (PRIV-RIGHT-001). |
 | `privacy.request.decided` | 1.4 | 409 | A decision is made on a privacy request that is already decided; the standing decision is not replaced (PRIV-RIGHT-002 AC5). |
+| `privacy.erasure.notfound` | 1.4 | 404 | An erasure is read or completed at `/admin/erasures/{id}` by a caller holding `privacyrequest:manage`, and no erasure is held under the identifier, including where it names a delivery of another kind (IDN-LIFE-003b, entry 264). |
 | `model.startup.redirectclient` | 1.5 | 500 | Startup: a registered client's return address is not an absolute address with a host, or `redirect.defaultclient` names no registered browser application. `details.client` names the client the bad address was read from; `details.key` names the setting where the configured default will not resolve (API-REDIR-001). |
+| `identity.identifier.invalid` | 1.1 | 422 | The value is not a well-formed identifier of its kind. (REG-IDENT-001, entry 40) |
+| `identity.identifier.locked` | 1.1 | 409 | The identifier is locked: an invitation bound it, a provider operates the mailbox, or it is the personal email a membership keeps and is removed, made primary or replaced during that membership, so nothing about it is the person's to change. (REG-IDENT-010, REG-MAIL-001, entries 40 and 243) |
+| `identity.identifier.maximum` | 1.1 | 409 | The account or the registration already holds as many identifiers of the kind as it may; where the maximum is one, the change is a replace. (REG-IDENT-002, REG-IDENT-007) |
+| `identity.registration.incomplete` | 1.1 | 422 | The step a registration request is for is not the step the registration has reached: its predecessor is incomplete, or it is complete already. (REG-SESS-002, REG-SESS-004) |
+| `identity.profile.invalid` | 1.1 | 422 | A profile field is not one the library admits: a display name over its byte bound, or a legal name over its length. (REG-PROF-001, entry 40) |
+| `identity.profile.notaccepted` | 1.1 | 422 | The deployment does not take the field from the person: its key is off, or it is the date of birth, which is corrected through support. (REG-PROF-001, REG-IDENT-009, entry 40) |
+| `auth.credential.notfound` | 1.2 | 404 | The account holds no such credential. (AUTH-FACT-001, entry 40) |
+| `auth.credential.labelinvalid` | 1.2 | 422 | A credential label is empty, longer than the bound, or already held by another credential of the same kind on the account. (AUTH-FACT-001, REG-PM-002, entry 40) |
+| `auth.credential.notupgradable` | 1.2 | 409 | The credential named for an upgrade to a passkey is not a second-factor security key. (AUTH-FACT-002b) |
+| `authz.role.inuse` | 1.3 | 409 | A grant or a derivation names the role, so it cannot be removed; its permissions can be changed instead. (AUTHZ-GRANT-004, AUTHZ-GRANT-003 AC3, entry 189) |
+| `authz.group.inuse` | 1.3 | 409 | The group holds a member, belongs to a group, or was given a grant, so it cannot be removed. (AUTHZ-GROUP-001, AUTHZ-GRANT-003 AC3, entry 192) |
+| `identity.domain.unverified` | 1.1 | 422 | A listed domain is verified and no TXT value at `_identity-verify.<domain>` is `identity-domain-verification=<token>`, or the lookup could not be made; nothing is written. (REG-DOM-001, entry 209) |
+| `identity.invitation.notfound` | 1.1 | 404 | `GET /account/invitation` or the acknowledgement is asked of an account no standing invitation is attached to: none of its links was opened by it, or each it opened was acknowledged or revoked. (REG-INV-002, entry 242) |
 
 ## LIB-HOST-001, host declarations
 
@@ -6184,6 +10157,9 @@ The subsection each row belongs in is named with it.
 | `PasskeyAddresses` (`changePassword`, `enrol`, `manage`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `passkeyAddresses` or the field of it that is empty. The addresses are the frontend pages `/.well-known/change-password` and `/.well-known/passkey-endpoints` point at (REG-PM-001). |
 | `AuthenticationAddresses` (`signIn`, `provider`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `authenticationAddresses.signIn` or `authenticationAddresses.provider`. The first is where an authorization request that is not silent and holds no session is forwarded (AUTH-SESS-012 AC3). The second is the address the library is mounted at on the authentication application, which is where another application finds `/oidc/authorize` and `/oidc/token` (BFF-SESS-006). |
 | `SignOnClient` (`clientId`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `signOnClient.clientId`. The identifier is what this application calls itself at the provider when it establishes its own session, and the registry holds the one destination a code returns to under it. The secret it presents is not a declaration: it comes from the secrets manager through `ISecretSource.ReadSignOnSecretAsync` and is passed to `AddJanus`, which refuses to start without it with `model.startup.keyunavailable` and `details.key` naming `signOnSecret` (BFF-SESS-006, OPS-SEC-001). |
+| `IDnsResolver` (`TextRecordsAsync`) | optional | No startup refusal. Every verification of a locked domain answers `identity.domain.unverified` and every scheduled check fails and raises `domain-reverification-failed`, so no domain is ever proved. A deployment that locks no domain needs none (REG-DOM-001, entry 212). |
+| `IMailServer` (`ProvisionAsync`, `MailboxesAsync`, `AppPasswordsAsync`, `CreateAppPasswordAsync`, `RevokeAppPasswordAsync`) | optional | No startup refusal. No mailbox is pushed and none is compared; the rows are still written, and the first pass after a registration pushes every state owed. A push carries a key that stays the same until the server confirms it, the address in its canonical form and the state `disabled`, `enabled` or `removed`; the server applies a key once. The listing answers every mailbox the server hosts with whether it is enabled. The three app-password calls carry the person's token and act on the account the server finds in it; the creation answers the server's new secret and its identifier, and a revocation of an identifier the server does not hold for that person answers `auth.credential.notfound`. Without a registration every app-password operation answers `authz.denied`. A deployment whose staff mail is hosted elsewhere needs none (INT-MAIL-006, INT-MAIL-008, INT-MAIL-009, INT-MAIL-010, entries 215, 262 and 263). |
+| `MailServerClient` (`clientId`) | where `IMailServer` is registered, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `mailServerClient.clientId`. The identifier is the registry's `protocol` client the mail server trusts, which the library issues the person's token to for the app-password calls; it presents no secret, since the library issues the token itself (INT-MAIL-010, AUTH-OIDC-001 AC4, entry 262). |
 | `ImageCodec` (`Reencode`) | optional, and required while any organization shows photos | Startup fails with `model.startup.declarationmissing` and `details.key` naming `imageCodec` where a `photo.enabled.<organization>` key is on and no codec is registered. The callback is `Func<ReadOnlyMemory<byte>, int, CancellationToken, ValueTask<ReadOnlyMemory<byte>?>>`: the uploaded bytes and the longest side in pixels the stored image is held to, answering the re-encoded JPEG with every metadata segment removed, or nothing where the bytes are not an image the deployment accepts. Nothing it answers chooses a code: a refusal is `identity.photo.invalid` (IDN-ATTR-002, IDN-ATTR-004). |
 
 ## Shipped default declarations
@@ -6281,6 +10257,8 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `auth.credential.removed` | security | `AuditActions.CredentialRemoved` | A credential was removed from an account. (AUTH-FACT-001) |
 | `auth.credential.reportcancelled` | security | `AuditActions.CredentialReportCancelled` | A loss report was cancelled before it took effect. (AUTH-REC-004) |
 | `auth.credential.reportedlost` | security | `AuditActions.CredentialReportedLost` | A credential was reported lost, which starts the window before it is invalidated. (AUTH-REC-004) |
+| `auth.mailcredential.created` | security | `AuditActions.MailCredentialCreated` | The mail server generated an app password at its holder's request. Details carry `credential`, the server's identifier; neither the secret nor the label is written. The account is both subjects; the row names no organization. (REG-MAIL-002, INT-MAIL-010, entry 263) |
+| `auth.mailcredential.revoked` | security | `AuditActions.MailCredentialRevoked` | The mail server revoked an app password at its holder's request. Details carry `credential`, the server's identifier. The account is both subjects; the row names no organization. (REG-MAIL-002, INT-MAIL-010, entry 263) |
 | `auth.oidc.refreshreused` | security | `AuditActions.RefreshTokenReused` | A refresh token was presented a second time, which revokes the family it belongs to. (AUTH-TOK-004) |
 | `auth.phonesignal.considered` | security | `AuditActions.PhoneSignalConsidered` | A phone signal was consulted before a send, recorded without the number it was consulted for. (AUTH-ABUSE-006) |
 | `auth.recovery.approved` | security | `AuditActions.RecoveryApproved` | An assisted recovery was approved, naming the approver and the reason given. (AUTH-REC-006) |
@@ -6288,21 +10266,41 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `auth.restriction.granted` | security | `AuditActions.RestrictionGranted` | A sending restriction was granted against an address or a number. (AUTH-ABUSE-005) |
 | `auth.session.presented` | security | `AuditActions.SessionPresented` | A session was presented, which is what a sign-in history is read from. (AUTH-SESS-010) |
 | `authz.access.denied` | security | `AuditActions.AccessDenied` | A permission was refused, which is the row the refusal's correlation identifier resolves to. (AUTHZ-CONCEAL-004) |
+| `authz.group.created` | security | `AuditActions.GroupCreated` | A group was created in an organization. Details carry `group`, `name` and `reason`; the row is filed under the group's organization. (AUTHZ-GROUP-001, entry 191) |
+| `authz.group.memberadded` | security | `AuditActions.GroupMemberAdded` | An account or a group was added to a group. Details carry `group`, `name`, `memberType`, `memberId` and `reason`. (AUTHZ-GROUP-001, OPS-CFG-007, entry 191) |
+| `authz.group.memberremoved` | security | `AuditActions.GroupMemberRemoved` | An account or a group was taken out of a group. Details carry `group`, `name`, `memberType`, `memberId` and `reason`. (AUTHZ-GROUP-001, OPS-CFG-007, entry 191) |
+| `authz.group.removed` | security | `AuditActions.GroupRemoved` | A group nothing named was removed. Details carry `group`, `name` and `reason`. (AUTHZ-GROUP-001, entries 191 and 192) |
+| `authz.role.defined` | security | `AuditActions.RoleDefined` | A role was created, or the permissions it bundles were changed. Details carry `role`, `before`, `after` and `reason`; the row names no organization. (AUTHZ-GRANT-004, OPS-CFG-007, entry 188) |
+| `authz.role.removed` | security | `AuditActions.RoleRemoved` | A role nothing named was removed. Details carry `role`, `before`, `after` (null) and `reason`. (AUTHZ-GRANT-004, entries 188 and 189) |
 | `identity.account.deactivated` | routine | `AuditActions.AccountDeactivated` | An account was deactivated by its own owner. (IDN-LIFE-013) |
-| `identity.account.reactivated` | routine | `AuditActions.AccountReactivated` | A deactivated account was stood back up. (IDN-LIFE-013) |
+| `identity.account.reactivated` | routine, or security where an administrator acted | `AuditActions.AccountReactivated` | A suspended account was stood back up: by its owner from a deactivation (routine), or by an administrator from an administrator's suspension (security, the acting subject the administrator and the effective subject the account). (IDN-LIFE-013, entry 254) |
+| `identity.account.suspended` | security | `AuditActions.AccountSuspended` | An administrator suspended an account, or took over the suspension of one its owner deactivated. The acting subject is the administrator, the effective subject the account; the row names no organization. (IDN-LIFE-013, AUTH-SESS-010, entries 254 and 255) |
 | `identity.credential.labelled` | routine | `AuditActions.CredentialLabelled` | A credential was given or renamed a label by its holder. (REG-PM-002) |
-| `identity.deletion.cancelled` | routine | `AuditActions.DeletionCancelled` | A deletion was cancelled inside its grace window. (IDN-LIFE-014) |
+| `identity.deletion.cancelled` | routine, or security where an administrator acted | `AuditActions.DeletionCancelled` | A deletion was cancelled inside its grace window: by the subject from the link (routine), or by an administrator on the subject's behalf (security, the acting subject the administrator; details carry `request` where an out-of-band erasure request began the window). (IDN-LIFE-014, IDN-LIFE-003, entry 260) |
 | `identity.deletion.requested` | routine | `AuditActions.DeletionRequested` | A deletion was requested, which opens the grace window it can be brought back from. (IDN-LIFE-014) |
+| `identity.invitation.issued` | security | `AuditActions.InvitationIssued` | An invitation into an organization was issued. Details carry `invitation` and nothing it binds; the row is filed under the organization. (IDN-LIFE-009a, REG-INV-001, entry 234) |
+| `identity.invitation.revoked` | security | `AuditActions.InvitationRevoked` | An invitation nobody had acknowledged was revoked, or replaced by a later one for the same corporate address. Details carry `invitation`. (IDN-LIFE-009a, REG-MAIL-001, entries 231 and 233) |
+| `identity.invitation.acknowledged` | security | `AuditActions.InvitationAcknowledged` | An invitation was acknowledged and the membership it offered attached. Details carry `invitation`; the actor is the person acknowledging and the row is filed under the organization. (REG-INV-001, IDN-LIFE-009a, entry 249) |
+| `identity.membership.ended` | security | `AuditActions.MembershipEnded` | An administrator ended a membership; the account and the organization persist. Details carry `membership`; the acting subject is the administrator, the effective subject the member, and the row is filed under the organization. (IDN-MEM-001, REG-MAIL-003, entry 250) |
+| `identity.organization.created` | security | `AuditActions.OrganizationCreated` | An organization was created, with its policy key holding no override. Details carry `reason`; the row is filed under the organization. (IDN-ORG-002, entry 197) |
+| `identity.organization.deletioncancelled` | security | `AuditActions.OrganizationDeletionCancelled` | An organization's deletion request was cancelled inside its window, which gives back every grant it holds. Details carry `reason`. (IDN-ORG-003, entry 197) |
+| `identity.organization.deletionrequested` | security | `AuditActions.OrganizationDeletionRequested` | An organization's deletion was requested: it is suspended and every member session ended. Details carry `reason`. (IDN-ORG-003, entry 197) |
+| `identity.organization.domainadded` | security | `AuditActions.OrganizationDomainAdded` | A domain was listed in an organization's lock, unverified. Details carry `domain` and `reason`; the row is filed under the organization. (REG-DOM-001, IDN-ORG-006, entry 214) |
+| `identity.organization.domainremoved` | security | `AuditActions.OrganizationDomainRemoved` | A domain was removed from an organization's lock; its addresses stay refused until it is listed anew. Details carry `domain` and `reason`. (REG-DOM-001, entries 207 and 214) |
+| `identity.organization.domainverified` | security | `AuditActions.OrganizationDomainVerified` | A listed domain was verified by its TXT record and now admits its addresses. Details carry `domain` and `reason`. (REG-DOM-001, entry 214) |
 | `identity.organization.erased` | routine | `AuditActions.OrganizationErased` | An organization's deletion grace window elapsed and the erasure executed. Details carry `organization`, `deletingSince` and `membershipsEnded`; the row names no subject and no actor. (IDN-ORG-003) |
 | `identity.preferences.changed` | routine | `AuditActions.PreferencesChanged` | The account's preference values were changed, recorded by key and never by value. (REG-PREF-001) |
 | `identity.profile.changed` | routine | `AuditActions.ProfileChanged` | A profile attribute of the account was changed. (IDN-ATTR-001) |
 | `identity.secondstep.preferred` | routine | `AuditActions.SecondStepPreferred` | The account's preferred second step was changed. (AUTH-FACT-007) |
+| `identity.takedown.executed` | security | `AuditActions.TakedownExecuted` | Phase one of a takedown committed: the account entered its window, its sessions ended and the hosts' delivery was written. Details carry `takedown`, `trigger` (spelled as `10` section 5.12d), `reason` and `erasureDue`. (IDN-LIFE-003) |
+| `identity.takedown.reversed` | security | `AuditActions.TakedownReversed` | A takedown was reversed inside its window and the account restored to active. Details carry `reason`. (IDN-LIFE-003) |
 | `identity.username.changed` | routine | `AuditActions.UsernameChanged` | The account's username was changed, which holds the old one for as long as the retention says. (REG-IDENT-009) |
 | `ops.configuration.changed` | security | `AuditActions.ConfigurationChanged` | A runtime setting is put in force through the one configuration operation. Details carry `key`, `before`, `after`, `loosening` and, where the change is a loosening, `reason`. (OPS-CFG-002, OPS-CFG-005) |
 | `privacy.consent.granted` | security | `AuditActions.ConsentGranted` | A consent was granted for a purpose, naming the document version it was given against. (PRIV-CONS-004) |
 | `privacy.consent.withdrawn` | security | `AuditActions.ConsentWithdrawn` | A consent was withdrawn for a purpose. (PRIV-CONS-008) |
 | `privacy.document.published` | security | `AuditActions.DocumentPublished` | A version of a legal document was published in the governing language. (PRIV-CONS-005) |
 | `privacy.document.translated` | security | `AuditActions.DocumentTranslated` | A translation was filed against a published version of a legal document. (PRIV-CONS-005) |
+| `privacy.erasure.completed` | security | `AuditActions.ErasureCompleted` | An erasure whose retries were spent was completed by hand, with its erasures row. Details carry `erasure` and `outstanding`, the required subscribers that had not confirmed, by name; the acting subject is the operator, the effective subject the erased one. (IDN-LIFE-003a, entry 264) |
 | `privacy.erasure.executed` | security | `AuditActions.ErasureExecuted` | An erasure was carried out, which destroys the subject key and leaves the trail resolving. (PRIV-RIGHT-005) |
 | `privacy.export.assembled` | security | `AuditActions.ExportAssembled` | A subject export was assembled and made available to the subject. (PRIV-RIGHT-003) |
 | `privacy.objection.recorded` | security | `AuditActions.ObjectionRecorded` | An objection to a purpose was recorded. (PRIV-BASIS-003) |
@@ -6312,6 +10310,7 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `privacy.request.lapsed` | security | `AuditActions.RequestLapsed` | A data subject request reached its deadline undecided. (PRIV-RIGHT-002) |
 | `privacy.request.refused` | security | `AuditActions.RequestRefused` | A data subject request was refused, with the reason recorded against it. (PRIV-RIGHT-002) |
 | `privacy.request.submitted` | security | `AuditActions.RequestSubmitted` | A data subject request was submitted by the subject. (PRIV-RIGHT-002) |
+| `privacy.restriction.lifted` | security | `AuditActions.RestrictionLifted` | An administrator lifted a restriction of processing and the subscribers were told. The acting subject is the administrator, the effective subject the account; the row names no organization. (PRIV-RIGHT-004, entry 258) |
 
 ## Message kinds
 
@@ -6332,6 +10331,7 @@ asks for it. The library never holds the words (CONV-CONTENT-001).
 | `identifier-detached` | `MessageKind.IdentifierDetached` | The identifier that was removed no longer reaches the account. It carries no link and no powers. |
 | `identifier-removed` | `MessageKind.IdentifierRemoved` | An identifier was removed, sent to the members of the security-notice set that remain and carrying the link that undoes it. |
 | `identifier-settings-changed` | `MessageKind.IdentifierSettingsChanged` | The primary identifier of a kind, or the kind's backup setting, changed. |
+| `invitation-link` | `MessageKind.InvitationLink` | The link an invitation into an organization carries, sent to the email the invitation binds and to nothing else; its place `token` carries the link (IDN-LIFE-009a, REG-MAIL-001, entries 226 and 227). |
 | `no-account` | `MessageKind.NoAccount` | The answer to a request made for an address no account holds. |
 | `privacy-request-lapsed` | `MessageKind.PrivacyRequestLapsed` | The honest word to a subject whose out-of-band erasure request reached its deadline undecided (PRIV-RIGHT-002). |
 | `privacy-request-received` | `MessageKind.PrivacyRequestReceived` | The automatic receipt a data subject request gets the moment it enters the queue, which is not a decision and starts nothing (PRIV-RIGHT-002). |

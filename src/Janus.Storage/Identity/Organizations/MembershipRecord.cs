@@ -36,4 +36,15 @@ internal sealed class MembershipRecord
     /// The <c>ended_at</c> column.
     /// </summary>
     public DateTimeOffset? EndedAt { get; set; }
+
+    /// <summary>
+    /// The <c>acknowledged_documents</c> column: the documents and versions the person
+    /// acknowledged, as a JSON array.
+    /// </summary>
+    public string? AcknowledgedDocuments { get; set; }
+
+    /// <summary>
+    /// The <c>acknowledged_at</c> column.
+    /// </summary>
+    public DateTimeOffset? AcknowledgedAt { get; set; }
 }

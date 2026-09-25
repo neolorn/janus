@@ -35,4 +35,18 @@ internal interface IAuditStore
     ValueTask<IReadOnlyList<AuditRecord>> FindBySubjectAsync(
         SubjectId subject,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads every record naming one subject, as the acting or the effective identity,
+    /// most recent first.
+    /// </summary>
+    /// <param name="subject">Whose records to read.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The records, each read as it reads after erasure: what it holds under a
+    /// subject's key does not come back, whoever's key it is.
+    /// </returns>
+    ValueTask<IReadOnlyList<AuditRecord>> FindNamingAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken);
 }

@@ -24,6 +24,9 @@ internal sealed class PendingSignInRecord
     /// <summary>The <c>factor</c> column: which catalogue entry it stands for.</summary>
     public Factor Factor { get; set; }
 
+    /// <summary>The <c>email</c> column: the address it went to, where it went to one.</summary>
+    public IdentifierId? Email { get; set; }
+
     /// <summary>The <c>code</c> column.</summary>
     public byte[] Code { get; set; } = [];
 

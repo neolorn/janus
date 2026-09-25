@@ -27,7 +27,7 @@ public sealed class ProcessingRecordsTests
         new(Guid.Parse("55555555-5555-4555-8555-555555555555"));
 
     private readonly AccessGateInMemory _gate = new();
-    private readonly MembershipLookupInMemory _memberships = new();
+    private readonly AdministrativeOrganizationInMemory _administrative = new();
     private readonly ComplianceStoreInMemory _compliance = new();
     private readonly RegisterRolesInMemory _roles = new();
     private readonly ConfigurationInMemory _configuration = new();
@@ -39,7 +39,7 @@ public sealed class ProcessingRecordsTests
     /// </summary>
     public ProcessingRecordsTests()
     {
-        _memberships.Add(Mona, Company);
+        _administrative.Organization = Company;
         _gate.Grant(Mona, Company, Permissions.RecordsOfProcessingRead);
         _gate.Grant(Mona, Company, Permissions.ComplianceManage);
 
@@ -687,7 +687,7 @@ public sealed class ProcessingRecordsTests
 
     private ProcessingRecordsService Records(AuthorizationDeclaration declaration) =>
         new(
-            new AdministrativeScope(_gate, _memberships),
+            new AdministrativeScope(_gate, _administrative),
             DeclaredProcessing.Of(declaration),
             declaration,
             _compliance,

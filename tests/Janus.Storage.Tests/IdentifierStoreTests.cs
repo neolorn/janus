@@ -7,8 +7,10 @@ using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Identity.Identifiers;
 using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Authentication.Identifiers;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Identifiers;
+using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -326,6 +328,160 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     /// <summary>
+    /// REG-MAIL-001: the personal email a membership keeps reaches its row and reads
+    /// back kept, and the security-notice set reaches it at the primary-only setting.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_001_ThePersonalEmailAMembershipKeepsReadsBackKeptAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        IdentifierId personal = await WriteAsync(subject, _entered);
+        IdentifierId corporate = await WriteAsync(subject, Fresh("Corporate"));
+
+        await RecordAsync(subject, set =>
+        {
+            set.Verify(personal, Noon);
+            set.Verify(corporate, Noon);
+            set.MakePrimary(corporate);
+            set.KeepPersonal(personal);
+            set.Backup(IdentifierKind.Email).UsePrimaryOnly();
+        });
+
+        await using StoreContext reading = database.Context();
+        IdentifierSet read = await Store(reading).FindBySubjectAsync(
+            subject,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(read.Find(personal)!.IsPersonal);
+        Assert.False(read.Find(corporate)!.IsPersonal);
+        Assert.Equal(
+            [personal, corporate],
+            read.SecurityNoticeSet(IdentifierKind.Email).Select(identifier => identifier.Id));
+        Assert.True((await StoredAsync(personal)).IsPersonal);
+    }
+
+    /// <summary>
+    /// REG-MAIL-001 and REG-INV-001 AC4: the corporate address an organization asserts
+    /// is taken on verified, locked and primary, and the personal email it displaces
+    /// stays verified beside it as the membership's; both read back so.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_001_TheCorporateAddressIsTakenOnPrimaryBesideThePersonalEmailAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        IdentifierId personal = await WriteAsync(subject, _entered);
+        string entered = Fresh("Staff");
+        var corporate = IdentifierId.New(TimeProvider.System);
+
+        await TakenCorporateAsync(subject, personal, corporate, entered);
+
+        await using StoreContext reading = database.Context();
+        IdentifierSet read = await Store(reading).FindBySubjectAsync(
+            subject,
+            TestContext.Current.CancellationToken);
+        Identifier taken = read.Find(corporate)!;
+        Identifier kept = read.Find(personal)!;
+
+        Assert.Equal(Canonicalised(entered), taken.Canonical);
+        Assert.True(taken is { IsVerified: true, IsPrimary: true, IsLocked: true, IsPersonal: false });
+        Assert.True(kept is { IsVerified: true, IsPrimary: false, IsPersonal: true });
+    }
+
+    /// <summary>
+    /// REG-MAIL-003 AC1 and AC2: when the membership ends the corporate address leaves
+    /// the account, so no account owns it any more, and the personal email reads back as
+    /// the primary, kept by no membership.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_003_TheCorporateAddressLeavesAndThePersonalEmailIsPrimaryAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        IdentifierId personal = await WriteAsync(subject, _entered);
+        string entered = Fresh("Leaving");
+        var corporate = IdentifierId.New(TimeProvider.System);
+
+        await TakenCorporateAsync(subject, personal, corporate, entered);
+
+        await using (StoreContext writing = database.Context())
+        {
+            Assert.Equal(
+                personal,
+                await Directory(writing).RetireCorporateAsync(
+                    subject,
+                    Canonicalised(entered),
+                    TestContext.Current.CancellationToken));
+
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        IdentifierSet read = await Store(reading).FindBySubjectAsync(
+            subject,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(Assert.Single(read.All) is { IsVerified: true, IsPrimary: true, IsPersonal: false });
+        Assert.Equal(personal, read.All[0].Id);
+        Assert.Null(await Store(reading).FindOwnerAsync(
+            IdentifierKind.Email,
+            Canonicalised(entered),
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// REG-MAIL-003 AC1: sign-in finds an account through the holder of what was
+    /// entered, and once the membership ends the retired corporate address has none,
+    /// exactly as an address no account ever held.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_MAIL_003_AC1_TheRetiredAddressHasNoHolderToSignInAsAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        IdentifierId personal = await WriteAsync(subject, _entered);
+        string entered = Fresh("Retired");
+        string never = Canonicalised(Fresh("Never"));
+        var corporate = IdentifierId.New(TimeProvider.System);
+
+        await TakenCorporateAsync(subject, personal, corporate, entered);
+
+        await using (StoreContext holding = database.Context())
+        {
+            Assert.Equal(
+                (subject, corporate),
+                await Directory(holding).HolderAsync(
+                    IdentifierKind.Email,
+                    Canonicalised(entered),
+                    TestContext.Current.CancellationToken));
+        }
+
+        await using (StoreContext writing = database.Context())
+        {
+            _ = await Directory(writing).RetireCorporateAsync(
+                subject,
+                Canonicalised(entered),
+                TestContext.Current.CancellationToken);
+
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        IdentifierDirectory directory = Directory(reading);
+
+        Assert.Null(await directory.HolderAsync(
+            IdentifierKind.Email,
+            Canonicalised(entered),
+            TestContext.Current.CancellationToken));
+        Assert.Null(await directory.OwnerAsync(
+            IdentifierKind.Email,
+            Canonicalised(entered),
+            TestContext.Current.CancellationToken));
+        Assert.Null(await directory.HolderAsync(
+            IdentifierKind.Email,
+            never,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// A value the account changed replaces both stored forms and the fingerprint, so
     /// the old value belongs to nobody and the new one belongs to the account.
     /// </summary>
@@ -486,6 +642,39 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
 
     private IdentifierStore Store(StoreContext context) =>
         new(context, _deployment.Keys, Deployment.FingerprintKey, _deployment.Randomness);
+
+    // A verified primary personal email displaced by a corporate address, as an
+    // acknowledgement into an organization whose mail is integrated leaves it.
+    private async Task TakenCorporateAsync(
+        SubjectId subject,
+        IdentifierId personal,
+        IdentifierId corporate,
+        string entered)
+    {
+        await RecordAsync(subject, set =>
+        {
+            set.Verify(personal, Noon);
+            set.MakePrimary(personal);
+        });
+
+        await using StoreContext writing = database.Context();
+
+        await Directory(writing)
+            .TakeCorporateAsync(
+                subject,
+                corporate,
+                entered,
+                Canonicalised(entered),
+                personal,
+                Noon,
+                maximum: 5,
+                TestContext.Current.CancellationToken);
+
+        await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    private IdentifierDirectory Directory(StoreContext context) =>
+        new(Store(context), new PreferenceStore(context, _deployment.Keys, _deployment.Randomness));
 
     private static string Fresh(string person) =>
         person + "." + Guid.NewGuid().ToString("N") + "@Example.COM";

@@ -10,6 +10,52 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- A message goes out in the language its recipient's account settled on, else, where
+  it answers a registration, sign-in or recovery request, in the locale that request
+  carried, else in every language of `notification.languages`; a tag such as `en-GB`
+  finds a declared `en`. Registration now settles the account's language from the
+  locale it was begun under. The restrictions judge a message in every language
+  once, and each language is then a message of its own: announced, carried and
+  counted under its own reference, so a failed delivery report releases that one
+  alone and a mail restriction of one a minute refuses the next request rather than
+  the second language. Messages that used to fall back to the first declared
+  language, and alerts, which used to be sent once per language, now take this path.
+  `SendRequest.Language` is nullable, and null means every declared language.
+  `IRecovery.ApproveAsync` no longer takes a language: the approver's locale says
+  nothing of the person recovered. The holder of an address someone tried to register
+  is told in the holder's language, and an invitation link goes out in every declared
+  language.
+
+- A policy's gate is written with `level`, `phishingResistant` and `maxAge`, as
+  chapter 10 names them, where the age was `maximumAge`. This is the form
+  `GET|PUT /admin/config/policy.default` carries and the settings table stores.
+
+- A grant of an organization whose deletion has been requested confers nothing from
+  the next request, in checks, filters and capability arrays alike, and confers again
+  once the request is cancelled. `identity.effective_grants` leaves such grants out.
+
+- A loosening of runtime configuration, the named restriction set and the alert
+  destinations included, is refused unless the caller also holds `system:administer`
+  in the administrative organization. A tightening asks nothing more.
+
+- `config.key.protected` answers 422 rather than 403.
+
+- A restriction keyed to a host supplier the deployment did not register is refused
+  where it is edited with `config.value.notallowed` naming the `supplier`, rather than
+  with the startup code.
+
+- `IAccessGate.ResolveAsync` no longer takes an organization: a refusal's correlation
+  identifier resolves for a caller holding `audit:read` in the administrative
+  organization, whichever organization the refusal was recorded in.
+
+- An administrative operation on the deployment or on an account (session revocation,
+  recovery approval, the privacy request queue, records of processing, compliance text
+  and the takedown) is permitted only where the caller holds its permission in the
+  administrative organization. A grant in any other organization no longer reaches it,
+  and before bootstrap has marked an organization administrative every such operation
+  is refused. `ISessions.RevokeAccountAsync` and `ISessions.RevokeEveryAsync` no longer
+  take an organization.
+
 - The names the library puts on the wire no longer carry the product's name. The
   cookies are `__Host-identity-session`, `__Host-identity-preauth`,
   `__Host-identity-csrf`, `__Host-identity-browser` and `__Host-identity-device`; a
@@ -202,6 +248,318 @@ against the public contract of LIB-API-001.
   staged for it either way; the frontend navigates to the account application.
 
 ### Added
+
+- An administrator holding `membership:manage` can invite a person into an
+  organization: `POST /admin/organizations/{id}/invitations` binds an `email`, a
+  `phone`, both or neither, and may attach `roles` (which also asks `grant:manage`) and
+  `documents` (fixed at their current version). It asks step-up and answers 201 with the
+  invitation's `id` and `expiresAt`; the link is sent to the bound email, and where no
+  email is bound the `token` is answered once for the administrator to hand over. An
+  invitation into the administrative organization of a deployment that registers
+  `IMailServer` needs both a personal `email` and a `corporateEmail`, and reserves that
+  mailbox disabled; inviting the address again replaces an expired invitation.
+  `DELETE .../invitations/{invitationId}` revokes an invitation nobody has acknowledged
+  (204, or 422 `identity.invitation.expired` once it is), and gives up a mailbox nobody
+  ever held. What an invitation binds is held encrypted and forgotten when it is
+  revoked; its link is held only as a fingerprint. A deployment applies one further
+  migration, which adds the invitation table; one that registers its own message
+  templates adds `invitation-link`. `IInvitations` is the same set of operations in
+  process.
+
+- A registration can be begun from an invitation link: `POST /register` takes an
+  `invitationToken`, which spends the link. The email the invitation bound is verified
+  by that press and locked, a bound phone is locked, taken at its step only as bound,
+  and cannot be skipped, and the inviting organization's login factors and domain lock
+  govern the steps. The account the terms step creates holds the invitation and no
+  membership. A token that opens nothing answers 422 `identity.invitation.expired`, and
+  a bound email an account already holds answers 422
+  `identity.invitation.identifiermismatch`, so its holder signs in instead.
+  `IRegistration.BeginAsync` takes the token as a new argument.
+
+- A person already signed in who presses an invitation link has the invitation
+  attached to their account: `POST /register` with `invitationToken` from a signed-in
+  browser attaches it and answers `registration.signedin` as before, and a token that
+  opens nothing answers 422 `identity.invitation.expired`. `IInvitations.OpenAsync` is
+  the same operation in process.
+
+- `GET /account/invitation` reads the invitation attached to the signed-in account for
+  the membership step: its `id`, the `organization` and its `organizationName`, the
+  display name of who invited them as `invitedBy` (null where their account shows
+  none), the `roles`, the `documents` with their `version`s, and `expiresAt`. Where
+  the account opened several links, the last one still standing is read. An account
+  with none attached answers 404 `identity.invitation.notfound`.
+  `IInvitations.AttachedAsync` is the same operation in process.
+
+- An account can hold a personal email that a membership keeps: while it is kept it
+  stays verified and non-primary, every security notice reaches it whatever the backup
+  setting, and removing, promoting or replacing it answers 409
+  `identity.identifier.locked`; the account view shows it `locked`. Apply the
+  migration, which adds `is_personal` to the identifiers table.
+
+- `POST /account/invitation/acknowledge` with `{ "invitationId" }` acknowledges the
+  invitation the membership step showed (204): the membership attaches carrying the
+  documents at their versions and when, each role is granted across the organization
+  as given by who invited them, and the audit trail records
+  `identity.invitation.acknowledged`. Where the organization's mail is integrated, the
+  corporate address becomes the primary email, verified and locked, the personal email
+  stays beside it, the mailbox is owed enabled, and the account's notice set is told
+  of the address. Nothing attaches until the account meets the organization's
+  required assurance and credential redundancy with the factors that organization
+  permits (403 `auth.stepup.required`, outcome `enrol`, naming the `field` and its
+  `value`); a bound identifier not verified on the account answers 422
+  `identity.invitation.identifiermismatch`, an invitation that no longer stands 422
+  `identity.invitation.expired`, and one the account does not hold 404
+  `identity.invitation.notfound`. The export carries `acknowledgedAt` on a membership
+  and a `membership-acknowledgements` section. Apply the migration, which adds the
+  acknowledgement to the memberships table. `IInvitations.AcknowledgeAsync` is the same
+  operation in process.
+
+- An invitation that expires unused forgets what it bound when the invitation sweep
+  runs; the row keeps who invited into what and when, and its mailbox stays reserved.
+
+- Erasing a subject also forgets what an invitation attached to their account binds,
+  in the same transaction, instead of when the invitation expires.
+
+- `DELETE /admin/organizations/{id}/memberships/{subject}` ends a membership under
+  `membership:manage` (204); the account, its state, its grants and the organization
+  persist, and the audit trail records `identity.membership.ended`. An account holding
+  no current membership of the organization answers 400 `api.request.malformed` naming
+  `subject`. Ending a membership of the administrative organization retires the
+  corporate address in the same transaction: the address leaves the account and is
+  free for a later invitation, the personal email becomes the primary, the mailbox is
+  owed disabled, and the notice set is told of the new primary.
+  `IInvitations.EndMembershipAsync` is the same operation in process.
+
+- `POST /admin/accounts/{subject}/suspend` and `/reactivate` suspend and reactivate an
+  account under `account:manage`, each a step-up action (204). Suspension ends every
+  session of the account in the same transaction; reactivation restores the account as
+  it stood, so one suspended while restricted is restricted again. An account its
+  owner deactivated becomes the administrator's to reactivate and its owner's link no
+  longer stands it up. Reactivation applies only to an administrator's suspension, and
+  an account being deleted is not suspended (403 `authz.denied`); an unknown subject
+  answers 400 `api.request.malformed` naming `subject`. The audit trail records
+  `identity.account.suspended` and `identity.account.reactivated` in the security
+  category. `IAccounts` is the same pair of operations in process. Apply the
+  migration, which adds `restriction_held` to the accounts table.
+
+- A processing restriction is no longer lost when the account passes through a
+  deletion window, a takedown or a suspension: cancelling the deletion, reversing the
+  takedown and reactivating the account each bring it back restricted, and a
+  restriction decided while the account is suspended or deleting is held for when it
+  returns, with `RestrictionChanged` delivered to the subscribers when it is decided.
+
+- `POST /admin/accounts/{subject}/restriction/lift` lifts a processing restriction
+  under `account:manage` (204): the account is active again, `RestrictionChanged` is
+  delivered to every subject-event handler in the same transaction, and the audit
+  trail records `privacy.restriction.lifted`. An account that is not restricted,
+  including one holding a restriction while suspended or deleting, answers 403
+  `authz.denied`. `IAccounts.LiftRestrictionAsync` is the same operation in process.
+
+- `POST /admin/accounts/{subject}/delete/cancel` cancels a deletion inside its grace
+  window on the subject's behalf under `account:manage` (204), whether the subject or
+  an out-of-band erasure request began it; the account comes back as it stood and the
+  audit trail records `identity.deletion.cancelled` naming the erasure request where
+  one began the window. A takedown answers 409 `identity.takedown.active`, a closed
+  window 422 `identity.deletion.windowelapsed`, and an account in no window 403
+  `authz.denied`. `IAccounts.CancelDeletionAsync` is the same operation in process.
+
+- `GET /admin/accounts/{subject}/photo` serves the photo an account shows to an
+  administrator holding `account:manage`, as `image/jpeg` with `Cache-Control:
+  no-store`. An account that shows none and one whose organizations withhold photos
+  both answer 404; an unknown subject answers 400 `api.request.malformed` naming
+  `subject`. `IAccounts.ReadPhotoAsync` is the same read in process.
+
+- `GET`, `POST /account/mail/apppasswords` and `DELETE /account/mail/apppasswords/{id}`
+  list, create and revoke the signed-in person's mail app passwords at the mail
+  server. The library issues the person a token to the mail server's client from
+  their session and makes one call with it; the server generates the secret, which is
+  answered once, stored nowhere and never logged: `IssuedAppPassword` and its `Secret`
+  carry `NeverLogged`. Creation and revocation are the
+  `mailcredential:create` and `mailcredential:revoke` step-up actions, notified to the
+  security-notice set and audited as `auth.mailcredential.created` and
+  `auth.mailcredential.revoked` by the server's identifier. An account that holds no
+  enabled mailbox is refused with 403 `authz.denied`. `IMailServer` gains
+  `AppPasswordsAsync`, `CreateAppPasswordAsync` and `RevokeAppPasswordAsync`, and a
+  deployment that registers a mail server must declare `MailServerClient` or it does
+  not start. `IAppPasswords` is the same operations in process.
+
+- `GET /admin/erasures` lists every erasure whose host-side work is outstanding,
+  oldest first, and `GET /admin/erasures/{id}` reads one, each with its subject,
+  reason, status, attempts and every registered subscriber with when it confirmed.
+  `POST /admin/erasures/{id}/complete` closes an erasure whose retries were spent,
+  asks the `erasure:complete` step-up, and is audited as `privacy.erasure.completed`
+  with the required subscribers that had not confirmed; one not yet failed is 409
+  `privacy.erasure.notfailed`. An erasure's `id` is the identifier of its delivery; an
+  identifier naming no erasure is 404 `privacy.erasure.notfound`. All three need
+  `privacyrequest:manage`. `IErasures` is the same operations in process.
+
+- `GET /admin/access?resourceType=...&resourceId=...` answers who can access a record:
+  every live grant on it, on what contains it and on the whole organization, nearest
+  first, each with its kind, holder, role, whether it denies and the container it sits
+  on. It needs `grant:read` in the record's organization; `resourceType`
+  `organization` asks for the whole of one. `IAccessGate.WhoCanAccessAsync` is the
+  same in process, and given the host's `FilterSources` it also reports each holder a
+  derivation confers the record on as a derived grant; where
+  `authz.reverselookup.budget` runs out first the answer carries `partial: true` and
+  the relationships left unevaluated. Without those rows, a record a derivation
+  reaches is refused with `authz.derivation.sourcesmissing`, over HTTP included.
+
+- Staff mailboxes are provisioned through `IMailServer`, which a deployment registers
+  where its staff mail is hosted and which no package ships. A mailbox is owed
+  `disabled` from its reservation, `enabled` while its holder is an active member of
+  the administrative organization, and `disabled` otherwise; `MailboxPublisher` pushes
+  whatever differs under a key that stays the same until the server confirms it,
+  retries on the outbox schedule, and raises `degradation` naming the mailbox when the
+  budget is spent. `MailboxReconciliation` compares the server's listing with what is
+  owed and raises `degradation` on any difference without changing either side. The
+  address is held encrypted under its holder's key and is erased with them.
+
+- Where Continue with Apple is among the system policy's `loginFactors` and
+  `notification.email.sendingdomain` is not in `notification.email.relayregistered`,
+  the deployment raises `relay-domain-unregistered` with the domain as it starts and
+  whenever a change to either key or to `policy.default` leaves it so. The warning
+  stops neither the start nor the change; a warning that cannot be raised stops both.
+  A host now registers `IEvents` for the start to complete.
+
+- An organization can lock its members to email domains it has proved by DNS:
+  `POST /admin/organizations/{id}/domains` lists a domain and answers the TXT record to
+  publish, `POST .../domains/{domain}/verify` looks for it (422
+  `identity.domain.unverified` where it is not found), `DELETE .../domains/{domain}`
+  removes the domain and raises `domain-removed`, and `GET` lists each domain with its
+  last check. From the first domain listed, a member who signs in with an address
+  outside the verified list, or with an address in a removed domain, is refused with
+  422 `identity.identifier.domainnotallowed` once a factor has succeeded, and a sign-in
+  link or code is not sent to such an address. Each change asks `domain:manage` in the
+  administrative organization, step-up and a reason; listing and verifying also ask
+  `system:administer`. `DomainReverification` re-checks every verified domain each
+  `domain.reverify.interval`, and a failed check raises `domain-reverification-failed`
+  and revokes nothing. The deployment registers an `IDnsResolver`; without one no
+  domain is ever verified. `policy.default` refuses a non-empty `emailDomains`. A
+  deployment applies one further migration, which adds the domain table and the
+  address a sign-in or a sign-in link was opened with. `IOrganizationDomains` is the
+  same set of operations in process.
+
+- `GET /admin/organizations/{id}/policy` answers the policy an organization's members
+  resolve to, each field and each gate as `{ value, overridden }`, and
+  `PUT /admin/organizations/{id}/policy` replaces what the organization overrides.
+  Both ask `organization:manage` in the administrative organization; a replacement
+  also asks step-up under `policy:change` and a reason, and `system:administer` where
+  it loosens. A field looser than the system policy is refused with 422
+  `config.policy.belowsystem` naming it, the administrative organization cannot fall
+  below `aal2` (422 `config.value.belowfloor`), and `emailDomains` or an unknown member
+  is refused with 400. `IOrganizations.PolicyAsync` and `ReplacePolicyAsync` are the
+  same in process.
+
+- `POST /admin/organizations` creates an organization with its policy key holding no
+  override; `POST /admin/organizations/{id}/delete` suspends one, ending every session
+  of its members, and `POST /admin/organizations/{id}/delete/cancel` restores it inside
+  `organization.deletion.grace` (422 `identity.deletion.windowelapsed` after). All ask
+  `organization:manage` in the administrative organization and a reason, and are
+  recorded in the audit trail; the deletion and its cancellation also need step-up
+  under the new gate `organization:delete`, and the administrative organization is
+  refused with 409 `identity.organization.protected`. `IOrganizations` is the same set
+  of operations in process. While an organization is suspended nothing in it is
+  reached through any grant, a derivation over the host's own rows included, and the
+  host's facts are left as they stand for a cancellation to restore.
+
+- `IConfigurationStore.WriteAsync` for one member of a key that exists once per
+  organization or once per declared category: it puts the value in force for the next
+  read, answers what was in force before, and refuses a protected family or a value the
+  family does not admit.
+
+- `GET /admin/groups?organization={id}` reads an organization's groups with their
+  direct members, `POST /admin/groups` creates one, `DELETE /admin/groups/{id}`
+  removes one that holds no member, belongs to no group and was never given a grant
+  (409 `authz.group.inuse` otherwise), and `POST|DELETE /admin/groups/{id}/members`
+  adds or takes out an account or a group of the same organization (409
+  `authz.group.cycle` where the group would contain itself). All ask `group:manage`
+  in the group's organization and a reason, and are recorded in the audit trail; a
+  change of members also needs step-up, and `system:administer` where the group
+  reaches a role carrying it. `IGroups` is the same set of operations in process.
+
+- `GET /admin/roles` reads every role with its permissions, `POST /admin/roles`
+  creates a role or gives an existing one the permissions stated, and
+  `DELETE /admin/roles/{name}` removes one no grant or derivation names (409
+  `authz.role.inuse` otherwise). All ask `role:manage` in the administrative
+  organization; changes need step-up and a reason, are recorded in the audit trail
+  with the permissions before and after, and need `system:administer` where the role
+  carries it before or after. `IRoles` is the same set of operations in process.
+
+- `POST /admin/grants` writes a stored grant to an account or a group on one
+  registered record or, as `resourceType` `organization`, on a whole organization,
+  and `DELETE /admin/grants/{id}` revokes one; both ask `grant:manage` in the grant's
+  organization, step-up and a reason, and record who acted and when. A grant or
+  revocation of a role carrying `system:administer` also needs `system:administer`.
+  `IGrants` is the same pair of operations in process.
+
+- `GET /admin/grants?organization=...&subjectType=user|group&subjectId=...` and
+  `IGrants.HeldAsync` read the live grants one account or group holds in its own name
+  in an organization, oldest first, each with its identifier, kind, role, what it is
+  on, whether it denies, its expiry, and who granted it, when and why. It needs
+  `grant:read` in that organization; a grant reaching an account through a group is
+  read under the group.
+
+- `GET /admin/restrictions` and `GET /admin/restrictions/{name}` read the named
+  restriction set under `restriction:edit`, the shipped defaults included;
+  `PUT /admin/restrictions/{name}` creates or replaces one and `DELETE` removes one,
+  each behind step-up, with a reason and an alert for a loosening; and
+  `POST /admin/restrictions/{name}/grant` adds credit to one key under
+  `restriction:grant`, behind step-up and with a reason. `IRestrictionSet` is the same
+  set of operations in process.
+
+- `GET /admin/config/{key}` reads one runtime key under `config:read`: its value in
+  force and its default in the key's own JSON type, whether it is protected, and which
+  way it loosens. `PUT /admin/config/{key}` changes it under `config:manage` with a
+  reason on every change; a loosening also needs `system:administer` and step-up, a
+  protected key is refused, and the alert destination keys tell the destinations they
+  replace. `IConfigurationAdministration` is the same operation in process.
+
+- `POST /admin/notices` and `POST /admin/documents/{document}/versions` publish a
+  version under `notice:publish`, with its governing text, its governing language and
+  any translations, and a required `material`; `PUT
+  /admin/documents/{document}/versions/{version}/translations/{language}` attaches or
+  corrects a translation without a new version.
+
+- `GET /admin/audit?subject=...` and `IAuditTrail` read every audit record naming one
+  subject, what it did to others as well as what was done to it, most recent first,
+  under `audit:read`: each entry carries its codes, identities, organization and plain
+  details, never a value held under a subject's key, so it reads the same before and
+  after erasure.
+
+- `GET /admin/explanations/{correlationId}` resolves a refusal's correlation identifier
+  to the permission and the principal for `audit:read`, and
+  `GET /account/explanations/{correlationId}` resolves one for the principal it refused
+  where the refused type is not concealed (`IAccessGate.ResolveOwnAsync`).
+
+- `POST /admin/accounts/{subject}/sessions/revoke` ends every session of one account
+  under `session:revoke-account`, and `POST /admin/sessions/revoke-all` ends every
+  session in the deployment under `session:revoke`, the caller's own included. Both
+  answer 204.
+
+- The minor takedown, as `ITakedowns` and `POST /admin/accounts/{subject}/takedown`:
+  under `takedown:execute` and step-up, one transaction suspends the account into its
+  `takedown.grace` window, ends every session of it, records the trigger and the
+  reason, and writes the `TakedownExecuted` delivery the host confirms order
+  cancellation against. The answer carries `takedownId` and `erasureDue`.
+  `AccountSuspended` follows the commit; no deletion notice and no
+  `AccountDeletionRequested` do.
+
+- `GET /admin/accounts/{subject}/takedown` reads the latest takedown of an account:
+  when it was triggered, when its erasure runs, and which registered subscriber has
+  confirmed it and when. An account never taken down answers 404
+  `identity.takedown.notfound`.
+
+- `POST /admin/accounts/{subject}/takedown/reverse` restores a taken down account to
+  active inside its window, with a reason, and publishes `TakedownReversed`. After the
+  window it answers 422 `identity.takedown.windowelapsed`.
+
+- The deletion sweep erases a taken down account when `takedown.grace` elapses, and an
+  account in its own deletion window when `account.deletion.grace` does.
+
+- `MembershipChanged` announces a membership beginning or ending, naming the
+  membership, its organization and whose it is. The erasure at the end of an
+  organization's deletion window raises one for every membership it ends, alongside
+  `OrganizationErased`.
 
 - The two default declarations the library was always meant to ship now exist:
   `LawfulBases.Default`, the six lawful bases with the four properties the library
@@ -1126,6 +1484,16 @@ against the public contract of LIB-API-001.
 
 ### Fixed
 
+- An organization's policy that overrides the gates of some step-up actions resolves,
+  every other action keeping the system's gate. Such a policy failed to resolve for
+  every member of the organization.
+- A change to `policy.default` records what it raised, so a sign-in that does not meet
+  a raised assurance floor or redundancy rule is held, or told its deadline, as
+  `policy.enforcement.grace` says. The raise was never recorded, and nobody was held.
+- Every request body is read through the library's generated serialization contexts
+  and through nothing else. The reflection resolver the framework starts with answered
+  before any context was asked, so every body was read by reflection, and the privacy
+  and compliance bodies were declared in no context at all.
 - A request that names an identifier kind (`email`, `phone`) is read. Adding an
   identifier to a registration or to an account, and setting a backup identifier, were
   answered as malformed requests whatever was sent.

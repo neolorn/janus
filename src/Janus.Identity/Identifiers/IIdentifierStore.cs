@@ -41,6 +41,19 @@ internal interface IIdentifierStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Finds the account an identifier belongs to and the identifier itself, on the
+    /// terms of <see cref="FindOwnerAsync"/>.
+    /// </summary>
+    /// <param name="kind">Which kind the value is.</param>
+    /// <param name="canonical">The value in its canonical form.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The account and the identifier, or nothing where no account holds it.</returns>
+    ValueTask<(SubjectId Subject, IdentifierId Identifier)?> FindHolderAsync(
+        IdentifierKind kind,
+        string canonical,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Whether a value is held out of reach by a removal whose undo has not run out
     /// (REG-IDENT-006). A reserved value belongs to no account and resolves to none,
     /// so this is asked only where something is about to be taken on.

@@ -1,5 +1,8 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json.Serialization;
+using Janus.Core;
 
 namespace Janus.Hosting.Privacy;
 
@@ -23,4 +26,26 @@ internal sealed record DocumentVersionView(
     string Version,
     string GoverningLanguage,
     string Text,
-    IReadOnlyList<DocumentTranslationView> Translations);
+    IReadOnlyList<DocumentTranslationView> Translations)
+{
+    /// <summary>
+    /// The view of a version.
+    /// </summary>
+    /// <param name="version">The version.</param>
+    /// <returns>The view.</returns>
+    /// <exception cref="ArgumentNullException">The version is absent.</exception>
+    public static DocumentVersionView Of(DocumentVersion version)
+    {
+        ArgumentNullException.ThrowIfNull(version);
+
+        return new DocumentVersionView(
+            version.DocumentName,
+            version.Version,
+            version.GoverningLanguage,
+            version.Text,
+            [
+                .. version.Translations.Select(translation =>
+                    new DocumentTranslationView(translation.Language, translation.Text)),
+            ]);
+    }
+}

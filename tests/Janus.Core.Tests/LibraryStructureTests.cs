@@ -291,6 +291,27 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
+    /// IDN-LIFE-009a AC1: a membership is made in one place, the attachment of an
+    /// acknowledged invitation, and the acknowledgement is the one thing that runs it;
+    /// a grant, or any other path, makes none.
+    /// </summary>
+    [Fact]
+    public void IDN_LIFE_009a_AC1_OnlyAnAcknowledgedInvitationMakesAMembership()
+    {
+        string[] making =
+        [
+            .. Named(text =>
+                Regex.IsMatch(text, @"\bMembership\s*\.\s*Create\(", RegexOptions.None, TimeSpan.FromSeconds(5))
+                || Called(text, "IMembershipStore", "CreateAsync")),
+        ];
+
+        Assert.Equal(["MembershipAttachment.cs"], making);
+        Assert.Equal(
+            ["IMembershipAttachment.cs", "InvitationAcknowledgement.cs", "MembershipAttachment.cs", "StorageRegistration.cs"],
+            Named(text => text.Contains("MembershipAttachment", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
     /// IDN-ATTR-003 AC2: the photo is in a table of its own and only its own port
     /// reaches it, so no ordinary read of an account carries image bytes.
     /// </summary>
@@ -429,12 +450,31 @@ public sealed class LibraryStructureTests
             .SelectMany(folder => Sources().Where(file =>
                 file.StartsWith(folder, StringComparison.Ordinal)));
 
-    // Whichever name a class gives the store it holds, a write through it is that name
-    // followed by the store's write.
-    private static bool Written(string text) =>
-        Regex.Matches(text, @"IConfigurationStore\s+(\w+)", RegexOptions.None, TimeSpan.FromSeconds(5))
+    private static bool Written(string text) => Called(text, "IConfigurationStore", "WriteAsync");
+
+    // Whichever name a class gives the port it holds, a call through it is that name
+    // followed by the port's method.
+    private static bool Called(string text, string port, string method) =>
+        Regex.Matches(text, port + @"\s+(\w+)", RegexOptions.None, TimeSpan.FromSeconds(5))
             .Select(match => match.Groups[1].Value)
-            .Any(held => text.Contains(held + ".WriteAsync(", StringComparison.Ordinal));
+            .Any(held => Regex.IsMatch(
+                text,
+                @"\b" + Regex.Escape(held) + @"\s*\." + method + @"\(",
+                RegexOptions.None,
+                TimeSpan.FromSeconds(5)));
+
+    // The files of the library whose text answers yes, by name.
+    private static string[] Named(Func<string, bool> answers) =>
+    [
+        .. Sources()
+            .Where(file => file.StartsWith(
+                Path.Combine(Repository.Root, "src") + Path.DirectorySeparatorChar,
+                StringComparison.Ordinal))
+            .Where(file => answers(File.ReadAllText(file)))
+            .Select(Path.GetFileName)
+            .Select(name => name!)
+            .Order(StringComparer.Ordinal),
+    ];
 
     private static IEnumerable<string> Sources() =>
         Roots

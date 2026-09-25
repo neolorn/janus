@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
+using Janus.Authentication.Organizations;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
@@ -24,6 +25,7 @@ namespace Janus.Authentication.SignIn;
 /// <param name="identifiers">Where an identifier is resolved to an account.</param>
 /// <param name="accounts">Where the account's state is read.</param>
 /// <param name="policies">What policy governs the account.</param>
+/// <param name="domainLock">Whether an email address is one a member may sign in with.</param>
 /// <param name="sending">Where a message goes out.</param>
 /// <param name="nonExistence">What answers an address no account holds.</param>
 /// <param name="signals">What is known about a number before a text leans on it.</param>
@@ -33,16 +35,18 @@ namespace Janus.Authentication.SignIn;
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where a token and a code are drawn from.</param>
 /// <remarks>
-/// Implements AUTH-FACT-003, AUTH-ABUSE-003 and REG-SESS-003. Asking always succeeds:
-/// an identifier no account holds, an identifier whose channel the policy has not
-/// enabled and an account that cannot be signed into each produce the same answer as
-/// one that can, and differ only in what arrives at the channel.
+/// Implements AUTH-FACT-003, AUTH-ABUSE-003, REG-SESS-003 and REG-DOM-001. Asking always
+/// succeeds: an identifier no account holds, an identifier whose channel the policy has
+/// not enabled, an account that cannot be signed into and an address a domain lock
+/// refuses each produce the same answer as one that can, and differ only in what
+/// arrives at the channel.
 /// </remarks>
 internal sealed class SignInLinks(
     IPendingSignInStore pending,
     IIdentifierDirectory identifiers,
     IAccountDirectory accounts,
     PolicyResolution policies,
+    DomainLock domainLock,
     INotificationHandler sending,
     NonExistenceNotice nonExistence,
     PhoneSignals signals,
@@ -57,7 +61,10 @@ internal sealed class SignInLinks(
     /// kind.
     /// </summary>
     /// <param name="identifier">The email or phone as it was entered.</param>
-    /// <param name="language">The language the message goes out in.</param>
+    /// <param name="language">
+    /// The locale of the request, which the message goes out in where the account holds
+    /// no language of its own (IDN-ATTR-001).
+    /// </param>
     /// <param name="source">The address the request came from.</param>
     /// <param name="browser">What the asking browser carries, or nothing.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
@@ -75,7 +82,10 @@ internal sealed class SignInLinks(
     /// Asks for a one-time code by email.
     /// </summary>
     /// <param name="identifier">The email as it was entered.</param>
-    /// <param name="language">The language the message goes out in.</param>
+    /// <param name="language">
+    /// The locale of the request, which the message goes out in where the account holds
+    /// no language of its own (IDN-ATTR-001).
+    /// </param>
     /// <param name="source">The address the request came from.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Success, or the delay the source has earned.</returns>
@@ -194,6 +204,34 @@ internal sealed class SignInLinks(
     }
 
     /// <summary>
+    /// Whether the address a link or code went to is one the account's domain locks
+    /// still admit, which is judged again when it is used since a lock may have changed
+    /// while it was out (REG-DOM-001).
+    /// </summary>
+    /// <param name="held">The pending sign-in.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Nothing where it is admitted, or the refusal.</returns>
+    /// <exception cref="ArgumentNullException">The pending sign-in is absent.</exception>
+    public async ValueTask<Error?> LockedAsync(PendingSignIn held, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(held);
+
+        if (held.Email is not IdentifierId email)
+        {
+            return null;
+        }
+
+        HeldIdentifiers standing = await identifiers.HeldAsync(held.Subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        // An address the account has given up since is judged on nothing.
+        return standing.Find(email) is HeldIdentifier sent
+            && EmailAddress.TryParse(sent.Canonical, out EmailAddress address)
+                ? await domainLock.RefusedAsync(held.Subject, address, cancellationToken).ConfigureAwait(false)
+                : null;
+    }
+
+    /// <summary>
     /// Ends one that has been used, inside the transaction the caller opened.
     /// </summary>
     /// <param name="held">The pending sign-in.</param>
@@ -274,11 +312,12 @@ internal sealed class SignInLinks(
         }
 
         Channel? channel = Read(identifier, usernames, ask);
-        SubjectId? owner = channel is null
+        (SubjectId Subject, IdentifierId Identifier)? holder = channel is null
             ? null
             : await identifiers
-                .OwnerAsync(channel.Kind, channel.Canonical, cancellationToken)
+                .HolderAsync(channel.Kind, channel.Canonical, cancellationToken)
                 .ConfigureAwait(false);
+        SubjectId? owner = holder?.Subject;
 
         TimeSpan delay = (await throttle
                 .DelayAsync(
@@ -321,8 +360,8 @@ internal sealed class SignInLinks(
         // Everything from here answers the caller the same way. What differs is what
         // reaches the channel: the message, the non-existence notice, or nothing at
         // all (AUTH-ABUSE-003).
-        return owner is SubjectId subject
-            ? await IssueAsync(subject, channel, language, source, browser, ask, cancellationToken)
+        return holder is { } held
+            ? await IssueAsync(held.Subject, held.Identifier, channel, language, source, browser, ask, cancellationToken)
                 .ConfigureAwait(false)
             : await TellAsync(channel, language, source, cancellationToken).ConfigureAwait(false);
     }
@@ -350,6 +389,7 @@ internal sealed class SignInLinks(
 
     private async ValueTask<Result> IssueAsync(
         SubjectId subject,
+        IdentifierId identifier,
         Channel channel,
         string language,
         string source,
@@ -381,6 +421,26 @@ internal sealed class SignInLinks(
             return Result.Success();
         }
 
+        IdentifierId? email = channel.Kind is IdentifierKind.Email ? identifier : null;
+
+        // An address a domain lock refuses is sent nothing, as a factor the policy has
+        // not enabled is (REG-DOM-001, AUTH-ABUSE-003).
+        if (email is not null
+            && EmailAddress.TryParse(channel.Canonical, out EmailAddress address)
+            && await domainLock.RefusedAsync(subject, address, cancellationToken).ConfigureAwait(false)
+                is Error locked)
+        {
+            return locked.Code == ErrorCodes.IdentifierDomainNotAllowed
+                ? Result.Success()
+                : Result.Failure(locked);
+        }
+
+        string? settled = await identifiers.LanguageAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        IReadOnlyList<string> languages = (await configuration
+                .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
+            .Match(read => read, _ => (IReadOnlyList<string>)[]);
+
         string code = VerificationCode.Draw(randomness);
         var token = OpaqueToken.Draw(randomness);
 
@@ -401,7 +461,7 @@ internal sealed class SignInLinks(
                         ask.Message,
                         RestrictionPurpose.SignIn,
                         source,
-                        language)
+                        RecipientLanguage.Of(settled, language, languages))
                     {
                         Subject = subject,
                         Values = values,
@@ -422,6 +482,7 @@ internal sealed class SignInLinks(
                     token,
                     subject,
                     channel.Factor,
+                    email,
                     code,
                     Fingerprint(browser),
                     time.GetUtcNow(),

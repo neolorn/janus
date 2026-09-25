@@ -149,7 +149,7 @@ public sealed class AuditRecordTests
     }
 
     /// <summary>
-    /// The audit port offers an append and a read and nothing that changes a record.
+    /// The audit port offers an append and reads and nothing that changes a record.
     /// </summary>
     [Fact]
     public void PRIV_RET_002_AC1_TheAuditPortOffersNoWriteButAnAppend()
@@ -158,7 +158,9 @@ public sealed class AuditRecordTests
             .GetMethods(BindingFlags.Public | BindingFlags.Instance)
             .Select(method => method.Name);
 
-        Assert.Equal(["AppendAsync", "FindBySubjectAsync"], methods.Order(StringComparer.Ordinal));
+        Assert.Equal(
+            ["AppendAsync", "FindBySubjectAsync", "FindNamingAsync"],
+            methods.Order(StringComparer.Ordinal));
     }
 
     private static Dictionary<string, JsonElement> Fields(params (string Name, string Value)[] fields)

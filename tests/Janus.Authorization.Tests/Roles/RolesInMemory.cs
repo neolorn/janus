@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -24,7 +25,7 @@ internal sealed class RolesInMemory : IRoleStore
 
     /// <inheritdoc/>
     public ValueTask<IReadOnlyList<Role>> AllAsync(CancellationToken cancellationToken) =>
-        ValueTask.FromResult<IReadOnlyList<Role>>([.. _roles.Values.OrderBy(role => role.Name)]);
+        ValueTask.FromResult<IReadOnlyList<Role>>([.. _roles.Values.OrderBy(role => role.Name.ToString(), StringComparer.Ordinal)]);
 
     /// <inheritdoc/>
     public ValueTask CreateAsync(Role role, CancellationToken cancellationToken)

@@ -73,6 +73,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly AccessGateInMemory _gate = new();
+    private readonly AdministrativeOrganizationInMemory _administrative = new();
     private readonly LocationResolverInMemory _locations = new();
     private readonly ThrottleLedgerInMemory _throttle = new();
     private readonly NoticeLedgerInMemory _notices = new();
@@ -689,7 +690,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             _audit,
             Policies,
             _configuration,
-            _gate,
+            new AdministrativeScope(_gate, _administrative),
             _locations,
             _work,
             _clock,
@@ -727,10 +728,9 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             _authenticators,
             Passwords,
             Policies,
-            _memberships,
             Sessions,
             Guard,
-            _gate,
+            new AdministrativeScope(_gate, _administrative),
             _notifications,
             new NonExistenceNotice(_configuration, _notifications, _notices, _work, _events, _clock),
             Throttle,

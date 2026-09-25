@@ -201,7 +201,6 @@ internal static class RecoveryEndpoints
                         new SubjectId(subject),
                         request.Reason ?? string.Empty,
                         channel,
-                        RequestOrigin.Language(context.Request),
                         RequestOrigin.Source(context.Request),
                         cancellationToken)
                     .ConfigureAwait(false),

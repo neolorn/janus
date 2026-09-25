@@ -103,6 +103,92 @@ public sealed class AccountTests
     }
 
     /// <summary>
+    /// IDN-LIFE-013 AC1 and PRIV-RIGHT-004: an administrator suspending a restricted
+    /// account and reactivating it restores the restriction, and an active one comes
+    /// back active; an account its owner deactivated becomes the administrator's to
+    /// reactivate.
+    /// </summary>
+    [Fact]
+    public void IDN_LIFE_013_AC1_ReactivationRestoresARestrictionInForce()
+    {
+        var restricted = Account.Create(Ahmed, Noon);
+        var active = Account.Create(Ahmed, Noon);
+        var deactivated = Account.Create(Ahmed, Noon);
+
+        restricted.Restrict();
+        restricted.Suspend();
+        active.Suspend();
+        deactivated.Deactivate();
+        deactivated.Suspend();
+
+        Assert.Equal((AccountState.Suspended, true), (restricted.State, restricted.RestrictionHeld));
+        Assert.Equal(SuspensionOrigin.Administrator, deactivated.SuspendedBy);
+
+        restricted.Reactivate();
+        active.Reactivate();
+
+        Assert.Equal((AccountState.Restricted, false), (restricted.State, restricted.RestrictionHeld));
+        Assert.Equal(AccountState.Active, active.State);
+        Assert.Throws<InvalidOperationException>(() => restricted.Reactivate());
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-004 AC2: a restricted account keeps its restriction through a deletion
+    /// window it leaves and through a takedown that is reversed, and comes back
+    /// restricted from both.
+    /// </summary>
+    [Fact]
+    public void PRIV_RIGHT_004_AC2_ARestrictionIsHeldThroughADeletionWindow()
+    {
+        var cancelled = Account.Create(Ahmed, Noon);
+        var reversed = Account.Create(Ahmed, Noon);
+
+        cancelled.Restrict();
+        cancelled.RequestDeletion(DeletionOrigin.Self, Noon);
+        reversed.Restrict();
+        reversed.Takedown(Noon);
+
+        Assert.Equal((AccountState.Deleting, true), (cancelled.State, cancelled.RestrictionHeld));
+        Assert.Equal((AccountState.Deleting, true), (reversed.State, reversed.RestrictionHeld));
+
+        cancelled.CancelDeletion();
+        reversed.ReverseTakedown();
+
+        Assert.Equal((AccountState.Restricted, false), (cancelled.State, cancelled.RestrictionHeld));
+        Assert.Equal((AccountState.Restricted, false), (reversed.State, reversed.RestrictionHeld));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-004: a restriction decided while the account is suspended, by either
+    /// origin, or in its deletion window is held until it comes back, and an erasure
+    /// leaves nothing held; an active account is restricted, never held.
+    /// </summary>
+    [Fact]
+    public void PRIV_RIGHT_004_ARestrictionDecidedAwayFromActiveIsHeld()
+    {
+        var suspended = Account.Create(Ahmed, Noon);
+        var deactivated = Account.Create(Ahmed, Noon);
+        var erased = Account.Create(Ahmed, Noon);
+
+        suspended.Suspend();
+        suspended.HoldRestriction();
+        deactivated.Deactivate();
+        deactivated.HoldRestriction();
+        erased.RequestDeletion(DeletionOrigin.Self, Noon);
+        erased.HoldRestriction();
+
+        suspended.Reactivate();
+        deactivated.Reactivate();
+        erased.MarkErased();
+
+        Assert.Equal(AccountState.Restricted, suspended.State);
+        Assert.Equal(AccountState.Restricted, deactivated.State);
+        Assert.Equal((AccountState.Deleted, false), (erased.State, erased.RestrictionHeld));
+        Assert.Throws<InvalidOperationException>(() => Account.Create(Ahmed, Noon).HoldRestriction());
+        Assert.Throws<InvalidOperationException>(erased.HoldRestriction);
+    }
+
+    /// <summary>
     /// IDN-LIFE-003 AC4: a takedown passes the account through suspension into the
     /// grace window in one transaction, recording that a takedown put it there.
     /// </summary>

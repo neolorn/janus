@@ -73,6 +73,14 @@ internal sealed class GrantsInMemory : IGrantStore
     }
 
     /// <inheritdoc/>
+    public ValueTask<bool> NamesAsync(RoleName role, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_grants.Values.Any(grant => grant.Role == role));
+
+    /// <inheritdoc/>
+    public ValueTask<bool> NamesAsync(GrantSubject holder, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_grants.Values.Any(grant => grant.Subject == holder));
+
+    /// <inheritdoc/>
     public ValueTask<IReadOnlyList<Grant>> HeldByAsync(
         IReadOnlyList<GrantSubject> holders,
         OrganizationId organization,

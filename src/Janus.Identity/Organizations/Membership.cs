@@ -10,8 +10,10 @@ namespace Janus.Identity.Organizations;
 /// that belongs neither to the account nor to the organization.
 /// </summary>
 /// <remarks>
-/// Implements IDN-MEM-001, IDN-MEM-002 and IDN-PRIN-003. Ending a membership leaves
-/// both sides where they are and removes no row: the end is an instant on the record.
+/// Implements IDN-MEM-001, IDN-MEM-002, IDN-PRIN-003 and REG-INV-001. Ending a
+/// membership leaves both sides where they are and removes no row: the end is an
+/// instant on the record. A membership an invitation attached carries what the person
+/// acknowledged for it.
 /// How many memberships an account may hold at once is
 /// <c>organization.multiplememberships</c>, which the caller reads and this type
 /// applies: the schema takes any number and the rule lives here.
@@ -56,6 +58,11 @@ internal sealed class Membership
     public DateTimeOffset? EndedAt { get; private set; }
 
     /// <summary>
+    /// What the person acknowledged when an invitation attached it, where one did.
+    /// </summary>
+    public MembershipAcknowledgement? Acknowledgement { get; private init; }
+
+    /// <summary>
     /// Whether the membership is running: it began and has not ended.
     /// </summary>
     public bool IsCurrent => EndedAt is null;
@@ -71,6 +78,9 @@ internal sealed class Membership
     /// </param>
     /// <param name="multiple">What <c>organization.multiplememberships</c> allows.</param>
     /// <param name="createdAt">When it begins.</param>
+    /// <param name="acknowledgement">
+    /// What the person acknowledged, where an invitation attaches it.
+    /// </param>
     /// <returns>The membership, or the refusal and its code.</returns>
     /// <exception cref="ArgumentNullException">The memberships held are absent.</exception>
     /// <exception cref="ArgumentException">One of them belongs to another account.</exception>
@@ -80,7 +90,8 @@ internal sealed class Membership
         OrganizationId organization,
         IEnumerable<Membership> held,
         bool multiple,
-        DateTimeOffset createdAt)
+        DateTimeOffset createdAt,
+        MembershipAcknowledgement? acknowledgement = null)
     {
         ArgumentNullException.ThrowIfNull(held);
 
@@ -113,7 +124,10 @@ internal sealed class Membership
 
         return current is not 0 && !multiple
             ? Result.Failure<Membership>(Error.From(ErrorCodes.MembershipLimitReached))
-            : Result.Success(new Membership(id, subject, organization, createdAt));
+            : Result.Success(new Membership(id, subject, organization, createdAt)
+            {
+                Acknowledgement = acknowledgement,
+            });
     }
 
     /// <summary>
@@ -125,14 +139,16 @@ internal sealed class Membership
     /// <param name="organization">Which organization it is of.</param>
     /// <param name="createdAt">When it began.</param>
     /// <param name="endedAt">When it ended, where it has.</param>
+    /// <param name="acknowledgement">What the person acknowledged, where an invitation attached it.</param>
     /// <returns>The membership.</returns>
     public static Membership Existing(
         MembershipId id,
         SubjectId subject,
         OrganizationId organization,
         DateTimeOffset createdAt,
-        DateTimeOffset? endedAt) =>
-        new(id, subject, organization, createdAt) { EndedAt = endedAt };
+        DateTimeOffset? endedAt,
+        MembershipAcknowledgement? acknowledgement) =>
+        new(id, subject, organization, createdAt) { EndedAt = endedAt, Acknowledgement = acknowledgement };
 
     /// <summary>
     /// Ends the membership. The account and the organization persist, and the record

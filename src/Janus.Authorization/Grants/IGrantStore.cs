@@ -55,6 +55,24 @@ internal interface IGrantStore
     ValueTask<bool> ExistsAsync(Grant grant, DateTimeOffset at, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Whether any grant confers the role, live, expired or revoked, which is what keeps
+    /// the role in place: a grant's history names it.
+    /// </summary>
+    /// <param name="role">Which role.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Whether one does.</returns>
+    ValueTask<bool> NamesAsync(RoleName role, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Whether any grant was given to an account or a group, live, expired or revoked,
+    /// which is what keeps a group in place: a grant's history names it.
+    /// </summary>
+    /// <param name="holder">The account or group.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Whether one was.</returns>
+    ValueTask<bool> NamesAsync(GrantSubject holder, CancellationToken cancellationToken);
+
+    /// <summary>
     /// The live grants a principal holds, its own and those of every group it belongs
     /// to, within one organization.
     /// </summary>
@@ -101,14 +119,15 @@ internal interface IGrantStore
 
     /// <summary>
     /// The live grants on one record, on anything containing it, or on the whole
-    /// organization, whoever holds them. This is what the "who can access this?" view
-    /// reads for stored grants.
+    /// organization, whoever holds them, as the effective grants view confers them: none
+    /// while the organization's deletion is requested, and none of a role that allows
+    /// nothing. This is what the "who can access this?" view reads for stored grants.
     /// </summary>
     /// <param name="reference">The record in question.</param>
     /// <param name="organization">The organization the record belongs to.</param>
     /// <param name="at">The instant liveness is read at.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The grants, nearest container first.</returns>
+    /// <returns>The grants, oldest first.</returns>
     ValueTask<IReadOnlyList<Grant>> OnAsync(
         ResourceReference reference,
         OrganizationId organization,

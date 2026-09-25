@@ -31,8 +31,26 @@ internal sealed class PolicyResolution(
     /// for one holding a membership, and the strictest of several for one holding
     /// several.
     /// </returns>
+    public ValueTask<Result<Policy>> ForAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken) =>
+        ForAsync(subject, joining: null, cancellationToken);
+
+    /// <summary>
+    /// The policy in force for a principal an invitation is taking into an
+    /// organization, which that organization's policy governs from the moment the
+    /// invitation attaches and before the membership does (IDN-LIFE-009a, REG-INV-001).
+    /// </summary>
+    /// <param name="subject">The principal, or the subject a registration will create.</param>
+    /// <param name="joining">The organization the invitation is into, where one is.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The policy <see cref="ForAsync(SubjectId, CancellationToken)"/> resolves, with the
+    /// organization joined counted among the principal's memberships.
+    /// </returns>
     public async ValueTask<Result<Policy>> ForAsync(
         SubjectId subject,
+        OrganizationId? joining,
         CancellationToken cancellationToken)
     {
         Error? failure = null;
@@ -46,8 +64,13 @@ internal sealed class PolicyResolution(
             return Result.Failure<Policy>(failure);
         }
 
-        IReadOnlyList<OrganizationId> held =
-            await memberships.OfAsync(subject, cancellationToken).ConfigureAwait(false);
+        List<OrganizationId> held =
+            [.. await memberships.OfAsync(subject, cancellationToken).ConfigureAwait(false)];
+
+        if (joining is OrganizationId invitedInto && !held.Contains(invitedInto))
+        {
+            held.Add(invitedInto);
+        }
 
         Policy? organizations = null;
 

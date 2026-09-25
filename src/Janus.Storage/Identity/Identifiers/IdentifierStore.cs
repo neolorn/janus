@@ -61,7 +61,8 @@ internal sealed class IdentifierStore(
                         row.AddedAt,
                         row.VerifiedAt,
                         row.IsPrimary,
-                        row.IsLocked));
+                        row.IsLocked,
+                        row.IsPersonal));
                 }
             }
             finally
@@ -92,6 +93,24 @@ internal sealed class IdentifierStore(
         // this function computes is the neutralised value, so the guard is the floor
         // rather than the lookup.
         return row is null || Fingerprint.IsNeutralised(row.Fingerprint) ? null : row.Subject;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<(SubjectId Subject, IdentifierId Identifier)?> FindHolderAsync(
+        IdentifierKind kind,
+        string canonical,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(canonical);
+
+        byte[] fingerprint = Fingerprinted(canonical);
+
+        IdentifierRecord? row = await context.Identifiers
+            .Where(held => held.Kind == kind && held.Fingerprint == fingerprint)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return row is null || Fingerprint.IsNeutralised(row.Fingerprint) ? null : (row.Subject, row.Id);
     }
 
     /// <inheritdoc/>
@@ -347,12 +366,14 @@ internal sealed class IdentifierStore(
             VerifiedAt = identifier.VerifiedAt,
             IsPrimary = identifier.IsPrimary,
             IsLocked = identifier.IsLocked,
+            IsPersonal = identifier.IsPersonal,
         };
 
     private void Carry(Identifier identifier, IdentifierRecord row, ReadOnlySpan<byte> dataKey)
     {
         row.VerifiedAt = identifier.VerifiedAt;
         row.IsPrimary = identifier.IsPrimary;
+        row.IsPersonal = identifier.IsPersonal;
 
         // Re-encrypting an unchanged value would draw a new initialisation vector and
         // write a column the account did not change, so the stored forms are read back

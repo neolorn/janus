@@ -69,13 +69,14 @@ public interface ISessions
     /// </summary>
     /// <param name="context">Who is asking.</param>
     /// <param name="subject">Whose sessions.</param>
-    /// <param name="organization">The organization the caller is asking within.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Success, or <c>authz.denied</c> where the caller may not.</returns>
+    /// <returns>
+    /// Success, or <c>authz.denied</c> where the caller does not hold
+    /// <c>session:revoke-account</c> in the administrative organization.
+    /// </returns>
     ValueTask<Result> RevokeAccountAsync(
         AccessContext context,
         SubjectId subject,
-        OrganizationId organization,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -83,11 +84,12 @@ public interface ISessions
     /// suspected compromise calls for. Distinct from ending one account's.
     /// </summary>
     /// <param name="context">Who is asking.</param>
-    /// <param name="organization">The organization the caller is asking within.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Success, or <c>authz.denied</c> where the caller may not.</returns>
+    /// <returns>
+    /// Success, or <c>authz.denied</c> where the caller does not hold
+    /// <c>session:revoke</c> in the administrative organization.
+    /// </returns>
     ValueTask<Result> RevokeEveryAsync(
         AccessContext context,
-        OrganizationId organization,
         CancellationToken cancellationToken);
 }

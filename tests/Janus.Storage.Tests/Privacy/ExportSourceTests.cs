@@ -29,6 +29,7 @@ using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Identity.Profiles;
 using Janus.Storage.Privacy.Exports;
+using Janus.Storage.Privacy.Outbox;
 using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -184,6 +185,41 @@ public sealed class ExportSourceTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// REG-INV-001 AC3: a membership an invitation attached carries when it was
+    /// acknowledged, and each document the person acknowledged is carried at the
+    /// version shown.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_INV_001_AC3_TheExportCarriesWhatWasAcknowledgedAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        var acknowledged = new MembershipAcknowledgement(
+            [new InvitationDocument("staff-handbook", "3"), new InvitationDocument("conduct", "1")],
+            Noon);
+
+        MembershipId placed = await PlacedAsync(subject, organization, until: null, acknowledged);
+
+        IReadOnlyDictionary<string, ExportSection> named = await SectionsAsync(subject);
+
+        IReadOnlyDictionary<string, string> membership =
+            Assert.Single(named["memberships"].Records).Values;
+
+        Assert.Equal(Noon, DateTimeOffset.Parse(membership["acknowledgedAt"], null));
+        Assert.Equal(
+            [
+                (placed.Value.ToString(), "staff-handbook", "3"),
+                (placed.Value.ToString(), "conduct", "1"),
+            ],
+            named["membership-acknowledgements"].Records.Select(record =>
+                (record.Values["membership"], record.Values["document"], record.Values["version"])));
+        Assert.All(
+            named["membership-acknowledgements"].Records,
+            record => Assert.Equal(Noon, DateTimeOffset.Parse(record.Values["acknowledgedAt"], null)));
+    }
+
+    /// <summary>
     /// REG-ACCT-001: the standing group is carried whole, so the memberships, the
     /// roles the account holds and the assurance it can reach are in the export
     /// beside the state (IDN-MEM-001, AUTHZ-GRANT-001, AUTH-STEP-002).
@@ -195,7 +231,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
         SubjectId subject = await _deployment.AccountAsync(Noon);
         OrganizationId organization = await _deployment.OrganizationAsync(Noon);
 
-        await PlacedAsync(subject, organization, until: null);
+        _ = await PlacedAsync(subject, organization, until: null);
         GrantId conferred = await ConferredAsync(subject, organization);
 
         await PasswordAsync(subject);
@@ -209,6 +245,8 @@ public sealed class ExportSourceTests(DatabaseFixture database)
         Assert.Equal(organization.Value.ToString(), membership["organization"]);
         Assert.Equal(Noon, DateTimeOffset.Parse(membership["joinedAt"], null));
         Assert.False(membership.ContainsKey("endedAt"));
+        Assert.False(membership.ContainsKey("acknowledgedAt"));
+        Assert.Empty(named["membership-acknowledgements"].Records);
 
         IReadOnlyDictionary<string, string> grant =
             Assert.Single(named["grants"].Records).Values;
@@ -273,6 +311,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
                 "devices",
                 "preferences",
                 "memberships",
+                "membership-acknowledgements",
                 "grants",
                 "assurance",
                 "sessions",
@@ -294,6 +333,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
         Assert.Empty(named["recovery-codes"].Records);
         Assert.Empty(named["devices"].Records);
         Assert.Empty(named["memberships"].Records);
+        Assert.Empty(named["membership-acknowledgements"].Records);
         Assert.Empty(named["grants"].Records);
         Assert.Empty(named["sessions"].Records);
 
@@ -399,12 +439,14 @@ public sealed class ExportSourceTests(DatabaseFixture database)
         var source = new ExportSource(
             new AccountStore(reading),
             new AccountDirectory(
+                reading,
                 new AccountStore(reading),
                 new ProfileStore(reading, _deployment.Keys, _deployment.Randomness),
                 new ProfilePhotoStore(reading, _deployment.Keys, _deployment.Randomness),
                 new SubjectKeyStore(reading, _deployment.Keys, _deployment.Randomness),
                 Preferences(reading),
-                Declared),
+                Declared,
+                new OutboxStore(reading, new FixedTime(Noon))),
             new IdentifierDirectory(Identifiers(reading), Preferences(reading)),
             new AuthenticatorStore(reading, _deployment.Keys, _deployment.Randomness),
             new PasswordStore(reading),
@@ -568,10 +610,11 @@ public sealed class ExportSourceTests(DatabaseFixture database)
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
-    private async Task PlacedAsync(
+    private async Task<MembershipId> PlacedAsync(
         SubjectId subject,
         OrganizationId organization,
-        DateTimeOffset? until)
+        DateTimeOffset? until,
+        MembershipAcknowledgement? acknowledged = null)
     {
         Membership membership = Membership
             .Create(
@@ -580,7 +623,8 @@ public sealed class ExportSourceTests(DatabaseFixture database)
                 organization,
                 [],
                 multiple: true,
-                Noon)
+                Noon,
+                acknowledged)
             .Match(made => made, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
 
         if (until is DateTimeOffset ended)
@@ -595,6 +639,8 @@ public sealed class ExportSourceTests(DatabaseFixture database)
             TestContext.Current.CancellationToken);
 
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        return membership.Id;
     }
 
     private async Task<GrantId> ConferredAsync(SubjectId subject, OrganizationId organization)

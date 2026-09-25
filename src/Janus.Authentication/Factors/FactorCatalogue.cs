@@ -36,7 +36,7 @@ internal static class FactorCatalogue
                 IdentifierKind.Phone,
                 restricted: true),
             [Factor.Google] = Primary(AssuranceLevel.Delegated, phishingResistant: false),
-            [Factor.Apple] = Primary(AssuranceLevel.Delegated, phishingResistant: false),
+            [Factor.Apple] = Primary(AssuranceLevel.Delegated, phishingResistant: false, relaysAddress: true),
             [Factor.Totp] = Second(phishingResistant: false),
             [Factor.SecurityKey] = Second(phishingResistant: true, webAuthn: true),
             [Factor.PhoneCode] = Second(phishingResistant: false, restricted: true),
@@ -98,7 +98,8 @@ internal static class FactorCatalogue
         AssuranceLevel level,
         bool phishingResistant,
         bool webAuthn = false,
-        bool discoverable = false) =>
+        bool discoverable = false,
+        bool relaysAddress = false) =>
         new(
             CanBePrimary: true,
             CanBeSecondFactor: false,
@@ -110,7 +111,8 @@ internal static class FactorCatalogue
             discoverable,
             Channel: null,
             Restricted: false,
-            SingleUse: false);
+            SingleUse: false,
+            relaysAddress);
 
     // An entry whose contribution is to a sign-in and to nothing afterwards: the
     // mailbox or the number behind it is also the recovery channel, so counting it
@@ -130,7 +132,8 @@ internal static class FactorCatalogue
             IsDiscoverable: false,
             channel,
             restricted,
-            SingleUse: false);
+            SingleUse: false,
+            RelaysAddress: false);
 
     // An entry that is never a first step and lifts a sign-in beside one.
     private static FactorProperties Second(
@@ -149,5 +152,6 @@ internal static class FactorCatalogue
             IsDiscoverable: false,
             Channel: null,
             restricted,
-            singleUse);
+            singleUse,
+            RelaysAddress: false);
 }

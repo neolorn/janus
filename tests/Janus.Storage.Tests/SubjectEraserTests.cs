@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 using Dapper;
 using Janus.Authentication;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Invitations;
+using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Identity.Accounts;
@@ -16,6 +18,8 @@ using Janus.Identity.Profiles;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Accounts;
+using Janus.Storage.Authentication.Invitations;
+using Janus.Storage.Authentication.Mailboxes;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Audit;
@@ -23,6 +27,7 @@ using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Identity.Profiles;
 using Janus.Storage.Privacy.Erasures;
+using Janus.Storage.Privacy.Outbox;
 using Janus.Storage.Privacy.SubjectKeys;
 using Janus.Storage.Settings;
 using Microsoft.EntityFrameworkCore;
@@ -33,8 +38,8 @@ namespace Janus.Storage.Tests;
 
 /// <summary>
 /// The erasure: one transaction that leaves a subject's fields unrecoverable and every
-/// row where it was (PRIV-RIGHT-005, PRIV-RIGHT-005a, IDN-LIFE-003b, IDN-LIFE-014,
-/// IDN-ACCT-002, IDN-PRIN-003).
+/// row where it was (PRIV-RIGHT-005, PRIV-RIGHT-005a, IDN-LIFE-003a, IDN-LIFE-003b,
+/// IDN-LIFE-014, IDN-ACCT-002, IDN-PRIN-003).
 /// </summary>
 [Trait("kind", "integration")]
 public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture<DatabaseFixture>, IDisposable
@@ -107,6 +112,47 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             .SingleAsync(row => row.Subject == subject, TestContext.Current.CancellationToken);
 
         Assert.Equal(PersonalDataFormat.Marker, key.FormatMarker);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003a AC5: the state change, the key's destruction and the fingerprints'
+    /// neutralisation commit together or not at all. The erasure that commits leaves an
+    /// erased subject whose key is gone and whose address belongs to nobody; the one
+    /// that rolls back leaves a live subject whose key and address read as before.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_003a_AC5_TheStateTheKeyAndTheFingerprintsCommitTogetherAsync()
+    {
+        (SubjectId erased, string gone) = await AddressedAsync();
+        (SubjectId kept, string held) = await AddressedAsync();
+
+        await EraseAsync(erased, ErasureReason.ErasureRequest);
+
+        await using (StoreContext erasing = database.Context())
+        await using (var work = new UnitOfWork(erasing))
+        {
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            await Eraser(erasing).EraseAsync(
+                kept,
+                ErasureReason.ErasureRequest,
+                Noon,
+                TestContext.Current.CancellationToken);
+            await erasing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Equal(
+            (AccountState.Deleted, false, (SubjectId?)null),
+            await StandingAsync(reading, erased, gone));
+        Assert.Equal(
+            (AccountState.Deleting, true, (SubjectId?)kept),
+            await StandingAsync(reading, kept, held));
+        Assert.Equal(
+            held,
+            Assert.Single((await Identifiers(reading).FindBySubjectAsync(
+                kept,
+                TestContext.Current.CancellationToken)).All).Entered);
     }
 
     /// <summary>
@@ -735,6 +781,78 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
                 .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// PRIV-RIGHT-005c and REG-MAIL-003: the address of a mailbox the subject held is
+    /// theirs, so its fingerprint is neutralised with the rest and the row stays where
+    /// it is, is no longer read, and leaves the address free for a later invitation.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_005c_TheAddressOfAMailboxGoesWithItsHolderAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        var mailbox = Mailbox.Reserved("erased@example.test", Noon);
+
+        mailbox.Hold(subject);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await Mailboxes(writing).AddAsync(mailbox, TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using StoreContext reading = database.Context();
+
+        MailboxRecord row = await reading.Mailboxes
+            .SingleAsync(held => held.Id == mailbox.Id.Value, TestContext.Current.CancellationToken);
+
+        Assert.True(Fingerprint.IsNeutralised(row.Fingerprint));
+        Assert.Empty(await Mailboxes(reading).AllAsync(TestContext.Current.CancellationToken));
+
+        await Mailboxes(reading).AddAsync(
+            Mailbox.Reserved("erased@example.test", Noon),
+            TestContext.Current.CancellationToken);
+        await reading.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005a: what an invitation attached to the subject binds is forgotten
+    /// with the rest of their fields, while the row still names who invited into what;
+    /// an invitation attached to nobody keeps what it binds until it is used or expires.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_005a_WhatAnAttachedInvitationBindsGoesWithTheSubjectAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId inviter = await _deployment.AccountAsync(Noon);
+        Invitation attached = Invited(organization, inviter);
+        Invitation standing = Invited(organization, inviter);
+
+        attached.AttachTo(subject, Noon);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await Invitations(writing).AddAsync(attached, TestContext.Current.CancellationToken);
+            await Invitations(writing).AddAsync(standing, TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using StoreContext reading = database.Context();
+
+        InvitationRecord forgotten = await reading.Invitations
+            .SingleAsync(row => row.Id == attached.Id, TestContext.Current.CancellationToken);
+        InvitationRecord kept = await reading.Invitations
+            .SingleAsync(row => row.Id == standing.Id, TestContext.Current.CancellationToken);
+
+        Assert.Equal((null, null, null), (forgotten.EncryptedIdentifiers, forgotten.WrappedKey, forgotten.KeyVersion));
+        Assert.Equal((subject, inviter, organization), (forgotten.Invitee, forgotten.Inviter, forgotten.Organization));
+        Assert.NotNull(kept.EncryptedIdentifiers);
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
@@ -777,16 +895,37 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     }
 
     private AccountDirectory Directory(StoreContext context) => new(
+        context,
         new AccountStore(context),
         new ProfileStore(context, _deployment.Keys, _deployment.Randomness),
         new ProfilePhotoStore(context, _deployment.Keys, _deployment.Randomness),
         new SubjectKeyStore(context, _deployment.Keys, _deployment.Randomness),
         new PreferenceStore(context, _deployment.Keys, _deployment.Randomness),
-        PreferenceDeclarations.None);
+        PreferenceDeclarations.None,
+        new OutboxStore(context, new FixedTime(Noon)));
 
     private static ErasureStore Store(StoreContext context) => new(context);
 
     private IdentifierStore Identifiers(StoreContext context) =>
+        new(context, _deployment.Keys, Deployment.FingerprintKey, _deployment.Randomness);
+
+    private static Invitation Invited(OrganizationId organization, SubjectId inviter) =>
+        Invitation.Issued(
+            InvitationId.New(TimeProvider.System),
+            organization,
+            inviter,
+            new InvitedIdentifiers("invited@example.test", Phone: null, CorporateEmail: null),
+            [],
+            [],
+            mailbox: null,
+            OpaqueToken.Of(Guid.NewGuid().ToString("N")).Fingerprint(),
+            Noon,
+            TimeSpan.FromDays(7));
+
+    private InvitationStore Invitations(StoreContext context) =>
+        new(context, _deployment.Keys, _deployment.Randomness);
+
+    private MailboxStore Mailboxes(StoreContext context) =>
         new(context, _deployment.Keys, Deployment.FingerprintKey, _deployment.Randomness);
 
     // The deployment's own records, which the library neither maps nor writes: an
@@ -866,6 +1005,48 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await deleting.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         return subject;
+    }
+
+    // An account on its way out that holds one verified email, and that email.
+    private async ValueTask<(SubjectId Subject, string Address)> AddressedAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        string entered = "erasing-" + Guid.NewGuid().ToString("N")[..12] + "@example.test";
+
+        Assert.True(EmailAddress.TryParse(entered, out EmailAddress address));
+
+        await using StoreContext writing = database.Context();
+        IdentifierStore store = Identifiers(writing);
+        IdentifierSet set = await store.FindBySubjectAsync(subject, TestContext.Current.CancellationToken);
+        var email = Identifier.Email(IdentifierId.New(TimeProvider.System), subject, address, entered, Noon);
+
+        set.Add(email, maximum: 5);
+        set.Verify(email.Id, Noon);
+
+        await store.RecordAsync(set, TestContext.Current.CancellationToken);
+        await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        return (subject, address.Value);
+    }
+
+    // The account's state, whether its key still unwraps, and who owns the address.
+    private async ValueTask<(AccountState State, bool Readable, SubjectId? Owner)> StandingAsync(
+        StoreContext reading,
+        SubjectId subject,
+        string address)
+    {
+        AccountRecord account = await reading.Accounts
+            .SingleAsync(row => row.Subject == subject, TestContext.Current.CancellationToken);
+        SubjectKeyRecord key = await reading.SubjectKeys
+            .SingleAsync(row => row.Subject == subject, TestContext.Current.CancellationToken);
+
+        return (
+            account.State,
+            key.FormatMarker == PersonalDataFormat.Marker,
+            await Identifiers(reading).FindOwnerAsync(
+                IdentifierKind.Email,
+                address,
+                TestContext.Current.CancellationToken));
     }
 
     private async ValueTask<byte[]> StoredImageAsync(SubjectId subject)

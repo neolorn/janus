@@ -69,6 +69,28 @@ public sealed class OidcFlowTests
     }
 
     /// <summary>
+    /// INT-MAIL-004 AC2: the discovery document advertises no introspection endpoint;
+    /// a relying party validates a token against the key set and userinfo, which it
+    /// does advertise.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_004_AC2_TheDocumentAdvertisesNoIntrospectionAsync()
+    {
+        await using var deployment = new Deployment();
+
+        JsonElement document = (await new Machine(deployment)
+                .GetAsync("/.well-known/openid-configuration", bearer: string.Empty))
+            .Json();
+
+        Assert.DoesNotContain(
+            document.EnumerateObject(),
+            member => member.Name.Contains("introspection", StringComparison.Ordinal));
+        Assert.True(document.TryGetProperty("jwks_uri", out _));
+        Assert.True(document.TryGetProperty("userinfo_endpoint", out _));
+    }
+
+    /// <summary>
     /// AUTH-KEY-001 AC4: what the key set serves carries the configured algorithm and
     /// the public half only, named so that a token's header resolves to one of them.
     /// </summary>

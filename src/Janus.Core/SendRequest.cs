@@ -8,17 +8,21 @@ namespace Janus.Core;
 /// <param name="Message">What it is for.</param>
 /// <param name="Purpose">Which restrictions it answers to.</param>
 /// <param name="Source">The address the send was asked for from.</param>
-/// <param name="Language">The recipient's language, resolved before the send.</param>
+/// <param name="Language">
+/// The recipient's language, resolved before the send, or nothing where no language
+/// of theirs is known, in which case the message goes out in every language the
+/// deployment declares.
+/// </param>
 /// <remarks>
-/// Implements AUTH-ABUSE-004, INT-SMS-001 and CONV-CONTENT-001. The library states
-/// which message in which language; the words are the deployment's.
+/// Implements AUTH-ABUSE-004, INT-SMS-001, IDN-ATTR-001 and CONV-CONTENT-001. The
+/// library states which message in which language; the words are the deployment's.
 /// </remarks>
 public sealed record SendRequest(
     SendDestination Destination,
     MessageKind Message,
     RestrictionPurpose Purpose,
     string Source,
-    string Language)
+    string? Language)
 {
     private static readonly IReadOnlyDictionary<string, string> Nothing =
         new Dictionary<string, string>(capacity: 0);

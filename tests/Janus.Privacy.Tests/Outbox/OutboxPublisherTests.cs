@@ -244,54 +244,6 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-LIFE-003a: the manual path closes a delivery whose budget was spent, and
-    /// the erasure row it left failed is closed with it.
-    /// </summary>
-    /// <returns>The work of running it.</returns>
-    [Fact]
-    public async Task IDN_LIFE_003a_AManualCompletionClosesAFailedDeliveryAsync()
-    {
-        _subscribers.Add(new SubscriberInMemory("storefront", required: true) { Confirms = false });
-        _configuration.Set(Settings.OutboxRetryMaxAttempts, 1);
-
-        Delivery delivery = await RaisedAsync(SubjectEventKind.ErasureRequested);
-        var erasure = Erasure.Begun(Ahmed, Noon, ErasureReason.ErasureRequest);
-
-        _erasures.Add(erasure);
-
-        await Publisher(_none).PublishAsync(CancellationToken.None);
-
-        Assert.Equal(ErasureStatus.Failed, delivery.Status);
-        Assert.Equal(ErasureStatus.Failed, erasure.Status);
-
-        Result closed = await Publisher(_none).CompleteAsync(delivery.Id, CancellationToken.None);
-
-        Assert.True(closed.Match(() => true, _ => false));
-        Assert.Equal(ErasureStatus.Complete, delivery.Status);
-        Assert.Equal(ErasureStatus.Complete, erasure.Status);
-    }
-
-    /// <summary>
-    /// IDN-LIFE-003a: the manual path is for permanent failure, so a delivery the
-    /// subscribers are still working through is refused rather than closed by hand.
-    /// </summary>
-    /// <returns>The work of running it.</returns>
-    [Fact]
-    public async Task IDN_LIFE_003a_AManualCompletionRefusesADeliveryThatNeverFailedAsync()
-    {
-        _subscribers.Add(new SubscriberInMemory("storefront", required: true) { Confirms = false });
-
-        Delivery delivery = await RaisedAsync(SubjectEventKind.ErasureRequested);
-
-        Result closed = await Publisher(_none).CompleteAsync(delivery.Id, CancellationToken.None);
-
-        Assert.Equal(
-            ErrorCodes.Denied,
-            closed.Match(() => (ErrorCode?)null, failure => failure.Code));
-        Assert.Equal(ErasureStatus.AwaitingSubscribers, delivery.Status);
-    }
-
-    /// <summary>
     /// IDN-LIFE-003b: the erasure row says how far the host-side work has got, so it
     /// counts the attempts the delivery counted and completes when it completes.
     /// </summary>

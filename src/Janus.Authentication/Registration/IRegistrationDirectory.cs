@@ -6,7 +6,8 @@ namespace Janus.Authentication.Registration;
 
 /// <summary>
 /// What registration asks of the account directory: whether a value is already
-/// somebody's, and the one write that turns a finished registration into an account.
+/// somebody's, the language its holder reads, and the one write that turns a finished
+/// registration into an account.
 /// </summary>
 /// <remarks>
 /// Implements REG-SESS-001, REG-SESS-005, REG-SESS-007 and CONV-DESIGN-003. The
@@ -26,6 +27,14 @@ internal interface IRegistrationDirectory
         IdentifierKind kind,
         string canonical,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The language an account settled on, which is what its holder is told in.
+    /// </summary>
+    /// <param name="subject">The account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The language, or nothing where it settled none.</returns>
+    ValueTask<string?> LanguageAsync(SubjectId subject, CancellationToken cancellationToken);
 
     /// <summary>
     /// Writes the account, its identifiers and what the person answered on the way

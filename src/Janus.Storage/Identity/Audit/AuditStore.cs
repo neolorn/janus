@@ -107,6 +107,20 @@ internal sealed class AuditStore(
 
     // PRIV-BREACH-002: a record whose subject key is gone comes back anonymised, so
     // the question the trail exists to answer is still answerable after an erasure.
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<AuditRecord>> FindNamingAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        List<AuditRowRecord> rows = await context.AuditRecords
+            .Where(row => row.EffectiveSubject == subject || row.ActingSubject == subject)
+            .OrderByDescending(row => row.OccurredAt)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. rows.Select(row => Read(row, dataKey: null))];
+    }
+
     private static AuditRecord Read(AuditRowRecord row, byte[]? dataKey) =>
         AuditRecord.Existing(
             row.Id,

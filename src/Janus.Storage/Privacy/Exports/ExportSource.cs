@@ -107,6 +107,7 @@ internal sealed class ExportSource(
             Listed("devices", browsers.Select(Remembered)),
             new ExportSection("preferences", [new ExportRecord(Settled(preferences))]),
             Listed("memberships", joined.Select(Joined)),
+            Listed("membership-acknowledgements", joined.SelectMany(Acknowledged)),
             Listed(
                 "grants",
                 await ConferredAsync(subject, joined, now, cancellationToken).ConfigureAwait(false)),
@@ -314,7 +315,34 @@ internal sealed class ExportSource(
             values["endedAt"] = Moment(ended);
         }
 
+        if (membership.Acknowledgement is MembershipAcknowledgement acknowledged)
+        {
+            values["acknowledgedAt"] = Moment(acknowledged.At);
+        }
+
         return values;
+    }
+
+    // REG-INV-001 AC3: what the person acknowledged when an invitation attached the
+    // membership is held on it, one record for each document at the version shown.
+    private static IEnumerable<Dictionary<string, string>> Acknowledged(Membership membership)
+    {
+        if (membership.Acknowledgement is not MembershipAcknowledgement acknowledged)
+        {
+            yield break;
+        }
+
+        foreach (InvitationDocument document in acknowledged.Documents)
+        {
+            Dictionary<string, string> values = Values(capacity: 4);
+
+            values["membership"] = membership.Id.Value.ToString();
+            values["document"] = document.Document;
+            values["version"] = document.Version;
+            values["acknowledgedAt"] = Moment(acknowledged.At);
+
+            yield return values;
+        }
     }
 
     // AUTHZ-GRANT-001: what the account holds itself. A grant a group holds is the

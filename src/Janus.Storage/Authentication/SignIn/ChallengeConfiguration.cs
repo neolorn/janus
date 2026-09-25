@@ -40,6 +40,10 @@ internal sealed class ChallengeConfiguration : IEntityTypeConfiguration<Challeng
             .HasColumnName("subject")
             .HasConversion(subject => subject!.Value.Value, value => new SubjectId(value));
 
+        builder.Property(challenge => challenge.Email)
+            .HasColumnName("email")
+            .HasConversion(email => email!.Value.Value, value => new IdentifierId(value));
+
         builder.Property(challenge => challenge.WebAuthn).HasColumnName("webauthn");
         builder.Property(challenge => challenge.CreatedAt).HasColumnName("created_at");
         builder.Property(challenge => challenge.ExpiresAt).HasColumnName("expires_at");

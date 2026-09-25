@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
@@ -39,7 +40,10 @@ internal sealed class NonExistenceNotice(
     /// </summary>
     /// <param name="destination">The address that was asked about.</param>
     /// <param name="source">Where the request came from.</param>
-    /// <param name="language">The language the deployment answers in.</param>
+    /// <param name="language">
+    /// The locale of the request that asked, which is the only language known for an
+    /// address no account holds (IDN-ATTR-001).
+    /// </param>
     /// <param name="cancellationToken">Abandons the send.</param>
     /// <returns>Whether a notice went out, or the failure where it could not.</returns>
     public async ValueTask<Result<bool>> TellAsync(
@@ -59,6 +63,11 @@ internal sealed class NonExistenceNotice(
                 .ReadAsync(Settings.AlertingNonexistentThreshold, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Held<int>(error, ref failure));
+
+        IReadOnlyList<string> languages = (await configuration
+                .ReadAsync(Settings.NotificationLanguages, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<IReadOnlyList<string>>(error, ref failure));
 
         if (failure is not null)
         {
@@ -87,7 +96,7 @@ internal sealed class NonExistenceNotice(
                     MessageKind.NoAccount,
                     RestrictionPurpose.Notification,
                     source,
-                    language),
+                    RecipientLanguage.Found(language, languages)),
                 cancellationToken)
             .ConfigureAwait(false);
 

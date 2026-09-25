@@ -95,7 +95,7 @@ internal sealed class AlertDestinationChange(
         // notice goes out, because a notice of a change that was then refused tells
         // the destinations something that did not happen.
         Result allowed = await administration
-            .AllowedAsync(setting, replacement, reason, challenge, cancellationToken)
+            .AllowedAsync(setting, replacement, reason, challenge, AccessContext.Of(actor), cancellationToken)
             .ConfigureAwait(false);
 
         if (allowed.Match(() => (Error?)null, error => error) is Error disallowed)

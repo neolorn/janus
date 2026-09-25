@@ -105,6 +105,29 @@ internal sealed class ConfigurationInMemory : IConfigurationStore
             Result.Failure<TValue>));
     }
 
+    /// <inheritdoc/>
+    public async ValueTask<Result<TValue>> WriteAsync<TValue>(
+        SettingFamily<TValue> family,
+        string parameter,
+        TValue value,
+        CancellationToken cancellationToken)
+    {
+        if (family.Scope is SettingScope.Protected)
+        {
+            return Result.Failure<TValue>(new Error(ErrorCodes.ConfigurationKeyProtected, Nothing));
+        }
+
+        Result<TValue> before = await ReadAsync(family, parameter, cancellationToken);
+
+        return family.Read(parameter, family.Write(value)).Match(
+            admitted =>
+            {
+                _values[family.For(parameter)] = admitted!;
+                return before;
+            },
+            Result.Failure<TValue>);
+    }
+
     // A required key the deployment never named is undeclared, not a value nobody
     // wrote down; the store answers it the same way (LIB-HOST-001).
     private Result<TValue> Read<TValue>(Setting<TValue> setting)

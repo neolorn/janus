@@ -31,4 +31,38 @@ internal interface IAccountAudit
         SubjectId subject,
         DateTimeOffset at,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records that an administrator changed the standing of someone else's account,
+    /// which is a security event and kept as one.
+    /// </summary>
+    /// <param name="action">What changed.</param>
+    /// <param name="acting">The administrator.</param>
+    /// <param name="subject">Whose account it was made on.</param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask AdministeredAsync(
+        AuditAction action,
+        SubjectId acting,
+        SubjectId subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records that an administrator cancelled a deletion on the subject's behalf,
+    /// against the out-of-band erasure request that began it where one did.
+    /// </summary>
+    /// <param name="acting">The administrator.</param>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="request">The erasure request the window was begun for, if any.</param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask CancelledOnBehalfAsync(
+        SubjectId acting,
+        SubjectId subject,
+        PrivacyRequestId? request,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
 }

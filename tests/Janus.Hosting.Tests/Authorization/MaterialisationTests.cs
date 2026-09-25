@@ -126,6 +126,44 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
     }
 
     /// <summary>
+    /// AUTHZ-DERIVE-007: a materialised derivation's grants are rows, so who can access a
+    /// record is answered without the host's rows and reports them as materialised,
+    /// each with its identifier and the container the relationship is declared on.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_007_AMaterialisedGrantIsReportedAsARowAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Reviewed reviewed = await ReviewedAsync();
+        SubjectId administrator = await reviewed.Deployment.AccountAsync(cancellationToken);
+        RoleName administering = await reviewed.Deployment.RoleAsync([Permissions.GrantRead], cancellationToken);
+
+        await reviewed.Deployment.GrantAsync(
+            GrantSubject.Of(administrator), administering, null, false, null, null, cancellationToken);
+
+        await using ServiceProvider deployment = Materialised();
+        await RefreshAsync(deployment, reviewed);
+
+        await using AsyncServiceScope scope = deployment.CreateAsyncScope();
+
+        ResourceAccess access = Rendered(await scope.ServiceProvider
+            .GetRequiredService<IAccessGate>()
+            .WhoCanAccessAsync(AccessContext.Of(administrator), reviewed.Note, cancellationToken));
+
+        ExplainedGrant materialised = Assert.Single(
+            access.Grants,
+            grant => grant.Kind == GrantKind.Materialised);
+
+        Assert.NotNull(materialised.Id);
+        Assert.Equal(reviewed.Account.Value, materialised.SubjectId);
+        Assert.Equal(Reviewer, materialised.Role);
+        Assert.Equal(reviewed.Workspace, materialised.InheritedFrom);
+        Assert.False(access.Partial);
+        Assert.Empty(access.Unevaluated);
+    }
+
+    /// <summary>
     /// AUTHZ-DERIVE-005 AC3: where the relation changed without the refresh that
     /// should have followed it, the next refresh finds the difference, reports it and
     /// corrects it in the same run.

@@ -35,6 +35,7 @@ internal sealed class ChallengeStore(StoreContext context) : IChallengeStore
             : Challenge.Existing(
                 record.Handle,
                 record.Subject,
+                record.Email,
                 record.WebAuthn,
                 record.CreatedAt,
                 record.ExpiresAt,
@@ -52,6 +53,7 @@ internal sealed class ChallengeStore(StoreContext context) : IChallengeStore
                 {
                     Handle = challenge.Fingerprint,
                     Subject = challenge.Subject,
+                    Email = challenge.Email,
                     WebAuthn = challenge.WebAuthn,
                     CreatedAt = challenge.CreatedAt,
                     ExpiresAt = challenge.ExpiresAt,

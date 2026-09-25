@@ -91,6 +91,45 @@ public sealed class AccountStoreTests(DatabaseFixture database) : IClassFixture<
     }
 
     /// <summary>
+    /// IDN-LIFE-013 AC1: an administrator's suspension of a restricted account carries
+    /// the restriction to restore in the row, and reactivating it restores it and clears
+    /// the column; that the transitions are these is AccountTests IDN_LIFE_013_AC1.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_013_AC1_TheRowCarriesTheRestrictionToRestoreAsync()
+    {
+        SubjectId subject = Subjects.New();
+
+        await using StoreContext writing = database.Context();
+        var account = Account.Create(subject, Noon);
+        await AddAsync(writing, account);
+
+        var store = new AccountStore(writing);
+        account.Restrict();
+        account.Suspend();
+        await store.RecordTransitionAsync(account, TestContext.Current.CancellationToken);
+        await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        await using (StoreContext suspended = database.Context())
+        {
+            Account read = Assert.IsType<Account>(
+                await new AccountStore(suspended).FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+
+            Assert.Equal((AccountState.Suspended, true), (read.State, read.RestrictionHeld));
+        }
+
+        account.Reactivate();
+        await store.RecordTransitionAsync(account, TestContext.Current.CancellationToken);
+        await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        await using StoreContext reading = database.Context();
+        Account restored = Assert.IsType<Account>(
+            await new AccountStore(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+
+        Assert.Equal((AccountState.Restricted, false), (restored.State, restored.RestrictionHeld));
+    }
+
+    /// <summary>
     /// A transition the store cancels clears the columns it set, so no origin outlives
     /// the state that gave it meaning.
     /// </summary>

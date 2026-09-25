@@ -12,7 +12,8 @@ namespace Janus.Identity.Identifiers;
 /// Implements REG-IDENT-001, REG-IDENT-002 and REG-IDENT-005. Exactly one identifier of
 /// a kind is primary whenever the account has a verified one of that kind, so the first
 /// to verify takes the role and never leaves it empty. Ordinary communications go to
-/// the primary; security notices go to the set the kind's backup setting defines.
+/// the primary; security notices go to the set the kind's backup setting defines, and
+/// to the personal email a membership keeps whatever that setting is (REG-MAIL-001).
 /// </remarks>
 internal sealed class IdentifierSet
 {
@@ -154,7 +155,7 @@ internal sealed class IdentifierSet
 
     /// <summary>
     /// Who a security notice of a kind reaches: the primary plus whatever the kind's
-    /// backup setting adds.
+    /// backup setting adds, and the personal email a membership keeps.
     /// </summary>
     /// <param name="kind">The kind.</param>
     /// <returns>The security-notice set.</returns>
@@ -165,7 +166,7 @@ internal sealed class IdentifierSet
 
         foreach (Identifier identifier in _identifiers)
         {
-            if (identifier.Kind == kind && setting.Admits(identifier))
+            if (identifier.Kind == kind && (identifier.IsPersonal || setting.Admits(identifier)))
             {
                 reached.Add(identifier);
             }
@@ -186,7 +187,7 @@ internal sealed class IdentifierSet
         foreach (Identifier identifier in _identifiers)
         {
             if (identifier.Kind is not IdentifierKind.Username
-                && Backup(identifier.Kind).Admits(identifier))
+                && (identifier.IsPersonal || Backup(identifier.Kind).Admits(identifier)))
             {
                 reached.Add(identifier);
             }
@@ -285,7 +286,8 @@ internal sealed class IdentifierSet
     /// </summary>
     /// <param name="id">Which identifier to promote.</param>
     /// <exception cref="InvalidOperationException">
-    /// The account holds no such identifier, or it is not verified.
+    /// The account holds no such identifier, it is not verified, or it is the personal
+    /// email a membership keeps.
     /// </exception>
     public void MakePrimary(IdentifierId id)
     {
@@ -301,13 +303,60 @@ internal sealed class IdentifierSet
     }
 
     /// <summary>
+    /// Keeps a verified email as the personal email of a membership, which the account
+    /// then holds verified and non-primary until that membership ends (REG-MAIL-001).
+    /// </summary>
+    /// <param name="id">Which email.</param>
+    /// <exception cref="InvalidOperationException">
+    /// The account holds no such identifier, or it is not a verified email other than
+    /// the primary.
+    /// </exception>
+    public void KeepPersonal(IdentifierId id) => Require(id).KeepAsPersonal();
+
+    /// <summary>
+    /// Retires the corporate address a membership gave the account when that membership
+    /// ends: the personal email the membership kept becomes the primary email in the
+    /// same step and is kept no longer, and the corporate address leaves the account,
+    /// free for a later invitation (REG-MAIL-003).
+    /// </summary>
+    /// <param name="canonical">
+    /// The corporate address in its canonical form. Where the account no longer holds
+    /// it, the personal email still takes the primary role.
+    /// </param>
+    /// <returns>The personal email, now the primary.</returns>
+    /// <exception cref="InvalidOperationException">No personal email is kept.</exception>
+    public IdentifierId RetireCorporate(string canonical)
+    {
+        ArgumentNullException.ThrowIfNull(canonical);
+
+        Identifier personal = _identifiers.Find(identifier => identifier.IsPersonal)
+            ?? throw new InvalidOperationException("No personal email is kept for the account to continue on.");
+        Identifier? corporate = _identifiers.Find(identifier =>
+            identifier.Kind is IdentifierKind.Email
+            && string.Equals(identifier.Canonical, canonical, StringComparison.Ordinal));
+
+        personal.Release();
+        MakePrimary(personal.Id);
+
+        if (corporate is not null)
+        {
+            _identifiers.Remove(corporate);
+            _removed.Add(corporate.Id);
+        }
+
+        return personal.Id;
+    }
+
+    /// <summary>
     /// Takes an identifier off the account. The primary of a kind is never removed:
-    /// another of its kind takes the role first (REG-IDENT-006).
+    /// another of its kind takes the role first (REG-IDENT-006). The personal email a
+    /// membership keeps is not removed while it keeps it (REG-MAIL-001).
     /// </summary>
     /// <param name="id">Which identifier to remove.</param>
     /// <returns>The identifier as it stood, for the removal record to keep.</returns>
     /// <exception cref="InvalidOperationException">
-    /// The account holds no such identifier, or it is the primary of its kind.
+    /// The account holds no such identifier, or it is the primary of its kind or the
+    /// personal email a membership keeps.
     /// </exception>
     public Identifier Remove(IdentifierId id)
     {
@@ -316,6 +365,11 @@ internal sealed class IdentifierSet
         if (identifier.IsPrimary)
         {
             throw new InvalidOperationException("The primary of a kind is not removed.");
+        }
+
+        if (identifier.IsPersonal)
+        {
+            throw new InvalidOperationException("The personal email a membership keeps is not removed.");
         }
 
         _identifiers.Remove(identifier);

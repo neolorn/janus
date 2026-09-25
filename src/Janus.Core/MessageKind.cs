@@ -132,4 +132,11 @@ public enum MessageKind
     /// </summary>
     [JsonStringEnumMemberName("deletion-notice")]
     DeletionNotice = 18,
+
+    /// <summary>
+    /// The link an invitation into an organization carries, sent to the email the
+    /// invitation binds (IDN-LIFE-009a, REG-MAIL-001).
+    /// </summary>
+    [JsonStringEnumMemberName("invitation-link")]
+    InvitationLink = 19,
 }

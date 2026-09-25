@@ -38,7 +38,7 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
     private readonly PrivacyAuditInMemory _audit = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly AccessGateInMemory _gate = new();
-    private readonly MembershipLookupInMemory _memberships = new();
+    private readonly AdministrativeOrganizationInMemory _administrative = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
 
@@ -51,7 +51,7 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
         _configuration.Set(Settings.PrivacyCalendarTimeZone, "Africa/Cairo");
         _accounts.Hold(Ahmed, AccountState.Active);
         _accounts.Hold(Mona, AccountState.Active);
-        _memberships.Add(Mona, Company);
+        _administrative.Organization = Company;
         _gate.Grant(Mona, Company, Permissions.PrivacyRequestManage);
     }
 
@@ -59,7 +59,7 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
         new(
             _requests,
             new WorkingCalendar(_configuration),
-            new AdministrativeScope(_gate, _memberships),
+            new AdministrativeScope(_gate, _administrative),
             _accounts,
             new RestrictionGrant(_accounts, _outbox),
             _notices,
@@ -254,6 +254,27 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
         Assert.Equal(
             Janus.Privacy.Outbox.SubjectEventKind.RestrictionChanged,
             Assert.Single(_outbox.Deliveries).Kind);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-004: a restriction fulfilled while the account is suspended is held
+    /// for when it comes back, and the subscribers stop acting on it now.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_004_ARestrictionFulfilledWhileSuspendedIsHeldAsync()
+    {
+        PrivacyRequestReceipt receipt =
+            await EnteredAsync(PrivacyRequestType.Restriction, new DateOnly(2026, 9, 18));
+
+        _accounts.Hold(Ahmed, AccountState.Suspended);
+
+        _ = await Requests
+            .FulfilAsync(AccessContext.Of(Mona), receipt.RequestId, CancellationToken.None);
+
+        Assert.Equal(AccountState.Suspended, _accounts.Of(Ahmed));
+        Assert.True(_accounts.Holds(Ahmed));
+        Assert.True(Assert.Single(_outbox.Deliveries).Restricted);
     }
 
     /// <summary>

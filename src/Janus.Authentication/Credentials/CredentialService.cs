@@ -873,7 +873,7 @@ internal sealed class CredentialService(
         HeldIdentifiers channels = await identifiers.HeldAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        string language = await LanguageAsync(subject, cancellationToken).ConfigureAwait(false);
+        string? language = await LanguageAsync(subject, cancellationToken).ConfigureAwait(false);
         int told = 0;
 
         foreach (HeldIdentifier identifier in channels.NoticeSet)
@@ -906,21 +906,17 @@ internal sealed class CredentialService(
         return told;
     }
 
-    private async ValueTask<string> LanguageAsync(
+    private async ValueTask<string?> LanguageAsync(
         SubjectId subject,
         CancellationToken cancellationToken)
     {
-        if (await identifiers.LanguageAsync(subject, cancellationToken).ConfigureAwait(false)
-            is string settled)
-        {
-            return settled;
-        }
+        string? settled = await identifiers.LanguageAsync(subject, cancellationToken).ConfigureAwait(false);
 
         IReadOnlyList<string> languages = (await configuration
                 .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
             .Match(read => read, _ => (IReadOnlyList<string>)[]);
 
-        return languages.Count > 0 ? languages[0] : string.Empty;
+        return RecipientLanguage.Of(settled, requested: null, languages);
     }
 
     private async ValueTask<string> IssuerAsync(CancellationToken cancellationToken) =>

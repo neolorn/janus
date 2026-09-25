@@ -802,6 +802,8 @@ public sealed class BrowserProfileTests : IDisposable
         services.AddSingleton(new BrowserSessionCookies(ApplicationKind.Public));
         services.AddSingleton<ILocationResolver, LocationResolverInMemory>();
         services.AddScoped<PolicyResolution>();
+        services.AddSingleton<IAdministrativeOrganization>(new AdministrativeOrganizationInMemory());
+        services.AddScoped<AdministrativeScope>();
         services.AddScoped<SessionService>();
         services.AddScoped<PreAuthenticationService>();
         services.AddScoped<SynchronizerTokens>();

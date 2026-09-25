@@ -20,6 +20,25 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
     private readonly Dictionary<SubjectId, HeldPreferences> _preferences = [];
     private readonly Dictionary<SubjectId, DateTimeOffset> _created = [];
     private readonly Dictionary<SubjectId, SuspensionOrigin> _suspensions = [];
+
+    private readonly HashSet<SubjectId> _restrictionHeld = [];
+
+    private readonly List<(SubjectId Subject, DateTimeOffset At)> _lifted = [];
+
+    private readonly Dictionary<SubjectId, PrivacyRequestId> _erasures = [];
+
+    /// <summary>
+    /// Names the out-of-band erasure request an account's grace window was begun for.
+    /// </summary>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="request">The request.</param>
+    public void ErasedFor(SubjectId subject, PrivacyRequestId request) => _erasures[subject] = request;
+
+    /// <summary>
+    /// Every restriction lifted, with when, in the order it was: each is what the
+    /// subscribers were told.
+    /// </summary>
+    public IReadOnlyList<(SubjectId Subject, DateTimeOffset At)> Lifted => _lifted;
     private readonly Dictionary<SubjectId, HeldDeletion> _deletions = [];
     private readonly Dictionary<SubjectId, ReadOnlyMemory<byte>> _photos = [];
 
@@ -80,8 +99,24 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
     /// <inheritdoc/>
     public ValueTask ReinstateAsync(SubjectId subject, CancellationToken cancellationToken)
     {
-        _states[subject] = AccountState.Active;
+        _states[subject] = _restrictionHeld.Remove(subject)
+            ? AccountState.Restricted
+            : AccountState.Active;
         _ = _suspensions.Remove(subject);
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask SuspendAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        if (_states.GetValueOrDefault(subject) is AccountState.Restricted)
+        {
+            _ = _restrictionHeld.Add(subject);
+        }
+
+        _states[subject] = AccountState.Suspended;
+        _suspensions[subject] = SuspensionOrigin.Administrator;
 
         return ValueTask.CompletedTask;
     }
@@ -108,6 +143,27 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
             : null);
 
     /// <inheritdoc/>
+    public ValueTask LiftRestrictionAsync(
+        SubjectId subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        _states[subject] = AccountState.Active;
+        _lifted.Add((subject, at));
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<PrivacyRequestId?> ErasureRequestAsync(
+        SubjectId subject,
+        DateTimeOffset since,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_erasures.TryGetValue(subject, out PrivacyRequestId request)
+            ? request
+            : (PrivacyRequestId?)null);
+
+    /// <inheritdoc/>
     public ValueTask DeactivateAsync(SubjectId subject, CancellationToken cancellationToken)
     {
         _states[subject] = AccountState.Suspended;
@@ -122,6 +178,11 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
+        if (_states.GetValueOrDefault(subject) is AccountState.Restricted)
+        {
+            _ = _restrictionHeld.Add(subject);
+        }
+
         Deleting(subject, DeletionOrigin.Self, at);
 
         return ValueTask.CompletedTask;
@@ -130,7 +191,9 @@ internal sealed class AccountDirectoryInMemory(PreferenceDeclarations declaratio
     /// <inheritdoc/>
     public ValueTask CancelDeletionAsync(SubjectId subject, CancellationToken cancellationToken)
     {
-        _states[subject] = AccountState.Active;
+        _states[subject] = _restrictionHeld.Remove(subject)
+            ? AccountState.Restricted
+            : AccountState.Active;
         _ = _deletions.Remove(subject);
 
         return ValueTask.CompletedTask;

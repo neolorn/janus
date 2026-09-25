@@ -17,6 +17,8 @@ public sealed class ProcedureDocumentTests
 
     private const string Takedown = "docs/spec/14-takedown-procedure.md";
 
+    private const string Risks = "docs/spec/13-risk-register.md";
+
     /// <summary>
     /// PRIV-BREACH-001 AC4: both operator documents state the clock the item states,
     /// with both deadlines and the instant they run from.
@@ -84,6 +86,33 @@ public sealed class ProcedureDocumentTests
 
         Assert.Contains("**Non-suppressible**", runbook, StringComparison.Ordinal);
         Assert.Contains("no preference\n   silences it", runbook, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003 AC1: the takedown procedure exists as the item names it.
+    /// </summary>
+    [Fact]
+    public void IDN_LIFE_003_AC1_TheTakedownProcedureExists()
+    {
+        Assert.True(File.Exists(Path.Combine(Repository.Root, Takedown)));
+        Assert.Contains("# ", Repository.ReadText(Takedown), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// INT-MAIL-005 AC2: the risk register records, as R-A02, that staff mail is
+    /// reached with an app password and not a phishing-resistant factor.
+    /// </summary>
+    [Fact]
+    public void INT_MAIL_005_AC2_TheLimitationIsRecordedAsRA02()
+    {
+        string register = Repository.ReadText(Risks);
+
+        Assert.Contains(
+            "### R-A02 · Staff mail is reachable without a phishing-resistant factor",
+            register,
+            StringComparison.Ordinal);
+        Assert.Contains("INT-MAIL-005", register, StringComparison.Ordinal);
+        Assert.Contains("App passwords", register, StringComparison.Ordinal);
     }
 
     /// <summary>

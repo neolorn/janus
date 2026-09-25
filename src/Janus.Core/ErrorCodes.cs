@@ -250,6 +250,20 @@ public static class ErrorCodes
     public static ErrorCode TakedownActive { get; } = ErrorCode.Parse("identity.takedown.active");
 
     /// <summary>
+    /// The takedown's grace window has closed, so the erasure has run or is due and
+    /// there is nothing left to reverse. The person registers again.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-003, chapter 10 section 1.1.</remarks>
+    public static ErrorCode TakedownWindowElapsed { get; } = ErrorCode.Parse("identity.takedown.windowelapsed");
+
+    /// <summary>
+    /// The account was never taken down, so there is no progress to read. Read the
+    /// account the takedown was triggered on.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-003, chapter 10 section 1.1.</remarks>
+    public static ErrorCode TakedownNotFound { get; } = ErrorCode.Parse("identity.takedown.notfound");
+
+    /// <summary>
     /// The reactivation link is unknown, has lapsed with the state it belonged to, or
     /// has already been used. Where the notice carrying it is lost, ordinary recovery
     /// restores the account instead.
@@ -279,10 +293,26 @@ public static class ErrorCodes
     public static ErrorCode IdentifierInvalid { get; } = ErrorCode.Parse("identity.identifier.invalid");
 
     /// <summary>
-    /// The identifier is locked: an invitation bound it, or a provider operates the
-    /// mailbox. Nothing about it is the person's to change.
+    /// The address's domain is outside the verified domains an organization the
+    /// account belongs to locks its members to. Use an address in one of them.
     /// </summary>
-    /// <remarks>Implements REG-IDENT-010, chapter 10 section 1.1.</remarks>
+    /// <remarks>Implements REG-DOM-001, IDN-ORG-006, chapter 10 section 1.1.</remarks>
+    public static ErrorCode IdentifierDomainNotAllowed { get; } =
+        ErrorCode.Parse("identity.identifier.domainnotallowed");
+
+    /// <summary>
+    /// No TXT record at the domain's verification name carries its token, or none could
+    /// be read. Publish the record the domain was listed with and try again.
+    /// </summary>
+    /// <remarks>Implements REG-DOM-001, chapter 09 section 8a.</remarks>
+    public static ErrorCode DomainUnverified { get; } = ErrorCode.Parse("identity.domain.unverified");
+
+    /// <summary>
+    /// The identifier is locked: an invitation bound it, a provider operates the
+    /// mailbox, or it is the personal email a membership keeps. Nothing about it is the
+    /// person's to change.
+    /// </summary>
+    /// <remarks>Implements REG-IDENT-010, REG-MAIL-001, chapter 10 section 1.1.</remarks>
     public static ErrorCode IdentifierLocked { get; } = ErrorCode.Parse("identity.identifier.locked");
 
     /// <summary>
@@ -305,6 +335,28 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements IDN-ACCT-005, chapter 10 section 1.1.</remarks>
     public static ErrorCode IdentifierMixedScript { get; } = ErrorCode.Parse("identity.identifier.mixedscript");
+
+    /// <summary>
+    /// The invitation link is past its lifetime, was revoked, or has been used. Ask
+    /// the organization for a new invitation.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-009a, REG-INV-001, chapter 10 section 1.1.</remarks>
+    public static ErrorCode InvitationExpired { get; } = ErrorCode.Parse("identity.invitation.expired");
+
+    /// <summary>
+    /// An identifier the invitation binds is not a verified identifier of the account
+    /// accepting it. Accept from the account that holds it.
+    /// </summary>
+    /// <remarks>Implements REG-INV-001, REG-INV-002, chapter 10 section 1.1.</remarks>
+    public static ErrorCode InvitationIdentifierMismatch { get; } =
+        ErrorCode.Parse("identity.invitation.identifiermismatch");
+
+    /// <summary>
+    /// No invitation is attached to the account: its links were acknowledged or
+    /// revoked, or none was ever opened by it. Open the invitation link again.
+    /// </summary>
+    /// <remarks>Implements REG-INV-002, chapter 09 section 6a, chapter 10 section 1.1.</remarks>
+    public static ErrorCode InvitationNotFound { get; } = ErrorCode.Parse("identity.invitation.notfound");
 
     /// <summary>
     /// The step the request is for is not the step the registration has reached: its
@@ -711,6 +763,13 @@ public static class ErrorCodes
     public static ErrorCode GroupCycle { get; } = ErrorCode.Parse("authz.group.cycle");
 
     /// <summary>
+    /// The group holds a member, belongs to a group, or was given a grant, so removing
+    /// it would take away what they record. Take its members out instead.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GROUP-001 and AUTHZ-GRANT-003 AC3.</remarks>
+    public static ErrorCode GroupInUse { get; } = ErrorCode.Parse("authz.group.inuse");
+
+    /// <summary>
     /// The entity has no registered policy, which is a fault rather than a denial.
     /// Register a policy for the entity in the model.
     /// </summary>
@@ -723,6 +782,13 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements AUTHZ-GATE-006, chapter 10 section 1.3.</remarks>
     public static ErrorCode Restricted { get; } = ErrorCode.Parse("authz.restricted");
+
+    /// <summary>
+    /// A grant or a derivation still names the role, so removing it would take away
+    /// what they record. Change the permissions it carries instead.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-004 and AUTHZ-GRANT-003 AC3.</remarks>
+    public static ErrorCode RoleInUse { get; } = ErrorCode.Parse("authz.role.inuse");
 
     /// <summary>
     /// The change would leave an alert destination list empty. Add a destination
@@ -781,6 +847,13 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements PRIV-CONS-005, chapter 10 section 1.4.</remarks>
     public static ErrorCode DocumentNotFound { get; } = ErrorCode.Parse("privacy.document.notfound");
+
+    /// <summary>
+    /// No erasure is held under that identifier. Read the outstanding erasures for the
+    /// identifier of the one to act on.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-003b, chapter 10 section 1.4.</remarks>
+    public static ErrorCode ErasureNotFound { get; } = ErrorCode.Parse("privacy.erasure.notfound");
 
     /// <summary>
     /// An erasure that has not exhausted its retries cannot be completed by hand.

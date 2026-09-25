@@ -23,17 +23,31 @@ public interface IRegistration
     /// person came from.
     /// </summary>
     /// <param name="client">The originating application's client identifier.</param>
-    /// <param name="language">The language its messages go out in.</param>
+    /// <param name="language">
+    /// The locale of the request, which its messages go out in and which the account
+    /// keeps as its language preference (IDN-ATTR-001).
+    /// </param>
     /// <param name="source">
     /// The address the registration is started from, which the source restrictions
     /// count every message of this registration against.
     /// </param>
+    /// <param name="invitationToken">
+    /// The token of the invitation link the person pressed, or nothing for a public
+    /// registration. The press is what verifies the email the invitation bound, and
+    /// the invitation's organization governs every step from here (REG-INV-001).
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The session, whose state is read with <see cref="StateAsync"/>.</returns>
+    /// <returns>
+    /// The session, whose state is read with <see cref="StateAsync"/>, or the refusal:
+    /// <c>identity.invitation.expired</c> where the token opens no invitation,
+    /// <c>identity.invitation.identifiermismatch</c> where the email it binds is an
+    /// account's already.
+    /// </returns>
     ValueTask<Result<RegistrationSessionId>> BeginAsync(
         string client,
         string language,
         string source,
+        string? invitationToken,
         CancellationToken cancellationToken);
 
     /// <summary>

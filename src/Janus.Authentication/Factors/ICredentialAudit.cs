@@ -9,7 +9,7 @@ namespace Janus.Authentication.Factors;
 /// Where an event about one credential is recorded. The area holds no audit trail of
 /// its own, so what it has to record it hands out through this.
 /// </summary>
-/// <remarks>Implements AUTH-FACT-014, IDN-AUD-001 and CONV-LAYOUT-001.</remarks>
+/// <remarks>Implements AUTH-FACT-014, REG-MAIL-002, IDN-AUD-001 and CONV-LAYOUT-001.</remarks>
 internal interface ICredentialAudit
 {
     /// <summary>
@@ -25,6 +25,23 @@ internal interface ICredentialAudit
         AuditAction action,
         SubjectId subject,
         AuthenticatorId credential,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records that something happened to a mail app password, which the mail server
+    /// holds and names.
+    /// </summary>
+    /// <param name="action">What happened.</param>
+    /// <param name="subject">Whose app password.</param>
+    /// <param name="credential">What the server calls it.</param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask MailCredentialAsync(
+        AuditAction action,
+        SubjectId subject,
+        string credential,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 }

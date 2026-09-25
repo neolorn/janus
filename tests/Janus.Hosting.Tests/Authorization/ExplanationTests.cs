@@ -184,6 +184,48 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
+    /// AUTHZ-GATE-004 AC3: the identifier of the caller's own refusal resolves for the
+    /// caller where the type discloses, and not where it conceals.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_004_AC3_AnIdentifierResolvesForItsOwnerOnlyWhereTheTypeDisclosesAsync()
+    {
+        Deployed deployed = await DeployAsync(granted: false);
+
+        AuditRecordId concealed = await RefusedAsync(deployed, deployed.Record, HostPermissions.Read);
+        AuditRecordId disclosed = await RefusedAsync(deployed, deployed.Note, HostPermissions.ReadNote);
+
+        Result<AccessExplanation> ofTheConcealed = await ResolvedOwnAsync(deployed.Account, concealed);
+        Result<AccessExplanation> ofTheDisclosed = await ResolvedOwnAsync(deployed.Account, disclosed);
+
+        Assert.Equal(ErrorCodes.Denied, Refusal(ofTheConcealed).Code);
+        Assert.Empty(Refusal(ofTheConcealed).Details);
+
+        AccessExplanation explanation = Explained(ofTheDisclosed);
+
+        Assert.Equal(AccessOutcome.Denied, explanation.Outcome);
+        Assert.Equal(HostPermissions.ReadNote, explanation.Permission);
+        Assert.Equal(deployed.Account, explanation.Principal.Acting);
+        Assert.Null(explanation.Grant);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-004 AC3: another principal's refusal does not resolve for the caller,
+    /// even on a type that discloses.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_004_AC3_AnotherPrincipalsIdentifierDoesNotResolveForTheCallerAsync()
+    {
+        Deployed deployed = await DeployAsync(granted: false);
+
+        AuditRecordId theirs = await RefusedAsync(deployed, deployed.Note, HostPermissions.ReadNote);
+
+        Assert.Equal(ErrorCodes.Denied, Refusal(await ResolvedOwnAsync(deployed.Support, theirs)).Code);
+    }
+
+    /// <summary>
     /// AUTHZ-GATE-004 AC4: the identifier a concealed refusal carries resolves for a
     /// role holding <c>audit:read</c>, and for nobody else.
     /// </summary>
@@ -200,18 +242,43 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
 
         Result<AccessExplanation> withoutTheRole = await gate.ResolveAsync(
             AccessContext.Of(deployed.Account),
-            deployed.Deployment.Organization,
             correlation,
             TestContext.Current.CancellationToken);
 
         Result<AccessExplanation> asSupport = await gate.ResolveAsync(
             AccessContext.Of(deployed.Support),
-            deployed.Deployment.Organization,
             correlation,
             TestContext.Current.CancellationToken);
 
         Assert.Equal(ErrorCodes.Denied, Refusal(withoutTheRole).Code);
         Assert.Equal(AccessOutcome.Denied, Explained(asSupport).Outcome);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-004 AC4, AUTHZ-SCOPE-001: <c>audit:read</c> held in the organization
+    /// the refused record sits in, and not in the administrative one, resolves nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_004_AC4_AReadRoleOutsideTheAdministrativeOrganizationResolvesNothingAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Deployed deployed = await DeployAsync(granted: false);
+
+        SubjectId local = await deployed.Deployment.AccountAsync(cancellationToken);
+        RoleName reading = await deployed.Deployment.RoleAsync([Permissions.AuditRead], cancellationToken);
+
+        await deployed.Deployment.GrantAsync(
+            GrantSubject.Of(local), reading, null, false, null, null, cancellationToken);
+
+        AuditRecordId correlation = await RefusedAsync(deployed, deployed.Record, HostPermissions.Read);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        Result<AccessExplanation> resolved = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+            .ResolveAsync(AccessContext.Of(local), correlation, cancellationToken);
+
+        Assert.Equal(ErrorCodes.Denied, Refusal(resolved).Code);
     }
 
     /// <summary>
@@ -468,9 +535,16 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
         return Explained(await scope.ServiceProvider.GetRequiredService<IAccessGate>()
             .ResolveAsync(
                 AccessContext.Of(deployed.Support),
-                deployed.Deployment.Organization,
                 correlation,
                 TestContext.Current.CancellationToken));
+    }
+
+    private async Task<Result<AccessExplanation>> ResolvedOwnAsync(SubjectId caller, AuditRecordId correlation)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        return await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+            .ResolveOwnAsync(AccessContext.Of(caller), correlation, TestContext.Current.CancellationToken);
     }
 
     // The trail itself, read without the gate: an identifier that resolves through the
@@ -545,6 +619,15 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
 
         await deployment.GrantAsync(
             GrantSubject.Of(support), supporting, null, false, null, null, cancellationToken);
+
+        await deployment.GrantAsync(
+            GrantSubject.Of(support),
+            supporting,
+            null,
+            false,
+            null,
+            await deployment.AdministrativeAsync(cancellationToken),
+            cancellationToken);
 
         GrantId grant = default;
 

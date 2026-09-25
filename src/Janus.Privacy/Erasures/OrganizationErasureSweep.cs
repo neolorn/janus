@@ -14,16 +14,16 @@ namespace Janus.Privacy.Erasures;
 /// organization is erased and the fact announced, in one transaction per organization.
 /// </summary>
 /// <param name="organizations">Where the windows that have run out are read.</param>
-/// <param name="events">Where the erasure is announced.</param>
+/// <param name="events">Where the erasure and every membership it ended are announced.</param>
 /// <param name="audit">Where the erasure is written down.</param>
 /// <param name="configuration">Where the window's length is read.</param>
 /// <param name="work">The one transaction each organization is carried in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements IDN-ORG-003 and IDN-ORG-005. Nothing here waits on a human: the window
-/// is the whole of the decision, and an organization that reaches its end without a
-/// cancellation is erased. One organization per transaction, so a deployment that
-/// falls over mid-pass has erased whole organizations and begun none.
+/// Implements IDN-ORG-003, IDN-ORG-005 and IDN-MEM-001. Nothing here waits on a
+/// human: the window is the whole of the decision, and an organization that reaches
+/// its end without a cancellation is erased. One organization per transaction, so a
+/// deployment that falls over mid-pass has erased whole organizations and begun none.
 /// </remarks>
 internal sealed class OrganizationErasureSweep(
     IOrganizationStates organizations,
@@ -34,6 +34,8 @@ internal sealed class OrganizationErasureSweep(
     TimeProvider time)
 {
     private const string Announced = "organization-erased";
+
+    private const string MembershipEnded = "membership-ended";
 
     /// <summary>
     /// Runs one pass.
@@ -78,7 +80,7 @@ internal sealed class OrganizationErasureSweep(
     {
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
-        int ended = await organizations
+        IReadOnlyList<EndedMembership> ended = await organizations
             .EraseAsync(deletion.Organization, now, grace, cancellationToken)
             .ConfigureAwait(false);
 
@@ -90,19 +92,40 @@ internal sealed class OrganizationErasureSweep(
                 acting: null,
                 subject: null,
                 now,
-                Named(deletion, ended),
+                Named(deletion, ended.Count),
                 cancellationToken)
             .ConfigureAwait(false);
 
-        // The erasure has committed, so the announcement is the outstanding work and
-        // a consumer that refuses it stops the pass rather than the erasure.
+        // The erasure has committed, so the announcements are the outstanding work and
+        // a consumer that refuses one stops the pass rather than the erasure.
+        foreach (EndedMembership membership in ended)
+        {
+            if ((await events
+                    .PublishAsync(
+                        new MembershipChanged(
+                            now,
+                            Key(membership.Membership, now),
+                            membership.Membership,
+                            deletion.Organization,
+                            MembershipChange.Ended)
+                        {
+                            Subject = membership.Subject,
+                        },
+                        cancellationToken)
+                    .ConfigureAwait(false))
+                .Match(() => (Error?)null, failure => failure) is Error refused)
+            {
+                return refused;
+            }
+        }
+
         return (await events
                 .PublishAsync(
                     new OrganizationErased(
                         now,
                         Key(deletion.Organization, now),
                         deletion.Organization,
-                        ended),
+                        ended.Count),
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match(() => (Error?)null, failure => failure);
@@ -110,6 +133,9 @@ internal sealed class OrganizationErasureSweep(
 
     private static string Key(OrganizationId organization, DateTimeOffset at) =>
         string.Create(CultureInfo.InvariantCulture, $"{Announced}:{organization.Value}@{at.UtcTicks}");
+
+    private static string Key(MembershipId membership, DateTimeOffset at) =>
+        string.Create(CultureInfo.InvariantCulture, $"{MembershipEnded}:{membership.Value}@{at.UtcTicks}");
 
     private static Dictionary<string, JsonElement> Named(
         PendingOrganizationDeletion deletion,

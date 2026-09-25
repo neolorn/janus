@@ -5,7 +5,9 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Authentication.Tests;
 using Janus.Authentication.Tests.Accounts;
+using Janus.Authentication.Tests.Mailboxes;
 using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -20,7 +22,7 @@ namespace Janus.Hosting.Tests.Authorization;
 
 /// <summary>
 /// What the checks that read the database decide over a deployment, and where they run
-/// (AUTHZ-MODEL-004, AUTHZ-DERIVE-004).
+/// (AUTHZ-MODEL-004, AUTHZ-DERIVE-004), and what they warn of (INT-MAIL-011).
 /// </summary>
 /// <param name="host">The deployment the checks read.</param>
 [Trait("kind", "integration")]
@@ -38,6 +40,18 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         + "', 'nobody');";
 
     private const string Unmigrated = "behind";
+
+    private static readonly string Declaring =
+        "INSERT INTO identity.settings (key, value) VALUES ('"
+        + Settings.NotificationEmailRelayRegistered.Key
+        + "', '[\"mail.example.test\"]');";
+
+    private static readonly string Undeclaring =
+        "DELETE FROM identity.settings WHERE key = '"
+        + Settings.NotificationEmailRelayRegistered.Key
+        + "';";
+
+    private readonly EventsInMemory _events = new();
 
     private static readonly string Undefaulted =
         "DELETE FROM identity.settings WHERE key = '"
@@ -253,6 +267,33 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// INT-MAIL-010, LIB-HOST-001: the app passwords of a hosted mailbox are reached
+    /// with a token issued to the mail server's client, so a deployment that registers a
+    /// mail server and declares no client for it is stopped as it starts, and the same
+    /// deployment starts once it declares one.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_MAIL_010_ADeploymentHostingMailDeclaresTheMailServersClientAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using (IHost undeclared = Deployed(mail: true))
+        {
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await undeclared.StartAsync(cancellationToken));
+
+            Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+            Assert.Equal("mailServerClient.clientId", refused.Failure?.Details["key"].GetString());
+        }
+
+        using IHost declared = Deployed(mail: true, mailClient: true);
+
+        await declared.StartAsync(cancellationToken);
+        await declared.StopAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// API-REDIR-001: the default a destination falls back to is read against the
     /// registry as the deployment starts, so a key naming a client nothing registered
     /// stops it there rather than at the registration that would resolve to nothing.
@@ -339,16 +380,58 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         Assert.False(served.Started);
     }
 
+    /// <summary>
+    /// INT-MAIL-011 AC1: a deployment in which Continue with Apple is a way in and whose
+    /// sending domain is not declared as registered with the relay starts, and warns as
+    /// it does, naming the domain; declaring it quiets the warning.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_MAIL_011_AC1_AnUndeclaredSendingDomainWarnsAsTheDeploymentStartsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using (IHost undeclared = Deployed())
+        {
+            await undeclared.StartAsync(cancellationToken);
+            await undeclared.StopAsync(cancellationToken);
+        }
+
+        AlertRaised raised = Assert.Single(_events.Of<AlertRaised>());
+
+        Assert.Equal(AlertCondition.RelayDomainUnregistered, raised.Condition);
+        Assert.Equal(AlertSeverity.Normal, raised.Severity);
+        Assert.Equal("mail.example.test", raised.Details["domain"].GetString());
+
+        await WriteAsync(Declaring, cancellationToken);
+
+        try
+        {
+            using IHost declared = Deployed();
+
+            await declared.StartAsync(cancellationToken);
+            await declared.StopAsync(cancellationToken);
+
+            Assert.Single(_events.Published);
+        }
+        finally
+        {
+            await WriteAsync(Undeclaring, cancellationToken);
+        }
+    }
+
     private IHost Deployed(
         bool catalogue = true,
         bool handlers = true,
         bool addresses = true,
         bool signIn = true,
         bool client = true,
-        bool codec = false) =>
+        bool codec = false,
+        bool mail = false,
+        bool mailClient = false) =>
         new HostBuilder()
             .ConfigureServices(services =>
-                Declared(services, catalogue, handlers, addresses, signIn, client, codec))
+                Declared(services, catalogue, handlers, addresses, signIn, client, codec, mail, mailClient))
             .Build();
 
     // The library registered over this deployment, as the host's own code registers
@@ -361,11 +444,26 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool signIn = true,
         bool client = true,
         bool codec = false,
+        bool mail = false,
+        bool mailClient = false,
         string? connection = null)
     {
+        // Where what the library announces goes, the host's own (LIB-HOST-001).
+        services.AddSingleton<IEvents>(_events);
+
         if (codec)
         {
             services.AddSingleton(new ImageCodecInMemory().Declared);
+        }
+
+        if (mail)
+        {
+            services.AddSingleton<IMailServer>(new MailServerInMemory());
+        }
+
+        if (mailClient)
+        {
+            services.AddSingleton(new MailServerClient("mail-server"));
         }
 
         if (catalogue)

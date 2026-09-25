@@ -54,11 +54,25 @@ internal sealed class ProfilePhotos(
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (context.Effective is not SubjectId subject)
-        {
-            return Result.Failure<ReadOnlyMemory<byte>>(Error.From(ErrorCodes.Denied));
-        }
+        return context.Effective is SubjectId subject
+            ? await ReadOfAsync(subject, cancellationToken).ConfigureAwait(false)
+            : Result.Failure<ReadOnlyMemory<byte>>(Error.From(ErrorCodes.Denied));
+    }
 
+    /// <summary>
+    /// The image one account shows, for whoever the caller has already decided may see
+    /// it.
+    /// </summary>
+    /// <param name="subject">Whose.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The stored JPEG, empty where the account shows none and where no organization
+    /// it belongs to shows photos at all.
+    /// </returns>
+    public async ValueTask<Result<ReadOnlyMemory<byte>>> ReadOfAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
         Error? failure = null;
 
         bool shown = (await ShownAsync(subject, cancellationToken).ConfigureAwait(false))

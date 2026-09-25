@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
+using Janus.Core;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Xunit;
 
@@ -94,6 +97,7 @@ public sealed class ModelTests
             "accounts.deleting_by",
             "accounts.deleting_since",
             "accounts.notice_version",
+            "accounts.restriction_held",
             "accounts.state",
             "accounts.subject",
             "accounts.suspended_by",
@@ -284,10 +288,32 @@ public sealed class ModelTests
             "identifiers.fingerprint",
             "identifiers.identifier_id",
             "identifiers.is_locked",
+            "identifiers.is_personal",
             "identifiers.is_primary",
             "identifiers.kind",
             "identifiers.subject",
             "identifiers.verified_at",
+
+            // Not an account field: an invitation into an organization, what it binds
+            // under a key of its own until it is revoked or acknowledged, and its link
+            // held by its fingerprint (IDN-LIFE-009a, REG-INV-001).
+            "invitations.acknowledged_at",
+            "invitations.attached_at",
+            "invitations.documents",
+            "invitations.enc_identifiers",
+            "invitations.expires_at",
+            "invitations.id",
+            "invitations.invitee",
+            "invitations.inviter",
+            "invitations.issued_at",
+            "invitations.key_version",
+            "invitations.mailbox",
+            "invitations.organization",
+            "invitations.revoked_at",
+            "invitations.roles",
+            "invitations.session",
+            "invitations.token",
+            "invitations.wrapped_key",
 
             // Not an account field: the creation ceremony one account has open, and
             // the value AUTH-FACT-014 has the authenticator sign over.
@@ -331,8 +357,30 @@ public sealed class ModelTests
             "loss_reports.reported_at",
             "loss_reports.subject",
 
+            // Not an account field: a staff mailbox the library provisions, its address
+            // under its holder's key and found by its fingerprint, and the push it owes
+            // the mail server (INT-MAIL-006, INT-MAIL-007).
+            "mailboxes.attempts",
+            "mailboxes.canonicalisation_version",
+            "mailboxes.enc_canonical",
+            "mailboxes.failed_at",
+            "mailboxes.fingerprint",
+            "mailboxes.holder",
+            "mailboxes.id",
+            "mailboxes.key_version",
+            "mailboxes.next_attempt_at",
+            "mailboxes.pending",
+            "mailboxes.pending_key",
+            "mailboxes.pushed",
+            "mailboxes.released_at",
+            "mailboxes.reserved_at",
+            "mailboxes.retired_at",
+            "mailboxes.wrapped_key",
+
             // Standing: the membership record of IDN-MEM-001, with its own beginning
             // and end.
+            "memberships.acknowledged_at",
+            "memberships.acknowledged_documents",
             "memberships.created_at",
             "memberships.ended_at",
             "memberships.id",
@@ -394,6 +442,18 @@ public sealed class ModelTests
             "oidc_tokens.status",
             "oidc_tokens.subject",
             "oidc_tokens.type",
+
+            // Not an account field: a domain an organization locks its members to, with
+            // the token its TXT record carries and where its verification stands
+            // (REG-DOM-001, IDN-ORG-006).
+            "organization_domains.added_at",
+            "organization_domains.checked_at",
+            "organization_domains.domain",
+            "organization_domains.last_check_passed",
+            "organization_domains.organization",
+            "organization_domains.removed_at",
+            "organization_domains.token",
+            "organization_domains.verified_at",
 
             // The organization of IDN-ORG-001, with the mark IDN-ORG-004 reads and
             // the deletion window of IDN-ORG-003.
@@ -617,8 +677,11 @@ public sealed class ModelTests
             "settings.value",
 
             // Not an account field: a sign-in in flight, keyed by what the caller's handle
-            // hashes to and carrying what it has presented so far (AUTH-FACT-001).
+            // hashes to and carrying what it has presented so far (AUTH-FACT-001), and
+            // the email it was opened with, which a domain lock is judged on
+            // (REG-DOM-001).
             "signin_challenges.created_at",
+            "signin_challenges.email",
             "signin_challenges.expires_at",
             "signin_challenges.handle",
             "signin_challenges.presented",
@@ -627,8 +690,9 @@ public sealed class ModelTests
 
             // Not an account field: a link or a code the library sent for a sign-in,
             // one per account per catalogue entry, spent on presentation
-            // (AUTH-FACT-016, REG-SESS-003).
+            // (AUTH-FACT-016, REG-SESS-003), with the email it went to (REG-DOM-001).
             "signin_links.browser",
+            "signin_links.email",
             "signin_links.enc_code",
             "signin_links.expires_at",
             "signin_links.factor",
@@ -726,6 +790,61 @@ public sealed class ModelTests
 
         Assert.Equal(expected, fields.OrderBy(name => name, StringComparer.Ordinal));
     }
+
+    /// <summary>
+    /// REG-MAIL-002 AC1, INT-MAIL-010 AC1 and AC4: no table of the library's has a place
+    /// for a mail app password. The server generates the secret and holds the
+    /// credential, so there is nowhere here to keep either it or a hash of it.
+    /// </summary>
+    [Fact]
+    public void REG_MAIL_002_AC1_NoTableHoldsAnAppPassword() =>
+        RefuseColumnsNamedAfter(["apppassword", "app_password", "mailcredential", "mail_credential"]);
+
+    /// <summary>
+    /// INT-MAIL-001 AC2: a credential's type is a catalogue entry, which the
+    /// authenticators table admits by name, and no entry is a mail app password; the
+    /// mail server stores those (REG-MAIL-002).
+    /// </summary>
+    [Fact]
+    public void INT_MAIL_001_AC2_NoCredentialTypeIsAMailAppPassword()
+    {
+        using StoreContext context = new DesignTimeContextFactory().CreateDbContext([]);
+
+        string check = context
+            .GetService<IDesignTimeModel>()
+            .Model
+            .GetEntityTypes()
+            .Single(entity => entity.GetTableName() == "authenticators")
+            .GetCheckConstraints()
+            .Single(constraint => constraint.Name == "ck_authenticators_factor")
+            .Sql;
+
+        string[] admitted =
+        [
+            .. Regex
+                .Matches(check, "'([^']+)'", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1))
+                .Select(match => match.Groups[1].Value),
+        ];
+
+        Assert.Equal(Enum.GetValues<Factor>().Length, admitted.Length);
+        Assert.DoesNotContain(
+            admitted,
+            name => Regex.IsMatch(
+                name,
+                "app.?password|mail.?(password|credential)",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+                TimeSpan.FromSeconds(1)));
+    }
+
+    /// <summary>
+    /// INT-MAIL-002 AC2: every relation the library maps is in its own schema, so no
+    /// query it builds can join the mail server's store, which is another database.
+    /// </summary>
+    [Fact]
+    public void INT_MAIL_002_AC2_NoQueryOfTheLibraryCanJoinAnotherStore() =>
+        Assert.All(
+            Model().GetEntityTypes(),
+            entity => Assert.Equal(StoreContext.Schema, entity.GetSchema() ?? entity.GetViewSchema()));
 
     private static void RefuseColumnsNamedAfter(string[] forbidden) =>
         Assert.All(Columns(), column => Assert.DoesNotContain(

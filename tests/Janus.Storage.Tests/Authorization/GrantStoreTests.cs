@@ -136,6 +136,33 @@ public sealed class GrantStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// AUTHZ-DERIVE-007, IDN-ORG-003 AC1: the grants on a record are read as the
+    /// effective grants view confers them, so none is read while the organization's
+    /// deletion is requested.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_DERIVE_007_ASuspendedOrganizationsGrantsAreNotReadOnARecordAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId account = await _deployment.AccountAsync(Noon);
+        ResourceReference record = await RegisterAsync(organization, containedIn: null);
+
+        await WriteAsync(GrantSubject.Of(account), organization, record);
+        await WriteAsync(GrantSubject.Of(account), organization, on: null);
+
+        Assert.Equal(2, (await OnAsync(record, organization)).Count);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await writing.Database.ExecuteSqlAsync(
+                $"UPDATE identity.organizations SET deletion_requested_at = {Noon} WHERE id = {organization.Value};",
+                TestContext.Current.CancellationToken);
+        }
+
+        Assert.Empty(await OnAsync(record, organization));
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-003 AC1: a grant past its expiry confers nothing, with no sweep
     /// having run over the table.
     /// </summary>
@@ -334,6 +361,69 @@ public sealed class GrantStoreTests(DatabaseFixture database)
             Written(GrantSubject.Of(account), organization, Reference("document"), null, account),
             Noon,
             TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-004 and AUTHZ-GRANT-003 AC3: a role any grant confers is named, the
+    /// grant revoked or not, and a role no grant confers is not.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_004_ARoleAnyGrantConfersIsNamedAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId account = await _deployment.AccountAsync(Noon);
+        SubjectId administrator = await _deployment.AccountAsync(Noon);
+        GrantId id = await WriteAsync(GrantSubject.Of(account), organization, on: null);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await using var transaction = new UnitOfWork(writing);
+            await transaction.BeginAsync(TestContext.Current.CancellationToken);
+
+            Grant grant = (await Store(writing).FindAsync(id, TestContext.Current.CancellationToken))!;
+
+            _ = grant.Revoke(administrator, Noon.AddDays(1), "Taken back.");
+            await Store(writing).RecordAsync(grant, TestContext.Current.CancellationToken);
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        Assert.True(await Store(reading).NamesAsync(RoleName.Parse("editor"), TestContext.Current.CancellationToken));
+        Assert.False(await Store(reading).NamesAsync(RoleName.Parse("nobody-holds-this"), TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTHZ-GROUP-001 and AUTHZ-GRANT-003 AC3: a group any grant was given to is named,
+    /// the grant revoked or not, and one no grant was given to is not.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GROUP_001_AGroupAnyGrantWasGivenToIsNamedAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId administrator = await _deployment.AccountAsync(Noon);
+        var given = GrantSubject.Of(GroupId.New(TimeProvider.System));
+        var ungiven = GrantSubject.Of(GroupId.New(TimeProvider.System));
+        GrantId id = await WriteAsync(given, organization, on: null);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await using var transaction = new UnitOfWork(writing);
+            await transaction.BeginAsync(TestContext.Current.CancellationToken);
+
+            Grant grant = (await Store(writing).FindAsync(id, TestContext.Current.CancellationToken))!;
+
+            _ = grant.Revoke(administrator, Noon.AddDays(1), "Taken back.");
+            await Store(writing).RecordAsync(grant, TestContext.Current.CancellationToken);
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        Assert.True(await Store(reading).NamesAsync(given, TestContext.Current.CancellationToken));
+        Assert.False(await Store(reading).NamesAsync(ungiven, TestContext.Current.CancellationToken));
     }
 
     /// <inheritdoc/>

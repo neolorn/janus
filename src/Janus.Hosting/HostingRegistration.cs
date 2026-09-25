@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Janus.Authentication.Accounts;
@@ -9,7 +10,10 @@ using Janus.Authentication.Configuration;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
+using Janus.Authentication.Invitations;
+using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Oidc;
+using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Recovery;
@@ -18,15 +22,21 @@ using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.SignIn;
 using Janus.Authorization.Gate;
+using Janus.Authorization.Grants;
+using Janus.Authorization.Groups;
 using Janus.Authorization.Model;
+using Janus.Authorization.Roles;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Accounts;
 using Janus.Hosting.Alerting;
 using Janus.Hosting.Authentication;
+using Janus.Hosting.Authorization;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Configuration;
 using Janus.Hosting.Credentials;
 using Janus.Hosting.Oidc;
+using Janus.Hosting.Organizations;
 using Janus.Hosting.Passwords;
 using Janus.Hosting.Privacy;
 using Janus.Hosting.Recovery;
@@ -34,6 +44,7 @@ using Janus.Hosting.Registration;
 using Janus.Hosting.Sending;
 using Janus.Hosting.Sessions;
 using Janus.Privacy;
+using Janus.Privacy.Breaches;
 using Janus.Privacy.Consents;
 using Janus.Privacy.Documents;
 using Janus.Privacy.Erasures;
@@ -42,8 +53,10 @@ using Janus.Privacy.Outbox;
 using Janus.Privacy.Policies;
 using Janus.Privacy.Records;
 using Janus.Privacy.Requests;
+using Janus.Privacy.Takedowns;
 using Janus.Storage;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -163,6 +176,7 @@ public static class HostingRegistration
         // AUTH-ABUSE-004, OPS-ALERT-001: the one path every message takes, and what
         // decides whether it goes.
         services.AddScoped<SmsBalance>();
+        services.AddScoped<RelayRegistration>();
         services.AddScoped<SendingService>();
 
         // LIB-EXT-001: the shipped handler carries email and SMS; a deployment that
@@ -185,6 +199,7 @@ public static class HostingRegistration
             provider.GetRequiredService<RestrictionKeySuppliers>()));
         services.AddScoped<ConfigurationAdministration>();
         services.AddScoped<RestrictionAdministration>();
+        services.AddScoped<IRestrictionSet, RestrictionSetService>();
         services.AddScoped<ThrottleService>();
         services.AddScoped<NonExistenceNotice>();
         services.AddScoped<DeliveryReports>();
@@ -199,10 +214,12 @@ public static class HostingRegistration
         services.AddScoped<AlertRouter>();
         services.AddScoped<AlertDestinationChange>();
         services.AddScoped<IAlertLog, AlertLog>();
+        services.AddScoped<IConfigurationAdministration, ConfigurationService>();
 
         // AUTH-SESS-001, AUTH-PASS-004, AUTH-FACT-005: the authentication services,
         // each of which reads the settings table for what it enforces.
         services.AddScoped<PolicyResolution>();
+        services.AddScoped<Janus.Authentication.Policies.AdministrativeScope>();
         services.AddSingleton<Argon2idHasher>();
         services.AddScoped<IScreeningLog, ScreeningLog>();
         services.AddSingleton<IWordList>(_ => new WordList(Corpus));
@@ -244,25 +261,12 @@ public static class HostingRegistration
             provider.GetService<PasskeyAddresses>(),
             provider.GetService<AuthenticationAddresses>(),
             provider.GetService<SignOnClient>(),
+            provider.GetService<IMailServer>(),
+            provider.GetService<MailServerClient>(),
             provider.GetService<ImageCodec>(),
             provider.GetRequiredService<IConfigurationStore>()));
 
-        // CONV-DESIGN-006: every request and response of the library's endpoints is
-        // read and written by the generated contexts, never by reflection.
-        services.ConfigureHttpJsonOptions(options =>
-        {
-            // The contexts spell an enum as the contract spells it, and a request is
-            // read through these options rather than through a context, so the same
-            // converter stands here (API-CONV-002).
-            options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<IdentifierKind>());
-            options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<Factor>());
-            options.SerializerOptions.TypeInfoResolverChain.Add(RegistrationJson.Default);
-            options.SerializerOptions.TypeInfoResolverChain.Add(AuthenticationJson.Default);
-            options.SerializerOptions.TypeInfoResolverChain.Add(AccountJson.Default);
-            options.SerializerOptions.TypeInfoResolverChain.Add(RecoveryJson.Default);
-            options.SerializerOptions.TypeInfoResolverChain.Add(CredentialsJson.Default);
-            options.SerializerOptions.TypeInfoResolverChain.Add(WellKnownJson.Default);
-        });
+        services.ConfigureHttpJsonOptions(ReadThroughContexts);
         services.AddScoped<RegistrationService>();
         services.AddScoped<IRegistration>(provider => provider.GetRequiredService<RegistrationService>());
         services.AddScoped<IdentifierService>();
@@ -281,6 +285,7 @@ public static class HostingRegistration
             provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<AccountService>();
         services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
+        services.AddScoped<IAccounts, AccountAdministration>();
         services.AddScoped<SignInLinks>();
         services.AddScoped<VerificationCodes>();
         services.AddScoped<AuthenticationService>();
@@ -305,7 +310,7 @@ public static class HostingRegistration
 
         services.AddScoped<IPrivacyAlerts, PrivacyAlerts>();
         services.AddScoped<ILegalDocuments, LegalDocumentService>();
-        services.AddScoped<AdministrativeScope>();
+        services.AddScoped<Janus.Privacy.Policies.AdministrativeScope>();
         services.AddScoped<Supersession>();
         services.AddScoped<IConsents, ConsentService>();
         services.AddScoped<ISubjectNotices, SubjectNotices>();
@@ -313,10 +318,13 @@ public static class HostingRegistration
         services.AddScoped<RestrictionGrant>();
         services.AddScoped<DeadlineSweep>();
         services.AddScoped<IPrivacyRequests, PrivacyRequestService>();
+        services.AddScoped<ITakedowns, TakedownService>();
+        services.AddScoped<IErasures, ErasureService>();
         services.AddScoped<DeletionSweep>();
         services.AddScoped<OrganizationErasureSweep>();
         services.AddScoped<IExports, ExportService>();
         services.AddScoped<IProcessingRecords, ProcessingRecordsService>();
+        services.AddScoped<IAuditTrail, AuditTrailService>();
         services.AddScoped<OutboxPublisher>();
 
         // AUTHZ-MODEL-001: what may be processed for what is part of the one
@@ -326,7 +334,103 @@ public static class HostingRegistration
             provider.GetRequiredService<AuthorizationModel>().Processing);
 
         services.AddScoped<Derivations>();
+        services.AddScoped<ReverseLookup>();
         services.AddScoped<IAccessGate, AccessGate>();
+        services.AddScoped<Janus.Authorization.Gate.AdministrativeScope>();
+        services.AddScoped<IGrants, GrantService>();
+        services.AddScoped<IRoles, RoleService>();
+        services.AddScoped<IOrganizations, OrganizationService>();
+
+        // REG-DOM-001, LIB-EXT-001: the resolver is the deployment's and may be absent,
+        // so what reads a record takes it as it was registered and proves nothing
+        // without it.
+        services.AddScoped<DomainLock>();
+        services.AddScoped<IOrganizationDomains>(provider => new OrganizationDomainService(
+            provider.GetRequiredService<Janus.Authentication.Policies.AdministrativeScope>(),
+            provider.GetRequiredService<StepUpGuard>(),
+            provider.GetRequiredService<IOrganizationDirectory>(),
+            provider.GetRequiredService<IDomainStore>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<ConfigurationAdministration>(),
+            provider.GetService<IDnsResolver>(),
+            provider.GetRequiredService<IOrganizationAudit>(),
+            provider.GetRequiredService<IEvents>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped(provider => new DomainReverification(
+            provider.GetRequiredService<IDomainStore>(),
+            provider.GetService<IDnsResolver>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IEvents>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>()));
+
+        // INT-MAIL-006, INT-MAIL-008: the mail server is optional, and a deployment
+        // that registers none provisions nothing and reconciles nothing.
+        services.AddScoped(provider => new MailboxPublisher(
+            provider.GetRequiredService<IMailboxStore>(),
+            provider.GetService<IMailServer>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IEvents>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped(provider => new MailboxReconciliation(
+            provider.GetRequiredService<IMailboxStore>(),
+            provider.GetService<IMailServer>(),
+            provider.GetRequiredService<IEvents>(),
+            provider.GetRequiredService<TimeProvider>()));
+
+        // INT-MAIL-010: the app passwords are the mail server's, reached with a token
+        // the provider issues to the server's client; without a server there are none.
+        services.AddScoped<IMailServerTokens>(provider => new MailServerTokens(
+            provider.GetRequiredService<OpenIddict.Server.IOpenIddictServerFactory>(),
+            provider.GetRequiredService<OpenIddict.Server.IOpenIddictServerDispatcher>(),
+            provider.GetRequiredService<OidcService>(),
+            provider.GetRequiredService<IOidcClientStore>(),
+            provider.GetService<MailServerClient>(),
+            provider.GetRequiredService<AuthenticationAddresses>(),
+            provider.GetRequiredService<TimeProvider>()));
+        services.AddScoped<IAppPasswords>(provider => new AppPasswords(
+            provider.GetService<IMailServer>(),
+            provider.GetRequiredService<IMailServerTokens>(),
+            provider.GetRequiredService<IMailboxStore>(),
+            provider.GetRequiredService<IAccountDirectory>(),
+            provider.GetRequiredService<StepUpGuard>(),
+            provider.GetRequiredService<IIdentifierDirectory>(),
+            provider.GetRequiredService<INotificationHandler>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<ICredentialAudit>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>()));
+
+        services.AddScoped<InvitationAcknowledgement>();
+        services.AddScoped<MembershipEnd>();
+
+        // REG-MAIL-001: an invitation reserves a mailbox only where there is a mail
+        // server to create it on.
+        services.AddScoped<IInvitations>(provider => new InvitationService(
+            provider.GetRequiredService<IAccessGate>(),
+            provider.GetRequiredService<Janus.Authentication.Policies.AdministrativeScope>(),
+            provider.GetRequiredService<StepUpGuard>(),
+            provider.GetRequiredService<IOrganizationDirectory>(),
+            provider.GetRequiredService<IRoleCatalogue>(),
+            provider.GetRequiredService<ILegalDocuments>(),
+            provider.GetRequiredService<DomainLock>(),
+            provider.GetRequiredService<IInvitationStore>(),
+            provider.GetRequiredService<IAccountDirectory>(),
+            provider.GetRequiredService<InvitationAcknowledgement>(),
+            provider.GetRequiredService<MembershipEnd>(),
+            provider.GetRequiredService<IMailboxStore>(),
+            provider.GetService<IMailServer>(),
+            provider.GetRequiredService<INotificationHandler>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IOrganizationAudit>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<IGroups, GroupService>();
         services.AddScoped<IDerivationMaterialiser, DerivationMaterialiser>();
         services.AddScoped<ModelValidation>();
         services.AddScoped<RedirectValidation>();
@@ -344,8 +448,46 @@ public static class HostingRegistration
         services.Insert(5, ServiceDescriptor.Singleton<IHostedService, DeclarationValidationService>());
         services.Insert(6, ServiceDescriptor.Singleton<IHostedService, RedirectValidationService>());
         services.Insert(7, ServiceDescriptor.Singleton<IHostedService, SigningKeyValidationService>());
+        services.Insert(8, ServiceDescriptor.Singleton<IHostedService, RelayValidationService>());
 
         return services;
+    }
+
+    /// <summary>
+    /// Reads every request body through the generated contexts and through nothing
+    /// else.
+    /// </summary>
+    /// <param name="options">The options minimal APIs read a request with.</param>
+    /// <remarks>
+    /// Implements CONV-DESIGN-006 and CONV-CODE-004. The chain the framework starts
+    /// with holds the reflection resolver, and a context added after it is never asked,
+    /// so the chain is replaced rather than added to: a body no context declares fails
+    /// where it is first read instead of being reflected over.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">The options are absent.</exception>
+    internal static void ReadThroughContexts(JsonOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        // The contexts spell an enum as the contract spells it, and a request is read
+        // through these options rather than through a context's own, so the same
+        // converter stands here (API-CONV-002).
+        options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<IdentifierKind>());
+        options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<Factor>());
+        options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<TakedownTrigger>());
+        options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<SubjectType>());
+        options.SerializerOptions.TypeInfoResolverChain.Clear();
+        options.SerializerOptions.TypeInfoResolverChain.Add(RegistrationJson.Default);
+        options.SerializerOptions.TypeInfoResolverChain.Add(AuthenticationJson.Default);
+        options.SerializerOptions.TypeInfoResolverChain.Add(AccountJson.Default);
+        options.SerializerOptions.TypeInfoResolverChain.Add(RecoveryJson.Default);
+        options.SerializerOptions.TypeInfoResolverChain.Add(CredentialsJson.Default);
+        options.SerializerOptions.TypeInfoResolverChain.Add(WellKnownJson.Default);
+        options.SerializerOptions.TypeInfoResolverChain.Add(PrivacyJson.Default);
+        options.SerializerOptions.TypeInfoResolverChain.Add(ConfigurationJson.Default);
+        options.SerializerOptions.TypeInfoResolverChain.Add(SendingJson.Default);
+        options.SerializerOptions.TypeInfoResolverChain.Add(AuthorizationJson.Default);
+        options.SerializerOptions.TypeInfoResolverChain.Add(OrganizationJson.Default);
     }
 
     // The word list is a file a deployment holds beside the application, where it

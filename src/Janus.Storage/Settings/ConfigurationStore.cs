@@ -144,6 +144,46 @@ internal sealed class ConfigurationStore(StoreContext context) : IConfigurationS
         return before;
     }
 
+    /// <inheritdoc/>
+    public async ValueTask<Result<TValue>> WriteAsync<TValue>(
+        SettingFamily<TValue> family,
+        string parameter,
+        TValue value,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(family);
+
+        ConfigurationKey key = family.For(parameter);
+
+        if (family.Scope is SettingScope.Protected)
+        {
+            return Result.Failure<TValue>(new Error(ErrorCodes.ConfigurationKeyProtected, Naming(key)));
+        }
+
+        string written = family.Write(value);
+        Error? refused = null;
+
+        family.Read(parameter, written).Switch(_ => { }, failure => refused = failure);
+
+        if (refused is { } failure)
+        {
+            return Result.Failure<TValue>(failure);
+        }
+
+        Result<TValue> before = await ReadAsync(family, parameter, cancellationToken).ConfigureAwait(false);
+        SettingRecord? record = await RowAsync(key, cancellationToken).ConfigureAwait(false);
+
+        if (record is null)
+        {
+            record = new SettingRecord { Key = key };
+            context.Settings.Add(record);
+        }
+
+        record.Value = written;
+
+        return before;
+    }
+
     // A key that exists once for the deployment can sit under a family's prefix, as
     // policy.default sits under policy; it is not a member of the family and the
     // catalogue is what says so.

@@ -12,7 +12,7 @@ namespace Janus.Storage.Authentication.Sending;
 /// <param name="Message">Which message it is.</param>
 /// <param name="Purpose">Which restrictions it answered to.</param>
 /// <param name="Source">The address the send was asked for from.</param>
-/// <param name="Language">The language it goes out in.</param>
+/// <param name="Language">The language it goes out in, or nothing for every declared one.</param>
 /// <param name="Subject">Whose account the destination belongs to, where it belongs to one.</param>
 /// <param name="Values">What the library puts in the template's places.</param>
 /// <remarks>
@@ -26,6 +26,6 @@ internal sealed record SendDeliveryDocument(
     string Message,
     string Purpose,
     string Source,
-    string Language,
+    string? Language,
     Guid? Subject,
     IReadOnlyDictionary<string, string> Values);

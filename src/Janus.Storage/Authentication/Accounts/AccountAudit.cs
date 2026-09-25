@@ -43,4 +43,49 @@ internal sealed class AccountAudit(IAuditStore records, TimeProvider time) : IAc
                     Nothing),
                 cancellationToken)
             .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async ValueTask CancelledOnBehalfAsync(
+        SubjectId acting,
+        SubjectId subject,
+        PrivacyRequestId? request,
+        DateTimeOffset at,
+        CancellationToken cancellationToken) =>
+        await records.AppendAsync(
+                AuditRecord.Of(
+                    AuditRecordId.New(time),
+                    AuditCategory.Security,
+                    AuditActions.DeletionCancelled,
+                    at,
+                    acting,
+                    subject,
+                    organization: null,
+                    request is PrivacyRequestId against
+                        ? new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+                        {
+                            ["request"] = JsonSerializer.SerializeToElement(against.ToString()),
+                        }
+                        : Nothing),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async ValueTask AdministeredAsync(
+        AuditAction action,
+        SubjectId acting,
+        SubjectId subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken) =>
+        await records.AppendAsync(
+                AuditRecord.Of(
+                    AuditRecordId.New(time),
+                    AuditCategory.Security,
+                    action,
+                    at,
+                    acting,
+                    subject,
+                    organization: null,
+                    Nothing),
+                cancellationToken)
+            .ConfigureAwait(false);
 }

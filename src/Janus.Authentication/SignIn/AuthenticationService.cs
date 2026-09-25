@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
+using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Registration;
@@ -38,6 +39,7 @@ namespace Janus.Authentication.SignIn;
 /// <param name="sessionStore">Where a live session is read.</param>
 /// <param name="sessions">What begins and raises a session.</param>
 /// <param name="policies">What policy governs the account, and what it has raised.</param>
+/// <param name="domainLock">Whether the address a sign-in was opened with is one a member may use.</param>
 /// <param name="throttle">The progressive delay.</param>
 /// <param name="sending">Where a message goes out.</param>
 /// <param name="signals">What is known about a number before a text leans on it.</param>
@@ -48,10 +50,11 @@ namespace Janus.Authentication.SignIn;
 /// <param name="randomness">Where a handle and a code are drawn from.</param>
 /// <remarks>
 /// Implements LIB-API-005, AUTH-FACT-001 to AUTH-FACT-004, AUTH-FACT-015 to
-/// AUTH-FACT-017, AUTH-STEP-001 and AUTH-ABUSE-001 to AUTH-ABUSE-003. An identifier
-/// that resolves to nothing is carried through every step exactly as one that
-/// resolves to an account, so that nothing in the shape of an answer tells the two
-/// apart.
+/// AUTH-FACT-017, AUTH-STEP-001, AUTH-ABUSE-001 to AUTH-ABUSE-003 and REG-DOM-001. An
+/// identifier that resolves to nothing is carried through every step exactly as one
+/// that resolves to an account, so that nothing in the shape of an answer tells the two
+/// apart. A domain lock is judged once a factor has succeeded, as everything else about
+/// the account is.
 /// </remarks>
 internal sealed class AuthenticationService(
     IChallengeStore challenges,
@@ -68,6 +71,7 @@ internal sealed class AuthenticationService(
     ISessionStore sessionStore,
     SessionService sessions,
     PolicyResolution policies,
+    DomainLock domainLock,
     ThrottleService throttle,
     INotificationHandler sending,
     PhoneSignals signals,
@@ -87,7 +91,8 @@ internal sealed class AuthenticationService(
 
         Error? failure = null;
 
-        SubjectId? subject = await OwnerAsync(identifier, cancellationToken).ConfigureAwait(false);
+        (SubjectId? subject, IdentifierId? email) = await OpenerAsync(identifier, cancellationToken)
+            .ConfigureAwait(false);
 
         if (await DelayedAsync(source, identifier, subject, cancellationToken).ConfigureAwait(false)
             is Error held)
@@ -118,7 +123,7 @@ internal sealed class AuthenticationService(
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await challenges
             .AddAsync(
-                Challenge.Open(handle, subject, ceremony.Value, time.GetUtcNow(), lifetime),
+                Challenge.Open(handle, subject, email, ceremony.Value, time.GetUtcNow(), lifetime),
                 cancellationToken)
             .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -524,6 +529,11 @@ internal sealed class AuthenticationService(
             return Result.Failure<LandedSignIn>(Error.From(ErrorCodes.FactorRejected));
         }
 
+        if (await links.LockedAsync(held, cancellationToken).ConfigureAwait(false) is Error locked)
+        {
+            return Result.Failure<LandedSignIn>(locked);
+        }
+
         open.Accepted(held.Factor);
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
@@ -556,7 +566,9 @@ internal sealed class AuthenticationService(
         return default!;
     }
 
-    private async ValueTask<SubjectId?> OwnerAsync(
+    // The account an identifier opens a sign-in for, and the identifier itself where it
+    // is an email address, which is what a domain lock is later judged on.
+    private async ValueTask<(SubjectId? Subject, IdentifierId? Email)> OpenerAsync(
         string identifier,
         CancellationToken cancellationToken)
     {
@@ -571,7 +583,7 @@ internal sealed class AuthenticationService(
 
         if (failure is not null || IdentifierKinds.Detect(entered, usernames) is not { } kind)
         {
-            return null;
+            return (null, null);
         }
 
         string? canonical = kind switch
@@ -585,9 +597,14 @@ internal sealed class AuthenticationService(
             _ => Username.TryParse(entered, out Username username) ? username.Value : null,
         };
 
-        return canonical is null
-            ? null
-            : await identifiers.OwnerAsync(kind, canonical, cancellationToken).ConfigureAwait(false);
+        if (canonical is null
+            || await identifiers.HolderAsync(kind, canonical, cancellationToken).ConfigureAwait(false)
+                is not { } holder)
+        {
+            return (null, null);
+        }
+
+        return (holder.Subject, kind is IdentifierKind.Email ? holder.Identifier : null);
     }
 
     private async ValueTask<Error?> DelayedAsync(
@@ -824,6 +841,11 @@ internal sealed class AuthenticationService(
             return Result.Failure<bool>(refusal);
         }
 
+        if (await links.LockedAsync(held, cancellationToken).ConfigureAwait(false) is Error locked)
+        {
+            return Result.Failure<bool>(locked);
+        }
+
         open.Accepted(presented.Factor);
 
         return Result.Success(false);
@@ -868,6 +890,13 @@ internal sealed class AuthenticationService(
         string? trusted,
         CancellationToken cancellationToken)
     {
+        // REG-DOM-001: a member's sign-in email is in every lock the member is under,
+        // which is told only once a factor has succeeded (AUTH-ABUSE-003).
+        if (await LockedAsync(open, subject, cancellationToken).ConfigureAwait(false) is Error locked)
+        {
+            return Result.Failure<SignInOutcome>(locked);
+        }
+
         Error? failure = null;
 
         Policy policy = (await policies.ForAsync(subject, cancellationToken).ConfigureAwait(false))
@@ -961,6 +990,30 @@ internal sealed class AuthenticationService(
                 .ConfigureAwait(false);
     }
 
+    private async ValueTask<Error?> LockedAsync(
+        Challenge open,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        if (open.Email is not IdentifierId email)
+        {
+            return null;
+        }
+
+        HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        // An address the account gave up while the sign-in was open is no longer one
+        // a lock can be judged on.
+        if (held.Find(email) is not HeldIdentifier opened
+            || !EmailAddress.TryParse(opened.Canonical, out EmailAddress address))
+        {
+            return null;
+        }
+
+        return await domainLock.RefusedAsync(subject, address, cancellationToken).ConfigureAwait(false);
+    }
+
     // AUTH-FACT-002b: the entry rides the number the account would be texted at, so
     // it is that number the signal is asked about.
     private async ValueTask<bool> TextableAsync(
@@ -1041,8 +1094,14 @@ internal sealed class AuthenticationService(
             return Result.Failure<SignInOutcome>(Error.From(ErrorCodes.FactorRejected));
         }
 
-        string language = await identifiers.LanguageAsync(subject, cancellationToken)
-            .ConfigureAwait(false) ?? string.Empty;
+        // IDN-ATTR-001: the step carries no locale of the request, so the code goes out
+        // in the account's language, or in every declared one where it holds none.
+        string? settled = await identifiers.LanguageAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        IReadOnlyList<string> languages = (await configuration
+                .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
+            .Match(read => read, _ => (IReadOnlyList<string>)[]);
 
         string code = (await codes.IssueAsync(open.Fingerprint, cancellationToken)
                 .ConfigureAwait(false))
@@ -1060,7 +1119,7 @@ internal sealed class AuthenticationService(
                         MessageKind.VerificationCode,
                         RestrictionPurpose.Verification,
                         primary.Canonical,
-                        language)
+                        RecipientLanguage.Of(settled, requested: null, languages))
                     {
                         Subject = subject,
                         Values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)

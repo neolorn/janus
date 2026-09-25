@@ -14,7 +14,7 @@ namespace Janus.Privacy.Tests.Erasures;
 internal sealed class OrganizationStatesInMemory : IOrganizationStates
 {
     private readonly Dictionary<OrganizationId, PendingOrganizationDeletion> _deleting = [];
-    private readonly Dictionary<OrganizationId, int> _members = [];
+    private readonly Dictionary<OrganizationId, List<EndedMembership>> _members = [];
 
     /// <summary>
     /// The organizations erased, in the order the pass reached them.
@@ -30,8 +30,21 @@ internal sealed class OrganizationStatesInMemory : IOrganizationStates
     public void Deletes(OrganizationId organization, DateTimeOffset since, int members = 0)
     {
         _deleting[organization] = new PendingOrganizationDeletion(organization, since);
-        _members[organization] = members;
+        _members[organization] =
+        [
+            .. Enumerable.Range(0, members).Select(_ => new EndedMembership(
+                new MembershipId(Guid.CreateVersion7()),
+                new SubjectId(Guid.NewGuid()))),
+        ];
     }
+
+    /// <summary>
+    /// The memberships an organization's erasure ends.
+    /// </summary>
+    /// <param name="organization">Which organization.</param>
+    /// <returns>Them.</returns>
+    public IReadOnlyList<EndedMembership> MembersOf(OrganizationId organization) =>
+        _members[organization];
 
     /// <summary>
     /// Cancels a window, as a deployment does inside it.
@@ -51,7 +64,7 @@ internal sealed class OrganizationStatesInMemory : IOrganizationStates
         ]);
 
     /// <inheritdoc/>
-    public ValueTask<int> EraseAsync(
+    public ValueTask<IReadOnlyList<EndedMembership>> EraseAsync(
         OrganizationId organization,
         DateTimeOffset at,
         TimeSpan window,
@@ -69,6 +82,6 @@ internal sealed class OrganizationStatesInMemory : IOrganizationStates
 
         Erased.Add(organization);
 
-        return ValueTask.FromResult(_members[organization]);
+        return ValueTask.FromResult<IReadOnlyList<EndedMembership>>(_members[organization]);
     }
 }

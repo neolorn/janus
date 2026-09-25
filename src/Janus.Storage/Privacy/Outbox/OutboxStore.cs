@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Core;
 using Janus.Privacy.Outbox;
 using Microsoft.EntityFrameworkCore;
 
@@ -104,6 +105,62 @@ internal sealed class OutboxStore(StoreContext context, TimeProvider time) : IOu
             });
         }
     }
+
+    /// <inheritdoc/>
+    public async ValueTask<DeliveryProgress?> LatestAsync(
+        SubjectId subject,
+        SubjectEventKind kind,
+        CancellationToken cancellationToken)
+    {
+        DeliveryRecord? held = await context.Outbox
+            .AsNoTracking()
+            .Include(row => row.Confirmations)
+            .Where(row => row.Subject == subject && row.Kind == kind)
+            .OrderByDescending(row => row.RaisedAt)
+            .ThenByDescending(row => row.Id)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return held is null ? null : Progress(held);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<DeliveryProgress?> ProgressAsync(
+        DeliveryId delivery,
+        CancellationToken cancellationToken)
+    {
+        DeliveryRecord? held = await context.Outbox
+            .AsNoTracking()
+            .Include(row => row.Confirmations)
+            .SingleOrDefaultAsync(row => row.Id == delivery, cancellationToken)
+            .ConfigureAwait(false);
+
+        return held is null ? null : Progress(held);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<DeliveryProgress>> OutstandingAsync(
+        SubjectEventKind kind,
+        CancellationToken cancellationToken) =>
+    [
+        .. (await context.Outbox
+                .AsNoTracking()
+                .Include(row => row.Confirmations)
+                .Where(row => row.Kind == kind && row.Status != Core.ErasureStatus.Complete)
+                .OrderBy(row => row.RaisedAt)
+                .ThenBy(row => row.Id)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .Select(Progress),
+    ];
+
+    private static DeliveryProgress Progress(DeliveryRecord held) =>
+        new(
+            Read(held),
+            held.Confirmations.ToDictionary(
+                confirmation => confirmation.Subscriber,
+                confirmation => confirmation.ConfirmedAt,
+                StringComparer.Ordinal));
 
     private static Delivery Read(DeliveryRecord row) =>
         Delivery.Existing(

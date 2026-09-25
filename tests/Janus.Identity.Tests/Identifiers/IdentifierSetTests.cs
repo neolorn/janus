@@ -216,6 +216,152 @@ public sealed class IdentifierSetTests
     }
 
     /// <summary>
+    /// REG-MAIL-001 AC5: the personal email a membership keeps is reached by every
+    /// security notice whatever the backup setting, and is neither made primary,
+    /// removed nor replaced while it is kept.
+    /// </summary>
+    [Fact]
+    public void REG_MAIL_001_AC5_ThePersonalEmailStaysVerifiedNonPrimaryAndNotified()
+    {
+        IdentifierSet set = Empty();
+        Identifier personal = Email(1, "ahmed@example.com");
+        Identifier corporate = Email(2, "ahmed@staff.example");
+
+        set.Add(personal, maximum: 10);
+        set.Add(corporate, maximum: 10);
+        set.Verify(personal.Id, Noon);
+        set.Verify(corporate.Id, Noon);
+        set.MakePrimary(corporate.Id);
+        set.KeepPersonal(personal.Id);
+        set.Backup(IdentifierKind.Email).UsePrimaryOnly();
+
+        Assert.Equal([personal, corporate], set.SecurityNoticeSet(IdentifierKind.Email));
+        Assert.Equal([personal, corporate], set.SecurityNoticeSet());
+        Assert.Throws<InvalidOperationException>(() => set.MakePrimary(personal.Id));
+        Assert.Throws<InvalidOperationException>(() => set.Remove(personal.Id));
+        Assert.Throws<InvalidOperationException>(
+            () => personal.Replace("ahmed@example.org", "ahmed@example.org", Noon));
+        Assert.True(corporate.IsPrimary);
+        Assert.Equal([personal, corporate], set.All);
+    }
+
+    /// <summary>
+    /// REG-MAIL-003 AC2 and AC3: when the membership ends the personal email becomes the
+    /// primary, kept no longer, and the corporate address leaves the account, so the
+    /// account never holds zero verified emails; an account whose corporate address is
+    /// already gone still continues on its personal email.
+    /// </summary>
+    [Fact]
+    public void REG_MAIL_003_AC2_ThePersonalEmailBecomesPrimaryAndTheCorporateAddressLeaves()
+    {
+        IdentifierSet set = Empty();
+        Identifier personal = Email(1, "ahmed@example.com");
+        Identifier corporate = Email(2, "ahmed@staff.example");
+        Identifier phone = Phone(3, "+201001234567");
+
+        set.Add(personal, maximum: 10);
+        set.Add(corporate, maximum: 10);
+        set.Add(phone, maximum: 10);
+        set.Verify(personal.Id, Noon);
+        set.Verify(corporate.Id, Noon);
+        set.Verify(phone.Id, Noon);
+        set.MakePrimary(corporate.Id);
+        set.KeepPersonal(personal.Id);
+
+        Assert.Equal(personal.Id, set.RetireCorporate(corporate.Canonical));
+        Assert.True(personal is { IsPrimary: true, IsPersonal: false, IsVerified: true });
+        Assert.Equal([personal, phone], set.All);
+        Assert.Equal([corporate.Id], set.Removed);
+        Assert.True(phone.IsPrimary);
+
+        IdentifierSet gone = Empty();
+        Identifier kept = Email(4, "hana@example.com");
+        Identifier other = Email(5, "hana@example.org");
+
+        gone.Add(kept, maximum: 10);
+        gone.Add(other, maximum: 10);
+        gone.Verify(kept.Id, Noon);
+        gone.Verify(other.Id, Noon);
+        gone.MakePrimary(other.Id);
+        gone.KeepPersonal(kept.Id);
+
+        Assert.Equal(kept.Id, gone.RetireCorporate("hana@staff.example"));
+        Assert.True(kept.IsPrimary);
+        Assert.False(other.IsPrimary);
+        Assert.Empty(gone.Removed);
+        Assert.Throws<InvalidOperationException>(() => Empty().RetireCorporate("hana@staff.example"));
+    }
+
+    /// <summary>
+    /// REG-MAIL-003 AC3: no path through the set leaves a member with zero verified
+    /// emails: the kept personal email can be neither removed nor unverified-replaced
+    /// while the membership lasts, retiring the corporate address without it is
+    /// refused and changes nothing, and after retirement a verified primary email
+    /// remains.
+    /// </summary>
+    [Fact]
+    public void REG_MAIL_003_AC3_MembershipEndNeverLeavesZeroVerifiedEmails()
+    {
+        IdentifierSet set = Empty();
+        Identifier personal = Email(1, "ahmed@example.com");
+        Identifier corporate = Email(2, "ahmed@staff.example");
+
+        set.Add(personal, maximum: 10);
+        set.Add(corporate, maximum: 10);
+        set.Verify(personal.Id, Noon);
+        set.Verify(corporate.Id, Noon);
+        set.MakePrimary(corporate.Id);
+
+        IdentifierSet unkept = Empty();
+        Identifier only = Email(3, "hana@staff.example");
+
+        unkept.Add(only, maximum: 10);
+        unkept.Verify(only.Id, Noon);
+
+        Assert.Throws<InvalidOperationException>(() => unkept.RetireCorporate(only.Canonical));
+        Assert.Equal([only], unkept.All);
+        Assert.True(only is { IsVerified: true, IsPrimary: true });
+        Assert.Empty(unkept.Removed);
+
+        set.KeepPersonal(personal.Id);
+
+        Assert.Throws<InvalidOperationException>(() => set.Remove(personal.Id));
+        Assert.Throws<InvalidOperationException>(
+            () => personal.Replace("ahmed@example.org", "ahmed@example.org", Noon));
+
+        _ = set.RetireCorporate(corporate.Canonical);
+
+        Identifier remaining = Assert.Single(set.All);
+
+        Assert.True(remaining is { IsVerified: true, IsPrimary: true, IsPersonal: false });
+        Assert.Same(personal, remaining);
+    }
+
+    /// <summary>
+    /// REG-MAIL-001: only a verified email other than the primary is kept as the
+    /// personal email of a membership.
+    /// </summary>
+    [Fact]
+    public void REG_MAIL_001_OnlyAVerifiedEmailOtherThanThePrimaryIsKept()
+    {
+        IdentifierSet set = Empty();
+        Identifier primary = Email(1, "ahmed@example.com");
+        Identifier unverified = Email(2, "ahmed@example.org");
+        Identifier phone = Phone(3, "+201001234567");
+
+        set.Add(primary, maximum: 10);
+        set.Add(unverified, maximum: 10);
+        set.Add(phone, maximum: 10);
+        set.Verify(primary.Id, Noon);
+        set.Verify(phone.Id, Noon);
+
+        Assert.Throws<InvalidOperationException>(() => set.KeepPersonal(primary.Id));
+        Assert.Throws<InvalidOperationException>(() => set.KeepPersonal(unverified.Id));
+        Assert.Throws<InvalidOperationException>(() => set.KeepPersonal(phone.Id));
+        Assert.DoesNotContain(set.All, identifier => identifier.IsPersonal);
+    }
+
+    /// <summary>
     /// An identifier of another account never joins this one's set, whether it is read
     /// with the set or added to it.
     /// </summary>

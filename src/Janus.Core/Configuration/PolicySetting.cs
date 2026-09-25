@@ -9,7 +9,11 @@ namespace Janus.Core.Configuration;
 /// The system policy: the one key of chapter 10 section 4.1 whose value is the policy
 /// object of section 4.1a.
 /// </summary>
-/// <remarks>Implements chapter 10 sections 4.1 and 4.1a, AUTH-PRIN-002.</remarks>
+/// <remarks>
+/// Implements chapter 10 sections 4.1 and 4.1a, AUTH-PRIN-002 and REG-DOM-001. The
+/// system policy locks no domain: <c>emailDomains</c> is written only through an
+/// organization's domains, where each domain is verified for that organization.
+/// </remarks>
 public sealed class PolicySetting : Setting<Policy>
 {
     internal PolicySetting(string key, SettingScope scope, Policy fallback)
@@ -18,9 +22,17 @@ public sealed class PolicySetting : Setting<Policy>
     }
 
     /// <inheritdoc />
-    public override Result<Policy> Accept(Policy value) => value is null
-        ? Result.Failure<Policy>(Refused(ErrorCodes.ConfigurationValueNotAllowed, "allowed", "a policy"))
-        : Result.Success(value);
+    public override Result<Policy> Accept(Policy value)
+    {
+        if (value is null)
+        {
+            return Result.Failure<Policy>(Refused(ErrorCodes.ConfigurationValueNotAllowed, "allowed", "a policy"));
+        }
+
+        return value.EmailDomains.Count is 0
+            ? Result.Success(value)
+            : Result.Failure<Policy>(Refused(ErrorCodes.ConfigurationValueNotAllowed, "field", "emailDomains"));
+    }
 
     /// <inheritdoc />
     private protected override Result<Policy> Parse(string stored) =>
@@ -75,10 +87,10 @@ public sealed class PolicySetting : Setting<Policy>
         {
             if (entry.Value is null
                 || entry.Value.Level is null
-                || entry.Value.MaximumAge is null
+                || entry.Value.MaxAge is null
                 || !SettingText.TryRead(entry.Key, out StepUpAction action)
                 || !SettingText.TryRead(entry.Value.Level, out GateLevel level)
-                || !Duration.TryParse(entry.Value.MaximumAge, out TimeSpan age))
+                || !Duration.TryParse(entry.Value.MaxAge, out TimeSpan age))
             {
                 return Result.Failure<Policy>(Malformed());
             }
@@ -109,5 +121,5 @@ public sealed class PolicySetting : Setting<Policy>
         bool SelfServiceRecovery,
         string[]? EmailDomains);
 
-    private sealed record WrittenGate(string? Level, bool PhishingResistant, string? MaximumAge);
+    private sealed record WrittenGate(string? Level, bool PhishingResistant, string? MaxAge);
 }

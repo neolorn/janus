@@ -12,8 +12,9 @@ using Xunit;
 namespace Janus.Storage.Tests.Authorization;
 
 /// <summary>
-/// The group closure as a membership change leaves it, and the counters the change
-/// raises (AUTHZ-GROUP-001, AUTHZ-CACHE-001, CONV-TEST-003).
+/// The groups of an organization, the group closure as a membership change leaves it,
+/// and the counters the change raises (AUTHZ-GROUP-001, AUTHZ-CACHE-001,
+/// CONV-TEST-003).
 /// </summary>
 [Trait("kind", "integration")]
 public sealed class GroupClosureStoreTests(DatabaseFixture database)
@@ -192,6 +193,58 @@ public sealed class GroupClosureStoreTests(DatabaseFixture database)
             squad,
             GrantSubject.Of(department),
             TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTHZ-GROUP-001: an organization's groups are read together, by name, and no
+    /// other organization's among them.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_GROUP_001_AnOrganizationsGroupsAreReadByNameAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        OrganizationId elsewhere = await _deployment.OrganizationAsync(Noon);
+        GroupId tellers = await GroupAsync(organization, "Tellers");
+        GroupId auditors = await GroupAsync(organization, "Auditors");
+
+        _ = await GroupAsync(elsewhere, "Operators");
+
+        await using StoreContext reading = database.Context();
+
+        IReadOnlyList<Group> groups = await Store(reading)
+            .InAsync(organization, TestContext.Current.CancellationToken);
+
+        Assert.Equal([auditors, tellers], groups.Select(group => group.Id));
+        Assert.Equal(["Auditors", "Tellers"], groups.Select(group => group.Name));
+    }
+
+    /// <summary>
+    /// AUTHZ-GROUP-001: a group nothing names is removed with its row, and the
+    /// organization's other groups stay.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_GROUP_001_ARemovedGroupIsGoneAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        GroupId removed = await GroupAsync(organization, "Retired");
+        GroupId kept = await GroupAsync(organization, "Kept");
+
+        await using (StoreContext writing = database.Context())
+        {
+            await using var transaction = new UnitOfWork(writing);
+            await transaction.BeginAsync(TestContext.Current.CancellationToken);
+
+            await Store(writing).RemoveAsync(removed, TestContext.Current.CancellationToken);
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Null(await Store(reading).FindAsync(removed, TestContext.Current.CancellationToken));
+        Assert.Equal(
+            [kept],
+            (await Store(reading).InAsync(organization, TestContext.Current.CancellationToken))
+                .Select(group => group.Id));
     }
 
     /// <inheritdoc/>

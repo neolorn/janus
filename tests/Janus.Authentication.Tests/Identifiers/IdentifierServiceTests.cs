@@ -263,6 +263,46 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-MAIL-001 AC5: the personal email a membership keeps is not made primary,
+    /// removed or replaced by the person while the membership lasts.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_001_AC5_ThePersonalEmailStaysAsTheMembershipKeepsItAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId personal = _directory.Verified(_person, IdentifierKind.Email, Second, isPersonal: true);
+
+        Assert.Equal(
+            ErrorCodes.IdentifierLocked,
+            Refused(await Service.MakePrimaryAsync(
+                Acting,
+                personal,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.Equal(
+            ErrorCodes.IdentifierLocked,
+            Refused(await Service.RemoveAsync(
+                Acting,
+                Stepped(),
+                personal,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.Equal(
+            ErrorCodes.IdentifierLocked,
+            Refused(await Service.ReplaceAsync(
+                Acting,
+                Stepped(),
+                personal,
+                Third,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.Equal(Second, Named(await HeldAsync(), Second).Canonical);
+    }
+
+    /// <summary>
     /// REG-IDENT-006 AC2: the value stops resolving at once, the undo brings it
     /// back inside the window, and the same link is refused after it.
     /// </summary>

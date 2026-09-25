@@ -29,6 +29,18 @@ internal interface IIdentifierDirectory
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Finds the account an identifier belongs to and the identifier itself.
+    /// </summary>
+    /// <param name="kind">Which kind the value is.</param>
+    /// <param name="canonical">The value in its canonical form.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The account and the identifier, or nothing where no account holds it.</returns>
+    ValueTask<(SubjectId Subject, IdentifierId Identifier)?> HolderAsync(
+        IdentifierKind kind,
+        string canonical,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Whether a value is held out of reach by a removal whose undo has not run out.
     /// </summary>
     /// <param name="kind">Which kind the value is.</param>
@@ -98,6 +110,44 @@ internal interface IIdentifierDirectory
         IdentifierId id,
         Username username,
         DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Takes on the corporate address an organization asserts, verified, locked and
+    /// primary, and keeps the personal email it displaces through the membership
+    /// (REG-MAIL-001).
+    /// </summary>
+    /// <param name="subject">Whose it is.</param>
+    /// <param name="id">The identifier issued for the corporate address.</param>
+    /// <param name="entered">The address as the administrator entered it.</param>
+    /// <param name="canonical">The address in its canonical form.</param>
+    /// <param name="personal">The verified personal email the membership keeps.</param>
+    /// <param name="at">When the membership attached.</param>
+    /// <param name="maximum">How many emails the account may hold.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of taking it on.</returns>
+    ValueTask TakeCorporateAsync(
+        SubjectId subject,
+        IdentifierId id,
+        string entered,
+        string canonical,
+        IdentifierId personal,
+        DateTimeOffset at,
+        int maximum,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Retires the corporate address when the membership that gave it ends: the
+    /// personal email the membership kept becomes the primary email in the same step,
+    /// and the corporate address leaves the account (REG-MAIL-003).
+    /// </summary>
+    /// <param name="subject">Whose.</param>
+    /// <param name="canonical">The corporate address in its canonical form.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The personal email, now the primary.</returns>
+    ValueTask<IdentifierId> RetireCorporateAsync(
+        SubjectId subject,
+        string canonical,
         CancellationToken cancellationToken);
 
     /// <summary>

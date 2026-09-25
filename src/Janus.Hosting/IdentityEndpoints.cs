@@ -1,11 +1,16 @@
 using System;
 using Janus.Hosting.Accounts;
 using Janus.Hosting.Authentication;
+using Janus.Hosting.Authorization;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Configuration;
 using Janus.Hosting.Credentials;
+using Janus.Hosting.Organizations;
 using Janus.Hosting.Privacy;
 using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
+using Janus.Hosting.Sending;
+using Janus.Hosting.Sessions;
 using Microsoft.AspNetCore.Routing;
 
 namespace Janus.Hosting;
@@ -36,9 +41,24 @@ public static class IdentityEndpoints
         _ = endpoints.MapAuthentication();
         _ = endpoints.MapSignOn();
         _ = endpoints.MapAccount();
+        _ = endpoints.MapAccountAdministration();
+        _ = endpoints.MapAppPasswords();
         _ = endpoints.MapCredentials();
         _ = endpoints.MapRecovery();
         _ = endpoints.MapPrivacy();
+        _ = endpoints.MapTakedowns();
+        _ = endpoints.MapErasures();
+        _ = endpoints.MapSessionRevocation();
+        _ = endpoints.MapExplanations();
+        _ = endpoints.MapAccess();
+        _ = endpoints.MapAuditTrail();
+        _ = endpoints.MapPublication();
+        _ = endpoints.MapConfiguration();
+        _ = endpoints.MapRestrictions();
+        _ = endpoints.MapGrants();
+        _ = endpoints.MapRoles();
+        _ = endpoints.MapGroups();
+        _ = endpoints.MapOrganizations();
 
         return endpoints;
     }

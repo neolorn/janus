@@ -63,7 +63,11 @@ public sealed class LossReportsTests : IAsyncDisposable
     /// <summary>
     /// A deployment that can send the notices the window carries.
     /// </summary>
-    public LossReportsTests() => _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
+    public LossReportsTests()
+    {
+        _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
+        _configuration.Set(Settings.NotificationLanguages, [Language, "ar"]);
+    }
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
@@ -485,6 +489,39 @@ public sealed class LossReportsTests : IAsyncDisposable
 
         Assert.True(_notifications.Mail.Count > sent);
         Assert.Equal(first, _notifications.Mail[^1].Values["token"]);
+    }
+
+    /// <summary>
+    /// IDN-ATTR-001 AC2 and AC3: the notice the sweep repeats has no request in front
+    /// of it, so it goes out in the language the account settled on, and in every
+    /// declared language once the account holds none the deployment writes in.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ATTR_001_AC2_ANoticeTheSweepSendsResolvesItsLanguageWithoutARequestAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        AuthenticatorId generator = await EnrolledAsync(subject);
+
+        _identifiers.Reads(subject, "ar-EG");
+
+        _ = await Service.ReportAsync(
+            AccessContext.Of(subject),
+            generator,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        _clock.Advance(TimeSpan.FromDays(1));
+        _ = await Service.AdvanceAsync(TestContext.Current.CancellationToken);
+
+        string? settled = _notifications.Mail[^1].Language;
+
+        _identifiers.Reads(subject, "fr");
+        _clock.Advance(TimeSpan.FromDays(1));
+        _ = await Service.AdvanceAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("ar", settled);
+        Assert.Null(_notifications.Mail[^1].Language);
     }
 
     private LossReports Service =>

@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -7,20 +6,20 @@ namespace Janus.Privacy.Policies;
 
 /// <summary>
 /// Whether the caller may perform an operation of the deployment rather than of one
-/// record.
+/// organization's records.
 /// </summary>
 /// <param name="gate">The one place a permission is evaluated.</param>
-/// <param name="memberships">Where the caller's own organizations are read.</param>
+/// <param name="administrative">Which organization administers the deployment.</param>
 /// <remarks>
-/// Implements AUTHZ-SEAM-001, AUTHZ-SCOPE-001, AUTHZ-CONCEAL-005 and LIB-API-005.
-/// Calling the service in process is no way round the permission the endpoint
-/// applies, so every administrative operation of the area passes through here.
+/// Implements AUTHZ-SEAM-001, AUTHZ-SCOPE-001, AUTHZ-CONCEAL-005 and LIB-API-005. The
+/// deployment is the administrative organization's to administer, so the permission is
+/// asked there and nowhere else, and calling the service in process is no way round it.
 /// </remarks>
-internal sealed class AdministrativeScope(IAccessGate gate, IMembershipLookup memberships)
+internal sealed class AdministrativeScope(IAccessGate gate, IAdministrativeOrganization administrative)
 {
     /// <summary>
-    /// The refusal, or nothing where the caller holds the permission in one of the
-    /// organizations they belong to.
+    /// The refusal, or nothing where the caller holds the permission in the
+    /// administrative organization.
     /// </summary>
     /// <param name="context">Who is asking.</param>
     /// <param name="permission">What they are asking to do.</param>
@@ -31,29 +30,15 @@ internal sealed class AdministrativeScope(IAccessGate gate, IMembershipLookup me
         Permission permission,
         CancellationToken cancellationToken)
     {
-        if (context.Effective is not SubjectId subject)
+        if (await administrative.FindAsync(cancellationToken).ConfigureAwait(false)
+            is not OrganizationId organization)
         {
             return Error.From(ErrorCodes.Denied);
         }
 
-        var refused = Error.From(ErrorCodes.Denied);
-
-        foreach (OrganizationId organization in
-            await memberships.OfAsync(subject, cancellationToken).ConfigureAwait(false))
-        {
-            Error? failure = (await gate
-                    .RequireAsync(context, permission, organization, cancellationToken)
-                    .ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error);
-
-            if (failure is null)
-            {
-                return null;
-            }
-
-            refused = failure;
-        }
-
-        return refused;
+        return (await gate
+                .RequireAsync(context, permission, organization, cancellationToken)
+                .ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error);
     }
 }

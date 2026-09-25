@@ -222,6 +222,16 @@ internal sealed class DefaultMessageTemplates : IMessageTemplates
                 "حسابك في طريقه للحذف",
                 "سيُحذف حسابك بانتهاء مهلة السماح. لإلغاء ذلك استخدم هذا: {token}",
                 "سيُحذف حسابك. للإلغاء: {token}")),
+        (
+            MessageKind.InvitationLink,
+            new Words(
+                "You are invited to join an organization",
+                "You are invited to join an organization. Accept with this: {token}. It expires after a while. If you did not expect it, ignore this message.",
+                null),
+            new Words(
+                "دعوة للانضمام إلى مؤسسة",
+                "أنت مدعو للانضمام إلى مؤسسة. للقبول استخدم هذا: {token}. تنتهي صلاحيتها بعد مدة. إن لم تكن تتوقعها فتجاهل هذه الرسالة.",
+                null)),
     ];
 
     private static readonly FrozenDictionary<Held, MessageTemplate> Texts = Written();

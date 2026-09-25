@@ -458,7 +458,7 @@ internal sealed class LossReports(
         HeldIdentifiers held = await identifiers.HeldAsync(report.Subject, cancellationToken)
             .ConfigureAwait(false);
 
-        string language = await LanguageAsync(report.Subject, cancellationToken).ConfigureAwait(false);
+        string? language = await LanguageAsync(report.Subject, cancellationToken).ConfigureAwait(false);
         var values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)
         {
             ["token"] = Encoding.UTF8.GetString(report.Cancel),
@@ -525,20 +525,16 @@ internal sealed class LossReports(
         (await events.PublishAsync(raised, cancellationToken).ConfigureAwait(false))
             .Match(() => (Error?)null, error => error);
 
-    private async ValueTask<string> LanguageAsync(
+    private async ValueTask<string?> LanguageAsync(
         SubjectId subject,
         CancellationToken cancellationToken)
     {
-        if (await identifiers.LanguageAsync(subject, cancellationToken).ConfigureAwait(false)
-            is string settled)
-        {
-            return settled;
-        }
+        string? settled = await identifiers.LanguageAsync(subject, cancellationToken).ConfigureAwait(false);
 
         IReadOnlyList<string> languages = (await configuration
                 .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
             .Match(read => read, _ => (IReadOnlyList<string>)[]);
 
-        return languages.Count > 0 ? languages[0] : string.Empty;
+        return RecipientLanguage.Of(settled, requested: null, languages);
     }
 }

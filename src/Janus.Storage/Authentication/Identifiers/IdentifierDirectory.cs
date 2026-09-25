@@ -32,6 +32,13 @@ internal sealed class IdentifierDirectory(
         identifiers.FindOwnerAsync(kind, canonical, cancellationToken);
 
     /// <inheritdoc/>
+    public ValueTask<(SubjectId Subject, IdentifierId Identifier)?> HolderAsync(
+        IdentifierKind kind,
+        string canonical,
+        CancellationToken cancellationToken) =>
+        identifiers.FindHolderAsync(kind, canonical, cancellationToken);
+
+    /// <inheritdoc/>
     public ValueTask<bool> IsReservedAsync(
         IdentifierKind kind,
         string canonical,
@@ -114,6 +121,56 @@ internal sealed class IdentifierDirectory(
         set.Add(Identifier.Username(id, subject, username, at), maximum: 1);
 
         await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">The corporate address is not an email address.</exception>
+    public async ValueTask TakeCorporateAsync(
+        SubjectId subject,
+        IdentifierId id,
+        string entered,
+        string canonical,
+        IdentifierId personal,
+        DateTimeOffset at,
+        int maximum,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(entered);
+
+        if (!EmailAddress.TryParse(canonical, out EmailAddress address))
+        {
+            throw new InvalidOperationException("The corporate address is not an email address.");
+        }
+
+        IdentifierSet set = await identifiers.FindBySubjectAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        // The organization asserts the address and the system created its mailbox, so
+        // it is proved by the invitation and not by a code (REG-MAIL-001).
+        set.Add(Identifier.Email(id, subject, address, entered, at, isLocked: true), maximum);
+        set.Verify(id, at);
+        set.MakePrimary(id);
+        set.KeepPersonal(personal);
+
+        await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<IdentifierId> RetireCorporateAsync(
+        SubjectId subject,
+        string canonical,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(canonical);
+
+        IdentifierSet set = await identifiers.FindBySubjectAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        IdentifierId primary = set.RetireCorporate(canonical);
+
+        await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
+
+        return primary;
     }
 
     /// <inheritdoc/>
@@ -338,6 +395,7 @@ internal sealed class IdentifierDirectory(
             identifier.IsVerified,
             identifier.IsPrimary,
             identifier.IsLocked,
+            identifier.IsPersonal,
             identifier.VerifiedAt);
 
     private static Identifier Required(IdentifierSet set, IdentifierId id) =>

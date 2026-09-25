@@ -42,6 +42,24 @@ internal sealed class GroupsInMemory : IGroupStore
     }
 
     /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<Group>> InAsync(OrganizationId organization, CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<Group>>(
+        [
+            .. _groups.Values
+                .Where(group => group.Organization == organization)
+                .OrderBy(group => group.Name, StringComparer.Ordinal),
+        ]);
+
+    /// <inheritdoc/>
+    public ValueTask RemoveAsync(GroupId id, CancellationToken cancellationToken)
+    {
+        _groups.Remove(id);
+        _members.Remove(id);
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
     public ValueTask AddMemberAsync(GroupId group, GrantSubject member, CancellationToken cancellationToken)
     {
         Edges(group).Add(member);

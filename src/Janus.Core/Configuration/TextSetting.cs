@@ -23,6 +23,9 @@ public sealed class TextSetting : Setting<string>
         : Result.Success(value);
 
     /// <inheritdoc />
+    /// <inheritdoc />
+    private protected override bool Textual => true;
+
     private protected override Result<string> Parse(string stored) => Result.Success(stored);
 
     /// <inheritdoc />

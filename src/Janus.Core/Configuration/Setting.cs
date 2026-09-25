@@ -46,6 +46,14 @@ public abstract class Setting
     public bool IsRequired { get; }
 
     /// <summary>
+    /// Hands the setting, typed, to an operation that works on any key.
+    /// </summary>
+    /// <typeparam name="TResult">What the operation answers.</typeparam>
+    /// <param name="operation">The operation.</param>
+    /// <returns>What it answered.</returns>
+    internal abstract TResult Apply<TResult>(ISettingOperation<TResult> operation);
+
+    /// <summary>
     /// The way a key with no stated direction loosens, read from its bounds: a key
     /// bounded only above loosens upward, a key bounded only below loosens downward,
     /// and a key bounded at both ends or neither loosens on any change.

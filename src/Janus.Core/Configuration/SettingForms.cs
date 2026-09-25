@@ -83,7 +83,9 @@ internal static class SettingForms
 
             foreach (string name in names)
             {
-                if (name is null || !SettingText.TryRead(name, out Factor factor))
+                // Chapter 10 section 4.1a: the emergency credential is no entry of any
+                // policy, an organization's no more than the system's.
+                if (name is null || !SettingText.TryRead(name, out Factor factor) || !Policy.Admits(factor))
                 {
                     return Result.Failure<PolicyOverride>(malformed);
                 }
@@ -102,10 +104,10 @@ internal static class SettingForms
             {
                 if (entry.Value is null
                     || entry.Value.Level is null
-                    || entry.Value.MaximumAge is null
+                    || entry.Value.MaxAge is null
                     || !SettingText.TryRead(entry.Key, out StepUpAction action)
                     || !SettingText.TryRead(entry.Value.Level, out GateLevel level)
-                    || !Configuration.Duration.TryParse(entry.Value.MaximumAge, out TimeSpan age))
+                    || !Configuration.Duration.TryParse(entry.Value.MaxAge, out TimeSpan age))
                 {
                     return Result.Failure<PolicyOverride>(malformed);
                 }
@@ -150,5 +152,5 @@ internal static class SettingForms
         bool? SelfServiceRecovery,
         string[]? EmailDomains);
 
-    private sealed record WrittenGate(string? Level, bool PhishingResistant, string? MaximumAge);
+    private sealed record WrittenGate(string? Level, bool PhishingResistant, string? MaxAge);
 }

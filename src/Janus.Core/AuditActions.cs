@@ -21,10 +21,17 @@ public static class AuditActions
     public static AuditAction AccountDeactivated { get; } = AuditAction.Parse("identity.account.deactivated");
 
     /// <summary>
-    /// A deactivated account was stood back up.
+    /// A suspended account was stood back up, by its owner from a deactivation or by an
+    /// administrator from an administrator's suspension.
     /// </summary>
     /// <remarks>Implements IDN-LIFE-013, chapter 10 section 5.</remarks>
     public static AuditAction AccountReactivated { get; } = AuditAction.Parse("identity.account.reactivated");
+
+    /// <summary>
+    /// An administrator suspended an account; only an administrator reactivates it.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-013, AUTH-SESS-010 and IDN-AUD-001.</remarks>
+    public static AuditAction AccountSuspended { get; } = AuditAction.Parse("identity.account.suspended");
 
     /// <summary>
     /// The bot defence answered a send with a signal, which is recorded without the signal's own detail.
@@ -118,6 +125,92 @@ public static class AuditActions
     public static AuditAction OrganizationErased { get; } = AuditAction.Parse("identity.organization.erased");
 
     /// <summary>
+    /// An organization was created, with no override of the system policy.
+    /// </summary>
+    /// <remarks>Implements IDN-ORG-002 and IDN-AUD-001.</remarks>
+    public static AuditAction OrganizationCreated { get; } = AuditAction.Parse("identity.organization.created");
+
+    /// <summary>
+    /// An organization's deletion was requested, which suspended it and opened the
+    /// grace window.
+    /// </summary>
+    /// <remarks>Implements IDN-ORG-003 and IDN-AUD-001.</remarks>
+    public static AuditAction OrganizationDeletionRequested { get; } =
+        AuditAction.Parse("identity.organization.deletionrequested");
+
+    /// <summary>
+    /// An organization's deletion was cancelled inside its grace window, which lifted
+    /// the suspension.
+    /// </summary>
+    /// <remarks>Implements IDN-ORG-003 and IDN-AUD-001.</remarks>
+    public static AuditAction OrganizationDeletionCancelled { get; } =
+        AuditAction.Parse("identity.organization.deletioncancelled");
+
+    /// <summary>
+    /// A domain was added to an organization's lock, unverified and admitting nothing.
+    /// </summary>
+    /// <remarks>Implements REG-DOM-001 and IDN-AUD-001.</remarks>
+    public static AuditAction OrganizationDomainAdded { get; } =
+        AuditAction.Parse("identity.organization.domainadded");
+
+    /// <summary>
+    /// A domain of an organization's lock was verified by its TXT record, and admits
+    /// addresses in it from then on.
+    /// </summary>
+    /// <remarks>Implements REG-DOM-001 and IDN-AUD-001.</remarks>
+    public static AuditAction OrganizationDomainVerified { get; } =
+        AuditAction.Parse("identity.organization.domainverified");
+
+    /// <summary>
+    /// A domain was removed from an organization's lock, which stopped new sign-ins
+    /// with addresses in it.
+    /// </summary>
+    /// <remarks>Implements REG-DOM-001 and IDN-AUD-001.</remarks>
+    public static AuditAction OrganizationDomainRemoved { get; } =
+        AuditAction.Parse("identity.organization.domainremoved");
+
+    /// <summary>
+    /// An invitation into an organization was issued.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-009a, REG-INV-001 and IDN-AUD-001.</remarks>
+    public static AuditAction InvitationIssued { get; } =
+        AuditAction.Parse("identity.invitation.issued");
+
+    /// <summary>
+    /// An invitation nobody had acknowledged was revoked, or replaced by a later one
+    /// for the same corporate address.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-009a, REG-MAIL-001 and IDN-AUD-001.</remarks>
+    public static AuditAction InvitationRevoked { get; } =
+        AuditAction.Parse("identity.invitation.revoked");
+
+    /// <summary>
+    /// An invitation was acknowledged and the membership it offered attached.
+    /// </summary>
+    /// <remarks>Implements REG-INV-001, IDN-LIFE-009a and IDN-AUD-001.</remarks>
+    public static AuditAction InvitationAcknowledged { get; } =
+        AuditAction.Parse("identity.invitation.acknowledged");
+
+    /// <summary>
+    /// An administrator ended a membership; the account and the organization persist.
+    /// </summary>
+    /// <remarks>Implements IDN-MEM-001, REG-MAIL-003 and IDN-AUD-001.</remarks>
+    public static AuditAction MembershipEnded { get; } =
+        AuditAction.Parse("identity.membership.ended");
+
+    /// <summary>
+    /// A takedown was triggered, naming what raised it and the reason written for it.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-003, chapter 10 section 5.</remarks>
+    public static AuditAction TakedownExecuted { get; } = AuditAction.Parse("identity.takedown.executed");
+
+    /// <summary>
+    /// A takedown was reversed inside its window, with the reason written for it.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-003, chapter 10 section 5.</remarks>
+    public static AuditAction TakedownReversed { get; } = AuditAction.Parse("identity.takedown.reversed");
+
+    /// <summary>
     /// A version of a legal document was published in the governing language.
     /// </summary>
     /// <remarks>Implements PRIV-CONS-005, chapter 10 section 5.</remarks>
@@ -130,6 +223,12 @@ public static class AuditActions
     public static AuditAction DocumentTranslated { get; } = AuditAction.Parse("privacy.document.translated");
 
     /// <summary>
+    /// An erasure whose retries were spent was completed by hand.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-003a, chapter 10 section 5.</remarks>
+    public static AuditAction ErasureCompleted { get; } = AuditAction.Parse("privacy.erasure.completed");
+
+    /// <summary>
     /// An erasure was carried out, which destroys the subject key and leaves the trail resolving.
     /// </summary>
     /// <remarks>Implements PRIV-RIGHT-005, chapter 10 section 5.</remarks>
@@ -140,6 +239,42 @@ public static class AuditActions
     /// </summary>
     /// <remarks>Implements PRIV-RIGHT-003, chapter 10 section 5.</remarks>
     public static AuditAction ExportAssembled { get; } = AuditAction.Parse("privacy.export.assembled");
+
+    /// <summary>
+    /// A group was created.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GROUP-001.</remarks>
+    public static AuditAction GroupCreated { get; } = AuditAction.Parse("authz.group.created");
+
+    /// <summary>
+    /// An account or a group was added to a group, and holds what it holds.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GROUP-001 and OPS-CFG-007.</remarks>
+    public static AuditAction GroupMemberAdded { get; } = AuditAction.Parse("authz.group.memberadded");
+
+    /// <summary>
+    /// An account or a group was taken out of a group, and no longer holds what it holds.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GROUP-001 and OPS-CFG-007.</remarks>
+    public static AuditAction GroupMemberRemoved { get; } = AuditAction.Parse("authz.group.memberremoved");
+
+    /// <summary>
+    /// A group nothing named was removed.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GROUP-001.</remarks>
+    public static AuditAction GroupRemoved { get; } = AuditAction.Parse("authz.group.removed");
+
+    /// <summary>
+    /// The mail server generated an app password at its holder's request.
+    /// </summary>
+    /// <remarks>Implements REG-MAIL-002, INT-MAIL-010, chapter 10 section 5.</remarks>
+    public static AuditAction MailCredentialCreated { get; } = AuditAction.Parse("auth.mailcredential.created");
+
+    /// <summary>
+    /// The mail server revoked an app password at its holder's request.
+    /// </summary>
+    /// <remarks>Implements REG-MAIL-002, INT-MAIL-010, chapter 10 section 5.</remarks>
+    public static AuditAction MailCredentialRevoked { get; } = AuditAction.Parse("auth.mailcredential.revoked");
 
     /// <summary>
     /// An objection to a purpose was recorded.
@@ -220,10 +355,29 @@ public static class AuditActions
     public static AuditAction RestrictionEdited { get; } = AuditAction.Parse("auth.restriction.edited");
 
     /// <summary>
+    /// An administrator lifted a restriction of processing, which tells every
+    /// subject-event handler it may act on the subject's records again.
+    /// </summary>
+    /// <remarks>Implements PRIV-RIGHT-004 and IDN-AUD-001.</remarks>
+    public static AuditAction RestrictionLifted { get; } = AuditAction.Parse("privacy.restriction.lifted");
+
+    /// <summary>
     /// A sending restriction was granted against an address or a number.
     /// </summary>
     /// <remarks>Implements AUTH-ABUSE-005, chapter 10 section 5.</remarks>
     public static AuditAction RestrictionGranted { get; } = AuditAction.Parse("auth.restriction.granted");
+
+    /// <summary>
+    /// A role was created, or the permissions it bundles were changed.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-004 and OPS-CFG-007.</remarks>
+    public static AuditAction RoleDefined { get; } = AuditAction.Parse("authz.role.defined");
+
+    /// <summary>
+    /// A role nothing named was removed.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-004 and OPS-CFG-007.</remarks>
+    public static AuditAction RoleRemoved { get; } = AuditAction.Parse("authz.role.removed");
 
     /// <summary>
     /// The account's preferred second step was changed.

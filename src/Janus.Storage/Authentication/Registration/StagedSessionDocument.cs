@@ -24,6 +24,7 @@ namespace Janus.Storage.Authentication.Registration;
 /// <param name="RecoveryCodes">The set drawn at the security step, encoded.</param>
 /// <param name="Identifiers">Every identifier staged.</param>
 /// <param name="Credentials">Every credential enrolled against it.</param>
+/// <param name="Invitation">The invitation whose link opened it, where one did.</param>
 /// <remarks>
 /// Implements REG-SESS-001 and REG-SESS-002. The shape is generated at build time
 /// rather than reflected over at run time, so the column's format is fixed by
@@ -45,4 +46,5 @@ internal sealed record StagedSessionDocument(
     bool PasswordStandsAlone,
     IReadOnlyList<string>? RecoveryCodes,
     IReadOnlyList<StagedIdentityDocument> Identifiers,
-    IReadOnlyList<StagedCredentialDocument> Credentials);
+    IReadOnlyList<StagedCredentialDocument> Credentials,
+    Guid? Invitation);

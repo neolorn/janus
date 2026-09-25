@@ -459,6 +459,207 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     });
             });
 
+        modelBuilder.Entity("Janus.Storage.Authentication.Invitations.InvitationRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<DateTimeOffset?>("AcknowledgedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("acknowledged_at");
+
+                b.Property<DateTimeOffset?>("AttachedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("attached_at");
+
+                b.Property<string>("Documents")
+                    .IsRequired()
+                    .HasColumnType("jsonb")
+                    .HasColumnName("documents");
+
+                b.Property<byte[]>("EncryptedIdentifiers")
+                    .HasColumnType("bytea")
+                    .HasColumnName("enc_identifiers");
+
+                b.Property<DateTimeOffset>("ExpiresAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("expires_at");
+
+                b.Property<Guid?>("Invitee")
+                    .HasColumnType("uuid")
+                    .HasColumnName("invitee");
+
+                b.Property<Guid>("Inviter")
+                    .HasColumnType("uuid")
+                    .HasColumnName("inviter");
+
+                b.Property<DateTimeOffset>("IssuedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("issued_at");
+
+                b.Property<int?>("KeyVersion")
+                    .HasColumnType("integer")
+                    .HasColumnName("key_version");
+
+                b.Property<Guid?>("Mailbox")
+                    .HasColumnType("uuid")
+                    .HasColumnName("mailbox");
+
+                b.Property<Guid>("Organization")
+                    .HasColumnType("uuid")
+                    .HasColumnName("organization");
+
+                b.Property<DateTimeOffset?>("RevokedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("revoked_at");
+
+                b.PrimitiveCollection<string[]>("Roles")
+                    .IsRequired()
+                    .HasColumnType("text[]")
+                    .HasColumnName("roles");
+
+                b.Property<Guid?>("Session")
+                    .HasColumnType("uuid")
+                    .HasColumnName("session");
+
+                b.Property<byte[]>("Token")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("token");
+
+                b.Property<byte[]>("WrappedKey")
+                    .HasColumnType("bytea")
+                    .HasColumnName("wrapped_key");
+
+                b.HasKey("Id")
+                    .HasName("pk_invitations");
+
+                b.HasIndex("Invitee")
+                    .HasDatabaseName("ix_invitations_invitee");
+
+                b.HasIndex("Inviter")
+                    .HasDatabaseName("ix_invitations_inviter");
+
+                b.HasIndex("Mailbox")
+                    .IsUnique()
+                    .HasDatabaseName("ux_invitations_mailbox")
+                    .HasFilter("mailbox IS NOT NULL AND revoked_at IS NULL AND acknowledged_at IS NULL");
+
+                b.HasIndex("Organization")
+                    .HasDatabaseName("ix_invitations_organization");
+
+                b.HasIndex("Token")
+                    .IsUnique()
+                    .HasDatabaseName("ux_invitations_token");
+
+                b.ToTable("invitations", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_invitations_attached", "session IS NULL OR invitee IS NULL");
+
+                        t.HasCheckConstraint("ck_invitations_forgotten", "enc_identifiers IS NULL OR (revoked_at IS NULL AND acknowledged_at IS NULL)");
+
+                        t.HasCheckConstraint("ck_invitations_key", "(enc_identifiers IS NULL) = (wrapped_key IS NULL) AND (wrapped_key IS NULL) = (key_version IS NULL)");
+
+                        t.HasCheckConstraint("ck_invitations_outcome", "revoked_at IS NULL OR acknowledged_at IS NULL");
+                    });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Mailboxes.MailboxRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<int>("Attempts")
+                    .HasColumnType("integer")
+                    .HasColumnName("attempts");
+
+                b.Property<string>("CanonicalisationVersion")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("canonicalisation_version");
+
+                b.Property<byte[]>("EncryptedCanonical")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("enc_canonical");
+
+                b.Property<DateTimeOffset?>("FailedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("failed_at");
+
+                b.Property<byte[]>("Fingerprint")
+                    .IsRequired()
+                    .HasColumnType("bytea")
+                    .HasColumnName("fingerprint");
+
+                b.Property<Guid?>("Holder")
+                    .HasColumnType("uuid")
+                    .HasColumnName("holder");
+
+                b.Property<int?>("KeyVersion")
+                    .HasColumnType("integer")
+                    .HasColumnName("key_version");
+
+                b.Property<DateTimeOffset?>("NextAttemptAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("next_attempt_at");
+
+                b.Property<string>("Pending")
+                    .HasColumnType("text")
+                    .HasColumnName("pending");
+
+                b.Property<Guid?>("PendingKey")
+                    .HasColumnType("uuid")
+                    .HasColumnName("pending_key");
+
+                b.Property<string>("Pushed")
+                    .HasColumnType("text")
+                    .HasColumnName("pushed");
+
+                b.Property<DateTimeOffset?>("ReleasedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("released_at");
+
+                b.Property<DateTimeOffset>("ReservedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("reserved_at");
+
+                b.Property<DateTimeOffset?>("RetiredAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("retired_at");
+
+                b.Property<byte[]>("WrappedKey")
+                    .HasColumnType("bytea")
+                    .HasColumnName("wrapped_key");
+
+                b.HasKey("Id")
+                    .HasName("pk_mailboxes");
+
+                b.HasIndex("Fingerprint")
+                    .IsUnique()
+                    .HasDatabaseName("ux_mailboxes_fingerprint")
+                    .HasFilter("fingerprint <> decode(repeat('00', 32), 'hex')");
+
+                b.HasIndex("Holder")
+                    .HasDatabaseName("ix_mailboxes_holder");
+
+                b.ToTable("mailboxes", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_mailboxes_key", "(holder IS NULL) = (wrapped_key IS NOT NULL) AND (wrapped_key IS NULL) = (key_version IS NULL)");
+
+                        t.HasCheckConstraint("ck_mailboxes_pending", "pending IS NULL OR pending IN ('disabled', 'enabled', 'removed')");
+
+                        t.HasCheckConstraint("ck_mailboxes_pending_key", "(pending IS NULL) = (pending_key IS NULL)");
+
+                        t.HasCheckConstraint("ck_mailboxes_pushed", "pushed IS NULL OR pushed IN ('disabled', 'enabled', 'removed')");
+
+                        t.HasCheckConstraint("ck_mailboxes_released", "released_at IS NULL OR (holder IS NULL AND retired_at IS NULL)");
+                    });
+            });
+
         modelBuilder.Entity("Janus.Storage.Authentication.Oidc.OidcAuthorizationRecord", b =>
             {
                 b.Property<Guid>("Id")
@@ -742,6 +943,55 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                         t.HasCheckConstraint("ck_signing_keys_retirement", "(superseded_at IS NULL AND retires_at IS NULL) OR (superseded_at IS NOT NULL AND retires_at > superseded_at)");
 
                         t.HasCheckConstraint("ck_signing_keys_version", "key_version >= 1");
+                    });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Organizations.LockedDomainRecord", b =>
+            {
+                b.Property<string>("Token")
+                    .HasColumnType("text")
+                    .HasColumnName("token");
+
+                b.Property<DateTimeOffset>("AddedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("added_at");
+
+                b.Property<DateTimeOffset?>("CheckedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("checked_at");
+
+                b.Property<string>("Domain")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("domain");
+
+                b.Property<bool?>("LastCheckPassed")
+                    .HasColumnType("boolean")
+                    .HasColumnName("last_check_passed");
+
+                b.Property<Guid>("Organization")
+                    .HasColumnType("uuid")
+                    .HasColumnName("organization");
+
+                b.Property<DateTimeOffset?>("RemovedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("removed_at");
+
+                b.Property<DateTimeOffset?>("VerifiedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("verified_at");
+
+                b.HasKey("Token")
+                    .HasName("pk_organization_domains");
+
+                b.HasIndex("Organization", "Domain")
+                    .IsUnique()
+                    .HasDatabaseName("ux_organization_domains_organization_domain")
+                    .HasFilter("removed_at IS NULL");
+
+                b.ToTable("organization_domains", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_organization_domains_verified", "verified_at IS NULL OR checked_at IS NOT NULL");
                     });
             });
 
@@ -1474,6 +1724,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("created_at");
 
+                b.Property<Guid?>("Email")
+                    .HasColumnType("uuid")
+                    .HasColumnName("email");
+
                 b.Property<DateTimeOffset>("ExpiresAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("expires_at");
@@ -1523,6 +1777,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .IsRequired()
                     .HasColumnType("bytea")
                     .HasColumnName("enc_code");
+
+                b.Property<Guid?>("Email")
+                    .HasColumnType("uuid")
+                    .HasColumnName("email");
 
                 b.Property<DateTimeOffset>("ExpiresAt")
                     .HasColumnType("timestamp with time zone")
@@ -1908,6 +2166,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("character varying(64)")
                     .HasColumnName("notice_version");
 
+                b.Property<bool>("RestrictionHeld")
+                    .HasColumnType("boolean")
+                    .HasColumnName("restriction_held");
+
                 b.Property<string>("State")
                     .IsRequired()
                     .HasColumnType("text")
@@ -1942,6 +2204,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                         t.HasCheckConstraint("ck_accounts_deleting_by", "deleting_by IS NULL OR deleting_by IN ('oob-request', 'self', 'takedown')");
 
                         t.HasCheckConstraint("ck_accounts_documents", "(terms_version IS NULL) = (notice_version IS NULL)");
+
+                        t.HasCheckConstraint("ck_accounts_restriction_held", "NOT restriction_held OR state IN ('deleting', 'suspended')");
 
                         t.HasCheckConstraint("ck_accounts_state", "state IN ('active', 'deleted', 'deleting', 'restricted', 'suspended')");
 
@@ -1991,6 +2255,9 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                 b.HasKey("Category", "OccurredAt", "Id")
                     .HasName("pk_audit_records");
+
+                b.HasIndex("ActingSubject", "OccurredAt")
+                    .HasDatabaseName("ix_audit_records_acting_subject");
 
                 b.HasIndex("EffectiveSubject", "OccurredAt")
                     .HasDatabaseName("ix_audit_records_effective_subject");
@@ -2069,6 +2336,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("boolean")
                     .HasColumnName("is_locked");
 
+                b.Property<bool>("IsPersonal")
+                    .HasColumnType("boolean")
+                    .HasColumnName("is_personal");
+
                 b.Property<bool>("IsPrimary")
                     .HasColumnType("boolean")
                     .HasColumnName("is_primary");
@@ -2102,6 +2373,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                         t.HasCheckConstraint("ck_identifiers_fingerprint", "octet_length(fingerprint) = 32");
 
                         t.HasCheckConstraint("ck_identifiers_kind", "kind IN ('email', 'phone', 'username')");
+
+                        t.HasCheckConstraint("ck_identifiers_personal", "NOT is_personal OR (kind = 'email' AND verified_at IS NOT NULL AND NOT is_primary)");
 
                         t.HasCheckConstraint("ck_identifiers_primary", "NOT is_primary OR verified_at IS NOT NULL");
                     });
@@ -2221,6 +2494,14 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("uuid")
                     .HasColumnName("id");
 
+                b.Property<DateTimeOffset?>("AcknowledgedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("acknowledged_at");
+
+                b.Property<string>("AcknowledgedDocuments")
+                    .HasColumnType("jsonb")
+                    .HasColumnName("acknowledged_documents");
+
                 b.Property<DateTimeOffset>("CreatedAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("created_at");
@@ -2248,6 +2529,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                 b.ToTable("memberships", "identity", t =>
                     {
+                        t.HasCheckConstraint("ck_memberships_acknowledged", "(acknowledged_at IS NULL) = (acknowledged_documents IS NULL)");
+
                         t.HasCheckConstraint("ck_memberships_ended", "ended_at IS NULL OR ended_at >= created_at");
                     });
             });
@@ -2671,7 +2954,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     {
                         t.HasCheckConstraint("ck_outbox_attempts", "attempts >= 0");
 
-                        t.HasCheckConstraint("ck_outbox_kind", "kind IN ('erasure-requested', 'export-requested', 'restriction-changed')");
+                        t.HasCheckConstraint("ck_outbox_kind", "kind IN ('erasure-requested', 'export-requested', 'restriction-changed', 'takedown-executed')");
 
                         t.HasCheckConstraint("ck_outbox_reason", "reason IN ('erasure-request', 'minor-takedown', 'organization-erasure')");
 
@@ -2924,6 +3207,44 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasConstraintName("fk_identifier_verifications_subject");
             });
 
+        modelBuilder.Entity("Janus.Storage.Authentication.Invitations.InvitationRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Invitee")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .HasConstraintName("fk_invitations_invitee");
+
+                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Inviter")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_invitations_inviter");
+
+                b.HasOne("Janus.Storage.Authentication.Mailboxes.MailboxRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Mailbox")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .HasConstraintName("fk_invitations_mailbox");
+
+                b.HasOne("Janus.Storage.Identity.Organizations.OrganizationRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Organization")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_invitations_organization");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Mailboxes.MailboxRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Holder")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .HasConstraintName("fk_mailboxes_holder");
+            });
+
         modelBuilder.Entity("Janus.Storage.Authentication.Oidc.OidcAuthorizationRecord", b =>
             {
                 b.HasOne("Janus.Storage.Authentication.Oidc.OidcClientRecord", null)
@@ -2962,6 +3283,16 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .OnDelete(DeleteBehavior.Cascade)
                     .IsRequired()
                     .HasConstraintName("fk_oidc_tokens_subject");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Organizations.LockedDomainRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Identity.Organizations.OrganizationRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Organization")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_organization_domains_organization");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Passwords.PasswordRecord", b =>

@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Sending;
@@ -13,6 +14,7 @@ using Janus.Authentication.SignIn;
 using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Identifiers;
+using Janus.Authentication.Tests.Organizations;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
 using Janus.Authentication.Tests.Sending;
@@ -59,7 +61,9 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     private readonly SessionAuditInMemory _audit = new();
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
+    private readonly DomainStoreInMemory _domains = new();
     private readonly AccessGateInMemory _gate = new();
+    private readonly AdministrativeOrganizationInMemory _administrative = new();
     private readonly LocationResolverInMemory _locations = new();
     private readonly ThrottleLedgerInMemory _throttle = new();
     private readonly NoticeLedgerInMemory _notices = new();
@@ -114,6 +118,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             _live,
             Sessions,
             Policies,
+            Lock,
             Throttle,
             _notifications,
             Signals,
@@ -134,6 +139,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             _identifiers,
             _accounts,
             Policies,
+            Lock,
             _notifications,
             new NonExistenceNotice(_configuration, _notifications, _notices, _work, _events, _clock),
             Signals,
@@ -145,6 +151,8 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
     private PolicyResolution Policies => new(_memberships, _configuration, _raises);
 
+    private DomainLock Lock => new(_memberships, _configuration, _domains);
+
     private DeviceService Devices =>
         new(_devices, _configuration, _work, _events, _clock, _randomness);
 
@@ -154,7 +162,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             _audit,
             Policies,
             _configuration,
-            _gate,
+            new AdministrativeScope(_gate, _administrative),
             _locations,
             _work,
             _clock,

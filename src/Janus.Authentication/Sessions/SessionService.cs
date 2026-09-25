@@ -21,7 +21,7 @@ namespace Janus.Authentication.Sessions;
 /// <param name="audit">Where the factors presented are recorded.</param>
 /// <param name="policies">Where the principal's policy is resolved.</param>
 /// <param name="configuration">Where the lifetimes are read from.</param>
-/// <param name="gate">Where a permission is evaluated.</param>
+/// <param name="scope">Whether the caller may end sessions that are not their own.</param>
 /// <param name="locations">What the address a session was used from resolves to.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
@@ -36,7 +36,7 @@ internal sealed class SessionService(
     ISessionAudit audit,
     PolicyResolution policies,
     IConfigurationStore configuration,
-    IAccessGate gate,
+    AdministrativeScope scope,
     ILocationResolver locations,
     IUnitOfWork work,
     TimeProvider time,
@@ -531,14 +531,10 @@ internal sealed class SessionService(
     public async ValueTask<Result> RevokeAccountAsync(
         AccessContext context,
         SubjectId subject,
-        OrganizationId organization,
         CancellationToken cancellationToken)
     {
-        Error? refused = await RefusedAsync(
-                context,
-                Permissions.SessionRevokeAccount,
-                organization,
-                cancellationToken)
+        Error? refused = await scope
+            .RefusedAsync(context, Permissions.SessionRevokeAccount, cancellationToken)
             .ConfigureAwait(false);
 
         return refused is not null
@@ -549,14 +545,10 @@ internal sealed class SessionService(
     /// <inheritdoc/>
     public async ValueTask<Result> RevokeEveryAsync(
         AccessContext context,
-        OrganizationId organization,
         CancellationToken cancellationToken)
     {
-        Error? refused = await RefusedAsync(
-                context,
-                Permissions.SessionRevoke,
-                organization,
-                cancellationToken)
+        Error? refused = await scope
+            .RefusedAsync(context, Permissions.SessionRevoke, cancellationToken)
             .ConfigureAwait(false);
 
         if (refused is not null)
@@ -636,15 +628,6 @@ internal sealed class SessionService(
 
         return default!;
     }
-
-    private async ValueTask<Error?> RefusedAsync(
-        AccessContext context,
-        Permission permission,
-        OrganizationId organization,
-        CancellationToken cancellationToken) =>
-        (await gate.RequireAsync(context, permission, organization, cancellationToken)
-                .ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error);
 
     private async ValueTask<(TimeSpan Inactivity, TimeSpan Absolute)> LifetimesAsync(
         Policy policy,

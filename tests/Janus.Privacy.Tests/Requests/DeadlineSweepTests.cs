@@ -38,7 +38,7 @@ public sealed class DeadlineSweepTests : IAsyncDisposable
     private readonly PrivacyAuditInMemory _audit = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly AccessGateInMemory _gate = new();
-    private readonly MembershipLookupInMemory _memberships = new();
+    private readonly AdministrativeOrganizationInMemory _administrative = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
 
@@ -49,7 +49,7 @@ public sealed class DeadlineSweepTests : IAsyncDisposable
     {
         _configuration.Set(Settings.PrivacyCalendarTimeZone, "Africa/Cairo");
         _accounts.Hold(Ahmed, AccountState.Active);
-        _memberships.Add(Mona, Company);
+        _administrative.Organization = Company;
         _gate.Grant(Mona, Company, Permissions.PrivacyRequestManage);
     }
 
@@ -57,7 +57,7 @@ public sealed class DeadlineSweepTests : IAsyncDisposable
         new(
             _requests,
             new WorkingCalendar(_configuration),
-            new AdministrativeScope(_gate, _memberships),
+            new AdministrativeScope(_gate, _administrative),
             _accounts,
             new RestrictionGrant(_accounts, _outbox),
             _notices,

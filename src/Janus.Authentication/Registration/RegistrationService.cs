@@ -6,7 +6,9 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Invitations;
 using Janus.Authentication.Oidc;
+using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Sending;
@@ -32,6 +34,8 @@ namespace Janus.Authentication.Registration;
 /// <param name="authenticators">Where the account's credentials are written.</param>
 /// <param name="clients">The registry the originating client is resolved against.</param>
 /// <param name="policies">Where the policy in force is resolved.</param>
+/// <param name="invitations">Where the invitation a registration was opened by is kept.</param>
+/// <param name="locks">Whether the inviting organization's domain lock admits an address.</param>
 /// <param name="issuing">What issues the session the person is signed in on.</param>
 /// <param name="devices">What remembers the registering browser.</param>
 /// <param name="capture">Where the consent controls the person ticked are recorded.</param>
@@ -41,10 +45,12 @@ namespace Janus.Authentication.Registration;
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where the codes and the tokens are drawn from.</param>
 /// <remarks>
-/// Implements REG-SESS-001 to REG-SESS-008, REG-PROF-002, REG-IDENT-010,
-/// API-REDIR-002, AUTH-FACT-004 and AUTH-ABUSE-003. Every answer is the same whether or not the
-/// identifier presented belongs to an account already: the lookup decides only
-/// whether a code goes out and whether the holder is told.
+/// Implements REG-SESS-001 to REG-SESS-008, REG-PROF-002, REG-IDENT-010, REG-INV-001,
+/// REG-MAIL-001, REG-DOM-001, IDN-LIFE-009a, API-REDIR-002, AUTH-FACT-004 and
+/// AUTH-ABUSE-003. Every answer is the same whether or not the identifier presented
+/// belongs to an account already: the lookup decides only whether a code goes out and
+/// whether the holder is told. The one exception is the email an invitation binds,
+/// whose link only its mailbox received.
 /// </remarks>
 internal sealed class RegistrationService(
     IRegistrationSessionStore sessions,
@@ -58,6 +64,8 @@ internal sealed class RegistrationService(
     IAuthenticatorStore authenticators,
     IOidcClientStore clients,
     PolicyResolution policies,
+    IInvitationStore invitations,
+    DomainLock locks,
     SessionService issuing,
     DeviceService devices,
     IConsents capture,
@@ -74,6 +82,7 @@ internal sealed class RegistrationService(
         string client,
         string language,
         string source,
+        string? invitationToken,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(client);
@@ -97,6 +106,8 @@ internal sealed class RegistrationService(
         OidcClient? originating =
             await clients.FindAsync(client, cancellationToken).ConfigureAwait(false);
 
+        DateTimeOffset now = time.GetUtcNow();
+
         var session = RegistrationSession.Open(
             RegistrationSessionId.New(time),
             SubjectId.New(randomness),
@@ -104,15 +115,87 @@ internal sealed class RegistrationService(
                 ?? await DefaultClientAsync(cancellationToken).ConfigureAwait(false),
             language,
             source,
-            time.GetUtcNow(),
+            now,
             lifetime);
+
+        Invitation? invitation = null;
+
+        if (invitationToken is not null)
+        {
+            invitation = (await InvitedAsync(session, invitationToken, now, cancellationToken)
+                    .ConfigureAwait(false))
+                .Match(value => value, error => Held<Invitation>(error, ref failure));
+
+            if (failure is not null)
+            {
+                return Result.Failure<RegistrationSessionId>(failure);
+            }
+        }
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await sessions.AddAsync(session, cancellationToken).ConfigureAwait(false);
+
+        if (invitation is not null)
+        {
+            await invitations.RecordAsync(invitation, cancellationToken).ConfigureAwait(false);
+        }
+
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success(session.Id);
     }
+
+    // REG-INV-001 and REG-MAIL-001: the token is single use, so pressing it attaches the
+    // invitation to this registration and to no other. The link went to the email the
+    // invitation binds and nowhere else, so the press is that address's verification,
+    // and only its mailbox can learn that an account holds it already (REG-INV-002). A
+    // bound phone is staged locked and verified by its code at the phone step.
+    private async ValueTask<Result<Invitation>> InvitedAsync(
+        RegistrationSession session,
+        string invitationToken,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        Invitation? invitation = await invitations
+            .FindByTokenAsync(OpaqueToken.Of(invitationToken).Fingerprint(), cancellationToken)
+            .ConfigureAwait(false);
+
+        if (invitation is null
+            || !invitation.Opens(now)
+            || invitation.Identifiers is not InvitedIdentifiers bound)
+        {
+            return Result.Failure<Invitation>(Error.From(ErrorCodes.InvitationExpired));
+        }
+
+        if (bound.Email is string email)
+        {
+            StagedIdentity staged = Locked(IdentifierKind.Email, email);
+
+            if (await directory.OwnerAsync(IdentifierKind.Email, staged.Canonical, cancellationToken)
+                    .ConfigureAwait(false) is not null)
+            {
+                return Result.Failure<Invitation>(Error.From(ErrorCodes.InvitationIdentifierMismatch));
+            }
+
+            staged.Verify(now);
+            session.Stage(staged);
+        }
+
+        if (bound.Phone is string phone)
+        {
+            session.Stage(Locked(IdentifierKind.Phone, phone));
+        }
+
+        invitation.AttachTo(session.Id, now);
+        session.Invited(invitation.Id);
+
+        return Result.Success(invitation);
+    }
+
+    private StagedIdentity Locked(IdentifierKind kind, string value) =>
+        Canonical(kind, value) is (string entered, string canonical)
+            ? StagedIdentity.Of(IdentifierId.New(time), kind, entered, canonical, isLocked: true, isExtra: false)
+            : throw new InvalidOperationException("An invitation binds what its issue read.");
 
     /// <inheritdoc/>
     public async ValueTask<Result<RegistrationState>> StateAsync(
@@ -225,6 +308,11 @@ internal sealed class RegistrationService(
             return OutOfStep();
         }
 
+        if (live.Bound(kind) is StagedIdentity bound)
+        {
+            return await ResentAsync(live, bound, value, cancellationToken).ConfigureAwait(false);
+        }
+
         return await CollectAsync(live, kind, value, isExtra: false, cancellationToken)
             .ConfigureAwait(false);
     }
@@ -258,7 +346,9 @@ internal sealed class RegistrationService(
             return Result.Failure<RegistrationState>(failure);
         }
 
-        if (phone is AttributeRequirement.Required)
+        // REG-MAIL-001 AC3: a phone the invitation bound is verified before the
+        // membership step, so its step is never passed over.
+        if (phone is AttributeRequirement.Required || live.Bound(IdentifierKind.Phone) is not null)
         {
             return OutOfStep();
         }
@@ -339,7 +429,7 @@ internal sealed class RegistrationService(
 
         if (staged.IsLocked)
         {
-            return Result.Failure<RegistrationState>(Error.From(ErrorCodes.IdentifierLocked));
+            return await ResentAsync(live, staged, value, cancellationToken).ConfigureAwait(false);
         }
 
         if (Canonical(staged.Kind, value) is not (string entered, string canonical))
@@ -350,6 +440,12 @@ internal sealed class RegistrationService(
         if (!ScriptMixing.IsSingleScriptPerWord(canonical))
         {
             return Result.Failure<RegistrationState>(Error.From(ErrorCodes.IdentifierMixedScript));
+        }
+
+        if (await LockRefusedAsync(live, staged.Kind, canonical, cancellationToken).ConfigureAwait(false)
+            is Error outside)
+        {
+            return Result.Failure<RegistrationState>(outside);
         }
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
@@ -712,8 +808,7 @@ internal sealed class RegistrationService(
 
         Error? failure = null;
 
-        Policy policy = (await policies.ForAsync(live.Provisional, cancellationToken)
-                .ConfigureAwait(false))
+        Policy policy = (await PolicyAsync(live, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Held<Policy>(error, ref failure));
 
         if (failure is not null)
@@ -736,6 +831,10 @@ internal sealed class RegistrationService(
                 .ReadAsync(Settings.IdentifiersPhoneMax, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Held<int>(error, ref failure));
 
+        IReadOnlyList<string> languages = (await configuration
+                .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<IReadOnlyList<string>>(error, ref failure));
+
         if (failure is not null)
         {
             return Result.Failure<RegistrationOutcome>(failure);
@@ -747,10 +846,24 @@ internal sealed class RegistrationService(
 
         live.AcceptTerms(termsVersion, noticeVersion);
 
+        // IDN-ATTR-001: registration settles the account's language from the locale
+        // it was begun under, so a later message finds a preference to go out in.
         await directory
-            .CreateAsync(Created(live, now, emails, phones), cancellationToken)
+            .CreateAsync(
+                Created(live, now, emails, phones, RecipientLanguage.Found(live.Language, languages)),
+                cancellationToken)
             .ConfigureAwait(false);
         await WriteCredentialsAsync(live, now, cancellationToken).ConfigureAwait(false);
+
+        // REG-INV-001: until the person acknowledges it at the membership step, the
+        // account holds the invitation and nothing of its organization.
+        if (await InvitationAsync(live, cancellationToken).ConfigureAwait(false) is { } invitation
+            && invitation.Session == live.Id)
+        {
+            invitation.Registered(live.Provisional);
+
+            await invitations.RecordAsync(invitation, cancellationToken).ConfigureAwait(false);
+        }
 
         IssuedSession issued = (await issuing
                 .BeginAsync(
@@ -993,7 +1106,8 @@ internal sealed class RegistrationService(
         RegistrationSession session,
         DateTimeOffset now,
         int emails,
-        int phones)
+        int phones,
+        string? language)
     {
         var identifiers = new List<NewIdentifier>(session.Identifiers.Count);
 
@@ -1019,7 +1133,8 @@ internal sealed class RegistrationService(
             session.TermsVersion ?? string.Empty,
             session.NoticeVersion ?? string.Empty,
             emails,
-            phones);
+            phones,
+            language);
     }
 
     private static RegistrationState State(
@@ -1117,8 +1232,7 @@ internal sealed class RegistrationService(
     {
         Error? failure = null;
 
-        Policy policy = (await policies.ForAsync(session.Provisional, cancellationToken)
-                .ConfigureAwait(false))
+        Policy policy = (await PolicyAsync(session, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Held<Policy>(error, ref failure));
 
         if (failure is not null)
@@ -1154,6 +1268,81 @@ internal sealed class RegistrationService(
         return Result.Success(State(session, drawn));
     }
 
+    // IDN-LIFE-009a: from the moment the token attaches, the invitation's organization
+    // governs the registration as though the membership already stood.
+    private async ValueTask<Result<Policy>> PolicyAsync(
+        RegistrationSession session,
+        CancellationToken cancellationToken) =>
+        await policies
+            .ForAsync(
+                session.Provisional,
+                (await InvitationAsync(session, cancellationToken).ConfigureAwait(false))?.Organization,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+    private async ValueTask<Invitation?> InvitationAsync(
+        RegistrationSession session,
+        CancellationToken cancellationToken) =>
+        session.Invitation is InvitationId id
+            ? await invitations.FindAsync(id, cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("The invitation a registration was opened by has no row.")
+            : null;
+
+    // REG-DOM-001 AC2: an email the person chooses at an invitation, rather than one
+    // the invitation bound, is held to the inviting organization's lock.
+    private async ValueTask<Error?> LockRefusedAsync(
+        RegistrationSession session,
+        IdentifierKind kind,
+        string canonical,
+        CancellationToken cancellationToken) =>
+        kind is IdentifierKind.Email
+            && await InvitationAsync(session, cancellationToken).ConfigureAwait(false) is { } invitation
+            ? await locks.RefusedInAsync(invitation.Organization, Address(canonical), cancellationToken)
+                .ConfigureAwait(false)
+            : null;
+
+    // REG-IDENT-010: a bound identifier is not changed, so the only value its step or
+    // its Change takes is its own, and taking it sends a new code where none has
+    // verified it yet. Nothing goes to it before its step is reached (REG-SESS-002).
+    private async ValueTask<Result<RegistrationState>> ResentAsync(
+        RegistrationSession session,
+        StagedIdentity bound,
+        string value,
+        CancellationToken cancellationToken)
+    {
+        RegistrationStep collecting =
+            bound.Kind is IdentifierKind.Email ? RegistrationStep.Email : RegistrationStep.Phone;
+
+        if (session.Step < collecting)
+        {
+            return OutOfStep();
+        }
+
+        if (bound.IsVerified
+            || Canonical(bound.Kind, value) is not (_, string canonical)
+            || !string.Equals(canonical, bound.Canonical, StringComparison.Ordinal))
+        {
+            return Result.Failure<RegistrationState>(Error.From(ErrorCodes.IdentifierLocked));
+        }
+
+        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+
+        if (await DispatchAsync(session, bound, cancellationToken).ConfigureAwait(false) is Error refused)
+        {
+            return Result.Failure<RegistrationState>(refused);
+        }
+
+        if (session.Step is RegistrationStep.Phone && bound.Kind is IdentifierKind.Phone)
+        {
+            session.Reached(RegistrationStep.Confirm);
+        }
+
+        await sessions.RecordAsync(session, cancellationToken).ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        return Result.Success(State(session));
+    }
+
     private async ValueTask<Result<RegistrationState>> CollectAsync(
         RegistrationSession session,
         IdentifierKind kind,
@@ -1169,6 +1358,12 @@ internal sealed class RegistrationService(
         if (!ScriptMixing.IsSingleScriptPerWord(canonical))
         {
             return Result.Failure<RegistrationState>(Error.From(ErrorCodes.IdentifierMixedScript));
+        }
+
+        if (await LockRefusedAsync(session, kind, canonical, cancellationToken).ConfigureAwait(false)
+            is Error outside)
+        {
+            return Result.Failure<RegistrationState>(outside);
         }
 
         var staged = StagedIdentity.Of(
@@ -1230,6 +1425,10 @@ internal sealed class RegistrationService(
                 .ReadAsync(Settings.CodeVerificationLifetime, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Held<TimeSpan>(error, ref failure));
 
+        IReadOnlyList<string> languages = (await configuration
+                .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<IReadOnlyList<string>>(error, ref failure));
+
         if (failure is not null)
         {
             return failure;
@@ -1245,7 +1444,7 @@ internal sealed class RegistrationService(
                     MessageKind.VerificationCode,
                     RestrictionPurpose.Verification,
                     session.Source,
-                    session.Language)
+                    RecipientLanguage.Found(session.Language, languages))
                 {
                     Values = new Dictionary<string, string>(capacity: 2, StringComparer.Ordinal)
                     {
@@ -1278,6 +1477,10 @@ internal sealed class RegistrationService(
                 .ReadAsync(Settings.AbuseNonexistentWindow, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Held<TimeSpan>(error, ref failure));
 
+        IReadOnlyList<string> languages = (await configuration
+                .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<IReadOnlyList<string>>(error, ref failure));
+
         if (failure is not null)
         {
             return failure;
@@ -1290,6 +1493,8 @@ internal sealed class RegistrationService(
             return null;
         }
 
+        string? settled = await directory.LanguageAsync(holder, cancellationToken).ConfigureAwait(false);
+
         // The holder is told and the person registering is told nothing: the message
         // names no requester and carries neither a code nor a link (REG-SESS-005 AC2).
         Result<SendReference> sent = await sending
@@ -1299,7 +1504,7 @@ internal sealed class RegistrationService(
                     MessageKind.AccountExists,
                     RestrictionPurpose.Notification,
                     session.Source,
-                    session.Language)
+                    RecipientLanguage.Of(settled, session.Language, languages))
                 {
                     Subject = holder,
                 },

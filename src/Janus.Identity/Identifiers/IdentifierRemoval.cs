@@ -194,7 +194,8 @@ internal sealed class IdentifierRemoval
 
     /// <summary>
     /// The identifier as it was, for the set to take back. It returns unverified of
-    /// nothing and primary of nothing: the role is the set's to settle.
+    /// nothing and primary of nothing: the role is the set's to settle. A personal email
+    /// a membership keeps is never removed, so none returns as one.
     /// </summary>
     /// <returns>The identifier.</returns>
     public Identifier Restored() =>
@@ -207,5 +208,6 @@ internal sealed class IdentifierRemoval
             AddedAt,
             VerifiedAt,
             isPrimary: false,
-            IsLocked);
+            IsLocked,
+            isPersonal: false);
 }

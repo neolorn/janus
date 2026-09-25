@@ -6,10 +6,12 @@ using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Configuration;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Policies;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Tests;
 using Janus.Authentication.Tests.Alerting;
 using Janus.Authentication.Tests.Configuration;
+using Janus.Authentication.Tests.Policies;
 using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -60,9 +62,12 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
+    private readonly AccessGateInMemory _gate = new();
+    private readonly AdministrativeOrganizationInMemory _administrative = new();
 
     /// <summary>
-    /// A deployment alerting three addresses and two numbers.
+    /// A deployment alerting three addresses and two numbers, administered by whoever
+    /// changes them here.
     /// </summary>
     public AlertDestinationChangeTests()
     {
@@ -73,12 +78,23 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
         _configuration.Set(Settings.AlertingOwnerEmail, "owner@example.test");
         _configuration.Set(Settings.AlertingOwnerSms, "+201009999999");
         _sms.Balance = 1000m;
+
+        var administrative = OrganizationId.New(_clock);
+        _administrative.Organization = administrative;
+        _gate.GrantEveryone(administrative, Permissions.SystemAdminister);
     }
 
     private AlertDestinationChange Change =>
         new(
             _configuration,
-            new ConfigurationAdministration(_configuration, _changes, _work, _clock),
+            new ConfigurationAdministration(
+                _configuration,
+                _changes,
+                new AdministrativeScope(_gate, _administrative),
+                new PolicyResolution(new MembershipLookupInMemory(), _configuration, new PolicyRaiseStoreInMemory()),
+                new RelayRegistration(_configuration, _events, _clock),
+                _work,
+                _clock),
             new AlertRouter(
                 _configuration,
                 new SendingService(

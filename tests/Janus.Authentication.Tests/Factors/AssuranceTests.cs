@@ -85,7 +85,8 @@ public sealed class AssuranceTests
             IsDiscoverable: false,
             Channel: null,
             Restricted: false,
-            SingleUse: false);
+            SingleUse: false,
+            RelaysAddress: false);
 
         Assert.Null(Assurance.Reached([channel]));
         Assert.Equal(
@@ -195,7 +196,8 @@ public sealed class AssuranceTests
             IsDiscoverable: true,
             Channel: null,
             Restricted: false,
-            SingleUse: false);
+            SingleUse: false,
+            RelaysAddress: false);
 
         Assert.Equal(
             new Assurance(AssuranceLevel.Aal2, PhishingResistant: true),

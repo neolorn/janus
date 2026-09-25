@@ -31,7 +31,7 @@ namespace Janus.Hosting.Sending;
 /// <param name="randomness">Where a correlation reference is drawn from.</param>
 /// <remarks>
 /// Implements AUTH-ABUSE-004, AUTH-ABUSE-002, AUTH-ABUSE-006, AUTH-FACT-002b,
-/// INT-SMS-001, INT-GEN-005, CONV-CONTENT-001 and D-022. The refusal a restriction
+/// INT-SMS-001, INT-GEN-005, IDN-ATTR-001, CONV-CONTENT-001 and D-022. The refusal a restriction
 /// produces is the same whether or not the destination belongs to an account: nothing
 /// on this path reads the account to decide it.
 /// </remarks>
@@ -115,10 +115,32 @@ internal sealed class SendingService(
         SendDelivery written = await outbox.FindAsync(delivery.Id, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("The message just written has no row.");
 
-        SendReference reference = (await CarryAsync(written.Requested, cancellationToken).ConfigureAwait(false))
-            .Match(value => value, error => Held<SendReference>(error, ref failure));
+        IReadOnlyList<MessageTemplate> worded = (await WordedAsync(written.Requested, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<IReadOnlyList<MessageTemplate>>(error, ref failure));
 
         if (failure is not null)
+        {
+            return Result.Failure<SendReference>(failure);
+        }
+
+        var taken = new List<SendReference>(worded.Count);
+
+        foreach (MessageTemplate template in worded)
+        {
+            SendReference reference = (await CarryAsync(written.Requested, template, cancellationToken)
+                    .ConfigureAwait(false))
+                .Match(value => value, error => Held<SendReference>(error, ref failure));
+
+            if (failure is not null)
+            {
+                break;
+            }
+
+            taken.Add(reference);
+        }
+
+        if (failure is not null && taken.Count == 0)
         {
             // A transport that would not take it is an attempt to retry, never a
             // reason to count the send (AUTH-ABUSE-004). The row stays as it was
@@ -129,16 +151,27 @@ internal sealed class SendingService(
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
         // IDN-PRIN-003: a message a transport has taken is spent, and what is spent is
-        // removed rather than kept as a record of where somebody was written to.
-        await outbox.RemoveAsync(delivery.Id, cancellationToken).ConfigureAwait(false);
+        // removed rather than kept as a record of where somebody was written to. Where
+        // a transport refused one of its languages the row is not yet spent.
+        if (failure is null)
+        {
+            await outbox.RemoveAsync(delivery.Id, cancellationToken).ConfigureAwait(false);
+        }
 
-        await ledger
-            .RecordAsync(SendReferences.Of(reference), plan.Counted, plan.Spent, now, cancellationToken)
-            .ConfigureAwait(false);
+        // AUTH-ABUSE-004 AC1 counts messages: each one a transport took counts once,
+        // under its own reference, so a delivery report releases that one alone.
+        foreach (SendReference reference in taken)
+        {
+            await ledger
+                .RecordAsync(SendReferences.Of(reference), plan.Counted, plan.Spent, now, cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-        return Result.Success(reference);
+        return failure is null
+            ? Result.Success(taken[0])
+            : Result.Failure<SendReference>(failure);
     }
 
     private static TValue Held<TValue>(Error error, ref Error? failure)
@@ -259,27 +292,57 @@ internal sealed class SendingService(
             await supplier.Key(request.Context, cancellationToken).ConfigureAwait(false));
     }
 
-    private async ValueTask<Result<SendReference>> CarryAsync(
+    private async ValueTask<Result<IReadOnlyList<MessageTemplate>>> WordedAsync(
         SendRequest request,
         CancellationToken cancellationToken)
     {
-        // Which key the catalogue could not answer for is the library's to name; the
-        // failure the catalogue itself produced says nothing the operator can act on.
-        MessageTemplate? template = templates
-            .Find(request.Message, request.Kind, request.Language)
-            .Match(found => (MessageTemplate?)found, _ => null);
+        Error? failure = null;
 
-        if (template is null)
+        // IDN-ATTR-001: where no language of the recipient's is known, the message goes
+        // out in every language the deployment declares, each as the deployment's own
+        // template for it. The restrictions judged the request once; each language
+        // carried is a message of its own and counts as one.
+        IReadOnlyList<string> languages = request.Language is string named
+            ? [named]
+            : (await configuration
+                    .ReadAsync(Settings.NotificationLanguages, cancellationToken)
+                    .ConfigureAwait(false))
+                .Match(value => value, error => Held<IReadOnlyList<string>>(error, ref failure));
+
+        if (failure is not null)
         {
-            return Result.Failure<SendReference>(
-                Error.From(
-                    ErrorCodes.StartupDeclarationMissing,
-                    "key",
-                    JsonSerializer.SerializeToElement(Settings.NotificationLanguages.Key.ToString())));
+            return Result.Failure<IReadOnlyList<MessageTemplate>>(failure);
         }
 
+        var written = new List<MessageTemplate>(languages.Count);
+
+        foreach (string language in languages)
+        {
+            // Which key the catalogue could not answer for is the library's to name;
+            // the failure the catalogue itself produced says nothing the operator can
+            // act on.
+            if (templates
+                    .Find(request.Message, request.Kind, language)
+                    .Match(found => (MessageTemplate?)found, _ => null)
+                is not MessageTemplate template)
+            {
+                return Result.Failure<IReadOnlyList<MessageTemplate>>(Undeclared());
+            }
+
+            written.Add(template);
+        }
+
+        return written.Count == 0
+            ? Result.Failure<IReadOnlyList<MessageTemplate>>(Undeclared())
+            : Result.Success<IReadOnlyList<MessageTemplate>>(written);
+    }
+
+    private async ValueTask<Result<SendReference>> CarryAsync(
+        SendRequest request,
+        MessageTemplate template,
+        CancellationToken cancellationToken)
+    {
         var reference = SendReference.Draw(randomness);
-        string body = MessageRendering.Fill(template.Text, request.Values);
 
         Result published = await events
             .PublishAsync(
@@ -299,24 +362,40 @@ internal sealed class SendingService(
             return Result.Failure<SendReference>(unpublished);
         }
 
-        // INT-GEN-005: the payload of an outbound message is built here and nowhere
-        // else, so its field set is one thing to read and one thing to test.
-        Result carried = request.Kind is SendKind.Email
-            ? await mail
-                .SendAsync(
-                    new MailMessage(
-                        request.Destination.Mail,
-                        MessageRendering.Fill(template.Subject ?? string.Empty, request.Values),
-                        body,
-                        reference.Value),
-                    cancellationToken)
-                .ConfigureAwait(false)
-            : await sms
-                .SendAsync(
-                    new SmsMessage(request.Destination.Phone, body, reference.Value),
-                    cancellationToken)
-                .ConfigureAwait(false);
+        Result carried = await CarriedAsync(request, template, reference, cancellationToken)
+            .ConfigureAwait(false);
 
-        return carried.Match(() => Result.Success(reference), Result.Failure<SendReference>);
+        return carried.Match(
+            () => Result.Success(reference),
+            Result.Failure<SendReference>);
     }
+
+    // INT-GEN-005: the payload of an outbound message is built here and nowhere else,
+    // so its field set is one thing to read and one thing to test.
+    private ValueTask<Result> CarriedAsync(
+        SendRequest request,
+        MessageTemplate template,
+        SendReference reference,
+        CancellationToken cancellationToken)
+    {
+        string body = MessageRendering.Fill(template.Text, request.Values);
+
+        return request.Kind is SendKind.Email
+            ? mail.SendAsync(
+                new MailMessage(
+                    request.Destination.Mail,
+                    MessageRendering.Fill(template.Subject ?? string.Empty, request.Values),
+                    body,
+                    reference.Value),
+                cancellationToken)
+            : sms.SendAsync(
+                new SmsMessage(request.Destination.Phone, body, reference.Value),
+                cancellationToken);
+    }
+
+    private static Error Undeclared() =>
+        Error.From(
+            ErrorCodes.StartupDeclarationMissing,
+            "key",
+            JsonSerializer.SerializeToElement(Settings.NotificationLanguages.Key.ToString()));
 }

@@ -134,6 +134,12 @@ internal sealed class RegistrationSession
     /// <summary>The version of the privacy notice presented.</summary>
     public string? NoticeVersion { get; private set; }
 
+    /// <summary>
+    /// The invitation whose link opened the session, whose organization's policy
+    /// governs every step from then on (IDN-LIFE-009a).
+    /// </summary>
+    public InvitationId? Invitation { get; private set; }
+
     /// <summary>Whether the age screen has been answered.</summary>
     public bool AgeAnswered => AnsweredAgeAt is not null;
 
@@ -234,6 +240,7 @@ internal sealed class RegistrationSession
     /// <param name="recoveryCodes">The set drawn at the security step.</param>
     /// <param name="termsVersion">The terms version accepted.</param>
     /// <param name="noticeVersion">The notice version presented.</param>
+    /// <param name="invitation">The invitation that opened it, where one did.</param>
     public void Restore(
         RegistrationStep step,
         DateOnly? dateOfBirth,
@@ -246,7 +253,8 @@ internal sealed class RegistrationSession
         bool phoneSkipped,
         IReadOnlyList<PasswordHash>? recoveryCodes,
         string? termsVersion,
-        string? noticeVersion)
+        string? noticeVersion,
+        InvitationId? invitation)
     {
         Step = step;
         DateOfBirth = dateOfBirth;
@@ -260,7 +268,15 @@ internal sealed class RegistrationSession
         RecoveryCodes = recoveryCodes;
         TermsVersion = termsVersion;
         NoticeVersion = noticeVersion;
+        Invitation = invitation;
     }
+
+    /// <summary>
+    /// Records the invitation whose link opened the session, with the identifiers it
+    /// binds already staged and locked (REG-INV-001, REG-IDENT-010).
+    /// </summary>
+    /// <param name="invitation">The invitation.</param>
+    public void Invited(InvitationId invitation) => Invitation = invitation;
 
     /// <summary>
     /// Whether the session has lapsed, after which it answers nothing.
@@ -286,7 +302,12 @@ internal sealed class RegistrationSession
         DateOfBirth = retained;
         Group = group;
         AnsweredAgeAt = at;
-        Step = RegistrationStep.Email;
+
+        // An email the invitation bound was verified by the press that opened the
+        // session, so its step has nothing left to collect (REG-MAIL-001).
+        Step = Bound(IdentifierKind.Email) is { IsVerified: true }
+            ? RegistrationStep.Phone
+            : RegistrationStep.Email;
     }
 
     /// <summary>
@@ -335,6 +356,25 @@ internal sealed class RegistrationSession
         foreach (StagedIdentity staged in _identifiers)
         {
             if (staged.Id == id)
+            {
+                return staged;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The identifier of a kind an invitation bound, which the session holds locked
+    /// in place of the one its step would collect.
+    /// </summary>
+    /// <param name="kind">The kind.</param>
+    /// <returns>The staged identifier, or nothing where none of the kind is bound.</returns>
+    public StagedIdentity? Bound(IdentifierKind kind)
+    {
+        foreach (StagedIdentity staged in _identifiers)
+        {
+            if (staged.Kind == kind && staged.IsLocked && !staged.IsExtra)
             {
                 return staged;
             }

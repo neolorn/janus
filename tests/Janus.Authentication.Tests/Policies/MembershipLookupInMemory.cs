@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Policies;
@@ -29,6 +30,24 @@ internal sealed class MembershipLookupInMemory : IMembershipLookup
 
         organizations.Add(organization);
     }
+
+    /// <summary>
+    /// Takes a principal out of an organization.
+    /// </summary>
+    /// <param name="subject">The principal.</param>
+    /// <param name="organization">The organization.</param>
+    /// <returns>Whether the principal was in it.</returns>
+    public bool Leave(SubjectId subject, OrganizationId organization) =>
+        _held.TryGetValue(subject, out List<OrganizationId>? organizations)
+        && organizations.Remove(organization);
+
+    /// <summary>
+    /// Every principal placed in an organization.
+    /// </summary>
+    /// <param name="organization">The organization.</param>
+    /// <returns>Its members.</returns>
+    public IReadOnlyList<SubjectId> Members(OrganizationId organization) =>
+        [.. _held.Where(entry => entry.Value.Contains(organization)).Select(entry => entry.Key)];
 
     /// <inheritdoc/>
     public ValueTask<IReadOnlyList<OrganizationId>> OfAsync(

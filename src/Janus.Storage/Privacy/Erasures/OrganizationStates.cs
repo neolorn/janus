@@ -58,7 +58,7 @@ internal sealed class OrganizationStates(
     }
 
     /// <inheritdoc/>
-    public async ValueTask<int> EraseAsync(
+    public async ValueTask<IReadOnlyList<EndedMembership>> EraseAsync(
         OrganizationId organization,
         DateTimeOffset at,
         TimeSpan window,
@@ -69,7 +69,8 @@ internal sealed class OrganizationStates(
                 .ConfigureAwait(false)
             ?? throw new InvalidOperationException("No such organization.");
 
-        int ended = await EndedAsync(organization, at, cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<EndedMembership> ended = await EndedAsync(organization, at, cancellationToken)
+            .ConfigureAwait(false);
 
         erasing.RecordErasure(at, window);
 
@@ -78,7 +79,7 @@ internal sealed class OrganizationStates(
         return ended;
     }
 
-    private async ValueTask<int> EndedAsync(
+    private async ValueTask<IReadOnlyList<EndedMembership>> EndedAsync(
         OrganizationId organization,
         DateTimeOffset at,
         CancellationToken cancellationToken)
@@ -87,7 +88,7 @@ internal sealed class OrganizationStates(
             .FindByOrganizationAsync(organization, cancellationToken)
             .ConfigureAwait(false);
 
-        int ended = 0;
+        List<EndedMembership> ended = [];
 
         foreach (Membership membership in held)
         {
@@ -100,7 +101,7 @@ internal sealed class OrganizationStates(
 
             await memberships.RecordAsync(membership, cancellationToken).ConfigureAwait(false);
 
-            ended++;
+            ended.Add(new EndedMembership(membership.Id, membership.Subject));
         }
 
         return ended;

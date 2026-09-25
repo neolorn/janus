@@ -56,6 +56,10 @@ internal sealed class PendingSignInConfiguration : IEntityTypeConfiguration<Pend
             .HasColumnName("factor")
             .HasConversion(new VocabularyConverter<Factor>());
 
+        builder.Property(pending => pending.Email)
+            .HasColumnName("email")
+            .HasConversion(email => email!.Value.Value, value => new IdentifierId(value));
+
         builder.Property(pending => pending.Code).HasColumnName(CodeColumn);
 
         builder.Property(pending => pending.Browser)

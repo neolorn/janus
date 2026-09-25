@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication;
+using Janus.Authentication.Invitations;
 using Janus.Authentication.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -15,8 +18,9 @@ namespace Janus.Hosting.Tests.Registration;
 
 /// <summary>
 /// The registration flow as a browser drives it: the pre-authentication session it
-/// is bound to, what a browser without that cookie may do, and where the tokens are
-/// (BFF-CSRF-005a, BFF-CSRF-005b, REG-SESS-001).
+/// is bound to, what a browser without that cookie may do, where the tokens are, and
+/// that it asks nothing of the mail server (BFF-CSRF-005a, BFF-CSRF-005b,
+/// REG-SESS-001, INT-MAIL-006).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class RegistrationFlowTests : IAsyncDisposable
@@ -42,6 +46,37 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync() => await _deployment.DisposeAsync();
+
+    /// <summary>
+    /// INT-MAIL-006 AC2: a customer who registers is given no mailbox: none is
+    /// reserved, none is written down, and nothing reaches the mail server.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_006_AC2_RegisteringACustomerProvisionsNoMailboxAsync()
+    {
+        _ = await Flow.SignedInAsync(_deployment);
+
+        Assert.Empty(_deployment.Mailboxes.Held);
+        Assert.Equal(0, _deployment.Mailboxes.Recorded);
+        Assert.Empty(_deployment.MailServer.Received);
+    }
+
+    /// <summary>
+    /// INT-MAIL-006 AC4: registration asks nothing of the mail server, so a customer
+    /// registers while it cannot be reached.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_006_AC4_AnUnreachableMailServerDoesNotBlockRegistrationAsync()
+    {
+        _deployment.MailServer.Unreachable = true;
+
+        _ = await Flow.SignedInAsync(_deployment);
+
+        Assert.Single(_deployment.Directory.Created);
+        Assert.Empty(_deployment.MailServer.Received);
+    }
 
     /// <summary>
     /// BFF-CSRF-005a AC1: a browser that carries nothing is given a first contact by
@@ -83,6 +118,30 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status403Forbidden, without.Status);
         Assert.Equal(StatusCodes.Status201Created, with.Status);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-009a AC2 and API-LAND-001 AC2: an invitation token that opens no
+    /// invitation begins no registration, and the landing is answered with the code
+    /// it renders.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_009a_AC2_AnInvitationTokenThatOpensNothingIsRefusedAsync()
+    {
+        var browser = new Browser(_deployment);
+
+        _ = await browser.SendAsync("GET", "/register");
+
+        Answer refused = await browser.SendAsync(
+            "POST",
+            "/register",
+            ("clientId", "web"),
+            ("invitationToken", "no-such-invitation"));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.InvitationExpired.ToString(), refused.Text("code"));
+        Assert.Empty(_deployment.Registrations.All);
     }
 
     /// <summary>
@@ -193,6 +252,54 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
         Answer account = await browser.SendAsync("GET", "/account");
 
         Assert.NotEqual(account.Body, refused.Body);
+    }
+
+    /// <summary>
+    /// REG-INV-002 AC1: a signed-in browser that presses an invitation link is sent to
+    /// its account with the invitation attached there, and no registration is staged;
+    /// a token that opens nothing is answered with its code.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_INV_002_AC1_ALinkPressedWhileSignedInAttachesToTheAccountAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId holder = _deployment.Directory.Created[^1].Subject;
+        using var randomness = RandomNumberGenerator.Create();
+        var token = OpaqueToken.Draw(randomness);
+
+        _deployment.Invitations.Held.Add(Invitation.Issued(
+            InvitationId.New(TimeProvider.System),
+            OrganizationId.New(TimeProvider.System),
+            SubjectId.New(randomness),
+            new InvitedIdentifiers(Email: null, Phone: null, CorporateEmail: null),
+            roles: [],
+            documents: [],
+            mailbox: null,
+            token.Fingerprint(),
+            _deployment.Clock.GetUtcNow(),
+            TimeSpan.FromDays(7)));
+
+        int staged = _deployment.Registrations.All.Count;
+
+        Answer landed = await browser.SendAsync(
+            "POST",
+            "/register",
+            ("clientId", "web"),
+            ("invitationToken", token.Value));
+
+        Assert.Equal(ErrorCodes.RegistrationSignedIn.ToString(), landed.Text("code"));
+        Assert.Equal(holder, _deployment.Invitations.Held.Single().Invitee);
+        Assert.Equal(staged, _deployment.Registrations.All.Count);
+
+        Answer spent = await browser.SendAsync(
+            "POST",
+            "/register",
+            ("clientId", "web"),
+            ("invitationToken", token.Value));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, spent.Status);
+        Assert.Equal(ErrorCodes.InvitationExpired.ToString(), spent.Text("code"));
     }
 
     /// <summary>

@@ -9,9 +9,10 @@ namespace Janus.Authentication.Sending;
 /// a template for in every configured language.
 /// </summary>
 /// <remarks>
-/// Implements INT-SMS-001, AUTH-ABUSE-003 and AUTH-ABUSE-005. Only the answer to a
-/// request made for an address no account holds is mail alone: it is sent to an
-/// address, never to a number (AUTH-ABUSE-003).
+/// Implements INT-SMS-001, AUTH-ABUSE-003, AUTH-ABUSE-005 and REG-MAIL-001. Two
+/// messages are mail alone: the answer to a request made for an address no account
+/// holds, which is sent to an address and never to a number (AUTH-ABUSE-003), and an
+/// invitation's link, which goes to the email the invitation binds.
 /// </remarks>
 internal static class MessageChannels
 {
@@ -43,6 +44,7 @@ internal static class MessageChannels
         MessageKind.PrivacyRequestLapsed,
         MessageKind.DeactivationNotice,
         MessageKind.DeletionNotice,
+        MessageKind.InvitationLink,
     ];
 
     /// <summary>
@@ -83,5 +85,5 @@ internal static class MessageChannels
     /// <param name="message">The message.</param>
     /// <returns>Its channels.</returns>
     public static IReadOnlyList<SendKind> Of(MessageKind message) =>
-        message is MessageKind.NoAccount ? MailAlone : Both;
+        message is MessageKind.NoAccount or MessageKind.InvitationLink ? MailAlone : Both;
 }
