@@ -8,13 +8,13 @@ useDefault = true
 [[allowlists]]
 description = "an item identifier in a documentation comment"
 condition = "AND"
-paths = ['''^src/Janus\.Core/IAuditTrail\.cs$''']
+paths = ['''^\Qsrc/Janus.Core/IAuditTrail.cs\E$''']
 regexes = ['''^PRIV-BREACH-002$''']
 
 [[allowlists]]
 description = "SHA-1 hashes of leaked passwords (AUTH-PASS-004)"
 condition = "AND"
 regexTarget = "line"
-paths = ['''^src/Janus\.Hosting/Passwords/leaked-passwords\.txt$''']
+paths = ['''^\Qsrc/Janus.Hosting/Passwords/leaked-passwords.txt\E$''']
 # The scanner's line carries the line break before it, except on a diff's first line.
 regexes = ['''^\n?[0-9A-F]{40}$''']
