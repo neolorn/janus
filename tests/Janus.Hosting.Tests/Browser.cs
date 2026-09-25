@@ -35,6 +35,14 @@ internal sealed class Browser(Deployment deployment)
     public void Forget() => _cookies.Clear();
 
     /// <summary>
+    /// Takes a cookie as though an answer had written it, which is what a browser that
+    /// arrives already holding one amounts to.
+    /// </summary>
+    /// <param name="name">The cookie.</param>
+    /// <param name="value">What it holds.</param>
+    public void Hold(string name, string value) => _cookies[name] = value;
+
+    /// <summary>
     /// Sends a request the way the frontend sends one.
     /// </summary>
     /// <param name="method">The method.</param>

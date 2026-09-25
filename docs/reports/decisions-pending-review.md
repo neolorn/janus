@@ -16206,6 +16206,45 @@ could change:
 - LIB-API-003 could note that the OAuth error JSON at the back channel is the
   protocol's and not a user-facing error.
 
+---
+
+## 395. A prefix reaches every composed address through the request's base path or the declared provider address, and nothing composes one otherwise
+
+**Phase 10 · 2026-09-25 · Tier 2 · LIB-HOST-003 AC2**
+
+*The question.* Two places of the library compose an address from the request, and
+LIB-HOST-003 AC2 asks that each honours a prefix.
+
+- The provider round trip's `Location`, at `ProviderSignInEndpoints.cs:124`.
+- SignOn appends `/oidc/par` and `/oidc/token` to the declared provider address, at
+  `SignOn.cs:190`.
+
+*The readings.*
+
+1. Both are defects: the library should know its own prefix and compose from it.
+2. Neither is a defect. The round trip composes from `PathBase`, which is the
+   prefix the request arrived under. SignOn appends the library's own relative routes
+   to an address the host declares as where the library is mounted, prefix included.
+
+*Chosen: 2.*
+
+- The public documentation of `AuthenticationAddresses.Provider` already defines it
+  as "the address the library is mounted at on the authentication application".
+- A library that stored its own prefix would be a second source for what `PathBase`
+  and the declaration already give.
+- The other composed addresses are frontend paths or declared addresses, which a
+  prefix does not reach. The discovery document is already tested under a prefix.
+- No runtime code changed. Three tests pin the addresses under a non-empty prefix.
+
+*Tests that pin it.*
+
+- `PrefixedAddressTests.LIB_HOST_003_AC2_TheProviderReturnIsForwardedUnderThePrefixAsync`
+- `PrefixedAddressTests.LIB_HOST_003_AC2_ACrossSiteReturnIsReadAgainUnderThePrefixAsync`
+- `PrefixedAddressTests.LIB_HOST_003_AC2_TheSignOnReachesTheProviderUnderItsPrefixAsync`
+
+*Chapter text that should change.* None.
+
+
 # Rows for chapter 10
 
 D-162 section E names codes, keys, declarations and vocabularies the library now
