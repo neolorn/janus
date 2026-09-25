@@ -144,6 +144,16 @@ internal sealed class SendLedger(StoreContext context, ReadOnlyMemory<byte> fing
     }
 
     /// <inheritdoc/>
+    public async ValueTask<bool> HoldsAsync(byte[] reference, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+
+        return await context.Sends
+            .AnyAsync(send => send.Reference == reference, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<bool> ReleaseAsync(byte[] reference, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(reference);

@@ -11,11 +11,13 @@ using Janus.Authentication.Factors;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests;
+using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Policies;
 using Janus.Authentication.Tests.Sessions;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
+using Janus.Hosting.Callbacks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,7 +29,7 @@ namespace Janus.Hosting.Tests.Bff;
 /// <summary>
 /// The browser profile: what the pipeline refuses before an endpoint sees it, and
 /// what it lets through (BFF-CSRF-001 to BFF-CSRF-004, BFF-CSRF-006, BFF-CSRF-007,
-/// BFF-OWN-001, BFF-OWN-003).
+/// BFF-OWN-001, BFF-OWN-003, BFF-MACH-001).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class BrowserProfileTests : IDisposable
@@ -344,23 +346,36 @@ public sealed class BrowserProfileTests : IDisposable
     }
 
     /// <summary>
-    /// BFF-OWN-001 AC1 and AC3: mounting takes the pipeline and nothing else, so
-    /// there is no security-relevant value to get right and every application mounts
-    /// the same one implementation.
+    /// BFF-OWN-001 AC1 and AC3: mounting a profile takes the pipeline and nothing
+    /// else, so there is no security-relevant value to get right and every application
+    /// mounts the same one implementation. Mounting a host's callback takes where it is
+    /// and the provider's scheme, and nothing that could turn one of its checks off.
     /// </summary>
     [Fact]
     public void BFF_OWN_001_AC1_MountingTakesNoSecurityRelevantConfiguration()
     {
         MethodInfo[] mounting = typeof(PipelineProfiles).GetMethods(
             BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
+        Type[] callbacks = [typeof(ISignedCallback), typeof(IUnsignedCallback)];
 
         Assert.NotEmpty(mounting);
 
         foreach (MethodInfo mount in mounting)
         {
-            ParameterInfo only = Assert.Single(mount.GetParameters());
+            ParameterInfo[] parameters = mount.GetParameters();
 
-            Assert.Equal(typeof(IApplicationBuilder), only.ParameterType);
+            Assert.Equal(typeof(IApplicationBuilder), parameters[0].ParameterType);
+
+            if (mount.Name is not nameof(PipelineProfiles.UseCallback))
+            {
+                _ = Assert.Single(parameters);
+
+                continue;
+            }
+
+            Assert.Equal(3, parameters.Length);
+            Assert.Equal(typeof(PathString), parameters[1].ParameterType);
+            Assert.Contains(parameters[2].ParameterType, callbacks);
         }
     }
 
@@ -403,15 +418,16 @@ public sealed class BrowserProfileTests : IDisposable
     /// <summary>
     /// AUTH-SESS-007 AC2: enforcement is the pipeline's, so nothing an endpoint
     /// carries and no key of chapter 10 section 4 takes it out of the layer. What an
-    /// endpoint carries is read in two files and only ever adds a refusal to it: an
-    /// endpoint says that it needs a session, and nothing says it needs less than the
-    /// stages give it (BFF-STEP-001).
+    /// endpoint carries is read for enforcement in two files and only ever adds a
+    /// refusal to it: an endpoint says that it needs a session, and nothing says it
+    /// needs less than the stages give it (BFF-STEP-001). The third reader is the
+    /// logging of BFF-LOG-002, which only ever takes a body out of a log.
     /// </summary>
     [Fact]
     public void AUTH_SESS_007_AC2_NoEndpointCanOptOut()
     {
         Assert.Equal(
-            ["SessionRequired.cs", "SessionRequirement.cs"],
+            ["SensitiveBodyLogging.cs", "SessionRequired.cs", "SessionRequirement.cs"],
             Reading("GetEndpoint", "Metadata"));
 
         Assert.Empty(Reading("IConfigurationStore"));
@@ -441,35 +457,77 @@ public sealed class BrowserProfileTests : IDisposable
     }
 
     /// <summary>
-    /// BFF-CSRF-005 AC4: a return the provider makes as a top-level navigation keeps
-    /// the session and reaches the application, while one arriving as a cross-site
-    /// state change does not, which is why a return that posts has to land on a route
-    /// that reads. The cookie a public application issues is lax, so the browser
-    /// carries it on that navigation (BFF-CSRF-005 AC2).
+    /// BFF-CSRF-005 AC4: a processor that returns the browser by posting a form from
+    /// its own site, with no session on it, is answered 303 with the same address and
+    /// reaches nothing; the read the browser then makes of that address carries the
+    /// session, the cookie a public application issues being lax (BFF-CSRF-005 AC2), and
+    /// reaches the host's route. A cross-site post that carries the session, that does
+    /// not navigate the page, or that loads into a frame is refused as before.
     /// </summary>
+    /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task BFF_CSRF_005_AC4_AReturnByNavigationKeepsTheSessionAsync()
+    public async Task BFF_CSRF_005_AC4_ACrossSitePostReturnContinuesAsTheHostsGetAsync()
     {
         var log = new LogInMemory<ResourceIsolation>();
         (OpaqueToken secret, OpaqueToken _) = await LiveAsync();
-        HttpContext navigating = Arriving(
-            "GET",
+        (string Name, string Value)[] returning =
+        [
             ("Sec-Fetch-Site", "cross-site"),
-            ("Sec-Fetch-Mode", "navigate"));
+            ("Sec-Fetch-Mode", "navigate"),
+            ("Sec-Fetch-Dest", "document"),
+        ];
 
-        Carrying(navigating, secret);
+        DefaultHttpContext posted = Arriving("POST", returning);
 
-        await new ResourceIsolation(log).InvokeAsync(navigating, Endpoint);
+        posted.Request.PathBase = "/host";
+        posted.Request.Path = "/return";
+        posted.Request.QueryString = new QueryString("?reference=r-1");
+
+        await new ResourceIsolation(log).InvokeAsync(posted, Endpoint);
+
+        Assert.False(_reached);
+        Assert.Equal(StatusCodes.Status303SeeOther, posted.Response.StatusCode);
+        Assert.Equal("/host/return?reference=r-1", posted.Response.Headers.Location.ToString());
+
+        DefaultHttpContext continuing = Arriving("GET", returning);
+
+        Carrying(continuing, secret);
+
+        await new ResourceIsolation(log).InvokeAsync(continuing, Endpoint);
 
         Assert.True(_reached);
         Assert.Equal(
             secret.Value,
-            navigating.Request.Cookies[BrowserCookies.Session]);
+            continuing.Request.Cookies[BrowserCookies.Session]);
 
         _reached = false;
 
-        await new ResourceIsolation(log)
-            .InvokeAsync(Arriving("POST", ("Sec-Fetch-Site", "cross-site")), Endpoint);
+        DefaultHttpContext carried = Arriving("POST", returning);
+
+        Carrying(carried, secret);
+
+        DefaultHttpContext[] refused =
+        [
+            carried,
+            Arriving(
+                "POST",
+                ("Sec-Fetch-Site", "cross-site"),
+                ("Sec-Fetch-Mode", "cors"),
+                ("Sec-Fetch-Dest", "empty")),
+            Arriving(
+                "POST",
+                ("Sec-Fetch-Site", "cross-site"),
+                ("Sec-Fetch-Mode", "navigate"),
+                ("Sec-Fetch-Dest", "iframe")),
+            Arriving("POST", ("Sec-Fetch-Site", "cross-site")),
+        ];
+
+        foreach (DefaultHttpContext context in refused)
+        {
+            await new ResourceIsolation(log).InvokeAsync(context, Endpoint);
+
+            Assert.Equal(StatusCodes.Status403Forbidden, context.Response.StatusCode);
+        }
 
         Assert.False(_reached);
     }
@@ -479,12 +537,14 @@ public sealed class BrowserProfileTests : IDisposable
     /// configuration or attribute, no stage that enforces the token reading the
     /// endpoint or its metadata; the one thing a path decides is which profile carries
     /// a request, and that is settled in the one place the library names the routes.
+    /// The one other reader of the metadata is the logging of BFF-LOG-002, which
+    /// enforces no token and only ever takes a body out of a log.
     /// </summary>
     [Fact]
     public void BFF_CSRF_001_AC2_NoEndpointCanBeExcludedByConfigurationOrAttribute()
     {
         Assert.Equal(
-            ["SessionRequired.cs", "SessionRequirement.cs"],
+            ["SensitiveBodyLogging.cs", "SessionRequired.cs", "SessionRequirement.cs"],
             Reading("GetEndpoint", "Metadata"));
 
         Assert.Equal(["PipelineProfiles.cs"], Reading("Request.Path"));
@@ -538,6 +598,26 @@ public sealed class BrowserProfileTests : IDisposable
         await pipeline(carried);
 
         Assert.True(_reached);
+    }
+
+    /// <summary>
+    /// BFF-MACH-001 AC3: a request the machine profile governs carries none of what the
+    /// browser profile asks for, and passes it untouched: nothing refused, nothing issued.
+    /// </summary>
+    [Fact]
+    public async Task BFF_MACH_001_AC3_ARequestTheMachineProfileGovernsPassesTheBrowserProfileAsync()
+    {
+        RequestDelegate pipeline = Mounted();
+        HttpContext context = Arriving("POST");
+
+        context.Features.Set(MachineGoverned.Mark);
+
+        await pipeline(context);
+
+        Assert.True(_reached);
+        Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
+        Assert.Equal(0, context.Response.Headers.SetCookie.Count);
+        Assert.Empty(_contacts.All);
     }
 
     /// <summary>
@@ -791,6 +871,8 @@ public sealed class BrowserProfileTests : IDisposable
         services.AddSingleton<ILogger<MalformedRequest>>(new LogInMemory<MalformedRequest>());
         services.AddSingleton<ISessionStore>(_sessions);
         services.AddSingleton<ISessionAudit>(_audit);
+        services.AddSingleton<IAuthenticatorStore, AuthenticatorStoreInMemory>();
+        services.AddSingleton<ICredentialAudit, CredentialAuditInMemory>();
         services.AddSingleton<IMembershipLookup>(_memberships);
         services.AddSingleton<IPolicyRaiseStore, PolicyRaiseStoreInMemory>();
         services.AddSingleton<IAccessGate>(_gate);

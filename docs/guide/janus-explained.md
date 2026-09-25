@@ -14,7 +14,7 @@ Janus is a software library. A company's own application (the "host") imports it
 
 It is written to be **generic**. It has no idea what a store, an order or a medical product is. The host tells it, at start-up, what kinds of things exist ("orders", "branches"), what the processing purposes are ("fulfilment", "marketing"), and which policies apply. Two entirely different businesses run the same Janus without a line changed.
 
-What it deliberately does not do: merge two accounts into one, let one person act as another, host third-party apps, or store payment card details. Each of those is either out of scope or handled by someone else (payments by the payment provider, shipping by the courier, mail by the mail server).
+What it deliberately does not do: merge two accounts into one, let one person act as another, host third-party apps, or hold any of the host's business records. Each of those is either out of scope or handled by someone else (the host's business by the host and the processors it declares; mail by the mail server, which Janus does integrate).
 
 Three principles shape everything below:
 
@@ -47,9 +47,9 @@ An account is a person, once. Google or Apple sign-in attaches to an account; it
 | Sign-in methods (passkeys, password, security keys, authenticator app, Google/Apple links) | At least one way in | Hossam | Deleted |
 | Consent and objection records | None required | Hossam, from the privacy page | Kept as evidence, no longer tied to a readable person |
 
-Things Janus never holds: delivery addresses (the host keeps those, per order), card details, government ID numbers, precise location. Everything personal is encrypted under a key that belongs to Hossam alone; erasing him means destroying that key, which makes every personal field unreadable in one stroke, including fields in the host's own tables.
+Things Janus never holds: postal addresses (the host keeps those), the host's business records, government ID numbers, precise location. Everything personal is encrypted under a key that belongs to Hossam alone; erasing him means destroying that key, which makes every personal field unreadable in one stroke, including fields in the host's own tables.
 
-**Several emails and phones.** Hossam can keep more than one of each, all confirmed. One of each kind is **primary**: that is where ordinary mail and order updates go. Security notices (someone changed your password, someone signed in from a new device) go to a set Hossam chooses: primary only, primary plus one backup, or every confirmed address. The same set is what can recover the account if he is locked out. Any confirmed address can be used to sign in.
+**Several emails and phones.** Hossam can keep more than one of each, all confirmed. One of each kind is **primary**: that is where ordinary mail, and whatever the host sends him about its own business, goes. Security notices (someone changed your password, someone signed in from a new device) go to a set Hossam chooses: primary only, primary plus one backup, or every confirmed address. The same set is what can recover the account if he is locked out. Any confirmed address can be used to sign in.
 
 ---
 
@@ -212,7 +212,7 @@ The business processes his data for named purposes, each on a legal footing the 
 |---|---|---|
 | See or download his data | One export, machine-readable or readable | Immediate |
 | Correct something | Editable things he edits; the rest goes to support | Decided within 6 working days |
-| Pause processing | His records stay visible but nothing acts on them (no shipping, no refunds, no contact) until resolved | Decided within 6 working days; if nobody decides, the pause is granted automatically |
+| Pause processing | His records stay visible but nothing acts on them (the host is told, through `RestrictionChanged`, to stop acting on his records; no contact) until resolved | Decided within 6 working days; if nobody decides, the pause is granted automatically |
 | Delete the account | A 30-day grace window (by default) in which he can change his mind; then erasure: his key is destroyed and every personal field becomes unreadable, while receipts survive with no buyer | 30 days |
 | Be told of a breach | Within 3 days of the business detecting it; cannot be silenced by any preference | 3 days |
 
@@ -295,7 +295,7 @@ Every condition that needs a human is on a list with a severity. **High** goes b
 
 **Everything is audited.** Every sign-in, change, grant, approval and administrative action is recorded, append-only, with who acted and why, holding codes rather than personal details, kept 7 years for security and financial events and 90 days for routine access.
 
-**Outside services, and what each is trusted with.** The mail server (Stalwart) hosts staff mailboxes and sends every message; it trusts Janus for sign-in and is pushed every account change, with a daily comparison that reports drift. The payment provider sees the amount and returns a reference; card numbers never touch the system. The courier receives a generic package description, the recipient's name, phone and address, and a cash-on-delivery amount, never product names. The SMS gateway receives numbers and codes. Every message these services send back is treated as a hint to go and check, never as the truth.
+**Outside services, and what each is trusted with.** The mail server (Stalwart) hosts staff mailboxes and sends every message; it trusts Janus for sign-in and is pushed every account change, with a daily comparison that reports drift. The SMS gateway receives numbers and codes. The host declares its own processors (a payment provider, a courier) and, for each, which categories of personal data it may receive; Janus records them and enforces that nothing beyond those categories goes out. Every message these services send back is treated as a hint to go and check, never as the truth.
 
 **Deployments.** A push to the main branch builds, tests, migrates the database and deploys, with no manual step. Configuration lives in the database and is changed from the management app; only the database connection and the vault credential are set at deployment.
 
@@ -305,7 +305,7 @@ Every condition that needs a human is on a list with a severity. **High** goes b
 
 ### 10.1 A customer turns out to be a minor
 
-Only on a credible indication (they say so, a guardian writes in, something specific in support), never a guess from a name or a purchase. One operation does phase one at once: the account is suspended, every session ends, undispatched orders are cancelled through the host, and the reason is recorded. Seven days later, automatically, the account is erased. Inside those seven days, the person holding the takedown permission can reverse it from the account's admin page (the account returns, the cancelled orders do not). Nobody asks for ID documents. The breach clock (10.3) starts at the moment of the credible indication.
+Only on a credible indication (they say so, a guardian writes in, something specific in support), never a guess from a name or from anything in the host's records. One operation does phase one at once: the account is suspended, every session ends, the host is told to stop whatever it holds for him (the store cancels his undispatched orders), and the reason is recorded. Seven days later, automatically, the account is erased. Inside those seven days, the person holding the takedown permission can reverse it from the account's admin page (the account returns; what the host does about what it stopped is the host's rule; the store does not restore the orders). Nobody asks for ID documents. The breach clock (10.3) starts at the moment of the credible indication.
 
 ### 10.2 The emergency envelope
 
@@ -317,13 +317,13 @@ Detection starts two clocks: 72 hours to notify the regulator and 3 days to noti
 
 ### 10.4 Losing the server
 
-The database continuously ships its change log, so at most seconds of data are lost and a restore can land on any moment. Getting back online takes 4 to 8 hours (the business asked for 2 to 3; that would need a second server, declined on cost). A restore is followed by reconciliation with the payment provider, the courier and the mail server, because the outside world did not roll back with the database, and a restore that loses personal data starts the breach clocks. A restore is rehearsed automatically every quarter into a throwaway database, with a canary account that must decrypt and sign in, alerting on any failure.
+The database continuously ships its change log, so at most seconds of data are lost and a restore can land on any moment. Getting back online takes 4 to 8 hours (the business asked for 2 to 3; that would need a second server, declined on cost). A restore is followed by reconciliation with the mail server and with every processor the host declares, because the outside world did not roll back with the database, and a restore that loses personal data starts the breach clocks. A restore is rehearsed automatically every quarter into a throwaway database, with a canary account that must decrypt and sign in, alerting on any failure.
 
-The accepted gap, stated plainly: until the hosting tier is upgraded, backups sit on the same server as the database. Losing the server means losing everything, and the data by then includes health information. This is recorded as accepted under time pressure, with no date, and is the biggest single risk on the register.
+The accepted gap, stated plainly: until the hosting tier is upgraded, backups sit on the same server as the database. Losing the server means losing everything, including whatever the host has declared sensitive (for the store, purchase history that can reveal health information). This is recorded as accepted under time pressure, with no date, and is the biggest single risk on the register.
 
 ### 10.5 Other accepted risks, in one line each
 
-Mail app passwords bypass passkeys (mail programs offer nothing better; they work only for mail, are revocable, and never sign in to anything else). One person approves recoveries (written reason, separate-channel notice, anomaly alerts). One person holds all technical knowledge (the envelope is with the owner, not the developer). Age is self-declared (the alternative is holding identity documents). A stolen trusted device skips the second step for up to 30 days. Google or Apple sign-in skips the customer's own second step (bounded by the gates on sensitive actions). The courier can infer that a medical company shipped something.
+Mail app passwords bypass passkeys (mail programs offer nothing better; they work only for mail, are revocable, and never sign in to anything else). One person approves recoveries (written reason, separate-channel notice, anomaly alerts). One person holds all technical knowledge (the envelope is with the owner, not the developer). Age is self-declared (the alternative is holding identity documents). A stolen trusted device skips the second step for up to 30 days. Google or Apple sign-in skips the customer's own second step (bounded by the gates on sensitive actions). Risks that belong to the host's own processors (what a courier can infer from being used, say) live in the host's register.
 
 ---
 

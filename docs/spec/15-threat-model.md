@@ -6,8 +6,9 @@ design stops them.
 **Prerequisite:** none. Read alongside `13-risk-register.md` — the register records
 positions taken during design; this asks systematically what an adversary would do.
 
-**Status: complete.** All §6 gaps closed. Two commercial-priority questions are recorded as **answered "unknown"** — that is the answer, not an outstanding item. Everything not marked is
-derived from the specification or from stated facts about the business.
+**Status: complete.** All §6 gaps closed. Two commercial-priority questions are recorded as **answered "unknown"**; that is the answer, not an outstanding item. Everything not marked is
+derived from the specification or from stated facts about the first host, which stand
+here as the worked example a threat model needs; a host substitutes its own.
 
 ---
 
@@ -15,13 +16,11 @@ derived from the specification or from stated facts about the business.
 
 | Asset | Why it matters |
 |---|---|
-| **Customer order history** | Health data. An insulin needle purchase discloses a diagnosis |
-| **Customer contact data** | Names, phones, home addresses |
-| **B2B customer list and pricing** | Judged the most commercially valuable asset here — see §3.1 |
-| **Supplier relationship data** | Exclusive KDL importer status is the business's core advantage |
+| **The host's records about each subject** | Whatever the host declares sensitive (PRIV-SENS-001); for the first host, a purchase history from which a diagnosis can be read |
+| **Customer contact data** | Names, phones, and the contact details the host holds |
+| **The host's commercial records** | For the first host, its customer list and pricing, judged its most commercially valuable asset (see §3.1) |
 | **Staff credentials** | Access to everything above |
-| **System availability** | Downtime blocks orders; confirmed, with the nuance in §7 |
-| **Payment references** | Low value alone; card data is never held |
+| **System availability** | Downtime blocks the host's business; confirmed, with the nuance in §7 |
 | **Registration session store** | Staged identifiers, verification state, a password hash and enrolled authenticators for accounts that do not yet exist; bound to one browser, swept at `registration.session.lifetime` (REG-SESS-001) |
 | **Restriction records** | An HMAC of a destination address and send timestamps, for addresses that may belong to no account; deleted when the buckets empty (AUTH-ABUSE-004, R-A21) |
 | **Session location** | A city-level location per live session, resolved from a local IP database and kept only with the session record (AUTH-SESS-013) |
@@ -33,8 +32,8 @@ derived from the specification or from stated facts about the business.
 
 Stated so the boundary is deliberate.
 
-- **The courier knowing a medical company shipped something.** Unavoidable, accepted
-  (R-A06).
+- **What a host's processors can infer from being used at all.** The host's own
+  register records these: a processor learns, at least, that the host uses it.
 - **Nation-state adversaries.** Out of scope. Nothing here is designed to resist one.
 - **Physical access to the hosting provider.** Delegated to the provider.
 - **A compromised customer device.** Outside the boundary.
@@ -45,18 +44,17 @@ Stated so the boundary is deliberate.
 
 ### 3.1 Competitors — *ranked first on reasoning, not on confirmation*
 
-**Want:** the B2B customer list, pricing, stock levels, supplier terms.
+**Want:** the host's commercial records: its customer list, pricing and terms.
 
-**Why they rank first:** the company is the exclusive Egyptian importer for KDL with
-dominant share in its products. The customer list *is* the market position. A
-competitor who learns which clinics and pharmacies buy what, at what price, can
-target them directly.
+**Why they rank first:** for the first host, the customer list *is* the market
+position. A competitor who learns which customers buy what, at what price, can target
+them directly. A host with a different market re-ranks this actor.
 
 **How they would try:**
 
 | Method | Covered? |
 |---|---|
-| Register as a customer, browse the storefront | Partial — prices are public to customers by design |
+| Register as a customer, browse the public application | Partial: whatever the host shows every customer is public to customers by design |
 | Compromise a staff account | Covered — passkeys for interactive access |
 | Social-engineer recovery on a staff account | **Weakest point** — one approver (R-A03) |
 | Bribe or recruit a staff member | **Not covered** — see §6.1 |
@@ -69,8 +67,8 @@ and are the more likely route.
 
 ### 3.2 Someone targeting a specific person
 
-**Want:** to learn whether a named individual buys insulin needles — and therefore
-has diabetes.
+**Want:** to learn a sensitive fact about a named individual from the host's records
+about them (for the first host, a purchase that discloses a diagnosis).
 
 **Who:** an employer, an insurer, a family member in a dispute, a blackmailer.
 
@@ -81,12 +79,12 @@ successful lookup.
 
 | Method | Covered? |
 |---|---|
-| Guess an order URL and observe the response | Covered — concealment returns not-found, timing-identical |
-| Probe registration to confirm the person is a customer | Covered — enumeration resistance |
-| Recover the person's account via email | **Partially covered.** Recovery restores the password only and never removes MFA — but MFA is advisory for customers, so for a customer without it, a mailbox compromise yields the order history directly. Where MFA is enrolled, the recovered password can only *report* the second factor lost (AUTH-RECOV-007): the account keeps AAL2 for seven days, every gate stays closed, and the owner is warned on every channel — the phone included — with a one-click cancel (D-141) |
+| Guess a host record's URL and observe the response | Covered: concealment returns not-found, timing-identical |
+| Probe registration to confirm the person is a customer | Covered: enumeration resistance |
+| Recover the person's account via email | **Partially covered.** Recovery restores the password only and never removes MFA, but MFA is advisory for customers, so for a customer without it, a mailbox compromise yields the host's records about them directly. Where MFA is enrolled, the recovered password can only *report* the second factor lost (AUTH-RECOV-007): the account keeps AAL2 for seven days, every gate stays closed, and the owner is warned on every channel, the phone included, with a one-click cancel (D-141) |
 | Compromise the person's mailbox | Partial — email is the recovery channel by design |
 | Swap or port the person's SIM, where the host has enabled `phoneLink` or `phoneCode` | Partial. Both are off by default and flagged as restricted factors (AUTH-FACT-002b): a link is AAL1 and never a second step, an SMS code is never phishing-resistant and never passes a gate that asks for it, and SIM-change and porting signals are evaluated before a send where the gateway supplies them. The carrier-side attack itself is outside the boundary (R-A18) |
-| Observe a delivery | Not covered — physical, outside the boundary |
+| Observe the person in the physical world | Not covered: physical, outside the boundary |
 
 **Assessment.** This is the threat the concealment and enumeration rules were written
 for, and they hold. AUTHZ-CONCEAL-002's timing requirement is load-bearing here, not
@@ -96,17 +94,16 @@ pedantry.
 
 ### 3.3 Fraudsters
 
-**Want:** goods without paying, or resale value.
+**Want:** whatever the host sells or holds, without paying for it.
 
 **How they would try:**
 
 | Method | Covered? |
 |---|---|
-| Bulk fake accounts | Covered — mandatory phone verification |
-| SMS pumping to drain prepaid balance | Covered — named restrictions per destination and per source (AUTH-ABUSE-004), failed deliveries not counted, balance floor |
-| **Cash-on-delivery abuse** — order, refuse delivery, cost absorbed | Out of scope — owned by the order system (D-049) |
-| Stolen card | Delegated to the payment provider |
-| Account takeover of a real customer | Covered — the authentication controls |
+| Bulk fake accounts | Covered: mandatory phone verification |
+| SMS pumping to drain prepaid balance | Covered: named restrictions per destination and per source (AUTH-ABUSE-004), failed deliveries not counted, balance floor |
+| Abuse of the host's own commercial flow by a legitimately verified account | Out of scope: owned by the host (D-049); the library contributes the stable subject identifier |
+| Account takeover of a real customer | Covered: the authentication controls |
 
 ---
 
@@ -174,7 +171,7 @@ operator can recompute buys little until a second person holds the anchor.
 |---|---|
 | Compromised NuGet dependency | Partial — D-046 covers known advisories |
 | Compromised GitHub account | **Partial** — a compromised account can deploy to production |
-| Compromised provider (payment, shipping, SMS, mail) | Partial — minimisation limits what each holds |
+| Compromised provider (SMS, mail, or any processor the host declares) | Partial: minimisation limits what each holds |
 | Malicious provider callback | Covered — INT-GEN-003 |
 
 **The pipeline is a path to production that bypasses every application control.**
@@ -210,7 +207,7 @@ let a compromised mailbox veto its own removal.
 
 | Surface | Exposure | Primary control |
 |---|---|---|
-| Storefront | Public internet | Authentication, throttling, enumeration resistance |
+| Public application | Public internet | Authentication, throttling, enumeration resistance |
 | Management app | Public internet, staff only | Passkeys, step-up, organization policy |
 | Auth endpoints | Public | Throttling, uniform responses, CSRF |
 | Registration session and link landings | Public | Registration session bound to the pre-authentication cookie; links complete only in the originating browser on a press (REG-SESS-003); server-sent events on the session cookie with no token in any URL (`17`) |
@@ -233,8 +230,9 @@ Stated so effort is not spent re-solving these.
   revocation
 - **Credential strength** — passkeys, blocklist screening, no composition rules, no
   forced rotation
-- **Data minimisation to processors** — the courier, payment provider, and SMS
-  gateway each receive the minimum
+- **Data minimisation to processors**: the SMS gateway and the mail server receive
+  the minimum, and the host declares the categories each of its own processors may
+  receive (INT-GEN rules)
 - **Fail-closed discipline** — enforced by analyzer rather than by vigilance
 - **Audit integrity** — append-only at the database level, queryable by subject
 - **Identifier lifecycle** (D-146): verification links bound to the originating
@@ -253,8 +251,8 @@ A staff member with legitimate access can read or export customer data at volume
 nothing notices. Permissions limit *reach*; nothing limits *rate* or flags unusual
 patterns.
 
-For a business whose customer list is its market position, and whose customer data is
-health data, this is the most consequential gap found.
+For a business whose customer list is its market position, and whose records about
+customers are declared sensitive, this is the most consequential gap found.
 
 **Resolved — D-045.** Per-actor read volume counted with alerting on deviation from
 that actor's own baseline; exports require step-up, are individually audited, and are
@@ -265,23 +263,7 @@ would then export.
 
 ---
 
-### 6.2 Cash-on-delivery abuse has no control
 
-**Confirmed:** cash on delivery is used.
-
-Order, refuse delivery, and the company absorbs the shipping cost. Repeatable, and
-attractive against a competitor as harassment rather than fraud.
-
-**Resolved — D-049: out of scope for this library, owned by the order system.**
-
-The person ordering is a legitimate, verified account holder exercising a permission
-they properly hold — nothing in authentication or authorization is circumvented. The
-effective controls are commercial: order limits for new customers, prepayment above a
-threshold, refusal history tracked per account, deposits for repeat offenders.
-
-**What this library provides to build on:** a stable subject identifier surviving
-account changes, so refusal history attaches to a person rather than an email
-address.
 
 ---
 
@@ -302,8 +284,8 @@ there.
 
 ### 6.4 The operator's machine is an unaddressed attack surface
 
-It holds production credentials, deployment access, and — if the personal-machine
-backup copy is ever used — customer health data.
+It holds production credentials, deployment access, and, if the personal-machine
+backup copy is ever used, customer data of every declared category.
 
 Compromising it compromises everything. Nothing in the specification addresses it.
 
@@ -354,11 +336,11 @@ laptop in one office. The passkey requirement is what makes that hard.
 
 | # | Assumption | If wrong |
 |---|---|---|
-| 1 | Competitors are the top commercial threat | **Answered: unknown.** The user's position is "plausible, but I don't know." Recorded as their answer, not as a pending question. No control depends on it — the insider controls follow from the health-data obligation, which is fixed |
-| 2 | The B2B customer list is the most commercially sensitive asset | **Answered: unknown.** Same. Ranked first on reasoning about the business, not on confirmation |
-| ✓ 3 | **Confirmed** — cash on delivery is used | D-049 applies |
-| ✓ 4 | **Confirmed differently** — few staff, not all known, periodic turnover | §3.5 reworked; D-050 added |
-| ✓ 5 | **Confirmed, with nuance** — phone and WhatsApp still carry sales, which the system is intended to replace | R-A04 gains a second trigger |
+| 1 | Competitors are the top commercial threat | **Answered: unknown.** The user's position is "plausible, but I don't know." Recorded as their answer, not as a pending question. No control depends on it; the insider controls follow from the sensitive-data obligation, which is fixed |
+| 2 | The host's customer list is the most commercially sensitive asset | **Answered: unknown.** Same. Ranked first on reasoning about the business, not on confirmation |
+| ✓ 3 | **Confirmed**: the host has a commercial flow a verified account can abuse | D-049 applies; the host owns the control |
+| ✓ 4 | **Confirmed differently**: few staff, not all known, periodic turnover | §3.5 reworked; D-050 added |
+| ✓ 5 | **Confirmed, with nuance**: channels outside the system still carry part of the host's business, which the system is intended to replace | R-A04 gains a second trigger |
 
 ---
 
@@ -367,7 +349,7 @@ laptop in one office. The passkey requirement is what makes that hard.
 **THREAT-001** — This model SHALL be revisited when the business gains staff with
 system access, when a new external integration is added, or at each licence renewal.
 
-**All gaps in §6 are closed** — 6.1 (D-045), 6.2 (D-049, out of scope), 6.3 (D-046),
+**All gaps in §6 are closed**: 6.1 (D-045), 6.2 (D-049, out of scope, host-owned), 6.3 (D-046),
 6.4 (D-047), 6.5 (D-048), 6.6 (D-051, D-147 corrected the count).
 
 **Section 7 is resolved.** Three assumptions confirmed, two answered "unknown" — which is an

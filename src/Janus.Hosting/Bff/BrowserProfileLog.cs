@@ -148,6 +148,18 @@ internal static partial class BrowserProfileLog
     public static partial void SignOnExchangeRejected(ILogger log, string correlationId);
 
     /// <summary>
+    /// An authorization request the provider would not take when it was pushed
+    /// (AUTH-OIDC-006 AC2).
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    [LoggerMessage(
+        EventId = 14,
+        Level = LogLevel.Warning,
+        Message = "A sign-on request was not taken by the provider when it was pushed ({CorrelationId}).")]
+    public static partial void SignOnPushRejected(ILogger log, string correlationId);
+
+    /// <summary>
     /// A sign-on by an application the provider's registry does not hold, which is a
     /// registration the deployment has not made.
     /// </summary>
@@ -158,4 +170,17 @@ internal static partial class BrowserProfileLog
         Level = LogLevel.Error,
         Message = "This application is not registered at the provider it signs on to ({CorrelationId}).")]
     public static partial void SignOnUnregistered(ILogger log, string correlationId);
+
+    /// <summary>
+    /// A cross-site post that navigated the whole page and carried no session, which
+    /// was not carried and was answered with a read of the same address instead
+    /// (BFF-CSRF-005 AC4).
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    [LoggerMessage(
+        EventId = 13,
+        Level = LogLevel.Information,
+        Message = "A cross-site POST navigation without a session was sent on as a GET ({CorrelationId}).")]
+    public static partial void CrossSiteReturn(ILogger log, string correlationId);
 }

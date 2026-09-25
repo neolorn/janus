@@ -47,7 +47,7 @@ public interface IRegistration
         string client,
         string language,
         string source,
-        string? invitationToken,
+        [NeverLogged] string? invitationToken,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -159,7 +159,7 @@ public interface IRegistration
     ValueTask<Result<RegistrationState>> VerifyAsync(
         RegistrationSessionId session,
         IdentifierId identifier,
-        string code,
+        [NeverLogged] string code,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -178,7 +178,7 @@ public interface IRegistration
     /// </returns>
     ValueTask<Result<LinkLanding>> LandAsync(
         RegistrationSessionId? session,
-        string linkToken,
+        [NeverLogged] string linkToken,
         bool press,
         CancellationToken cancellationToken);
 
@@ -208,7 +208,7 @@ public interface IRegistration
     /// </returns>
     ValueTask<Result<RegistrationState>> SetPasswordAsync(
         RegistrationSessionId session,
-        string password,
+        [NeverLogged] string password,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -251,6 +251,6 @@ public interface IRegistration
     /// <returns>Success, whether or not either resolved to a live session.</returns>
     ValueTask<Result> AbandonAsync(
         RegistrationSessionId? session,
-        string? linkToken,
+        [NeverLogged] string? linkToken,
         CancellationToken cancellationToken);
 }

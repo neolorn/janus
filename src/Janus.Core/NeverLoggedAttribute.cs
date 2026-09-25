@@ -4,7 +4,7 @@ namespace Janus.Core;
 
 /// <summary>
 /// Marks a type or member whose value never reaches a log: credentials and secrets,
-/// health-implying data, and the content of compliance text.
+/// sensitive host data, and the content of compliance text.
 /// </summary>
 /// <remarks>
 /// Implements CONV-LOG-003. The marker is what rule JAN0002 of CONV-CODE-008 reads, so

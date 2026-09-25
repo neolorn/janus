@@ -106,6 +106,13 @@ public static class AuditActions
     public static AuditAction CredentialReportedLost { get; } = AuditAction.Parse("auth.credential.reportedlost");
 
     /// <summary>
+    /// A credential a social provider's security event held was usable again, because
+    /// the person signed in by another factor.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-012a and IDN-AUD-001.</remarks>
+    public static AuditAction CredentialRestored { get; } = AuditAction.Parse("auth.credential.restored");
+
+    /// <summary>
     /// A deletion was cancelled inside its grace window.
     /// </summary>
     /// <remarks>Implements IDN-LIFE-014, chapter 10 section 5.</remarks>
@@ -305,6 +312,20 @@ public static class AuditActions
     /// </summary>
     /// <remarks>Implements IDN-ATTR-001, chapter 10 section 5.</remarks>
     public static AuditAction ProfileChanged { get; } = AuditAction.Parse("identity.profile.changed");
+
+    /// <summary>
+    /// A social provider's security event naming a linked credential was refused: it
+    /// was not signed by the provider's published keys, or it had been carried before.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-012a and IDN-AUD-001.</remarks>
+    public static AuditAction ProviderEventRejected { get; } = AuditAction.Parse("auth.providerevent.rejected");
+
+    /// <summary>
+    /// A social provider's security event about a linked credential was carried, with
+    /// what it did to the account.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-012a and IDN-AUD-001.</remarks>
+    public static AuditAction ProviderEventTaken { get; } = AuditAction.Parse("auth.providerevent.taken");
 
     /// <summary>
     /// An assisted recovery was approved, naming the approver and the reason given.

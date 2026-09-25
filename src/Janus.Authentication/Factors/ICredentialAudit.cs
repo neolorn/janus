@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Credentials;
 using Janus.Core;
 
 namespace Janus.Authentication.Factors;
@@ -9,7 +10,7 @@ namespace Janus.Authentication.Factors;
 /// Where an event about one credential is recorded. The area holds no audit trail of
 /// its own, so what it has to record it hands out through this.
 /// </summary>
-/// <remarks>Implements AUTH-FACT-014, REG-MAIL-002, IDN-AUD-001 and CONV-LAYOUT-001.</remarks>
+/// <remarks>Implements AUTH-FACT-014, REG-MAIL-002, IDN-LIFE-012a, IDN-AUD-001 and CONV-LAYOUT-001.</remarks>
 internal interface ICredentialAudit
 {
     /// <summary>
@@ -42,6 +43,27 @@ internal interface ICredentialAudit
         AuditAction action,
         SubjectId subject,
         string credential,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records a social provider's security event about the identity a credential links,
+    /// and what it did.
+    /// </summary>
+    /// <param name="action">Whether the event was taken or refused.</param>
+    /// <param name="subject">Whose credential.</param>
+    /// <param name="credential">Which credential.</param>
+    /// <param name="type">The event's type, as the provider spells it.</param>
+    /// <param name="outcome">What it did, or why it did nothing.</param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask ProviderEventAsync(
+        AuditAction action,
+        SubjectId subject,
+        AuthenticatorId credential,
+        string type,
+        ProviderEventOutcome outcome,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 }

@@ -23,7 +23,7 @@ internal sealed class Invitation
         InvitationId id,
         OrganizationId organization,
         SubjectId inviter,
-        byte[] token,
+        [NeverLogged] byte[] token,
         IReadOnlyList<RoleName> roles,
         IReadOnlyList<InvitationDocument> documents,
         MailboxId? mailbox,
@@ -54,6 +54,7 @@ internal sealed class Invitation
     /// What is stored against the link's token, which the token cannot be recovered
     /// from.
     /// </summary>
+    [NeverLogged]
     public byte[] Token { get; }
 
     /// <summary>
@@ -129,7 +130,7 @@ internal sealed class Invitation
         IReadOnlyList<RoleName> roles,
         IReadOnlyList<InvitationDocument> documents,
         MailboxId? mailbox,
-        byte[] token,
+        [NeverLogged] byte[] token,
         DateTimeOffset issuedAt,
         TimeSpan lifetime)
     {
@@ -178,7 +179,7 @@ internal sealed class Invitation
         InvitationId id,
         OrganizationId organization,
         SubjectId inviter,
-        byte[] token,
+        [NeverLogged] byte[] token,
         InvitedIdentifiers? identifiers,
         IReadOnlyList<RoleName> roles,
         IReadOnlyList<InvitationDocument> documents,

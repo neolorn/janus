@@ -1,5 +1,6 @@
 using System;
 using System.Text;
+using Janus.Core;
 
 namespace Janus.Hosting.Bff;
 
@@ -13,6 +14,7 @@ namespace Janus.Hosting.Bff;
 /// database and never answered to a caller: what it exists for is one form field on
 /// one back-channel request.
 /// </remarks>
+[NeverLogged]
 internal sealed class SignOnSecret(ReadOnlyMemory<byte> material)
 {
     /// <summary>

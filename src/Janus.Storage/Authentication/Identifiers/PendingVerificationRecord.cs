@@ -38,9 +38,11 @@ internal sealed class PendingVerificationRecord
     public DateTimeOffset? OldConfirmedAt { get; set; }
 
     /// <summary>The <c>old_link</c> column.</summary>
+    [NeverLogged]
     public byte[]? OldLink { get; set; }
 
     /// <summary>The <c>link</c> column: what the new value's link fingerprints to.</summary>
+    [NeverLogged]
     public byte[]? Link { get; set; }
 
     /// <summary>The <c>staged_at</c> column, which the sweep reads.</summary>

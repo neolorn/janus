@@ -713,7 +713,7 @@ value that **changes without code changes** SHALL be a table.
 | Kind | Storage | Examples |
 |---|---|---|
 | Code branches on it | Constrained column | Account state, erasure status, concealment behaviour |
-| Changes without a deploy | Table | Roles, permissions, the courier's district list |
+| Changes without a deploy | Table | Roles, permissions, a host-maintained reference list |
 | **Declared with properties the code branches on** | Table seeded from the declaration | **Lawful bases, sensitive-data categories** (D-108) |
 
 **The test:** could someone add a value and have it work without an engineer? If no, a
@@ -789,7 +789,7 @@ returned in concealment responses.
 
 *Source: AUTHZ-CONCEAL-004*
 
-A customer's "I can't see my order" resolves to the exact decision that denied them.
+A customer's "I can't see my record" resolves to the exact decision that denied them.
 
 **Acceptance criteria**
 1. The identifier in a denial response resolves to log entries for that request.
@@ -799,17 +799,18 @@ A customer's "I can't see my order" resolves to the exact decision that denied t
 **CONV-LOG-003** — The following SHALL NEVER be logged.
 
 **Credentials and secrets:** passwords, tokens, session identifiers, TOTP secrets or
-codes, recovery codes, verification codes, card data, the hash prefix sent for
-password screening.
+codes, recovery codes, verification codes, the hash prefix sent for password
+screening.
 
-**Health-implying data:** order contents, in any log. Order contents are health data
-per PRIV-SENS-003. A debug line logging a cart looks harmless and is a health-data
-disclosure.
+**Sensitive host data:** any field of a resource type the host declares sensitive
+(PRIV-SENS-001), and the body of any endpoint the host marks `SensitiveBody`
+(BFF-LOG-002), in any log. A debug line logging such a body looks harmless and is a
+sensitive-data disclosure.
 
 **Compliance text:** the content of consent or notice text in any language. Log the
 notice **version**.
 
-*Source: PRIV-SENS-003, PRIV-PRIN-001, D-031*
+*Source: PRIV-SENS-001, PRIV-PRIN-001, D-031*
 
 **Acceptance criteria**
 1. An analyzer rule detects forbidden values and fails the build.

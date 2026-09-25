@@ -13,6 +13,7 @@ namespace Janus.Core;
 /// the subject's is a version 7 value, so rows written together sit together in the
 /// index.
 /// </remarks>
+[NeverLogged]
 public readonly record struct SessionId(Guid Value)
 {
     /// <summary>

@@ -130,8 +130,9 @@ public sealed class ModelTests
             "audit_records.organization",
 
             // Credentials: the enrolled authenticator of AUTH-FACT-001, the shared secret
-            // of AUTH-FACT-006 under the key, and the WebAuthn columns AUTH-FACT-011 and
-            // AUTH-FACT-012 read.
+            // of AUTH-FACT-006 under the key, the WebAuthn columns AUTH-FACT-011 and
+            // AUTH-FACT-012 read, and the keyed fingerprint a provider link is found by
+            // (IDN-LIFE-012a).
             "authenticators.added_at",
             "authenticators.algorithm",
             "authenticators.backup_eligible",
@@ -145,12 +146,25 @@ public sealed class ModelTests
             "authenticators.is_preferred",
             "authenticators.label",
             "authenticators.last_used_at",
+            "authenticators.provider_subject",
             "authenticators.public_key",
             "authenticators.relying_party",
             "authenticators.state",
             "authenticators.subject",
             "authenticators.totp_consumed_step",
             "authenticators.totp_secret",
+
+            // Not an account field: a host callback's provider events, each claimed once
+            // by the hash of the provider's identifier (BFF-MACH-002).
+            "callback_events.callback",
+            "callback_events.claimed_at",
+            "callback_events.identifier",
+
+            // Not an account field: the correlation references issued for a host's
+            // unsigned callbacks, each held by its hash (INT-GEN-003, BFF-MACH-003).
+            "callback_references.callback",
+            "callback_references.issued_at",
+            "callback_references.reference",
 
             // Not an account field: the inbound callbacks counted per source
             // (INT-GEN-003, BFF-MACH-003), the source held by its hash.

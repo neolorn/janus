@@ -125,9 +125,9 @@ The report carries a delivery status against an opaque reference and no personal
 
 *Source: INT-GEN-001*
 
-Already required; restated here because it is an environment property. At least one
-provider's published configuration specifies a plaintext base URL, which would send
-customer names, phone numbers and addresses unencrypted if copied unexamined.
+Already required; restated here because it is an environment property. A provider's
+published sample configuration can specify a plaintext base URL, which would send
+personal data unencrypted if copied unexamined.
 
 **Acceptance criteria**
 1. A configured endpoint with a plaintext scheme fails startup with a named error.
@@ -171,8 +171,9 @@ occur; host compromise is a different tier of problem and separating machines wo
 defend against something unlikely before real scale.
 
 **Consequence worth noting:** because everything shares a host, the mail server's
-separate database (D-006) does more than avoid schema coupling — it also keeps mail
-out of the database holding customer health data.
+separate database (D-006) does more than avoid schema coupling: it also keeps mail
+out of the database holding the subjects' personal data, including any the host
+declares sensitive.
 
 **Acceptance criteria**
 1. The isolation claim is stated with its scope wherever it appears.
@@ -243,27 +244,6 @@ order and two accounts can exist for one mailbox.
 
 ---
 
-**INF-DB-002** — Spatial querying SHALL be available for area containment.
-
-*Source: D-061*
-
-Address resolution matches coordinates against stored boundaries in our own database,
-which is what keeps coordinates from reaching any third party.
-
-**The boundary dataset SHALL be named**, and where its licence makes the supplier a
-recipient, it SHALL appear in the records of processing.
-
-*Source: D-079b*
-
-The criterion was untestable while no dataset was identified. Start with city
-boundaries, which are unambiguous and easy to source; district polygons follow if the
-dropdown proves too coarse (D-061).
-
-**Acceptance criteria**
-1. A point-in-area query returns the containing area without an external service.
-2. The dataset and its licence are recorded.
-
----
 
 **INF-DB-003** — Two database credentials SHALL exist: one with schema-alteration
 rights used only by the migration step, one for the application with row-level access

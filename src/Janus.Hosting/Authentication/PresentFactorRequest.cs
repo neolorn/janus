@@ -25,8 +25,8 @@ namespace Janus.Hosting.Authentication;
 internal sealed record PresentFactorRequest(
     string? ChallengeId,
     Factor Factor,
-    string? Value,
-    string? LinkToken,
+    [property: NeverLogged] string? Value,
+    [property: NeverLogged] string? LinkToken,
     AuthenticatorAssertion? Assertion,
     bool TrustDevice,
     bool Press);

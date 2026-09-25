@@ -9,8 +9,8 @@ namespace Janus.Core;
 /// The name shown where a human needs to know who the account is.
 /// </param>
 /// <param name="LegalName">
-/// The name a host that invoices or ships collects, absent while
-/// <c>profile.legalname</c> is off.
+/// The legal name, a proofing attribute absent while <c>profile.legalname</c> is
+/// off.
 /// </param>
 /// <param name="DateOfBirth">
 /// The date entered at the age step, absent while <c>profile.dateofbirth</c> is off.

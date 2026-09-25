@@ -152,7 +152,7 @@ internal sealed class AccountLifecycle(
     /// <returns>Success, or the refusal and its code.</returns>
     /// <exception cref="ArgumentNullException">The token is absent.</exception>
     public async ValueTask<Result> ReactivateAsync(
-        string linkToken,
+        [NeverLogged] string linkToken,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(linkToken);
@@ -304,7 +304,7 @@ internal sealed class AccountLifecycle(
     /// <returns>Success, or the refusal and its code.</returns>
     /// <exception cref="ArgumentNullException">The token is absent.</exception>
     public async ValueTask<Result> CancelDeletionAsync(
-        string linkToken,
+        [NeverLogged] string linkToken,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(linkToken);
@@ -388,7 +388,7 @@ internal sealed class AccountLifecycle(
     }
 
     private async ValueTask<LifecycleLink?> PresentedAsync(
-        string linkToken,
+        [NeverLogged] string linkToken,
         LifecycleLinkKind kind,
         CancellationToken cancellationToken)
     {
@@ -419,7 +419,7 @@ internal sealed class AccountLifecycle(
         SubjectId subject,
         MessageKind message,
         string source,
-        string token,
+        [NeverLogged] string token,
         CancellationToken cancellationToken)
     {
         HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken)

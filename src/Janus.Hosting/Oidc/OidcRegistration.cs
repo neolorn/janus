@@ -28,6 +28,9 @@ internal static class OidcRegistration
     /// <summary>The route the authorization request arrives at.</summary>
     public const string Authorization = "oidc/authorize";
 
+    /// <summary>The route the authorization request is pushed to beforehand.</summary>
+    public const string PushedAuthorization = "oidc/par";
+
     /// <summary>The route the token request arrives at.</summary>
     public const string Token = "oidc/token";
 
@@ -39,6 +42,9 @@ internal static class OidcRegistration
 
     /// <summary>The route the discovery document is served from.</summary>
     public const string Configuration = ".well-known/openid-configuration";
+
+    /// <summary>How long the reference to a pushed request can be presented.</summary>
+    public static readonly TimeSpan PushedRequestLifetime = TimeSpan.FromSeconds(60);
 
     /// <summary>
     /// Adds the server, the stores it keeps its records in, and the library's own
@@ -82,6 +88,7 @@ internal static class OidcRegistration
             {
                 _ = options
                     .SetAuthorizationEndpointUris(Authorization)
+                    .SetPushedAuthorizationEndpointUris(PushedAuthorization)
                     .SetTokenEndpointUris(Token)
                     .SetUserInfoEndpointUris(UserInfo)
                     .SetJsonWebKeySetEndpointUris(KeySet)
@@ -91,6 +98,18 @@ internal static class OidcRegistration
                 // nothing else. No implicit flow, no password grant, no device flow.
                 _ = options.AllowAuthorizationCodeFlow().AllowRefreshTokenFlow();
                 _ = options.RequireProofKeyForCodeExchange();
+
+                // AUTH-OIDC-006 AC1: the proof key is by S256 alone. The plain method is
+                // refused, and so is a challenge that names no method, which the
+                // protocol reads as plain.
+                _ = options.Configure(server => server.CodeChallengeMethods.Remove(
+                    OpenIddictConstants.CodeChallengeMethods.Plain));
+
+                // AUTH-OIDC-006 AC2: every authorization request is pushed over the
+                // back channel first, so the browser carries a reference and none of
+                // the parameters, and the reference lapses a minute after it is issued.
+                _ = options.RequirePushedAuthorizationRequests();
+                _ = options.Configure(server => server.RequestTokenLifetime = PushedRequestLifetime);
                 _ = options.RegisterScopes(
                     OpenIddictConstants.Scopes.OpenId,
                     OpenIddictConstants.Scopes.Email,
@@ -109,12 +128,14 @@ internal static class OidcRegistration
                     _ = options.AddEncryptionKey(key);
                 }
 
-                _ = options.AddEventHandler<OpenIddictServerEvents.ValidateAuthorizationRequestContext>(
+                _ = options.AddEventHandler<OpenIddictServerEvents.ValidatePushedAuthorizationRequestContext>(
                     handler => handler
                         .UseScopedHandler<RegisteredDestination>()
                         .SetOrder(RegisteredDestination.Order));
                 _ = options.AddEventHandler<OpenIddictServerEvents.HandleAuthorizationRequestContext>(
                     handler => handler.UseScopedHandler<AuthorizationIssue>());
+                _ = options.AddEventHandler<OpenIddictServerEvents.ApplyAuthorizationResponseContext>(
+                    handler => handler.UseScopedHandler<PushedRequestSpent>());
                 _ = options.AddEventHandler<OpenIddictServerEvents.HandleTokenRequestContext>(
                     handler => handler.UseScopedHandler<TokenIssue>());
                 _ = options.AddEventHandler<OpenIddictServerEvents.HandleUserInfoRequestContext>(

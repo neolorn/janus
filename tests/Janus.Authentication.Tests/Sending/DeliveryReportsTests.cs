@@ -2,7 +2,9 @@ using System;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
+using Janus.Authentication.Callbacks;
 using Janus.Authentication.Sending;
+using Janus.Authentication.Tests.Callbacks;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Xunit;
@@ -26,6 +28,7 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
     private readonly ConfigurationInMemory _configuration = new();
     private readonly SendLedgerInMemory _ledger = new();
     private readonly CallbackLedgerInMemory _callbacks = new();
+    private readonly CallbackEventsInMemory _claims = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
@@ -37,7 +40,7 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
     public DeliveryReportsTests() => _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
 
     private DeliveryReports Reports =>
-        new(_configuration, _ledger, _callbacks, _work, _events, _clock);
+        new(new CallbackAdmission(_configuration, _callbacks, _claims, _events, _clock), _ledger, _work);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
@@ -123,10 +126,14 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
 
     /// <summary>
     /// INT-GEN-003 AC1: a reference of the right shape that nobody drew is rejected,
-    /// so knowing what a reference looks like buys nothing.
+    /// whatever the report says became of the message, so knowing what a reference
+    /// looks like buys nothing.
     /// </summary>
-    [Fact]
-    public async Task INT_GEN_003_AC1_ACallbackWithAGuessedReferenceIsRejectedAsync()
+    /// <param name="delivered">What the report says.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task INT_GEN_003_AC1_ACallbackWithAGuessedReferenceIsRejectedAsync(bool delivered)
     {
         await SentAsync();
 
@@ -135,7 +142,7 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
             Refusal(await Reports.ReportAsync(
                 Gateway,
                 SendReference.Draw(_randomness).Value,
-                delivered: false,
+                delivered,
                 TestContext.Current.CancellationToken)));
 
         Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
@@ -161,7 +168,7 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
 
     /// <summary>
     /// INT-SMS-005 AC1: a forged report verifies no phone. A report of delivery for
-    /// a reference nobody drew is taken and does nothing: no count moves, nothing is
+    /// a reference nobody drew is refused and does nothing: no count moves, nothing is
     /// announced, and there is no state a phone could be marked verified in.
     /// </summary>
     [Fact]
@@ -170,7 +177,13 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
         await SentAsync();
         int announced = _events.Published.Count;
 
-        await ReportedAsync(SendReference.Draw(_randomness).Value, delivered: true);
+        Assert.Equal(
+            ErrorCodes.CallbackRejected,
+            Refusal(await Reports.ReportAsync(
+                Gateway,
+                SendReference.Draw(_randomness).Value,
+                delivered: true,
+                TestContext.Current.CancellationToken)));
 
         Assert.Equal(announced, _events.Published.Count);
         Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
@@ -217,42 +230,6 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
 
         Assert.Contains(_callbacks.Counted, callback => callback.Rejected
             && string.Equals(callback.Source, Gateway, StringComparison.Ordinal));
-    }
-
-    /// <summary>
-    /// PRIV-MIN-002 AC1, AC2, AC3: the one callback endpoint the library owns has
-    /// the three properties the item asks of a provider's: its reference is drawn and
-    /// a guessed one is rejected, a flood from one source is refused on the count
-    /// alone, and a report advances no state of its own.
-    /// </summary>
-    /// <returns>The work of the test.</returns>
-    [Fact]
-    public async Task PRIV_MIN_002_AC1_TheCallbackEndpointIsUnguessableCountedAndInertAsync()
-    {
-        _configuration.Set(Settings.IntegrationCallbackRateLimit, 2);
-
-        SendReference reference = await SentAsync();
-        int announced = _events.Published.Count;
-
-        Assert.Equal(
-            ErrorCodes.CallbackRejected,
-            Refusal(await Reports.ReportAsync(
-                Gateway,
-                SendReference.Draw(_randomness).Value,
-                delivered: false,
-                TestContext.Current.CancellationToken)));
-
-        await ReportedAsync(reference.Value, delivered: true);
-
-        Assert.Equal(announced, _events.Published.Count);
-
-        Assert.Equal(
-            ErrorCodes.CallbackRejected,
-            Refusal(await Reports.ReportAsync(
-                Gateway,
-                reference.Value,
-                delivered: true,
-                TestContext.Current.CancellationToken)));
     }
 
     /// <summary>

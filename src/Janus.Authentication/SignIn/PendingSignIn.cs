@@ -23,7 +23,7 @@ internal sealed class PendingSignIn
         SubjectId subject,
         Factor factor,
         IdentifierId? email,
-        byte[] code,
+        [NeverLogged] byte[] code,
         byte[]? browser,
         DateTimeOffset issuedAt,
         DateTimeOffset expiresAt)
@@ -39,6 +39,7 @@ internal sealed class PendingSignIn
     }
 
     /// <summary>What the token carried by the message hashes to.</summary>
+    [NeverLogged]
     public byte[] Fingerprint { get; }
 
     /// <summary>Whose sign-in.</summary>
@@ -51,11 +52,13 @@ internal sealed class PendingSignIn
     public IdentifierId? Email { get; }
 
     /// <summary>The code the same message carried, held as it is compared.</summary>
+    [NeverLogged]
     public byte[] Code { get; }
 
     /// <summary>
     /// What the requesting browser carried, or nothing where it carried none.
     /// </summary>
+    [NeverLogged]
     public byte[]? Browser { get; }
 
     /// <summary>When it went out.</summary>
@@ -84,7 +87,7 @@ internal sealed class PendingSignIn
         SubjectId subject,
         Factor factor,
         IdentifierId? email,
-        string code,
+        [NeverLogged] string code,
         byte[]? browser,
         DateTimeOffset at,
         TimeSpan lifetime) =>
@@ -109,7 +112,7 @@ internal sealed class PendingSignIn
         SubjectId subject,
         Factor factor,
         IdentifierId? email,
-        byte[] code,
+        [NeverLogged] byte[] code,
         byte[]? browser,
         DateTimeOffset issuedAt,
         DateTimeOffset expiresAt,
@@ -136,7 +139,7 @@ internal sealed class PendingSignIn
     /// </summary>
     /// <param name="presented">What the asking browser carries, or nothing.</param>
     /// <returns>Whether the two are the same browser.</returns>
-    public bool SameBrowser(byte[]? presented) =>
+    public bool SameBrowser([NeverLogged] byte[]? presented) =>
         Browser is not null
         && presented is not null
         && CryptographicOperations.FixedTimeEquals(Browser, presented);
@@ -146,12 +149,12 @@ internal sealed class PendingSignIn
     /// </summary>
     /// <param name="entered">What was typed.</param>
     /// <returns>Whether it matches.</returns>
-    public bool Matches(string entered) => VerificationCode.Matches(Code, entered);
+    public bool Matches([NeverLogged] string entered) => VerificationCode.Matches(Code, entered);
 
     /// <summary>
     /// A wrong code was typed against it.
     /// </summary>
     public void Missed() => WrongAttempts++;
 
-    private static byte[] Held(string code) => VerificationCode.Held(code);
+    private static byte[] Held([NeverLogged] string code) => VerificationCode.Held(code);
 }

@@ -379,6 +379,42 @@ public sealed class IdentifierSetTests
         Assert.Throws<ArgumentException>(() => Empty().Add(stranger, maximum: 10));
     }
 
+    /// <summary>
+    /// IDN-LIFE-012a: the address a provider stopped forwarding to drops to unverified,
+    /// and where it was the primary the earliest verified email takes the role; an
+    /// address already unverified, and the personal email a membership keeps, are
+    /// refused and left as they were (REG-MAIL-001 AC5).
+    /// </summary>
+    [Fact]
+    public void IDN_LIFE_012a_AnUnvouchedAddressDropsToUnverifiedAndHandsThePrimaryOn()
+    {
+        IdentifierSet set = Empty();
+        Identifier relayed = Email(1, "x7@relay.example");
+        Identifier later = Email(2, "ahmed@example.org");
+        Identifier earlier = Email(3, "ahmed@example.com");
+        Identifier kept = Email(4, "ahmed@example.net");
+
+        set.Add(relayed, maximum: 10);
+        set.Add(later, maximum: 10);
+        set.Add(earlier, maximum: 10);
+        set.Add(kept, maximum: 10);
+        set.Verify(kept.Id, Noon.AddMinutes(-3));
+        set.Verify(earlier.Id, Noon.AddMinutes(-2));
+        set.Verify(later.Id, Noon.AddMinutes(-1));
+        set.Verify(relayed.Id, Noon);
+        set.MakePrimary(relayed.Id);
+        set.KeepPersonal(kept.Id);
+
+        set.Unverify(relayed.Id);
+
+        Assert.True(relayed is { IsVerified: false, IsPrimary: false });
+        Assert.True(earlier.IsPrimary);
+        Assert.False(later.IsPrimary);
+        Assert.Throws<InvalidOperationException>(() => set.Unverify(relayed.Id));
+        Assert.Throws<InvalidOperationException>(() => set.Unverify(kept.Id));
+        Assert.True(kept is { IsVerified: true, IsPersonal: true });
+    }
+
     private static IdentifierSet Empty() =>
         IdentifierSet.Of(Ahmed, [], new List<BackupSetting>());
 

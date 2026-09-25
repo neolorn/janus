@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Core;
 
@@ -21,6 +22,12 @@ internal sealed class CredentialAuditInMemory : ICredentialAudit
     /// What was recorded of mail app passwords, in the order it was recorded.
     /// </summary>
     public List<(AuditAction Action, SubjectId Subject, string Credential)> MailCredentials { get; } = [];
+
+    /// <summary>
+    /// What was recorded of social providers' security events, in the order it was
+    /// recorded.
+    /// </summary>
+    public List<(AuditAction Action, AuthenticatorId Credential, string Type, ProviderEventOutcome Outcome)> ProviderEvents { get; } = [];
 
     /// <inheritdoc/>
     public ValueTask RecordedAsync(
@@ -44,6 +51,21 @@ internal sealed class CredentialAuditInMemory : ICredentialAudit
         CancellationToken cancellationToken)
     {
         MailCredentials.Add((action, subject, credential));
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask ProviderEventAsync(
+        AuditAction action,
+        SubjectId subject,
+        AuthenticatorId credential,
+        string type,
+        ProviderEventOutcome outcome,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        ProviderEvents.Add((action, credential, type, outcome));
 
         return ValueTask.CompletedTask;
     }

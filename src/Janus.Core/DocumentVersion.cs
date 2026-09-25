@@ -22,6 +22,6 @@ public sealed record DocumentVersion(
     string DocumentName,
     string Version,
     string GoverningLanguage,
-    string Text,
+    [property: NeverLogged] string Text,
     IReadOnlyList<DocumentTranslation> Translations,
     DateTimeOffset PublishedAt);

@@ -10,4 +10,4 @@ namespace Janus.Core;
 /// and never governs; where it and the governing text diverge, the governing text
 /// governs.
 /// </remarks>
-public sealed record DocumentTranslation(string Language, string Text);
+public sealed record DocumentTranslation(string Language, [property: NeverLogged] string Text);

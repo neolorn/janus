@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Authentication;
@@ -68,6 +69,32 @@ public sealed class AppPasswordFlowTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status204NoContent, revoked.Status);
         Assert.Empty(_deployment.MailServer.AppPasswordsOf(subject));
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-006 AC3: the token the mail server is handed is typed `at+jwt`, carries
+    /// the seven claims with the mail server's client as its audience, and is taken by
+    /// the mail server's adapter.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_006_AC3_TheMailServersTokenIsOneItsAdapterTakesAsync()
+    {
+        Browser browser = await HolderAsync();
+
+        _ = await browser.SendAsync("GET", Path);
+
+        string token = Assert.Single(_deployment.MailServer.Tokens);
+        JsonElement claims = MailServerAdapter.Claims(token);
+
+        Assert.Equal("at+jwt", MailServerAdapter.Header(token).GetProperty("typ").GetString());
+        Assert.Subset(
+            MailServerAdapter.Named(token).ToHashSet(StringComparer.Ordinal),
+            MailServerAdapter.Required.ToHashSet(StringComparer.Ordinal));
+        Assert.Equal(MailClient, claims.GetProperty("aud").GetString());
+        Assert.NotEmpty(claims.GetProperty("jti").GetString()!);
+        Assert.True((await MailServerAdapter.VerifyAsync(_deployment, token, MailClient)).IsValid);
+        Assert.False((await MailServerAdapter.VerifyAsync(_deployment, token, "another-client")).IsValid);
     }
 
     /// <summary>

@@ -13,16 +13,18 @@ namespace Janus.Hosting.Oidc;
 /// <param name="clients">The registry the client is read from.</param>
 /// <param name="log">Where a replaced destination is recorded.</param>
 /// <remarks>
-/// Implements API-REDIR-001. The destination is not matched by prefix or pattern:
-/// either the request named the client's one registered destination or it did not, and
-/// one that did not is replaced by the registered one before anything else reads it,
-/// so the answer reveals nothing about the check (API-REDIR-001 AC1) and the code goes
-/// where the deployment registered whatever was asked for.
+/// Implements API-REDIR-001 and AUTH-OIDC-006. The destination is not matched by prefix
+/// or pattern: either the request named the client's one registered destination or it
+/// did not, and one that did not is replaced by the registered one before anything else
+/// reads it, so the answer reveals nothing about the check (API-REDIR-001 AC1) and the
+/// code goes where the deployment registered whatever was asked for. It is judged where
+/// the request is pushed, because every authorization request is (AUTH-OIDC-006 AC2)
+/// and the one the browser then carries holds only what was kept here.
 /// </remarks>
 internal sealed class RegisteredDestination(
     IOidcClientStore clients,
     ILogger<RegisteredDestination> log)
-    : IOpenIddictServerHandler<OpenIddictServerEvents.ValidateAuthorizationRequestContext>
+    : IOpenIddictServerHandler<OpenIddictServerEvents.ValidatePushedAuthorizationRequestContext>
 {
     /// <summary>
     /// Where the handler sits: after the server has read the client the request named
@@ -32,7 +34,7 @@ internal sealed class RegisteredDestination(
 
     /// <inheritdoc/>
     public async ValueTask HandleAsync(
-        OpenIddictServerEvents.ValidateAuthorizationRequestContext context)
+        OpenIddictServerEvents.ValidatePushedAuthorizationRequestContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 

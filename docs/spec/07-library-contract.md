@@ -187,7 +187,7 @@ way round the permission.
 | **Calendar time zone** | `privacy.calendar.timezone`: the IANA zone in which the legal clock counts days (PRIV-RIGHT-002). Required, protected (D-153) |
 | **Message languages** | `notification.languages`: the BCP 47 tags every outbound message may be sent in (IDN-ATTR-001, AUTH-ABUSE-005). Required, at least one (D-153) |
 | **Email sending domain** | `notification.email.sendingdomain`, and the optional set of relay-registered domains (INT-MAIL-011). Required (D-153) |
-| **Recipients** | Optional: the processors and recipients the records of processing list (PRIV-ROPA-002), each `{ name, characterisation, dataReceived, location, agreementReference, callback }`; the library ships `05` section 8 as the default set (D-153) |
+| **Recipients** | Optional: the processors and recipients the records of processing list (PRIV-ROPA-002), each `{ name, characterisation, dataReceived, location, agreementReference, callback }`; the library ships as the default set only the rows its own processing makes true (mail server, SMS gateway, hosting provider, password screening; `05` section 6, D-153, D-162). Every business processor, payment and shipping included, is the host's declaration |
 | **Challenge verifier** | Optional: a callback that takes a challenge token and answers pass or fail (AUTH-ABUSE-008). Absent, bot-defence signals are audited and no challenge is shown (D-153) |
 | **Phone signal provider** | Optional: a callback answering `none` · `clear` · `risk` for a number (AUTH-FACT-002b). Absent, the record says `unavailable` (D-153) |
 | **Reserved usernames** | Optional: names added to the library's reserved list (REG-IDENT-009) (D-153) |

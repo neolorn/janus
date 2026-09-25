@@ -75,6 +75,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
     private readonly ConsentsInMemory _consents = new();
     private readonly SessionStoreInMemory _live = new();
     private readonly SessionAuditInMemory _audit = new();
+    private readonly CredentialAuditInMemory _credentials = new();
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly InvitationStoreInMemory _invitations = new();
     private readonly DomainStoreInMemory _domains = new();
@@ -129,6 +130,8 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
             new SessionService(
                 _live,
                 _audit,
+                _authenticators,
+                _credentials,
                 new PolicyResolution(_memberships, _configuration, _raises),
                 _configuration,
                 new AdministrativeScope(_gate, _administrative),
@@ -785,7 +788,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
 
         Dictionary<string, bool> ticked = new(StringComparer.Ordinal)
         {
-            ["fulfilment"] = true,
+            ["performance"] = true,
         };
 
         Result<RegistrationCompleted> refused = await Service.AcceptTermsAsync(

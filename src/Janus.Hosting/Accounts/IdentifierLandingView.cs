@@ -12,7 +12,7 @@ namespace Janus.Hosting.Accounts;
 /// somewhere else.
 /// </param>
 /// <remarks>Implements REG-SESS-003 and API-LAND-001.</remarks>
-internal sealed record IdentifierLandingView(bool SameBrowser, string? Code)
+internal sealed record IdentifierLandingView(bool SameBrowser, [property: NeverLogged] string? Code)
 {
     /// <summary>
     /// Reads a landing.

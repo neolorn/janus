@@ -2,7 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Janus.Authentication.Sending;
+namespace Janus.Authentication.Callbacks;
 
 /// <summary>
 /// What counts inbound callbacks per source, so that the endpoint answers a flood

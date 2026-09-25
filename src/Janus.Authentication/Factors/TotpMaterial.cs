@@ -1,4 +1,5 @@
 using System;
+using Janus.Core;
 
 namespace Janus.Authentication.Factors;
 
@@ -16,4 +17,5 @@ namespace Janus.Authentication.Factors;
 /// in.
 /// </param>
 /// <remarks>Implements AUTH-FACT-005 and AUTH-FACT-006.</remarks>
+[NeverLogged]
 internal sealed record TotpMaterial(ReadOnlyMemory<byte> Secret, long? ConsumedStep);

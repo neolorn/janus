@@ -1,4 +1,7 @@
 using System;
+using System.Globalization;
+using System.Linq;
+using Janus.Authentication.Factors;
 using Janus.Core;
 using Janus.Storage.Identity.Accounts;
 using Microsoft.EntityFrameworkCore;
@@ -10,9 +13,9 @@ namespace Janus.Storage.Authentication.Factors;
 /// How an enrolled credential is stored.
 /// </summary>
 /// <remarks>
-/// Implements AUTH-FACT-001, AUTH-FACT-006, AUTH-FACT-011 and CONV-ENUM-001. A label
-/// is unique per kind per account, which the database holds rather than a read before
-/// a write.
+/// Implements AUTH-FACT-001, AUTH-FACT-006, AUTH-FACT-011, IDN-LIFE-012a and
+/// CONV-ENUM-001. A label is unique per kind per account, and a provider's subject per
+/// provider, which the database holds rather than a read before a write.
 /// </remarks>
 internal sealed class AuthenticatorConfiguration : IEntityTypeConfiguration<AuthenticatorRecord>
 {
@@ -23,6 +26,16 @@ internal sealed class AuthenticatorConfiguration : IEntityTypeConfiguration<Auth
     public const string TotpSecretColumn = "totp_secret";
 
     private const int LabelLength = 64;
+
+    // The entries of the catalogue a person links rather than enrols: the social
+    // providers, which assert a credential and no tier.
+    private static readonly string[] Linked =
+    [
+        .. FactorCatalogue.Entries
+            .Where(entry => entry.Value.AssuranceLevel is AssuranceLevel.Delegated)
+            .Select(entry => VocabularyConverter<Factor>.Write(entry.Key))
+            .Order(StringComparer.Ordinal),
+    ];
 
     /// <inheritdoc/>
     public void Configure(EntityTypeBuilder<AuthenticatorRecord> builder)
@@ -55,6 +68,15 @@ internal sealed class AuthenticatorConfiguration : IEntityTypeConfiguration<Auth
                     + "(credential_id IS NULL) = (relying_party IS NULL) AND "
                     + "(credential_id IS NULL) = (backup_eligible IS NULL) AND "
                     + "(credential_id IS NULL) = (backup_state IS NULL)");
+
+            // IDN-LIFE-012a, PRIV-RIGHT-005c: a linked identity is found by the keyed
+            // fingerprint of the provider's subject, and only a linked identity has one.
+            table.HasCheckConstraint(
+                "ck_authenticators_provider_subject",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"(provider_subject IS NULL) <> ({Vocabulary.Admits("factor", Linked)}) AND "
+                        + $"(provider_subject IS NULL OR octet_length(provider_subject) = {Fingerprint.Length})"));
         });
 
         builder.HasKey(credential => credential.Id).HasName("pk_authenticators");
@@ -93,6 +115,7 @@ internal sealed class AuthenticatorConfiguration : IEntityTypeConfiguration<Auth
         builder.Property(credential => credential.BackupEligible).HasColumnName("backup_eligible");
         builder.Property(credential => credential.BackupState).HasColumnName("backup_state");
         builder.Property(credential => credential.IsPreferred).HasColumnName("is_preferred");
+        builder.Property(credential => credential.ProviderSubject).HasColumnName("provider_subject");
 
         // AUTH-FACT-013: the browser names the credential and not the account, so the
         // credential identifier is what a presentation is resolved by.
@@ -100,6 +123,20 @@ internal sealed class AuthenticatorConfiguration : IEntityTypeConfiguration<Auth
             .HasDatabaseName("ux_authenticators_credential_id")
             .IsUnique()
             .HasFilter("credential_id IS NOT NULL");
+
+        // REG-IDENT-008: a provider's subject is linked to one account. A fingerprint
+        // erasure neutralised is nobody's, so the rows it leaves do not collide.
+        builder.HasIndex(credential => new
+        {
+            credential.Factor,
+            credential.ProviderSubject,
+        })
+            .HasDatabaseName("ux_authenticators_provider_subject")
+            .IsUnique()
+            .HasFilter(
+                "provider_subject IS NOT NULL AND provider_subject <> decode(repeat('00', "
+                    + Fingerprint.Length.ToString(CultureInfo.InvariantCulture)
+                    + "), 'hex')");
 
         // AUTH-FACT-001 AC5: a label is held once per kind per account.
         builder.HasIndex(credential => new

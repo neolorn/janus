@@ -41,7 +41,7 @@ public sealed class TakedownServiceTests : IAsyncDisposable
     private readonly StepUpGateInMemory _stepUp = new();
     private readonly AccountStatesInMemory _accounts = new();
     private readonly OutboxStoreInMemory _outbox = new();
-    private readonly SubscriberInMemory _orders = new("orders", required: true);
+    private readonly SubscriberInMemory _records = new("records", required: true);
     private readonly SubscriberInMemory _newsletter = new("newsletter", required: false);
     private readonly PrivacyAuditInMemory _audit = new();
     private readonly EventsInMemory _events = new();
@@ -67,7 +67,7 @@ public sealed class TakedownServiceTests : IAsyncDisposable
             _stepUp,
             _accounts,
             _outbox,
-            [_orders, _newsletter],
+            [_records, _newsletter],
             _audit,
             _events,
             _configuration,
@@ -179,16 +179,16 @@ public sealed class TakedownServiceTests : IAsyncDisposable
         Assert.Equal(takedown.ErasureDue, before.ErasureDue);
         Assert.Equal(ErasureStatus.AwaitingSubscribers, before.Status);
         Assert.Equal(
-            [new SubscriberConfirmation("orders", true, null), new SubscriberConfirmation("newsletter", false, null)],
+            [new SubscriberConfirmation("records", true, null), new SubscriberConfirmation("newsletter", false, null)],
             before.Subscribers);
 
-        _outbox.Confirms(Assert.Single(_outbox.Deliveries), "orders", Noon + TimeSpan.FromMinutes(5));
+        _outbox.Confirms(Assert.Single(_outbox.Deliveries), "records", Noon + TimeSpan.FromMinutes(5));
 
         TakedownProgress after = Held(await ReadAsync(Mona));
 
         Assert.Equal(
             Noon + TimeSpan.FromMinutes(5),
-            Assert.Single(after.Subscribers, subscriber => subscriber.Name == "orders").ConfirmedAt);
+            Assert.Single(after.Subscribers, subscriber => subscriber.Name == "records").ConfirmedAt);
         Assert.Null(Assert.Single(after.Subscribers, subscriber => subscriber.Name == "newsletter").ConfirmedAt);
     }
 

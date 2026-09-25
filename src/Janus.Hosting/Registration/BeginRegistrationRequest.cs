@@ -1,3 +1,5 @@
+using Janus.Core;
+
 namespace Janus.Hosting.Registration;
 
 /// <summary>
@@ -12,4 +14,4 @@ namespace Janus.Hosting.Registration;
 /// one an invitation opens (REG-INV-001).
 /// </param>
 /// <remarks>Implements REG-SESS-001, REG-INV-001 and API-REDIR-002.</remarks>
-internal sealed record BeginRegistrationRequest(string? ClientId, string? InvitationToken);
+internal sealed record BeginRegistrationRequest(string? ClientId, [property: NeverLogged] string? InvitationToken);

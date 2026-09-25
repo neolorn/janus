@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Security.Claims;
+using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Oidc;
 using Janus.Authentication.Sessions;
@@ -24,18 +25,20 @@ namespace Janus.Hosting.Oidc;
 /// <param name="browser">What the browser carried.</param>
 /// <param name="addresses">Where a browser holding no session is sent.</param>
 /// <param name="configuration">Where the code's lifetime comes from.</param>
+/// <param name="pushed">What spends the pushed request a forwarded browser carried.</param>
 /// <remarks>
-/// Implements AUTH-SESS-012, AUTH-OIDC-002, AUTH-OIDC-004 and API-LAND-001. The
-/// endpoint forwards a browser and never renders a page, so a person who holds no
-/// session is sent to the authentication application's own route and the library
-/// writes no sentence. The code stands on the session record, which the token endpoint
+/// Implements AUTH-SESS-012, AUTH-OIDC-002, AUTH-OIDC-004, AUTH-OIDC-006 and
+/// API-LAND-001. The endpoint forwards a browser and never renders a page, so a person
+/// who holds no session is sent to the authentication application's own route and the
+/// library writes no sentence. The code stands on the session record, which the token endpoint
 /// reads again before it mints anything.
 /// </remarks>
 internal sealed class AuthorizationIssue(
     OidcService oidc,
     RequestSession browser,
     AuthenticationAddresses addresses,
-    IConfigurationStore configuration)
+    IConfigurationStore configuration,
+    PushedRequestSpent pushed)
     : IOpenIddictServerHandler<OpenIddictServerEvents.HandleAuthorizationRequestContext>
 {
     /// <inheritdoc/>
@@ -52,7 +55,7 @@ internal sealed class AuthorizationIssue(
             || (await oidc.MintAsync(live.Spine, context.CancellationToken).ConfigureAwait(false))
                 .Match(_ => false, _ => true))
         {
-            Refuse(context, silent);
+            await RefuseAsync(context, silent, context.CancellationToken).ConfigureAwait(false);
 
             return;
         }
@@ -112,14 +115,19 @@ internal sealed class AuthorizationIssue(
         return principal;
     }
 
-    private void Refuse(
+    private async ValueTask RefuseAsync(
         OpenIddictServerEvents.HandleAuthorizationRequestContext context,
-        bool silent)
+        bool silent,
+        CancellationToken cancellationToken)
     {
         // AUTH-SESS-012 AC3: a request that is not silent is sent where a person can
-        // sign in, which the deployment declared or it did not start.
+        // sign in, which the deployment declared or it did not start. No response of
+        // the server's own follows, so the pushed request is spent here (AUTH-OIDC-006
+        // AC2).
         if (!silent && context.Transaction.GetHttpRequest() is HttpRequest request)
         {
+            await pushed.SpendAsync(context.Transaction, cancellationToken).ConfigureAwait(false);
+
             request.HttpContext.Response.Redirect(addresses.SignIn);
             context.HandleRequest();
 

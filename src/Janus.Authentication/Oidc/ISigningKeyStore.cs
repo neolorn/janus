@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Core;
 
 namespace Janus.Authentication.Oidc;
 
@@ -40,7 +41,7 @@ internal interface ISigningKeyStore
     /// <param name="privateKey">Its private material, which the store wraps.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of recording it.</returns>
-    ValueTask AddAsync(SigningKey key, byte[] privateKey, CancellationToken cancellationToken);
+    ValueTask AddAsync(SigningKey key, [NeverLogged] byte[] privateKey, CancellationToken cancellationToken);
 
     /// <summary>
     /// Carries a change to a key the caller read.

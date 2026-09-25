@@ -69,7 +69,7 @@ public interface IAuthentication
     /// <returns>What the sign-in reached, or the failure the code produced.</returns>
     ValueTask<Result<SignInProgress>> VerifyDeviceAsync(
         string challenge,
-        string code,
+        [NeverLogged] string code,
         DeviceDescription device,
         string source,
         CancellationToken cancellationToken);
@@ -161,7 +161,7 @@ public interface IAuthentication
     ValueTask<Result<SignInLanding>> LandAsync(
         string challenge,
         string? browser,
-        string linkToken,
+        [NeverLogged] string linkToken,
         bool press,
         DeviceDescription device,
         string source,
@@ -198,5 +198,5 @@ public interface IAuthentication
     /// <param name="linkToken">The token the message carried.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Success, whether or not the token resolved to a pending link.</returns>
-    ValueTask<Result> AbandonLinkAsync(string linkToken, CancellationToken cancellationToken);
+    ValueTask<Result> AbandonLinkAsync([NeverLogged] string linkToken, CancellationToken cancellationToken);
 }

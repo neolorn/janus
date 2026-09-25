@@ -688,6 +688,8 @@ public sealed class CredentialServiceTests : IAsyncDisposable
         new(
             _live,
             _audit,
+            _authenticators,
+            _credentials,
             Policies,
             _configuration,
             new AdministrativeScope(_gate, _administrative),

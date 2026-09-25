@@ -1,3 +1,5 @@
+using Janus.Core;
+
 namespace Janus.Hosting.Credentials;
 
 /// <summary>
@@ -5,4 +7,4 @@ namespace Janus.Hosting.Credentials;
 /// </summary>
 /// <param name="Password">The password.</param>
 /// <remarks>Implements AUTH-PASS-004 and AUTH-RECOV-007a.</remarks>
-internal sealed record SetPasswordRequest(string? Password);
+internal sealed record SetPasswordRequest([property: NeverLogged] string? Password);

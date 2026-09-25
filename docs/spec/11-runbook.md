@@ -187,14 +187,14 @@ name, a purchase, or a writing style.
 
 ### Procedure — two phases, one button (IDN-LIFE-003, `14` §3)
 
-**Phase one, when you trigger it** — the identity system, in one transaction:
+**Phase one, when you trigger it**: the identity system, in one transaction:
 suspends the account and ends its sessions; records the event with the reason and
-trigger; publishes the outbox record that tells the host to cancel open orders. That
-outbox record is the completion record of the cancellation from this moment
-(IDN-LIFE-003, D-148): the host confirms against it moments later, and until it does
-the takedown screen shows the cancellation as still outstanding (any label is
-illustrative). No deletion email and no cancel link go to
-the subject.
+trigger; publishes the `TakedownExecuted` outbox record on which the host stops
+whatever processing it holds for the subject. That outbox record is the completion
+record of the host's step from this moment (IDN-LIFE-003, D-148): the host confirms
+against it moments later, and until it does the takedown screen shows the host's step
+as still outstanding (any label is illustrative). No deletion email and no cancel link
+go to the subject.
 
 **Phase two, seven days later, automatically** — the identity system erases:
 destroys the subject's key and neutralises the fingerprint (PRIV-RIGHT-005). The
@@ -202,12 +202,13 @@ account becomes `deleted`. The audit trail survives.
 
 **Inside the seven days** a misjudged adult is restored with the reverse-takedown
 control on the account's admin page (`POST /admin/accounts/{subject}/takedown/reverse`,
-`takedown:execute`, reason required; the label is illustrative). Cancelled orders are
-not restored. After the window there is nothing to reverse.
+`takedown:execute`, reason required; the label is illustrative). The library publishes
+`TakedownReversed`; whether the host restores anything it stopped is the host's rule.
+After the window there is nothing to reverse.
 
-**Do not record the takedown as finished** until the shop's cancellation shows
-complete and, after the window, the erasure shows complete. A permanent failure
-alerts you immediately.
+**Do not record the takedown as finished** until the host's step shows complete
+against its outbox record and, after the window, the erasure shows complete. A
+permanent failure alerts you immediately.
 
 **Do not** ask for proof of age. The date of birth entered at registration is retained
 only where `profile.dateofbirth` is on (REG-PROF-002, PRIV-MINOR-001); by default only
@@ -240,9 +241,10 @@ is faster and loses nothing.
 **Expect 4–8 hours.** This is the accepted objective, not a failure. There is no
 standby to fail over to; that was declined on cost.
 
-**Then reconcile.** A restore does not roll back the world. Mail was delivered,
-payments captured, shipments dispatched. Reconcile orders against the payment
-provider, shipments against the courier, and run Stalwart reconciliation.
+**Then reconcile.** A restore does not roll back the world. Mail was delivered, and
+every processor the host integrates has moved on. Run Stalwart reconciliation, then
+reconcile the host's records against each processor the host declares, following the
+host's own procedure.
 
 **If records were lost, this may be a personal data incident.** The 72-hour clock
 applies to loss of availability, not only disclosure. Record what was lost and for
@@ -305,12 +307,7 @@ unavailable → password set and change **fail rather than accept unscreened**
 Do not disable screening to restore service. Blocklist screening is the load-bearing
 control now that composition rules are gone.
 
-### 7.4 Payment and shipping
 
-Callbacks never advance authoritative state alone (INT-GEN-003). A provider outage
-delays confirmation; it does not corrupt order state.
-
----
 
 ## 8. Security incidents
 

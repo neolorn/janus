@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Janus.Storage.Tests;
 using Microsoft.EntityFrameworkCore;
@@ -64,6 +65,27 @@ public sealed class HostFixture : IAsyncLifetime
             .AddInterceptors(counted)
             .Options);
 
+    // LIB-HOST-001: every key the deployment has to name, with a value of the kind a
+    // deployment gives it; the conditional ones are not named, since their conditions
+    // do not hold here.
+    private static IEnumerable<object> Named() =>
+    [
+        Row(Settings.WebAuthnOrigins.Key, Settings.WebAuthnOrigins.Write(["https://accounts.example.test"])),
+        Row(Settings.HostingLocation.Key, Settings.HostingLocation.Write(HostingLocation.Inside)),
+        Row(Settings.HostingEnvironment.Key, Settings.HostingEnvironment.Write("a rented virtual machine")),
+        Row(Settings.AlertingEmailDestinations.Key, Settings.AlertingEmailDestinations.Write(["operator@example.test"])),
+        Row(Settings.AlertingSmsDestinations.Key, Settings.AlertingSmsDestinations.Write(["+201000000001"])),
+        Row(Settings.AlertingOwnerEmail.Key, Settings.AlertingOwnerEmail.Write("owner@example.test")),
+        Row(Settings.AlertingOwnerSms.Key, Settings.AlertingOwnerSms.Write("+201000000002")),
+        Row(Settings.AbuseSmsBalanceFloor.Key, Settings.AbuseSmsBalanceFloor.Write(100m)),
+        Row(Settings.LegalGoverningLanguage.Key, Settings.LegalGoverningLanguage.Write("ar")),
+        Row(Settings.PrivacyCalendarTimeZone.Key, Settings.PrivacyCalendarTimeZone.Write("Africa/Cairo")),
+        Row(Settings.NotificationLanguages.Key, Settings.NotificationLanguages.Write(["en"])),
+        Row(Settings.NotificationEmailSendingDomain.Key, Settings.NotificationEmailSendingDomain.Write("mail.example.test")),
+    ];
+
+    private static object Row(ConfigurationKey key, string value) => new { Key = key.ToString(), Value = value };
+
     /// <inheritdoc/>
     public async ValueTask InitializeAsync()
     {
@@ -76,11 +98,13 @@ public sealed class HostFixture : IAsyncLifetime
             // declare among them, and the check that runs before anything is served
             // reads them.
             await connection.ExecuteAsync(
+                "INSERT INTO identity.settings (key, value) VALUES (@Key, @Value)",
+                Named());
+
+            await connection.ExecuteAsync(
                 """
                 INSERT INTO identity.settings (key, value)
                 VALUES
-                    ('notification.languages', '["en"]'),
-                    ('notification.email.sendingdomain', 'mail.example.test'),
                     ('retention.identity', 'P7Y'),
                     ('retention.history', 'P2Y');
 

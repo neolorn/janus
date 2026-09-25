@@ -106,6 +106,55 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     /// <summary>
+    /// IDN-LIFE-002a AC2: a third party the subject names on a host record is data the
+    /// subject entered. Its fields are encrypted under the subject's own key, so they
+    /// read while the subject is there and are unrecoverable once the subject is
+    /// erased, with nothing done to the host's row.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_002a_AC2_AThirdPartysFieldsGoWithTheSubjectWhoEnteredThemAsync()
+    {
+        SubjectId subject = Subjects.New();
+        KeyEncryptionKeys keys = OneVersion(1);
+        var name = new PersonalFieldLocation(subject, "host_records", "enc_contact_name");
+        var phone = new PersonalFieldLocation(subject, "host_records", "enc_contact_phone");
+        byte[] named = Encoding.UTF8.GetBytes("a parent the subject named");
+        byte[] reached = Encoding.UTF8.GetBytes("+201001234567");
+
+        using var randomness = RandomNumberGenerator.Create();
+        byte[] dataKey = PersonalFieldCipher.NewDataKey(randomness);
+        byte[] storedName = PersonalFieldCipher.Encrypt(dataKey, name, named, randomness);
+        byte[] storedPhone = PersonalFieldCipher.Encrypt(dataKey, phone, reached, randomness);
+
+        await WriteAsync(subject, dataKey, keys);
+        CryptographicOperations.ZeroMemory(dataKey);
+
+        await using (StoreContext reading = database.Context())
+        {
+            SubjectKey live = await ReadAsync(reading, subject);
+
+            Assert.Equal(named, Decrypted(live, keys, name, storedName));
+            Assert.Equal(reached, Decrypted(live, keys, phone, storedPhone));
+        }
+
+        await using (StoreContext erasing = database.Context())
+        {
+            SubjectKey key = await ReadAsync(erasing, subject);
+            key.Erase();
+
+            await Store(erasing)
+                .RecordWrappingAsync(key, TestContext.Current.CancellationToken);
+            await erasing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext after = database.Context();
+        SubjectKey erased = await ReadAsync(after, subject);
+
+        Assert.Throws<CryptographicException>(() => Decrypted(erased, keys, name, storedName));
+        Assert.Throws<CryptographicException>(() => Decrypted(erased, keys, phone, storedPhone));
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-005a AC13: a rotation re-wraps the key under the new version and
     /// re-encrypts nothing, so the value stored before it decrypts after it, byte for
     /// byte the value that was written.
@@ -173,7 +222,7 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     private static PersonalFieldLocation Somewhere(SubjectId subject) =>
-        new(subject, "orders", "enc_recipient_name");
+        new(subject, "host_records", "enc_contact_name");
 
     private static KeyEncryptionKeys OneVersion(int version)
     {

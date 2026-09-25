@@ -130,8 +130,8 @@ public sealed class SupersessionTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// PRIV-CONS-007: a revision the person publishing called immaterial touches no
-    /// consent, which is what keeps a paragraph edit from stopping a storefront.
+    /// PRIV-CONS-007 AC3: a revision the person publishing called immaterial touches
+    /// no consent, which is what keeps a paragraph edit from stopping a service.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]

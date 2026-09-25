@@ -1,3 +1,5 @@
+using Janus.Core;
+
 namespace Janus.Hosting.Authentication;
 
 /// <summary>
@@ -5,4 +7,4 @@ namespace Janus.Hosting.Authentication;
 /// </summary>
 /// <param name="LinkToken">The token the message carried.</param>
 /// <remarks>Implements REG-SESS-003 and AUTH-FACT-003.</remarks>
-internal sealed record AbandonLinkRequest(string? LinkToken);
+internal sealed record AbandonLinkRequest([property: NeverLogged] string? LinkToken);

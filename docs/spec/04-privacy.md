@@ -51,8 +51,8 @@ library branches on. Egypt's six SHALL ship as the default declaration.
 
 | # | Basis | `IsConsent` | Written for sensitive | `RequiresAssessment` | `IsObjectable` | Typical use |
 |---|---|---|---|---|---|---|
-| 1 | Data Subject's Consent | yes | yes | no | no | Marketing; health-implying purchase data |
-| 2 | Fulfilment of a Contractual Obligation | no | — | no | no | Order processing, delivery, payment |
+| 1 | Data Subject's Consent | yes | yes | no | no | Marketing; consent-based purposes over sensitive data |
+| 2 | Fulfilment of a Contractual Obligation | no | n/a | no | no | Performing the contract the host has with the subject |
 | 3 | Fulfilment of a Legal Obligation | no | — | no | no | Tax and financial record retention |
 | 4 | Legitimate Interest | no | — | yes | yes | Fraud prevention, security, abuse controls |
 | 5 | Claim or Defence of a Legal Right | no | — | no | no | Retaining evidence for a dispute |
@@ -169,8 +169,9 @@ for authenticator secrets.
 | Backup file | Backup encryption under a key not on the host (DR-010) |
 
 **Which fields are encrypted is declared, not universal.** Fields used for filtering
-and search stay in plaintext — encrypting an order's district would break the address
-flow. The declaration names personal fields; the transaction record is not encrypted.
+and search stay in plaintext: encrypting a column a host record is queried by would
+break the query that uses it. The declaration names personal fields; the rest of the
+record is not encrypted.
 
 **And per-subject encryption is scoped by schema, not by field.**
 
@@ -226,62 +227,29 @@ non-consent bases when a consent-based purpose is withdrawn.
 
 *Source: D-066*
 
-An order carries at least three purposes at once: fulfilment (contractual
-obligation), retention (legal obligation), and personalised recommendations
-(consent). Gating the whole record on consent means either stalled fulfilment when a
-customer withdraws mid-delivery, or a gate that does nothing.
+A host's business record commonly carries several purposes at once: performing the
+contract (contractual obligation), retention (legal obligation), and a personalisation
+purpose (consent). Gating the whole record on consent means either stalled processing
+under the contract when a subject withdraws mid-way, or a gate that does nothing.
 
 | Purpose | Basis | Withdrawable |
 |---|---|---|
-| Fulfilment and delivery | Contractual obligation | No |
+| Performing the contract | Contractual obligation | No |
 | Tax and financial retention | Legal obligation | No |
-| Personalised recommendations | Consent | Yes |
+| Personalisation | Consent | Yes |
 
 **Acceptance criteria**
-1. Withdrawing consent during an open order does not interrupt fulfilment, the
-   courier callback, or refund processing.
-2. Withdrawing consent stops personalised recommendations on the next request.
-3. The customer's own order history remains visible to them and retained for tax.
+1. Withdrawing a consent-based purpose while the record is being processed under a
+   non-consent purpose interrupts no processing under that purpose and invokes no
+   `ConsentChanged` handler registered for it.
+2. Withdrawing consent stops processing for the withdrawn purpose on the next request.
+3. The subject's own records held under a legal-obligation purpose remain visible to
+   them and retained for that purpose's period.
 4. Each declared purpose names its basis; a purpose without one fails validation.
 
 ---
 
-**PRIV-SENS-003** — Storefront order history SHALL be declared sensitive.
 
-*Source: D-030*
-
-An individual purchasing insulin needles discloses a diabetes diagnosis through the
-purchase itself. The order history is health data held in our own database.
-
-**Acceptance criteria**
-1. Order records for individual customers carry the sensitive declaration.
-2. A written-consent record exists for any **consent-based purpose** applied to the
-   order — not for the order itself.
-3. An order is stored, fulfilled and retained for a customer who has granted no
-   consent-based purpose.
-
-*Criterion 2 corrected per D-066 (D-089).* As previously written it required written
-consent before any order could exist. Since the only consent-based purpose on an order
-is personalised recommendations — optional and withdrawable — that meant either forcing
-consent to an optional purpose at checkout, which the voluntariness and no-bundling
-rules prohibit, or making orders unstorable for every customer who declines. It was a
-surviving fragment of the record-gating model D-066 replaced.
-
----
-
-**PRIV-SENS-004** — Payment card data SHALL NOT be stored. Only a provider reference
-and an amount SHALL be retained.
-
-*Source: D-030*
-
-Card details go to the payment provider and never touch our servers, which removes
-the financial-detail category from our own holdings.
-
-**Acceptance criteria**
-1. No schema field holds a card number, expiry, or verification value.
-2. A search of the codebase finds no card-data field name.
-
----
 
 ## 4. Consent
 
@@ -321,13 +289,13 @@ subject to objection rather than withdrawal (PRIV-RIGHT-001a) (D-064, D-145).
 
 **Aggregate analytics is out of scope entirely** (D-066). Genuinely non-identifying
 aggregate analysis is not personal data and requires no basis. **Guard rail:** outputs
-must never be granular enough to single out an individual — a single customer in a
-district buying a specific product is identifiable without a name. The raw order data
-feeding the analysis remains under the order's own basis.
+must never be granular enough to single out an individual: one subject in a small
+locality with a distinctive attribute is identifiable without a name. The raw host
+records feeding the analysis remain under their own declared bases.
 
-**Personalised recommendations are personal data and require consent** (D-066). A
-recommendation derived from what a specific person bought is aimed at that
-individual; on-premises processing does not change that.
+**Personalisation is personal data and requires consent** (D-066). Output derived
+from what a specific person did is aimed at that individual; on-premises processing
+does not change that.
 
 **Acceptance criteria**
 1. No consent record references more than one purpose.
@@ -357,7 +325,7 @@ buildable in a web flow — no signature capture required.
 
 **Acceptance criteria**
 1. The written-consent record is distinguishable from ordinary consent in storage.
-2. It is retrievable for any past order.
+2. It is retrievable for any past processing under the purpose it covers.
 
 ---
 
@@ -455,14 +423,15 @@ materiality.
 
 *Source: D-024, D-066*
 
-Without this, publishing a revised notice — a text edit — would mark every existing
-customer's order history superseded and refuse it until each re-consented. A
-storefront-wide outage caused by editing a paragraph.
+Without this, publishing a revised notice (a text edit) would mark every live consent
+superseded and refuse processing of every record it covers until each subject
+re-consented. A service-wide outage caused by editing a paragraph.
 
 **Acceptance criteria**
 1. A material change identifies which subjects require re-asking.
 2. Only the consent-based purposes are suspended pending re-consent.
-3. Publishing a revised notice interrupts no fulfilment and no order history access.
+3. Publishing a revised notice interrupts no processing under a contractual or
+   legal-obligation purpose and no subject's access to their own records.
 4. Re-consent is requested at the subject's next interaction.
 
 ---
@@ -711,7 +680,8 @@ the account's live sessions (AUTH-SESS-013).
 
 **PRIV-RIGHT-004** — Restriction SHALL **suspend action, not visibility**. Restricted
 records remain visible and continue to count in aggregates; what stops is acting on
-them — shipping, refunding, contacting the subject — until the restriction lifts.
+them (contacting the subject, and whatever the host does on its own records about
+them, through `RestrictionChanged`) until the restriction lifts.
 
 *Source: D-037, D-068, AUTHZ-GATE-006*
 
@@ -747,17 +717,17 @@ afterwards (REG-IDENT-009): it is public by nature and is not personal data unde
 key, and the hold stops an erased person being impersonated at once under their former
 name.
 
-**Business records are outside the erasure right.** Order and transaction records
-(what was ordered, when, how much, which district) are retained under their declared
-lawful basis (legal obligation: tax law requires books, records and invoice copies
-to be kept five years, counted per the tax law as confirmed by the accountant (D-140);
-pending that confirmation the count runs from the later of the end of the fiscal year
-and the date the return was filed (D-147); or legitimate interest) for
-their declared retention period. PDPL Article 4(7) permits retention after the
-purpose is satisfied for a legitimate reason provided the data is kept "in a form
-that does not allow the identification of the Data Subject", which key destruction
-produces: name, phone, email, address and photo are gone, and what remains is a
-receipt with no buyer on it, as consumer tax receipts themselves are. No
+**The host's business records are outside the erasure right.** A record the host keeps
+under a declared lawful basis (a financial record, say: what was transacted, when and
+for how much) is retained under that basis (legal obligation: tax law requires books,
+records and invoice copies to be kept five years, counted per the tax law as confirmed
+by the host's accountant (D-140); pending that confirmation the count runs from the
+later of the end of the fiscal year and the date the return was filed (D-147); or
+legitimate interest) for its declared retention period. PDPL Article 4(7) permits
+retention after the purpose is satisfied for a legitimate reason provided the data is
+kept "in a form that does not allow the identification of the Data Subject", which key
+destruction produces: name, phone, email, address and photo are gone, and what remains
+is a record with no identifiable person on it, as a consumer receipt itself is. No
 singling-out test applies to these records.
 
 **Acceptance criteria**
@@ -769,7 +739,8 @@ singling-out test applies to these records.
    encrypted under the subject key that operation destroys, the row persists
    (IDN-ATTR-003, IDN-PRIN-003), and `GET /account/photo` answers as for an account
    with no photo (D-157).
-5. Order counts, revenue totals and product analysis are unchanged by an erasure.
+5. Aggregate queries over the non-encrypted columns of a host record are unchanged by
+   an erasure.
 6. Declared preferences and declared profile values are unreadable after erasure.
 7. A username freed by erasure cannot be claimed until `retention.consent` has elapsed
    and is claimable afterwards.
@@ -788,9 +759,9 @@ refuses it, and the DR-016 ledger and a restore recognise it as erased.
 
 *Source: D-097, D-099, D-100, D-147*
 
-**Per column, not per row.** Name and phone on an order are encrypted; product,
-quantity, date, total and district are not. Aggregates and reports are unaffected
-because they never read encrypted columns.
+**Per column, not per row.** Name and phone on a host record are encrypted; its
+non-personal columns (dates, amounts, quantities, references) are not. Aggregates and
+reports are unaffected because they never read encrypted columns.
 
 **How it works — envelope encryption, the standard pattern.**
 
@@ -812,19 +783,19 @@ Each encrypted field names the **existing column** that identifies its subject �
 typically a foreign key that is present for business reasons and already indexed.
 
 ```
-orders
-| order_id | customer_id | enc_cust_name | enc_recipient_name | enc_recipient_phone |
+host_records
+| record_id | subject_id | enc_subject_name | enc_contact_name | enc_contact_phone |
 
-enc_cust_name       → subject is customer_id
-enc_recipient_name  → subject is customer_id
-enc_recipient_phone → subject is customer_id
+enc_subject_name  -> subject is subject_id
+enc_contact_name  -> subject is subject_id
+enc_contact_phone -> subject is subject_id
 ```
 
-**No owner column is added and nothing is embedded in the ciphertext.** An order
-already references its customer because it is that customer's order; encryption reuses
-that rather than recording it twice. **A delivery recipient is not a second subject**:
-their details are data the customer entered and are encrypted under the customer's
-key (IDN-LIFE-002a, D-131).
+**No owner column is added and nothing is embedded in the ciphertext.** A host record
+already references its subject because it is that subject's record; encryption reuses
+that rather than recording it twice. **A third party the subject names in their own
+record is not a second subject**: their details are data the subject entered and are
+encrypted under the subject's key (IDN-LIFE-002a, D-131).
 
 **The declaration is per field, not per table**, so a row that does hold data about
 two account-holding subjects — a referral row naming referrer and referred, say — is
@@ -962,10 +933,10 @@ was safe — hence a durable intent record before either was attempted. With the
 key in the database, all three writes commit together or none do.
 
 **The erasures table remains** (IDN-LIFE-003b), because it is still the record of what
-happened, when, and why — and because the host-side steps of a takedown, cancelling
-orders and clearing any derived copies, remain asynchronous. Its status describes that
-host-side work, never the library's own steps, which have committed if the row exists
-(D-102).
+happened, when, and why, and because the host-side steps of a takedown (whatever the
+host does in its own tables on `TakedownExecuted`, and clearing any derived copies)
+remain asynchronous. Its status describes that host-side work, never the library's own
+steps, which have committed if the row exists (D-102).
 
 **What one transaction does not cover.** A backup taken **before** the erasure holds the
 wrapped key as it then was, so a restore to that point recovers the subject's fields.
@@ -1074,14 +1045,16 @@ Fields, and their source:
 **PRIV-ROPA-002** — All processors SHALL appear as recipients with their legal
 characterisation and agreement reference.
 
-Current processors: the payment provider, the shipping provider, the SMS gateway,
-the hosting provider, and the developer.
+Processors the library itself makes true: the mail server, the SMS gateway, the
+hosting provider and the password-screening recipient (D-162 C.103). Every processor of
+the host's own business is the host's declaration.
 
 **Values (D-153).** Recipients are a `recipients` declaration on the model builder
 (LIB-HOST-001): each entry `{ name, characterisation: processor · recipient,
 dataReceived: [category labels], location: inside · outside, agreementReference
-(optional), callback: boolean }`, the six columns of `05` section 8. The library ships
-that section's rows as defaults the host edits.
+(optional), callback: boolean }`, the six columns of `05` section 6. The library ships
+that section's rows as defaults, applied only while the integration they describe is
+configured (D-162 C.103); the host adds its own.
 
 *Source: D-036, D-041, D-029*
 
@@ -1168,8 +1141,8 @@ same rule holds for objection records.
 
 *Source: D-026.1, D-066*
 
-Previously undefined: an order row is both sensitive data ("stricter defaults") and a
-financial record ("long"), with no rule saying which governs.
+Previously undefined: a host record can be both sensitive data ("stricter defaults")
+and a financial record ("long"), with no rule saying which governs.
 
 | Category | Retention (default · floor) |
 |---|---|
@@ -1301,8 +1274,9 @@ PRIV-SENS-001).
 *Source: D-148; D-027, D-073, D-146; supersedes IDN-LIFE-002 and the earlier "date of birth
 SHALL NOT be collected"*
 
-There is no guest checkout: every order belongs to an account (IDN-LIFE-002a), so
-registration is the only collection path and the only place the affirmation is needed.
+Every subject holds an account (IDN-LIFE-002a): there is no anonymous path into the
+host's records, so registration is the only collection path and the only place the
+affirmation is needed.
 
 **Acceptance criteria**
 1. With `registration.adultaffirmation` = `required`, registration requires the derived
@@ -1310,7 +1284,7 @@ registration is the only collection path and the only place the affirmation is n
 2. With `profile.dateofbirth` off, no date of birth is stored and no record carries
    one after the age step; with it on, the date is a personal field under the subject
    key.
-3. With `registration.adultaffirmation` = `required`, no order exists whose subject
+3. With `registration.adultaffirmation` = `required`, no account exists whose subject
    has not affirmed.
 4. A deployment with `registration.adultaffirmation` = `off` and no written-consent
    basis declared for minors' data fails startup validation.
@@ -1328,59 +1302,15 @@ on the spot.
 
 **Acceptance criteria**
 1. The procedure exists as `14-takedown-procedure.md`.
-2. An operation performs suspension, order cancellation, data erasure and recording
-   **reliably, with per-subscriber completion visible** (IDN-LIFE-003a) — not
-   atomically, which is unachievable across the library/host boundary.
+2. An operation performs suspension, the host's `TakedownExecuted` work, data erasure
+   and recording **reliably, with per-subscriber completion visible** (IDN-LIFE-003a),
+   not atomically, which is unachievable across the library/host boundary.
 
 ---
 
-## 10. Data minimisation to processors
-
-**PRIV-MIN-001** — Data sent to the shipping provider SHALL follow a fixed field
-mapping. Order contents SHALL NEVER be disclosed.
-
-| Field | Rule |
-|---|---|
-| Package description | Fixed generic string; never product names or a narrowing category; never derived from the cart |
-| Notes | Delivery instructions only |
-| Business reference | Opaque internal reference |
-| Receiver email | **Omitted** — phone suffices for a courier |
-| Product catalogue integration | **Not used** for storefront orders |
-
-*Source: D-030*
-
-Standard practice, written down so it is not undone later by someone adding a
-helpful field.
-
-**Acceptance criteria**
-1. The description field is not reachable from order line items in code.
-2. No request to the shipping provider contains a product name.
-3. A test asserts the outbound payload shape.
-
----
-
-**PRIV-MIN-002** — The shipping provider's status callback SHALL be treated as
-hostile input.
-
-*Source: D-030, D-013*
-
-**Acceptance criteria**
-1. Correlation references are unguessable.
-2. The endpoint is rate-limited.
-3. A callback does not by itself advance order state.
-
----
-
-**Residual, accepted.** The shipping provider knows the sender is a medical supplies
-company, implying "bought something medical" rather than a specific condition — a
-much weaker inference, unavoidable if we ship at all, and proportionate.
-Cash-on-delivery amounts cross by necessity.
-
----
-
-## 11. Open items
+## 10. Open items
 
 None. Cross-references: account states in `01-identity`; consent capture surfaces in
 `02-authentication`; the model builder and gate in `03-authorization`; processor
-contracts and field mappings in `05-integrations`; retention enforcement and secrets
-in `06-operations`.
+contracts and the callback pipeline in `05-integrations`; retention enforcement and
+secrets in `06-operations`.

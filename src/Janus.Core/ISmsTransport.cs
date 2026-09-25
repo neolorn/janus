@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -8,7 +9,7 @@ namespace Janus.Core;
 /// is left with the gateway carrying it.
 /// </summary>
 /// <remarks>
-/// Implements LIB-EXT-001, INT-SMS-006, INT-SMS-004, INT-GEN-001. No provider name
+/// Implements LIB-EXT-001, INT-SMS-006, INT-SMS-004, INT-SMS-005, INT-GEN-001. No provider name
 /// appears in the library; a deployment registers one of these.
 /// </remarks>
 public interface ISmsTransport
@@ -30,4 +31,16 @@ public interface ISmsTransport
     /// <param name="cancellationToken">Abandons the read.</param>
     /// <returns>The balance, or the failure where the gateway did not answer.</returns>
     ValueTask<Result<decimal>> BalanceAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads a delivery report from the parameters the gateway put in the query string
+    /// of <c>GET /callbacks/sms/dlr</c>, in whatever names and values its own scheme
+    /// uses.
+    /// </summary>
+    /// <param name="parameters">The query string, one value a name.</param>
+    /// <returns>
+    /// The report, or a failure where the parameters hold none; a report that cannot be
+    /// read is rejected.
+    /// </returns>
+    Result<SmsDeliveryReport> ReadReport(IReadOnlyDictionary<string, string> parameters);
 }

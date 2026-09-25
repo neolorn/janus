@@ -1,3 +1,5 @@
+using Janus.Core;
+
 namespace Janus.Hosting.Authentication;
 
 /// <summary>
@@ -6,4 +8,4 @@ namespace Janus.Hosting.Authentication;
 /// <param name="ChallengeId">The handle the held sign-in carries.</param>
 /// <param name="Code">What was typed where the sign-in began.</param>
 /// <remarks>Implements AUTH-FACT-016 and AUTH-FACT-004.</remarks>
-internal sealed record VerifyDeviceRequest(string? ChallengeId, string? Code);
+internal sealed record VerifyDeviceRequest(string? ChallengeId, [property: NeverLogged] string? Code);

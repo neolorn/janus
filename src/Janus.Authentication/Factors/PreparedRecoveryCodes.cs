@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Janus.Authentication.Passwords;
+using Janus.Core;
 
 namespace Janus.Authentication.Factors;
 
@@ -14,6 +15,7 @@ namespace Janus.Authentication.Factors;
 /// because the security step of a registration draws them before an account exists
 /// to hold them (REG-SESS-002).
 /// </remarks>
+[NeverLogged]
 internal sealed record PreparedRecoveryCodes(
     IReadOnlyList<string> Codes,
     IReadOnlyList<PasswordHash> Hashes);

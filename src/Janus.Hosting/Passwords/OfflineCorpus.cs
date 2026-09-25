@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Core;
 
 namespace Janus.Hosting.Passwords;
 
@@ -62,7 +63,7 @@ internal sealed class OfflineCorpus
     /// is absent, unreadable or older than the deployment admits.
     /// </returns>
     public async ValueTask<IReadOnlySet<string>?> RangeAsync(
-        string prefix,
+        [NeverLogged] string prefix,
         DateTimeOffset now,
         TimeSpan maximumAge,
         CancellationToken cancellationToken)

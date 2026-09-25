@@ -21,7 +21,7 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
 
     private const string Security = "security";
 
-    private const string Fulfilment = "fulfilment";
+    private const string Performance = "performance";
 
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
 
@@ -96,7 +96,7 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
     {
         Browser browser = await Flow.SignedInAsync(_deployment);
 
-        Answer refused = await browser.SendAsync("POST", "/privacy/consents/" + Fulfilment + "/grant");
+        Answer refused = await browser.SendAsync("POST", "/privacy/consents/" + Performance + "/grant");
 
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
         Assert.Equal(ErrorCodes.PurposeNoConsent.ToString(), refused.Text("code"));

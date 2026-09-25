@@ -1,4 +1,5 @@
 using System;
+using Janus.Core;
 
 namespace Janus.Storage.Authentication.Registration;
 
@@ -25,9 +26,9 @@ internal sealed record StagedIdentityDocument(
     string Canonical,
     bool IsLocked,
     bool IsExtra,
-    byte[]? Code,
+    [property: NeverLogged] byte[]? Code,
     DateTimeOffset? CodeExpiresAt,
-    byte[]? Link,
+    [property: NeverLogged] byte[]? Link,
     int WrongAttempts,
     bool CodeSpent,
     DateTimeOffset? VerifiedAt);

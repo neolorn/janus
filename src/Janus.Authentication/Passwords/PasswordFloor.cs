@@ -19,7 +19,7 @@ internal static class PasswordFloor
     /// <param name="password">The password, in UTF-8.</param>
     /// <returns>Its length.</returns>
     /// <exception cref="ArgumentNullException">The password is absent.</exception>
-    public static int Characters(byte[] password)
+    public static int Characters([NeverLogged] byte[] password)
     {
         ArgumentNullException.ThrowIfNull(password);
 

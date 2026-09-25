@@ -147,7 +147,7 @@ internal static class ApiStatus
         [ErrorCodes.ConfigurationKeyProtected] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ConfigurationLastDestination] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ConfigurationPolicyBelowSystem] = StatusCodes.Status422UnprocessableEntity,
-        [ErrorCodes.CallbackRejected] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.CallbackRejected] = StatusCodes.Status429TooManyRequests,
         [ErrorCodes.EndpointInsecure] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.SmsBalanceFloor] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.PurposeNoConsent] = StatusCodes.Status422UnprocessableEntity,

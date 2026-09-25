@@ -10,7 +10,10 @@ namespace Janus.Hosting.Credentials;
 /// <param name="Secret">The shared secret in Base32, shown as text.</param>
 /// <param name="Uri">The <c>otpauth</c> address, shown as a QR code.</param>
 /// <remarks>Implements AUTH-FACT-005, AUTH-FACT-007 and chapter 18 FE-PM-006.</remarks>
-internal sealed record GeneratorEnrolmentView(Guid Id, string Secret, string Uri)
+internal sealed record GeneratorEnrolmentView(
+    Guid Id,
+    [property: NeverLogged] string Secret,
+    [property: NeverLogged] string Uri)
 {
     /// <summary>
     /// Reads an enrolment.

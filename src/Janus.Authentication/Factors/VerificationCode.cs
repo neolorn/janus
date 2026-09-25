@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using Janus.Core;
 
 namespace Janus.Authentication.Factors;
 
@@ -19,6 +20,7 @@ namespace Janus.Authentication.Factors;
 /// registering browser has to show them (REG-SESS-003); the row they are held in
 /// carries what they were issued against and nothing that names a person.
 /// </remarks>
+[NeverLogged]
 internal sealed class VerificationCode
 {
     /// <summary>
@@ -30,7 +32,7 @@ internal sealed class VerificationCode
 
     private VerificationCode(
         byte[] holder,
-        byte[] code,
+        [NeverLogged] byte[] code,
         DateTimeOffset issuedAt,
         DateTimeOffset expiresAt,
         int attempts)
@@ -46,6 +48,7 @@ internal sealed class VerificationCode
     public byte[] Holder { get; }
 
     /// <summary>The digits, as they are compared.</summary>
+    [NeverLogged]
     public byte[] Code { get; }
 
     /// <summary>When it was issued.</summary>
@@ -68,7 +71,7 @@ internal sealed class VerificationCode
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public static VerificationCode Issue(
         byte[] holder,
-        string code,
+        [NeverLogged] string code,
         DateTimeOffset at,
         TimeSpan lifetime)
     {
@@ -89,7 +92,7 @@ internal sealed class VerificationCode
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public static VerificationCode Stored(
         byte[] holder,
-        byte[] code,
+        [NeverLogged] byte[] code,
         DateTimeOffset issuedAt,
         DateTimeOffset expiresAt,
         int attempts)
@@ -121,7 +124,7 @@ internal sealed class VerificationCode
     /// <param name="code">The code.</param>
     /// <returns>The digits, as they are compared.</returns>
     /// <exception cref="ArgumentNullException">The code is absent.</exception>
-    public static byte[] Held(string code)
+    public static byte[] Held([NeverLogged] string code)
     {
         ArgumentNullException.ThrowIfNull(code);
 
@@ -148,7 +151,7 @@ internal sealed class VerificationCode
     /// <param name="entered">The code as it was typed.</param>
     /// <returns>Whether they match.</returns>
     /// <exception cref="ArgumentNullException">Either is absent.</exception>
-    public static bool Matches(byte[] held, string entered)
+    public static bool Matches([NeverLogged] byte[] held, [NeverLogged] string entered)
     {
         ArgumentNullException.ThrowIfNull(held);
         ArgumentNullException.ThrowIfNull(entered);
@@ -178,7 +181,7 @@ internal sealed class VerificationCode
     /// <param name="entered">The code as it was typed.</param>
     /// <returns>Whether they match.</returns>
     /// <exception cref="ArgumentNullException">The code is absent.</exception>
-    public bool Is(string entered) => Matches(Code, entered);
+    public bool Is([NeverLogged] string entered) => Matches(Code, entered);
 
     /// <summary>
     /// A wrong code was entered against it.
@@ -194,7 +197,7 @@ internal sealed class VerificationCode
     public bool Exhausted(int cap) => Attempts >= cap;
 
     // Spaces and separators are what a person copying six digits off a screen adds.
-    private static string Canonical(string entered)
+    private static string Canonical([NeverLogged] string entered)
     {
         var canonical = new StringBuilder(Digits);
 

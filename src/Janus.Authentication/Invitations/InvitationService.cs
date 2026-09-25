@@ -530,7 +530,7 @@ internal sealed class InvitationService(
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public async ValueTask<Result> OpenAsync(
         AccessContext context,
-        string token,
+        [NeverLogged] string token,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);

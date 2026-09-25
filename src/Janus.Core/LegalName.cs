@@ -5,8 +5,8 @@ using Janus.Core.Unicode;
 namespace Janus.Core;
 
 /// <summary>
-/// The name a host that invoices or ships collects, off unless the deployment turns it
-/// on with a declared purpose.
+/// The legal name, a proofing attribute that is off unless the deployment turns it on
+/// with a declared purpose.
 /// </summary>
 /// <remarks>
 /// Implements REG-PROF-001, IDN-ATTR-007 and IDN-ACCT-005. Identity does no proofing

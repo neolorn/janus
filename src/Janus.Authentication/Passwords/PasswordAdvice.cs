@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Janus.Core;
 
 namespace Janus.Authentication.Passwords;
 
@@ -23,7 +24,7 @@ internal static class PasswordAdvice
     /// </param>
     /// <returns>The feedback, which never refuses.</returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
-    public static PasswordFeedback On(byte[] password, IReadOnlyCollection<string> ownWords)
+    public static PasswordFeedback On([NeverLogged] byte[] password, IReadOnlyCollection<string> ownWords)
     {
         ArgumentNullException.ThrowIfNull(password);
         ArgumentNullException.ThrowIfNull(ownWords);

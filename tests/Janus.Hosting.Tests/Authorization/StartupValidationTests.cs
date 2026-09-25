@@ -294,6 +294,45 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// IDN-LIFE-012a, LIB-HOST-001: a social provider is optional, and one declared is
+    /// declared whole, so a declaration that could verify none of its events stops the
+    /// deployment as it starts, naming the part that does not hold; one declared whole
+    /// starts.
+    /// </summary>
+    /// <param name="part">The part that does not hold.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("provider")]
+    [InlineData("metadata")]
+    [InlineData("clientIds")]
+    public async Task IDN_LIFE_012a_ASocialProviderDeclaredShortOfWholeIsRefusedAsync(string part)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var metadata = new Uri("https://accounts.google.test/.well-known/risc-configuration");
+        var whole = new SocialProvider(Factor.Google, metadata, ["the-client"]);
+        SocialProvider[] declared = part switch
+        {
+            "provider" => [whole, whole with { Provider = Factor.Password }],
+            "metadata" => [whole with { Metadata = new Uri("http://accounts.google.test/risc") }],
+            _ => [whole with { ClientIds = [] }],
+        };
+
+        using (IHost refusedHost = Deployed(providers: declared))
+        {
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await refusedHost.StartAsync(cancellationToken));
+
+            Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+            Assert.Equal("socialProvider." + part, refused.Failure?.Details["key"].GetString());
+        }
+
+        using IHost started = Deployed(providers: [whole]);
+
+        await started.StartAsync(cancellationToken);
+        await started.StopAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// API-REDIR-001: the default a destination falls back to is read against the
     /// registry as the deployment starts, so a key naming a client nothing registered
     /// stops it there rather than at the registration that would resolve to nothing.
@@ -420,6 +459,124 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         }
     }
 
+    /// <summary>
+    /// LIB-HOST-001 AC1, AC3: the deployment names the keys the list gives and
+    /// retention for the categories it declares, and nothing else, and it starts.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task LIB_HOST_001_AC3_ADeploymentNamingOnlyTheListedKeysStartsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        var served = new ServerStandIn();
+        using IHost deployment = new HostBuilder()
+            .ConfigureServices(services => Declared(services.AddSingleton<IHostedService>(served)))
+            .Build();
+
+        await deployment.StartAsync(cancellationToken);
+        await deployment.StopAsync(cancellationToken);
+
+        Assert.True(served.Started);
+    }
+
+    /// <summary>
+    /// LIB-HOST-001 AC4: a deployment that never named the language its legal
+    /// documents bind in is stopped as it starts, under that key's own code.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task LIB_HOST_001_AC4_ADeploymentWithoutItsGoverningLanguageIsRefusedAsync()
+    {
+        StartupException refused = await RefusedWithoutAsync(Settings.LegalGoverningLanguage.Key, "ar");
+
+        Assert.Equal(ErrorCodes.StartupGoverningLanguage, refused.Failure?.Code);
+        Assert.Equal("legal.governinglanguage", refused.Failure?.Details["key"].GetString());
+    }
+
+    /// <summary>
+    /// LIB-HOST-001 AC2: a key the deployment has to name and left unnamed stops it as
+    /// it starts, by the key's name and before the web server registered after the
+    /// library has served anything.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task LIB_HOST_001_AC2_AnUnnamedKeyIsRefusedByNameBeforeTheServerStartsAsync()
+    {
+        StartupException refused = await RefusedWithoutAsync(
+            Settings.HostingEnvironment.Key,
+            "a rented virtual machine");
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        Assert.Equal("hosting.environment", refused.Failure?.Details["key"].GetString());
+    }
+
+    /// <summary>
+    /// LIB-HOST-001 AC2: a conditional key is one the deployment has to name once its
+    /// condition holds, so a deployment that moves its data outside Egypt and names no
+    /// basis for the transfer is stopped by that key.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task LIB_HOST_001_AC2_AConditionalKeyIsRefusedOnceItsConditionHoldsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await WriteAsync(Located(HostingLocation.Outside), cancellationToken);
+
+        try
+        {
+            using IHost deployment = Deployed();
+
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await deployment.StartAsync(cancellationToken));
+
+            Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+            Assert.Equal("hosting.crossborderbasis", refused.Failure?.Details["key"].GetString());
+        }
+        finally
+        {
+            await WriteAsync(Located(HostingLocation.Inside), cancellationToken);
+        }
+    }
+
+    // LIB-HOST-001: the deployment started with one key it has to name left unnamed,
+    // which is named again afterwards whatever the start did.
+    private async Task<StartupException> RefusedWithoutAsync(ConfigurationKey key, string value)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await WriteAsync("DELETE FROM identity.settings WHERE key = '" + key + "';", cancellationToken);
+
+        try
+        {
+            var served = new ServerStandIn();
+            using IHost deployment = new HostBuilder()
+                .ConfigureServices(services => Declared(services.AddSingleton<IHostedService>(served)))
+                .Build();
+
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await deployment.StartAsync(cancellationToken));
+
+            Assert.False(served.Started);
+
+            return refused;
+        }
+        finally
+        {
+            await WriteAsync(
+                "INSERT INTO identity.settings (key, value) VALUES ('" + key + "', '" + value + "');",
+                cancellationToken);
+        }
+    }
+
+    private static string Located(HostingLocation location) =>
+        "UPDATE identity.settings SET value = '"
+        + Settings.HostingLocation.Write(location)
+        + "' WHERE key = '"
+        + Settings.HostingLocation.Key
+        + "';";
+
     private IHost Deployed(
         bool catalogue = true,
         bool handlers = true,
@@ -428,10 +585,20 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool client = true,
         bool codec = false,
         bool mail = false,
-        bool mailClient = false) =>
+        bool mailClient = false,
+        IReadOnlyList<SocialProvider>? providers = null) =>
         new HostBuilder()
-            .ConfigureServices(services =>
-                Declared(services, catalogue, handlers, addresses, signIn, client, codec, mail, mailClient))
+            .ConfigureServices(services => Declared(
+                services,
+                catalogue,
+                handlers,
+                addresses,
+                signIn,
+                client,
+                codec,
+                mail,
+                mailClient,
+                providers: providers))
             .Build();
 
     // The library registered over this deployment, as the host's own code registers
@@ -446,7 +613,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool codec = false,
         bool mail = false,
         bool mailClient = false,
-        string? connection = null)
+        string? connection = null,
+        IReadOnlyList<SocialProvider>? providers = null)
     {
         // Where what the library announces goes, the host's own (LIB-HOST-001).
         services.AddSingleton<IEvents>(_events);
@@ -494,6 +662,11 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         if (client)
         {
             services.AddSingleton(new SignOnClient("this-application"));
+        }
+
+        foreach (SocialProvider provider in providers ?? [])
+        {
+            services.AddSingleton(provider);
         }
 
         return services.AddJanus(

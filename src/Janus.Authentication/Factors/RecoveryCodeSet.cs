@@ -139,7 +139,7 @@ internal sealed class RecoveryCodeSet
     /// <param name="at">When.</param>
     /// <returns>Whether a code of the set was spent.</returns>
     /// <exception cref="ArgumentNullException">The value is absent.</exception>
-    public bool Spend(string entered, DateTimeOffset at)
+    public bool Spend([NeverLogged] string entered, DateTimeOffset at)
     {
         byte[] presented = RecoveryCode.Presented(entered);
 

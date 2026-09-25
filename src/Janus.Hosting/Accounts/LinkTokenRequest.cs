@@ -1,3 +1,5 @@
+using Janus.Core;
+
 namespace Janus.Hosting.Accounts;
 
 /// <summary>
@@ -6,4 +8,4 @@ namespace Janus.Hosting.Accounts;
 /// </summary>
 /// <param name="LinkToken">The token of the link.</param>
 /// <remarks>Implements REG-IDENT-006 and REG-SESS-003.</remarks>
-internal sealed record LinkTokenRequest(string? LinkToken);
+internal sealed record LinkTokenRequest([property: NeverLogged] string? LinkToken);

@@ -40,11 +40,13 @@ namespace Janus.Hosting.Bff;
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="log">Where a refused return is recorded.</param>
 /// <remarks>
-/// Implements BFF-SESS-006, BFF-SESS-003, BFF-SESS-004, BFF-OWN-001, BFF-CSRF-005a and
-/// BFF-MACH-001. The code is exchanged from this server to the provider and never from
-/// the browser, the destination it returns to is the registered one and never one a
-/// request names, and what the exchange hands back is read once and dropped: after it,
-/// this application holds a session record and nothing else.
+/// Implements BFF-SESS-006, BFF-SESS-003, BFF-SESS-004, BFF-OWN-001, BFF-CSRF-005a,
+/// BFF-MACH-001 and AUTH-OIDC-006. The request is pushed and the code exchanged from
+/// this server to the provider and never from the browser, which carries only the
+/// reference the push was answered with; the destination the code returns to is the
+/// registered one and never one a request names, and what the exchange hands back is
+/// read once and dropped: after it, this application holds a session record and nothing
+/// else.
 /// </remarks>
 internal sealed class SignOn(
     SignOnClient client,
@@ -116,7 +118,7 @@ internal sealed class SignOn(
     /// <exception cref="ArgumentNullException">The request is absent.</exception>
     public async Task<IResult> ReturnAsync(
         HttpContext context,
-        string? code,
+        [NeverLogged] string? code,
         string? state,
         string? error,
         CancellationToken cancellationToken)
@@ -172,7 +174,7 @@ internal sealed class SignOn(
     // sent back to is read from the registry and never from the request that asked.
     private static string Destination(OidcClient registered) => registered.Redirect;
 
-    private static string Challenge(string verifier) =>
+    private static string Challenge([NeverLogged] string verifier) =>
         Base64Url.EncodeToString(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
 
     // BFF-SESS-006: the browser is sent back onto this application and nowhere else, so
@@ -221,6 +223,15 @@ internal sealed class SignOn(
         var state = OpaqueToken.Draw(randomness);
         string verifier = OpaqueToken.Draw(randomness).Value;
 
+        if (await PushedAsync(registered, state, verifier, silent, cancellationToken)
+                .ConfigureAwait(false)
+            is not string reference)
+        {
+            BrowserProfileLog.SignOnPushRejected(log, context.TraceIdentifier);
+
+            return Answers.Refused(ErrorCodes.SessionExpired);
+        }
+
         await contacts
             .CarryAsync(
                 contact,
@@ -228,29 +239,66 @@ internal sealed class SignOn(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        return Results.Redirect(Authorization(registered, state, verifier, silent));
+        return Results.Redirect(Authorization(registered, reference));
     }
 
-    private string Authorization(
+    // AUTH-OIDC-006 AC2: the browser carries the client and the reference the push was
+    // answered with, and nothing of the request itself.
+    private string Authorization(OidcClient registered, string reference) =>
+        Address(addresses.Provider, "/oidc/authorize")
+        + "?client_id=" + Uri.EscapeDataString(registered.ClientId)
+        + "&request_uri=" + Uri.EscapeDataString(reference);
+
+    // AUTH-OIDC-006 AC2: the request is pushed on this server's own connection,
+    // authenticated as the exchange is, and answered with the reference alone.
+    private async Task<string?> PushedAsync(
         OidcClient registered,
         OpaqueToken state,
-        string verifier,
-        bool silent) =>
-        Address(addresses.Provider, "/oidc/authorize")
-        + "?response_type=code"
-        + "&client_id=" + Uri.EscapeDataString(registered.ClientId)
-        + "&redirect_uri=" + Uri.EscapeDataString(Destination(registered))
-        + "&scope=openid"
-        + "&state=" + Uri.EscapeDataString(state.Value)
-        + "&code_challenge=" + Challenge(verifier)
-        + "&code_challenge_method=S256"
-        + (silent ? "&prompt=none" : string.Empty);
+        [NeverLogged] string verifier,
+        bool silent,
+        CancellationToken cancellationToken)
+    {
+        var parameters = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["response_type"] = "code",
+            ["client_id"] = registered.ClientId,
+            ["client_secret"] = secret.Value(),
+            ["redirect_uri"] = Destination(registered),
+            ["scope"] = "openid",
+            ["state"] = state.Value,
+            ["code_challenge"] = Challenge(verifier),
+            ["code_challenge_method"] = "S256",
+        };
+
+        if (silent)
+        {
+            parameters["prompt"] = "none";
+        }
+
+        using HttpClient requests = channel.CreateClient(Channel);
+        using var form = new FormUrlEncodedContent(parameters);
+        using HttpResponseMessage answered = await requests
+            .PostAsync(new Uri(Address(addresses.Provider, "/oidc/par")), form, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!answered.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        using var body = JsonDocument.Parse(
+            await answered.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+
+        return body.RootElement.TryGetProperty("request_uri", out JsonElement reference)
+            ? reference.GetString()
+            : null;
+    }
 
     private async Task<IResult> RedeemAsync(
         HttpContext context,
         OpaqueToken carried,
         SignOnAttempt attempt,
-        string code,
+        [NeverLogged] string code,
         CancellationToken cancellationToken)
     {
         if (await clients.FindAsync(client.ClientId, cancellationToken).ConfigureAwait(false)
@@ -305,7 +353,7 @@ internal sealed class SignOn(
     private async Task<string?> ExchangedAsync(
         OidcClient registered,
         SignOnAttempt attempt,
-        string code,
+        [NeverLogged] string code,
         CancellationToken cancellationToken)
     {
         using HttpClient requests = channel.CreateClient(Channel);

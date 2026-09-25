@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
+using Janus.Authentication.Callbacks;
 using Janus.Authentication.Configuration;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
@@ -160,6 +161,10 @@ public static class HostingRegistration
         services.AddScoped<SessionRequirement>();
         services.AddScoped<MachineProfile>();
 
+        // BFF-LOG-002: whatever request logging the host turns on, a marked body
+        // stays out of it.
+        services.AddHttpLoggingInterceptor<SensitiveBodyLogging>();
+
         // BFF-SESS-006: the client half of the sign-on is the library's, so what it
         // presents, where it presents it and the connection it presents it on are
         // registered here and a host supplies none of them.
@@ -171,7 +176,6 @@ public static class HostingRegistration
         // A deployment that declares none of it starts, and the checks that would have
         // read a declaration find nothing to read.
         services.TryAddSingleton(RestrictionKeySuppliers.None);
-        services.TryAddSingleton(Recipients.Shipped);
 
         // AUTH-ABUSE-004, OPS-ALERT-001: the one path every message takes, and what
         // decides whether it goes.
@@ -202,7 +206,19 @@ public static class HostingRegistration
         services.AddScoped<IRestrictionSet, RestrictionSetService>();
         services.AddScoped<ThrottleService>();
         services.AddScoped<NonExistenceNotice>();
+        services.AddScoped<CallbackAdmission>();
+        services.AddScoped<CallbackReferences>();
+        services.AddScoped<ICallbackReferences>(
+            provider => provider.GetRequiredService<CallbackReferences>());
         services.AddScoped<DeliveryReports>();
+
+        // IDN-LIFE-012a: a provider's events are verified against the keys it publishes,
+        // read on a client of the framework's factory and held between events; a
+        // deployment that declares no provider takes none.
+        services.AddSingleton<ProviderKeys>();
+        _ = services.AddHttpClient(ProviderKeys.Channel);
+        services.AddScoped<ProviderEvents>();
+        services.AddScoped<ProviderEventIntake>();
         services.AddScoped(services => new BotDefence(
             services.GetRequiredService<IConfigurationStore>(),
             services.GetRequiredService<IDatacenterRanges>(),
@@ -264,6 +280,7 @@ public static class HostingRegistration
             provider.GetService<IMailServer>(),
             provider.GetService<MailServerClient>(),
             provider.GetService<ImageCodec>(),
+            provider.GetServices<SocialProvider>(),
             provider.GetRequiredService<IConfigurationStore>()));
 
         services.ConfigureHttpJsonOptions(ReadThroughContexts);
@@ -439,16 +456,18 @@ public static class HostingRegistration
         // AUTHZ-MODEL-004 AC2 (D-160): what a hosted service starts before is what was
         // registered after it, and the web server is one, so the checks that read the
         // database go at the head of the collection. OPS-MIG-002 leads them, because
-        // every one of the others reads a table.
+        // every one of the others reads a table, and LIB-HOST-001 follows, because
+        // most of them read a key the deployment has to name.
         services.Insert(0, ServiceDescriptor.Singleton<IHostedService, SchemaValidationService>());
-        services.Insert(1, ServiceDescriptor.Singleton<IHostedService, ModelValidationService>());
-        services.Insert(2, ServiceDescriptor.Singleton<IHostedService, SendingValidationService>());
-        services.Insert(3, ServiceDescriptor.Singleton<IHostedService, HandlerValidationService>());
-        services.Insert(4, ServiceDescriptor.Singleton<IHostedService, ConfigurationValidationService>());
-        services.Insert(5, ServiceDescriptor.Singleton<IHostedService, DeclarationValidationService>());
-        services.Insert(6, ServiceDescriptor.Singleton<IHostedService, RedirectValidationService>());
-        services.Insert(7, ServiceDescriptor.Singleton<IHostedService, SigningKeyValidationService>());
-        services.Insert(8, ServiceDescriptor.Singleton<IHostedService, RelayValidationService>());
+        services.Insert(1, ServiceDescriptor.Singleton<IHostedService, SettingsValidationService>());
+        services.Insert(2, ServiceDescriptor.Singleton<IHostedService, ModelValidationService>());
+        services.Insert(3, ServiceDescriptor.Singleton<IHostedService, SendingValidationService>());
+        services.Insert(4, ServiceDescriptor.Singleton<IHostedService, HandlerValidationService>());
+        services.Insert(5, ServiceDescriptor.Singleton<IHostedService, ConfigurationValidationService>());
+        services.Insert(6, ServiceDescriptor.Singleton<IHostedService, DeclarationValidationService>());
+        services.Insert(7, ServiceDescriptor.Singleton<IHostedService, RedirectValidationService>());
+        services.Insert(8, ServiceDescriptor.Singleton<IHostedService, SigningKeyValidationService>());
+        services.Insert(9, ServiceDescriptor.Singleton<IHostedService, RelayValidationService>());
 
         return services;
     }

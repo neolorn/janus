@@ -1,6 +1,7 @@
 using System;
 using Janus.Storage.Authentication.Accounts;
 using Janus.Storage.Authentication.Alerting;
+using Janus.Storage.Authentication.Callbacks;
 using Janus.Storage.Authentication.Credentials;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Identifiers;
@@ -296,6 +297,16 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     public DbSet<CallbackRecord> Callbacks => Set<CallbackRecord>();
 
     /// <summary>
+    /// The provider events a callback was carried for.
+    /// </summary>
+    public DbSet<CallbackEventRecord> CallbackEvents => Set<CallbackEventRecord>();
+
+    /// <summary>
+    /// The correlation references issued for a host's unsigned callbacks.
+    /// </summary>
+    public DbSet<CallbackReferenceRecord> CallbackReferences => Set<CallbackReferenceRecord>();
+
+    /// <summary>
     /// The registration sessions, counted per source.
     /// </summary>
     public DbSet<RegistrationSourceRecord> RegistrationSources =>
@@ -474,6 +485,8 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new BalanceReadingConfiguration());
         modelBuilder.ApplyConfiguration(new NoticeConfiguration());
         modelBuilder.ApplyConfiguration(new CallbackConfiguration());
+        modelBuilder.ApplyConfiguration(new CallbackEventConfiguration());
+        modelBuilder.ApplyConfiguration(new CallbackReferenceConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationSourceConfiguration());
         modelBuilder.ApplyConfiguration(new AlertConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationSessionConfiguration());

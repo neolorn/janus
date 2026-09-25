@@ -43,7 +43,7 @@ internal sealed class LeakedPasswordCorpus(
     /// <inheritdoc/>
     public async ValueTask<Result<IReadOnlySet<string>>> RangeAsync(
         BlocklistSource source,
-        string prefix,
+        [NeverLogged] string prefix,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(prefix);
@@ -92,12 +92,12 @@ internal sealed class LeakedPasswordCorpus(
 
     // The prefix is the whole of what goes out, against the client's base address
     // (INT-PWD-001).
-    private static Uri Relative(string prefix) =>
+    private static Uri Relative([NeverLogged] string prefix) =>
         new(prefix.ToUpperInvariant(), UriKind.Relative);
 
     // The deployment names where its own corpus answers; the prefix is a segment
     // under it, whatever else the address carries.
-    private static string Range(string address, string prefix) =>
+    private static string Range(string address, [NeverLogged] string prefix) =>
         address.TrimEnd('/') + "/" + prefix.ToUpperInvariant();
 
     private static Result<IReadOnlySet<string>> Unavailable() =>

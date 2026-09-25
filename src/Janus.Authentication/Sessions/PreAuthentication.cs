@@ -31,11 +31,13 @@ internal sealed class PreAuthentication
     /// <summary>
     /// What the pre-authentication cookie's token fingerprints to.
     /// </summary>
+    [NeverLogged]
     public byte[] Fingerprint { get; }
 
     /// <summary>
     /// What the synchronizer token bound to it fingerprints to.
     /// </summary>
+    [NeverLogged]
     public byte[] CsrfFingerprint { get; private set; }
 
     /// <summary>

@@ -1,3 +1,5 @@
+using Janus.Core;
+
 namespace Janus.Hosting.Recovery;
 
 /// <summary>
@@ -8,4 +10,4 @@ namespace Janus.Hosting.Recovery;
 /// is cancelling.
 /// </param>
 /// <remarks>Implements AUTH-RECOV-007 and D-141.</remarks>
-internal sealed record CancelLossRequest(string? Token);
+internal sealed record CancelLossRequest([property: NeverLogged] string? Token);

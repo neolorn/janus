@@ -7,7 +7,7 @@ namespace Janus.Authentication.Accounts;
 /// The profile as the account directory holds it.
 /// </summary>
 /// <param name="DisplayName">The name shown where a human needs to know who it is.</param>
-/// <param name="LegalName">The name a host that invoices or ships collects.</param>
+/// <param name="LegalName">The legal name, a proofing attribute collected only with a declared purpose.</param>
 /// <param name="DateOfBirth">The date entered at the age step, where it is retained.</param>
 /// <param name="PhotoUpdatedAt">When the photo was last set, where one is shown.</param>
 /// <remarks>

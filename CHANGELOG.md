@@ -10,6 +10,58 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- Every access token now names the client it was issued to in `aud`, beside
+  `client_id`, as RFC 9068 has it; the token the library hands the mail server for app
+  passwords names the mail server's client. A party verifying a token offline can now
+  refuse one issued to any other client.
+
+- Every authorization request is now pushed first. A client posts the parameters it
+  used to put in the address to `POST /oidc/par`, authenticated with its secret, and
+  sends the browser to `/oidc/authorize` with its `client_id` and the `request_uri`
+  it was answered with. `/oidc/authorize` refuses a request that carries its
+  parameters instead, with `invalid_request`. A `request_uri` is taken once, whatever
+  it is answered with, and lapses 60 seconds after it is issued. A browser
+  application's own sign-on pushes its request on the back channel as it exchanges
+  its code, so the browser carries nothing of the request. The discovery document
+  names `pushed_authorization_request_endpoint` and
+  `require_pushed_authorization_requests`.
+
+- The provider takes a proof key by S256 alone. A request naming the plain method,
+  or carrying a challenge that names no method, is refused with `invalid_request`,
+  and the discovery document no longer lists `plain`.
+
+- `ISmsTransport` has a new member, `ReadReport`, which reads a delivery report from
+  the parameters the gateway puts in the query string. Every transport implements it.
+
+- A form another site posts as the whole page, with no session cookie on it, is no
+  longer refused by the browser profile: it is answered 303 with its own address, so
+  the browser reads that address with the session and the host's GET route there
+  continues. Nothing of the post is carried. The same post carrying the session, or
+  one that does not navigate the page, is refused as before.
+
+- A deployment that has not named every key it has to name now stops as it starts,
+  before any other startup check and before the web server: the governing
+  language under `model.startup.governinglanguage`, every other key under
+  `model.startup.declarationmissing` with `details.key`. `hosting.environment` is
+  among them in every deployment, since every deployment serves the records of
+  processing.
+
+- Every public type and member that carries a password, a token, a code, a key or
+  the text of a notice is marked `[NeverLogged]`: `SessionId`,
+  `GeneratedRecoveryCodes`, `KeyEncryptionKeys`, the code of `LinkLanding` and
+  `SignInLanding`, the token of `IssuedInvitation`, the secret and address of
+  `GeneratorEnrolment`, the text of `DocumentVersion` and `DocumentTranslation`,
+  and the secret parameters of the service contracts. The marker states the rule
+  for the host as it does for the library's own build.
+
+- The shipped provider register, `ProviderRegister.Default`, is now the four rows the
+  library's own processing makes true: the mail server, the SMS gateway, the hosting
+  provider and password screening. The SMS gateway is now applied to every
+  deployment's records of processing, as the hosting provider is, because every
+  deployment sends its text messages through a transport it registers. The rows for
+  a host's own business and for developer tooling are gone; a host declares every
+  processor of its own business on the model builder.
+
 - A message goes out in the language its recipient's account settled on, else, where
   it answers a registration, sign-in or recovery request, in the locale that request
   carried, else in every language of `notification.languages`; a tag such as `en-GB`
@@ -247,7 +299,114 @@ against the public contract of LIB-API-001.
   document, which put an account's own details on a registration route. Nothing is
   staged for it either way; the frontend navigates to the account application.
 
+- How long a send counter is kept now follows the restrictions as they stand rather than
+  the interval the send was counted under. The record holds the keyed hash and the times
+  and nothing else, and the read before every send takes with it every record whose
+  newest time is older than the longest interval now declared, so shortening an interval
+  reaches the sends already counted.
+- Notification handling is now a contract a deployment can replace: `INotificationHandler`
+  in `Janus.Core` takes which message goes to which destination in which language, and
+  the shipped handler that renders the deployment's templates and hands them to the mail
+  and SMS transports is registered only if the deployment registers none of its own.
+- The city shown on a session is now resolved by the library from the address the
+  session was used from, and no longer given by the caller: it is not a field on any
+  request. While no location database is present the listing shows no city and the
+  `degradation` condition is raised once a window.
+- A verification code is now an aggregate with a table of its own. It lives
+  `code.verification.lifetime` whatever issued it, dies on the try that reaches
+  `code.verification.attempts`, and is spent by the first right one. The new-device
+  check issues and answers through it, and a sign-in in progress no longer carries a
+  code or a count of wrong ones.
+- The offline leaked-password list now travels in the package. A deployment that holds
+  no corpus file of its own still falls back to a dated list when the range API cannot
+  answer, and the list is refreshed with each release rather than by the operator.
+- The self-hosted compromised-password corpus is now reached at the address
+  `password.blocklist.selfhosted.address` names, over the same range protocol the
+  primary source uses, rather than read from a second file beside the application. A
+  deployment that names `selfHosted` and no address does not start.
+- A password longer than `password.maximum` is now refused with
+  `auth.password.toolong` rather than with the configuration code for a value above a
+  ceiling. A password field no longer answers with a sentence about configuration.
+- A check, a capability page or an explanation on a type a derivation reaches is now
+  refused without the host's rows whatever that derivation confers, rather than only
+  where the role it confers allows what is being asked. A call site that passes today
+  can no longer start faulting because an administrator edited a role.
+- An explanation can now be asked with the host's own rows, and on a type a derivation
+  reaches it names the grant the fact produced: no identifier, the derived kind, the
+  role the derivation confers, and the container it was inherited from. Asked without
+  those rows such a type is refused rather than answered from the stored grants alone.
+  The identifier an explained grant carries is optional for the same reason: a derived
+  grant is a fact being true and no row holds it.
+- A page of capabilities now costs one query over the host's own rows however many
+  permissions it asks for. Every derivation reaching the type is evaluated in that one
+  query, and what the role each confers allows is read from the model, so a page that
+  offers three actions costs what a page offering one costs.
+- A sign-in whose password an invalidation left below the single-factor floor now
+  completes and says so, so the person is asked for a new password at the next
+  sign-in rather than being locked out.
+- The case-insensitive collation is created in the schema the library owns, like
+  everything else of the library's, and a column names it by that schema.
+- A configuration key loosens the way its row states. Where a row states nothing, a
+  key with only a ceiling loosens upward, a key with only a floor loosens downward,
+  and a flag loosens away from its default, so a tightening no longer costs the
+  friction a loosening does.
+- A duration written in years or months is held at 366 days a year and 31 days a
+  month, so a retention floor stated in years is never shorter than the calendar
+  span it names.
+- `ThrowIfIncomplete` now takes the screening sources and whether the records of
+  processing are generated, because `service.name` and `hosting.environment` are
+  named only by a deployment that uses them. A missing declaration now fails with
+  `model.startup.declarationmissing` naming the key.
+
 ### Added
+
+- `POST /callbacks/providers/google` and `POST /callbacks/providers/apple` take the
+  security events Google (Cross-Account Protection) and Sign in with Apple send about
+  an identity linked to an account, on the machine profile and held to
+  `integration.callback.ratelimit`. A host declares each provider it takes events from
+  with a `SocialProvider`: the address of the provider's document naming its issuer
+  and keys, and the deployment's client identifiers there; a provider declared twice,
+  one that is not a social provider, an address that is not HTTPS or no client stops
+  the deployment at startup under `model.startup.declarationmissing`. An event is
+  verified against the keys the provider publishes, carried once by its `jti`, and
+  audited under `auth.providerevent.taken` or `auth.providerevent.rejected`. A
+  compromised, disabled or signed-out provider account ends every session of the
+  account and holds the linked credential until the person signs in by another
+  factor, which restores it under `auth.credential.restored`; withdrawn consent or a
+  deleted provider account unlinks the credential, or suspends the account with a
+  security notice where it is the last way in; a disabled relay address drops to
+  unverified. An event of an undeclared provider, or one the keys do not verify, is
+  refused as every rejected callback is. The client the documents are read with is
+  `identity-providers`.
+
+- `UseCallback` mounts one of the host's own providers' callbacks on the machine
+  profile, at a path the host chooses and ahead of the browser profile. A signed
+  callback (`ISignedCallback`) names its provider's keyed hash, where the signature and
+  the signed bytes are, its secrets and its event identifier; the library verifies the
+  signature over the raw bytes in fixed time against the current secret and, for 24
+  hours after a rotation, the previous one, holds a five-minute window where the
+  scheme carries an instant, and carries each event once, giving the claim back when
+  the host's route does not answer with a 2xx. An unsigned callback
+  (`IUnsignedCallback`) reaches the route only with a reference issued for it and once
+  the host has confirmed it with the provider. Both are held to
+  `integration.callback.ratelimit` and to the provider's published ranges first, and
+  every refusal is answered 429 `integration.callback.rejected`, recorded against its
+  source and counted toward `alerting.callback.threshold`. Claimed events and issued
+  references are kept, as hashes, in the new `callback_events` and
+  `callback_references` tables.
+
+- `ICallbackReferences.IssueAsync` issues the correlation reference an unsigned
+  callback carries: 128 random bits in base64url, of which only the hash is kept.
+
+- `GET /callbacks/sms/dlr` takes the SMS gateway's delivery report on the machine
+  profile. A report of failed delivery for a send the library made releases that send
+  from its restrictions and nothing else; a report carrying an unknown reference, or
+  one the transport cannot read, is refused 429 `integration.callback.rejected`.
+
+- `SensitiveBodyAttribute` marks an endpoint whose request and response bodies never
+  reach the framework's request logging, whatever fields the deployment or the
+  endpoint asks it to record. Every endpoint the library maps carries it, and a
+  request the logging meets before its endpoint is known is treated as marked.
 
 - An administrator holding `membership:manage` can invite a person into an
   organization: `POST /admin/organizations/{id}/invitations` binds an `email`, a
@@ -539,8 +698,8 @@ against the public contract of LIB-API-001.
 - The minor takedown, as `ITakedowns` and `POST /admin/accounts/{subject}/takedown`:
   under `takedown:execute` and step-up, one transaction suspends the account into its
   `takedown.grace` window, ends every session of it, records the trigger and the
-  reason, and writes the `TakedownExecuted` delivery the host confirms order
-  cancellation against. The answer carries `takedownId` and `erasureDue`.
+  reason, and writes the `TakedownExecuted` delivery on which the host stops its
+  own processing for the subject. The answer carries `takedownId` and `erasureDue`.
   `AccountSuspended` follows the commit; no deletion notice and no
   `AccountDeletionRequested` do.
 
@@ -1421,67 +1580,6 @@ against the public contract of LIB-API-001.
   the old address where the account has no other channel at all. A deployment applies
   one further migration, which lets a staged verification record no browser.
 
-### Changed
-
-- How long a send counter is kept now follows the restrictions as they stand rather than
-  the interval the send was counted under. The record holds the keyed hash and the times
-  and nothing else, and the read before every send takes with it every record whose
-  newest time is older than the longest interval now declared, so shortening an interval
-  reaches the sends already counted.
-- Notification handling is now a contract a deployment can replace: `INotificationHandler`
-  in `Janus.Core` takes which message goes to which destination in which language, and
-  the shipped handler that renders the deployment's templates and hands them to the mail
-  and SMS transports is registered only if the deployment registers none of its own.
-- The city shown on a session is now resolved by the library from the address the
-  session was used from, and no longer given by the caller: it is not a field on any
-  request. While no location database is present the listing shows no city and the
-  `degradation` condition is raised once a window.
-- A verification code is now an aggregate with a table of its own. It lives
-  `code.verification.lifetime` whatever issued it, dies on the try that reaches
-  `code.verification.attempts`, and is spent by the first right one. The new-device
-  check issues and answers through it, and a sign-in in progress no longer carries a
-  code or a count of wrong ones.
-- The offline leaked-password list now travels in the package. A deployment that holds
-  no corpus file of its own still falls back to a dated list when the range API cannot
-  answer, and the list is refreshed with each release rather than by the operator.
-- The self-hosted compromised-password corpus is now reached at the address
-  `password.blocklist.selfhosted.address` names, over the same range protocol the
-  primary source uses, rather than read from a second file beside the application. A
-  deployment that names `selfHosted` and no address does not start.
-- A password longer than `password.maximum` is now refused with
-  `auth.password.toolong` rather than with the configuration code for a value above a
-  ceiling. A password field no longer answers with a sentence about configuration.
-- A check, a capability page or an explanation on a type a derivation reaches is now
-  refused without the host's rows whatever that derivation confers, rather than only
-  where the role it confers allows what is being asked. A call site that passes today
-  can no longer start faulting because an administrator edited a role.
-- An explanation can now be asked with the host's own rows, and on a type a derivation
-  reaches it names the grant the fact produced: no identifier, the derived kind, the
-  role the derivation confers, and the container it was inherited from. Asked without
-  those rows such a type is refused rather than answered from the stored grants alone.
-  The identifier an explained grant carries is optional for the same reason: a derived
-  grant is a fact being true and no row holds it.
-- A page of capabilities now costs one query over the host's own rows however many
-  permissions it asks for. Every derivation reaching the type is evaluated in that one
-  query, and what the role each confers allows is read from the model, so a page that
-  offers three actions costs what a page offering one costs.
-- A sign-in whose password an invalidation left below the single-factor floor now
-  completes and says so, so the person is asked for a new password at the next
-  sign-in rather than being locked out.
-- The case-insensitive collation is created in the schema the library owns, like
-  everything else of the library's, and a column names it by that schema.
-- A configuration key loosens the way its row states. Where a row states nothing, a
-  key with only a ceiling loosens upward, a key with only a floor loosens downward,
-  and a flag loosens away from its default, so a tightening no longer costs the
-  friction a loosening does.
-- A duration written in years or months is held at 366 days a year and 31 days a
-  month, so a retention floor stated in years is never shorter than the calendar
-  span it names.
-- `ThrowIfIncomplete` now takes the screening sources and whether the records of
-  processing are generated, because `service.name` and `hosting.environment` are
-  named only by a deployment that uses them. A missing declaration now fails with
-  `model.startup.declarationmissing` naming the key.
-
 ### Fixed
 
 - An organization's policy that overrides the gates of some step-up actions resolves,
@@ -1505,6 +1603,11 @@ against the public contract of LIB-API-001.
   the identifier began with a digit, which is about half of them.
 
 ### Removed
+
+- `Recipients`, `Recipient` and `RecipientLocation`, a second shipped register that
+  nothing read. The records of processing are generated from the recipients declared
+  on the model builder and `ProviderRegister.Default`, and flag a missing agreement
+  reference there.
 
 - `IOidc.FindClientAsync`, `IOidc.MintAsync`, `IOidc.ReuseAsync` and `MintedSession`.
   The contract now carries the two operations a host calls in process and the library

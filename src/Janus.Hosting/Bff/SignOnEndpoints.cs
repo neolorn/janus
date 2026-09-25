@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Core;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -49,7 +50,7 @@ internal static class SignOnEndpoints
     private static Task<IResult> ReturnAsync(
         SignOn signOn,
         HttpContext context,
-        string? code,
+        [NeverLogged] string? code,
         string? state,
         string? error,
         CancellationToken cancellationToken)

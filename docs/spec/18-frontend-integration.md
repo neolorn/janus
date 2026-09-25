@@ -754,76 +754,11 @@ the person.
 
 ## 7. Addresses
 
-**FE-ADDR-001** — Location SHALL be an **opt-in control** in the address flow, never
-requested during registration or on page load.
-
-*Source: D-061*
-
-**Acceptance criteria**
-1. No permission prompt appears unless the person activates the control.
-2. The control appears wherever an address is entered, including checkout.
-
----
-
-**FE-ADDR-002** — Location SHALL **preselect** city and district. The person confirms
-or corrects before anything is saved.
-
-*Source: D-061*
-
-A suggestion, not an authority.
-
-**Acceptance criteria**
-1. A preselected value is editable.
-2. Nothing is saved without confirmation.
-3. Denying the permission leaves the form fully usable.
-
----
-
-**FE-ADDR-003** — Coordinates SHALL be sent to our own BFF for resolution and SHALL
-NOT be retained.
-
-*Source: D-061*
-
-**Acceptance criteria**
-1. No third-party service receives coordinates.
-2. Coordinates are not persisted client-side or server-side after resolution.
-
----
-
-**FE-ADDR-004** — Overriding a preselection SHALL be reported, not only the final
-value.
-
-*Source: D-061*
-
-Consistent overrides for an area indicate a wrong boundary. The signal accumulates
-without anyone gathering it.
-
-**Acceptance criteria**
-1. An override is recorded with the suggested value and the chosen one.
-
----
-
-**FE-ADDR-005** — The **landmark field SHALL be prompted for explicitly**, not
-presented as an optional afterthought.
-
-*Source: D-061*
-
-In Egypt the landmark is often what actually completes a delivery. The courier's own
-example uses that field for one.
-
-**Acceptance criteria**
-1. The field carries a label and prompt indicating a landmark is wanted.
-2. Structured selection and free text are both submitted.
-
----
-
-**FE-ADDR-006** — Districts flagged as unserved SHALL be refused **at entry**, not at
-dispatch.
-
-*Source: D-061*
-
-**Acceptance criteria**
-1. An unserved district cannot be selected, with the reason shown.
+Postal and delivery addresses are host data (IDN-ATTR-005); the address flow, its
+location control and its district handling are the host's screens (D-061 records the
+first host's design, handed to the host). Two library constraints reach them: no
+coordinate is stored for a person (IDN-ATTR-006), and location is never requested
+during registration or on page load of any library screen.
 
 ---
 
@@ -851,7 +786,7 @@ the application should meet the same bar; on these screens it is a requirement.
 | Component library choice | Frontend, unconstrained |
 | Copy and tone | Design and legal review |
 | Navigation structure | Product |
-| Business screens beyond identity and privacy | The host application |
+| Business screens beyond identity and privacy, including addresses | The host application |
 
 Constraints shape these. They do not specify them.
 

@@ -229,8 +229,8 @@ stored grants alone (AUTHZ-PRIN-001 AC2).
 *Source: D-043*
 
 A stored grant exists because someone wrote it. A derived grant exists because a
-fact in the business data is true — "the assigned representative on an account holds
-the reader role on that account's orders." It needs no maintenance and cannot drift,
+fact in the business data is true: "the assigned representative on an account holds
+the reader role on that account's records." It needs no maintenance and cannot drift,
 because there is nothing to keep in sync.
 
 This is the same construct Zanzibar calls a computed userset. It is the mechanism

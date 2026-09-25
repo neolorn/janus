@@ -482,6 +482,41 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     /// <summary>
+    /// IDN-LIFE-012a: the address a provider stopped forwarding to drops to unverified
+    /// and gives up the primary role; an address the account holds unverified, or does
+    /// not hold, drops nothing.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_012a_AnUnvouchedAddressDropsToUnverifiedAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        IdentifierId id = await WriteAsync(subject, _entered);
+
+        await RecordAsync(subject, set => set.Verify(id, Noon));
+
+        await using (StoreContext writing = database.Context())
+        {
+            IdentifierDirectory directory = Directory(writing);
+
+            Assert.Equal(id, await directory.UnverifyAsync(subject, Canonical, TestContext.Current.CancellationToken));
+            Assert.Null(await directory.UnverifyAsync(
+                subject,
+                Canonicalised(Fresh("Never")),
+                TestContext.Current.CancellationToken));
+
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        Identifier read = Assert.Single(
+            (await Store(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken)).All);
+
+        Assert.True(read is { IsVerified: false, IsPrimary: false });
+        Assert.Null(await Directory(reading).UnverifyAsync(subject, Canonical, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// A value the account changed replaces both stored forms and the fingerprint, so
     /// the old value belongs to nobody and the new one belongs to the account.
     /// </summary>

@@ -13,7 +13,7 @@ namespace Janus.Hosting.Tests.Authorization;
 /// What a consent decides at the gate: an action done for a purpose resting on
 /// consent runs only where the subject consented to that purpose, and an action done
 /// for another purpose on the same record is untouched by it
-/// (PRIV-SENS-002, PRIV-SENS-002a, PRIV-SENS-003, AUTHZ-GATE-005).
+/// (PRIV-SENS-001, PRIV-SENS-002, PRIV-SENS-002a, AUTHZ-GATE-005).
 /// </summary>
 [Trait("kind", "integration")]
 public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixture>
@@ -25,7 +25,7 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
     private static readonly ResourceType Workspace = ResourceType.Parse("workspace");
 
     /// <summary>
-    /// PRIV-SENS-002 AC1, PRIV-SENS-003 AC2: the grant is there and the consent is
+    /// PRIV-SENS-002 AC1: the grant is there and the consent is
     /// not, so the action done for the consent-based purpose over the sensitive type
     /// is refused by the code that names what is missing.
     /// </summary>
@@ -87,6 +87,25 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
+    /// PRIV-CONS-007 AC3: a material revision of the notice ends the consent-based
+    /// purpose and nothing else, so the record is still read under the purpose
+    /// resting on the contract.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_007_AC3_ARevisedNoticeInterruptsNoContractualProcessingAsync()
+    {
+        Granted granted = await GrantedAsync();
+
+        await RecordAsync(
+            granted.Account,
+            Held(ConsentKind.Written) with { SupersededAt = Deployment.Noon.AddDays(30) });
+
+        Assert.Null(await RefusalAsync(granted, HostPermissions.Read));
+        Assert.Equal(ErrorCodes.ConsentSuperseded, await RefusalAsync(granted));
+    }
+
+    /// <summary>
     /// PRIV-CONS-008 AC4, PRIV-SENS-002a AC2: a withdrawn consent stops the purpose
     /// on the next request, the record staying where it is.
     /// </summary>
@@ -108,9 +127,9 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
-    /// PRIV-SENS-002a AC1, AC3, PRIV-SENS-003 AC3: the same record is read under the
-    /// purpose resting on the contract whether the consent-based one was ever given,
-    /// withdrawn, or never asked for.
+    /// PRIV-SENS-002a AC1: the same record is read under the purpose resting on the
+    /// contract whether the consent-based one was ever given, withdrawn, or never
+    /// asked for.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -149,13 +168,13 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
-    /// PRIV-SENS-003 AC1: the type the host declares sensitive derives the written
+    /// PRIV-SENS-001 AC1: the type the host declares sensitive derives the written
     /// requirement from the declaration alone, so an ordinary consent over it is the
     /// wrong kind and a written one admits the action.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task PRIV_SENS_003_AC1_TheSensitiveDeclarationDerivesTheWrittenRequirementAsync()
+    public async Task PRIV_SENS_001_AC1_TheSensitiveDeclarationDerivesTheWrittenRequirementAsync()
     {
         Granted granted = await GrantedAsync();
 
@@ -169,13 +188,13 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
-    /// PRIV-SENS-003 AC2: the written record is asked for by the consent-based
+    /// PRIV-SENS-002 AC1: the written record is asked for by the consent-based
     /// purpose and by nothing else, so reading the same sensitive record for a
     /// purpose resting on the contract is admitted with no consent anywhere.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task PRIV_SENS_003_AC2_TheWrittenRecordIsAskedForByTheConsentBasedPurposeOnlyAsync()
+    public async Task PRIV_SENS_002_AC1_TheWrittenRecordIsAskedForByTheConsentBasedPurposeOnlyAsync()
     {
         Granted granted = await GrantedAsync();
 
@@ -184,13 +203,13 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
-    /// PRIV-SENS-003 AC3: a customer who has granted no consent-based purpose still
+    /// PRIV-SENS-002a AC1: a subject who has granted no consent-based purpose still
     /// has their record read and kept, and the capability offers the reading without
     /// a residual rather than withholding it.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task PRIV_SENS_003_AC3_TheRecordIsReadForACustomerWhoConsentedToNothingAsync()
+    public async Task PRIV_SENS_002a_AC1_TheRecordIsReadForASubjectWhoConsentedToNothingAsync()
     {
         Granted granted = await GrantedAsync();
 

@@ -1943,6 +1943,8 @@ chooses nothing about what the profile covers.
 
 *Chapter text that should change.* None.
 
+**Superseded by D-165.** The host's own callbacks are mounted at paths it chooses; the library's routes stay a fixed list. Applied in entry 276.
+
 ---
 
 ## 63. A deployment that starts without key material refuses to start
@@ -2232,6 +2234,8 @@ with its registered secret, and widens when phase 8 adds application passwords.
 `OidcFlowTests.BFF_MACH_001_AC3_TheTokenEndpointAuthenticatesTheClientAsync`.
 
 *Chapter text that should change.* None.
+
+**Superseded by D-165.** The callbacks only; break-glass stays with phase 9. Applied in entry 276.
 
 ---
 
@@ -3246,6 +3250,8 @@ declared by the host rather than applied, that an unstated location is the hosti
 location, and that `password screening` is fixed outside.
 
 **Superseded by D-162.** Applied in entry 151.
+
+**Superseded by D-165.** Applied in entry 270.
 
 ---
 
@@ -5375,6 +5381,8 @@ declares from, that an unstated location is the hosting location at generation, 
 `password screening` is fixed outside. Chapter 05 section 8's "Location field" column
 should read `inside` or `outside` for every row that states one and "follows hosting"
 for every row that does not.
+
+**Superseded by D-165.** Applied in entry 270.
 
 ---
 
@@ -9672,6 +9680,8 @@ the adapter in Milestone 2 step 5 (entry 215).
 process from the session record to the declared client and is not stored, and
 LIB-HOST-001 could hold the declaration (row below).
 
+**Superseded by D-164.** Applied in entry 281.
+
 ---
 
 ## 263. What the app-password endpoints answer and record
@@ -10111,6 +10121,999 @@ unwarned until the next restart. Under it:
 change is checked, say that the warning stops neither a start nor a change, and say
 that domains compare without regard to case.
 
+---
+
+## 270. The shipped provider register is four rows; the developer row is the host's
+
+**Corrections 3 · 2026-09-24 · Tier 2 · PRIV-ROPA-002, LIB-HOST-001 Recipients, 05 section 6, D-165, D-029**
+
+*The question.* Chapter 05 section 6 tabulates five rows: mail server, SMS gateway,
+hosting provider, password screening and "Developer | Processor | All stored data |
+n/a | No", and says "These rows are the processors the library itself makes true and
+are shipped as defaults, each applied only while the integration it describes is
+configured". LIB-HOST-001 Recipients says "the library ships as the default set only
+the rows its own processing makes true (mail server, SMS gateway, hosting provider,
+password screening; `05` section 6, D-153, D-162)". D-165 says "the four library-true
+rows" and, under "Kept on purpose", "the recipient row for the developer
+relationship (D-029)". The corrections-3 instruction says the shipped defaults are
+"exactly the four library-true rows (mail server, SMS gateway, hosting provider,
+password screening), nothing else".
+
+*The readings.*
+
+1. Ship five rows, the developer row among them, as 05 section 6's table lists.
+2. Ship the four rows LIB-HOST-001 and D-165 name; the developer relationship is a
+   row the host declares through `recipients`, and D-165's "kept on purpose" keeps the
+   row in the chapter as the example of one.
+
+*Chosen: 2.* Three sources name four and the owner's instruction says "nothing else".
+The developer relationship is the deployment's contract (D-029), not something the
+library's own processing makes true, and a shipped row the library cannot make true is
+a register entry that may be false. Under it:
+
+- `ProviderRegister.Default` is the four rows in 05 section 6's order.
+- The SMS gateway row is applied to every deployment, as the hosting provider is:
+  `ISmsTransport` is a required registration (the sending service takes it), so the
+  integration it describes is always configured.
+- The unread second copy of the list (`Recipients`, `Recipient`, `RecipientLocation`)
+  is removed rather than kept beside the register.
+
+*Tests that pin it.*
+`ProcessingRecordsTests.PRIV_ROPA_002_TheShippedRegisterIsTheFourRowsTheLibraryMakesTrue`,
+`ProcessingRecordsTests.INT_GEN_004_AC1_AProviderAddedWithoutAnAgreementReferenceIsFlaggedAsync`,
+`ProcessingRecordsTests.PRIV_ROPA_002_TheRowsTheLibraryMakesTrueAreAppliedWithoutADeclarationAsync`.
+
+*Chapter text that should change.* 05 section 6 could drop the Developer row from the
+shipped table, or mark it as a row the host declares, and say that the SMS gateway row
+is always applied because an SMS transport is a required registration.
+
+---
+
+## 271. What the D-165 word search covers
+
+**Corrections 3 · 2026-09-24 · Tier 2 · D-165 code consequences, 08 CONV-NAME-001**
+
+*The question.* The corrections-3 instruction says "A repository-wide search for those
+words must come back empty outside docs/", the words being payment provider, courier,
+order, cart, product, checkout and cash on delivery. D-165's code consequences say "no
+fixture, test name, sample configuration or comment names a payment or shipping
+provider, an order, a cart, a courier or cash on delivery". A literal search for
+"order", "product" and "checkout" also finds words that are not business: sort order
+and ordering in prose, `ORDER BY`, the provider framework's handler `Order` constants,
+the lawful basis key `court-judgment-or-order` (10), the product name of CONV-NAME-001
+and the changelog lines about it, and the pinned platform action `actions/checkout` in
+the pipeline.
+
+*The readings.*
+
+1. Remove every literal occurrence, renaming the framework constants, the lawful-basis
+   key, CONV-NAME-001's vocabulary and the pipeline action.
+2. Remove every occurrence in the business sense D-165 names; keep the non-business
+   senses, which are fixed by a framework, by chapter 10, by CONV-NAME-001 or by the
+   platform.
+
+*Chosen: 2.* D-165 states the rule in the business sense ("names ... an order"), and
+reading 1 would break the OpenIddict handler contract, change a chapter 10 key and
+rename the pipeline's pinned action. The business senses are gone from code, tests,
+fixtures, comments, the changelog and NOTICE; the search script that checks it lists
+the non-business senses it passes, and the corrections-3 report lists them.
+
+*Tests that pin it.* None; verified by the search recorded in the corrections-3
+report.
+
+*Chapter text that should change.* None in the chapters; the instruction's search
+could name the business sense.
+
+---
+
+## 272. What carries `[NeverLogged]`
+
+**Corrections 3 · 2026-09-24 · Tier 2 · CONV-LOG-003 AC1, CONV-CODE-008 JAN0002**
+
+*The question.* CONV-LOG-003 lists what "SHALL NEVER be logged": "passwords, tokens,
+session identifiers, TOTP secrets or codes, recovery codes, verification codes, the
+hash prefix sent for password screening", "any field of a resource type the host
+declares sensitive", "the body of any endpoint the host marks `SensitiveBody`", and
+"the content of consent or notice text in any language". JAN0002 reports "A logging
+call whose argument is a type or member marked as never-logged". No chapter says
+which declarations carry the marker, and C# admits no attribute on a local variable.
+
+*The readings.*
+
+1. Mark the types whose whole value is forbidden, and nothing else.
+2. Mark those types, every property or field of another type that holds a forbidden
+   value, and every parameter through which one passes as a plain string or bytes.
+
+*Chosen: 2*, the strictest reading. A password is carried as a `string` far more
+often than as a `Password`, and the rule catches only what it can see marked. Under
+it:
+
+- Types: `Password`, `PasswordHash`, `OpaqueToken`, `TotpMaterial`, `TotpEnrolment`,
+  `VerificationCode`, `RecoveryCodeEntry`, `PreparedRecoveryCodes`, `SigningMaterial`,
+  `SessionId`, `GeneratedRecoveryCodes`, `KeyEncryptionKeys`, `SignOnSecret`,
+  `RecoveryCodesView`.
+- Members: every request member carrying a password, code, link token or invitation
+  token; every answer member carrying a code, secret, token or `otpauth` address; the
+  secret columns of the rows (hashes, tokens, codes, the client secret, the signing
+  key, the stored token payload, the staged password); the text of a notice and of
+  its translations.
+- Session identifiers are read to include the fingerprints a session, a
+  pre-authentication record or a link is found by, which identify it as surely as
+  the secret does.
+- Parameters: every `string`, `byte[]` or `ReadOnlyMemory<byte>` parameter carrying one
+  of those values, in the public service contracts and in their implementations
+  alike, since the rule reads the implementation's parameter and not the contract's.
+- Not marked: locals, which C# does not allow; spans, which cannot reach a logging
+  call; wrapped data keys, which are ciphertext; the send reference, which CONV-LOG-003
+  does not list. A host's own sensitive types and `SensitiveBody` endpoints are the
+  host's to mark; the library enforces the latter at runtime (BFF-LOG-002).
+
+*Tests that pin it.*
+`NeverLoggedValueAnalyzerTests.CONV_LOG_003_AC1_TheLibrarysOwnCarriersAreReportedAsync`,
+`NeverLoggedValueAnalyzerTests.CONV_LOG_003_AC1_TheVersionAndTheIdentifiersBesideThemAreNotReportedAsync`,
+`Janus.Authentication.Tests.NeverLoggedTests` (two tests),
+`Janus.Hosting.Tests.NeverLoggedTests` (two tests),
+`Janus.Storage.Tests.NeverLoggedTests.CONV_LOG_003_AC1_EveryColumnCarryingAForbiddenValueIsMarked`.
+
+*Chapter text that should change.* CONV-LOG-003 or CONV-CODE-008 could say which
+declarations carry the marker (types, members and parameters), that session
+identifiers include the fingerprints they are found by, and that locals cannot carry
+it.
+
+---
+
+## 273. Where the required keys are checked, and when the register counts as generated
+
+**Corrections 3 · 2026-09-24 · Tier 2 · LIB-HOST-001 AC2 and AC4, 10 section 4, PRIV-ROPA-001**
+
+*The question.* LIB-HOST-001 AC2: "Omitting any produces a named startup error
+identifying which". Chapter 10 section 4: "`hosting.environment`, required only when
+the records-of-processing generator is used (PRIV-ROPA-001)", and "startup **fails**
+with a named error if any is unset (the conditional one, when its condition holds)".
+`Settings.ThrowIfIncomplete` implements the rule, and nothing called it. No chapter
+says where among the startup checks it runs, how a deployment is known to use the
+generator, or what a named value that cannot be read does.
+
+*The readings.*
+
+1. The generator is used when a request for the register arrives, so the key is read
+   and refused then, and startup never requires it.
+2. The generator is part of every deployment of the library, which serves the
+   register at `GET /admin/privacy/records` and cannot be told not to, so startup
+   requires the key.
+
+*Chosen: 2*, the reading that refuses. Under reading 1 an incomplete register would be
+found by the regulator's request rather than by the operator's start. Under it:
+
+- The check is a startup check of its own, `SettingsValidationService`, registered
+  directly after the schema check and before every other, so an unnamed key is
+  reported by its own name and code (`model.startup.governinglanguage` for the
+  governing language, `model.startup.declarationmissing` with `details.key`
+  otherwise) and never by whichever later check happens to read it.
+- A key counts as named when the deployment wrote a row for it. A row that exists and
+  cannot be read stops the start as well, carrying the read's own failure.
+- The conditions are read from the values in force: `hosting.location` where it is
+  named, and `password.blocklist.source` and `password.blocklist.sources`, which have
+  defaults.
+
+*Tests that pin it.*
+`StartupValidationTests.LIB_HOST_001_AC3_ADeploymentNamingOnlyTheListedKeysStartsAsync`,
+`StartupValidationTests.LIB_HOST_001_AC4_ADeploymentWithoutItsGoverningLanguageIsRefusedAsync`,
+`StartupValidationTests.LIB_HOST_001_AC2_AnUnnamedKeyIsRefusedByNameBeforeTheServerStartsAsync`,
+`StartupValidationTests.LIB_HOST_001_AC2_AConditionalKeyIsRefusedOnceItsConditionHoldsAsync`,
+and the `StartupConfigurationTests` of `Settings.ThrowIfIncomplete`.
+
+*Chapter text that should change.* Chapter 10 section 4 could say that the register
+is generated by every deployment, making `hosting.environment` required outright, or
+name how a deployment declines the generator.
+
+---
+
+## 274. How a sensitive body is kept out of request logging
+
+**Corrections 3 · 2026-09-24 · Tier 2 · BFF-LOG-002, CONV-LOG-003, LIB-HOST-001**
+
+*The question.* BFF-LOG-002: "Such an endpoint is one the host marks with the
+`SensitiveBody` endpoint metadata (LIB-HOST-001); the library has no knowledge of what
+the body holds. Body logging is off for a marked endpoint whatever the setting." The
+chapters name the metadata and nothing else: not which assembly carries it, whether
+the library's own endpoints carry it, or what happens to a body the logging meets
+before the endpoint is known.
+
+*The readings.*
+
+1. The mark is the host's alone, so only the endpoints the host marks are covered, and
+   a body logged ahead of routing is logged, since no mark is known yet.
+2. The mark is the host's to place and the library's to honour everywhere: the
+   library marks every endpoint it maps, and a request whose endpoint is not known
+   when the logging reads it is treated as marked.
+
+*Chosen: 2*, the reading that logs least. Under it:
+
+- `SensitiveBodyAttribute` is public in `Janus.Core`, beside `NeverLoggedAttribute`,
+  so a host puts it on an endpoint as an attribute or as endpoint metadata without a
+  second vocabulary. It carries nothing.
+- The library registers an `IHttpLoggingInterceptor` with `AddJanus`. It runs after
+  the framework has applied the deployment's fields and any per-endpoint setting, and
+  turns off request and response bodies where the endpoint carries the mark or is
+  not known. Body logging stays wholly the host's to turn on; the library turns
+  nothing on.
+- Every endpoint `MapIdentityEndpoints` maps carries the mark, since each body holds
+  a credential or a person's data.
+- A host's own interceptor registered after the library's runs after it and could
+  turn a body back on. That is host code choosing to log the body, not a setting,
+  and is outside what the library can refuse.
+- The endpoint metadata the interceptor reads makes it a third reader of endpoint
+  metadata in `Bff/`; the gates of BFF-CSRF-001 AC2 and AUTH-SESS-007 AC2 list it, and
+  it enforces no token and admits nothing.
+
+*Tests that pin it.*
+`SensitiveBodyLoggingTests.BFF_LOG_002_AC1_BodyLoggingIsOffByDefault`,
+`SensitiveBodyLoggingTests.BFF_LOG_002_AC2_NoLogEntryHoldsAFieldOfAMarkedEndpointsBodyAsync`,
+`SensitiveBodyLoggingTests.BFF_LOG_002_AC1_EveryEndpointTheLibraryMapsIsMarked`,
+`SensitiveBodyLoggingTests.BFF_LOG_002_AC1_ABodyMetBeforeRoutingIsNotLoggedAsync`,
+`BrowserProfileTests.BFF_CSRF_001_AC2_NoEndpointCanBeExcludedByConfigurationOrAttribute`,
+`BrowserProfileTests.AUTH_SESS_007_AC2_NoEndpointCanOptOut`.
+
+*Chapter text that should change.* Chapter 07's "Sensitive-body endpoints" row could
+name the type (`SensitiveBodyAttribute`, in `Janus.Core`) and say that the library's
+own endpoints carry it and that an unknown endpoint counts as marked; chapter 17
+BFF-LOG-002 could say the same.
+
+---
+
+## 275. What the browser profile does with a processor's cross-site post return
+
+**Corrections 3 · 2026-09-24 · Tier 3 · BFF-CSRF-005 AC4, BFF-CSRF-002**
+
+*The question.* BFF-CSRF-005 AC4: "A cross-site POST return to a host route carrying
+no session cookie is handled as the host's GET continuation, not as a lost session;
+the library documents the pattern." The prose: "where one posts, the host's return
+route must be a GET that then continues, rather than relying on the session being
+present on the POST itself." BFF-CSRF-002: "Reject where `Sec-Fetch-Site` is
+`cross-site` and the request is state-changing", AC1 "A cross-site POST is rejected
+before reaching any endpoint." A post the processor makes reaches the resource
+isolation stage first and is refused there, so no host route can turn it into a GET
+unless the host puts its own code ahead of the stages. The criterion touches a gate,
+so the strictest reading is taken.
+
+*The readings.*
+
+1. The library refuses the post as today and documents that the host writes its own
+   middleware, ahead of the browser profile, that answers its return route with a
+   redirect.
+2. The resource isolation stage itself answers such a post 303 with its own address,
+   so the browser reads that address as a top-level navigation and the lax cookie
+   goes with it; nothing of the post is carried.
+
+*Chosen: 2*, in its narrowest form. Reading 1 asks every host to write code that
+meets cross-site posts ahead of every gate the library has, which is the hazard the
+stages exist to remove. Under reading 2:
+
+- Only a `POST` whose `Sec-Fetch-Site` is `cross-site`, `Sec-Fetch-Mode` is
+  `navigate` and `Sec-Fetch-Dest` is `document`, and which carries no session cookie,
+  is answered 303. A post that carries the session, one that does not navigate the
+  page, one that loads into a frame, and one without fetch metadata are refused
+  exactly as before with `session.csrf.invalid`.
+- The `Location` is the request's own encoded path and query, relative, so the answer
+  is never a redirect elsewhere. The body is not read and not forwarded.
+- It applies to every route of the browser profile, the library's included; a library
+  route that only accepts a post answers the read with 405, and no state changes.
+- The answer is recorded at Information under event 13 of the browser profile's log,
+  with the correlation identifier only.
+- BFF-CSRF-002 AC1 still holds: the post is not carried and reaches no endpoint.
+- The pattern is documented on `UseBrowserProfile`: the host's route there is a GET
+  that asks the processor for the outcome.
+
+*Tests that pin it.*
+`BrowserProfileTests.BFF_CSRF_005_AC4_ACrossSitePostReturnContinuesAsTheHostsGetAsync`,
+`BrowserProfileTests.BFF_CSRF_002_AC1_ACrossSitePostIsRejectedBeforeAnyEndpointAsync`.
+
+*Chapter text that should change.* Chapter 17 BFF-CSRF-005 could state the rule the
+stage applies (the three header values, no session cookie, 303 to the same address),
+and BFF-CSRF-002 could name it as the one cross-site post answered other than by
+refusal.
+
+---
+
+## 276. The seam a host mounts its own callbacks on
+
+**Corrections 3 · 2026-09-24 · Tier 2, Tier 3 where marked · BFF-MACH-001, BFF-MACH-002, BFF-MACH-003, INT-GEN-003, BFF-OWN-001, CONV-DESIGN-005**
+
+*The question.* D-165 and 05 INT-GEN-003: "The library ships these controls as a
+host-mountable machine-profile pipeline (BFF-MACH-002, BFF-MACH-003): signature
+verification, correlation references, the rate limit and source restriction", and "A
+host mounts each of its own providers' callbacks on the same pipeline". No chapter
+names the mounting call, how a host states its provider's scheme, where the secret is
+read, how an event is claimed and what happens to a claim the host's route fails, what
+an unsigned callback is confirmed through, or what status a rejection answers.
+
+*The readings.*
+
+1. Hand the host the checks as separate middleware to arrange around its own routes.
+2. One mount per callback, where the callback is a contract the host implements to
+   declare its provider's scheme, and the library runs every check in a fixed order
+   before the host's route.
+
+*Chosen: 2.* Reading 1 leaves the presence and order of each check to every host,
+which is what BFF-OWN-001 refuses for the browser profile. Under it:
+
+- `UseCallback(PathString, ISignedCallback)` and `UseCallback(PathString,
+  IUnsignedCallback)` mount a callback before `UseBrowserProfile`, at a path the host
+  chooses (09 section 10, "under paths of its choosing"), matched without regard to
+  case in `PipelineProfiles` only.
+- The branch runs the machine profile's stages, so a request carrying a session cookie
+  is refused (BFF-MACH-001 AC2), then the callback's checks, then the host's route. It
+  marks the request with an internal feature the browser profile passes untouched; no
+  host code can set it, so no browser endpoint reaches the machine profile by
+  configuration (BFF-MACH-001 AC1).
+- The checks, in order: `integration.callback.ratelimit` per source, before anything
+  is read; the provider's published ranges where declared, an IPv4-mapped address
+  compared as IPv4; then, signed, a signature present, the five-minute window where
+  the scheme carries an instant, and verification; or, unsigned, a reference issued
+  for that callback, then the host's confirmation.
+- Tier 3. Signed: the host declares the hash of the provider's keyed-hash scheme
+  (`Algorithm`), where the signatures and the signed bytes are (`Presented`), the
+  secrets (`ReadSecretsAsync`) and the event identifier (`EventOf`). The library
+  computes the HMAC itself, compares every presented signature in fixed time against
+  the current secret and, for 24 hours after `CurrentSince`, the previous one,
+  whichever matches, and zeroes what it computed. A hash the platform cannot compute
+  fails at mount; secrets that cannot be read verify nothing. Only shared-secret
+  schemes are covered, which is what "Secret: from the secrets manager, rotatable with
+  an overlap window" describes.
+- Tier 3. Idempotency: the SHA-256 of the event identifier is claimed per callback in
+  `callback_events`, in one insert that does nothing on conflict, before the route
+  runs. A delivery of an event already claimed is answered 200 without reaching the
+  route and recorded at Information. A delivery the route does not answer with a 2xx,
+  or that throws, gives its claim back in a scope of its own under a token the
+  request's abandonment does not cancel, so the provider's retry is carried. A
+  verified delivery carrying no identifier is refused.
+- Unsigned: a reference is issued through the public `ICallbackReferences`: 128 random
+  bits, base64url, kept as its SHA-256 in `callback_references`, so the lookup is by
+  hash and nothing secret is compared in variable time. The route is reached only once
+  the host's `ConfirmAsync` succeeds. No claim is made, since the route acts only on
+  what the provider's API confirmed.
+- Every refusal is recorded against its source in the callbacks ledger (INT-GEN-003
+  AC3), counts toward `alerting.callback.threshold`, and is logged at Warning with the
+  callback's name, the check and the correlation identifier.
+- Tier 3. `integration.callback.rejected` answers 429 for every cause, the status 05
+  and 10 give it for the rate limit, where it answered 422 before. `ApiStatus` gives a
+  code one status, and one answer for a forged reference and a flood tells the sender
+  nothing of which it was. The rate-limited refusal carries `retryAt`, so the answer
+  carries `Retry-After`.
+- Every method of both contracts returns `Result` or `Result<T>` (CONV-DESIGN-005),
+  and a failure refuses the delivery. `BFF_OWN_001_AC1` now holds the two profile
+  mounts to the builder alone and `UseCallback` to the builder, a path and a callback
+  contract, with nothing that could turn a check off.
+- The public types are under `Janus.Hosting.Callbacks` as mounting types
+  (CONV-LAYOUT-002); admission, references and the ledgers are under
+  `Janus.Authentication.Callbacks`, where `ICallbackLedger` moved from `Sending`
+  (CONV-DESIGN-001 AC2).
+- Neither new table has a retention: a claimed event and an issued reference stay.
+
+*Tests that pin it.*
+`HostCallbackTests.BFF_MACH_002_AC1_AnUnsignedOrMisSignedCallbackIsRejectedBeforeParsingAsync`,
+`HostCallbackTests.BFF_MACH_002_AC2_AReplayOutsideTheWindowIsRejectedAsync`,
+`HostCallbackTests.BFF_MACH_002_AC3_ADuplicateEventIdentifierIsProcessedOnceAsync`,
+`HostCallbackTests.BFF_MACH_002_AC3_ADeliveryTheRouteFailedIsCarriedAgainAsync`,
+`HostCallbackTests.BFF_MACH_002_AC3_ADeliveryCarryingNoEventIdentifierIsRefusedAsync`,
+`HostCallbackTests.BFF_MACH_002_AC4_ComparisonIsConstantTime`,
+`HostCallbackTests.BFF_MACH_002_TheSecretReplacedVerifiesFor24HoursAsync`,
+`HostCallbackTests.BFF_MACH_002_SecretsTheManagerCannotGiveVerifyNothingAsync`,
+`HostCallbackTests.BFF_MACH_002_AnAlgorithmThePlatformCannotComputeFailsWhenMounted`,
+`HostCallbackTests.INT_GEN_003_AFloodIsAnsweredBeforeAnyLookupAsync`,
+`HostCallbackTests.INT_GEN_003_ACallbackFromOutsideThePublishedRangesIsRejectedAsync`,
+`HostCallbackTests.INT_GEN_003_AReferenceIs128RandomBitsKeptByItsHashAsync`,
+`HostCallbackTests.BFF_MACH_003_AC1_NoUnsignedCallbackAdvancesStateWithoutConfirmationAsync`,
+`HostCallbackTests.BFF_MACH_003_AC2_AForgedCallbackWithAGuessedReferenceIsRejectedAndLoggedAsync`,
+`HostCallbackTests.BFF_MACH_003_AC3_RepeatedVerificationFailuresRaiseAnAlertAsync`,
+`HostCallbackTests.BFF_MACH_001_AC2_AHostCallbackCarryingASessionCookieIsRefusedAsync`,
+`CallbackContractTests.CONV_DESIGN_005_AC1_EveryCallbackContractMethodReturnsAnOutcome`,
+`CallbackContractTests.CONV_DESIGN_005_AC2_NoCallbackContractReturnsNull`,
+`BrowserProfileTests.BFF_MACH_001_AC3_ARequestTheMachineProfileGovernsPassesTheBrowserProfileAsync`,
+`BrowserProfileTests.BFF_OWN_001_AC1_MountingTakesNoSecurityRelevantConfiguration`,
+`CallbackStoreTests.BFF_MACH_002_AC3_AnEventIsClaimedOnceAsync`,
+`CallbackStoreTests.BFF_MACH_002_AC3_AnEventGivenBackIsClaimedAgainAsync`,
+`CallbackStoreTests.INT_GEN_003_AReferenceIsHeldForItsCallbackOnlyAsync`,
+`CallbackStoreTests.INT_GEN_003_TheTablesHoldHashesAndTimesAndNothingElseAsync`.
+
+*Chapter text that should change.* 17 BFF-MACH-002 could name the mount, limit the
+item to shared-secret keyed hashes, and state what a failed route does to a claim and
+what a repeated delivery is answered; BFF-MACH-003 could name the reference issuer and
+the confirmation a host supplies; 10 section 1 could give `integration.callback.rejected`
+429 for every cause; 04 or 06 could give `callback_events` and `callback_references` a
+retention.
+
+---
+
+## 277. A report of delivery is held to a live send
+
+**Corrections 3 · 2026-09-24 · Tier 3 · INT-GEN-003 AC1, 09 section 10 AC1, INT-SMS-005, AUTH-ABUSE-007**
+
+*The question.* INT-GEN-003 AC1: "A callback with a guessed reference is rejected." 09
+section 10 AC1: "A forged callback with a guessed reference is rejected and logged."
+INT-SMS-005 gives a report of failed delivery one effect and says nothing of a report
+of delivery. Since phase 4 a report of delivery was taken and did nothing whatever its
+reference, so a guessed reference reporting delivery was answered as a genuine one
+and never counted toward `alerting.callback.threshold`. The endpoint answers on the
+wire for the first time in this run. The item touches rejection and alerting, so the
+strictest reading is taken.
+
+*The readings.*
+
+1. A report of delivery changes nothing, so its reference is not looked up and it is
+   always taken.
+2. Every report is held to a live send, whatever it says: a report of delivery is
+   checked against the send and changes nothing of it; one whose reference no send
+   holds is rejected, recorded against its source and counted, as a failure report
+   with a guessed reference already was.
+
+*Chosen: 2.* Both criteria name a callback with a guessed reference without regard to
+what it reports. Under it:
+
+- `ISendLedger.HoldsAsync(reference)` answers whether a send the transport took under
+  that reference is still held, reading the same `sends` row a release removes. It
+  writes nothing.
+- A genuine report of delivery that arrives after its send settled is refused. A send
+  is held for as long as any bucket it counted against decides anything, which is
+  hours, and a gateway reports within minutes.
+
+*Tests that pin it.*
+`DeliveryReportsTests.INT_GEN_003_AC1_ACallbackWithAGuessedReferenceIsRejectedAsync`
+(both reports), `DeliveryReportsTests.INT_SMS_005_AC1_AForgedReportVerifiesNoPhoneAsync`,
+`DeliveryReportsTests.INT_GEN_003_AC2_ACallbackAdvancesNoStateOfItsOwnAsync`,
+`SendLedgerTests.HoldsAsync_ASendCounted_IsHeldUntilItIsReleasedAsync`.
+
+*Chapter text that should change.* 05 INT-SMS-005 could say that a report of delivery
+is checked against the send it names and is rejected where no send holds its
+reference.
+
+---
+
+## 278. How the delivery report is read and what it answers
+
+**Corrections 3 · 2026-09-24 · Tier 2 · INT-SMS-005, 09 section 10, LIB-EXT-001, CONV-DESIGN-005, BFF-MACH-001**
+
+*The question.* D-165 keeps `GET /callbacks/sms/dlr`, and INT-SMS-005 says the
+gateway "calls over plain HTTP with parameters in the query string". No chapter names
+those parameters, which are each gateway's own, nor what a report taken is answered.
+
+*The readings.*
+
+1. The library fixes the parameter names, and a host whose gateway uses others adapts
+   them in front of the endpoint.
+2. The transport the host registers reads the report, since it is the one component
+   that knows the gateway's scheme.
+
+*Chosen: 2.* Reading 1 writes one gateway's scheme into the library, which LIB-EXT-001
+AC3 keeps out, and puts host code ahead of the machine profile. Under it:
+
+- `ISmsTransport.ReadReport(parameters)` returns `Result<SmsDeliveryReport>`, the
+  reference the send was given and whether it was delivered; a failure is a report
+  that cannot be read (CONV-DESIGN-005). Every transport implements it.
+- The endpoint passes the query string one value a name; a name the gateway repeated
+  is not passed.
+- A report that cannot be read is rejected as one carrying a guessed reference is:
+  429 `integration.callback.rejected`, recorded against its source and counted toward
+  the alert.
+- A report taken answers 200 with no body.
+- The path is one of the machine profile's routes, so a request carrying the browser
+  session cookie is refused 403 (BFF-MACH-001 AC2) and the browser profile never runs
+  for it.
+- `ISmsTransport` is a required registration (entry 270), so the endpoint's transport
+  is always resolvable when the host's endpoints are built.
+
+*Tests that pin it.*
+`DeliveryReportEndpointTests.BFF_MACH_001_AC3_TheDeliveryReportIsCarriedOnTheMachineProfileAsync`,
+`DeliveryReportEndpointTests.INT_GEN_003_AC1_AForgedOrUnreadableReportIsRejectedAsync`,
+`DeliveryReportEndpointTests.BFF_MACH_001_AC2_ADeliveryReportCarryingASessionCookieIsRefusedAsync`,
+`SensitiveBodyLoggingTests.BFF_LOG_002_AC1_EveryEndpointTheLibraryMapsIsMarked`,
+`ResultContractTests.CONV_DESIGN_005_AC1_EveryContractMethodReturnsAnOutcome`.
+
+*Chapter text that should change.* 05 INT-SMS-005 could say that the registered
+transport reads the report; 09 section 10 could give the answer to a report taken (200,
+no body) and the status of a refused one.
+
+---
+
+## 279. When a pushed request is spent, and where its destination is judged
+
+**Corrections 3 · 2026-09-24 · Tier 2 · AUTH-OIDC-006 AC2, API-REDIR-001, 09 section 9, BFF-SESS-006**
+
+*The question.* AUTH-OIDC-006 AC2: "the `request_uri` is single use and expires in 60
+seconds." The protocol server the library is built on spends a reference only when it
+issues a code against it, so a reference answered with `login_required`, or one that
+forwarded the browser to sign in, could be presented again for the rest of its minute.
+Separately, API-REDIR-001 replaces a destination that is not the registered one rather
+than refusing it, and every authorization request now reaches `/oidc/authorize` as a
+reference whose parameters were read at the push.
+
+*The readings.*
+
+1. A reference is spent when a code is issued against it; any other answer leaves it
+   presentable until it lapses.
+2. A reference is spent by the first answer it is given, whatever that answer is.
+
+For the destination:
+
+1. It is judged at the push, where the parameters are read, and the replacement of
+   API-REDIR-001 applies there.
+2. A push naming another destination is refused, since RFC 9126 has the server
+   validate it at the push.
+
+*Chosen: 2, and 1 for the destination.* "Single use" says nothing of the answer, and
+a copy of a reference that can still be presented is what the criterion exists to
+prevent; the strictest reading is taken. For the destination, API-REDIR-001 AC1 is the
+chapters' rule and the push is where the parameters are now read; replacing still
+sends the code nowhere but the registered destination. Under it:
+
+- The server spends the reference when it issues a code. Every other answer of
+  `/oidc/authorize` spends it too: a refusal as the answer is applied, a browser
+  forwarded to sign in before it is forwarded. A reference presented a second time is
+  refused 400 and forwards nowhere.
+- The reference lapses 60 seconds after issue; the push answers `expires_in: 60`.
+- The pushed request is kept as a row of `oidc_tokens` taken before anyone is known,
+  so the row's `subject` is nullable (migration `AllowPushedRequestTokens`). A subject
+  that names no account of this deployment is still refused where it arrives.
+- The destination check runs on the push only. At `/oidc/authorize` the parameters are
+  the ones the push kept, so nothing there can name another destination.
+- Every registered client holds the permission to push. The browser application's
+  own sign-on pushes on the same back channel and with the same secret as its
+  exchange; a push the provider refuses answers `session.expired`, forwards nowhere
+  and is logged (`BrowserProfileLog` event 14).
+
+*Tests that pin it.*
+`ProviderConformanceTests.AUTH_OIDC_006_AC2_ADirectAuthorizationRequestIsRefusedAsync`,
+`ProviderConformanceTests.AUTH_OIDC_006_AC2_AReferenceIsTakenOnceAsync`,
+`ProviderConformanceTests.AUTH_OIDC_006_AC2_AReferenceAnsweredWithoutACodeIsSpentAsync`,
+`ProviderConformanceTests.AUTH_OIDC_006_AC2_AReferenceLapsesAfterSixtySecondsAsync`,
+`ProviderConformanceTests.AUTH_OIDC_006_AC4_TheDocumentRequiresPushedRequestsAsync`,
+`OidcFlowTests.API_REDIR_001_AC1_AnUnknownDestinationIsReplacedAndLoggedAsync`,
+`SignOnTests.AUTH_OIDC_006_AC2_TheBrowserCarriesOnlyThePushedReferenceAsync`,
+`SignOnTests.AUTH_OIDC_006_AC2_ARequestThePushRefusesIsNotForwardedAsync`,
+`OidcStoreTests.AUTH_OIDC_006_AC2_APushedRequestIsKeptNamingNobodyAsync`.
+
+*Chapter text that should change.* 02 AUTH-OIDC-006 could say that a `request_uri` is
+spent by the first answer it is given; 09 section 9 could say that API-REDIR-001's
+replacement applies at `POST /oidc/par`.
+
+---
+
+## 280. What the provider's conformance suite is and what it asserts
+
+**Corrections 3 · 2026-09-24 · Tier 2 · AUTH-OIDC-006 AC1, CONV-TEST-002, LIB-TEST-001, API-REDIR-001**
+
+*The question.* AUTH-OIDC-006 AC1: "A conformance suite asserts each refusal named
+above and the exact-match rule." CONV-TEST-002 gives "conformance" as the kind that
+runs against a host's own configuration and ships per LIB-TEST-001, whose package is
+built in phase 10 and whose criteria name the model and the permission checks only.
+The item names the implicit, password and plain-PKCE forms and public clients without
+saying which requests each of them covers.
+
+*The readings.*
+
+1. The suite is a suite of the library's own tests over its provider, written now.
+2. The suite is part of the `Janus.Conformance` package a host runs, written in phase
+   10 with that package.
+
+*Chosen: 1, and phase 10 carries the same assertions into the package.* The criterion
+is D-164's and belongs to this correction; the behaviour it asserts is set by the
+library's configuration of its provider, which the tests exercise through the real
+`AddJanus`. So that a host can also prove it against its own deployment, phase 10's
+host-run suite runs the same refusals. Each named form is read at its widest:
+
+- Implicit: every response type but `code`, the hybrid ones included, is refused at the
+  push with `unsupported_response_type`.
+- Password: that grant and every grant but the code and the refresh (client
+  credentials, device code, token exchange) is refused with `unsupported_grant_type`.
+- Plain PKCE: the plain method and a challenge that names no method, which RFC 7636
+  reads as plain, are refused with `invalid_request`, and so is a request with no
+  proof key. The discovery document lists S256 alone.
+- Exact match: a destination differing from the registered one in any character
+  (trailing slash, query, path, case of the host, scheme, port, suffix) never receives
+  the code, which API-REDIR-001 sends to the registered one; and a code is exchanged
+  only by naming its destination exactly.
+- Public clients: none exists, since a client that does not authenticate is refused
+  at the push and at the exchange with `invalid_client`; the one kind that
+  authenticates and holds nothing, a browser application's own layer, is handed no
+  refresh token.
+
+*Tests that pin it.*
+`ProviderConformanceTests.AUTH_OIDC_006_AC1_TheImplicitFormsAreRefusedAsync`,
+`ProviderConformanceTests.AUTH_OIDC_006_AC1_EveryOtherGrantIsRefusedAsync`,
+`ProviderConformanceTests.AUTH_OIDC_006_AC1_OnlyTheS256ProofKeyIsTakenAsync`,
+`ProviderConformanceTests.AUTH_OIDC_006_AC1_OnlyTheExactRegisteredDestinationReceivesTheCodeAsync`,
+`ProviderConformanceTests.AUTH_OIDC_006_AC1_ACodeIsNotExchangedForAnotherDestinationAsync`,
+`ProviderConformanceTests.AUTH_OIDC_006_AC1_NoPublicClientReceivesARefreshTokenAsync`,
+`ProviderConformanceTests.AUTH_OIDC_006_AC1_TheDocumentNamesOnlyWhatIsAdmittedAsync`.
+
+*Chapter text that should change.* 02 AUTH-OIDC-006 AC1 could say whether the suite is
+the library's own or part of LIB-TEST-001's package; 07 LIB-TEST-001 could name the
+provider's refusals among what the host-run suite verifies.
+
+---
+
+## 281. An access token's audience, and the adapter that verifies it
+
+**Corrections 3 · 2026-09-24 · Tier 3 · AUTH-OIDC-006 AC3, INT-MAIL-004, INT-MAIL-010, entry 215**
+
+*The question.* AUTH-OIDC-006 AC3: "Every access token carries `typ: at+jwt` and the
+seven claims; a token whose `aud` is not the mail server's client identifier is
+rejected by the adapter." No chapter says what `aud` names for a client other than the
+mail server's. The mail server's adapter is not built in Milestone 1 (entry 215), so
+there is no adapter in the library to reject anything.
+
+*The readings.*
+
+1. `aud` names the client the token was issued to, for every client; the adapter's
+   half of the criterion waits for the adapter.
+2. `aud` names the client the token was issued to, for every client; the adapter's
+   half is proved now by a verifier configured as the adapter must be, against what
+   the provider publishes, and the adapter built in Milestone 2 is held to the same
+   test.
+3. `aud` names a resource the deployment declares, one per relying party.
+
+*Chosen: 2, the strictest reading.* Reading 3 adds a declaration no chapter has.
+Reading 1 leaves a criterion untested. Under 2:
+
+- Every access token the token endpoint issues, on a code and on a refresh, names the
+  client it was issued to as `aud`, beside `client_id`. The token issued to the mail
+  server's client for app passwords (INT-MAIL-010) does the same.
+- The verifier the tests use reads the published key set and the issuer from the
+  discovery document, and requires the type `at+jwt`, the issuer, the audience of the
+  mail server's client and the lifetime on the deployment's clock. It takes the mail
+  server's token and refuses a token issued to a browser application's own layer and
+  an identity token issued to the mail server's own client.
+- The adapter built in Milestone 2 verifies the same things; its test is this one run
+  against it.
+
+*Tests that pin it.*
+`ProviderConformanceTests.AUTH_OIDC_006_AC3_EveryAccessTokenIsTypedAndCarriesTheSevenClaimsAsync`,
+`ProviderConformanceTests.AUTH_OIDC_006_AC3_ARefreshedAccessTokenIsTypedAndCarriesTheSevenClaimsAsync`,
+`ProviderConformanceTests.AUTH_OIDC_006_AC3_TheAdapterRefusesATokenForAnotherAudienceAsync`,
+`AppPasswordFlowTests.AUTH_OIDC_006_AC3_TheMailServersTokenIsOneItsAdapterTakesAsync`.
+
+*Chapter text that should change.* 02 AUTH-OIDC-006 could say that `aud` is the client
+identifier the token was issued to; 05 INT-MAIL-004 could list what the adapter
+verifies (signature, `typ`, issuer, audience, lifetime).
+
+---
+
+## 282. The provider event endpoint beside chapter 09's one callback
+
+**Corrections 3 · 2026-09-24 · Tier 3 · IDN-LIFE-012a AC3, 09 section 10, BFF-MACH-001, INT-GEN-003**
+
+*The question.* 09 section 10: "The library defines one callback endpoint of its own",
+and its table lists `GET /callbacks/sms/dlr` alone. IDN-LIFE-012a AC3: "The endpoint
+`POST /callbacks/providers/{provider}` is on the machine profile (BFF-MACH-001) and
+rate-limited like every callback." The two chapters contradict each other on what the
+library defines. No chapter says what the endpoint answers, where the event sits in
+the request, or which values `{provider}` takes.
+
+*The readings.*
+
+1. Build nothing until 09 names the endpoint.
+2. Build the endpoint IDN-LIFE-012a names, as the owner's corrections-3 order says,
+   and leave 09 to be brought into line.
+
+*Chosen: 2.* The owner's order names the endpoint and the item. Under it:
+
+- The library maps `POST /callbacks/providers/google` and `POST
+  /callbacks/providers/apple`, one route for each factor the catalogue marks as a
+  social provider; a path naming anything else is not the library's. Both are on the
+  machine profile's exact list.
+- Each delivery is counted against `integration.callback.ratelimit` before anything is
+  read, as INT-GEN-003 has it. No source is refused for where it is: neither provider
+  publishes the ranges its deliveries come from.
+- Google delivers the Security Event Token as the request's body (RFC 8935) and is
+  answered 202; Apple posts `{"payload": "<token>"}` and is answered 200. Every
+  refusal is `integration.callback.rejected`, 429, as every rejected callback is
+  (entry 276), and counts towards the callback alert.
+
+*Tests that pin it.*
+`ProviderEventTests.IDN_LIFE_012a_AC3_TheEndpointIsOnTheMachineProfileAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AC3_TheEndpointIsRateLimitedLikeEveryCallbackAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AC1_ASignedCompromiseEndsEverySessionAndHoldsTheCredentialAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AC2_AWithdrawnIdentityIsUnlinkedAsync`.
+
+*Chapter text that should change.* 09 section 10 could say the library defines two
+callback endpoints of its own and list `POST /callbacks/providers/{provider}` (source:
+Google, Apple; never does: act on an event its provider's keys do not verify), with
+`{provider}` one of `google` and `apple` and the answers 202 and 200.
+
+---
+
+## 283. What a deployment declares of a social provider, and how its keys are read
+
+**Corrections 3 · 2026-09-24 · Tier 3 · IDN-LIFE-012a, LIB-HOST-001, INT-GEN-003**
+
+*The question.* IDN-LIFE-012a: "Every event is verified against the provider's
+published keys". No chapter says where the library learns the address of those keys,
+the issuer an event names, or the audience it is addressed to, which is the
+deployment's own client identifier at the provider and nothing the library can know.
+LIB-HOST-001 has no row for a social provider.
+
+*The readings.*
+
+1. A fixed list of the providers' public addresses inside the library, with the client
+   identifiers in a configuration key.
+2. A host declaration per provider: the address of the provider's document naming its
+   issuer and key set, and the deployment's client identifiers there; optional, with
+   no default.
+
+*Chosen: 2, the strictest reading.* Reading 1 puts a vendor's address in library code
+and holds the audience in runtime configuration an administrator can change. Under 2:
+
+- `SocialProvider(Factor Provider, Uri Metadata, IReadOnlyList<string> ClientIds)` is a
+  public declaration registered once per provider. It is optional: a deployment that
+  declares none takes no provider event, and an event of an undeclared provider is
+  refused and counted as rejected, since nothing it holds could verify it.
+- A declaration that could verify nothing stops the deployment at startup with
+  `model.startup.declarationmissing`: `details.key` is `socialProvider.provider` for a
+  provider declared twice or a factor that is not a social provider,
+  `socialProvider.metadata` for an address that is not absolute HTTPS, and
+  `socialProvider.clientIds` for no client or an empty one.
+- The document and the key set are read over HTTPS only, on the framework's client
+  `identity-providers`, and held between events by the configuration manager of the
+  token library the provider stack already carries; nothing an event carries names
+  where keys are read from. An event naming a key the set does not hold is refused and
+  the set is asked for again, for the provider to deliver again. A set that cannot be
+  read refuses every event and is logged at error.
+- The signature is RS256 only; the issuer is the document's; the audience is one of
+  the declared clients. An event's lifetime is judged where it states one; a security
+  event states none and is not refused for that.
+
+*Tests that pin it.*
+`StartupValidationTests.IDN_LIFE_012a_ASocialProviderDeclaredShortOfWholeIsRefusedAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AnEventNothingDeclaredOrReadableVerifiesIsRefusedAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AC1_AnUnsignedEventChangesNothingAndIsAuditedAsRejectedAsync`.
+
+*Chapter text that should change.* 07 LIB-HOST-001 could list `SocialProvider` as an
+optional host declaration with the startup refusals above; 10 could carry its row.
+
+---
+
+## 284. How a provider's event finds the account it concerns
+
+**Corrections 3 · 2026-09-24 · Tier 2 · IDN-LIFE-012a, IDN-LIFE-012, PRIV-RIGHT-005c, REG-ACCT-001**
+
+*The question.* A provider's event names the identity by the provider's own subject
+identifier (`sub`), never by the account. No chapter says where the library holds that
+identifier for a linked identity, and social linking itself is built in phase 10.
+
+*The readings.*
+
+1. Hold the provider's subject in plain on the linked credential.
+2. Hold it as the keyed fingerprint every other searchable value is held as
+   (PRIV-RIGHT-005c), on the linked credential, unique per provider, and neutralised
+   at erasure with the rest.
+
+*Chosen: 2.* The identifier is the person's at the provider and is only ever looked up,
+never shown. Under it:
+
+- `authenticators.provider_subject` holds the 32-byte fingerprint of the provider's
+  subject under the fingerprint key. A check constraint holds it on a Google or Apple
+  credential and nowhere else; a unique index on the factor and the fingerprint, which
+  leaves out the neutralised value, keeps one account to an identity.
+- `IAuthenticatorStore.LinkAsync` records a linked identity with its subject and
+  `ByProviderAsync` finds it; phase 10's linking calls the first.
+- Erasure neutralises the fingerprint in the transaction that neutralises the others,
+  so the provider's events find the erased account no longer and the identity can be
+  linked afresh.
+- The column is a field of the Credentials group of REG-ACCT-001 ("provider links").
+
+*Tests that pin it.*
+`AuthenticatorStoreTests.IDN_LIFE_012a_ALinkedIdentityIsFoundByTheProvidersSubjectAsync`,
+`AuthenticatorStoreTests.IDN_LIFE_012a_AProvidersSubjectIsLinkedOnceAsync`,
+`AuthenticatorStoreTests.IDN_LIFE_012a_OnlyALinkedIdentityHoldsAProvidersSubjectAsync`,
+`SubjectEraserTests.IDN_LIFE_012a_TheProvidersSubjectOfALinkedIdentityGoesWithItsHolderAsync`,
+`ModelTests.REG_ACCT_001_AC2_NoFieldExistsOutsideTheGroupsTheTableNames`.
+
+*Chapter text that should change.* 01 IDN-LIFE-012 could say the provider's subject
+identifier is held as a keyed fingerprint on the linked credential; 04 PRIV-RIGHT-005c
+could list it among the fingerprints erasure neutralises.
+
+---
+
+## 285. Which provider events do what
+
+**Corrections 3 · 2026-09-24 · Tier 3 · IDN-LIFE-012a**
+
+*The question.* IDN-LIFE-012a names outcomes, not event types: "compromised, disabled,
+or its sessions revoked"; "consent revoked or account deleted"; "an email change or
+disable". AC1 names `sessions-revoked` and `account-disabled`, AC2 `consent-revoked`
+and `account-delete`. Google's catalogue also carries `tokens-revoked`,
+`token-revoked`, `account-credential-change-required`, `account-enabled` and
+`verification`; Apple's carries `email-enabled` and spells deletion `account-delete`.
+Neither provider sends an event for an email change.
+
+*The readings.*
+
+1. Act on the four types the criteria name and record every other.
+2. Act on every type whose meaning falls under an outcome the item names, and record
+   every other.
+
+*Chosen: 2, the strictest reading.* Under it:
+
+- Ends every session and holds the credential: Google `sessions-revoked`,
+  `account-disabled` (whatever its reason), `account-credential-change-required` (the
+  provider suspects a compromise) and `tokens-revoked` (the grant behind the sign-in is
+  gone).
+- Unlinks, or suspends where it is the last way in (entry 286): Apple
+  `consent-revoked`, `account-delete` and `account-deleted`.
+- Drops the address to unverified: Apple `email-disabled`, naming the address.
+- Recorded and changes nothing: `token-revoked`, `account-enabled`, `verification`,
+  `email-enabled` and any type the library does not know. `account-enabled` does not
+  lift a hold; only a sign-in by another factor does (entry 288).
+- An event naming no identity (`verification`, a revoked token) is acknowledged and
+  recorded nowhere, as is one naming an identity no account links.
+- "An email change" has no event in either provider's catalogue, so nothing answers
+  it.
+
+*Tests that pin it.*
+`ProviderEventTests.IDN_LIFE_012a_AC1_ASignedCompromiseEndsEverySessionAndHoldsTheCredentialAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AC2_AWithdrawnIdentityIsUnlinkedAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AnAddressTheProviderStoppedForwardingToDropsToUnverifiedAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AnEventThatChangesNothingIsRecordedAndAcknowledgedAsync`.
+
+*Chapter text that should change.* 01 IDN-LIFE-012a could name the event types for
+each outcome and drop "an email change", or name the event it means.
+
+---
+
+## 286. A withdrawn identity that is the last way in
+
+**Corrections 3 · 2026-09-24 · Tier 3 · IDN-LIFE-012a AC2, IDN-LIFE-012 AC3, IDN-LIFE-013, AUTH-SESS-010, REG-ACCT-001**
+
+*The question.* IDN-LIFE-012a: "IDN-LIFE-012 AC3 still refuses to remove the last
+credential, in which case the account is `suspended` with a security notice to the
+security-notice set". No chapter says what "the last credential" counts, who the
+suspension is recorded as made by (IDN-LIFE-013: `self` or `administrator`), what
+happens to an account already suspended or in its deletion window, or whether the
+credential stays.
+
+*The readings.*
+
+1. The last credential is the last row of any kind; the suspension is the owner's.
+2. The last credential is the last way in: nothing else the account holds may begin a
+   sign-in (REG-ACCT-001, "at least one primary sign-in method"). The suspension is an
+   administrator's, since only an administrator stands it back up.
+
+*Chosen: 2, the strictest reading.* A recovery code or a generator cannot sign a person
+in alone, and a suspension its owner could lift by the deactivation link would hand
+the account back to whoever holds the owner's mail. Under it:
+
+- The credential is the last where, without it, the password and every other usable
+  credential the account holds include no factor that may begin a sign-in.
+- Where it is not the last, it is removed and the security-notice set is told.
+- Where it is, it stays, and the account is suspended as an administrator suspends it:
+  `suspendedBy` is `administrator`, every session ends in the same transaction
+  (AUTH-SESS-010), `AccountSuspended` is announced with that origin, and the
+  security-notice set is told. An account its owner deactivated is taken over and
+  announces nothing, since its state does not change; one an administrator suspended
+  stays as it is; one in its deletion window or erased is left to that.
+
+*Tests that pin it.*
+`ProviderEventTests.IDN_LIFE_012a_AC2_AWithdrawnIdentityIsUnlinkedAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AC2_AWithdrawnLastCredentialSuspendsTheAccountWithANoticeAsync`.
+
+*Chapter text that should change.* 01 IDN-LIFE-012a could say that the last credential
+is the last way to begin a sign-in and that the suspension is recorded as the
+administrator's.
+
+---
+
+## 287. A disabled address that is the personal email a membership keeps
+
+**Corrections 3 · 2026-09-24 · Tier 3 · IDN-LIFE-012a, REG-MAIL-001 AC5, REG-MAIL-003 AC3**
+
+*The question.* IDN-LIFE-012a: "on an email change or disable, the provider-verified
+identifier SHALL drop to unverified". REG-MAIL-001 AC5 and REG-MAIL-003 AC3 hold the
+personal email a membership keeps verified for as long as the membership lasts, and
+the database refuses a kept email that is not verified. The two contradict each other
+where the provider's address is the one the membership keeps. No chapter says what
+becomes of the primary role an unverified address held.
+
+*The readings.*
+
+1. Drop it anyway and release it from the membership.
+2. Leave the kept personal email verified; drop every other.
+
+*Chosen: 2, the strictest reading.* It keeps most: a member keeps the verified address
+the end of the membership falls back on. Under it:
+
+- The verified email at the address the event names drops to unverified, unless it is
+  the kept personal email, which stays as it is and the event is recorded.
+- Where the dropped address was the primary email, the role passes to the earliest
+  verified email that may hold it, and stays vacant where none may.
+
+*Tests that pin it.*
+`IdentifierSetTests.IDN_LIFE_012a_AnUnvouchedAddressDropsToUnverifiedAndHandsThePrimaryOn`,
+`IdentifierStoreTests.IDN_LIFE_012a_AnUnvouchedAddressDropsToUnverifiedAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AnAddressTheProviderStoppedForwardingToDropsToUnverifiedAsync`.
+
+*Chapter text that should change.* 01 IDN-LIFE-012a could except the personal email a
+membership keeps and say where the primary role goes.
+
+---
+
+## 288. How a credential is held until the person signs in by another factor
+
+**Corrections 3 · 2026-09-24 · Tier 2 · IDN-LIFE-012a AC1, AUTH-RECOV-007, AUTH-SESS-001**
+
+*The question.* IDN-LIFE-012a: "the linked credential SHALL be `suspended` until the
+person signs in by another factor". `suspended` is also the state a reported loss puts
+a credential in, which is invalidated at the end of a window (AUTH-RECOV-007). No
+chapter says how the two are told apart, what counts as signing in by another factor,
+or whether the restoration is recorded.
+
+*The readings.*
+
+1. A new credential state.
+2. The existing `suspended` state with no instant at which it is invalidated, which a
+   reported loss always carries.
+
+*Chosen: 2.* It adds no value to a vocabulary chapter 10 holds. Under it:
+
+- The provider's event suspends the linked credential with no `invalidates_at`; the
+  sweep that invalidates a lost credential never reaches it.
+- Every session that begins for the account, on factors that do not include the held
+  credential's, restores it in the transaction the session begins in, and the
+  restoration is recorded as `auth.credential.restored` against the credential. A
+  credential suspended for a reported loss is not restored.
+
+*Tests that pin it.*
+`SessionServiceTests.IDN_LIFE_012a_AHeldCredentialStandsAgainAtASignInByAnotherFactorAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AHeldCredentialStandsAgainOnceThePersonSignsInByAnotherFactorAsync`,
+`AuthenticatorStoreTests.IDN_LIFE_012a_AHeldCredentialReadsBackHeldAsync`.
+
+*Chapter text that should change.* 01 IDN-LIFE-012a could say the credential is
+suspended with no invalidation instant and restored at the first session begun on
+another factor; 10 could list `auth.credential.restored`.
+
+---
+
+## 289. How a provider's event is carried once and audited
+
+**Corrections 3 · 2026-09-24 · Tier 2 · IDN-LIFE-012a AC1, IDN-AUD-001, INT-GEN-003, CONV-LOG-003**
+
+*The question.* IDN-LIFE-012a: every event "is idempotent by its `jti`, and is
+audited"; AC1: "an unsigned or replayed event changes nothing and is audited as
+rejected". No chapter names the audit actions or their details, says whose trail an
+unsigned event is recorded in, or what a replay is answered.
+
+*The readings.*
+
+1. Audit only what verified, and answer a replay as a refusal.
+2. Audit what verified and what did not against the account whose linked identity it
+   names, and acknowledge a replay so the provider stops delivering it.
+
+*Chosen: 2.* AC1 asks for the unsigned event to be audited, and a refused replay would
+be delivered again. Under it:
+
+- The `jti` is claimed under the provider's own callback name (`providers/google`,
+  `providers/apple`) in the ledger every callback claims its event in, in the
+  transaction the event's work runs in, so an event whose work fails is neither
+  claimed nor half done.
+- A carried event is recorded as `auth.providerevent.taken`; a replayed one as
+  `auth.providerevent.rejected`, answered as a carried one is. An event the keys do not
+  verify is recorded as `auth.providerevent.rejected` against the account whose linked
+  identity its unverified claims name, where they name one, and refused. Both are
+  security records with `credential`, `event` (the type as the provider spells it)
+  and `outcome`: `sessionsEnded`, `credentialUnlinked`, `accountSuspended`,
+  `addressUnverified`, `recorded`, `unsigned` or `replayed`. The provider's subject is
+  never recorded or logged.
+- An event about no linked identity is claimed and acknowledged and recorded nowhere.
+
+*Tests that pin it.*
+`ProviderEventTests.IDN_LIFE_012a_AC1_AnUnsignedEventChangesNothingAndIsAuditedAsRejectedAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AC1_AReplayedEventChangesNothingAndIsAuditedAsRejectedAsync`,
+`ProviderEventTests.IDN_LIFE_012a_AnEventThatChangesNothingIsRecordedAndAcknowledgedAsync`,
+`AuditActionsTests` (the catalogue).
+
+*Chapter text that should change.* 10 could list the three audit actions and the
+`outcome` vocabulary.
+
 
 # Rows for chapter 10
 
@@ -10160,6 +11163,7 @@ The subsection each row belongs in is named with it.
 | `IDnsResolver` (`TextRecordsAsync`) | optional | No startup refusal. Every verification of a locked domain answers `identity.domain.unverified` and every scheduled check fails and raises `domain-reverification-failed`, so no domain is ever proved. A deployment that locks no domain needs none (REG-DOM-001, entry 212). |
 | `IMailServer` (`ProvisionAsync`, `MailboxesAsync`, `AppPasswordsAsync`, `CreateAppPasswordAsync`, `RevokeAppPasswordAsync`) | optional | No startup refusal. No mailbox is pushed and none is compared; the rows are still written, and the first pass after a registration pushes every state owed. A push carries a key that stays the same until the server confirms it, the address in its canonical form and the state `disabled`, `enabled` or `removed`; the server applies a key once. The listing answers every mailbox the server hosts with whether it is enabled. The three app-password calls carry the person's token and act on the account the server finds in it; the creation answers the server's new secret and its identifier, and a revocation of an identifier the server does not hold for that person answers `auth.credential.notfound`. Without a registration every app-password operation answers `authz.denied`. A deployment whose staff mail is hosted elsewhere needs none (INT-MAIL-006, INT-MAIL-008, INT-MAIL-009, INT-MAIL-010, entries 215, 262 and 263). |
 | `MailServerClient` (`clientId`) | where `IMailServer` is registered, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `mailServerClient.clientId`. The identifier is the registry's `protocol` client the mail server trusts, which the library issues the person's token to for the app-password calls; it presents no secret, since the library issues the token itself (INT-MAIL-010, AUTH-OIDC-001 AC4, entry 262). |
+| `SocialProvider` (`provider`, `metadata`, `clientIds`) | optional, once per social provider | No startup refusal where none is declared: every event of that provider is refused as a rejected callback. One declared twice, naming a factor that is not a social provider, with a `metadata` address that is not absolute HTTPS, or with no client or an empty one stops startup with `model.startup.declarationmissing` and `details.key` naming `socialProvider.provider`, `socialProvider.metadata` or `socialProvider.clientIds`. `metadata` is the provider's document naming `issuer` and `jwks_uri` (Google's Cross-Account Protection configuration, Apple's discovery document); `clientIds` are the audiences an event for the deployment names (IDN-LIFE-012a, entry 283). |
 | `ImageCodec` (`Reencode`) | optional, and required while any organization shows photos | Startup fails with `model.startup.declarationmissing` and `details.key` naming `imageCodec` where a `photo.enabled.<organization>` key is on and no codec is registered. The callback is `Func<ReadOnlyMemory<byte>, int, CancellationToken, ValueTask<ReadOnlyMemory<byte>?>>`: the uploaded bytes and the longest side in pixels the stored image is held to, answering the re-encoded JPEG with every metadata segment removed, or nothing where the bytes are not an image the deployment accepts. Nothing it answers chooses a code: a refusal is `identity.photo.invalid` (IDN-ATTR-002, IDN-ATTR-004). |
 
 ## Shipped default declarations
@@ -10256,9 +11260,12 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `auth.credential.invalidationheld` | security | `AuditActions.CredentialInvalidationHeld` | An invalidation was held rather than carried out, because carrying it out would leave the account with no way in. (AUTH-REC-004) |
 | `auth.credential.removed` | security | `AuditActions.CredentialRemoved` | A credential was removed from an account. (AUTH-FACT-001) |
 | `auth.credential.reportcancelled` | security | `AuditActions.CredentialReportCancelled` | A loss report was cancelled before it took effect. (AUTH-REC-004) |
+| `auth.credential.restored` | security | `AuditActions.CredentialRestored` | A credential a provider's event held stands again, because the person signed in by another factor. Details carry `credential`. (IDN-LIFE-012a, entry 288) |
 | `auth.credential.reportedlost` | security | `AuditActions.CredentialReportedLost` | A credential was reported lost, which starts the window before it is invalidated. (AUTH-REC-004) |
 | `auth.mailcredential.created` | security | `AuditActions.MailCredentialCreated` | The mail server generated an app password at its holder's request. Details carry `credential`, the server's identifier; neither the secret nor the label is written. The account is both subjects; the row names no organization. (REG-MAIL-002, INT-MAIL-010, entry 263) |
 | `auth.mailcredential.revoked` | security | `AuditActions.MailCredentialRevoked` | The mail server revoked an app password at its holder's request. Details carry `credential`, the server's identifier. The account is both subjects; the row names no organization. (REG-MAIL-002, INT-MAIL-010, entry 263) |
+| `auth.providerevent.rejected` | security | `AuditActions.ProviderEventRejected` | A social provider's security event about a linked identity was refused: its provider's keys do not verify it, or it had been carried before. Details carry `credential`, `event` (the type as the provider spells it) and `outcome` (`unsigned` or `replayed`); the account is both subjects. (IDN-LIFE-012a AC1, entry 289) |
+| `auth.providerevent.taken` | security | `AuditActions.ProviderEventTaken` | A social provider's security event about a linked identity was carried. Details carry `credential`, `event` and `outcome` (`sessionsEnded`, `credentialUnlinked`, `accountSuspended`, `addressUnverified` or `recorded`); the account is both subjects. (IDN-LIFE-012a, entries 285 to 289) |
 | `auth.oidc.refreshreused` | security | `AuditActions.RefreshTokenReused` | A refresh token was presented a second time, which revokes the family it belongs to. (AUTH-TOK-004) |
 | `auth.phonesignal.considered` | security | `AuditActions.PhoneSignalConsidered` | A phone signal was consulted before a send, recorded without the number it was consulted for. (AUTH-ABUSE-006) |
 | `auth.recovery.approved` | security | `AuditActions.RecoveryApproved` | An assisted recovery was approved, naming the approver and the reason given. (AUTH-REC-006) |

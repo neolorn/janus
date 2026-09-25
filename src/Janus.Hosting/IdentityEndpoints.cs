@@ -1,4 +1,5 @@
 using System;
+using Janus.Core;
 using Janus.Hosting.Accounts;
 using Janus.Hosting.Authentication;
 using Janus.Hosting.Authorization;
@@ -11,6 +12,8 @@ using Janus.Hosting.Recovery;
 using Janus.Hosting.Registration;
 using Janus.Hosting.Sending;
 using Janus.Hosting.Sessions;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 
 namespace Janus.Hosting;
@@ -37,28 +40,36 @@ public static class IdentityEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        _ = endpoints.MapRegistration();
-        _ = endpoints.MapAuthentication();
-        _ = endpoints.MapSignOn();
-        _ = endpoints.MapAccount();
-        _ = endpoints.MapAccountAdministration();
-        _ = endpoints.MapAppPasswords();
-        _ = endpoints.MapCredentials();
-        _ = endpoints.MapRecovery();
-        _ = endpoints.MapPrivacy();
-        _ = endpoints.MapTakedowns();
-        _ = endpoints.MapErasures();
-        _ = endpoints.MapSessionRevocation();
-        _ = endpoints.MapExplanations();
-        _ = endpoints.MapAccess();
-        _ = endpoints.MapAuditTrail();
-        _ = endpoints.MapPublication();
-        _ = endpoints.MapConfiguration();
-        _ = endpoints.MapRestrictions();
-        _ = endpoints.MapGrants();
-        _ = endpoints.MapRoles();
-        _ = endpoints.MapGroups();
-        _ = endpoints.MapOrganizations();
+        // BFF-LOG-002, CONV-LOG-003: every body the library answers carries a
+        // credential or a person's data, so none of them is logged.
+        RouteGroupBuilder library = endpoints
+            .MapGroup(string.Empty)
+            .WithMetadata(new SensitiveBodyAttribute());
+
+        _ = library.MapRegistration();
+        _ = library.MapAuthentication();
+        _ = library.MapSignOn();
+        _ = library.MapAccount();
+        _ = library.MapAccountAdministration();
+        _ = library.MapAppPasswords();
+        _ = library.MapCredentials();
+        _ = library.MapRecovery();
+        _ = library.MapPrivacy();
+        _ = library.MapTakedowns();
+        _ = library.MapErasures();
+        _ = library.MapSessionRevocation();
+        _ = library.MapExplanations();
+        _ = library.MapAccess();
+        _ = library.MapAuditTrail();
+        _ = library.MapPublication();
+        _ = library.MapConfiguration();
+        _ = library.MapRestrictions();
+        _ = library.MapDeliveryReports();
+        _ = library.MapProviderEvents();
+        _ = library.MapGrants();
+        _ = library.MapRoles();
+        _ = library.MapGroups();
+        _ = library.MapOrganizations();
 
         return endpoints;
     }

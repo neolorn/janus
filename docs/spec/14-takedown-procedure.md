@@ -11,9 +11,9 @@ What happens when a customer turns out to be under 18.
 ## 1. Why this exists
 
 The service is 18+ only. Age is **self-declared** on a neutral age screen at registration
-(REG-PROF-002); the affirmation is derived from the answer. There is no guest checkout
-(D-073), so every order belongs to an account this procedure can act on. The date itself
-is retained only where `profile.dateofbirth` is on.
+(REG-PROF-002); the affirmation is derived from the answer. Every act of processing the
+host performs belongs to an account (D-073), so this procedure always has an account to
+act on. The date itself is retained only where `profile.dateofbirth` is on.
 
 A self-declared date verifies nothing. Someone under 18 can enter one.
 
@@ -50,22 +50,22 @@ Four steps, in **two phases**. The system provides one operation — the takedow
 
 **Phase one — the moment you trigger it.** In one transaction the identity system:
 
-**1 — Suspends the account.** Access stops immediately: every session ends, sign-in
-is refused, staff cannot act on the account. No further orders.
+**1. Suspends the account.** Access stops immediately: every session ends, sign-in
+is refused, staff cannot act on the account. No further processing.
 
 **4 — Records the event.** What triggered it, what was done, when. This record is what
 demonstrates the procedure was followed.
 
-And it tells the shop's system to:
+And it tells the host's system, through the `TakedownExecuted` outbox record, to:
 
-**2 — Cancel open orders.** Anything not yet dispatched. For anything already with
-the courier, contact them to halt delivery if it is still possible; if not, note it
-and move on. This step happens in the host's system moments later. The identity
-system's outbox record, written in the trigger transaction, is the completion record
-of this step from the moment you press the button (IDN-LIFE-003, D-148): the takedown
-screen reads it and shows the cancellation as still outstanding until the host confirms
-against it (the label shown is illustrative). No erasures row exists yet; that record
-belongs to phase two.
+**2. Stop what it holds for the subject.** The host's own procedure says what that
+means for its records (anything in flight is stopped where it still can be; where it
+cannot, the host notes it and moves on). This step happens in the host's system moments
+later. The identity system's outbox record, written in the trigger transaction, is the
+completion record of this step from the moment you press the button (IDN-LIFE-003,
+D-148): the takedown screen reads it and shows the host's step as still outstanding
+until the host confirms against it (the label shown is illustrative). No erasures row
+exists yet; that record belongs to phase two.
 
 **Phase two — seven days later, automatically.**
 
@@ -76,15 +76,15 @@ key (PRIV-RIGHT-005a) and **neutralises** their searchable fingerprint
 unrecoverable at once; the anonymised record and the audit trail survive
 (PRIV-RIGHT-005). The account is then `deleted`.
 
-**Why the window.** Nothing is processed during it — the account is locked and its
-orders are cancelled — but a mistake can still be undone. If it turns out an adult was
-misjudged, **reverse the takedown** from the account's admin page inside the seven
-days: the account returns to `active` and the person can sign in again. Cancelled
-orders are not restored; they re-order. After the window, there is nothing to
-reverse.
+**Why the window.** Nothing is processed during it (the account is locked and the host
+has stopped what it held) but a mistake can still be undone. If it turns out an adult
+was misjudged, **reverse the takedown** from the account's admin page inside the seven
+days: the account returns to `active` and the person can sign in again. The host
+receives `TakedownReversed`; whether it restores what it stopped is the host's rule.
+After the window, there is nothing to reverse.
 
 **Do not record the takedown as finished until every step shows complete**: the
-host's cancellation confirmed against its outbox record and, after the window, the
+host's step confirmed against its outbox record and, after the window, the
 erasure complete in the erasures row (IDN-LIFE-003b). If a step
 fails permanently you will be alerted immediately (OPS-ALERT-001); you do not need to
 watch for it.
@@ -102,7 +102,8 @@ would create exactly the data the policy exists to avoid.
 **Do not keep the account open pending investigation.** There is nothing to
 investigate. A credible indication is sufficient; the cost of being wrong is a
 reversal inside the window, or a customer who must re-register after it, and the cost
-of being slow is processing a minor's health data without lawful basis.
+of being slow is processing a minor's data, possibly of a sensitive category, without
+lawful basis.
 
 **Do not delete the audit trail.** Anonymisation removes the personal data. The record
 that the account existed and what happened to it must survive — that is what proves the
@@ -114,13 +115,15 @@ procedure ran.
 
 Two follow-ups.
 
-**Refund any cancelled orders** through the normal process. The account being
-suspended does not affect the refund obligation. Payment references are held by the
-payment provider and order records are business records (PRIV-RIGHT-005), so a refund
-remains possible after the erasure too; the window simply makes it easier.
+**Settle anything the host owes the person** through the host's normal process. The
+account being suspended does not affect that obligation. The host's business records
+survive erasure as anonymised records (PRIV-RIGHT-005), and the host's processors hold
+their own references, so settlement remains possible after the erasure too; the window
+simply makes it easier.
 
-**Consider whether it is a reportable incident.** Processing a minor's health data
-without guardian consent is a processing failure. Whether it requires regulator
+**Consider whether it is a reportable incident.** Processing a minor's data, of any
+category the host has declared sensitive, without guardian consent is a processing
+failure. Whether it requires regulator
 notification depends on the circumstances — how long, how much, whether it was
 disclosed anywhere. Record the facts; take advice if uncertain.
 
@@ -144,8 +147,9 @@ you to stop processing, which you should do regardless.
 **Do:** confirm the account is suspended and that the data will be removed at the end
 of the window (or has been, if it has passed).
 
-**Do not:** hand over order history, addresses, or anything else about the account
-without being satisfied the person is the guardian and is entitled to it. The account
+**Do not:** hand over the host's records about the account, contact details, or
+anything else about it without being satisfied the person is the guardian and is
+entitled to it. The account
 holder is a data subject, and a minor's data protection rights are not suspended by
 being a minor.
 
@@ -160,6 +164,6 @@ rolling twelve months, counted by the operator from the takedown records at the
 quarterly review of RISK-001, the self-declaration control is not proportionate in
 practice, and R-A05 in the risk register is reconsidered (D-147).
 
-**Currently accepted on the basis that the realistic case is rare** — a 17-year-old
-buying for their household, not a minor covertly ordering. Frequency is the evidence
-that would overturn that.
+**Currently accepted on the basis that the realistic case is rare**: a 17-year-old
+acting for their household, not a minor covertly using the service. Frequency is the
+evidence that would overturn that.

@@ -21,7 +21,7 @@ namespace Janus.Hosting.Tests.Organizations;
 [Trait("kind", "unit")]
 public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
 {
-    private const string Tightened = """{"requiredAssurance":"aal2","reason":"Staff handle payments."}""";
+    private const string Tightened = """{"requiredAssurance":"aal2","reason":"Staff hold administrative roles."}""";
 
     private static readonly OrganizationId Administration =
         new(Guid.Parse("33333333-3333-4333-8333-333333333333"));
@@ -128,7 +128,7 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
         Assert.Equal(AssuranceLevel.Aal2, (await OverrideAsync(Branch)).RequiredAssurance);
         Assert.Equal(Settings.OrganizationPolicy.For(Branch.ToString()), change.Key);
         Assert.False(change.Loosening);
-        Assert.Equal("Staff handle payments.", change.Reason);
+        Assert.Equal("Staff hold administrative roles.", change.Reason);
         Assert.Equal(PolicyField.RequiredAssurance, Assert.Single(raised).Field);
         Assert.Empty(await _deployment.Raises.OfAsync(null, CancellationToken.None));
     }
@@ -270,7 +270,7 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
         Answer misspelt = await administrator.SendAsync(
             "PUT",
             PathOf(Branch),
-            """{"requiredAssurence":"aal2","reason":"Staff handle payments."}""");
+            """{"requiredAssurence":"aal2","reason":"Staff hold administrative roles."}""");
         Answer locked = await administrator.SendAsync(
             "PUT",
             PathOf(Branch),
@@ -286,7 +286,7 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
         Answer unreadable = await administrator.SendAsync(
             "PUT",
             PathOf(Branch),
-            """{"requiredAssurance":"aal9","reason":"Staff handle payments."}""");
+            """{"requiredAssurance":"aal9","reason":"Staff hold administrative roles."}""");
 
         Assert.Equal("requiredAssurence", Member(misspelt));
         Assert.Equal("emailDomains", Member(locked));

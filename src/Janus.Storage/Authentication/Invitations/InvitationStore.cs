@@ -41,7 +41,9 @@ internal sealed class InvitationStore(
     }
 
     /// <inheritdoc/>
-    public async ValueTask<Invitation?> FindByTokenAsync(byte[] token, CancellationToken cancellationToken)
+    public async ValueTask<Invitation?> FindByTokenAsync(
+        [NeverLogged] byte[] token,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(token);
 

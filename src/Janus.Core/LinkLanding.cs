@@ -19,4 +19,4 @@ namespace Janus.Core;
 /// Implements REG-SESS-003, BFF-CSRF-005b and API-LAND-001. The server decides which
 /// case applies; the frontend never guesses it from the user agent.
 /// </remarks>
-public sealed record LinkLanding(bool Verified, bool SameBrowser, string? Code);
+public sealed record LinkLanding(bool Verified, bool SameBrowser, [property: NeverLogged] string? Code);

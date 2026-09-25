@@ -37,9 +37,11 @@ internal sealed class ProcessingRecordsService(
     IConfigurationStore configuration,
     TimeProvider time) : IProcessingRecords
 {
-    // The three rows of the shipped register the library itself makes true, named as
-    // ProviderRegister ships them (PRIV-ROPA-002, chapter 05 section 8).
+    // The four rows of the shipped register, named as ProviderRegister ships them
+    // (PRIV-ROPA-002, chapter 05 section 6).
     private const string MailServer = "mail server";
+
+    private const string SmsGateway = "sms gateway";
 
     private const string HostingProvider = "hosting provider";
 
@@ -251,11 +253,10 @@ internal sealed class ProcessingRecordsService(
         }),
     ];
 
-    // PRIV-ROPA-002: the rest of the shipped register is offered, because a generic
-    // library cannot know that a deployment takes payments or ships anything; the
-    // three rows it makes true itself are applied, because it does know that. A
-    // deployment that edited one of them has declared it, and its own row stands in
-    // place of the shipped default rather than beside it.
+    // PRIV-ROPA-002: each shipped row is applied while the integration it describes is
+    // configured, because the library itself makes it true. A deployment that edited
+    // one of them has declared it, and its own row stands in place of the shipped
+    // default rather than beside it.
     private IEnumerable<RecipientDeclaration> Recipients(bool mail, bool screening) =>
     [
         .. declaration.Recipients,
@@ -266,6 +267,9 @@ internal sealed class ProcessingRecordsService(
     private static bool Made(string row, bool mail, bool screening) => row switch
     {
         HostingProvider => true,
+
+        // Every deployment registers the transport its text messages leave through.
+        SmsGateway => true,
         MailServer => mail,
         PasswordScreening => screening,
         _ => false,

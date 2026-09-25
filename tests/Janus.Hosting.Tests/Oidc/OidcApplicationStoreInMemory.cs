@@ -171,6 +171,7 @@ internal sealed class OidcApplicationStoreInMemory(OidcClientStoreInMemory clien
 
         ImmutableArray<string>.Builder permitted = ImmutableArray.CreateBuilder<string>();
 
+        permitted.Add(OpenIddictConstants.Permissions.Endpoints.PushedAuthorization);
         permitted.Add(OpenIddictConstants.Permissions.Endpoints.Authorization);
         permitted.Add(OpenIddictConstants.Permissions.Endpoints.Token);
         permitted.Add(OpenIddictConstants.Permissions.GrantTypes.AuthorizationCode);

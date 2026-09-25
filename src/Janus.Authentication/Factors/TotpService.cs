@@ -82,7 +82,7 @@ internal sealed class TotpService(
     public async ValueTask<Result> ConfirmAsync(
         SubjectId subject,
         AuthenticatorId id,
-        string code,
+        [NeverLogged] string code,
         CancellationToken cancellationToken)
     {
         Authenticator? enrolling = await authenticators.FindAsync(id, cancellationToken)
@@ -159,7 +159,7 @@ internal sealed class TotpService(
     /// </returns>
     public async ValueTask<Result<AuthenticatorId>> PresentAsync(
         SubjectId subject,
-        string code,
+        [NeverLogged] string code,
         CancellationToken cancellationToken)
     {
         IReadOnlyList<Authenticator> held =
@@ -194,7 +194,7 @@ internal sealed class TotpService(
     // saying so is what tells the person to wait rather than to look again.
     private static ErrorCode Refusal(
         IReadOnlyCollection<Authenticator> generators,
-        string code,
+        [NeverLogged] string code,
         DateTimeOffset now,
         int drift) =>
         generators.Any(generator =>

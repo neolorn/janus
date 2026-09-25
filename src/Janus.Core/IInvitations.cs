@@ -75,7 +75,7 @@ public interface IInvitations
     /// </returns>
     ValueTask<Result> OpenAsync(
         AccessContext context,
-        string token,
+        [NeverLogged] string token,
         CancellationToken cancellationToken);
 
     /// <summary>

@@ -167,6 +167,37 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
     }
 
     /// <summary>
+    /// INT-GEN-003 AC1: a send is held under its reference until it is released, and a
+    /// reference nobody drew holds nothing; asking changes nothing (INT-SMS-005).
+    /// </summary>
+    [Fact]
+    public async Task HoldsAsync_ASendCounted_IsHeldUntilItIsReleasedAsync()
+    {
+        RestrictionKey destination = Destination("+201001234568");
+        byte[] reference = Reference(11);
+
+        await RecordedAsync(reference, [new SendCount(destination, Day)], Noon);
+
+        await using (StoreContext reading = database.Context())
+        {
+            Assert.True(await Ledger(reading).HoldsAsync(reference, TestContext.Current.CancellationToken));
+            Assert.False(await Ledger(reading).HoldsAsync(Reference(12), TestContext.Current.CancellationToken));
+        }
+
+        Assert.NotNull(await FindAsync(destination));
+
+        await using (StoreContext releasing = database.Context())
+        {
+            Assert.True(await Ledger(releasing).ReleaseAsync(reference, TestContext.Current.CancellationToken));
+            await releasing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext after = database.Context();
+
+        Assert.False(await Ledger(after).HoldsAsync(reference, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// Credit granted to a key is spent one send at a time and the row goes with the
     /// last of it (AUTH-ABUSE-004 AC4).
     /// </summary>

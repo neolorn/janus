@@ -20,4 +20,4 @@ namespace Janus.Core;
 /// elsewhere signs nothing in. The server decides which case applies; the frontend
 /// never guesses it.
 /// </remarks>
-public sealed record SignInLanding(SignInProgress? SignedIn, bool SameBrowser, string? Code);
+public sealed record SignInLanding(SignInProgress? SignedIn, bool SameBrowser, [property: NeverLogged] string? Code);

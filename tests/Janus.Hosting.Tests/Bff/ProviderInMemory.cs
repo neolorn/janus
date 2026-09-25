@@ -19,13 +19,21 @@ internal sealed class ProviderInMemory(Deployment deployment) : HttpMessageHandl
 {
     private readonly List<Uri> _asked = [];
 
+    private readonly List<string> _carried = [];
+
     /// <summary>
     /// Every address the back channel asked, in order.
     /// </summary>
     public IReadOnlyList<Uri> Asked => _asked;
 
     /// <summary>
-    /// Whether the token endpoint is reachable at all.
+    /// What each request the back channel made carried, in the same order, and empty
+    /// where it carried nothing.
+    /// </summary>
+    public IReadOnlyList<string> Carried => _carried;
+
+    /// <summary>
+    /// Whether the provider is reachable at all.
     /// </summary>
     public bool Reachable { get; set; } = true;
 
@@ -53,6 +61,11 @@ internal sealed class ProviderInMemory(Deployment deployment) : HttpMessageHandl
         context.Request.Host = new HostString(address.Authority);
         context.Request.Path = new PathString(address.AbsolutePath);
         context.Request.QueryString = new QueryString(address.Query);
+
+        _carried.Add(
+            request.Content is HttpContent carried
+                ? await carried.ReadAsStringAsync(cancellationToken)
+                : string.Empty);
 
         if (request.Content is HttpContent sent)
         {

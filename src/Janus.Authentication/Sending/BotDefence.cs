@@ -48,7 +48,7 @@ internal sealed class BotDefence(
     /// <exception cref="ArgumentNullException">The source is absent.</exception>
     public async ValueTask<Result> CheckAsync(
         string source,
-        string? token,
+        [NeverLogged] string? token,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(source);

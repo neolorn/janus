@@ -21,12 +21,12 @@ internal static class Declaration
     public const string Newsletter = "newsletter-consent";
 
     /// <summary>
-    /// A person's order, which is sensitive and carries purposes on three bases at
-    /// once.
+    /// A person's statement, which is sensitive and carries purposes on three bases
+    /// at once.
     /// </summary>
-    internal sealed class Order
+    internal sealed class Statement
     {
-        /// <summary>The order.</summary>
+        /// <summary>The statement.</summary>
         public string Id { get; init; } = string.Empty;
     }
 
@@ -76,17 +76,17 @@ internal static class Declaration
             .LawfulBasis(new LawfulBasisDeclaration("contract", false, false, false, false))
             .LawfulBasis(new LawfulBasisDeclaration("interest", false, false, true, true))
             .SensitiveCategory("financial")
-            .Permission("order:read")
-            .Resource<Order>("order", order => order
+            .Permission("statement:read")
+            .Resource<Statement>("statement", statement => statement
                 .BelongsToOrganization()
                 .Sensitive("financial")
-                .Purpose("fulfilment", "contract", data: ["identity", "order"], subjects: ["customers"])
-                .Purpose("recommendations", "agreement", data: ["order"], subjects: ["customers"])
+                .Purpose("performance", "contract", data: ["identity", "statement"], subjects: ["customers"])
+                .Purpose("recommendations", "agreement", data: ["statement"], subjects: ["customers"])
                 .Purpose(
                     "security",
                     "interest",
                     assessment: "The abuse controls are assessed annually.",
-                    data: ["order"],
+                    data: ["statement"],
                     subjects: ["customers"]))
             .Resource<Mailing>("mailing", mailing => mailing
                 .BelongsToOrganization()

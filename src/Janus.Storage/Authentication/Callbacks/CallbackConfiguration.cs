@@ -2,7 +2,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
-namespace Janus.Storage.Authentication.Sending;
+namespace Janus.Storage.Authentication.Callbacks;
 
 /// <summary>
 /// How an inbound callback is counted.

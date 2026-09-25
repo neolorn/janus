@@ -26,9 +26,11 @@ internal sealed class SessionRecord
     public SubjectId Subject { get; set; }
 
     /// <summary>The <c>secret_fingerprint</c> column.</summary>
+    [NeverLogged]
     public byte[] SecretFingerprint { get; set; } = [];
 
     /// <summary>The fingerprint of the synchronizer token bound to the session.</summary>
+    [NeverLogged]
     public byte[] CsrfFingerprint { get; set; } = [];
 
     /// <summary>The <c>created_at</c> column.</summary>

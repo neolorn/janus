@@ -72,4 +72,11 @@ internal sealed class AuthenticatorRecord
 
     /// <summary>The <c>is_preferred</c> column (IDN-ATTR-008).</summary>
     public bool IsPreferred { get; set; }
+
+    /// <summary>
+    /// The <c>provider_subject</c> column: the keyed fingerprint of the subject a
+    /// social provider knows a linked identity by, which is what its security events
+    /// name (IDN-LIFE-012a, PRIV-RIGHT-005c).
+    /// </summary>
+    public byte[]? ProviderSubject { get; set; }
 }

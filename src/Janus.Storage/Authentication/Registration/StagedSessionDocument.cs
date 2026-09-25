@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
+using Janus.Core;
 
 namespace Janus.Storage.Authentication.Registration;
 
@@ -42,7 +43,7 @@ internal sealed record StagedSessionDocument(
     DateTimeOffset? AnsweredAgeAt,
     bool AgeRefused,
     bool PhoneSkipped,
-    string? Password,
+    [property: NeverLogged] string? Password,
     bool PasswordStandsAlone,
     IReadOnlyList<string>? RecoveryCodes,
     IReadOnlyList<StagedIdentityDocument> Identifiers,

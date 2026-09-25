@@ -51,7 +51,7 @@ internal sealed class PasswordService(
     /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public async ValueTask<Result<PreparedPassword>> PrepareAsync(
-        byte[] password,
+        [NeverLogged] byte[] password,
         IReadOnlyCollection<string> ownWords,
         AssuranceLevel reachable,
         CancellationToken cancellationToken)
@@ -130,7 +130,7 @@ internal sealed class PasswordService(
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public async ValueTask<Result<PasswordFeedback>> SetAsync(
         SubjectId subject,
-        byte[] password,
+        [NeverLogged] byte[] password,
         IReadOnlyCollection<string> ownWords,
         AssuranceLevel reachable,
         CancellationToken cancellationToken)
@@ -185,7 +185,7 @@ internal sealed class PasswordService(
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public async ValueTask<Result<PasswordVerification>> VerifyAsync(
         SubjectId subject,
-        byte[] password,
+        [NeverLogged] byte[] password,
         IReadOnlyCollection<string> ownWords,
         CancellationToken cancellationToken)
     {

@@ -1,4 +1,5 @@
 using System;
+using Janus.Core;
 
 namespace Janus.Storage.Authentication.Factors;
 
@@ -16,6 +17,7 @@ internal sealed class VerificationCodeRecord
     public byte[] Holder { get; set; } = [];
 
     /// <summary>The <c>code</c> column: the digits, as they are compared.</summary>
+    [NeverLogged]
     public byte[] Code { get; set; } = [];
 
     /// <summary>The <c>issued_at</c> column.</summary>

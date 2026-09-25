@@ -2,6 +2,7 @@ using System;
 using System.Security.Cryptography;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
+using Janus.Authentication.Callbacks;
 using Janus.Authentication.Configuration;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
@@ -41,6 +42,7 @@ using Janus.Privacy.Requests;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Accounts;
 using Janus.Storage.Authentication.Alerting;
+using Janus.Storage.Authentication.Callbacks;
 using Janus.Storage.Authentication.Configuration;
 using Janus.Storage.Authentication.Credentials;
 using Janus.Storage.Authentication.Factors;
@@ -179,7 +181,8 @@ internal static class StorageRegistration
         services.AddScoped<IAuthenticatorStore>(provider => new AuthenticatorStore(
             provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
-            provider.GetRequiredService<RandomNumberGenerator>()));
+            provider.GetRequiredService<RandomNumberGenerator>(),
+            fingerprintKey));
         services.AddScoped<IRegistrationSessionStore>(provider => new RegistrationSessionStore(
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<DataConnections>(),
@@ -287,6 +290,8 @@ internal static class StorageRegistration
         services.AddScoped<ICallbackLedger>(provider => new CallbackLedger(
             provider.GetRequiredService<StoreContext>(),
             fingerprintKey));
+        services.AddScoped<ICallbackEvents, CallbackEventStore>();
+        services.AddScoped<ICallbackReferenceStore, CallbackReferenceStore>();
         services.AddScoped<IRegistrationSources>(provider => new RegistrationSourceLedger(
             provider.GetRequiredService<StoreContext>(),
             fingerprintKey));

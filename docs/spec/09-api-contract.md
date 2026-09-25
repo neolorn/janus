@@ -1349,8 +1349,9 @@ It is the statutory decision deadline, after which lapse is a deemed rejection
 
 Access and portability are the self-service export; objection completes immediately
 through `POST /privacy/objections/{purpose}` (PRIV-RIGHT-001a). **Rectification of editable data** is
-account editing; **rectification of non-editable data** (an order's recorded details,
-say) is a request here, decided under the six-working-day rule like restriction.
+account editing; **rectification of non-editable data** (the recorded details of a
+host business record, say) is a request here, decided under the six-working-day rule
+like restriction.
 Restriction enters the request queue; erasure reaches it only through
 `POST /admin/privacy/requests` (out of band).
 
@@ -1365,8 +1366,8 @@ phishing-resistant under the system policy), and is **rate-limited**.
 
 *Source: D-086, D-141*
 
-Without it, anyone holding a live session — a borrowed phone, a shared computer —
-pulled a complete health-implying order history in one request, from a session that
+Without it, anyone holding a live session (a borrowed phone, a shared computer)
+pulled a complete export, sensitive records included, in one request, from a session that
 can persist while used (AUTH-SESS-005). That is the threat model's central attacker, who needs one
 successful lookup.
 
@@ -1652,8 +1653,8 @@ operation loosens a control (OPS-CFG-002) or touches another person's account.
 
 | Endpoint | Does |
 |---|---|
-| `POST /admin/accounts/{subject}/takedown` | Phase one, in one transaction: suspends the account, ends its sessions, records `reason` and `trigger` (`staff-report` · `customer-report` · `automated-signal` · `authority-request`, `10` section 5.12d), and writes the outbox record for host-side order cancellation. Starts `takedown.grace` (7 days); erasure — key destruction, fingerprint neutralisation — runs when it elapses and the account becomes `deleted` (IDN-LIFE-003, D-127). Requires step-up. **202** `{ takedownId, erasureDue }` |
-| `POST /admin/accounts/{subject}/takedown/reverse` | Reverses a takedown inside its window — an adult misjudged. Restores `active`; cancelled orders are not restored. Records the reason. Requires step-up. **204** · **422** `identity.takedown.windowelapsed` |
+| `POST /admin/accounts/{subject}/takedown` | Phase one, in one transaction: suspends the account, ends its sessions, records `reason` and `trigger` (`staff-report` · `customer-report` · `automated-signal` · `authority-request`, `10` section 5.12d), and writes the `TakedownExecuted` outbox record for the host's own handling. Starts `takedown.grace` (7 days); erasure (key destruction, fingerprint neutralisation) runs when it elapses and the account becomes `deleted` (IDN-LIFE-003, D-127). Requires step-up. **202** `{ takedownId, erasureDue }` |
+| `POST /admin/accounts/{subject}/takedown/reverse` | Reverses a takedown inside its window (an adult misjudged). Restores `active`; host-side actions taken on `TakedownExecuted` are not undone by the library. Records the reason. Requires step-up. **204** · **422** `identity.takedown.windowelapsed` |
 
 ### Privacy requests and erasures — `privacyrequest:manage`
 
@@ -1698,7 +1699,8 @@ Standard endpoints for first-party, manually registered clients.
 |---|---|
 | `GET /.well-known/openid-configuration` | Discovery |
 | `GET /oidc/jwks` | Signing keys |
-| `GET /oidc/authorize` | Authorization code with PKCE — **redirects to the authentication application; never renders a page**. Honours `prompt=none` for silent sign-on (AUTH-SESS-012) |
+| `POST /oidc/par` | Pushed Authorization Request (RFC 9126): the client posts the authorization parameters over the back channel and receives a single-use `request_uri` valid for 60 seconds; required for every client (AUTH-OIDC-006, D-164) |
+| `GET /oidc/authorize` | Authorization code with PKCE, by `request_uri` from `/oidc/par` only; direct parameters are refused with `invalid_request` — **redirects to the authentication application; never renders a page**. Honours `prompt=none` for silent sign-on (AUTH-SESS-012) |
 | `POST /oidc/token` | Token issuance and refresh — machine profile (BFF-MACH-001) |
 | `GET /oidc/userinfo` | Claims, by scope (D-153): `openid` gives `sub`; `email` gives `email` and `email_verified` (the primary email); `profile` gives `name` (display name), `preferred_username` where `identifiers.username.enabled`, and `locale` (language preference). Nothing else is issued: no phone, legal name, date of birth or photo |
 
@@ -1726,16 +1728,17 @@ Refresh tokens rotate on use; reuse of a consumed token revokes the session fami
 
 ## 10. Callbacks
 
-Inbound from providers. Each follows INT-GEN-003 — hostile input, unguessable
-references, rate-limited, and never advancing authoritative state alone.
+Inbound from providers. Each follows INT-GEN-003: hostile input, unguessable
+references, rate-limited, and never advancing authoritative state alone. The library
+defines one callback endpoint of its own; a host mounts its own providers' callbacks on
+the same machine-profile pipeline (BFF-MACH-002, INT-GEN-003) under paths of its
+choosing, and those paths are not part of this contract.
 
 | Endpoint | Source | Never does |
 |---|---|---|
 | `GET /callbacks/sms/dlr` | SMS gateway | Mark a phone verified |
-| `POST /callbacks/shipping` | Shipping provider | Advance order state |
-| `POST /callbacks/payment` | Payment provider | Mark an order paid |
 
-*Source: AUTH-ABUSE-007, PRIV-MIN-002, INT-PAY-002*
+*Source: AUTH-ABUSE-007, INT-GEN-003*
 
 **Acceptance criteria**
 1. A forged callback with a guessed reference is rejected and logged.

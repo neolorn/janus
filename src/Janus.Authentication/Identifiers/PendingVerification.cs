@@ -76,6 +76,7 @@ internal sealed class PendingVerification
     /// The fingerprint of the token the displaced address was written to with, where
     /// it was asked and has not answered.
     /// </summary>
+    [NeverLogged]
     public byte[]? OldLink { get; private set; }
 
     /// <summary>
@@ -189,7 +190,7 @@ internal sealed class PendingVerification
     /// <param name="link">The fingerprint of the token the message carried.</param>
     /// <exception cref="ArgumentNullException">The fingerprint is absent.</exception>
     /// <exception cref="InvalidOperationException">It was not asked.</exception>
-    public void AskedOld(byte[] link)
+    public void AskedOld([NeverLogged] byte[] link)
     {
         ArgumentNullException.ThrowIfNull(link);
 

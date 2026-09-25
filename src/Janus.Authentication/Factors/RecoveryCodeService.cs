@@ -162,7 +162,7 @@ internal sealed class RecoveryCodeService(
     /// </returns>
     public async ValueTask<Result> SpendAsync(
         SubjectId subject,
-        string code,
+        [NeverLogged] string code,
         CancellationToken cancellationToken)
     {
         RecoveryCodeSet? held = await sets.FindAsync(subject, cancellationToken).ConfigureAwait(false);

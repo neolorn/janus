@@ -1,6 +1,6 @@
 using System;
 
-namespace Janus.Storage.Authentication.Sending;
+namespace Janus.Storage.Authentication.Callbacks;
 
 /// <summary>
 /// The <c>callbacks</c> row: one inbound callback and whether it was rejected.

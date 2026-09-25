@@ -14,4 +14,7 @@ namespace Janus.Core;
 /// Implements AUTH-FACT-005, AUTH-FACT-007 and chapter 18 FE-PM-006. The enrolment
 /// does not become usable until one code of this secret is presented.
 /// </remarks>
-public sealed record GeneratorEnrolment(AuthenticatorId Credential, string Secret, string Address);
+public sealed record GeneratorEnrolment(
+    AuthenticatorId Credential,
+    [property: NeverLogged] string Secret,
+    [property: NeverLogged] string Address);

@@ -1,3 +1,5 @@
+using Janus.Core;
+
 namespace Janus.Hosting.Credentials;
 
 /// <summary>
@@ -6,4 +8,4 @@ namespace Janus.Hosting.Credentials;
 /// <param name="CredentialId">Which enrolment.</param>
 /// <param name="Code">What was typed.</param>
 /// <remarks>Implements AUTH-FACT-007.</remarks>
-internal sealed record ConfirmGeneratorRequest(string? CredentialId, string? Code);
+internal sealed record ConfirmGeneratorRequest(string? CredentialId, [property: NeverLogged] string? Code);

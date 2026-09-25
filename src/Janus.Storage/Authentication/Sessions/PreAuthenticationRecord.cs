@@ -15,9 +15,11 @@ namespace Janus.Storage.Authentication.Sessions;
 internal sealed class PreAuthenticationRecord
 {
     /// <summary>The <c>fingerprint</c> column, which is this table's key.</summary>
+    [NeverLogged]
     public byte[] Fingerprint { get; set; } = [];
 
     /// <summary>The <c>csrf_fingerprint</c> column.</summary>
+    [NeverLogged]
     public byte[] CsrfFingerprint { get; set; } = [];
 
     /// <summary>The <c>created_at</c> column.</summary>
@@ -42,6 +44,7 @@ internal sealed class PreAuthenticationRecord
     /// The <c>signon_verifier</c> column: the proof key the token request presents,
     /// wrapped under the key-encryption key.
     /// </summary>
+    [NeverLogged]
     public byte[]? SignOnVerifier { get; set; }
 
     /// <summary>

@@ -158,7 +158,7 @@ internal sealed class AuthenticationService(
     /// <inheritdoc/>
     public async ValueTask<Result<SignInProgress>> VerifyDeviceAsync(
         string challenge,
-        string code,
+        [NeverLogged] string code,
         DeviceDescription device,
         string source,
         CancellationToken cancellationToken) =>
@@ -202,7 +202,7 @@ internal sealed class AuthenticationService(
     public async ValueTask<Result<SignInLanding>> LandAsync(
         string challenge,
         string? browser,
-        string linkToken,
+        [NeverLogged] string linkToken,
         bool press,
         DeviceDescription device,
         string source,
@@ -235,7 +235,7 @@ internal sealed class AuthenticationService(
         devices.RemoveAsync(context, device, cancellationToken);
 
     /// <inheritdoc/>
-    public ValueTask<Result> AbandonLinkAsync(string linkToken, CancellationToken cancellationToken) =>
+    public ValueTask<Result> AbandonLinkAsync([NeverLogged] string linkToken, CancellationToken cancellationToken) =>
         links.AbandonAsync(linkToken, cancellationToken);
 
     /// <summary>
@@ -339,7 +339,7 @@ internal sealed class AuthenticationService(
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public async ValueTask<Result<SignInOutcome>> VerifyDeviceAsync(
         string challenge,
-        string code,
+        [NeverLogged] string code,
         SessionOrigin origin,
         CancellationToken cancellationToken)
     {
@@ -492,7 +492,7 @@ internal sealed class AuthenticationService(
     public async ValueTask<Result<LandedSignIn>> LandAsync(
         string challenge,
         string? browser,
-        string linkToken,
+        [NeverLogged] string linkToken,
         bool press,
         SessionOrigin origin,
         string? remembered,

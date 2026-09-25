@@ -136,7 +136,7 @@ internal sealed class IdentifierService(
     public async ValueTask<Result> VerifyAsync(
         AccessContext context,
         IdentifierId identifier,
-        string code,
+        [NeverLogged] string code,
         string source,
         CancellationToken cancellationToken)
     {
@@ -154,7 +154,7 @@ internal sealed class IdentifierService(
     public async ValueTask<Result> VerifyAsync(
         EnrolmentSessionId enrolment,
         IdentifierId identifier,
-        string code,
+        [NeverLogged] string code,
         string source,
         CancellationToken cancellationToken)
     {
@@ -173,7 +173,7 @@ internal sealed class IdentifierService(
     private async ValueTask<Result> ProvedAsync(
         SubjectId subject,
         IdentifierId identifier,
-        string code,
+        [NeverLogged] string code,
         string source,
         CancellationToken cancellationToken)
     {
@@ -244,7 +244,7 @@ internal sealed class IdentifierService(
     /// <inheritdoc/>
     public async ValueTask<Result<LinkLanding>> LandAsync(
         SessionId? session,
-        string linkToken,
+        [NeverLogged] string linkToken,
         bool press,
         string source,
         CancellationToken cancellationToken)
@@ -323,7 +323,7 @@ internal sealed class IdentifierService(
     }
 
     /// <inheritdoc/>
-    public async ValueTask<Result> AbandonAsync(string linkToken, CancellationToken cancellationToken)
+    public async ValueTask<Result> AbandonAsync([NeverLogged] string linkToken, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(linkToken);
 
@@ -563,7 +563,7 @@ internal sealed class IdentifierService(
 
     /// <inheritdoc/>
     public async ValueTask<Result> UndoAsync(
-        string linkToken,
+        [NeverLogged] string linkToken,
         string source,
         CancellationToken cancellationToken)
     {
@@ -878,7 +878,7 @@ internal sealed class IdentifierService(
     }
 
     private async ValueTask<(PendingVerification Waiting, byte[] Fingerprint)?> WaitingAsync(
-        string linkToken,
+        [NeverLogged] string linkToken,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(linkToken))
@@ -1180,7 +1180,7 @@ internal sealed class IdentifierService(
         SubjectId subject,
         MessageKind message,
         string source,
-        string? token,
+        [NeverLogged] string? token,
         CancellationToken cancellationToken)
     {
         if (reached.Count is 0)

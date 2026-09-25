@@ -24,6 +24,7 @@ internal sealed class InvitationRecord
     public SubjectId Inviter { get; set; }
 
     /// <summary>The <c>token</c> column: the fingerprint of the link's token.</summary>
+    [NeverLogged]
     public byte[] Token { get; set; } = [];
 
     /// <summary>

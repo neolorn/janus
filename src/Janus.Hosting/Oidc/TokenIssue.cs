@@ -15,10 +15,11 @@ namespace Janus.Hosting.Oidc;
 /// </summary>
 /// <param name="oidc">Where the session record a token stands on is read.</param>
 /// <remarks>
-/// Implements AUTH-OIDC-002, AUTH-OIDC-003, AUTH-OIDC-004 and AUTH-SESS-012. The grant
-/// itself has already been judged by the time this runs: what is left is the record
-/// every token is minted from, which decides whether anything is issued at all, how
-/// long the access token lasts, and how long a handle on the record may be held.
+/// Implements AUTH-OIDC-002, AUTH-OIDC-003, AUTH-OIDC-004, AUTH-OIDC-006 and
+/// AUTH-SESS-012. The grant itself has already been judged by the time this runs: what
+/// is left is the record every token is minted from, which decides whether anything is
+/// issued at all, how long the access token lasts, and how long a handle on the record
+/// may be held.
 /// </remarks>
 internal sealed class TokenIssue(OidcService oidc)
     : IOpenIddictServerHandler<OpenIddictServerEvents.HandleTokenRequestContext>
@@ -62,6 +63,11 @@ internal sealed class TokenIssue(OidcService oidc)
         // AUTH-OIDC-003: the handle stops no later than the record it is a handle on,
         // and has no lifetime of its own to outlive it with.
         principal.SetRefreshTokenLifetime(minted.Remaining);
+
+        // AUTH-OIDC-006 AC3: the access token names the client it was issued to as its
+        // audience, so a party configured as another client refuses it.
+        principal.SetAudiences(
+            context.ClientId ?? throw new InvalidOperationException("The grant named no client."));
         principal.SetDestinations(Destinations);
 
         context.SignIn(principal);

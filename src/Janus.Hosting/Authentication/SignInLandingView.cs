@@ -1,5 +1,6 @@
 using System;
 using Janus.Authentication.SignIn;
+using Janus.Core;
 
 namespace Janus.Hosting.Authentication;
 
@@ -12,7 +13,7 @@ namespace Janus.Hosting.Authentication;
 /// somewhere else.
 /// </param>
 /// <remarks>Implements AUTH-FACT-003, REG-SESS-003 and API-LAND-001.</remarks>
-internal sealed record SignInLandingView(bool SameBrowser, string? Code)
+internal sealed record SignInLandingView(bool SameBrowser, [property: NeverLogged] string? Code)
 {
     /// <summary>
     /// Reads a landing.

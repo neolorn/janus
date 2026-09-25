@@ -15,6 +15,8 @@ internal sealed class AuthenticatorStoreInMemory : IAuthenticatorStore
 {
     private readonly Dictionary<AuthenticatorId, Authenticator> _held = [];
 
+    private readonly Dictionary<(Factor Provider, string Subject), AuthenticatorId> _linked = [];
+
     /// <summary>
     /// Every credential the store holds.
     /// </summary>
@@ -46,6 +48,14 @@ internal sealed class AuthenticatorStoreInMemory : IAuthenticatorStore
             && credential.WebAuthn.CredentialId.Span.SequenceEqual(credentialId.Span)));
 
     /// <inheritdoc/>
+    public ValueTask<Authenticator?> ByProviderAsync(
+        Factor provider,
+        string subject,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(
+            _linked.TryGetValue((provider, subject), out AuthenticatorId id) ? _held.GetValueOrDefault(id) : null);
+
+    /// <inheritdoc/>
     public ValueTask<IReadOnlyList<Authenticator>> OfAsync(
         SubjectId subject,
         CancellationToken cancellationToken) =>
@@ -56,6 +66,17 @@ internal sealed class AuthenticatorStoreInMemory : IAuthenticatorStore
     public ValueTask AddAsync(Authenticator authenticator, CancellationToken cancellationToken)
     {
         Hold(authenticator);
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask LinkAsync(Authenticator authenticator, string subject, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(authenticator);
+
+        Hold(authenticator);
+        _linked[(authenticator.Factor, subject)] = authenticator.Id;
 
         return ValueTask.CompletedTask;
     }

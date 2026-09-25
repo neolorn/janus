@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication;
+using Janus.Core;
 using Janus.Storage.Authentication.Oidc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -35,7 +36,7 @@ internal sealed class ClientSecrets(
 {
     /// <inheritdoc/>
     protected override ValueTask<bool> ValidateClientSecretAsync(
-        string secret,
+        [NeverLogged] string secret,
         string comparand,
         CancellationToken cancellationToken)
     {
@@ -53,7 +54,7 @@ internal sealed class ClientSecrets(
 
     /// <inheritdoc/>
     protected override ValueTask<string> ObfuscateClientSecretAsync(
-        string secret,
+        [NeverLogged] string secret,
         CancellationToken cancellationToken) =>
         ValueTask.FromResult(Convert.ToBase64String(OpaqueToken.Of(secret).Fingerprint()));
 }

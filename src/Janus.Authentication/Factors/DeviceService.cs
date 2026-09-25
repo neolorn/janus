@@ -151,7 +151,7 @@ internal sealed class DeviceService(
     /// <returns>Whether the second step is skipped.</returns>
     public ValueTask<bool> TrustsAsync(
         SubjectId subject,
-        string? presented,
+        [NeverLogged] string? presented,
         CancellationToken cancellationToken) =>
         StandsAsync(subject, presented, DeviceKind.Trusted, cancellationToken);
 
@@ -164,7 +164,7 @@ internal sealed class DeviceService(
     /// <returns>Whether the browser is remembered.</returns>
     public ValueTask<bool> RemembersAsync(
         SubjectId subject,
-        string? presented,
+        [NeverLogged] string? presented,
         CancellationToken cancellationToken) =>
         StandsAsync(subject, presented, DeviceKind.Remembered, cancellationToken);
 
@@ -221,7 +221,7 @@ internal sealed class DeviceService(
     /// <returns>Nothing, or the failure where the limit cannot be read.</returns>
     public async ValueTask<Result> FailedAsync(
         SubjectId subject,
-        string? presented,
+        [NeverLogged] string? presented,
         CancellationToken cancellationToken)
     {
         Device? device = await OfAsync(subject, presented, DeviceKind.Trusted, cancellationToken)
@@ -401,7 +401,7 @@ internal sealed class DeviceService(
 
     private async ValueTask<bool> StandsAsync(
         SubjectId subject,
-        string? presented,
+        [NeverLogged] string? presented,
         DeviceKind kind,
         CancellationToken cancellationToken)
     {
@@ -424,7 +424,7 @@ internal sealed class DeviceService(
 
     private async ValueTask<Device?> OfAsync(
         SubjectId subject,
-        string? presented,
+        [NeverLogged] string? presented,
         DeviceKind kind,
         CancellationToken cancellationToken)
     {

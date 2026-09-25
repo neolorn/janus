@@ -57,7 +57,7 @@ internal static class TokenProtection
         return derived;
     }
 
-    private static SymmetricSecurityKey Derive(ReadOnlyMemory<byte> material)
+    private static SymmetricSecurityKey Derive([NeverLogged] ReadOnlyMemory<byte> material)
     {
         byte[] key = new byte[Length];
 

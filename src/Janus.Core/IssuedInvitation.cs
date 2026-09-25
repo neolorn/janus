@@ -12,4 +12,4 @@ namespace Janus.Core;
 /// to and the administrator hands it over; nothing where it was sent.
 /// </param>
 /// <remarks>Implements IDN-LIFE-009a, REG-INV-001 and chapter 09 section 8a.</remarks>
-public sealed record IssuedInvitation(InvitationId Id, DateTimeOffset ExpiresAt, string? Token);
+public sealed record IssuedInvitation(InvitationId Id, DateTimeOffset ExpiresAt, [property: NeverLogged] string? Token);

@@ -86,7 +86,7 @@ internal sealed class VerificationCodes(
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public async ValueTask<Result> PresentAsync(
         byte[] holder,
-        string entered,
+        [NeverLogged] string entered,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(holder);

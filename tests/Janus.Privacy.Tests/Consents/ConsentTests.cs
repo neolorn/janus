@@ -22,7 +22,7 @@ public sealed class ConsentTests : IAsyncDisposable
 
     private const string Marketing = "marketing";
 
-    private const string Fulfilment = "fulfilment";
+    private const string Performance = "performance";
 
     private const string Security = "security";
 
@@ -205,6 +205,24 @@ public sealed class ConsentTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-SENS-002a AC1: withdrawing the consent-based purpose of a record announces
+    /// that purpose alone, so a handler the host registered for the contractual
+    /// purpose of the same record is never invoked by it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_SENS_002a_AC1_AWithdrawalInvokesNoHandlerOfTheOtherPurposesAsync()
+    {
+        await GrantAsync(Recommendations);
+        await WithdrawAsync(Recommendations);
+
+        IReadOnlyList<ConsentChanged> raised = _events.Of<ConsentChanged>();
+
+        Assert.NotEmpty(raised);
+        Assert.All(raised, announced => Assert.Equal(Recommendations, announced.Purpose));
+    }
+
+    /// <summary>
     /// PRIV-SENS-002a AC4, PRIV-CONS-008a AC3: a purpose resting on another basis
     /// takes no consent record, so withdrawing one leaves it running.
     /// </summary>
@@ -212,12 +230,12 @@ public sealed class ConsentTests : IAsyncDisposable
     [Fact]
     public async Task PRIV_SENS_002a_AC4_APurposeOnAnotherBasisTakesNoConsentAsync()
     {
-        Assert.False(await GrantAsync(Fulfilment));
+        Assert.False(await GrantAsync(Performance));
 
         await GrantAsync(Recommendations);
         await WithdrawAsync(Recommendations);
 
-        Assert.DoesNotContain(await HeldAsync(), record => record.Purpose == Fulfilment);
+        Assert.DoesNotContain(await HeldAsync(), record => record.Purpose == Performance);
     }
 
     /// <summary>
@@ -351,9 +369,9 @@ public sealed class ConsentTests : IAsyncDisposable
     [Fact]
     public async Task PRIV_CONS_008a_AC3_APurposeThatTakesNoConsentIsNamedAsSuchAsync()
     {
-        Assert.Equal(ErrorCodes.PurposeNoConsent, await RefusedGrantAsync(Fulfilment));
+        Assert.Equal(ErrorCodes.PurposeNoConsent, await RefusedGrantAsync(Performance));
         Assert.Equal(ErrorCodes.PurposeNoConsent, await RefusedGrantAsync("nothing-declared"));
-        Assert.Equal(ErrorCodes.PurposeNoConsent, await RefusedWithdrawalAsync(Fulfilment));
+        Assert.Equal(ErrorCodes.PurposeNoConsent, await RefusedWithdrawalAsync(Performance));
         Assert.Empty(await HeldAsync());
     }
 

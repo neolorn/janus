@@ -1,7 +1,10 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Factors;
 using Janus.Core;
 using Janus.Core.Configuration;
 
@@ -31,10 +34,11 @@ namespace Janus.Hosting;
 /// What the deployment reads uploaded images with, or nothing where it registered
 /// none.
 /// </param>
+/// <param name="providers">The social providers whose security events the deployment takes.</param>
 /// <param name="configuration">Where the organizations that show photos are read.</param>
 /// <remarks>
-/// Implements LIB-HOST-001, REG-PM-001, AUTH-SESS-012, BFF-SESS-006, IDN-ATTR-002 and
-/// INT-MAIL-010.
+/// Implements LIB-HOST-001, REG-PM-001, AUTH-SESS-012, BFF-SESS-006, IDN-ATTR-002,
+/// INT-MAIL-010 and IDN-LIFE-012a.
 /// The library knows no route of the frontend, so it has none to fall back on: a
 /// deployment that declares none of these is stopped here rather than answering a
 /// password manager as a site that offers neither page, meeting an interactive
@@ -43,7 +47,10 @@ namespace Janus.Hosting;
 /// codec is optional until a policy shows photos, and required from then on, because
 /// the library reads no image itself. The mail server's client is optional until a mail
 /// server is registered, and required from then on, because which protocol client the
-/// server trusts is the deployment's to say.
+/// server trusts is the deployment's to say. A social provider is optional, and one
+/// declared is declared whole: named once, as a social provider, with the HTTPS address
+/// of its document and at least one client, since a declaration short of that would
+/// verify none of the events it was declared for.
 /// </remarks>
 internal sealed class DeclarationCoverage(
     PasskeyAddresses? addresses,
@@ -52,6 +59,7 @@ internal sealed class DeclarationCoverage(
     IMailServer? mail,
     MailServerClient? mailClient,
     ImageCodec? codec,
+    IEnumerable<SocialProvider> providers,
     IConfigurationStore configuration)
 {
     private const string Passkeys = "passkeyAddresses";
@@ -63,6 +71,8 @@ internal sealed class DeclarationCoverage(
     private const string Codec = "imageCodec";
 
     private const string MailClient = "mailServerClient.clientId";
+
+    private const string Social = "socialProvider";
 
     /// <summary>
     /// Reads what LIB-HOST-001 requires against what is registered.
@@ -116,6 +126,11 @@ internal sealed class DeclarationCoverage(
             return Missing(MailClient);
         }
 
+        if (Undeclared() is string part)
+        {
+            return Missing(Social + "." + part);
+        }
+
         return await PhotographedAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -124,6 +139,34 @@ internal sealed class DeclarationCoverage(
             ErrorCodes.StartupDeclarationMissing,
             "key",
             JsonSerializer.SerializeToElement(key)));
+
+    // IDN-LIFE-012a: the part of a social provider's declaration that does not hold,
+    // or nothing where every one holds.
+    private string? Undeclared()
+    {
+        var named = new HashSet<Factor>();
+
+        foreach (SocialProvider declared in providers)
+        {
+            if (!named.Add(declared.Provider)
+                || FactorCatalogue.Of(declared.Provider).AssuranceLevel is not AssuranceLevel.Delegated)
+            {
+                return "provider";
+            }
+
+            if (declared.Metadata is not { IsAbsoluteUri: true } metadata || metadata.Scheme != Uri.UriSchemeHttps)
+            {
+                return "metadata";
+            }
+
+            if (declared.ClientIds is not { Count: > 0 } clients || clients.Any(string.IsNullOrWhiteSpace))
+            {
+                return "clientIds";
+            }
+        }
+
+        return null;
+    }
 
     // IDN-ATTR-002: a photo is available where an organization's policy says so, and
     // the library has nothing to make one with unless the deployment declared a codec.

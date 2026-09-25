@@ -6,7 +6,7 @@ namespace Janus.Hosting.Bff;
 /// The library's own routes that non-browser callers reach.
 /// </summary>
 /// <remarks>
-/// Implements BFF-MACH-001. Which routes these are is settled here and by nothing a
+/// Implements BFF-MACH-001 and IDN-LIFE-012a AC3. Which routes these are is settled here and by nothing a
 /// deployment can set, so a browser endpoint cannot be moved onto the machine profile
 /// by configuration and a machine endpoint cannot be left off it by omission.
 /// </remarks>
@@ -14,8 +14,12 @@ internal static class MachineRoutes
 {
     private static readonly PathString[] Governed =
     [
+        new("/oidc/par"),
         new("/oidc/token"),
         new("/oidc/userinfo"),
+        new("/callbacks/sms/dlr"),
+        new("/callbacks/providers/google"),
+        new("/callbacks/providers/apple"),
     ];
 
     /// <summary>

@@ -76,6 +76,79 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.ToTable("alerts", "identity");
             });
 
+        modelBuilder.Entity("Janus.Storage.Authentication.Callbacks.CallbackEventRecord", b =>
+            {
+                b.Property<string>("Callback")
+                    .HasColumnType("text")
+                    .HasColumnName("callback");
+
+                b.Property<byte[]>("Identifier")
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("identifier");
+
+                b.Property<DateTimeOffset>("ClaimedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("claimed_at");
+
+                b.HasKey("Callback", "Identifier")
+                    .HasName("pk_callback_events");
+
+                b.ToTable("callback_events", "identity");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Callbacks.CallbackRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<DateTimeOffset>("At")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("at");
+
+                b.Property<bool>("Rejected")
+                    .HasColumnType("boolean")
+                    .HasColumnName("rejected");
+
+                b.Property<byte[]>("Source")
+                    .IsRequired()
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("source");
+
+                b.HasKey("Id")
+                    .HasName("pk_callbacks");
+
+                b.HasIndex("Source", "At")
+                    .HasDatabaseName("ix_callbacks_source_at");
+
+                b.ToTable("callbacks", "identity");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Callbacks.CallbackReferenceRecord", b =>
+            {
+                b.Property<byte[]>("Reference")
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("reference");
+
+                b.Property<string>("Callback")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("callback");
+
+                b.Property<DateTimeOffset>("IssuedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("issued_at");
+
+                b.HasKey("Reference")
+                    .HasName("pk_callback_references");
+
+                b.ToTable("callback_references", "identity");
+            });
+
         modelBuilder.Entity("Janus.Storage.Authentication.Credentials.KeyCeremonyRecord", b =>
             {
                 b.Property<Guid>("Subject")
@@ -178,6 +251,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("last_used_at");
 
+                b.Property<byte[]>("ProviderSubject")
+                    .HasColumnType("bytea")
+                    .HasColumnName("provider_subject");
+
                 b.Property<byte[]>("PublicKey")
                     .HasColumnType("bytea")
                     .HasColumnName("public_key");
@@ -216,6 +293,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasDatabaseName("ux_authenticators_preferred")
                     .HasFilter("is_preferred");
 
+                b.HasIndex("Factor", "ProviderSubject")
+                    .IsUnique()
+                    .HasDatabaseName("ux_authenticators_provider_subject")
+                    .HasFilter("provider_subject IS NOT NULL AND provider_subject <> decode(repeat('00', 32), 'hex')");
+
                 b.HasIndex("Subject", "Factor", "Label")
                     .IsUnique()
                     .HasDatabaseName("ux_authenticators_label");
@@ -225,6 +307,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                         t.HasCheckConstraint("ck_authenticators_factor", "factor IN ('apple', 'breakGlass', 'emailCode', 'emailLink', 'google', 'passkey', 'password', 'phoneCode', 'phoneLink', 'recoveryCodes', 'securityKey', 'totp')");
 
                         t.HasCheckConstraint("ck_authenticators_invalidates_at", "invalidates_at IS NULL OR state IN ('suspended')");
+
+                        t.HasCheckConstraint("ck_authenticators_provider_subject", "(provider_subject IS NULL) <> (factor IN ('apple', 'google')) AND (provider_subject IS NULL OR octet_length(provider_subject) = 32)");
 
                         t.HasCheckConstraint("ck_authenticators_state", "state IN ('active', 'invalidated', 'suspended')");
 
@@ -861,7 +945,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("text")
                     .HasColumnName("status");
 
-                b.Property<Guid>("Subject")
+                b.Property<Guid?>("Subject")
                     .HasColumnType("uuid")
                     .HasColumnName("subject");
 
@@ -1296,36 +1380,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasName("pk_sms_balance_readings");
 
                 b.ToTable("sms_balance_readings", "identity");
-            });
-
-        modelBuilder.Entity("Janus.Storage.Authentication.Sending.CallbackRecord", b =>
-            {
-                b.Property<Guid>("Id")
-                    .ValueGeneratedOnAdd()
-                    .HasColumnType("uuid")
-                    .HasColumnName("id");
-
-                b.Property<DateTimeOffset>("At")
-                    .HasColumnType("timestamp with time zone")
-                    .HasColumnName("at");
-
-                b.Property<bool>("Rejected")
-                    .HasColumnType("boolean")
-                    .HasColumnName("rejected");
-
-                b.Property<byte[]>("Source")
-                    .IsRequired()
-                    .HasMaxLength(32)
-                    .HasColumnType("bytea")
-                    .HasColumnName("source");
-
-                b.HasKey("Id")
-                    .HasName("pk_callbacks");
-
-                b.HasIndex("Source", "At")
-                    .HasDatabaseName("ix_callbacks_source_at");
-
-                b.ToTable("callbacks", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.NoticeRecord", b =>
@@ -3281,7 +3335,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .WithMany()
                     .HasForeignKey("Subject")
                     .OnDelete(DeleteBehavior.Cascade)
-                    .IsRequired()
                     .HasConstraintName("fk_oidc_tokens_subject");
             });
 

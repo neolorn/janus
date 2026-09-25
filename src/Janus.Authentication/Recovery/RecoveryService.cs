@@ -141,8 +141,8 @@ internal sealed class RecoveryService(
 
     /// <inheritdoc/>
     public async ValueTask<Result> CompleteAsync(
-        string token,
-        string password,
+        [NeverLogged] string token,
+        [NeverLogged] string password,
         string source,
         CancellationToken cancellationToken)
     {
@@ -282,7 +282,7 @@ internal sealed class RecoveryService(
 
     /// <inheritdoc/>
     public async ValueTask<Result<EnrolmentSession>> BeginEnrolmentAsync(
-        string token,
+        [NeverLogged] string token,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(token);
@@ -405,7 +405,7 @@ internal sealed class RecoveryService(
     // AUTHZ-SCOPE-001: the permission is held in an organization, and an approver
     // approves for any account with the permission one of their own organizations
     // grants them. The account being recovered need belong to none.
-    private async ValueTask<RecoveryLink?> FindAsync(string token, CancellationToken cancellationToken) =>
+    private async ValueTask<RecoveryLink?> FindAsync([NeverLogged] string token, CancellationToken cancellationToken) =>
         token is { Length: > 0 }
             ? await links
                 .FindAsync(OpaqueToken.Of(token).Fingerprint(), cancellationToken)
@@ -521,7 +521,7 @@ internal sealed class RecoveryService(
 
     private async ValueTask<Result> SetAsync(
         SubjectId subject,
-        string password,
+        [NeverLogged] string password,
         CancellationToken cancellationToken)
     {
         HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken)
