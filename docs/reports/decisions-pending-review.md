@@ -15900,6 +15900,53 @@ named at a request that the model does not declare" as a fault that throws at th
 request, and AC3 could say "Configuration faults in what the host declares surface at
 startup".
 
+---
+
+## 388. A recorded refusal carries the grant that decided it, and one builder explains live and recorded refusals
+
+**Phase 10 · 2026-09-25 · Tier 3 · CONV-LOG-006 AC1, AUTHZ-GATE-004, AUTHZ-CONCEAL-004, OPS-OBS-001**
+
+*The question.* The live explanation (`ExplainAsync`) names the deny grant that decided.
+The resolution of a recorded refusal (`ResolveAsync`, `ResolveOwnAsync`) was built by a
+second path and always said that no grant matched. The two disagreed for every refusal
+a deny grant decided, which is what CONV-LOG-006 is there to prevent.
+
+*The readings.*
+
+1. Keep two paths and test only that they agree where they already do. This fails the
+   criterion for deny-grant refusals.
+2. Re-evaluate at resolution time. This explains the present grants, not the ones that
+   refused. The record holds no identifier of the refused record, so there is nothing to
+   evaluate against.
+3. The refusal records the deciding grant, in the D-153 explanation values, in its
+   audit details. One builder makes the explanation from principal, permission and
+   grant, for a live decision and for a recorded refusal alike.
+
+*Chosen: 3.*
+
+- It is the only reading where the log and the explanation derive from one source.
+- It discloses nothing new:
+  - Support resolution needs `audit:read` in the administrative organization, which
+    already reads the audit details.
+  - Self-service resolution applies only to non-concealed types, whose live
+    explanation already names the same grant.
+  - The container a deny grant sits on is named only to those two readers. The
+    identifier the refusal hands back is still the row's own, so it says nothing
+    about the record (AUTHZ-CONCEAL-004 AC2), and a concealed refusal still does not
+    resolve for its caller.
+- The values are plain identifiers, a role name and a type. They are not values held
+  under a subject's key, so the trail reads the same after erasure.
+- A row written before the change has no `grant` and resolves as it did.
+
+*Tests that pin it.* `ExplanationTests.CONV_LOG_006_AC1_ARecordedRefusalResolvesToTheLiveExplanationAsync`,
+together with the existing `ExplanationTests` of AUTHZ-GATE-004, AUTHZ-CONCEAL-004 and
+OPS-OBS-001, which still pass.
+
+*Chapter text that should change.* AUTHZ-CONCEAL-004 AC1 could read "The identifier
+resolves to an audit entry naming the permission, the principal and the grant that
+decided, or none"; OPS-OBS-001 AC1 says "the missing grant" and could add "or the deny
+grant that decided".
+
 
 # Rows for chapter 10
 

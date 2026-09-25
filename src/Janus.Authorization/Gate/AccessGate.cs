@@ -93,6 +93,7 @@ internal sealed class AccessGate(
                 permission,
                 resource.Type,
                 decided.Organization,
+                Deciding(decided, resource),
                 cancellationToken).ConfigureAwait(false);
         }
 
@@ -150,6 +151,7 @@ internal sealed class AccessGate(
             permission,
             resource.Type,
             decided.Organization,
+            Deciding(decided, resource),
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -177,6 +179,7 @@ internal sealed class AccessGate(
                 permission,
                 OrganizationWide,
                 organization,
+                decided is null ? null : Explained(decided, resource: null),
                 cancellationToken).ConfigureAwait(false);
         }
 
@@ -222,7 +225,10 @@ internal sealed class AccessGate(
         Decision decided = await DecideAsync(context, permission, resource, cancellationToken)
             .ConfigureAwait(false);
 
-        return Result.Success(Explanation(context, permission, resource, decided, derivedBy: null));
+        return Result.Success(Explanation(
+            new ExplainedPrincipal(context.Acting, context.Effective),
+            permission,
+            Deciding(decided, resource)));
     }
 
     /// <inheritdoc/>
@@ -254,7 +260,10 @@ internal sealed class AccessGate(
                 .ConfigureAwait(false)
             : null;
 
-        return Result.Success(Explanation(context, permission, resource, decided, derivedGrant));
+        return Result.Success(Explanation(
+            new ExplainedPrincipal(context.Acting, context.Effective),
+            permission,
+            Deciding(decided, resource) ?? derivedGrant));
     }
 
     /// <inheritdoc/>
@@ -333,11 +342,12 @@ internal sealed class AccessGate(
                 : Result.Failure<AccessExplanation>(Error.From(ErrorCodes.Denied));
     }
 
-    private static AccessExplanation Resolved(DeniedAccess recorded) => new(
-        AccessOutcome.Denied,
-        recorded.Permission,
+    // CONV-LOG-006: a recorded refusal is explained by the path that explains a live
+    // decision, from the grant that decided it as the refusal recorded it.
+    private static AccessExplanation Resolved(DeniedAccess recorded) => Explanation(
         new ExplainedPrincipal(recorded.Acting, recorded.Effective),
-        Grant: null);
+        recorded.Permission,
+        recorded.Grant);
 
     // AUTHZ-CONCEAL-005: a refusal tied to no record conceals nothing.
     private bool Discloses(ResourceType type) =>
@@ -1006,25 +1016,23 @@ internal sealed class AccessGate(
     private static Error Malformed(string member) =>
         Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
 
-    // AUTHZ-GATE-004: one shape answers both paths, the derived grant being the one a
-    // fact in the host's data produced rather than one somebody wrote.
+    // AUTHZ-GATE-004, CONV-LOG-006: one shape answers every path, a live decision and a
+    // refusal read back alike, from the grant that decided: one somebody wrote, one a
+    // fact in the host's data produced, or none.
     private static AccessExplanation Explanation(
-        AccessContext context,
+        ExplainedPrincipal principal,
         Permission permission,
-        ResourceReference resource,
-        Decision decided,
-        ExplainedGrant? derivedBy)
-    {
-        ExplainedGrant? grant = decided.Grant is null
-            ? derivedBy
-            : Explained(decided.Grant, resource);
-
-        return new AccessExplanation(
+        ExplainedGrant? grant) =>
+        new(
             grant is { Deny: false } ? AccessOutcome.Allowed : AccessOutcome.Denied,
             permission,
-            new ExplainedPrincipal(context.Acting, context.Effective),
+            principal,
             grant);
-    }
+
+    // The stored grant that decided an evaluation, as an explanation and the refusal it
+    // records both name it.
+    private static ExplainedGrant? Deciding(Decision decided, ResourceReference resource) =>
+        decided.Grant is null ? null : Explained(decided.Grant, resource);
 
     // AUTHZ-GATE-004, D-162: the grant a fact produced, as an explanation names it. It
     // holds no identifier, because no row holds it; the role is the one the derivation
@@ -1088,7 +1096,7 @@ internal sealed class AccessGate(
             above == resource ? null : above);
     }
 
-    private static ExplainedGrant Explained(CandidateGrant decided, ResourceReference resource)
+    private static ExplainedGrant Explained(CandidateGrant decided, ResourceReference? resource)
     {
         ResourceReference? above = decided.AncestorType is null || decided.AncestorId is null
             ? null
@@ -1122,6 +1130,7 @@ internal sealed class AccessGate(
         Permission permission,
         ResourceType type,
         OrganizationId? organization,
+        ExplainedGrant? grant,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -1135,7 +1144,8 @@ internal sealed class AccessGate(
             organization,
             permission,
             type,
-            time.GetUtcNow());
+            time.GetUtcNow(),
+            grant);
 
         await audit.RecordAsync(denial, cancellationToken).ConfigureAwait(false);
         await spikes.WatchAsync(denial, cancellationToken).ConfigureAwait(false);

@@ -18,7 +18,8 @@ namespace Janus.Hosting.Tests.Authorization;
 
 /// <summary>
 /// What the gate says about a decision, and what a refusal discloses
-/// (AUTHZ-GATE-004, AUTHZ-CONCEAL-001 to AUTHZ-CONCEAL-005, AUTHZ-IMP-001, OPS-OBS-001),
+/// (AUTHZ-GATE-004, AUTHZ-CONCEAL-001 to AUTHZ-CONCEAL-005, AUTHZ-IMP-001, OPS-OBS-001,
+/// CONV-LOG-006),
 /// and what a grant confers over the organization it is scoped to (AUTHZ-GRANT-001,
 /// OPS-CFG-006).
 /// </summary>
@@ -310,6 +311,48 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
         Assert.Equal(AccessOutcome.Denied, explanation.Outcome);
         Assert.Equal(HostPermissions.ReadNote, explanation.Permission);
         Assert.Null(explanation.Grant);
+    }
+
+    /// <summary>
+    /// CONV-LOG-006 AC1: the refusal the gate records and the explanation it gives live
+    /// derive from one source, so the recorded refusal, read back through the support
+    /// resolution and through the owner's own, is the explanation the gate gave: where
+    /// no grant matched, where a deny grant on the container decided, where a deny grant
+    /// on the record defeated an allow above it, and where the library holds no row for
+    /// the record.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_LOG_006_AC1_ARecordedRefusalResolvesToTheLiveExplanationAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Deployed unmatched = await DeployAsync(granted: false);
+        Deployed deniedAbove = await DeployAsync(granted: false);
+        Deployed deniedOnTheRecord = await DeployAsync(granted: true);
+
+        await deniedAbove.Deployment.GrantAsync(
+            GrantSubject.Of(deniedAbove.Account), deniedAbove.Role, deniedAbove.Container, true, null, null, cancellationToken);
+        await deniedOnTheRecord.Deployment.GrantAsync(
+            GrantSubject.Of(deniedOnTheRecord.Account), deniedOnTheRecord.Role, deniedOnTheRecord.Note, true, null, null, cancellationToken);
+
+        (Deployed Deployed, ResourceReference Asked, bool ByADeny)[] refusals =
+        [
+            (unmatched, unmatched.Note, false),
+            (deniedAbove, deniedAbove.Note, true),
+            (deniedOnTheRecord, deniedOnTheRecord.Note, true),
+            (unmatched, Reference(Note), false),
+        ];
+
+        foreach ((Deployed deployed, ResourceReference asked, bool byADeny) in refusals)
+        {
+            AccessExplanation live = await ExplainedAsync(deployed, asked);
+            AuditRecordId correlation = await RefusedAsync(deployed, asked, HostPermissions.ReadNote);
+
+            Assert.Equal(AccessOutcome.Denied, live.Outcome);
+            Assert.Equal(byADeny, live.Grant is { Deny: true });
+            Assert.Equal(live, await ResolvedAsync(deployed, correlation));
+            Assert.Equal(live, Explained(await ResolvedOwnAsync(deployed.Account, correlation)));
+        }
     }
 
     /// <summary>

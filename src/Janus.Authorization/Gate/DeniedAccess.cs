@@ -5,7 +5,8 @@ namespace Janus.Authorization.Gate;
 
 /// <summary>
 /// One refusal as the trail records it: who asked, what they asked to do, the kind of
-/// thing they asked it of, and the organization the evaluation was scoped to.
+/// thing they asked it of, the organization the evaluation was scoped to, and the
+/// grant that decided it.
 /// </summary>
 /// <param name="Correlation">The identifier the refusal is answered with.</param>
 /// <param name="Acting">
@@ -23,11 +24,16 @@ namespace Janus.Authorization.Gate;
 /// <param name="Permission">What was asked for.</param>
 /// <param name="Type">The kind of thing it was asked of.</param>
 /// <param name="At">The instant the refusal happened.</param>
+/// <param name="Grant">
+/// The deny grant that decided the refusal, as an explanation names it, or nothing
+/// where no grant matched.
+/// </param>
 /// <remarks>
-/// Implements AUTHZ-CONCEAL-004 and CONV-LOG-005. The identifier handed back says
-/// nothing about the record: it is drawn the same way and carried the same way whether
-/// the record exists, and what it resolves to is the permission and the principal,
-/// which is nobody where the request named nobody (AUTHZ-CONCEAL-004 AC2).
+/// Implements AUTHZ-CONCEAL-004, CONV-LOG-005 and CONV-LOG-006. The identifier handed
+/// back says nothing about the record: it is drawn the same way and carried the same
+/// way whether the record exists, and what it resolves to is the permission and the
+/// principal, which is nobody where the request named nobody (AUTHZ-CONCEAL-004 AC2),
+/// and the grant the explanation named when the refusal was made.
 /// </remarks>
 internal sealed record DeniedAccess(
     AuditRecordId Correlation,
@@ -36,4 +42,5 @@ internal sealed record DeniedAccess(
     OrganizationId? Organization,
     Permission Permission,
     ResourceType Type,
-    DateTimeOffset At);
+    DateTimeOffset At,
+    ExplainedGrant? Grant);

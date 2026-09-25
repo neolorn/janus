@@ -1170,6 +1170,9 @@ against the public contract of LIB-API-001.
 - A check, a filter or a fragment naming a resource type the model does not declare
   raises at the request, before the caller's restriction is read or anything is
   recorded, so the calling code's fault is the same whoever asks.
+- A refusal is recorded with the grant that decided it, where one did, so its correlation
+  identifier resolves to what the gate explained at the time: a deny grant is named with
+  the container it sat on, rather than the refusal reading as one no grant matched.
 - A refusal the library answers is logged under the correlation identifier the answer
   carries, by its code. A fault is logged at error with the code and the structured
   context the answer withholds, so a `system.fault` is traced to its cause by that

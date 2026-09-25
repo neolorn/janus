@@ -17,8 +17,8 @@ namespace Janus.Storage.Authorization.Gate;
 /// </summary>
 /// <param name="connections">Where the statements take their connection from.</param>
 /// <remarks>
-/// Implements AUTHZ-CONCEAL-004, AUTHZ-GATE-004, OPS-ALERT-006, CONV-LOG-005 and
-/// CONV-DESIGN-003. The record is written through the operation's own connection, so a
+/// Implements AUTHZ-CONCEAL-004, AUTHZ-GATE-004, OPS-ALERT-006, CONV-LOG-005, CONV-LOG-006
+/// and CONV-DESIGN-003. The record is written through the operation's own connection, so a
 /// refusal on a path that opened no transaction stands on its own and one inside a
 /// transaction is part of it. Nothing here changes or removes a row.
 /// </remarks>
@@ -27,6 +27,18 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
     private const string Permission = "permission";
     private const string ResourceType = "resourceType";
     private const string Resource = "resource";
+
+    // CONV-LOG-006: the grant that decided a refusal and its fields, spelled as the
+    // explanation spells them (AUTHZ-GATE-004, D-153).
+    private const string Grant = "grant";
+    private const string Id = "id";
+    private const string Kind = "kind";
+    private const string HolderType = "subjectType";
+    private const string Holder = "subjectId";
+    private const string Role = "role";
+    private const string Deny = "deny";
+    private const string InheritedFrom = "inheritedFrom";
+    private const string ContainerId = "resourceId";
 
     private static readonly AuditAction Denied = AuditActions.AccessDenied;
 
@@ -177,13 +189,42 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
             .ConfigureAwait(false);
     }
 
-    private static string Written(DeniedAccess denial) => JsonSerializer.Serialize(
-        new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+    // CONV-LOG-006: the grant that decided the refusal is written with it, in the
+    // values of the explanation (AUTHZ-GATE-004, D-153), so what the refusal resolves to
+    // is what the gate explained.
+    private static string Written(DeniedAccess denial)
+    {
+        var details = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
         {
             [Permission] = JsonSerializer.SerializeToElement(denial.Permission.ToString()),
             [ResourceType] = JsonSerializer.SerializeToElement(denial.Type.ToString()),
-        },
-        AuditDocument.Default.DictionaryStringJsonElement);
+        };
+
+        if (denial.Grant is ExplainedGrant grant)
+        {
+            details[Grant] = Element(new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+            {
+                [Id] = JsonSerializer.SerializeToElement(grant.Id?.Value),
+                [Kind] = JsonSerializer.SerializeToElement(VocabularyConverter<GrantKind>.Write(grant.Kind)),
+                [HolderType] = JsonSerializer.SerializeToElement(VocabularyConverter<SubjectType>.Write(grant.SubjectType)),
+                [Holder] = JsonSerializer.SerializeToElement(grant.SubjectId),
+                [Role] = JsonSerializer.SerializeToElement(grant.Role.ToString()),
+                [Deny] = JsonSerializer.SerializeToElement(grant.Deny),
+                [InheritedFrom] = grant.InheritedFrom is ResourceReference container
+                    ? Element(new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+                    {
+                        [ResourceType] = JsonSerializer.SerializeToElement(container.Type.ToString()),
+                        [ContainerId] = JsonSerializer.SerializeToElement(container.Id.ToString()),
+                    })
+                    : JsonSerializer.SerializeToElement<string?>(null),
+            });
+        }
+
+        return JsonSerializer.Serialize(details, AuditDocument.Default.DictionaryStringJsonElement);
+    }
+
+    private static JsonElement Element(Dictionary<string, JsonElement> fields) =>
+        JsonSerializer.SerializeToElement(fields, AuditDocument.Default.DictionaryStringJsonElement);
 
     // OPS-ALERT-006, D-045: what was exported is the operation and the kind of record,
     // and the one record where the call named one; never what the rows held.
@@ -216,8 +257,32 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
             row.Organization is Guid organization ? new OrganizationId(organization) : null,
             Core.Permission.Parse(Field(details, Permission)),
             Core.ResourceType.Parse(Field(details, ResourceType)),
-            row.At);
+            row.At,
+            details.TryGetValue(Grant, out JsonElement grant) ? Decided(grant) : null);
     }
+
+    // The grant as the refusal wrote it. A refusal no grant decided carries none.
+    private static ExplainedGrant Decided(JsonElement grant)
+    {
+        JsonElement id = grant.GetProperty(Id);
+        JsonElement container = grant.GetProperty(InheritedFrom);
+
+        return new ExplainedGrant(
+            id.ValueKind is JsonValueKind.Null ? null : new GrantId(id.GetGuid()),
+            VocabularyConverter<GrantKind>.Read(Text(grant, Kind)),
+            VocabularyConverter<SubjectType>.Read(Text(grant, HolderType)),
+            grant.GetProperty(Holder).GetGuid(),
+            RoleName.Parse(Text(grant, Role)),
+            grant.GetProperty(Deny).GetBoolean(),
+            container.ValueKind is JsonValueKind.Null
+                ? null
+                : new ResourceReference(
+                    Core.ResourceType.Parse(Text(container, ResourceType)),
+                    ResourceId.Parse(Text(container, ContainerId))));
+    }
+
+    private static string Text(JsonElement fields, string name) =>
+        fields.GetProperty(name).GetString() ?? throw Missing(name);
 
     private static string Field(Dictionary<string, JsonElement> details, string name) =>
         details.TryGetValue(name, out JsonElement value)
