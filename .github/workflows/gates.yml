@@ -32,11 +32,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
       - run: dotnet restore Janus.slnx --locked-mode
       - run: dotnet build Janus.slnx --no-restore
+      # CONV-SETUP-003 AC2 and LIB-TEST-002 AC1: the shipped file moves only in a
+      # release commit, under a version raised by what the surface lost or gained.
+      - env:
+          RANGE_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          RANGE_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: ./.github/gates/release.sh "$RANGE_BASE" "$RANGE_HEAD"
 
   format:
     name: Format

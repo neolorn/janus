@@ -14738,6 +14738,95 @@ over"; PRIV-RET-001's row for host-declared categories could say the floor is pa
 the declaration and the key defaults to it; `09` section 8 could say whether a member
 of `retention.<category>` is written at runtime.
 
+---
+
+## 359. A version is judged at the commit that releases it, by what the shipped surface lost or gained
+
+**Phase 10 · 2026-09-25 · Tier 2 · LIB-TEST-002 AC1, LIB-VER-001, LIB-VER-002, CONV-SETUP-003 AC2, CONV-VCS-005 AC3**
+
+*The question.* LIB-TEST-002 AC1: "Altering a public signature without a version bump
+fails the build." The version is the tag's (LIB-VER-001, CONV-VCS-005) and no project
+file carries one, so between releases there is no version to raise. CONV-SETUP-003
+fails the build on a public change without its line in the unshipped file, and moves
+lines to the shipped file only in a release commit. No chapter says how a release
+commit is recognised, what the version it names has to be, or where a major version's
+migration note lives; the workflow that publishes is Milestone 2 step 1.
+
+*The readings.*
+
+1. The unshipped line is the bump: the analyser is the whole of AC1, and the version is
+   chosen at release by whoever releases.
+2. The unshipped line records the change and the release commit is judged. A commit
+   that changes a shipped file is a release: it adds one dated version section to the
+   changelog, above every other, and leaves Unreleased and every unshipped file empty.
+   The version it names raises the major part where the shipped surface lost a line,
+   at least the minor part where it gained one, and follows the one before it in every
+   case. A section opening a major version links its migration note, a file in the
+   repository. A release tag names the version its commit added.
+
+*Chosen: 2.* Reading 1 lets a removed signature ship under a minor version, which is
+the failure AC1 names. The rules are `.github/gates/release.sh`, run over the pushed
+range in the `Public surface files up to date` job, the CONV-SETUP-003 row of
+CONV-GATE-001. A lost shipped line is a changed or removed signature, since the
+analyser records a change as the old line removed and the new one added. The first
+version has no predecessor and so opens a major version, and links its migration note
+as Milestone 2 step 12 publishes one with 1.0.0. Where a note lives is not fixed: the
+gate asks for a link to a file in the repository. Publishing the package, and the
+version MinVer derives from the tag, stay with the release workflow of Milestone 2
+step 1.
+
+*Tests that pin it.* None in the solution: the rule is a gate over commits and tags,
+which a test cannot make. It was exercised in this phase against a scratch repository,
+fourteen cases passing and failing as stated: a plain commit; a first release with and
+without its note; a shipped change outside a release; a removal released as a minor,
+and as a major with and without its note; an addition released as a patch and as a
+minor; a minor raise keeping a patch number; a patch release; a release leaving lines
+under Unreleased and in an unshipped file; a tag on a commit releasing nothing; and a
+range across a merge. Over the repository's whole history it passes.
+
+*Chapter text that should change.* LIB-TEST-002 AC1 could say the bump is judged at the
+release commit; CONV-VCS-005 could say where the migration note of LIB-VER-002 lives.
+
+---
+
+## 360. The library-owned schema is read from a migrated database and held to a committed file
+
+**Phase 10 · 2026-09-25 · Tier 2 · LIB-API-001 AC2, LIB-TEST-002 AC2, CONV-TEST-002, CONV-GATE-002**
+
+*The question.* LIB-API-001 lists the database schema (all library-owned tables) and
+the ancestry closure's structure as contract; its AC2 has a change to any caught by a
+contract test before release, and LIB-TEST-002 AC2 fails the build on a change to the
+closure's structure. No test held the schema. The model's configuration covers the
+tables the context maps, but the view a host's filter reads (`effective_grants`) and
+the partitioning of the audit records exist only in the migrations. CONV-TEST-002's
+contract kind runs with no container, on every push (CONV-GATE-002).
+
+*The readings.*
+
+1. The structure is read from the model at design time, as a contract-kind test, and
+   the view and the partitioning are left to the migrations.
+2. The structure is read from a migrated database: every table and view in the
+   library's schema with its columns, constraints and indexes, the monthly leaf
+   partitions aside, compared with a committed file, as an integration-kind test.
+
+*Chosen: 2.* Reading 1 leaves out the one relation a host's own SQL reads beside the
+closure. The rendering is one query over the catalogue, and the file is
+`tests/Janus.Storage.Tests/schema.txt`, beside its test as `configuration-keys.txt` is
+beside its own: an intended change is written into it in the same commit, where it is
+the reviewable diff. A month's partition is created by the day the migration or the
+sweep runs, so the leaf partitions are not part of the contract; the partitioned
+tables above them are. The closure's ten lines are also stated in the test named for
+LIB-TEST-002 AC2, so restructuring it means changing a test that says it cannot be.
+Being integration-kind, both run in the `Integration tests` job, on a pull request and
+on the default branch, where a red check blocks the merge.
+
+*Tests that pin it.*
+`SchemaContractTests.LIB_API_001_AC2_TheLibraryOwnedSchemaIsTheContractAsync`,
+`SchemaContractTests.LIB_TEST_002_AC2_TheAncestryClosureStructureIsTheContractAsync`.
+
+*Chapter text that should change.* CONV-TEST-002 could say that a contract test which
+needs the database is of the integration kind.
+
 
 # Rows for chapter 10
 
