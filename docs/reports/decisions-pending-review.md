@@ -16161,6 +16161,51 @@ and port. The chapter does not say where in the pipeline the fault is caught.
 *Chapter text that should change.* BFF-ERR-002 AC2 could say that the detail kept is
 the fault's type, since CONV-LOG-003 keeps its message out of the log.
 
+---
+
+## 394. An authorization refusal the server cannot send to a client is answered to the browser in the envelope; the back-channel endpoints keep the protocol's JSON
+
+**Phase 10 · 2026-09-25 · Tier 2 · LIB-API-003 AC4, BFF-ERR-001, AUTH-OIDC-006**
+
+*The question.* Two kinds of OIDC error reach the browser differently.
+
+- When `/oidc/authorize` fails before a client's destination is known, OpenIddict
+  7.7.1 writes the error as `text/plain` prose for a developer. The request may name
+  no client, or a pushed request that is spent, or be unreadable.
+- The token, PAR and userinfo endpoints answer errors as RFC 6749 section 5.2 and RFC
+  9126 JSON, with `error` and `error_description`, to a machine client.
+
+*The readings.*
+
+1. Answer the local authorize error through the library's writer. Keep the protocol's
+   JSON at the back channel.
+2. Put every OIDC error, back channel included, into the envelope.
+3. Leave both as the server writes them.
+
+*Chosen: 1.*
+
+- Reading 3 leaves prose in a browser answer, which LIB-API-003 AC4 forbids.
+- Reading 2 breaks every relying party that reads `error` as RFC 6749 requires, the
+  mail server among them (AUTH-OIDC-004).
+- The local error answers 400 `api.request.malformed`, with the protocol's code under
+  `details.error`, because the browser brought a request the server could not read as
+  one it serves.
+- `server_error` answers 500 `system.fault`.
+- A refusal that can be redirected to the client still goes back to it as the
+  protocol says.
+
+*Tests that pin it.*
+`ErrorTranslationTests.LIB_API_003_AC4_AnAuthorizationRefusalAnswersTheEnvelopeAsync`.
+
+*Chapter text that should change.* Two rows in the ledger's "Rows for chapter 10"
+could change:
+
+- the `api.request.malformed` row (section 1.5) could add "or an authorization request
+  the provider refused and cannot return to a client, with the protocol's code under
+  `details.error`";
+- LIB-API-003 could note that the OAuth error JSON at the back channel is the
+  protocol's and not a user-facing error.
+
 # Rows for chapter 10
 
 D-162 section E names codes, keys, declarations and vocabularies the library now

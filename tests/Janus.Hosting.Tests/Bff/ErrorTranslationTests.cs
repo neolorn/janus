@@ -12,8 +12,9 @@ namespace Janus.Hosting.Tests.Bff;
 
 /// <summary>
 /// What answers under the mount where neither a stage nor an endpoint wrote the
-/// library's body: a path nothing serves, a method a path does not take, and a fault
-/// (LIB-API-003 AC4, BFF-ERR-001, BFF-ERR-002).
+/// library's body: a path nothing serves, a method a path does not take, a fault, and a
+/// refusal of the provider's that cannot go back to the client (LIB-API-003 AC4,
+/// BFF-ERR-001, BFF-ERR-002).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class ErrorTranslationTests
@@ -119,6 +120,29 @@ public sealed class ErrorTranslationTests
             line => line.Contains(correlation, StringComparison.Ordinal)
                 && line.Contains(nameof(InvalidOperationException), StringComparison.Ordinal));
         Assert.DoesNotContain(deployment.Logs.Lines, line => line.Contains("db.internal", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// LIB-API-003 AC4, AUTH-OIDC-006 AC2: an authorization request the provider
+    /// refuses and cannot return to a client is answered to the browser by the
+    /// library's writer, carrying the protocol's code and no description.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_API_003_AC4_AnAuthorizationRefusalAnswersTheEnvelopeAsync()
+    {
+        await using var deployment = new Deployment(prefix: Prefix);
+
+        Answer answered = await new Browser(deployment).SendAsync("GET", Prefix + "/oidc/authorize");
+
+        AssertEnvelope(answered, StatusCodes.Status400BadRequest, ErrorCodes.RequestMalformed);
+        Assert.Equal(
+            ["error"],
+            answered.Json().GetProperty("details").EnumerateObject().Select(detail => detail.Name));
+        Assert.Equal(
+            "invalid_request",
+            answered.Json().GetProperty("details").GetProperty("error").GetString());
+        Assert.Null(answered.Location);
     }
 
     // The body every refusal of the library carries, and nothing a person reads.

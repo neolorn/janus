@@ -137,6 +137,14 @@ internal static class OidcRegistration
                     handler => handler.UseScopedHandler<AuthorizationIssue>());
                 _ = options.AddEventHandler<OpenIddictServerEvents.ApplyAuthorizationResponseContext>(
                     handler => handler.UseScopedHandler<PushedRequestSpent>());
+
+                // LIB-API-003 AC4: a refusal the client cannot be sent stays with the
+                // browser, and is answered there as every other refusal is.
+                _ = options.AddEventHandler<OpenIddictServerEvents.ApplyAuthorizationResponseContext>(
+                    handler => handler
+                        .UseScopedHandler<AuthorizationErrorAnswer>()
+                        .SetOrder(AuthorizationErrorAnswer.Order));
+
                 _ = options.AddEventHandler<OpenIddictServerEvents.HandleTokenRequestContext>(
                     handler => handler.UseScopedHandler<TokenIssue>());
                 _ = options.AddEventHandler<OpenIddictServerEvents.HandleUserInfoRequestContext>(

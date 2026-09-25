@@ -1000,6 +1000,10 @@ against the public contract of LIB-API-001.
   `system.fault` with the correlation identifier and nothing of what was thrown; the
   log keeps the fault's type under that identifier. The host's routes outside the
   mount answer as the host has them answer.
+- An authorization request refused where the refusal cannot go back to a client is
+  answered to the browser in the error envelope rather than as the provider's text:
+  400 `api.request.malformed` with the protocol's code in `details.error`, or 500
+  `system.fault`.
 - Every session carries a synchronizer token of its own, bound to that session and to no
   other, and reissued whenever the session's secret is. Neither value is ever read back:
   the record holds only what each fingerprints to.
