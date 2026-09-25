@@ -995,6 +995,8 @@ against the public contract of LIB-API-001.
   `retryAt`, before any session is looked up. Each instance of a deployment counts on
   its own, by the connection address after the proxies the host trusts, so a
   deployment of several instances sets the key to each one's share.
+- Capabilities never list a permission the authorization model does not declare,
+  whatever a stored role still allows.
 - Under the mount, a path no endpoint serves and a method a path does not take answer
   404 `authz.resource.notfound` in the error envelope, and a fault answers 500
   `system.fault` with the correlation identifier and nothing of what was thrown; the

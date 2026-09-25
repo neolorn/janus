@@ -443,7 +443,7 @@ internal sealed class AccessGate(
                 Error.From(ErrorCodes.DerivationSourcesMissing));
         }
 
-        return await PageAsync(context, type, resources, permissions, NoneAdmitted, cancellationToken)
+        return await PageAsync(context, type, resources, Asked(permissions), NoneAdmitted, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -460,14 +460,22 @@ internal sealed class AccessGate(
         ArgumentNullException.ThrowIfNull(permissions);
         ArgumentNullException.ThrowIfNull(sources);
 
+        IReadOnlyList<Permission> asked = Asked(permissions);
+
         return await PageAsync(
             context,
             type,
             resources,
-            permissions,
-            (organization, token) => DerivedAsync(context, type, organization, permissions, resources, sources, token),
+            asked,
+            (organization, token) => DerivedAsync(context, type, organization, asked, resources, sources, token),
             cancellationToken).ConfigureAwait(false);
     }
+
+    // BFF-CAP-002 AC2: a permission the model does not declare is no capability, so it
+    // is not asked about at all and is absent from every row, whatever a stored role
+    // still allows; the permissions it is asked beside are answered as they are alone.
+    private IReadOnlyList<Permission> Asked(IReadOnlyList<Permission> permissions) =>
+        [.. permissions.Where(model.Declares)];
 
     // AUTHZ-GATE-005 AC1: one query answers the whole page for the stored grants, and
     // one further query over the host's rows answers what the derivations confer, so

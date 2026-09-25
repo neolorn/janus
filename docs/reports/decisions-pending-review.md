@@ -16244,6 +16244,44 @@ LIB-HOST-003 AC2 asks that each honours a prefix.
 
 *Chapter text that should change.* None.
 
+---
+
+## 396. An undeclared permission is dropped from a capability answer
+
+**Phase 10 · 2026-09-25 · Tier 3 · BFF-CAP-002 AC2, API-CAP-001, AUTHZ-MODEL-003**
+
+*The question.* `CapabilitiesAsync` answered whatever it was asked, including a
+permission the model does not declare, wherever a stored role still allowed it. What
+does the answer hold for such a permission: nothing, false, or a refusal?
+
+*The readings.*
+
+1. Absent: it is not asked, and appears in no `can` and no `requires`.
+2. Listed as not held.
+3. The whole answer is refused with an error code.
+4. It is raised as a programming fault in the calling code, as entry 387 does for an
+   undeclared resource type.
+
+*Chosen: 1.*
+
+- BFF-CAP-002 AC2 says an undeclared capability "never appears in a response", which
+  presumes the response is given.
+- API-CAP-001 puts capabilities on a resource response. Readings 3 and 4 would fail
+  the host's whole response over one name, and withhold the declared capabilities as
+  well.
+- Reading 2 makes the name appear.
+- Reading 1 adds no code and no exception path.
+- An undeclared type has no policy at all, so entry 387 raises. An undeclared
+  permission leaves the declared ones answerable, and under reading 1 its name cannot
+  reach the response, which is what AC2 asks.
+- If the owner prefers entry 387's treatment for permissions named in host code,
+  `Asked` becomes a raise and the test expects it.
+
+*Tests that pin it.* `GateBehaviourTests.BFF_CAP_002_AC2_AnUndeclaredPermissionAppearsInNoCapabilityAsync`.
+
+*Chapter text that should change.* BFF-CAP-002 AC2 could say "is left out of the
+answer".
+
 
 # Rows for chapter 10
 

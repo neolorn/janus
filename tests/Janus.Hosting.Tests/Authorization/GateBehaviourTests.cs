@@ -758,6 +758,49 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
+    /// BFF-CAP-002 AC2: a permission the model does not declare, asked for beside one
+    /// it does, is in no capability's <c>can</c> and no <c>requires</c>, even where a
+    /// stored role allows it, and what is declared is answered as it is alone.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task BFF_CAP_002_AC2_AnUndeclaredPermissionAppearsInNoCapabilityAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var undeclared = Permission.Parse("document:share");
+
+        // The role's rows are written directly, as a model that no longer declares a
+        // permission would find them; the startup check refuses such a role, and this
+        // is what stands behind it.
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, undeclared]);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        Capability capability = Assert.Single(Rendered(
+            await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .CapabilitiesAsync(
+                    AccessContext.Of(nested.Account),
+                    Document,
+                    [nested.Record.Id],
+                    [HostPermissions.Read, undeclared],
+                    Sources(reading),
+                    cancellationToken)));
+
+        Assert.Equal([HostPermissions.Read], capability.Can);
+        Assert.Empty(capability.Requires);
+    }
+
+    /// <summary>
     /// LIB-HOST-004 AC2, AUTH-STEP-003 AC1, AC2: with no assurance provider registered,
     /// an action bound to a step-up gate is refused although the grants confer it, and
     /// the refusal is a different code from the one an absent grant carries.
@@ -817,7 +860,12 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
         Error aged = Assert.IsType<Error>(await SteppedUpRefusalAsync(nested, TimeSpan.FromDays(1)));
 
         Assert.Equal(ErrorCodes.StepUpRequired, aged.Code);
-        Assert.Equal(HostPermissions.Publish.ToString(), aged.Details["action"].GetString());
+        Assert.Equal(
+            (long)Settings.SessionStepUpRecency.Default.TotalSeconds,
+            aged.Details["required"].GetProperty("maxAge").GetInt64());
+        Assert.Equal<string>(
+            ["options", "outcome", "pendingUntil", "required"],
+            aged.Details.Keys.Order(StringComparer.Ordinal));
     }
 
     /// <summary>
