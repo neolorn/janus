@@ -54,6 +54,18 @@ internal sealed class GrantStore(StoreContext context, DataConnections connectio
     }
 
     /// <inheritdoc/>
+    public async ValueTask<OrganizationId?> ScopeOfAsync(GrantId id, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<OrganizationId> scoped = await context.Grants
+            .Where(row => row.Id == id)
+            .Select(row => row.Organization)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return scoped is [OrganizationId organization] ? organization : null;
+    }
+
+    /// <inheritdoc/>
     public async ValueTask CreateAsync(Grant grant, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(grant);

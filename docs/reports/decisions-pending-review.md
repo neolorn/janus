@@ -6874,6 +6874,8 @@ API-CONV-002 bounds every free-text field at 1 to 1024 characters after trimming
 `authz.grant.expired`, the 422 and the 400, show the 201 body, and give `DELETE` its
 body.
 
+**Revised by entry 411.**
+
 ---
 
 ## 187. What the role routes carry, and where `role:manage` is asked
@@ -16800,6 +16802,226 @@ In each case the permission check stays in the service and none is in the endpoi
 - LIB-API-005 could name the endpoints that are not operations: session establishment, callbacks, well-known documents and the provider's protocol endpoints.
 - `09` could list the contract each endpoint maps.
 - `09` `POST /register` could say that a signed-in request carrying an invitation token attaches the invitation to the account (REG-INV-002 AC1) before the `409`.
+
+---
+
+## 409. Resolving the scope the gate is asked in is part of the gate step
+
+**Phase 10 · 2026-09-25 · Tier 2 · CONV-DESIGN-002 AC3, AUTHZ-SCOPE-001**
+
+*The question.* `AdministrativeScope.RefusedAsync` reads which organization administers
+the deployment, then asks the gate there. A group or grant operation must read which
+organization its row belongs to before it can ask the gate there. AC3 says the gate call
+comes before any load or write. The question is whether these reads are loads before the
+gate.
+
+*The readings.*
+
+1. They are loads before the gate, so the order is broken. The organization would need
+   to be resolved elsewhere, for example at startup, or named by the caller.
+2. They resolve the scope the gate is asked in (AUTHZ-SCOPE-001) and are part of the gate
+   step. The rules for such a read:
+   - It reads which organization administers the deployment, or which organization one
+     row belongs to, and nothing of the row is used before the gate.
+   - It writes nothing.
+   - Where it finds nothing, the operation is refused. The administrative organization
+     unmarked gives `Denied`. A row that names no organization is refused through the
+     gate (entry 411).
+
+*Chosen: 2.*
+
+- The read decides where the permission is asked, not what the operation acts on.
+- The gate itself does the same reads: `ResolveAsync` for the administrative
+  organization, and `ScopeOfAsync` for a record in the who-can-access lookup.
+- Resolving at startup would not work, because bootstrap marks the organization and can
+  do so after the process has started. The gate's own comment says that before
+  bootstrap nothing resolves.
+- Naming the organization in the request would change the `09` routes (entry 411 reading 4).
+- The read fails closed in both cases.
+- A row's organization is read by a method named `ScopeOfAsync` that answers an
+  organization or nothing. The scan holds the name to that return type.
+
+*Tests that pin it.*
+
+- The existing `AdministrativeScopeTests` in `Janus.Authentication.Tests` and
+  `Janus.Privacy.Tests`: the two AUTHZ-SCOPE-001 tests, and
+  `IDN_ORG_001_WithoutAnAdministrativeOrganizationEveryOperationIsRefusedAsync`.
+- `PublicSurfaceTests.CONV_DESIGN_002_AC3_EveryOperationMeetsTheGateBeforeItReadsOrWrites`:
+  it skips `ScopeOfAsync` and holds its return type.
+- The entry 411 tests.
+
+*Chapter text that should change.* CONV-DESIGN-002 could say that resolving the scope the
+gate is asked in, meaning the administrative organization or the organization a row
+belongs to, read alone, is part of the gate step.
+
+---
+
+## 410. The gate step of an operation on the caller's own records is asking whose account is asking, before anything is read
+
+**Phase 10 · 2026-09-25 · Tier 3 · CONV-DESIGN-002 AC3, LIB-API-005, AUTHZ-GATE-006, IDN-ACCT-007**
+
+*The question.* CONV-DESIGN-002 AC3 says each operation method performs the gate call
+before any load or write. There are 28 operations on the caller's own account,
+credentials, sessions, consent, requests and invitations. No permission in `10` section
+2.1 governs them. `09` says they act on "only the subject's own" records. Some read a row
+named by identifier before checking that the context names an account. The question is
+what their gate step is and where it must stand.
+
+*The readings.*
+
+1. AC3 does not apply: with no permission there is no gate call, and the order is free.
+2. The gate step is the check that the context names an account (`context.Effective`),
+   made before any call. For a change to one's own settings, the step also includes the
+   gate's restriction answer through `ISettingsRestriction`, which already comes first.
+   A row named by identifier is read only after the check, and another account's row is
+   answered exactly as a missing one.
+3. Self-service permissions are invented and asked of the gate, for example
+   `session:own`.
+
+*Chosen: 2, the reading that refuses most among those the chapters allow.*
+
+- Reading 1 lets an operation read a row for a context that names nobody. That is the
+  load-before-gate AC3 forbids. It refuses less.
+- Reading 3 contradicts `09` ("only the subject's own"), `10` section 2.1 (no such
+  permission), IDN-ACCT-007 AC2 and AUTHZ-GATE-006, which put the restriction and not a
+  grant in front of one's own settings. It would also add public surface: new permission
+  constants and grants every account would need.
+- Reading 2 costs nothing observable. The answers are unchanged (`authz.denied`, or
+  `auth.session.expired` for a session read), and a context with no account now reads
+  nothing.
+- 25 of the 28 already met it. Three were reordered: `DeviceService.RemoveAsync` (behind
+  `IAuthentication.ForgetDeviceAsync`), `SessionService.ReadAsync` and
+  `SessionService.EndAsync`.
+
+*Tests that pin it.*
+`DeviceServiceTests.CONV_DESIGN_002_AC3_ARemovalForNoAccountReadsNoBrowserAsync`,
+`SessionServiceTests.CONV_DESIGN_002_AC3_AnEndForNoAccountReadsNoSessionAsync`,
+`SessionServiceTests.CONV_DESIGN_002_AC3_AReadForNoAccountReadsNoSessionAsync`,
+`PublicSurfaceTests.CONV_DESIGN_002_AC3_EveryOperationMeetsTheGateBeforeItReadsOrWrites`
+(its `OwnOperations` list).
+
+*Chapter text that should change.* CONV-DESIGN-002 could add: "An operation on the
+caller's own records, which no permission governs, performs as its gate step the check
+that the access context names an account, before any load; a record named by identifier
+is loaded after it, and another account's record is answered as a missing one."
+
+---
+
+## 411. A group or grant is gated in the organization its row names, read alone first; a row that names none is refused by the gate
+
+**Phase 10 · 2026-09-25 · Tier 3 · CONV-DESIGN-002 AC3, AUTHZ-SCOPE-001, AUTHZ-CONCEAL-004, AUTHZ-CONCEAL-005, AUTHZ-GRANT-001, `09` section 8, D-162 item 93**
+
+*The question.* A group change or a grant revocation is authorized in the organization
+the row belongs to (AUTHZ-SCOPE-001), and that organization is known only from the row.
+The operations read the whole row first. A missing row was answered before the gate,
+with 400 `id` for a group and 404 `authz.grant.notfound` for a grant (entry 186 point 2).
+A grant on an unregistered record was answered 400 `resourceId` before the gate. The
+question is how the gate can come first, and what a row that does not exist answers.
+
+*The readings.*
+
+1. Keep the order. The existence check is validation. AC3 stays broken, and any signed-in
+   caller learns whether an identifier exists in an organization they have no business
+   in: 400 or 404 for missing, 403 for existing elsewhere.
+2. Read only the row's organization first (`ScopeOfAsync`, scope resolution as in entry 409),
+   then ask the gate there, then load the row. A row that does not exist belongs to no
+   organization, so no grant reaches it. The gate refuses it as it refuses an unregistered
+   host record: restriction first, then `authz.denied` recorded against no organization,
+   type `organization`, with a correlation. The row's own answers (404 for a revoked or
+   materialised grant, 409 in use, and so on) are given only after the gate admits.
+3. Conceal: answer a missing row and a missing permission alike as not found. This
+   contradicts D-162 item 93 and entry 131 (under `/admin` a missing permission is 403),
+   and `09` section 8.
+4. Put the organization in the route (`/admin/organizations/{org}/groups/{id}`), so the
+   gate is asked before any read. This changes the `09` routes and the `IGroups` and
+   `IGrants` signatures.
+
+*Chosen: 2.*
+
+- It is the only reading that meets AC3 without changing the `09` routes or the public
+  contracts. It refuses most: the refusal is the same whether or not the row exists, and
+  nothing of the row but its organization is read before the gate.
+- It keeps D-162 item 93 and entry 131: the concealment rule reaches the permission
+  check and stops there. Not found is still told, as 404, to a caller the gate admitted.
+  For privacy requests the scope does not depend on the row, so there 404 follows the
+  permission check; here no caller can pass the permission check for a row that names no
+  organization.
+- The refusal is recorded and counted as every refusal is (AUTHZ-CONCEAL-004,
+  AUTHZ-GATE-004). The caller can resolve it as their own, as an organization-wide
+  refusal discloses (AUTHZ-CONCEAL-005).
+- It needs one internal port, `IUnscopedRefusal`, with its adapter built as
+  `ISettingsRestriction` and `GatedSettings` are. No package, no folder, no public type.
+- It reverses entry 186 point 2 for an unknown identifier only. A revoked or
+  materialised grant is still 404 to a caller holding `grant:manage` where it is scoped,
+  and is now 403 to a caller without it, as the gate comes first (entry 186 point 6
+  already put the step-up last).
+- An organization-wide grant whose identifier is not a Guid stays 400 `resourceId`. That
+  is shape, and nothing is read.
+
+*Tests that pin it.*
+`GroupEndpointTests.CONV_DESIGN_002_AC3_ARefusedChangeReadsTheSameWhetherOrNotTheGroupExistsAsync`,
+`GroupEndpointTests.CONV_DESIGN_002_AC3_AGroupNoRowNamesIsRefusedToEveryCallerAsync`,
+`GrantEndpointTests.CONV_DESIGN_002_AC3_ARefusedRevocationReadsTheSameWhateverTheGrantIsAsync`,
+`GrantEndpointTests.CONV_DESIGN_002_AC3_WhatNoRowNamesIsRefusedToEveryCallerAsync`,
+`ExplanationTests.CONV_DESIGN_002_AC3_AChangeToWhatNoRowNamesIsRefusedAsTheGateRefusesAsync`,
+`ExplanationTests.CONV_DESIGN_002_AC3_ARestrictedCallerIsAnsweredAlikeWhetherOrNotTheRowIsThereAsync`,
+`PublicSurfaceTests.CONV_DESIGN_002_AC3_EveryOperationMeetsTheGateBeforeItReadsOrWrites`.
+The kept 404 cases are pinned by `GrantEndpointTests.AUTHZ_GRANT_001_OnlyAnUnrevokedStoredGrantIsRevokedAsync`.
+
+*Chapter text that should change.*
+
+- `09` section 8 could say that a group or grant identifier naming no row, and a grant on
+  a record with no registration, are refused 403 `authz.denied` like a missing
+  permission.
+- `09` could also say that `authz.grant.notfound` answers a revoked or derived grant to a
+  caller holding `grant:manage` where it is scoped.
+- Entry 186 point 2 should be read with this correction.
+
+---
+
+## 412. The operations no gate governs
+
+**Phase 10 · 2026-09-25 · Tier 3 · CONV-DESIGN-002 AC3, LIB-API-005, OPS-ALERT-005, AUTHZ-DERIVE-005, AUTH-RECOV-007**
+
+*The question.* Four operation methods take an access context and meet no gate at all.
+AC3 says each operation method performs the gate call first.
+
+*The readings.*
+
+1. Gate all four.
+2. Record them as outside the gate, each for its reason, named in the scan so a fifth
+   cannot join silently.
+
+*Chosen: 2.*
+
+- `IReadVolume.ReturnedAsync` counts the records one person was given (OPS-ALERT-005). A
+  refusal would stop the count, and silencing the exfiltration watch is the opposite of
+  fail closed. No permission exists for it.
+- `IDerivationMaterialiser.RefreshAsync` writes the grants the host's own rows already
+  imply (AUTHZ-DERIVE-005). It is called by the host after the host's own operation met
+  the gate, and by the drift sweep. No permission exists for it in `10` section 2.1. A
+  context naming no account is a programming fault it throws on before it reads.
+- `IRecovery.CancelLossAsync` (`LossReports.CancelAsync`) takes an optional context. Its
+  authority is the token the notification carried or the account holding the report
+  (AUTH-RECOV-007), judged against that one report. Every other case answers the same
+  `auth.credential.notfound`, and nothing is written before that answer.
+- `IAccessGate` is the gate and is left out of the scan.
+- Gating the first three would need permissions `10` does not define, and each gate would
+  refuse no one the operation should refuse.
+
+- `IRegistration.BeginAsync` is the fourth. A registration is begun by a browser that
+  holds no account, so there is no one whose access a gate could decide; a browser
+  already signed in is refused on its context before any other call (REG-SESS-002,
+  entry 408).
+
+*Tests that pin it.*
+`PublicSurfaceTests.CONV_DESIGN_002_AC3_EveryOperationMeetsTheGateBeforeItReadsOrWrites`
+(its `Ungated` list, and the assertion that every listed name is an operation).
+
+*Chapter text that should change.* CONV-DESIGN-002 AC3 could read "Each operation method
+performs the gate call before any load or write, except those that watch or maintain
+what the gate reads (read-volume counting, derivation refresh) and those whose authority
+is a presented token."
 
 
 # Rows for chapter 10

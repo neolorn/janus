@@ -340,6 +340,39 @@ public sealed class DeviceServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-002 AC3: removing a browser asks first whose account is asking, so a
+    /// context naming no account is refused before any browser is read, and the one it
+    /// named still stands.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AC3_ARemovalForNoAccountReadsNoBrowserAsync()
+    {
+        SubjectId subject = Subject();
+        OpaqueToken trust = await TrustedAsync(subject);
+
+        DeviceSummary held = Assert.Single(Value(await Service.ListAsync(
+            AccessContext.Of(subject),
+            TestContext.Current.CancellationToken)));
+        int found = _devices.Found;
+
+        Result removed = await Service.RemoveAsync(
+            AccessContext.Of(SystemPrincipal.ForOrganization(
+                "import",
+                "a nightly import",
+                new OrganizationId(Guid.NewGuid()))),
+            held.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.Denied, Refusal(removed));
+        Assert.Equal(found, _devices.Found);
+        Assert.True(await Service.TrustsAsync(
+            subject,
+            trust.Value,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// AUTH-FACT-016 AC1: a password-only sign-in from a browser the account has not
     /// seen is held for the check.
     /// </summary>

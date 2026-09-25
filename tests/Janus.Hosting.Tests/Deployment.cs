@@ -933,6 +933,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<Janus.Authorization.Roles.IRoleAudit>(RoleChanges);
         _ = services.AddSingleton<Janus.Authorization.Groups.IGroupAudit>(GroupChanges);
         _ = services.AddScoped<Janus.Authorization.Gate.AdministrativeScope>();
+        _ = services.AddSingleton<Janus.Authorization.Gate.IUnscopedRefusal, Janus.Authorization.Tests.Gate.UnscopedRefusalInMemory>();
         _ = services.AddScoped<IGrants, Janus.Authorization.Grants.GrantService>();
         _ = services.AddScoped<IRoles, Janus.Authorization.Roles.RoleService>();
         _ = services.AddScoped<IGroups, Janus.Authorization.Groups.GroupService>();

@@ -498,6 +498,11 @@ public static class HostingRegistration
         services.AddScoped<ISettingsRestriction>(provider =>
             new GatedSettings(provider.GetRequiredService<AccessGate>().RequireSettingsChangeAsync));
 
+        // CONV-DESIGN-002 AC3, AUTHZ-SCOPE-001: a group or a grant the deployment holds no
+        // row for is refused by the gate, which its operations ask through a port.
+        services.AddScoped<IUnscopedRefusal>(provider =>
+            new GatedUnscopedRefusal(provider.GetRequiredService<AccessGate>().RefuseUnscopedAsync));
+
         // AUTHZ-INHERIT-002: the host says where each of its records sits, and the
         // ancestry the gate reads is written from that and nothing else.
         services.AddScoped<IResources, ResourceService>();

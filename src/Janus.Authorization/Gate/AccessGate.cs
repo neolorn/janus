@@ -1139,6 +1139,16 @@ internal sealed class AccessGate(
         ResourceType type,
         OrganizationId? organization,
         ExplainedGrant? grant,
+        CancellationToken cancellationToken) =>
+        Result.Failure(await RecordedAsync(context, permission, type, organization, grant, cancellationToken)
+            .ConfigureAwait(false));
+
+    private async ValueTask<Error> RecordedAsync(
+        AccessContext context,
+        Permission permission,
+        ResourceType type,
+        OrganizationId? organization,
+        ExplainedGrant? grant,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -1166,11 +1176,42 @@ internal sealed class AccessGate(
             concealed.Concealed(correlation);
         }
 
-        return Result.Failure(Error.From(
+        return Error.From(
             ErrorCodes.Denied,
             "correlation",
-            JsonSerializer.SerializeToElement(correlation.Value)));
+            JsonSerializer.SerializeToElement(correlation.Value));
     }
+
+    /// <summary>
+    /// Refuses a permission asked over what belongs to no organization.
+    /// </summary>
+    /// <param name="context">Who is acting, and for whom.</param>
+    /// <param name="permission">What was asked for.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// <c>authz.restricted</c> for a restricted account and a modifying permission;
+    /// otherwise the refusal, recorded against no organization.
+    /// </returns>
+    /// <remarks>
+    /// Implements CONV-DESIGN-002 AC3 and AUTHZ-SCOPE-001: a row the deployment does not
+    /// hold belongs to no organization, so no grant reaches it. It is refused as an
+    /// organization-wide check refuses, restriction first, so the answer is the one a
+    /// caller holding nothing where a row is would have, as a host record the library
+    /// holds no registration for is refused.
+    /// </remarks>
+    internal async ValueTask<Error> RefuseUnscopedAsync(
+        AccessContext context,
+        Permission permission,
+        CancellationToken cancellationToken) =>
+        await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false)
+            ? Error.From(ErrorCodes.Restricted)
+            : await RecordedAsync(
+                context,
+                permission,
+                OrganizationWide,
+                organization: null,
+                grant: null,
+                cancellationToken).ConfigureAwait(false);
 
     // AUTHZ-GATE-006: a restriction leaves the account's reading actions and refuses
     // every modifying one, wherever the gate is evaluated (D-160).

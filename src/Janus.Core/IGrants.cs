@@ -45,9 +45,11 @@ public interface IGrants
     /// <param name="reason">Why.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// Success, or the refusal: <c>authz.grant.notfound</c> where no stored grant by
-    /// that identifier stands unrevoked, <c>authz.grant.reasonrequired</c> where the
-    /// reason is blank.
+    /// Success, or the refusal: <c>authz.denied</c> where the caller does not hold
+    /// <c>grant:manage</c> where the grant is scoped, which no caller does where the
+    /// deployment holds no grant by that identifier; <c>authz.grant.notfound</c> where
+    /// the grant is revoked or is not one somebody wrote;
+    /// <c>authz.grant.reasonrequired</c> where the reason is blank.
     /// </returns>
     ValueTask<Result> RevokeAsync(
         AccessContext context,

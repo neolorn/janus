@@ -16,6 +16,7 @@ namespace Janus.Authorization.Groups;
 /// administrator.
 /// </summary>
 /// <param name="gate">Whether the caller may manage groups where the group belongs.</param>
+/// <param name="unscoped">The refusal of a group the deployment holds no row for.</param>
 /// <param name="scope">Whether the caller holds system administration.</param>
 /// <param name="stepUp">What a change of members asks of the caller's session.</param>
 /// <param name="groups">Where groups and their members are read and written.</param>
@@ -33,6 +34,7 @@ namespace Janus.Authorization.Groups;
 /// </remarks>
 internal sealed class GroupService(
     IAccessGate gate,
+    IUnscopedRefusal unscoped,
     AdministrativeScope scope,
     IStepUpGate stepUp,
     IGroupStore groups,
@@ -126,15 +128,14 @@ internal sealed class GroupService(
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
+        if (await GroupRefusedAsync(context, group, cancellationToken).ConfigureAwait(false) is Error denied)
+        {
+            return Result.Failure(denied);
+        }
+
         if (await groups.FindAsync(group, cancellationToken).ConfigureAwait(false) is not Group held)
         {
             return Result.Failure(Malformed("id"));
-        }
-
-        if (await ManagingRefusedAsync(context, held.Organization, cancellationToken).ConfigureAwait(false)
-            is Error denied)
-        {
-            return Result.Failure(denied);
         }
 
         if (Stated(reason) is not string stated)
@@ -175,15 +176,14 @@ internal sealed class GroupService(
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
+        if (await GroupRefusedAsync(context, group, cancellationToken).ConfigureAwait(false) is Error denied)
+        {
+            return Result.Failure(denied);
+        }
+
         if (await groups.FindAsync(group, cancellationToken).ConfigureAwait(false) is not Group held)
         {
             return Result.Failure(Malformed("id"));
-        }
-
-        if (await ManagingRefusedAsync(context, held.Organization, cancellationToken).ConfigureAwait(false)
-            is Error denied)
-        {
-            return Result.Failure(denied);
         }
 
         if (!await JoinableAsync(member, held.Organization, cancellationToken).ConfigureAwait(false))
@@ -253,15 +253,14 @@ internal sealed class GroupService(
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
+        if (await GroupRefusedAsync(context, group, cancellationToken).ConfigureAwait(false) is Error denied)
+        {
+            return Result.Failure(denied);
+        }
+
         if (await groups.FindAsync(group, cancellationToken).ConfigureAwait(false) is not Group held)
         {
             return Result.Failure(Malformed("id"));
-        }
-
-        if (await ManagingRefusedAsync(context, held.Organization, cancellationToken).ConfigureAwait(false)
-            is Error denied)
-        {
-            return Result.Failure(denied);
         }
 
         if (Stated(reason) is not string stated)
@@ -298,6 +297,19 @@ internal sealed class GroupService(
 
     private static Error Malformed(string member) =>
         Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
+
+    // AUTHZ-SCOPE-001, CONV-DESIGN-002 AC3: a change to a group is judged in the
+    // organization its row belongs to, and that alone is read of it before the gate. A
+    // group the deployment holds no row for belongs to none, and the gate refuses it as
+    // it refuses a caller managing nothing where a group is; one removed since its
+    // organization was read is no such group once it is read.
+    private async ValueTask<Error?> GroupRefusedAsync(
+        AccessContext context,
+        GroupId group,
+        CancellationToken cancellationToken) =>
+        await groups.ScopeOfAsync(group, cancellationToken).ConfigureAwait(false) is OrganizationId organization
+            ? await ManagingRefusedAsync(context, organization, cancellationToken).ConfigureAwait(false)
+            : await unscoped.RefusedAsync(context, Permissions.GroupManage, cancellationToken).ConfigureAwait(false);
 
     private async ValueTask<Error?> ManagingRefusedAsync(
         AccessContext context,

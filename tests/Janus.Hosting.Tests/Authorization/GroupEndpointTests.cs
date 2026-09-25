@@ -176,6 +176,63 @@ public sealed class GroupEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// CONV-DESIGN-002 AC3 and AUTHZ-SCOPE-001: a change to a group meets the gate in
+    /// the group's organization before the group is read, so a caller without
+    /// <c>group:manage</c> there is refused alike whether or not the group exists, and
+    /// nothing of the group is read or written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AC3_ARefusedChangeReadsTheSameWhetherOrNotTheGroupExistsAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Administration, Permissions.GroupManage);
+        Group tellers = await HeldAsync(Branch, "Tellers");
+        var absent = new GroupId(Guid.NewGuid());
+        int found = _deployment.Groups.Found;
+
+        Answer[] present =
+        [
+            await RemovedAsync(administrator, tellers.Id),
+            await AddedAsync(administrator, tellers.Id, User),
+            await MemberRemovedAsync(administrator, tellers.Id, User),
+        ];
+
+        Answer[] missing =
+        [
+            await RemovedAsync(administrator, absent),
+            await AddedAsync(administrator, absent, User),
+            await MemberRemovedAsync(administrator, absent, User),
+        ];
+
+        Assert.Equal(found, _deployment.Groups.Found);
+        Assert.All(present.Concat(missing), Denied);
+        Assert.Equal(present.Select(Shape), missing.Select(Shape));
+        Assert.Empty(_deployment.GroupChanges.Changes);
+        Assert.Empty(await _deployment.Groups.MembersAsync(tellers.Id, CancellationToken.None));
+        Assert.Single(await _deployment.Groups.InAsync(Branch, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002 AC3 and AUTHZ-SCOPE-001: a group the deployment holds no row for
+    /// belongs to no organization, so no one holds <c>group:manage</c> where it is, and
+    /// a caller holding it in an organization is refused as one holding it nowhere.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AC3_AGroupNoRowNamesIsRefusedToEveryCallerAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
+        var absent = new GroupId(Guid.NewGuid());
+
+        Answer removed = await RemovedAsync(administrator, absent);
+        Answer added = await AddedAsync(administrator, absent, User);
+        Answer taken = await MemberRemovedAsync(administrator, absent, User);
+
+        Assert.All((Answer[])[removed, added, taken], Denied);
+        Assert.Empty(_deployment.GroupChanges.Changes);
+    }
+
+    /// <summary>
     /// AUTHZ-GROUP-001 and AUTHZ-GRANT-003 AC3: a group that holds a member, belongs to
     /// a group, or was ever given a grant is not removed, and one nothing names is.
     /// </summary>
@@ -329,8 +386,9 @@ public sealed class GroupEndpointTests : IAsyncLifetime
 
     /// <summary>
     /// AUTHZ-GROUP-001 and API-CONV-002: a change names an organization, a name and a
-    /// reason of 1 to 1024 characters, a group the deployment holds, and a member group
-    /// of the same organization; anything else is a malformed request naming the field.
+    /// reason of 1 to 1024 characters, and a member group of the same organization;
+    /// anything else is a malformed request naming the field. A group the deployment
+    /// holds no row for is refused rather than malformed (CONV-DESIGN-002 AC3).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -344,7 +402,6 @@ public sealed class GroupEndpointTests : IAsyncLifetime
         Answer unnamed = await CreatedAsync(administrator, " ");
         Answer overlong = await CreatedAsync(administrator, new string('n', 1025));
         Answer unreasoned = await CreatedAsync(administrator, "Auditors", reason: " ");
-        Answer unheld = await AddedAsync(administrator, new GroupId(Guid.NewGuid()), User);
         Answer crossing = await AddedAsync(administrator, tellers, GrantSubject.Of(foreign.Id));
         Answer untyped = await administrator.SendAsync(
             "POST",
@@ -357,7 +414,6 @@ public sealed class GroupEndpointTests : IAsyncLifetime
         Assert.Equal("name", Member(unnamed));
         Assert.Equal("name", Member(overlong));
         Assert.Equal("reason", Member(unreasoned));
-        Assert.Equal("id", Member(unheld));
         Assert.Equal("subjectId", Member(crossing));
         Assert.Equal("subjectType", Member(untyped));
         Assert.Equal("reason", Member(silent));
@@ -371,6 +427,28 @@ public sealed class GroupEndpointTests : IAsyncLifetime
         Assert.Equal(StatusCodes.Status400BadRequest, answer.Status);
 
         return answer.Json().GetProperty("details").GetProperty("member").GetString()!;
+    }
+
+    private static void Denied(Answer answer)
+    {
+        Assert.Equal(StatusCodes.Status403Forbidden, answer.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), answer.Text("code"));
+    }
+
+    // The members a refusal's body carries, its details among them, which is all of it
+    // a caller could tell two refusals apart by beside the values that are new each time.
+    private static string Shape(Answer answer)
+    {
+        JsonElement body = answer.Json();
+
+        return string.Join(
+            ',',
+            body.EnumerateObject()
+                .Select(member => member.Name)
+                .Concat(body.TryGetProperty("details", out JsonElement details) && details.ValueKind is JsonValueKind.Object
+                    ? details.EnumerateObject().Select(member => "details." + member.Name)
+                    : [])
+                .Order(StringComparer.Ordinal));
     }
 
     private static GroupId Id(Answer created)

@@ -273,8 +273,10 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// AUTHZ-GRANT-001: a revocation names a stored grant that stands unrevoked; any
-    /// other identifier is no such grant.
+    /// AUTHZ-GRANT-001: a revocation names a stored grant that stands unrevoked; a
+    /// revoked or materialised grant is no such grant to a caller holding
+    /// <c>grant:manage</c> where it is. An identifier naming no row is refused
+    /// (CONV-DESIGN-002 AC3).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -287,15 +289,73 @@ public sealed class GrantEndpointTests : IAsyncLifetime
 
         Answer first = await RevokedAsync(administrator, created.Text("id"));
         Answer second = await RevokedAsync(administrator, created.Text("id"));
-        Answer unknown = await RevokedAsync(administrator, Guid.NewGuid().ToString());
         Answer derived = await RevokedAsync(administrator, materialised.Id.ToString());
 
         Assert.Equal(StatusCodes.Status204NoContent, first.Status);
         Assert.Equal(StatusCodes.Status404NotFound, second.Status);
         Assert.Equal(ErrorCodes.GrantNotFound.ToString(), second.Text("code"));
-        Assert.Equal(StatusCodes.Status404NotFound, unknown.Status);
         Assert.Equal(StatusCodes.Status404NotFound, derived.Status);
         Assert.Null((await _deployment.AccessGrants.FindAsync(materialised.Id, CancellationToken.None))!.RevokedAt);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002 AC3 and AUTHZ-SCOPE-001: a revocation meets the gate in the
+    /// grant's organization before the grant is read, so a caller without
+    /// <c>grant:manage</c> there is refused alike whether the grant stands, was revoked,
+    /// is the host's data speaking or was never written, and nothing of it is read or
+    /// changed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AC3_ARefusedRevocationReadsTheSameWhateverTheGrantIsAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Administration, Permissions.GrantManage);
+        Grant standing = await WrittenAsync();
+        Grant revoked = await WrittenAsync();
+        Grant materialised = await MaterialisedAsync();
+
+        Assert.True(revoked
+            .Revoke(new SubjectId(Holder), _deployment.Clock.GetUtcNow(), "Left the project.")
+            .Match(() => true, _ => false));
+        await _deployment.AccessGrants.RecordAsync(revoked, CancellationToken.None);
+
+        int found = _deployment.AccessGrants.Found;
+
+        Answer[] present =
+        [
+            await RevokedAsync(administrator, standing.Id.ToString()),
+            await RevokedAsync(administrator, revoked.Id.ToString()),
+            await RevokedAsync(administrator, materialised.Id.ToString()),
+        ];
+
+        Answer missing = await RevokedAsync(administrator, Guid.NewGuid().ToString());
+
+        IReadOnlyList<Grant> held = await HeldAsync(Branch);
+
+        Assert.Equal(found, _deployment.AccessGrants.Found);
+        Assert.All(present.Append(missing), Denied);
+        Assert.All(present, answer => Assert.Equal(Shape(missing), Shape(answer)));
+        Assert.Contains(held, grant => grant.Id == standing.Id);
+        Assert.Contains(held, grant => grant.Id == materialised.Id);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002 AC3 and AUTHZ-SCOPE-001: a grant the deployment holds no row for,
+    /// and a record it holds no registration for, belong to no organization, so no one
+    /// holds <c>grant:manage</c> where they are, and a caller holding it in an
+    /// organization is refused as one holding it nowhere.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AC3_WhatNoRowNamesIsRefusedToEveryCallerAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GrantManage);
+
+        Answer revoked = await RevokedAsync(administrator, Guid.NewGuid().ToString());
+        Answer unregistered = await GrantedAsync(administrator, "document", "d-2");
+
+        Assert.All((Answer[])[revoked, unregistered], Denied);
+        Assert.Empty(await HeldAsync(Branch));
     }
 
     /// <summary>
@@ -397,9 +457,10 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// AUTHZ-GRANT-001: a grant names a role, a registered record or an organization,
-    /// and a group of the grant's own organization; anything else is a malformed
-    /// request naming the member.
+    /// AUTHZ-GRANT-001: a grant names a role, an organization, and a group of the
+    /// grant's own organization; anything else is a malformed request naming the
+    /// member. A record the deployment holds no registration for is refused rather
+    /// than malformed (CONV-DESIGN-002 AC3).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -412,7 +473,6 @@ public sealed class GrantEndpointTests : IAsyncLifetime
         await _deployment.Groups.CreateAsync(local, CancellationToken.None);
         await _deployment.Groups.CreateAsync(foreign, CancellationToken.None);
 
-        Answer unregistered = await GrantedAsync(administrator, "document", "d-2");
         Answer unnamed = await GrantedAsync(administrator, "organization", "not-an-organization");
         Answer unknownRole = await GrantedAsync(administrator, "document", "d-1", role: RoleName.Parse("auditor"));
         Answer foreignGroup = await GrantedAsync(administrator, "document", "d-1", group: foreign.Id);
@@ -427,7 +487,6 @@ public sealed class GrantEndpointTests : IAsyncLifetime
             ("role", Reader.ToString()),
             ("reason", "Needs it."));
 
-        Assert.Equal("resourceId", Member(unregistered));
         Assert.Equal("resourceId", Member(unnamed));
         Assert.Equal("role", Member(unknownRole));
         Assert.Equal("subjectId", Member(foreignGroup));
@@ -582,6 +641,28 @@ public sealed class GrantEndpointTests : IAsyncLifetime
         return answer.Json().GetProperty("details").GetProperty("member").GetString()!;
     }
 
+    private static void Denied(Answer answer)
+    {
+        Assert.Equal(StatusCodes.Status403Forbidden, answer.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), answer.Text("code"));
+    }
+
+    // The members a refusal's body carries, its details among them, which is all of it
+    // a caller could tell two refusals apart by beside the values that are new each time.
+    private static string Shape(Answer answer)
+    {
+        JsonElement body = answer.Json();
+
+        return string.Join(
+            ',',
+            body.EnumerateObject()
+                .Select(member => member.Name)
+                .Concat(body.TryGetProperty("details", out JsonElement details) && details.ValueKind is JsonValueKind.Object
+                    ? details.EnumerateObject().Select(member => "details." + member.Name)
+                    : [])
+                .Order(StringComparer.Ordinal));
+    }
+
     private static Task<Answer> RevokedAsync(Browser administrator, string id) =>
         administrator.SendAsync("DELETE", "/admin/grants/" + id, ("reason", "No longer needed."));
 
@@ -621,6 +702,29 @@ public sealed class GrantEndpointTests : IAsyncLifetime
             organization,
             _deployment.Clock.GetUtcNow(),
             CancellationToken.None);
+
+    // A grant an administrator of the branch wrote on its record.
+    private async Task<Grant> WrittenAsync()
+    {
+        Grant written = Grant
+            .Create(
+                GrantId.New(_deployment.Clock),
+                new GrantSubject(SubjectType.User, Holder),
+                Reader,
+                Branch,
+                Document,
+                deny: false,
+                GrantKind.Stored,
+                expiresAt: null,
+                new SubjectId(Holder),
+                _deployment.Clock.GetUtcNow(),
+                "Needs it.")
+            .Match(grant => grant, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        await _deployment.AccessGrants.CreateAsync(written, CancellationToken.None);
+
+        return written;
+    }
 
     // A grant a derivation's refresh wrote, which the host's data answers for.
     private async Task<Grant> MaterialisedAsync()

@@ -106,6 +106,18 @@ internal sealed class GroupStore(StoreContext context, DataConnections connectio
     }
 
     /// <inheritdoc/>
+    public async ValueTask<OrganizationId?> ScopeOfAsync(GroupId id, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<OrganizationId> scoped = await context.Groups
+            .Where(row => row.Id == id)
+            .Select(row => row.Organization)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return scoped is [OrganizationId organization] ? organization : null;
+    }
+
+    /// <inheritdoc/>
     public async ValueTask CreateAsync(Group group, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(group);

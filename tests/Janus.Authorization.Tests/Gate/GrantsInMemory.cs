@@ -27,6 +27,11 @@ internal sealed class GrantsInMemory : IGrantStore
     public int Reads { get; private set; }
 
     /// <summary>
+    /// How many times one grant's row has been read by its identifier.
+    /// </summary>
+    public int Found { get; private set; }
+
+    /// <summary>
     /// Raises the counter of one account, as a grant or membership change does.
     /// </summary>
     /// <param name="subject">Whose counter.</param>
@@ -34,8 +39,16 @@ internal sealed class GrantsInMemory : IGrantStore
         _versions[subject] = _versions.GetValueOrDefault(subject) + 1;
 
     /// <inheritdoc/>
-    public ValueTask<Grant?> FindAsync(GrantId id, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(_grants.GetValueOrDefault(id));
+    public ValueTask<Grant?> FindAsync(GrantId id, CancellationToken cancellationToken)
+    {
+        Found++;
+
+        return ValueTask.FromResult(_grants.GetValueOrDefault(id));
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<OrganizationId?> ScopeOfAsync(GrantId id, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_grants.TryGetValue(id, out Grant? grant) ? grant.Organization : (OrganizationId?)null);
 
     /// <inheritdoc/>
     public ValueTask CreateAsync(Grant grant, CancellationToken cancellationToken)

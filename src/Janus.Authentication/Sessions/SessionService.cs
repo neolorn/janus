@@ -474,12 +474,16 @@ internal sealed class SessionService(
     {
         ArgumentNullException.ThrowIfNull(context);
 
+        // CONV-DESIGN-002 AC3: whose account is asking is the gate of a read of one's own
+        // session, asked before any session is read.
+        if (context.Effective is not SubjectId subject)
+        {
+            return Result.Failure<SessionDetail>(Error.From(ErrorCodes.SessionExpired));
+        }
+
         Session? live = await sessions.FindAsync(session, cancellationToken).ConfigureAwait(false);
 
-        if (context.Effective is not SubjectId subject
-            || live is null
-            || live.Subject != subject
-            || live.EndedAt is not null)
+        if (live is null || live.Subject != subject || live.EndedAt is not null)
         {
             return Result.Failure<SessionDetail>(Error.From(ErrorCodes.SessionExpired));
         }
@@ -529,13 +533,18 @@ internal sealed class SessionService(
     {
         ArgumentNullException.ThrowIfNull(context);
 
+        // CONV-DESIGN-002 AC3: whose account is asking is the gate of ending one's own
+        // session, asked before any session is read.
+        if (context.Effective is not SubjectId subject)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
         Session? ending = await sessions.FindAsync(session, cancellationToken).ConfigureAwait(false);
 
         // A session that is not the caller's is answered as one that does not exist:
         // the identifier of somebody else's session tells the caller nothing.
-        if (context.Effective is not SubjectId subject
-            || ending is null
-            || ending.Subject != subject)
+        if (ending is null || ending.Subject != subject)
         {
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }

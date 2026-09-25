@@ -482,7 +482,9 @@ against the public contract of LIB-API-001.
   where the group would contain itself). All ask `group:manage` in the group's
   organization and a reason, and are recorded in the audit trail; a change of members
   also needs step-up, and `system:administer` where the group reaches a role carrying
-  it. `IGroups` is the same set of operations in process.
+  it. `IGroups` is the same set of operations in process. A group the deployment holds
+  no row for belongs to no organization, so every caller is refused it with 403
+  `authz.denied`, as a caller without `group:manage` is.
 - `GET /admin/roles` reads every role with its permissions, `POST /admin/roles` creates
   a role or gives an existing one the permissions stated, and
   `DELETE /admin/roles/{name}` removes one no grant or derivation names (409
@@ -495,7 +497,10 @@ against the public contract of LIB-API-001.
   `DELETE /admin/grants/{id}` revokes one; both ask `grant:manage` in the grant's
   organization, step-up and a reason, and record who acted and when. A grant or
   revocation of a role carrying `system:administer` also needs `system:administer`.
-  `IGrants` is the same pair of operations in process.
+  `IGrants` is the same pair of operations in process. A revocation naming no grant, and
+  a grant on a record the deployment holds no registration for, are refused with 403
+  `authz.denied` in the same way; a revoked or derived grant answers 404
+  `authz.grant.notfound` only to a caller holding `grant:manage` where it is scoped.
 - `GET /admin/grants?organization=...&subjectType=user|group&subjectId=...` and
   `IGrants.HeldAsync` read the live grants one account or group holds in its own name in
   an organization, oldest first, each with its identifier, kind, role, what it is on,

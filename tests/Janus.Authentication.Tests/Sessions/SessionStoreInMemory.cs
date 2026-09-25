@@ -24,6 +24,11 @@ internal sealed class SessionStoreInMemory : ISessionStore
     public IReadOnlyCollection<Session> All => _sessions.Values;
 
     /// <summary>
+    /// How many times one session has been read by its identifier.
+    /// </summary>
+    public int Found { get; private set; }
+
+    /// <summary>
     /// The session a secret belongs to, whatever its state.
     /// </summary>
     /// <param name="secret">The secret.</param>
@@ -32,8 +37,12 @@ internal sealed class SessionStoreInMemory : ISessionStore
         _secrets.TryGetValue(Key(secret.Fingerprint()), out SessionId id) ? _sessions[id] : null;
 
     /// <inheritdoc/>
-    public ValueTask<Session?> FindAsync(SessionId id, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(_sessions.GetValueOrDefault(id));
+    public ValueTask<Session?> FindAsync(SessionId id, CancellationToken cancellationToken)
+    {
+        Found++;
+
+        return ValueTask.FromResult(_sessions.GetValueOrDefault(id));
+    }
 
     /// <inheritdoc/>
     public ValueTask<Session?> FindByFingerprintAsync(

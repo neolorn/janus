@@ -302,9 +302,16 @@ internal sealed class DeviceService(
     {
         ArgumentNullException.ThrowIfNull(context);
 
+        // CONV-DESIGN-002 AC3: whose account is asking is the gate of an operation on
+        // one's own browsers, asked before any browser is read.
+        if (context.Effective is not SubjectId subject)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
         Device? device = await devices.FindAsync(id, cancellationToken).ConfigureAwait(false);
 
-        if (context.Effective is not SubjectId subject || device is null || device.Subject != subject)
+        if (device is null || device.Subject != subject)
         {
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
