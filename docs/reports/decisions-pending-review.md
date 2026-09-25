@@ -15465,6 +15465,42 @@ administration to confer it.
 *Chapter text that should change.* OPS-CFG-006 AC2 could name the inheritance it
 excludes: from membership, from position, and from a grant beneath the organization.
 
+---
+
+## 377. The fingerprint key's absence is tested after the command flows, in the key document's class
+
+**Phase 10 · 2026-09-25 · Tier 2 · INF-HOST-003 AC4**
+
+*The question.* INF-HOST-003 AC4 reads "The fingerprint key is never written to the
+database." Its row asks for flows and both rotations, then a search of every column.
+The rotations exist only as commands; `Janus.Cli.Tests` references only `Janus.Cli`
+and `Janus.Storage.Tests`; each rotation test class shares one database across its
+cases, seeded for them; and bootstrap runs once per deployment.
+
+*The readings.*
+
+1. A Hosting test drives live flows, then runs the rotations some other way.
+2. A Cli test runs the command flows, then searches the database: bootstrap, which
+   fingerprints the first administrator's identifiers and mailbox; `rotate-kek` and
+   its seal; `rotate-fingerprint-key` and its seal; then every column of every base
+   table in the `identity` schema, read back as text, is searched for each version of
+   the fingerprint key as lower-case and upper-case hexadecimal (how a `bytea` column
+   reads back), base64 without padding, base64 with `+` escaped as JSON writes it, and
+   base64url.
+
+*Chosen: 2*, in a new class `KeyDocumentTests` with its own database, named for
+`src/Janus.Cli/KeyDocument.cs`, which carries the key into a command and implements
+INF-HOST-003 there. The test also asserts that every command exited 0, that the
+identifiers are under version 2, and that the search finds a value bootstrap did write
+(the WebAuthn origin), so a search that reads nothing cannot pass. The host's own
+ledgers, which hash under the same key through `Fingerprint.Compute`, are not scanned
+after live flows, since the rotations exist only as commands.
+
+*Tests that pin it.*
+`KeyDocumentTests.INF_HOST_003_AC4_TheFingerprintKeyIsNeverWrittenToTheDatabaseAsync`.
+
+*Chapter text that should change.* None.
+
 
 # Rows for chapter 10
 
