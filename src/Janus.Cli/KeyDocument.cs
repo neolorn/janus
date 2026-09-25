@@ -14,26 +14,37 @@ namespace Janus.Cli;
 /// standard input.
 /// </summary>
 /// <remarks>
-/// Implements OPS-SEC-001, INF-HOST-003 and LIB-EXT-001, as entry 307 of the decisions
-/// pending review settles them. The operator pipes the document from the secrets
-/// manager's own client, so no key is an argument the process list shows, a file left
-/// on disk or a variable in the environment. Standard input that is a terminal is
+/// Implements OPS-SEC-001, INF-HOST-003 and LIB-EXT-001, as entries 307 and 340 of the
+/// decisions pending review settle them. The operator pipes the document from the
+/// secrets manager's own client, so no key is an argument the process list shows, a
+/// file left on disk or a variable in the environment. Standard input that is a terminal is
 /// refused before anything is read, so no key is typed or pasted where a screen or a
 /// history keeps it. The document is read as bytes and every key is decoded straight
 /// from them into arrays the command's <see cref="HeldKeys"/> clears when it ends, so
-/// nothing but the connection passes through a string.
+/// nothing but the connection passes through a string. The secret of a client being
+/// registered travels the same way, for the command that registers it.
 /// </remarks>
 [NeverLogged]
 internal sealed class KeyDocument
 {
+    /// <summary>
+    /// The member the secret of the client a command registers is read from.
+    /// </summary>
+    public const string ClientSecretMember = "clientSecret";
+
     // A connection and a handful of keys; anything longer is not the document.
     private const int Longest = 64 * 1024;
 
-    private KeyDocument(string connection, KeyEncryptionKeys keyEncryptionKeys, FingerprintKeys fingerprintKeys)
+    private KeyDocument(
+        string connection,
+        KeyEncryptionKeys keyEncryptionKeys,
+        FingerprintKeys fingerprintKeys,
+        ReadOnlyMemory<byte>? clientSecret)
     {
         Connection = connection;
         KeyEncryptionKeys = keyEncryptionKeys;
         FingerprintKeys = fingerprintKeys;
+        ClientSecret = clientSecret;
     }
 
     /// <summary>
@@ -51,6 +62,12 @@ internal sealed class KeyDocument
     /// beside it.
     /// </summary>
     public FingerprintKeys FingerprintKeys { get; }
+
+    /// <summary>
+    /// The secret of the client a command registers, as its UTF-8 bytes, where the
+    /// document carries one.
+    /// </summary>
+    public ReadOnlyMemory<byte>? ClientSecret { get; }
 
     /// <summary>
     /// Reads the document from standard input.
@@ -158,10 +175,24 @@ internal sealed class KeyDocument
                 return Result.Failure<KeyDocument>(Unavailable("fingerprintKeys"));
             }
 
+            ReadOnlyMemory<byte>? clientSecret = null;
+
+            if (root.TryGetProperty(ClientSecretMember, out JsonElement secret))
+            {
+                if (secret.ValueKind is not JsonValueKind.String
+                    || !secret.TryGetBytesFromBase64(out byte[]? decoded))
+                {
+                    return Result.Failure<KeyDocument>(Malformed(ClientSecretMember));
+                }
+
+                clientSecret = held.Hold(decoded);
+            }
+
             return Result.Success(new KeyDocument(
                 connection.GetString()!,
                 new KeyEncryptionKeys(keyVersion, keyMaterial),
-                new FingerprintKeys(fingerprintVersion, fingerprintMaterial)));
+                new FingerprintKeys(fingerprintVersion, fingerprintMaterial),
+                clientSecret));
         }
     }
 

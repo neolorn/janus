@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Oidc;
@@ -13,7 +14,7 @@ namespace Janus.Storage.Authentication.Oidc;
 /// The registered clients, over the <c>oidc_clients</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
-/// <remarks>Implements AUTH-OIDC-001 and CONV-DESIGN-003.</remarks>
+/// <remarks>Implements AUTH-OIDC-001, OPS-SEC-002 and CONV-DESIGN-003.</remarks>
 internal sealed class OidcClientStore(StoreContext context) : IOidcClientStore
 {
     /// <inheritdoc/>
@@ -38,6 +39,7 @@ internal sealed class OidcClientStore(StoreContext context) : IOidcClientStore
     public async ValueTask RecordAsync(
         OidcClient client,
         byte[] fingerprint,
+        DateTimeOffset replacedUntil,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(client);
@@ -62,6 +64,14 @@ internal sealed class OidcClientStore(StoreContext context) : IOidcClientStore
                 .ConfigureAwait(false);
 
             return;
+        }
+
+        // OPS-SEC-002: the secret a new one replaces stays accepted for the overlap, so
+        // an application still presenting it is not refused while it takes the new one.
+        if (!CryptographicOperations.FixedTimeEquals(held.Secret, fingerprint))
+        {
+            held.PreviousSecret = held.Secret;
+            held.PreviousSecretUntil = replacedUntil;
         }
 
         held.Name = client.Name;

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -7,8 +8,8 @@ namespace Janus.Authentication.Oidc;
 
 /// <summary>
 /// The registry of manually registered clients. Nothing in the library writes to it
-/// from a request: a client is registered by the deployment and by nothing else
-/// (AUTH-OIDC-001).
+/// from a request: a client is registered by the deployment, from the server, and by
+/// nothing else (AUTH-OIDC-001).
 /// </summary>
 internal interface IOidcClientStore
 {
@@ -33,7 +34,14 @@ internal interface IOidcClientStore
     /// </summary>
     /// <param name="client">The client.</param>
     /// <param name="fingerprint">What its secret hashes to.</param>
+    /// <param name="replacedUntil">
+    /// Until when a secret this one replaces stays accepted beside it (OPS-SEC-002).
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of registering it.</returns>
-    ValueTask RecordAsync(OidcClient client, byte[] fingerprint, CancellationToken cancellationToken);
+    ValueTask RecordAsync(
+        OidcClient client,
+        byte[] fingerprint,
+        DateTimeOffset replacedUntil,
+        CancellationToken cancellationToken);
 }

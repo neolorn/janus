@@ -22,7 +22,7 @@ namespace Janus.Storage.Tests.Authentication;
 /// tokens the protocol server writes through the library's own stores, the signing key
 /// whose private half is wrapped, and the sweep that takes what can no longer be
 /// presented (AUTH-OIDC-001, AUTH-OIDC-002, AUTH-OIDC-003, AUTH-KEY-001, AUTH-KEY-002,
-/// AUTH-KEY-003).
+/// AUTH-KEY-003, OPS-SEC-002).
 /// </summary>
 [Trait("kind", "integration")]
 public sealed class OidcStoreTests(DatabaseFixture database)
@@ -94,6 +94,45 @@ public sealed class OidcStoreTests(DatabaseFixture database)
                 held,
                 ["https://attacker.test/collect"],
                 TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// OPS-SEC-002 AC2: a registration with a new secret keeps what the one it replaced
+    /// hashes to until the overlap ends, a change that keeps the secret leaves that
+    /// alone, and the table holds no replaced secret without the instant it ends.
+    /// </summary>
+    [Fact]
+    public async Task OPS_SEC_002_AC2_AReplacedSecretIsKeptUntilTheOverlapEndsAsync()
+    {
+        const string rotated = "rotated-client";
+        const string replacement = "the-secret-that-replaced-it";
+
+        DateTimeOffset until = Noon + TimeSpan.FromMinutes(15);
+
+        await RecordedAsync(rotated, Secret, DateTimeOffset.MinValue);
+        await RecordedAsync(rotated, replacement, until);
+        await RecordedAsync(rotated, replacement, until + TimeSpan.FromDays(1));
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        (byte[] Current, byte[] Previous, DateTimeOffset Until) held = await connection
+            .QuerySingleAsync<(byte[], byte[], DateTimeOffset)>(
+                """
+                SELECT secret, previous_secret, previous_secret_until
+                FROM identity.oidc_clients WHERE client_id = @clientId
+                """,
+                new { clientId = rotated });
+
+        Assert.Equal(OpaqueToken.Of(replacement).Fingerprint(), held.Current);
+        Assert.Equal(OpaqueToken.Of(Secret).Fingerprint(), held.Previous);
+        Assert.Equal(until, held.Until);
+
+        PostgresException refused = await Assert.ThrowsAsync<PostgresException>(async () =>
+            await connection.ExecuteAsync(
+                "UPDATE identity.oidc_clients SET previous_secret_until = NULL WHERE client_id = @clientId",
+                new { clientId = rotated }));
+
+        Assert.Equal(PostgresErrorCodes.CheckViolation, refused.SqlState);
     }
 
     /// <summary>
@@ -403,7 +442,14 @@ public sealed class OidcStoreTests(DatabaseFixture database)
         return token.Id;
     }
 
-    private async Task RegisteredAsync(string clientId, OidcClientKind kind)
+    private Task RegisteredAsync(string clientId, OidcClientKind kind) =>
+        RecordedAsync(clientId, Secret, DateTimeOffset.MinValue, kind);
+
+    private async Task RecordedAsync(
+        string clientId,
+        string secret,
+        DateTimeOffset replacedUntil,
+        OidcClientKind kind = OidcClientKind.Protocol)
     {
         var client = new OidcClient(
             clientId,
@@ -416,7 +462,8 @@ public sealed class OidcStoreTests(DatabaseFixture database)
 
         await new OidcClientStore(writing).RecordAsync(
             client,
-            OpaqueToken.Of(Secret).Fingerprint(),
+            OpaqueToken.Of(secret).Fingerprint(),
+            replacedUntil,
             TestContext.Current.CancellationToken);
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
     }

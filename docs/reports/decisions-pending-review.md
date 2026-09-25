@@ -13827,6 +13827,109 @@ identifier and nothing the endpoint wrote. AUTHZ-CONCEAL-001 could say that a ho
 the gate before it looks the record up, since a record the library holds no row for is
 the genuine absence a concealed refusal is identical to.
 
+---
+
+## 340. How a client enters the registry, and how its secret is rotated
+
+**Phase 9 · 2026-09-25 · Tier 3 · AUTH-OIDC-001, OPS-SEC-001, OPS-SEC-002, API-REDIR-001**
+
+*The question.* AUTH-OIDC-001 has "a manually managed client registry" and AC4 has the
+mail-server client "registered at bootstrap where the mail integration is enabled".
+OPS-SEC-002 has client secrets share one lifecycle with the signing keys, with automated
+rotation and overlap windows; AC1 has rotation complete without restart or manual
+action, AC2 has what was issued under the previous key stay valid through the overlap.
+Phase 5 built the registry's reader and a writer only the tests called. Nothing in the
+library or the command-line application wrote a client, and entry 262's "bootstrap
+registers it" was never built, so a deployment could register the mail server or its
+own browser applications only by writing the table by hand. Nothing kept a replaced
+secret. No chapter says how a client is registered, where its secret comes from, what a
+registration writes down, or how long a replaced secret is taken.
+
+*The readings.* For the route: (1) bootstrap takes the mail-server client's values and
+secret; (2) a command of its own, run as the deployment is stood up and again whenever a
+client changes; (3) an endpoint of the management application. For the secret: (a) an
+argument; (b) a member of the key document piped from the secrets manager. For the
+overlap: (i) none, the new secret replaces the old at once; (ii) the replaced secret is
+taken for the signing keys' overlap, the access-token lifetime and five minutes; (iii) a
+key of its own.
+
+*Chosen: 2, b and ii (Tier 3, the strictest reading).* Bootstrap runs once and refuses a
+second run, so under (1) a secret could never be rotated and a browser application added
+later could never be registered. An endpoint (3) is the dynamic registration
+AUTH-OIDC-001 puts out of scope, reached with a session rather than with the server. An
+argument shows in the process list, so the secret travels as the keys do (entry 307). A
+key of its own (iii) is a default no chapter names; the signing keys' overlap is the one
+OPS-SEC-002's "one lifecycle" already prices.
+
+What is built:
+
+- `janus register-client --client <id> --name <name> --kind protocol|browser-application
+  --redirect <address> --scopes "<scope> ..."`, the secret in the key document's
+  optional member `clientSecret` as its UTF-8 bytes in base64, held and cleared with the
+  keys. The command checks the schema as the others do and prints
+  `{"registered":"<id>"}`.
+- `ClientRegistry` refuses with `api.request.malformed` naming the member: an identifier
+  or a scope that is empty or carries white space, a blank name, a destination without
+  an origin (the rule API-REDIR-001 AC3 applies at startup), and a secret shorter than
+  32 bytes, not UTF-8, or nothing but white space. The command refuses an absent or
+  undecodable `clientSecret` the same way.
+- The registry holds the SHA-256 of the secret, as before. Registering a client again
+  with a different secret moves the fingerprint held to `previous_secret`, with
+  `previous_secret_until` now plus `oidc.accesstoken.lifetime` plus five minutes
+  (migration `AddClientSecretOverlap`; a check keeps the two columns null together). A
+  registration that keeps the secret leaves both alone.
+- The token and pushed-authorization endpoints take either fingerprint, each compared in
+  constant time, the replaced one only before `previous_secret_until`.
+- Each registration is written down in the security partition as
+  `auth.oidc.clientregistered` under the principal `register-client`, reason
+  `AUTH-OIDC-001`, operation `configuration`, with `details.client`, `details.kind` and
+  `details.changed` (whether the registry held the client before), and nothing of the
+  secret.
+
+*Contradiction (Tier 3).* OPS-SEC-002 AC1 has rotation complete without restart or
+manual action, and D-026.3 has client secrets at rest under the key-encryption key with
+automated rotation. D-162 item 66 and `ISecretSource` (each value read once, at startup)
+have an application's sign-on secret come from the secrets manager, and the mail
+server's secret sits in the mail server's own configuration, which the library does not
+reach. Under this build a client secret is rotated in three human steps: a new secret in
+the secrets manager, `janus register-client` run with it, and the application restarted
+or the mail server reconfigured within the overlap. AC2 holds for client secrets and AC1
+holds for the signing keys; AC1 for client secrets is read under D-162 item 66 as the
+overlap that lets those steps be taken without an outage. The owner decides which
+governs: a library that generates and hands out client secrets itself, or a lifecycle
+outside the library with the overlap as its contract.
+
+*Residue.* API-REDIR-001 AC3 reads the registry's origins at startup, so a registration
+that changes a destination is taken by a running host at its next start. Until a
+registration exists, a declared mail client the registry does not hold as a `protocol`
+client faults as entry 262 has it, which is what tells an operator who skipped the
+command.
+
+*Rows for chapter 10.* Audit actions: `auth.oidc.clientregistered` | security |
+`AuditActions.ClientRegistered` | A client was registered in the provider's registry, or
+a registered one changed, from the server.
+
+*Tests that pin it.*
+`ClientRegistryTests.AUTH_OIDC_001_AC4_TheMailServerClientIsRegisteredFromTheServerAsync`,
+`ClientRegistryTests.OPS_SEC_002_AC2_AReplacedSecretIsKeptThroughTheOverlapAsync`,
+`ClientRegistryTests.OPS_SEC_002_AC2_TheOverlapFollowsTheAccessTokenLifetimeAsync`,
+`ClientRegistryTests.OPS_SEC_002_AChangeThatKeepsTheSecretReplacesNothingAsync`,
+`ClientRegistryTests.AUTH_OIDC_001_AClientTheRegistryCannotServeIsRefusedAsync`,
+`ClientRegistryTests.OPS_SEC_001_ASecretTheServerWouldNotTakeIsRefusedAsync`,
+`OidcStoreTests.OPS_SEC_002_AC2_AReplacedSecretIsKeptUntilTheOverlapEndsAsync`,
+`OidcFlowTests.OPS_SEC_002_AC2_AReplacedSecretAuthenticatesTheClientThroughTheOverlapAsync`,
+`RegisterClientTests.AUTH_OIDC_001_AC4_TheMailServerClientIsRegisteredAsTheDeploymentIsStoodUpAsync`,
+`RegisterClientTests.OPS_SEC_002_AC2_RegisteringANewSecretKeepsTheReplacedOneThroughTheOverlapAsync`,
+`RegisterClientTests.AUTH_OIDC_001_ARegistrationWithoutAUsableSecretIsRefusedAsync`,
+`RegisterClientTests.AUTH_OIDC_001_AnArgumentTheCommandCannotTakeIsRefusedAsync`,
+`AuditActionsTests.CONV_NAME_003_AC2_ChangingAnActionFailsTheContractTest` (extended).
+
+*Chapter text that should change.* AUTH-OIDC-001 AC4 could read "registered with
+`janus register-client` as the deployment is stood up" in place of "at bootstrap", and
+OPS-SEC-003's values could name the command beside `rotate-kek`. OPS-SEC-002 needs the
+owner's answer on AC1 for client secrets. Chapter 10 needs the audit-action row, and
+section 4.9 could say that a replaced client secret keeps the signing keys' overlap.
+
 
 # Rows for chapter 10
 
@@ -13983,6 +14086,7 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `auth.mailcredential.revoked` | security | `AuditActions.MailCredentialRevoked` | The mail server revoked an app password at its holder's request. Details carry `credential`, the server's identifier. The account is both subjects; the row names no organization. (REG-MAIL-002, INT-MAIL-010, entry 263) |
 | `auth.providerevent.rejected` | security | `AuditActions.ProviderEventRejected` | A social provider's security event about a linked identity was refused: its provider's keys do not verify it, or it had been carried before. Details carry `credential`, `event` (the type as the provider spells it) and `outcome` (`unsigned` or `replayed`); the account is both subjects. (IDN-LIFE-012a AC1, entry 289) |
 | `auth.providerevent.taken` | security | `AuditActions.ProviderEventTaken` | A social provider's security event about a linked identity was carried. Details carry `credential`, `event` and `outcome` (`sessionsEnded`, `credentialUnlinked`, `accountSuspended`, `addressUnverified` or `recorded`); the account is both subjects. (IDN-LIFE-012a, entries 285 to 289) |
+| `auth.oidc.clientregistered` | security | `AuditActions.ClientRegistered` | A client was registered in the provider's registry, or a registered one changed, from the server. The principal is the `register-client` command with the reason `AUTH-OIDC-001`; `details.client`, `details.kind` and `details.changed` (whether the registry held it before). No subject; the row names no organization. (AUTH-OIDC-001, OPS-SEC-002, entry 340) |
 | `auth.oidc.refreshreused` | security | `AuditActions.RefreshTokenReused` | A refresh token was presented a second time, which revokes the family it belongs to. (AUTH-TOK-004) |
 | `auth.phonesignal.considered` | security | `AuditActions.PhoneSignalConsidered` | A phone signal was consulted before a send, recorded without the number it was consulted for. (AUTH-ABUSE-006) |
 | `auth.recovery.approved` | security | `AuditActions.RecoveryApproved` | An assisted recovery was approved, naming the approver and the reason given. (AUTH-REC-006) |

@@ -31,6 +31,7 @@ public sealed class AuditActionsTests
         "auth.credential.restored",
         "auth.mailcredential.created",
         "auth.mailcredential.revoked",
+        "auth.oidc.clientregistered",
         "auth.oidc.refreshreused",
         "auth.phonesignal.considered",
         "auth.providerevent.rejected",

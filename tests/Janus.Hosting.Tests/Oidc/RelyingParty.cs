@@ -74,6 +74,7 @@ internal static class RelyingParty
                     Destination,
                     ["openid", "email", "offline_access"]),
                 OpaqueToken.Of(Secret).Fingerprint(),
+                DateTimeOffset.MinValue,
                 TestContext.Current.CancellationToken);
         }
     }

@@ -3295,6 +3295,7 @@ static Janus.Core.AuditActions.AccountSuspended.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.BotDefenceSignalled.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.BreakGlassGenerated.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.BreakGlassUsed.get -> Janus.Core.AuditAction
+static Janus.Core.AuditActions.ClientRegistered.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.ConfigurationChanged.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.KeyRotationCompleted.get -> Janus.Core.AuditAction
 static Janus.Core.AuditActions.KeyRotationResumed.get -> Janus.Core.AuditAction

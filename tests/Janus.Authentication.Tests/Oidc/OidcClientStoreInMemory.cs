@@ -13,19 +13,19 @@ namespace Janus.Authentication.Tests.Oidc;
 /// </summary>
 internal sealed class OidcClientStoreInMemory : IOidcClientStore
 {
-    private readonly Dictionary<string, (OidcClient Client, byte[] Secret)> _clients =
-        new(StringComparer.Ordinal);
+    private readonly Dictionary<string, RegisteredClient> _clients = new(StringComparer.Ordinal);
 
     /// <summary>
-    /// The clients as they were registered, with what each one's secret hashes to,
-    /// for a caller that reads the registry as the protocol server reads it.
+    /// The clients as they were registered, with what each one's secret hashes to and
+    /// the secret it replaced, for a caller that reads the registry as the protocol
+    /// server reads it.
     /// </summary>
-    public IReadOnlyList<(OidcClient Client, byte[] Secret)> Registered => [.. _clients.Values];
+    public IReadOnlyList<RegisteredClient> Registered => [.. _clients.Values];
 
     /// <inheritdoc/>
     public ValueTask<OidcClient?> FindAsync(string clientId, CancellationToken cancellationToken) =>
         ValueTask.FromResult(
-            _clients.TryGetValue(clientId, out (OidcClient Client, byte[] Secret) held)
+            _clients.TryGetValue(clientId, out RegisteredClient? held)
                 ? held.Client
                 : null);
 
@@ -38,12 +38,30 @@ internal sealed class OidcClientStoreInMemory : IOidcClientStore
     public ValueTask RecordAsync(
         OidcClient client,
         byte[] fingerprint,
+        DateTimeOffset replacedUntil,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(client);
+        ArgumentNullException.ThrowIfNull(fingerprint);
 
-        _clients[client.ClientId] = (client, fingerprint);
+        _clients[client.ClientId] = _clients.TryGetValue(client.ClientId, out RegisteredClient? held)
+            && !held.Secret.AsSpan().SequenceEqual(fingerprint)
+                ? new RegisteredClient(client, fingerprint, held.Secret, replacedUntil)
+                : new RegisteredClient(client, fingerprint, held?.Previous, held?.PreviousUntil);
 
         return ValueTask.CompletedTask;
     }
 }
+
+/// <summary>
+/// One client as the registry holds it.
+/// </summary>
+/// <param name="Client">The client.</param>
+/// <param name="Secret">What its secret hashes to.</param>
+/// <param name="Previous">What the secret it replaced hashes to, where one was.</param>
+/// <param name="PreviousUntil">Until when the replaced secret is taken.</param>
+internal sealed record RegisteredClient(
+    OidcClient Client,
+    byte[] Secret,
+    byte[]? Previous,
+    DateTimeOffset? PreviousUntil);

@@ -273,6 +273,7 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
                 "https://identity.example.test/auth/signon/return",
                 ["openid"]),
             OpaqueToken.Of("a-secret-the-deployment-set").Fingerprint(),
+            DateTimeOffset.MinValue,
             TestContext.Current.CancellationToken);
 
         string credential = await GeneratedAsync();

@@ -162,6 +162,7 @@ public sealed class AppPasswordFlowTests : IAsyncDisposable
                 "https://mail.example.test/callback",
                 ["openid", "email", "offline_access"]),
             OpaqueToken.Of("the-mail-servers-secret").Fingerprint(),
+            DateTimeOffset.MinValue,
             TestContext.Current.CancellationToken);
 
     // INT-MAIL-006: the browser's account holds the mailbox its membership of the

@@ -31,6 +31,8 @@ internal sealed class OidcApplicationStoreInMemory(OidcClientStoreInMemory clien
                 Kind = held.Client.Kind,
                 Redirect = held.Client.Redirect,
                 Secret = held.Secret,
+                PreviousSecret = held.Previous,
+                PreviousSecretUntil = held.PreviousUntil,
                 Scopes = [.. held.Client.Scopes],
             })
             .AsQueryable();

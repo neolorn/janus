@@ -64,9 +64,13 @@ internal sealed class RedirectValidation(IOidcClientStore clients, IConfiguratio
             member,
             JsonSerializer.SerializeToElement(value));
 
-    // An address a browser can be sent to is absolute and carries a host, which is
-    // what having an origin at all means (API-REDIR-001 AC3).
-    private static bool Origin(string destination) =>
+    /// <summary>
+    /// Whether a browser can be sent to the address: it is absolute and carries a host,
+    /// which is what having an origin at all means (API-REDIR-001 AC3).
+    /// </summary>
+    /// <param name="destination">The address.</param>
+    /// <returns>Whether it has an origin.</returns>
+    public static bool Origin(string destination) =>
         Uri.TryCreate(destination, UriKind.Absolute, out Uri? parsed) && parsed.Host.Length > 0;
 
     private static bool Lands(IReadOnlyList<OidcClient> registered, string named)

@@ -1017,6 +1017,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
                 "https://fallback.example.test/welcome",
                 ["openid"]),
             [7, 8, 9],
+            DateTimeOffset.MinValue,
             TestContext.Current.CancellationToken);
 
         _configuration.Set(Settings.RedirectDefaultClient, "fallback");
@@ -1044,6 +1045,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
                 "https://elsewhere.example.test/welcome",
                 ["openid"]),
             [4, 5, 6],
+            DateTimeOffset.MinValue,
             TestContext.Current.CancellationToken);
 
         Assert.Equal(Registered, Ok(await AcceptedAsync(await SecuredAsync())).Landing);
@@ -1631,6 +1633,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
         .RecordAsync(
             new OidcClient(Client, Client, OidcClientKind.BrowserApplication, Registered, ["openid"]),
             [1, 2, 3],
+            DateTimeOffset.MinValue,
             TestContext.Current.CancellationToken)
         .AsTask();
 

@@ -381,6 +381,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `janus register-client` registers a client in the provider's registry, or changes a
+  registered one, from the server: `--client`, `--name`, `--kind`, `--redirect` and
+  `--scopes`, with the secret piped in the key document as `clientSecret`. The registry
+  keeps what the secret hashes to. Registering a client again with a new secret keeps
+  the one it replaced accepted for the access-token lifetime and five minutes, which is
+  how a client secret is rotated. Each registration is recorded as
+  `auth.oidc.clientregistered`.
 - The audit trail's monthly partitions are kept by a daily job, `audit-partitions`,
   under the maintenance credential: the current month and the two after it are created
   where missing, and partitions past `retention.audit.security` or

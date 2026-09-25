@@ -395,6 +395,13 @@ public static class AuditActions
     public static AuditAction RecoveryApproved { get; } = AuditAction.Parse("auth.recovery.approved");
 
     /// <summary>
+    /// A client was registered in the provider's registry, or a registered one changed,
+    /// from the server.
+    /// </summary>
+    /// <remarks>Implements AUTH-OIDC-001 and OPS-SEC-002.</remarks>
+    public static AuditAction ClientRegistered { get; } = AuditAction.Parse("auth.oidc.clientregistered");
+
+    /// <summary>
     /// A refresh token was presented a second time, which revokes the family it belongs to.
     /// </summary>
     /// <remarks>Implements AUTH-TOK-004, chapter 10 section 5.</remarks>

@@ -513,6 +513,8 @@ public sealed class ModelTests
             "oidc_clients.client_id",
             "oidc_clients.kind",
             "oidc_clients.name",
+            "oidc_clients.previous_secret",
+            "oidc_clients.previous_secret_until",
             "oidc_clients.redirect",
             "oidc_clients.scopes",
             "oidc_clients.secret",

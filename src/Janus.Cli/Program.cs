@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Cli.Bootstrap;
+using Janus.Cli.Clients;
 using Janus.Cli.Configuration;
 using Janus.Cli.Erasures;
 using Janus.Cli.Rotation;
@@ -47,6 +48,7 @@ internal static class Program
             [RotateFingerprintKeyCommand.Name] = RotateFingerprintKeyCommand.RunAsync,
             [ConfigureCommand.Name] = ConfigureCommand.RunAsync,
             [ReplayErasuresCommand.Name] = ReplayErasuresCommand.RunAsync,
+            [RegisterClientCommand.Name] = RegisterClientCommand.RunAsync,
         };
 
     /// <summary>

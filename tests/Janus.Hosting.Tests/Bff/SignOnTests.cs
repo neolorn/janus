@@ -285,6 +285,7 @@ public sealed class SignOnTests
         await deployment.Clients.RecordAsync(
             new OidcClient(Client, Client, OidcClientKind.BrowserApplication, Return, ["openid"]),
             OpaqueToken.Of("a-secret-the-deployment-did-not-set").Fingerprint(),
+            DateTimeOffset.MinValue,
             TestContext.Current.CancellationToken);
 
         Answer refused = await new Browser(deployment).SendAsync("GET", Start);
@@ -380,6 +381,7 @@ public sealed class SignOnTests
                 Return,
                 ["openid"]),
             OpaqueToken.Of(Secret).Fingerprint(),
+            DateTimeOffset.MinValue,
             TestContext.Current.CancellationToken);
 
     // The three legs one browser makes across two applications: this application
