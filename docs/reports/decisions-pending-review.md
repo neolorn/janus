@@ -15501,6 +15501,62 @@ after live flows, since the rotations exist only as commands.
 
 *Chapter text that should change.* None.
 
+---
+
+## 378. The destructive-operation report reads what the added migrations' Up runs, and reports more than the chapter's list
+
+**Phase 10 · 2026-09-25 · Tier 2 · OPS-DEP-001 AC1 to AC3, OPS-DEP-002 AC1 and AC2, `08` section 1b**
+
+*The question.* `08` section 1b makes the report the idempotent script of the pending
+migrations, scanned for `DROP`, `ALTER ... TYPE` and `ADD CONSTRAINT`. OPS-DEP-001
+calls destructive "dropping a column or table, narrowing a type, adding a constraint
+that could fail against existing rows". Its AC3 says additive migrations are
+unaffected either way. Several things are left open:
+
+- The pipeline has no deployed database to ask which migrations are pending.
+- A `DROP` also appears where nothing is lost: `DROP DEFAULT`, `DROP NOT NULL`,
+  `DROP INDEX`, `DROP CONSTRAINT`, and a `DROP TABLE` built inside a function body.
+- A constraint that could fail against rows also comes without `ADD CONSTRAINT`:
+  `SET NOT NULL`, a unique index, and a column added `NOT NULL` without a default.
+- The chapter does not say what an unset variable reads as.
+
+*The readings.*
+
+1. Report exactly the three words of `08`, over every migration.
+2. Report the three words of `08` wherever they appear in the script of the
+   migrations the range adds (the pending ones, as far as a pipeline can know). Also
+   report the three constraint forms OPS-DEP-001 names and `08` does not, on any table
+   the same migrations did not create, or created and then filled. With no base,
+   report every migration.
+3. Reading 2, but report only what loses data or could fail against rows. That leaves
+   out `DROP DEFAULT`, `DROP NOT NULL`, `DROP INDEX`, `DROP CONSTRAINT`, and
+   `ADD CONSTRAINT` on a table the range created.
+
+*Chosen: 2.*
+
+- Within the range, reading 2 reports everything reading 1 reports, plus what
+  OPS-DEP-001 names and reading 1 misses.
+- Reading 3 reports less than `08` states, and a gate that reads less than its chapter
+  fails open.
+- The cost falls on AC3 at the margin. With the gate enabled, three kinds of migration
+  go to the manual workflow: one that widens (`DROP NOT NULL`), one that backfills a
+  required column and then drops its default, and one that adds a check constraint to
+  a table it created. That is the safe direction, and the gate stays disabled for now.
+- An unset or empty variable reads as `disabled`, because the chapter says the gate
+  "is currently disabled" and the variable does not exist yet. Any other value fails
+  the run rather than being guessed at.
+- A push that opens a branch has no previous commit, so every migration is judged.
+  That reports more, never less.
+
+*Tests that pin it.* None in the solution; a gate over commits is not built by a test.
+24 scenarios against scratch repositories, listed in the phase 10 report under
+OPS-DEP-001, pin each form, the created-table and filled-table cases, the `Down`
+exclusion, the range, the unset and the invalid variable, and the message.
+
+*Chapter text that should change.* `08` section 1b could list the constraint forms of
+OPS-DEP-001 beside `ADD CONSTRAINT`, and say which `DROP` forms count. OPS-DEP-001
+could say what an unset variable means.
+
 
 # Rows for chapter 10
 

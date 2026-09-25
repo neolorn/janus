@@ -303,8 +303,22 @@ jobs:
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
+      # The report reads the migrations the range adds, so the base has to be here.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: ./.github/gates/destructive-operations.sh
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - run: dotnet restore Janus.slnx --locked-mode
+      - run: dotnet tool restore
+      # OPS-DEP-001: the toggle is the repository variable, so enabling the gate is a
+      # change to the variable and not to this file.
+      - env:
+          DESTRUCTIVE_DDL_GATE: ${{ vars.DESTRUCTIVE_DDL_GATE }}
+          RANGE_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          RANGE_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: ./.github/gates/destructive-operations.sh "$RANGE_BASE" "$RANGE_HEAD"
 
   dependency-vulnerabilities:
     name: Dependency vulnerability alerting
