@@ -104,7 +104,7 @@ internal sealed class BreakGlassService(
         // refused attempt is the earliest the answer promises (OPS-BOOT-004 AC7).
         if (attempted > GlobalAttempts)
         {
-            return Result.Failure<IssuedSession>(Throttled(now + GlobalWindow));
+            return Result.Failure<IssuedSession>(ThrottleService.Refusal(now + GlobalWindow));
         }
 
         var attempt = new ThrottleAttempt(origin.Address, Identifier: null);
@@ -120,7 +120,7 @@ internal sealed class BreakGlassService(
 
         if (delay > TimeSpan.Zero)
         {
-            return Result.Failure<IssuedSession>(Throttled(now + delay));
+            return Result.Failure<IssuedSession>(ThrottleService.Refusal(now + delay));
         }
 
         if (BreakGlassCode.Checked(credential) is not string canonical
@@ -278,9 +278,6 @@ internal sealed class BreakGlassService(
             new Uri(new Uri(addresses.Provider, UriKind.Absolute), Page),
             now));
     }
-
-    private static Error Throttled(DateTimeOffset lifts) =>
-        Error.From(ErrorCodes.Throttled, "retryAt", JsonSerializer.SerializeToElement(lifts));
 
     // OPS-ALERT-002: one issue is generated once and used once, and the two are two
     // alerts, so the use of an issue is never folded into the alert its generation

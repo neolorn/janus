@@ -382,6 +382,78 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// BFF-ABUSE-001 AC2 and AUTH-RECOV-002: an approval past the account's cap for the
+    /// day is refused with the instant the earliest approval still counted leaves the
+    /// day, which is when the cap admits the next, to the tick.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ABUSE_001_AC2_TheAccountCapLiftsWhenItsEarliestCountedApprovalLeavesTheDayAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        (SubjectId approver, SessionId session) = await ApproverAsync();
+        var given = new List<DateTimeOffset>();
+
+        for (int approval = 0; approval < 3; approval++)
+        {
+            given.Add(_clock.GetUtcNow());
+
+            Assert.NotNull(Value(await Approving(approver, session, subject, Reason)));
+
+            _clock.Advance(TimeSpan.FromMinutes(1));
+        }
+
+        _configuration.Set(Settings.RecoveryRateLimitAccount, 2);
+
+        Result<ApprovedRecovery> capped = await Approving(approver, session, subject, Reason);
+
+        Assert.Equal(ErrorCodes.Throttled, Refused(capped));
+        Assert.Equal(given[1].AddDays(1), Lifts(capped));
+
+        _clock.Advance(given[1].AddDays(1) - _clock.GetUtcNow() - TimeSpan.FromTicks(1));
+
+        (SubjectId early, SessionId opened) = await ApproverAsync();
+
+        Assert.Equal(ErrorCodes.Throttled, Refused(await Approving(early, opened, subject, Reason)));
+
+        _clock.Advance(TimeSpan.FromTicks(1));
+
+        Assert.NotNull(Value(await Approving(early, opened, subject, Reason)));
+    }
+
+    /// <summary>
+    /// BFF-ABUSE-001 AC2 and AUTH-RECOV-002: where the account's cap and the
+    /// approver's are both reached, the refusal names the later of the two instants,
+    /// since only then does neither hold the approval.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ABUSE_001_AC2_TwoCapsReachedLiftAtTheLaterOfThemAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        (SubjectId first, SessionId opened) = await ApproverAsync();
+        (SubjectId second, SessionId another) = await ApproverAsync();
+
+        _configuration.Set(Settings.RecoveryRateLimitAccount, 2);
+        _configuration.Set(Settings.RecoveryRateLimitApprover, 1);
+
+        _ = await Approving(first, opened, subject, Reason);
+
+        _clock.Advance(TimeSpan.FromMinutes(1));
+
+        DateTimeOffset latest = _clock.GetUtcNow();
+
+        _ = await Approving(second, another, subject, Reason);
+
+        _clock.Advance(TimeSpan.FromMinutes(1));
+
+        Result<ApprovedRecovery> capped = await Approving(second, another, subject, Reason);
+
+        Assert.Equal(ErrorCodes.Throttled, Refused(capped));
+        Assert.Equal(latest.AddDays(1), Lifts(capped));
+    }
+
+    /// <summary>
     /// OPS-ALERT-001 and AUTH-RECOV-002: recovery approvals clustering on one account
     /// raise the alert under that account once they reach the threshold, and not before.
     /// </summary>
@@ -819,4 +891,8 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     private static TValue? Value<TValue>(Result<TValue> result)
         where TValue : class =>
         result.Match<TValue?>(value => value, _ => null);
+
+    // The instant a throttled refusal says it lifts (API-CONV-003).
+    private static DateTimeOffset? Lifts<TValue>(Result<TValue> result) =>
+        result.Match<DateTimeOffset?>(_ => null, error => error.Details["retryAt"].GetDateTimeOffset());
 }

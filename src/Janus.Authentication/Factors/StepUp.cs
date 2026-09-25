@@ -130,7 +130,13 @@ internal static class StepUp
 
         if (Proved(session, gate, required, phishingResistant, now))
         {
-            return new StepUpChallenge(StepUpOutcome.Satisfied, required, phishingResistant, [], null);
+            return new StepUpChallenge(
+                StepUpOutcome.Satisfied,
+                required,
+                phishingResistant,
+                gate.MaximumAge,
+                [],
+                null);
         }
 
         IReadOnlyList<IReadOnlyList<Factor>> offered =
@@ -138,7 +144,13 @@ internal static class StepUp
 
         if (offered.Count > 0)
         {
-            return new StepUpChallenge(StepUpOutcome.Present, required, phishingResistant, offered, null);
+            return new StepUpChallenge(
+                StepUpOutcome.Present,
+                required,
+                phishingResistant,
+                gate.MaximumAge,
+                offered,
+                null);
         }
 
         // Three answers and never a bare refusal: the account has never held what the
@@ -154,6 +166,7 @@ internal static class StepUp
             outcome,
             required,
             phishingResistant,
+            gate.MaximumAge,
             [],
             outcome is StepUpOutcome.LossPending ? held.LossCompletes : null);
     }

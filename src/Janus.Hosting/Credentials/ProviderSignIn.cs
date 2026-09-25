@@ -205,7 +205,13 @@ internal sealed class ProviderSignIn(
         {
             BrowserProfileLog.ProviderExchangeRejected(log, context.TraceIdentifier, provider);
 
-            return Back(attempt.ReturnTo, ErrorCodes.FactorRejected);
+            // CONV-LOG-005, AUTH-ABUSE-001: an identity that did not hold up is a
+            // refused factor, recorded and counted against the source behind its delay.
+            Error refused = await authentication
+                .ProviderRefusedAsync(provider, RequestOrigin.Source(context.Request), cancellationToken)
+                .ConfigureAwait(false);
+
+            return Back(attempt.ReturnTo, refused.Code);
         }
 
         return attempt.Intent switch

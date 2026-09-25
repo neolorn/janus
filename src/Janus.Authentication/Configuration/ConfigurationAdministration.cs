@@ -40,8 +40,6 @@ internal sealed class ConfigurationAdministration(
     IUnitOfWork work,
     TimeProvider time)
 {
-    private const string Gate = "config:loosen";
-
     /// <summary>
     /// Puts a value in force for one setting.
     /// </summary>
@@ -296,7 +294,7 @@ internal sealed class ConfigurationAdministration(
 
         if (!StepUpRefusal.Met(challenge))
         {
-            return StepUpRefusal.Of(Gate, challenge);
+            return StepUpRefusal.Of(challenge);
         }
 
         return string.IsNullOrWhiteSpace(reason)

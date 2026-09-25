@@ -8,6 +8,7 @@ using Janus.Authentication.BreakGlass;
 using Janus.Authentication.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Hosting.Tests.Credentials;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.Outbox;
 using Microsoft.AspNetCore.Http;
@@ -206,6 +207,10 @@ public sealed class RequestLoggingTests : IAsyncDisposable
             ("factor", "password"),
             ("value", Wrong));
 
+        // Three refusals from the one address every browser here shares have earned it
+        // the first delay (AUTH-ABUSE-001), which the step-up that follows waits out.
+        quiet.Clock.Advance(TimeSpan.FromSeconds(1));
+
         string challenge = await BegunAsync(administrator, Flow.Address);
         int presented = quiet.SessionAudit.Records.Count;
 
@@ -251,6 +256,132 @@ public sealed class RequestLoggingTests : IAsyncDisposable
         Assert.Equal(emergency, Assert.Single(quiet.BreakGlassAudit.Used).Emergency);
         Assert.Equal(emergency, Assert.Single(quiet.Changes.Written).Actor);
         Assert.Empty(quiet.Logs.Lines);
+    }
+
+    /// <summary>
+    /// CONV-LOG-005 AC1: with the host logging nothing at all, a handle that opens no
+    /// sign-in, a wrong device-verification code, a pressed sign-in link that lands on
+    /// no sign-in, an identity token that does not hold up and an identity linked to no
+    /// account are each recorded as a failed authentication, none of it through the
+    /// log.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_LOG_005_AC1_EveryRefusedWayInIsRecordedWithTheLogSilentAsync()
+    {
+        await using var quiet = new Deployment(logging: LogLevel.None);
+
+        Flow.Prepare(quiet);
+
+        quiet.Configuration.Set(
+            Settings.PolicyDefault,
+            Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.EmailLink]),
+            });
+        quiet.Templates.Set(
+            MessageKind.SignInLink,
+            SendKind.Email,
+            Language,
+            new MessageTemplate("link", "{code} {token}"));
+
+        _ = await Flow.SignedInAsync(quiet);
+
+        SubjectId subject = quiet.Directory.Created[^1].Subject;
+
+        quiet.Clock.Advance(TimeSpan.FromMinutes(5));
+
+        var signing = new Browser(quiet);
+
+        _ = await signing.SendAsync("GET", "/auth/session");
+
+        Answer nowhere = await signing.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", "a-handle-nothing-opened"),
+            ("factor", "password"),
+            ("value", Flow.Password));
+
+        string challenge = await BegunAsync(signing, Flow.Address);
+
+        _ = await signing.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "password"),
+            ("value", Flow.Password));
+
+        string code = quiet.Mail.Taken[^1].Body.Split(' ')[0];
+
+        Answer wrongCode = await signing.SendAsync(
+            "POST",
+            "/auth/device/verify",
+            ("challengeId", challenge),
+            ("code", string.Equals(code, "000000", StringComparison.Ordinal) ? "111111" : "000000"));
+
+        // Every refusal here counts against the one address every browser shares, and
+        // the address the link goes to was just sent the code, so the clock moves past
+        // both before the next (AUTH-ABUSE-001, AUTH-ABUSE-004).
+        quiet.Clock.Advance(TimeSpan.FromMinutes(2));
+
+        _ = await signing.SendAsync("POST", "/auth/link", ("identifier", Flow.Address));
+
+        Answer astray = await signing.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", "a-handle-nothing-opened"),
+            ("factor", "emailLink"),
+            ("linkToken", Flow.Token(quiet, IdentifierKind.Email)),
+            ("press", true));
+
+        quiet.Clock.Advance(TimeSpan.FromSeconds(10));
+
+        Answer forged = await ProvidedAsync(quiet, new ProviderPerson("a-subject-at-the-provider") { Forged = true });
+
+        quiet.Clock.Advance(TimeSpan.FromSeconds(10));
+
+        Answer unlinked = await ProvidedAsync(quiet, new ProviderPerson("a-subject-nobody-linked"));
+
+        Assert.Equal(ErrorCodes.FactorRejected.ToString(), nowhere.Text("code"));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, wrongCode.Status);
+        Assert.Equal(ErrorCodes.FactorRejected.ToString(), astray.Text("code"));
+        Assert.EndsWith("?error=" + ErrorCodes.FactorRejected, forged.Location, StringComparison.Ordinal);
+        Assert.EndsWith("?error=" + ErrorCodes.FactorRejected, unlinked.Location, StringComparison.Ordinal);
+        Assert.Equal<(SubjectId?, Factor)>(
+            [
+                (null, Factor.Password),
+                (subject, Factor.EmailCode),
+                (subject, Factor.EmailLink),
+                (null, Factor.Google),
+                (null, Factor.Google),
+            ],
+            quiet.SessionAudit.Failed);
+        Assert.Empty(quiet.Logs.Lines);
+    }
+
+    // A round trip to the provider to sign in, which comes back with the person given.
+    private static async Task<Answer> ProvidedAsync(Deployment deployment, ProviderPerson person)
+    {
+        var browser = new Browser(deployment);
+
+        string authorization = (await browser.SendAsync("GET", "/auth/providers/google?intent=signin&returnTo=%2F"))
+            .Location ?? throw new InvalidOperationException("The start forwarded nowhere.");
+
+        string code = deployment.SocialProviders.Issue(Factor.Google, authorization, person);
+
+        Answer forwarded = await browser.SendAsync(
+            "POST",
+            "/callbacks/providers/google/return",
+            "code=" + Uri.EscapeDataString(code)
+                + "&state=" + Uri.EscapeDataString(SocialProvidersInMemory.Parameter(authorization, "state")!),
+            header: false,
+            origin: null,
+            token: false,
+            contentType: "application/x-www-form-urlencoded");
+
+        return await browser.SendAsync(
+            "GET",
+            forwarded.Location ?? throw new InvalidOperationException("The return forwarded nowhere."));
     }
 
     // What a deployment logging everything wrote for the flows: something, the refused

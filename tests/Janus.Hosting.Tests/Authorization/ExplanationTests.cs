@@ -33,10 +33,12 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     // The role the host's declaration says a reviewer holds on what they review.
     private static readonly RoleName Reviewer = RoleName.Parse("reviewer");
 
+    private static readonly TimeSpan Recency = TimeSpan.FromMinutes(15);
+
     // A session that has met every gate, so no step-up stands between a change and the
     // permission it asks for.
     private static readonly StepUpChallenge Satisfied =
-        new(StepUpOutcome.Satisfied, AssuranceLevel.Aal2, PhishingResistant: false, [], null);
+        new(StepUpOutcome.Satisfied, AssuranceLevel.Aal2, PhishingResistant: false, Recency, [], null);
 
     /// <summary>
     /// AUTHZ-GATE-004 AC1: a refusal names what was asked for and says that no grant

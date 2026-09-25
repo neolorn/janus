@@ -27,11 +27,13 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
 
     private static readonly PhoneNumber Phone = Number("+201001234567");
 
+    private static readonly TimeSpan Recency = TimeSpan.FromMinutes(15);
+
     private static readonly StepUpChallenge Satisfied =
-        new(StepUpOutcome.Satisfied, AssuranceLevel.Aal2, PhishingResistant: false, [], null);
+        new(StepUpOutcome.Satisfied, AssuranceLevel.Aal2, PhishingResistant: false, Recency, [], null);
 
     private static readonly StepUpChallenge Wanting =
-        new(StepUpOutcome.Present, AssuranceLevel.Aal2, PhishingResistant: false, [[Factor.Totp]], null);
+        new(StepUpOutcome.Present, AssuranceLevel.Aal2, PhishingResistant: false, Recency, [[Factor.Totp]], null);
 
     private readonly ConfigurationInMemory _configuration = new();
     private readonly SendLedgerInMemory _ledger = new();

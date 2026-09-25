@@ -55,7 +55,7 @@ public sealed class StepUpGatesTests
     /// AUTH-STEP-002 AC3, AUTHZ-GATE-005 (D-160): where the acting person's own
     /// session carries the request, the gate bound to a host's action is judged against
     /// it, so a session that met the gate is not challenged and one that did not is
-    /// refused naming the gate.
+    /// refused, the session having been asked about that gate.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -70,7 +70,7 @@ public sealed class StepUpGatesTests
             TestContext.Current.CancellationToken));
 
         Assert.Equal(ErrorCodes.StepUpRequired, refused.Code);
-        Assert.Equal(Gate, refused.Details["action"].GetString());
+        Assert.Equal([Gate], sessions.Asked);
 
         sessions.Meets(Gate);
 

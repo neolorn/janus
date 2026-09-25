@@ -84,6 +84,10 @@ public interface IAuthentication
     /// which belongs to the asking principal or to nobody.
     /// </param>
     /// <param name="presented">The factor and what proves it.</param>
+    /// <param name="source">
+    /// The address the attempt came from, which the progressive delay counts a refused
+    /// factor against, as it does at sign-in.
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>What the session now reaches, or the refusal.</returns>
     ValueTask<Result<SignInProgress>> StepUpAsync(
@@ -91,6 +95,7 @@ public interface IAuthentication
         SessionId session,
         string challenge,
         FactorPresentation presented,
+        string source,
         CancellationToken cancellationToken);
 
     /// <summary>

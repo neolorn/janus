@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Accounts;
@@ -333,10 +332,7 @@ internal sealed class SignInLinks(
 
         if (delay > TimeSpan.Zero)
         {
-            return Result.Failure(Error.From(
-                ErrorCodes.Throttled,
-                "retryAt",
-                JsonSerializer.SerializeToElement(time.GetUtcNow() + delay)));
+            return Result.Failure(ThrottleService.Refusal(time.GetUtcNow() + delay));
         }
 
         if (channel is null)

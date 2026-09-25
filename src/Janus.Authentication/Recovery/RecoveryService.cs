@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Accounts;
@@ -122,10 +121,7 @@ internal sealed class RecoveryService(
 
         if (delay > TimeSpan.Zero)
         {
-            return Result.Failure(Error.From(
-                ErrorCodes.Throttled,
-                "retryAt",
-                JsonSerializer.SerializeToElement(time.GetUtcNow() + delay)));
+            return Result.Failure(ThrottleService.Refusal(time.GetUtcNow() + delay));
         }
 
         if (channel is null)
@@ -636,6 +632,20 @@ internal sealed class RecoveryService(
         return RecipientLanguage.Of(settled, requested, languages);
     }
 
+    // A limit over a day that slides: once reached, it admits another when the approval
+    // that reached it is a day old, and a limit of nothing admits none, a day being the
+    // most the answer can promise (AUTH-RECOV-002, BFF-ABUSE-001).
+    private static DateTimeOffset? Lifts(IReadOnlyList<DateTimeOffset> taken, int limit, DateTimeOffset now) =>
+        taken.Count < limit
+            ? null
+            : limit <= 0 ? now + Day : taken[^limit] + Day;
+
+    // Where both limits are reached, the approval waits for the later of the two.
+    private static DateTimeOffset? Later(DateTimeOffset? one, DateTimeOffset? other) =>
+        one is DateTimeOffset first && other is DateTimeOffset second
+            ? first > second ? first : second
+            : one ?? other;
+
     // AUTH-RECOV-002: one approval is recorded, counted and alerted on; the link goes
     // out only once as many approvers as the deployment requires have stood behind it.
     private async ValueTask<Result<ApprovedRecovery>> StandAsync(
@@ -672,15 +682,15 @@ internal sealed class RecoveryService(
         DateTimeOffset now = time.GetUtcNow();
         DateTimeOffset since = now - Day;
 
-        int forAccount = await approvals.ForAsync(subject, since, cancellationToken)
+        IReadOnlyList<DateTimeOffset> drawn = await approvals.ForAsync(subject, since, cancellationToken)
             .ConfigureAwait(false);
 
-        int byApprover = await approvals.ByAsync(approver, since, cancellationToken)
+        IReadOnlyList<DateTimeOffset> given = await approvals.ByAsync(approver, since, cancellationToken)
             .ConfigureAwait(false);
 
-        if (forAccount >= perAccount || byApprover >= perApprover)
+        if (Later(Lifts(drawn, perAccount, now), Lifts(given, perApprover, now)) is DateTimeOffset lifts)
         {
-            return Result.Failure<ApprovedRecovery>(Error.From(ErrorCodes.Throttled));
+            return Result.Failure<ApprovedRecovery>(ThrottleService.Refusal(lifts));
         }
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
@@ -695,8 +705,8 @@ internal sealed class RecoveryService(
         Result raised = await RaiseAsync(
                 subject,
                 approver,
-                forAccount + 1,
-                byApprover + 1,
+                drawn.Count + 1,
+                given.Count + 1,
                 now,
                 cancellationToken)
             .ConfigureAwait(false);

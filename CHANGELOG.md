@@ -999,6 +999,20 @@ against the public contract of LIB-API-001.
   whatever a stored role still allows.
 - A host's restriction key supplier is asked once for each key name when a send is
   judged, however many restrictions count under that key.
+- Every throttled answer (sign-in, sign-in link and email code, recovery, break-glass
+  and the recovery approval limits) carries `retryAt` in its details and a matching
+  `Retry-After` header. The progressive delay runs from the failure that earned it and
+  grows when failures follow one another, so `retryAt` is the instant the next attempt
+  is looked at.
+- `auth.stepup.required` carries `required` (`level`, `phishingResistant`, `maxAge` in
+  seconds), `outcome`, `options` and `pendingUntil` on every gated operation, as the API
+  contract gives them, and nothing else.
+- Factors presented to step a session up are held by the progressive sign-in delay,
+  counted against the same source and account as sign-in failures;
+  `IAuthentication.StepUpAsync` takes the request's source address.
+- A wrong device verification code, a pressed sign-in link that lands on no sign-in, a
+  refused delegated or provider sign-in and an unknown sign-in challenge are recorded as
+  `auth.authentication.failed` and held by the progressive delay.
 - Under the mount, a path no endpoint serves and a method a path does not take answer
   404 `authz.resource.notfound` in the error envelope, and a fault answers 500
   `system.fault` with the correlation identifier and nothing of what was thrown; the

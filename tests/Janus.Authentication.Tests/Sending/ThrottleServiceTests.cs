@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
@@ -82,6 +83,80 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
 
         _clock.Advance(TimeSpan.FromMinutes(20));
 
+        Assert.Equal(TimeSpan.Zero, await DelayAsync(attempt));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001 AC2: a failure after a quiet spell earns what the halved count
+    /// earns, not what the count before the spell would have.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_AC2_AFailureAfterAQuietSpellEarnsLessAsync()
+    {
+        var attempt = new ThrottleAttempt("198.51.100.7", "someone@example.test");
+
+        await FailedAsync(attempt, times: 6);
+        _clock.Advance(TimeSpan.FromMinutes(20));
+        await FailedAsync(attempt, times: 1);
+
+        Assert.Equal(TimeSpan.FromSeconds(1), await DelayAsync(attempt));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001 AC1: failures made one after another, each once the delay the
+    /// last one earned has run, escalate the delay; seconds of decay between them do
+    /// not keep the count where it was.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_AC1_FailuresMadeOneAfterAnotherEscalateTheDelayAsync()
+    {
+        var attempt = new ThrottleAttempt("198.51.100.7", "someone@example.test");
+        var earned = new List<TimeSpan>();
+
+        for (int failure = 0; failure < 6; failure++)
+        {
+            await FailedAsync(attempt, times: 1);
+
+            TimeSpan delay = await DelayAsync(attempt);
+
+            earned.Add(delay);
+            _clock.Advance(delay + TimeSpan.FromSeconds(1));
+        }
+
+        Assert.Equal<TimeSpan>(
+            [
+                TimeSpan.Zero,
+                TimeSpan.Zero,
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromSeconds(2),
+                TimeSpan.FromSeconds(4),
+                TimeSpan.FromSeconds(8),
+            ],
+            earned);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001 AC1 and AUTH-ABUSE-002 AC2: the delay runs from the failure that
+    /// earned it, so what is left shrinks as the clock runs and an attempt made once it
+    /// has run is looked at.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_AC1_TheDelayRunsFromTheFailureThatEarnedItAsync()
+    {
+        var attempt = new ThrottleAttempt("198.51.100.7", "someone@example.test");
+
+        await FailedAsync(attempt, times: 4);
+
+        TimeSpan earned = await DelayAsync(attempt);
+
+        _clock.Advance(TimeSpan.FromSeconds(0.5));
+
+        TimeSpan left = await DelayAsync(attempt);
+
+        _clock.Advance(TimeSpan.FromSeconds(1.5));
+
+        Assert.Equal(TimeSpan.FromSeconds(2), earned);
+        Assert.Equal(TimeSpan.FromSeconds(1.5), left);
         Assert.Equal(TimeSpan.Zero, await DelayAsync(attempt));
     }
 
@@ -200,16 +275,19 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-ABUSE-002 AC2: the refusal says how long is left and nothing else.
+    /// AUTH-ABUSE-002 AC2: the refusal says when the next attempt is looked at, as the
+    /// one <c>retryAt</c> every throttle of the library answers with, and nothing else.
     /// </summary>
     [Fact]
     public void AUTH_ABUSE_002_AC2_TheRemainingDelayIsCommunicated()
     {
-        Error refusal = ThrottleService.Refusal(TimeSpan.FromSeconds(4.2));
+        DateTimeOffset lifts = Noon.AddSeconds(4.2);
+
+        Error refusal = ThrottleService.Refusal(lifts);
 
         Assert.Equal(ErrorCodes.Throttled, refusal.Code);
-        Assert.Equal("5", Assert.Single(refusal.Details).Value.GetString());
-        Assert.Equal("retryAfter", Assert.Single(refusal.Details).Key);
+        Assert.Equal("retryAt", Assert.Single(refusal.Details).Key);
+        Assert.Equal(lifts, Assert.Single(refusal.Details).Value.GetDateTimeOffset());
     }
 
     /// <summary>

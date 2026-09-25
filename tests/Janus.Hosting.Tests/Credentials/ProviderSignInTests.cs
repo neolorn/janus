@@ -200,6 +200,61 @@ public sealed class ProviderSignInTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-LOG-005 AC1: a delegated sign-in refused because the identity is linked to
+    /// no account is recorded as a refused factor against no account, with the log
+    /// writing nothing at all.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_LOG_005_AC1_AnIdentityLinkedToNoAccountIsRecordedAsync()
+    {
+        var browser = new Browser(_deployment);
+        string authorization = Where(await browser.SendAsync("GET", Start("google", "signin")));
+
+        _ = await ReturnedAsync(
+            browser,
+            "google",
+            authorization,
+            new ProviderPerson("a-subject-nobody-linked", Gmail, true));
+
+        Assert.Equal<(SubjectId?, Factor)>([(null, Factor.Google)], _deployment.SessionAudit.Failed);
+    }
+
+    /// <summary>
+    /// CONV-LOG-005 AC1 and AUTH-ABUSE-001: an identity token that does not hold up is
+    /// recorded as a refused factor against no account and counted against the
+    /// address it came back from; once that address has earned a delay the browser is
+    /// sent back throttled and nothing more is recorded.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_LOG_005_AC1_AForgedIdentityIsRecordedBehindTheDelayAsync()
+    {
+        var browser = new Browser(_deployment);
+        var forged = new ProviderPerson(GoogleSubject) { Forged = true };
+        var landed = new List<string?>();
+
+        for (int attempt = 0; attempt < 4; attempt++)
+        {
+            string authorization = Where(await browser.SendAsync("GET", Start("google", "signin")));
+
+            landed.Add((await ReturnedAsync(browser, "google", authorization, forged)).Location);
+        }
+
+        Assert.Equal(
+            [
+                Page + "?error=" + ErrorCodes.FactorRejected,
+                Page + "?error=" + ErrorCodes.FactorRejected,
+                Page + "?error=" + ErrorCodes.FactorRejected,
+                Page + "?error=" + ErrorCodes.Throttled,
+            ],
+            landed);
+        Assert.Equal<(SubjectId?, Factor)>(
+            [(null, Factor.Google), (null, Factor.Google), (null, Factor.Google)],
+            _deployment.SessionAudit.Failed);
+    }
+
+    /// <summary>
     /// BFF-CSRF-005a: a return presenting a state this browser was not sent out with
     /// establishes nothing and is recorded, and the code is never exchanged.
     /// </summary>

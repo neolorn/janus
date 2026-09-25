@@ -250,6 +250,220 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-LOG-005 AC1: a handle that opens no sign-in is a refused factor naming no
+    /// account, recorded as one; its source's delay is asked first, so once the delay
+    /// stands nothing more is recorded until it lifts (AUTH-ABUSE-001).
+    /// </summary>
+    [Fact]
+    public async Task CONV_LOG_005_AC1_AHandleThatOpensNothingIsRecordedBehindTheDelayAsync()
+    {
+        await AccountAsync();
+
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            Assert.Equal(
+                ErrorCodes.FactorRejected,
+                Refused(await PresentAsync("a-handle-nothing-opened", Factor.Password, Secret)));
+        }
+
+        Assert.Equal(
+            ErrorCodes.Throttled,
+            Refused(await PresentAsync("a-handle-nothing-opened", Factor.Password, Secret)));
+        Assert.Equal<(SubjectId?, Factor)>(
+            [(null, Factor.Password), (null, Factor.Password), (null, Factor.Password)],
+            _audit.Failed);
+    }
+
+    /// <summary>
+    /// CONV-LOG-005 AC1: a wrong device-verification code is a refused email code
+    /// against the account whose sign-in it would complete, and a handle that opens
+    /// nothing there is one against no account.
+    /// </summary>
+    [Fact]
+    public async Task CONV_LOG_005_AC1_AWrongDeviceCodeIsRecordedAgainstTheAccountAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await PresentAsync(began.Challenge, Factor.Password, Secret);
+
+        Result<SignInProgress> wrong = await Service.VerifyDeviceAsync(
+            began.Challenge,
+            Other(Code()),
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Result<SignInProgress> nowhere = await Service.VerifyDeviceAsync(
+            "a-handle-nothing-opened",
+            Code(),
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(Refused(wrong));
+        Assert.Equal(ErrorCodes.CodeExpired, Refused(nowhere));
+        Assert.Equal<(SubjectId?, Factor)>(
+            [(subject, Factor.EmailCode), (null, Factor.EmailCode)],
+            _audit.Failed);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001 AC1: wrong device-verification codes count against the delay as
+    /// any refused factor does, so the right code inside it is refused unread, and
+    /// once it lifts the same code completes the sign-in.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_AC1_WrongDeviceCodesAreHeldByTheDelayAsync()
+    {
+        await AccountAsync();
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await PresentAsync(began.Challenge, Factor.Password, Secret);
+
+        string right = Code();
+
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            _ = await Service.VerifyDeviceAsync(
+                began.Challenge,
+                Other(right),
+                Browser,
+                Source,
+                TestContext.Current.CancellationToken);
+        }
+
+        Result<SignInProgress> delayed = await Service.VerifyDeviceAsync(
+            began.Challenge,
+            right,
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        _clock.Advance(TimeSpan.FromSeconds(1));
+
+        Result<SignInProgress> completed = await Service.VerifyDeviceAsync(
+            began.Challenge,
+            right,
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.Throttled, Refused(delayed));
+        Assert.Equal(SignInStatus.Complete, Reached(completed).Status);
+        Assert.Equal(3, _audit.Failed.Count);
+    }
+
+    /// <summary>
+    /// CONV-LOG-005 AC1: a link pressed in the browser that asked for it and landing
+    /// on no sign-in of its account is a refused link against that account; an open
+    /// that is not a press, a press in another browser, and a token that resolves to
+    /// nothing are no attempt and are not recorded.
+    /// </summary>
+    [Fact]
+    public async Task CONV_LOG_005_AC1_ALinkThatDoesNotLandIsRecordedAgainstItsAccountAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.EmailLink);
+        Remembered(subject);
+
+        (string challenge, string token, string browser) = await AskedAsync(subject);
+
+        _ = await LandedAsync(challenge, browser, token, press: false);
+        _ = await LandedAsync(challenge, browser: null, token, press: true);
+
+        Result<SignInLanding> unknown = await Service.LandAsync(
+            challenge,
+            browser,
+            "a-token-nothing-issued",
+            press: true,
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Assert.Empty(_audit.Failed);
+
+        Result<SignInLanding> astray = await Service.LandAsync(
+            "a-handle-nothing-opened",
+            browser,
+            token,
+            press: true,
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.CodeExpired, unknown.Match(_ => (ErrorCode?)null, error => error.Code));
+        Assert.Equal(ErrorCodes.FactorRejected, astray.Match(_ => (ErrorCode?)null, error => error.Code));
+        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.EmailLink)], _audit.Failed);
+    }
+
+    /// <summary>
+    /// CONV-LOG-005 AC1: a delegated sign-in refused because the identity is linked to
+    /// no account is recorded against none, and one refused because the account it is
+    /// linked to is not active is recorded against that account.
+    /// </summary>
+    [Fact]
+    public async Task CONV_LOG_005_AC1_ARefusedDelegatedSignInIsRecordedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        await _authenticators.LinkAsync(
+            Authenticator.Linked(
+                AuthenticatorId.New(_clock),
+                subject,
+                Factor.Google,
+                Label(Factor.Google),
+                _clock.GetUtcNow()),
+            "linked-at-the-provider",
+            TestContext.Current.CancellationToken);
+
+        _accounts.Stands(subject, AccountState.Suspended);
+
+        Result<SignInOutcome> unlinked = await Service.DelegatedAsync(
+            Factor.Google,
+            "linked-to-nothing",
+            new SessionOrigin(Source, Browser),
+            TestContext.Current.CancellationToken);
+
+        Result<SignInOutcome> inactive = await Service.DelegatedAsync(
+            Factor.Google,
+            "linked-at-the-provider",
+            new SessionOrigin(Source, Browser),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.FactorRejected, unlinked.Match(_ => (ErrorCode?)null, error => error.Code));
+        Assert.Equal(ErrorCodes.FactorRejected, inactive.Match(_ => (ErrorCode?)null, error => error.Code));
+        Assert.Equal<(SubjectId?, Factor)>(
+            [(null, Factor.Google), (subject, Factor.Google)],
+            _audit.Failed);
+    }
+
+    /// <summary>
+    /// CONV-LOG-005 AC1: a provider's round trip whose identity does not hold up is a
+    /// refused factor naming no account, recorded and counted against its source, and
+    /// while the delay it earned stands nothing more is recorded (AUTH-ABUSE-001).
+    /// </summary>
+    [Fact]
+    public async Task CONV_LOG_005_AC1_AProviderIdentityThatDoesNotHoldUpIsRecordedBehindTheDelayAsync()
+    {
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            Assert.Equal(
+                ErrorCodes.FactorRejected,
+                (await Service.ProviderRefusedAsync(Factor.Apple, Source, TestContext.Current.CancellationToken)).Code);
+        }
+
+        Assert.Equal(
+            ErrorCodes.Throttled,
+            (await Service.ProviderRefusedAsync(Factor.Apple, Source, TestContext.Current.CancellationToken)).Code);
+        Assert.Equal<(SubjectId?, Factor)>(
+            [(null, Factor.Apple), (null, Factor.Apple), (null, Factor.Apple)],
+            _audit.Failed);
+    }
+
+    /// <summary>
     /// AUTH-FACT-002b AC4: a second-step challenge offers the account's preferred
     /// method first and the others from it.
     /// </summary>
@@ -1010,6 +1224,10 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     private string Code() => _notifications.Mail[^1].Values["code"];
 
     private string Token() => _notifications.Mail[^1].Values["token"];
+
+    // A code of the same shape that is not the one sent.
+    private static string Other(string code) =>
+        string.Equals(code, "000000", StringComparison.Ordinal) ? "111111" : "000000";
 
     private static SignInProgress Reached(Result<SignInProgress> outcome) =>
         outcome.Match(

@@ -13048,6 +13048,8 @@ names costs (or let section 4.1a's `gates` carry host-named keys), and that a li
 filter asks the bound gate; LIB-HOST-004 could say what the provider's level is
 compared with, or return the three values a gate needs.
 
+**Revised by entry 399.**
+
 ---
 
 ## 329. What an export operation is, and what it asks
@@ -15168,6 +15170,8 @@ change and break-glass use. AC1 says raising the minimum level does not suppress
 | `auth.authentication.failed` | security | `AuditActions.AuthenticationFailed` | A factor presented at sign-in, or the break-glass credential, was refused. The acting subject is the nil subject; the effective subject is the account the attempt was made against, or the nil subject where the identifier resolved to none or the break-glass code was refused before the reserved account was read; `details.factor` names the factor. Nothing that was typed is written. The row names no organization. (CONV-LOG-005) |
 | `auth.stepup.failed` | security | `AuditActions.StepUpFailed` | A factor presented to step a live session up was refused, including against a challenge that is not the asker's. The acting and effective subject is the session's account; `details.session` names the session and `details.factor` the factor. The row names no organization. (CONV-LOG-005) |
 
+**Revised by entry 402.**
+
 ---
 
 ## 368. The library opens no log scope, and its refusal entries name the identifier in the message
@@ -16310,6 +16314,295 @@ again.
 
 *Chapter text that should change.* LIB-HOST-001 AC5 could say "once each time a send
 is judged, however many restrictions share the key".
+
+---
+
+## 398. The recovery approval limits answer the instant their day admits another approval
+
+**Phase 10 · 2026-09-25 · Tier 2 · BFF-ABUSE-001 AC2, AUTH-RECOV-002, AUTH-ABUSE-002**
+
+*The question.* The two approval limits are `recovery.ratelimit.account` (3 a day) and
+`recovery.ratelimit.approver` (5 a day). Both refused `auth.throttled` with no details.
+BFF-ABUSE-001 AC2 and the `auth.throttled` row ask every throttled answer to carry its
+interval. No chapter says what the interval of a count over a day is.
+
+*The readings.*
+
+1. A day from now.
+2. The instant the limit admits another approval: the earliest of the last `limit`
+   approvals counted, plus a day. Where both limits are reached, the later of the two.
+   Where a limit is 0 or less, a day from now.
+3. The end of a calendar day.
+
+*Chosen: 2.*
+
+- Reading 1 promises later than the truth.
+- Reading 3 invents a fixed window that the settings ("in a day") do not state and the
+  count does not use.
+- Reading 2 is what the export limit already answers (`ExportOperations`:
+  `taken[^limit] + Window`, and now plus the window where the limit is 0).
+- For the answer to hold to the tick, the window opens *after* now less a day. An
+  approval given exactly a day ago has left the window, as `ExportLedger` reads its
+  hour (`AssembledAt > since`). Before, such an approval still counted, so the change
+  loosens by one tick.
+- The store port returns the instants, earliest first, instead of a count.
+
+*Tests that pin it.*
+
+- `RecoveryServiceTests.BFF_ABUSE_001_AC2_TheAccountCapLiftsWhenItsEarliestCountedApprovalLeavesTheDayAsync`
+- `RecoveryServiceTests.BFF_ABUSE_001_AC2_TwoCapsReachedLiftAtTheLaterOfThemAsync`
+- `RecoveryApprovalStoreTests.BFF_ABUSE_001_AC2_TheApprovalsCountedAreReadEarliestFirstAsync`
+- `BreakGlassEndpointTests.BFF_ABUSE_001_AC2_AnApprovalPastTheCapCarriesItsIntervalAsync`
+
+*Chapter text that should change.*
+
+- AUTH-RECOV-002 could say the two limits count over the last day, and that a refusal
+  carries `retryAt`: the instant the earliest counted approval leaves that day.
+- The two rows in `10` could say "sliding".
+
+---
+
+## 399. The step-up refusal is the shape `09` gives, on every gate
+
+**Phase 10 · 2026-09-25 · Tier 2 · BFF-STEP-001 AC1, AUTH-STEP-001, AUTH-STEP-002, `09` `POST /auth/step-up`**
+
+*The question.* The refusal wrote `action`, `level`, `phishingResistant`, `outcome`,
+`combinations` and `lossCompletes`. `09` gives:
+
+- `required{level, phishingResistant, maxAge}`
+- `outcome`
+- `options`
+- `pendingUntil`
+
+So the questions are:
+
+- Which members stay?
+- What is `maxAge`?
+- When is `pendingUntil` written?
+- Should the bare `auth.stepup.required` that `StepUpGuard.JudgedAsync` returned for
+  the library's own gated endpoints carry the details?
+
+*The readings.*
+
+1. Keep the code's members and add `09`'s.
+2. Take `09` exactly:
+   - `action` goes.
+   - `combinations` becomes `options`.
+   - `lossCompletes` becomes `pendingUntil`.
+   - `maxAge` is the gate's maximum age.
+   - Every refusal that judged a gate carries the details.
+
+*Chosen: 2.*
+
+- `09` is authoritative for shapes.
+- **`action`.** The caller knows which action it asked for, so `action` tells the
+  frontend nothing it lacks. Keeping it would widen the contract past `09`. This
+  revises the member list of entry 328.
+- **`maxAge`.** This is the gate's `MaximumAge`: the action's freshness window in `10`
+  section 5a, or `session.stepup.recency` (PT15M) where the gate states none. It is
+  written in whole seconds, truncated.
+- **`pendingUntil`.** It is always written, and is null unless the outcome is
+  `pending`, so the keys never vary with the outcome.
+- **Pending.** `pending` stays a 403 `auth.stepup.required`. `09`'s "not a refusal but
+  a status" is read as how the frontend presents it, since the operation did not
+  proceed.
+- **Factor names.** Names in `options` are the catalogue's written names
+  (`recoveryCodes`), where `09`'s example writes `recovery-code`.
+- **Bare refusals.** A refusal stays bare only where no gate was judged: no session of
+  the library, or a session that is not the account's (entry 328).
+
+*Tests that pin it.*
+
+- `CredentialFlowTests.BFF_STEP_001_AC1_AGateTheAccountCanMeetNamesWhatMeetsItAsync`
+- `CredentialFlowTests.BFF_STEP_001_AC1_AGateTheAccountNeverReachedAsksForEnrolmentAsync`
+- `CredentialFlowTests.BFF_STEP_001_AC1_AGateReachedWithAFactorThatIsGoneAsksForAReportAsync`
+- `CredentialFlowTests.BFF_STEP_001_AC1_AGateWaitingOnAReportNamesWhenItCompletesAsync`
+- `GateBehaviourTests.AUTH_STEP_002_AC3_ASessionThatMeetsAHostsGateIsNotChallengedAsync`
+
+*Chapter text that should change.*
+
+- `09`'s example could write `recoveryCodes`.
+- `09` could say whether `pending` is a 403 or a 200.
+- Entry 328's list of members is replaced by `09`'s.
+
+---
+
+## 400. A refused step-up factor is held by the sign-in delay, in one count per account
+
+**Phase 10 · 2026-09-25 · Tier 3 · AUTH-ABUSE-001, AUTH-STEP-001, CONV-LOG-005, OPS-BOOT-004**
+
+*The question.* Entry 367 left step-up unthrottled, because AUTH-ABUSE-001 names
+sign-in. A live session could present step-up factors with no delay. Should it be
+throttled? If so, do sign-in and step-up share a per-account count, and does AC5's
+exemption for a recognised browser apply?
+
+*The readings.*
+
+1. Leave step-up unthrottled (entry 367).
+2. Count refused step-up factors under the sign-in throttle, per source and per
+   account, in one per-account count shared with sign-in.
+3. As 2, with a separate per-account count for step-up.
+4. As 2 or 3, with AUTH-ABUSE-001 AC5 exempting the session's own browser.
+
+*Chosen: 2, without 4.*
+
+- **Shared count.** Separate counts would give an attacker two budgets of guesses
+  against one set of factors: a password is a factor at both.
+- AUTH-ABUSE-001 names one capped account component. A second key space would be a
+  second mechanism.
+- **No AC5 exemption.** A step-up is asked of exactly the session holder it distrusts:
+  a session in someone else's hands. The owner is held at most the account cap
+  (30 s) while an attack runs.
+- **Order.** The delay is asked once the session and the asker are established and
+  before the challenge is opened. So a correct factor inside the delay is refused
+  unchecked.
+- **What is counted.** A challenge that is unknown or someone else's counts as a
+  refused factor. A step-up that succeeds clears the source and account counts, as a
+  sign-in does.
+- **Answer.** 429 `auth.throttled` with `retryAt` and `Retry-After`.
+- **Public surface.** `IAuthentication.StepUpAsync` gains `string source`.
+- **Break-glass.** No change in behaviour. It was already counted per source and under
+  the global limit of five an hour (OPS-BOOT-004 AC7), and its refused code was
+  already recorded (entry 367). Only its answer was brought to the one refusal shape.
+- This supersedes entry 367's "Step-up refusals are not throttled".
+
+*Tests that pin it.*
+
+- `StepUpDelayTests.AUTH_ABUSE_001_AC1_RefusedStepUpFactorsAreDelayedProgressivelyAsync`
+- `StepUpDelayTests.AUTH_ABUSE_001_AC1_TheRightFactorInsideTheDelayIsRefusedUncheckedAsync`
+- `StepUpDelayTests.AUTH_ABUSE_001_AC2_TheStepUpDelayDecaysAsync`
+- `StepUpDelayTests.AUTH_ABUSE_001_AC4_TheAccountDelayAStepUpEarnsStopsAtItsCapAsync`
+- `StepUpDelayTests.AUTH_ABUSE_001_AC3_SignInAndStepUpFailuresShareTheAccountsCountAsync`
+- `BreakGlassEndpointTests.BFF_ABUSE_001_AC2_ADelayedBreakGlassCodeCarriesItsIntervalAsync`
+
+*Chapter text that should change.* AUTH-ABUSE-001 could say that a factor refused at
+step-up is counted with sign-in failures, the account component shared, and that AC5
+does not apply at step-up.
+
+---
+
+## 401. The delay runs from the failure that earned it, and the standing count rounds
+
+**Phase 10 · 2026-09-25 · Tier 3 · AUTH-ABUSE-001 AC1, AC2, AUTH-ABUSE-002 AC2, BFF-ABUSE-001 AC2**
+
+*The question.* `DelayAsync` answered the whole delay the standing count earned,
+measured from now, on every ask. The standing count was truncated. This had two
+effects:
+
+- A failure made seconds after the last found the count decayed below a whole number,
+  one fewer standing. So failures at the pace the delay allows never escalated past
+  the first delay.
+- `retryAt` was now plus the whole delay, however long ago the failure was. It was not
+  the instant an attempt is looked at.
+
+*The readings.*
+
+1. Keep both.
+2. The delay runs from the last counted failure (the failure's instant plus the delay
+   its standing count earns, less now). The standing count rounds to the nearest whole
+   failure, half away from zero.
+3. As 2, with the standing count rounded up.
+
+*Chosen: 2.*
+
+- AC1 asks for a progressive delay, and reading 1 never progresses.
+- AUTH-ABUSE-002 AC2 and BFF-ABUSE-001 AC2 ask for the remaining interval, which must
+  shrink as the clock runs.
+- Reading 3 keeps every count at one or more forever, so it never decays to nothing.
+- Decay now acts on the delay the next failure earns (a quiet spell earns less), not
+  on a delay already running.
+- The existing `ThrottleServiceTests.AUTH_ABUSE_001_AC2_TheDelayDecaysWithTimeAsync`
+  still passes, but no longer decides decay: it passes with decay removed. The new
+  quiet-spell test decides it.
+- Rounding also makes the OPS-ALERT-001 account alert reach its threshold under
+  consecutive failures, which truncation could hold off.
+
+*Tests that pin it.*
+
+- `ThrottleServiceTests.AUTH_ABUSE_001_AC1_FailuresMadeOneAfterAnotherEscalateTheDelayAsync`
+- `ThrottleServiceTests.AUTH_ABUSE_001_AC1_TheDelayRunsFromTheFailureThatEarnedItAsync`
+- `ThrottleServiceTests.AUTH_ABUSE_001_AC2_AFailureAfterAQuietSpellEarnsLessAsync`
+- `StepUpDelayTests.AUTH_ABUSE_001_AC1_RefusedStepUpFactorsAreDelayedProgressivelyAsync`
+
+*Chapter text that should change.* AUTH-ABUSE-001 could say the delay runs from the
+failure that earned it, and how a decayed count is rounded.
+
+---
+
+## 402. Revises entry 367's "Not recorded" list: each case is recorded behind a throttle, or stays unrecorded for a stated reason
+
+**Phase 10 · 2026-09-25 · Tier 3 · CONV-LOG-005 AC1, AUTH-ABUSE-001, AUTH-ABUSE-003, IDN-AUD-001**
+
+*The question.* Entry 367 left five cases unrecorded:
+
+- a wrong device-verification code
+- a sign-in link that does not land
+- a refused delegated sign-in
+- a refused provider sign-in
+- an unknown or expired challenge handle at `PresentAsync`
+
+Which of them are failed authentications under CONV-LOG-005? Can each be bounded so
+that nobody writes rows without limit?
+
+*The readings.*
+
+1. Keep entry 367: none is recorded.
+2. Record each case that is a factor presented and refused, as
+   `auth.authentication.failed` in entry 367's row shape, after putting it behind the
+   throttle that already applies to its flow. Leave unrecorded only what presents
+   nothing, or cannot be bounded or attributed.
+3. Record every case, bounded or not.
+
+*Chosen: 2, which keeps most of what can be bounded.* No new audit action is needed.
+The rows are entry 367's: nil acting subject, `details.factor` alone, nothing typed, no
+source address.
+
+- **Wrong device-verification code.** Recorded as `emailCode`, since the code goes to
+  the primary email and is an email code in form and channel, against the challenge's
+  account. It is behind the source and account delay, asked first, and the existing
+  `code.verification.attempts` limit. An unknown or expired handle there is recorded
+  with the nil subject behind the source delay.
+- **Sign-in link that does not land.** A press in the browser that asked, where the
+  link's challenge is gone or belongs to another account, is recorded as the link's
+  factor against the link's account, behind the source and account delay. Three cases
+  stay unrecorded:
+  - A plain open presents nothing, and mail scanners make them.
+  - A press in another browser only shows the code.
+  - An unknown or expired link token: the token is looked up before the open or press
+    is read, so it is reached by scanner prefetches as much as by presses. Nothing
+    held names its factor or account, and the random token cannot be guessed, so no
+    guessing runs through it.
+- **Refused delegated sign-in.** An identity linked to no account, an unusable link or
+  an inactive account is recorded as the provider against the linked account, or the
+  nil subject. It is behind the source and account delay, asked before the refusal.
+- **Refused provider sign-in.** A code that did not trade, or an identity token that
+  did not validate, is recorded as (nil, provider) and counted against the source. This
+  holds whatever the round trip's intent, because the token is checked before the
+  intent is read. While a delay stands nothing is recorded, and the redirect carries
+  `error=auth.throttled`. `retryAt` cannot travel on the redirect, which carries a code
+  only (entry 348). A provider error or a cancel stays unrecorded: nothing was
+  presented.
+- **Unknown or expired handle at `PresentAsync`.** The source delay is now asked before
+  the handle is judged, so this no longer runs before the throttle. It is then recorded
+  and counted as an identifier that resolves to nothing (nil subject, the presented
+  factor), and answered as that is (AUTH-ABUSE-003).
+
+*Tests that pin it.*
+
+- `AuthenticationServiceTests.CONV_LOG_005_AC1_AHandleThatOpensNothingIsRecordedBehindTheDelayAsync`
+- `AuthenticationServiceTests.CONV_LOG_005_AC1_AWrongDeviceCodeIsRecordedAgainstTheAccountAsync`
+- `AuthenticationServiceTests.AUTH_ABUSE_001_AC1_WrongDeviceCodesAreHeldByTheDelayAsync`
+- `AuthenticationServiceTests.CONV_LOG_005_AC1_ALinkThatDoesNotLandIsRecordedAgainstItsAccountAsync`
+- `AuthenticationServiceTests.CONV_LOG_005_AC1_ARefusedDelegatedSignInIsRecordedAsync`
+- `AuthenticationServiceTests.CONV_LOG_005_AC1_AProviderIdentityThatDoesNotHoldUpIsRecordedBehindTheDelayAsync`
+- `ProviderSignInTests.CONV_LOG_005_AC1_AnIdentityLinkedToNoAccountIsRecordedAsync`
+- `ProviderSignInTests.CONV_LOG_005_AC1_AForgedIdentityIsRecordedBehindTheDelayAsync`
+- `RequestLoggingTests.CONV_LOG_005_AC1_EveryRefusedWayInIsRecordedWithTheLogSilentAsync`
+
+*Chapter text that should change.* The `auth.authentication.failed` row in entry 367
+could say "A factor presented at sign-in, device verification, a sign-in link press,
+or a provider's round trip, or the break-glass credential, was refused". CONV-LOG-005
+could name these as failed authentication.
 
 
 # Rows for chapter 10

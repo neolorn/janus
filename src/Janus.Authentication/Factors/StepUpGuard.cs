@@ -21,9 +21,11 @@ namespace Janus.Authentication.Factors;
 /// <param name="policies">What resolves the policy the gates come from.</param>
 /// <param name="time">The clock the recency is judged against.</param>
 /// <remarks>
-/// Implements AUTH-STEP-001, AUTH-STEP-002 and chapter 10 section 5a. The answer is
-/// yes or the one refusal: what the person could present instead is the business of
-/// the step-up endpoint, which the refusal sends them to.
+/// Implements AUTH-STEP-001, AUTH-STEP-002, BFF-STEP-001 and chapter 10 section 5a.
+/// The answer is yes or the one refusal, which carries what chapter 9 says every
+/// <c>auth.stepup.required</c> carries: the gate's three values, the outcome and the
+/// combinations that would meet it, so the person steps up at the step-up endpoint
+/// knowing what to present.
 /// </remarks>
 internal sealed class StepUpGuard(
     ISessionStore sessions,
@@ -137,9 +139,7 @@ internal sealed class StepUpGuard(
         CancellationToken cancellationToken) =>
         (await ChallengedAsync(subject, session, action, enrolling, cancellationToken).ConfigureAwait(false))
             .Match<Error?>(
-                challenge => challenge.Outcome is StepUpOutcome.Satisfied
-                    ? null
-                    : Error.From(ErrorCodes.StepUpRequired),
+                challenge => StepUpRefusal.Met(challenge) ? null : StepUpRefusal.Of(challenge),
                 error => error);
 
     private async ValueTask<Result<StepUpChallenge>> ChallengedAsync(

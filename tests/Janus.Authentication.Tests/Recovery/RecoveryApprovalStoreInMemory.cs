@@ -39,20 +39,26 @@ internal sealed class RecoveryApprovalStoreInMemory : IRecoveryApprovalStore
                 approval.Subject == subject && approval.At >= from && approval.SpentAt is null)]);
 
     /// <inheritdoc/>
-    public ValueTask<int> ForAsync(
+    public ValueTask<IReadOnlyList<DateTimeOffset>> ForAsync(
         SubjectId subject,
         DateTimeOffset from,
         CancellationToken cancellationToken) =>
-        ValueTask.FromResult(_given.Count(approval =>
-            approval.Subject == subject && approval.At >= from));
+        ValueTask.FromResult<IReadOnlyList<DateTimeOffset>>(
+            [.. _given
+                .Where(approval => approval.Subject == subject && approval.At > from)
+                .Select(approval => approval.At)
+                .Order()]);
 
     /// <inheritdoc/>
-    public ValueTask<int> ByAsync(
+    public ValueTask<IReadOnlyList<DateTimeOffset>> ByAsync(
         SubjectId approver,
         DateTimeOffset from,
         CancellationToken cancellationToken) =>
-        ValueTask.FromResult(_given.Count(approval =>
-            approval.Approver == approver && approval.At >= from));
+        ValueTask.FromResult<IReadOnlyList<DateTimeOffset>>(
+            [.. _given
+                .Where(approval => approval.Approver == approver && approval.At > from)
+                .Select(approval => approval.At)
+                .Order()]);
 
     /// <inheritdoc/>
     public ValueTask SpendAsync(

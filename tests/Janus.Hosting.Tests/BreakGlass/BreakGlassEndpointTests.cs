@@ -418,6 +418,7 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, fifth.Status);
         Assert.Equal(StatusCodes.Status429TooManyRequests, sixth.Status);
         Assert.Equal(ErrorCodes.Throttled.ToString(), sixth.Text("code"));
+        Assert.Equal(_deployment.Clock.GetUtcNow().AddHours(1), Lifts(sixth));
         Assert.Equal("3600", sixth.Header("Retry-After"));
         Assert.True(Assert.Single(_deployment.BreakGlass.Issues).Stands);
 
@@ -426,6 +427,65 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
         Assert.Equal(
             StatusCodes.Status200OK,
             (await PresentedAsync(browser, credential, IPAddress.Parse("198.51.100.4"))).Status);
+    }
+
+    /// <summary>
+    /// BFF-ABUSE-001 AC2: a code presented from a source its own failures have delayed
+    /// is answered 429 auth.throttled, with the instant the delay lifts in the body
+    /// and the seconds to it in the header, the two agreeing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ABUSE_001_AC2_ADelayedBreakGlassCodeCarriesItsIntervalAsync()
+    {
+        string credential = await GeneratedAsync();
+        var browser = new Browser(_deployment);
+        var repeated = IPAddress.Parse("198.51.100.1");
+
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            _ = await PresentedAsync(browser, Drawn(), repeated);
+        }
+
+        Answer delayed = await PresentedAsync(browser, credential, repeated);
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, delayed.Status);
+        Assert.Equal(ErrorCodes.Throttled.ToString(), delayed.Text("code"));
+        Assert.Equal(_deployment.Clock.GetUtcNow().AddSeconds(1), Lifts(delayed));
+        Assert.Equal("1", delayed.Header("Retry-After"));
+    }
+
+    /// <summary>
+    /// BFF-ABUSE-001 AC2 and AUTH-RECOV-002a: an approval past the day's cap for the
+    /// account is answered 429 auth.throttled, with the instant the earliest approval
+    /// counted against the cap leaves the day, and the header agrees with it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ABUSE_001_AC2_AnApprovalPastTheCapCarriesItsIntervalAsync()
+    {
+        _deployment.Configuration.Set(Settings.RecoveryRateLimitAccount, 1);
+
+        string credential = await GeneratedAsync();
+        SubjectId administrator = _deployment.Directory.Created[^1].Subject;
+        var owner = new Browser(_deployment);
+
+        _ = await PresentedAsync(owner, credential);
+
+        _deployment.Clock.Advance(TimeSpan.FromHours(1));
+
+        Answer approved = await ApprovedAsync(owner, administrator);
+        DateTimeOffset counted = _deployment.Clock.GetUtcNow();
+
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(1));
+
+        Answer capped = await ApprovedAsync(owner, administrator);
+
+        Assert.Equal(StatusCodes.Status200OK, approved.Status);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, capped.Status);
+        Assert.Equal(ErrorCodes.Throttled.ToString(), capped.Text("code"));
+        Assert.Equal(counted.AddDays(1), Lifts(capped));
+        Assert.Equal("86340", capped.Header("Retry-After"));
     }
 
     /// <summary>
@@ -501,6 +561,18 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
 
         return where.StartsWith(origin, StringComparison.Ordinal) ? where[origin.Length..] : where;
     }
+
+    // The instant a throttled answer says its interval lifts (API-CONV-003).
+    private static DateTimeOffset Lifts(Answer answer) =>
+        answer.Json().GetProperty("details").GetProperty("retryAt").GetDateTimeOffset();
+
+    private static Task<Answer> ApprovedAsync(Browser browser, SubjectId subject) =>
+        browser.SendAsync(
+            "POST",
+            "/admin/recovery/approve",
+            ("subject", subject.ToString()),
+            ("reason", "The administrator lost every factor."),
+            ("channelUsed", Flow.Address));
 
     private static Task<Answer> PresentedAsync(Browser browser, string credential, IPAddress? source = null) =>
         browser.SendAsync(

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -33,7 +32,8 @@ internal sealed class ThrottleService(
     TimeProvider time)
 {
     /// <summary>
-    /// How long this attempt waits before it is even looked at.
+    /// How long this attempt waits before it is even looked at: what is left of the
+    /// delay the last failure of each scope earned, the largest of them.
     /// </summary>
     /// <param name="attempt">Who is attempting what, from where.</param>
     /// <param name="cancellationToken">Abandons the read.</param>
@@ -64,10 +64,7 @@ internal sealed class ThrottleService(
                 .FindAsync(scope, key, cancellationToken)
                 .ConfigureAwait(false);
 
-            TimeSpan delay = Throttle.Delay(
-                Throttle.Standing(counted, now, terms.Decay),
-                terms,
-                Throttle.Cap(scope, terms));
+            TimeSpan delay = Throttle.Remaining(counted, now, terms, Throttle.Cap(scope, terms));
 
             if (delay > standing)
             {
@@ -79,17 +76,15 @@ internal sealed class ThrottleService(
     }
 
     /// <summary>
-    /// The refusal a standing delay produces, which says how long is left and
-    /// nothing about whether the account exists.
+    /// The refusal a standing delay produces, which says when the next attempt is
+    /// looked at and nothing about whether the account exists. Every throttle of the
+    /// library answers in this one shape, which the boundary turns into
+    /// <c>Retry-After</c> (AUTH-ABUSE-002, BFF-ABUSE-001).
     /// </summary>
-    /// <param name="delay">What the attempt waits.</param>
+    /// <param name="lifts">When the delay has run.</param>
     /// <returns>The failure.</returns>
-    public static Error Refusal(TimeSpan delay) =>
-        Error.From(
-            ErrorCodes.Throttled,
-            "retryAfter",
-            JsonSerializer.SerializeToElement(
-                ((int)Math.Ceiling(delay.TotalSeconds)).ToString(CultureInfo.InvariantCulture)));
+    public static Error Refusal(DateTimeOffset lifts) =>
+        Error.From(ErrorCodes.Throttled, "retryAt", JsonSerializer.SerializeToElement(lifts));
 
     /// <summary>
     /// Counts one failed attempt against every scope it belongs to.

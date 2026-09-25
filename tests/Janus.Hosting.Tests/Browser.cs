@@ -53,6 +53,10 @@ internal sealed class Browser(Deployment deployment)
     /// <param name="token">Whether to present the synchronizer token it holds.</param>
     /// <param name="contentType">What the body is sent as, where there is one.</param>
     /// <param name="source">The address the connection arrives from, or nothing for none.</param>
+    /// <param name="trace">
+    /// The identifier the request is traced by, or nothing for one of the framework's
+    /// own, so that two answers can be compared byte for byte.
+    /// </param>
     /// <returns>What came back.</returns>
     public async Task<Answer> SendAsync(
         string method,
@@ -62,9 +66,15 @@ internal sealed class Browser(Deployment deployment)
         string? origin = Origin,
         bool token = true,
         string contentType = "application/json",
-        IPAddress? source = null)
+        IPAddress? source = null,
+        string? trace = null)
     {
         var context = new DefaultHttpContext();
+
+        if (trace is not null)
+        {
+            context.TraceIdentifier = trace;
+        }
 
         context.Connection.RemoteIpAddress = source;
         context.Request.Method = method;
@@ -162,6 +172,24 @@ internal sealed class Browser(Deployment deployment)
         string path,
         params (string Name, object? Value)[] fields) =>
         SendAsync(method, path, Written(fields));
+
+    /// <summary>
+    /// Sends a request with a JSON object built from the pairs given, from one
+    /// address and traced by one identifier.
+    /// </summary>
+    /// <param name="source">The address the connection arrives from.</param>
+    /// <param name="trace">The identifier the request is traced by.</param>
+    /// <param name="method">The method.</param>
+    /// <param name="path">The path.</param>
+    /// <param name="fields">What the object holds.</param>
+    /// <returns>What came back.</returns>
+    public Task<Answer> SendAsync(
+        IPAddress source,
+        string trace,
+        string method,
+        string path,
+        params (string Name, object? Value)[] fields) =>
+        SendAsync(method, path, Written(fields), source: source, trace: trace);
 
     private static string Written((string Name, object? Value)[] fields)
     {
