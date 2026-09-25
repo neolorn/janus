@@ -15822,6 +15822,43 @@ contract method's refusals.
 
 *Chapter text that should change.* None.
 
+---
+
+## 386. A service contract is every public interface of the core that the host does not implement
+
+**Phase 10 · 2026-09-25 · Tier 2 · CONV-DESIGN-002 AC1, LIB-API-005, LIB-EXT-001**
+
+*The question.* AC1 excludes the LIB-EXT-001 extension points from the service
+contracts. `Janus.Core` also holds other interfaces the host implements and the library
+calls, and the criterion does not say whether they are service contracts:
+
+- what the host declares (`IPurposeHandler`, `IMessageTemplates`);
+- the receivers of what the library publishes (`IEventConsumer<>`,
+  `INotificationHandler`, `ISubjectEventSubscriber`).
+
+*The readings.*
+
+1. A service contract is an interface listed in LIB-API-005. The test enumerates that
+   list.
+2. Every public interface of `Janus.Core` is a service contract, except a named list of
+   interfaces the host implements: the LIB-EXT-001 points, the host declarations of
+   LIB-HOST-001, LIB-HOST-002 and LIB-HOST-004, and the receivers of LIB-API-001 and
+   IDN-LIFE-003a. An interface not on that list is held to the rule.
+
+*Chosen: 2.*
+
+- It fails closed. A new contract is held without anyone adding it to a list. A new
+  host-implemented interface has to be named, in one place, with its reason.
+- `IResources` is not on the list: the host calls it to register and move its
+  records, and the library implements it, so it is a service contract.
+
+*Tests that pin it.* `PublicSurfaceTests.CONV_DESIGN_002_AC1_EveryServiceContractHasOneInternalSealedImplementation`.
+
+*Chapter text that should change.* CONV-DESIGN-002 AC1 could name the second exclusion:
+"interfaces the host implements for the library to call (LIB-EXT-001, LIB-HOST-001,
+LIB-HOST-002, LIB-HOST-004, and the receivers of LIB-API-001) are not service
+contracts".
+
 
 # Rows for chapter 10
 

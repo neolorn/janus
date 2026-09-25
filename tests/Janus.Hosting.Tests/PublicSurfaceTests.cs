@@ -3,17 +3,22 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
+using Janus.Core;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Callbacks;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Janus.Hosting.Tests;
 
 /// <summary>
 /// What the shipped assemblies may expose, derive from and carry: public types in the
-/// contract's projects alone, no controller, and no validation attribute
-/// (LIB-API-002, CONV-LAYOUT-002, CONV-DESIGN-006, CONV-CODE-006).
+/// contract's projects alone, one internal sealed implementation of each service
+/// contract, one public registration, no controller, and no validation attribute
+/// (LIB-API-002, CONV-LAYOUT-002, CONV-DESIGN-002, CONV-DESIGN-006, CONV-DESIGN-007,
+/// CONV-CODE-006).
 /// </summary>
 [Trait("kind", "contract")]
 public sealed class PublicSurfaceTests
@@ -41,6 +46,32 @@ public sealed class PublicSurfaceTests
         "Janus.Conformance",
         "Janus.Core",
         "Janus.Hosting",
+    ];
+
+    // CONV-DESIGN-002 AC1: the interfaces of the core that are not service contracts,
+    // since the host implements them and the library calls them: the extension points
+    // of LIB-EXT-001, what the host declares of its model and its purposes
+    // (LIB-HOST-001, LIB-HOST-002, LIB-HOST-004), and the receivers of what the library
+    // publishes (LIB-API-001, IDN-LIFE-003a). An interface added outside this list is a
+    // service contract and is held to the rule.
+    private static readonly Type[] NotServiceContracts =
+    [
+        typeof(IAssuranceProvider),
+        typeof(ICertificateRenewal),
+        typeof(IClockReference),
+        typeof(IDnsResolver),
+        typeof(IErasureLedger),
+        typeof(IEventConsumer<>),
+        typeof(ILocationSource),
+        typeof(IMailServer),
+        typeof(IMailTransport),
+        typeof(IMessageTemplates),
+        typeof(INotificationHandler),
+        typeof(IPurposeHandler),
+        typeof(IRestoreTestInstance),
+        typeof(ISecretSource),
+        typeof(ISmsTransport),
+        typeof(ISubjectEventSubscriber),
     ];
 
     /// <summary>
@@ -103,6 +134,59 @@ public sealed class PublicSurfaceTests
             .Select(carrier => carrier.Name);
 
         Assert.Empty(validated);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002 AC1: every service contract of the core has exactly one
+    /// implementation among the shipped assemblies, and it is internal and sealed. Every
+    /// public interface of the core is a service contract but those the host implements
+    /// for the library to call.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_002_AC1_EveryServiceContractHasOneInternalSealedImplementation()
+    {
+        Type[] implementations =
+        [
+            .. Shipped
+                .SelectMany(name => Load(name).GetTypes())
+                .Where(type => type is { IsClass: true, IsAbstract: false })
+                .Where(type => !type.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false)),
+        ];
+
+        Type[] contracts =
+        [
+            .. typeof(Result).Assembly
+                .GetExportedTypes()
+                .Where(type => type.IsInterface)
+                .Where(type => !NotServiceContracts.Contains(type.IsGenericType ? type.GetGenericTypeDefinition() : type)),
+        ];
+
+        IEnumerable<string> broken = contracts
+            .Select(contract => (contract, Implementing: implementations.Where(contract.IsAssignableFrom).ToArray()))
+            .Where(found => found.Implementing.Length != 1
+                || found.Implementing[0] is not { IsSealed: true, IsPublic: false, IsNestedPublic: false })
+            .Select(found => found.contract.Name + ": " + string.Join(", ", found.Implementing.Select(type => type.FullName)));
+
+        Assert.NotEmpty(contracts);
+        Assert.Empty(broken);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-007 AC1: a host registers the library with one call, since the only
+    /// public extension of the service collection in the shipped assemblies is
+    /// <c>AddJanus</c>, and it is declared once.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_007_AC1_TheEntryPointIsThePublicRegistrationAndTheOnlyOne()
+    {
+        IEnumerable<string> registrations = Shipped
+            .SelectMany(name => Load(name).GetExportedTypes())
+            .SelectMany(type => type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly))
+            .Where(method => method.IsDefined(typeof(ExtensionAttribute), inherit: false))
+            .Where(method => typeof(IServiceCollection).IsAssignableFrom(method.GetParameters()[0].ParameterType))
+            .Select(method => method.DeclaringType!.FullName + "." + method.Name);
+
+        Assert.Equal([typeof(HostingRegistration).FullName + "." + nameof(HostingRegistration.AddJanus)], registrations);
     }
 
     private static Assembly Load(string name) => Assembly.Load(new AssemblyName(name));
