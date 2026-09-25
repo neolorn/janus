@@ -165,6 +165,31 @@ public sealed class SendingServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-004: a restriction names no channel, so it governs every send its key
+    /// and purpose match: a mail answers to <c>sms.destination</c> once that bucket is
+    /// spent, and a text message to <c>email.destination</c> (entry 342).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_004_ARestrictionGovernsEverySendWhateverItsNameAsync()
+    {
+        _ledger.Given(new RestrictionKey("sms.destination", Mailbox.Value), Noon, Noon, Noon);
+        _ledger.Given(new RestrictionKey("email.destination", Phone.Value), Noon);
+
+        _clock.Advance(TimeSpan.FromSeconds(10));
+
+        Result<SendReference> mailed = await Service.SendAsync(Mailed(), TestContext.Current.CancellationToken);
+        Result<SendReference> texted = await Service.SendAsync(Texted(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.RestrictionExceeded, Refusal(mailed));
+        Assert.Equal(Noon + TimeSpan.FromHours(24), RetryAt(mailed));
+        Assert.Equal(ErrorCodes.RestrictionExceeded, Refusal(texted));
+        Assert.Equal(Noon + TimeSpan.FromSeconds(60), RetryAt(texted));
+        Assert.Empty(_mail.Taken);
+        Assert.Empty(_sms.Taken);
+    }
+
+    /// <summary>
     /// AUTH-FACT-002b AC6: what the deployment can learn about the number is asked for
     /// before a restricted factor is carried to it, and the answer is written down
     /// against the entry it was asked for.

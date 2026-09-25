@@ -13983,6 +13983,47 @@ the last annual operation and say it is warned of from the maintenance log.
 OPS-MAINT-001 could list the annual operation beside the licences and permits it warns
 of, under `expiry-approaching` with the scope `envelope-rotation`.
 
+---
+
+## 342. A restriction names no channel
+
+**Phase 9 · 2026-09-25 · Tier 3 · AUTH-ABUSE-004, D-146, `10` section 4.5 `restrictions`**
+
+*The question.* AUTH-ABUSE-004 gives a restriction a key, an optional purpose filter and
+its buckets, and says every send evaluates every applicable restriction. The model has
+no channel. The shipped names say one: `sms.destination`, `sms.source`,
+`email.destination`. Read as the model states, a mail to an address answers to
+`sms.destination` (3 a day) as well as `email.destination` (5 an hour), so the hourly
+bucket is never the one that refuses, and a text message answers to the one a minute of
+`email.destination`. The sending phase built the model as stated and no entry recorded
+the question; it was found again in this phase.
+
+*The readings.* (1) A restriction governs every send its key and purpose match, whatever
+the channel; the names are names. (2) The prefix of a shipped name is a channel filter:
+`sms.*` governs text messages and `email.*` mail. (3) A channel field is added to the
+restriction beside the purpose.
+
+*Chosen: 1 (Tier 3, the strictest reading).* It grants least: every send answers to
+every restriction the model makes applicable, and no send escapes one because of how a
+host named it. Reading (2) gives a name a meaning the chapter does not, and a host's
+restriction named `sms.anything` would silently stop governing mail. Reading (3) adds a
+field to the public restriction shape and to `10` section 4.5, which is the owner's.
+
+*Residue.* A deployment that offers both channels to one person meets the tighter of the
+two sets on each: three mails a day to one address, and one text message a minute to one
+number. A host that wants channel limits apart edits the shipped restrictions; it cannot
+yet say "this one is for mail".
+
+*Tests that pin it.*
+`SendingServiceTests.AUTH_ABUSE_004_ARestrictionGovernsEverySendWhateverItsNameAsync`,
+`SendingServiceTests.AUTH_ABUSE_004_AC1_AFourthTextMessageInsideADayIsRefusedWithTheLiftAsync`,
+`SendingServiceTests.AUTH_ABUSE_004_AC1_ASecondMailInsideAMinuteIsRefusedWithTheLiftAsync`.
+
+*Chapter text that should change.* AUTH-ABUSE-004 could either give the restriction a
+channel filter (`sms` · `email` · `any`) beside the purpose, with the shipped defaults
+filtered by the channel their names give, or say that a restriction applies across
+channels and that the shipped names are names only.
+
 
 # Rows for chapter 10
 
