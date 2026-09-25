@@ -15593,6 +15593,55 @@ fails it. The OPS-DATA-003 test checks every direct line.
 connection of OPS-DATA-003 as its exception. OPS-DATA-003 AC1 could say that the
 comment sits above the use.
 
+---
+
+## 380. Permission logic is the authorization area, its storage, the model's declarations, the contract-table mapping and the view, judged over the change under review
+
+**Phase 10 · 2026-09-25 · Tier 2 · CONV-TEST-004 AC2, CONV-VCS-004 AC1, AUTHZ-TEST-001**
+
+*The question.* Two criteria catch "a change to permission logic without a
+corresponding truth-table change". Neither says which files are permission logic, or
+whether a single commit or the change under review is judged. CONV-VCS-004 speaks of
+"a commit touching permission logic" that shall "reference" the truth-table change.
+
+*The readings.*
+
+1. Only `src/Janus.Authorization`, judged per commit: each commit that touches it
+   changes `TruthTableTests.cs` itself.
+2. Everything the check and the filter decide by, judged over the range a push or a
+   pull request carries. That is the authorization area; `src/Janus.Storage/Authorization`,
+   which answers its ports; the declaration types in `Janus.Core` the model is built
+   from; `src/Janus.Hosting/AuthorizationTables.cs`, which maps the contract tables a
+   host's filter reads; and a migration that changes the view `effective_grants`. The
+   range fails when this logic changed and the table did not.
+3. The paths of reading 2, judged per commit.
+
+*Chosen: 2.*
+
+- Reading 1 misses the storage and the declarations, where a decision can change
+  while the area stays the same.
+- Per commit (readings 1 and 3), 41 of the 48 past commits that touch these paths
+  would fail. So would `8665b02` and `be945f6` on this branch. In each case the pull
+  request changed the table in a sibling commit, and that sibling is the "reference"
+  CONV-VCS-004 asks for.
+- AUTHZ-TEST-001 makes the table's diff the change a reviewer reads, and that change
+  is the pull request.
+- On a pull request the range is the whole request; on the default branch it is the
+  push.
+- The step sits in the `Truth-table suite` job, which CONV-GATE-002 keeps off
+  feature-branch pushes.
+- Paths that carry no decision (the endpoints, the `Permission` value type, the
+  public-surface files) are outside it.
+
+*Tests that pin it.* None in the solution; a gate over commits is not built by a test.
+22 scenarios against scratch repositories, listed in the phase 10 report under
+CONV-TEST-004, pin each path, the view, the paths that are not logic, and a range
+against a single push. Over the merged pull requests of the history, one would have
+failed: `phase-07-privacy` (#15).
+
+*Chapter text that should change.* CONV-TEST-004 AC2 or CONV-VCS-004 could list what
+permission logic is, and say that the change under review is the unit judged.
+
 
 # Rows for chapter 10
 
