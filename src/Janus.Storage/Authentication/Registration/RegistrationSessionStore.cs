@@ -330,7 +330,7 @@ internal sealed class RegistrationSessionStore(
 
         foreach (RegistrationLinkRecord link in held)
         {
-            if (!Array.Exists(outstanding, fingerprint => fingerprint.SequenceEqual(link.Fingerprint)))
+            if (!Array.Exists(outstanding, fingerprint => CryptographicOperations.FixedTimeEquals(fingerprint, link.Fingerprint)))
             {
                 context.RegistrationLinks.Remove(link);
             }
@@ -338,7 +338,7 @@ internal sealed class RegistrationSessionStore(
 
         foreach (byte[] fingerprint in outstanding)
         {
-            if (!held.Exists(link => link.Fingerprint.SequenceEqual(fingerprint)))
+            if (!held.Exists(link => CryptographicOperations.FixedTimeEquals(link.Fingerprint, fingerprint)))
             {
                 context.RegistrationLinks.Add(
                     new RegistrationLinkRecord { Fingerprint = fingerprint, Session = session.Id });

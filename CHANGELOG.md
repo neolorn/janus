@@ -294,6 +294,8 @@ against the public contract of LIB-API-001.
   revoked; its link is held only as a fingerprint. Invitations are kept in a table of
   their own, and a deployment that registers its own message templates carries
   `invitation-link`. `IInvitations` is the same set of operations in process.
+- Every hash, token, code and fingerprint the library compares in process is compared
+  in constant time, the fingerprints of a registration link included.
 - A registration can be begun from an invitation link: `POST /register` takes an
   `invitationToken`, which spends the link. The email the invitation bound is verified
   by that press and locked, a bound phone is locked, taken at its step only as bound,
