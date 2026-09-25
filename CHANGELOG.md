@@ -614,7 +614,9 @@ against the public contract of LIB-API-001.
   text-message template is checked against its budget with every place the library fills
   at its widest, so a template that fits as it is written but not once a code, a link or
   an alert's detail is in it stops the deployment instead of costing two messages at
-  every send. Nothing is measured at the moment of a send.
+  every send. Nothing is measured at the moment of a send. The notice sent when someone
+  tries to register an address already held, or to change another account to it, points
+  its holder to sign-in and to recovery.
 - Publishing an event answers for itself. An operation records its event inside the
   transaction that made it true and commits nothing it could not publish, so a change
   never reaches the database without its event reaching a consumer. Every method of the

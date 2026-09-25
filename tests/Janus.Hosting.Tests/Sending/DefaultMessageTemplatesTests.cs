@@ -80,6 +80,40 @@ public sealed class DefaultMessageTemplatesTests
             });
 
     /// <summary>
+    /// AUTH-ABUSE-003 AC6: the notice that someone tried to register or change to an
+    /// address already held points its holder to sign-in and to recovery, on every
+    /// channel and in every language carried, and by mail it names both attempts it is
+    /// sent for, so a returning customer who forgot the account is not left at a dead end.
+    /// </summary>
+    [Fact]
+    public void AUTH_ABUSE_003_AC6_TheAccountExistsNoticePointsToSignInAndRecovery()
+    {
+        Dictionary<string, (string SignIn, string Recovery, string Registration, string Change)> words = new(StringComparer.Ordinal)
+        {
+            ["en"] = ("sign in", "recover", "register", "change"),
+            ["ar"] = ("سجل الدخول", "استرد", "حساب جديد", "تغيير"),
+        };
+
+        Assert.Equal(DefaultMessageTemplates.Languages.Order(StringComparer.Ordinal), words.Keys.Order(StringComparer.Ordinal));
+        Assert.All(
+            Every().Where(held => held.Message is MessageKind.AccountExists),
+            held =>
+            {
+                string text = Found(held).Text;
+                (string signIn, string recovery, string registration, string change) = words[held.Language];
+
+                Assert.Contains(signIn, text, StringComparison.Ordinal);
+                Assert.Contains(recovery, text, StringComparison.Ordinal);
+
+                if (held.Kind is SendKind.Email)
+                {
+                    Assert.Contains(registration, text, StringComparison.Ordinal);
+                    Assert.Contains(change, text, StringComparison.Ordinal);
+                }
+            });
+    }
+
+    /// <summary>
     /// LIB-EXT-001 AC1: a deployment that registers no catalogue gets the shipped one
     /// and starts; nothing about the registration refuses it.
     /// </summary>

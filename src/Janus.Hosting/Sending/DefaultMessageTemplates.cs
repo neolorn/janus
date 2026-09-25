@@ -106,12 +106,12 @@ internal sealed class DefaultMessageTemplates : IMessageTemplates
             MessageKind.AccountExists,
             new Words(
                 "This address is already on an account",
-                "Someone tried to use this address on a new account. Your account is unchanged. If it was not you, there is nothing to do.",
-                "Someone tried to use this address on a new account. Your account is unchanged."),
+                "Someone tried to register this address on a new account, or to change another account to it. Nothing has changed. If it was you, sign in with this address, or recover your account if you cannot sign in.",
+                "Someone tried to register this number, or to change another account to it. Nothing has changed. If it was you, sign in, or recover your account."),
             new Words(
                 "هذا العنوان مسجل بالفعل",
-                "حاول أحدهم استخدام هذا العنوان في حساب جديد. لم يتغير حسابك. إن لم يكن منك فلا شيء عليك.",
-                "حاول أحدهم استخدام هذا العنوان في حساب جديد. لم يتغير حسابك.")),
+                "حاول أحدهم تسجيل هذا العنوان في حساب جديد، أو تغيير حساب آخر إليه. لم يتغير شيء. إن كنت أنت فسجل الدخول بهذا العنوان، أو استرد حسابك إن تعذر عليك الدخول.",
+                "حاول أحدهم استخدام رقمك. لم يتغير شيء. سجل الدخول أو استرد حسابك.")),
         (
             MessageKind.IdentifierAdded,
             new Words(
