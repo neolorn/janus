@@ -15001,6 +15001,39 @@ plus `VolumeFixture`.
 unit or contract kind neither takes as a fixture nor constructs a type that starts a
 container.
 
+---
+
+## 365. Every column that carries a time of day is `timestamp with time zone`
+
+**Phase 10 · 2026-09-25 · Tier 2 · PRIV-RET-003 AC2**
+
+*The question.* PRIV-RET-003 AC2 says "All stored timestamps are UTC." The schema
+holds two `date` columns that are calendar days: `privacy_requests.received_at` and
+`read_volume.day`. The test must tell a stored timestamp from them without a list,
+because a list would hide a new offender.
+
+*The readings.*
+
+1. By name: a column ending `_at` or `_since` is an instant. `received_at` is a day,
+   so this needs a list of exceptions.
+2. By type, instants only: every `timestamp` or `timestamptz` column must be
+   `timestamptz`.
+3. By type, anything carrying a time of day: every `timestamp`, `timestamptz`, `time`
+   or `timetz` column (or array of them) must be `timestamptz`. A `date` falls
+   outside, since it has no time of day.
+
+*Chosen: 3.* Reading 1 needs the list the criterion's test must not hide behind.
+Reading 3 is the stricter of the two type readings. A time of day stored without a
+date cannot be converted at display, and `timetz` keeps an offset rather than UTC,
+so refusing both fails closed. No such column exists today. If one is ever wanted,
+changing the test's query is the deliberate step.
+
+*Tests that pin it.* `SchemaContractTests.PRIV_RET_003_AC2_EveryStoredInstantIsInUtcAsync`.
+
+*Chapter text that should change.* PRIV-RET-003 could say that an instant is stored
+as `timestamp with time zone`, and that a calendar day is stored as a `date` and is
+not an instant.
+
 
 # Rows for chapter 10
 

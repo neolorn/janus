@@ -10,8 +10,8 @@ namespace Janus.Storage.Tests;
 
 /// <summary>
 /// The library-owned schema as a host reads it: every table and view in the library's
-/// schema, with its columns, constraints and indexes, read from a migrated database
-/// (LIB-API-001, LIB-TEST-002).
+/// schema, with its columns, constraints and indexes, and the type every instant is
+/// stored as, read from a migrated database (LIB-API-001, LIB-TEST-002, PRIV-RET-003).
 /// </summary>
 /// <remarks>
 /// The schema is read from the database and not from the model, because the view a
@@ -90,6 +90,19 @@ public sealed class SchemaContractTests(DatabaseFixture database) : IClassFixtur
         ORDER BY relation, part, item
         """;
 
+    // PRIV-RET-003 AC2: every column of the library's schema whose type carries a time
+    // of day, with that type, an array read as its element. An instant has a time of
+    // day whatever the column is named; a date has none, so it is a calendar day and
+    // no instant, and it has no zone to be stored in.
+    private const string TimesOfDay =
+        """
+        SELECT table_name || '.' || column_name || ' ' || ltrim(udt_name, '_')
+        FROM information_schema.columns
+        WHERE table_schema = 'identity'
+            AND ltrim(udt_name, '_') IN ('timestamp', 'timestamptz', 'time', 'timetz')
+        ORDER BY table_name, column_name
+        """;
+
     /// <summary>
     /// LIB-API-001 AC2: the library-owned schema is the committed one, so a table,
     /// column, constraint or index that changes fails here until the change is written
@@ -131,6 +144,23 @@ public sealed class SchemaContractTests(DatabaseFixture database) : IClassFixtur
             schema
                 .SkipWhile(line => line != "table ancestry")
                 .TakeWhile((line, at) => at == 0 || line.StartsWith("  ", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// PRIV-RET-003 AC2: every instant the library stores is a <c>timestamp with time
+    /// zone</c>, which PostgreSQL keeps in UTC, so no column holds a time of day in a
+    /// zone nobody recorded.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RET_003_AC2_EveryStoredInstantIsInUtcAsync()
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        string[] carried = [.. await connection.QueryAsync<string>(TimesOfDay)];
+
+        Assert.NotEmpty(carried);
+        Assert.All(carried, column => Assert.EndsWith(" timestamptz", column, StringComparison.Ordinal));
     }
 
     private async Task<IReadOnlyList<string>> SchemaAsync()
