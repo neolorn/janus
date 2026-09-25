@@ -4,8 +4,11 @@ using System.Linq;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Privacy.Consents;
 using Janus.Privacy.Policies;
 using Janus.Privacy.Records;
+using Janus.Privacy.Tests.Consents;
+using Janus.Privacy.Tests.Documents;
 using Xunit;
 
 namespace Janus.Privacy.Tests.Records;
@@ -18,6 +21,10 @@ namespace Janus.Privacy.Tests.Records;
 [Trait("kind", "unit")]
 public sealed class ProcessingRecordsTests : IAsyncDisposable
 {
+    // INT-HOST-002: what the transfer outside the country stands on, which is never a
+    // consent.
+    private const string Permit = "the regulator's permit";
+
     private static readonly DateTimeOffset Noon = new(2026, 9, 22, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly SubjectId Mona =
@@ -33,6 +40,10 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
     private readonly ConfigurationInMemory _configuration = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
+    private readonly ConsentStoreInMemory _consents = new();
+    private readonly LegalDocumentStoreInMemory _documents = new();
+    private readonly EventsInMemory _events = new();
+    private readonly PrivacyAuditInMemory _audit = new();
 
     /// <summary>
     /// A caller who may read the register, in a deployment that has named where it is
@@ -530,6 +541,101 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// INT-HOST-002 AC2: with the deployment hosted outside the country, a consent
+    /// granted and then withdrawn leaves the register stating the basis the transfer
+    /// stands on, on the register and on every recipient outside the country, with no
+    /// finding added.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_HOST_002_AC2_AWithdrawnConsentLeavesTheHostingOnItsBasisAsync()
+    {
+        AuthorizationDeclaration declared = HostedOutside();
+
+        ProcessingRegister before = Generated(await Records(declared)
+            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
+
+        await GrantedAndWithdrawnAsync(declared, "marketing");
+
+        ProcessingRegister after = Generated(await Records(declared)
+            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
+
+        StandsOnItsBasis(before, after);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-010 AC2: with the deployment hosted outside the country, every
+    /// purpose resting on consent granted and then withdrawn leaves the transfer on the
+    /// basis the deployment stated, on the register and on every recipient outside the
+    /// country, with no finding added.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_CONS_010_AC2_WithdrawingEveryConsentLeavesTheTransferOnItsBasisAsync()
+    {
+        AuthorizationDeclaration declared = HostedOutside();
+        string[] consented =
+        [
+            .. DeclaredProcessing.Of(declared).Purposes
+                .Where(purpose => purpose.Consent is not null)
+                .Select(purpose => purpose.Name),
+        ];
+
+        ProcessingRegister before = Generated(await Records(declared)
+            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
+
+        await GrantedAndWithdrawnAsync(declared, consented);
+
+        ProcessingRegister after = Generated(await Records(declared)
+            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
+
+        Assert.Equal(["marketing", "newsletter", "recommendations"], consented);
+        StandsOnItsBasis(before, after);
+    }
+
+    /// <summary>
+    /// PRIV-SENS-002a AC3: a record carrying the contract, the books the law has the
+    /// host keep, and a consent; the consent withdrawn, nothing is announced for the
+    /// books and their row keeps the period it stated before.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_SENS_002a_AC3_AWithdrawalLeavesTheBooksKeptForTheirPeriodAsync()
+    {
+        const string books = "keeping the books";
+
+        AuthorizationDeclaration declared = Declaration.Declared()
+            .LawfulBasis(new LawfulBasisDeclaration(
+                "legal-obligation",
+                IsConsent: false,
+                RequiresWrittenConsentForSensitive: false,
+                RequiresAssessment: false,
+                IsObjectable: false))
+            .Resource<Declaration.Statement>("invoice", invoice => invoice
+                .BelongsToOrganization()
+                .Purpose("performance", "contract", data: ["identity", "statement"], subjects: ["customers"])
+                .Purpose(books, "legal-obligation", data: ["statement"], subjects: ["customers"])
+                .Purpose("recommendations", "agreement", data: ["statement"], subjects: ["customers"]))
+            .Build();
+
+        ProcessingRegister before = Generated(await Records(declared)
+            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
+
+        await GrantedAndWithdrawnAsync(declared, "recommendations");
+
+        ProcessingRegister after = Generated(await Records(declared)
+            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
+
+        Assert.Equal("legal-obligation", Row(after, books).LawfulBasis);
+        Assert.Equal(["statement P1826D"], Row(before, books).Retention);
+        Assert.Equal(Row(before, books).Retention, Row(after, books).Retention);
+        Assert.NotEmpty(_events.Of<ConsentChanged>());
+        Assert.All(
+            _events.Of<ConsentChanged>(),
+            announced => Assert.Equal("recommendations", announced.Purpose));
+    }
+
+    /// <summary>
     /// PRIV-RET-001 AC3, PRIV-ROPA-001: the retention of each category the purpose
     /// is over is on the row, longest first: the declared floor where the deployment
     /// states no period, the stated period where it does, and a category whose stated
@@ -724,6 +830,86 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
         outcome.Match(
             register => register,
             error => throw new InvalidOperationException(error.Code.ToString()));
+
+    private static void Accepted(Result outcome) =>
+        outcome.Switch(
+            () => { },
+            error => throw new InvalidOperationException(error.Code.ToString()));
+
+    // INT-HOST-002, PRIV-CONS-010: the transfer stands on the basis the deployment
+    // stated, on the register and on every recipient outside the country, as it stood
+    // before, and nothing is flagged that was not.
+    private static void StandsOnItsBasis(ProcessingRegister before, ProcessingRegister after)
+    {
+        RecipientRecord[] outside =
+            [.. after.Recipients.Where(recipient => recipient.Location is HostingLocation.Outside)];
+
+        Assert.Equal(HostingLocation.Outside, after.HostingLocation);
+        Assert.Equal(Permit, after.CrossBorderBasis);
+        Assert.Contains(outside, recipient => recipient.Name is "hosting provider");
+        Assert.Contains(outside, recipient => recipient.Name is "password screening");
+        Assert.All(outside, recipient => Assert.Equal(Permit, recipient.CrossBorderBasis));
+        Assert.Equal(before.Recipients.Select(Stated), after.Recipients.Select(Stated));
+        Assert.Equal(before.Flags, after.Flags);
+    }
+
+    private static (string Name, HostingLocation Location, string? Basis) Stated(RecipientRecord recipient) =>
+        (recipient.Name, recipient.Location, recipient.CrossBorderBasis);
+
+    // INT-HOST-002, PRIV-CONS-010: a deployment hosted outside the country on the
+    // basis it stated, reaching a recipient that follows the hosting and one that is
+    // outside the country wherever the hosting is.
+    private AuthorizationDeclaration HostedOutside()
+    {
+        _configuration.Set(Settings.HostingLocation, HostingLocation.Outside);
+        _configuration.Set(Settings.HostingCrossBorderBasis, Permit);
+
+        return Declaration.Declared()
+            .Recipient(ProviderRegister.Default.Single(row => row.Name is "hosting provider"))
+            .Recipient(ProviderRegister.Default.Single(row => row.Name is "password screening"))
+            .Build();
+    }
+
+    // The subject grants each purpose from the dashboard, against the version in force
+    // of the document governing it, and takes each back a day later.
+    private async Task GrantedAndWithdrawnAsync(AuthorizationDeclaration declared, params string[] purposes)
+    {
+        var consents = new ConsentService(
+            _consents,
+            _documents,
+            DeclaredProcessing.Of(declared),
+            _events,
+            _audit,
+            _work,
+            _clock);
+
+        _documents.Hold(new DocumentVersion(ConsentService.Notice, "1", "en", "The notice.", [], Noon));
+        _documents.Hold(new DocumentVersion(Declaration.Newsletter, "1", "en", "The terms.", [], Noon));
+
+        foreach (string purpose in purposes)
+        {
+            Accepted(await consents.GrantAsync(
+                AccessContext.Of(Mona),
+                purpose,
+                ConsentMechanism.Dashboard,
+                TestContext.Current.CancellationToken));
+
+            _clock.Advance(TimeSpan.FromDays(1));
+
+            Accepted(await consents.WithdrawAsync(
+                AccessContext.Of(Mona),
+                purpose,
+                TestContext.Current.CancellationToken));
+        }
+
+        IReadOnlyList<ConsentRecord> held =
+            await _consents.ConsentsAsync(Mona, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            purposes.Order(StringComparer.Ordinal),
+            held.Select(record => record.Purpose).Order(StringComparer.Ordinal));
+        Assert.All(held, record => Assert.False(record.Live));
+    }
 
     // A deployment that declares one of its types as children's data, which is the
     // category the register's children's column reports (PRIV-SENS-001).

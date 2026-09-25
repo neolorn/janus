@@ -87,6 +87,33 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-CONS-003 AC2: a registration that said nothing of any purpose, followed by
+    /// an hour of using the account, leaves the subject with no consent recorded, in
+    /// the dashboard or in the store.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_CONS_003_AC2_NoConsentIsInferredFromSilenceOrContinuedUseAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+
+        for (int visit = 0; visit < 6; visit++)
+        {
+            _deployment.Clock.Advance(TimeSpan.FromMinutes(10));
+
+            Assert.Equal(StatusCodes.Status200OK, (await browser.SendAsync("GET", "/auth/session")).Status);
+            Assert.Equal(StatusCodes.Status200OK, (await browser.SendAsync("GET", "/account")).Status);
+        }
+
+        Answer read = await browser.SendAsync("GET", "/privacy/consents");
+
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+        Assert.Empty(read.Json().EnumerateArray());
+        Assert.Empty(await _deployment.Consents.ConsentsAsync(subject, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// PRIV-CONS-008a AC3: a purpose resting on another basis is not the subject's to
     /// agree to, so the dashboard records no consent for it.
     /// </summary>

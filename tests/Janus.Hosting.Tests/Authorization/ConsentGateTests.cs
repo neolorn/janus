@@ -148,6 +148,30 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
+    /// PRIV-SENS-002a AC3: the subject's own record, kept as the books a legal
+    /// obligation has the host keep, is still read by them for that purpose once they
+    /// withdraw the purpose resting on consent, which alone stops.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_SENS_002a_AC3_TheBooksStayVisibleToTheirSubjectAfterAWithdrawalAsync()
+    {
+        Granted granted = await GrantedAsync(HostPermissions.Retain);
+
+        await RecordAsync(granted.Account, Held(ConsentKind.Written));
+
+        Assert.Null(await RefusalAsync(granted, HostPermissions.Retain));
+        Assert.Null(await RefusalAsync(granted));
+
+        await RecordAsync(
+            granted.Account,
+            Held(ConsentKind.Written) with { WithdrawnAt = Deployment.Noon.AddDays(1) });
+
+        Assert.Null(await RefusalAsync(granted, HostPermissions.Retain));
+        Assert.Equal(ErrorCodes.ConsentRequired, await RefusalAsync(granted));
+    }
+
+    /// <summary>
     /// AUTHZ-GATE-005 AC3: the capability is offered with the consent it still
     /// requires, so the control prompts rather than failing silently, and the consent
     /// recorded takes the residual away.
@@ -374,13 +398,13 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
     private static ResourceReference Reference(ResourceType type) =>
         new(type, ResourceId.Parse(Guid.NewGuid().ToString()));
 
-    private async Task<Granted> GrantedAsync()
+    private async Task<Granted> GrantedAsync(params Permission[] also)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         var deployment = new Deployment(host);
 
         RoleName role = await deployment.BeginAsync(
-            [HostPermissions.Read, HostPermissions.Recommend],
+            [HostPermissions.Read, HostPermissions.Recommend, .. also],
             cancellationToken);
         SubjectId account = await deployment.AccountAsync(cancellationToken);
 

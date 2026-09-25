@@ -15319,6 +15319,89 @@ before any middleware runs. The test mounts a probe on each side of
 server's request identifier, that host middleware goes before the profile's one
 mounting call or after it, and that middleware after it runs inside stage 11.
 
+---
+
+## 372. The books stay visible through the gate and kept for their period on the register
+
+**Phase 10 · 2026-09-25 · Tier 2 · PRIV-SENS-002a AC3**
+
+*The question.* PRIV-SENS-002a AC3 says the subject's own records held under a
+legal-obligation purpose stay visible to them and are kept for that purpose's period
+after they withdraw a consent-based purpose on the same record. The host holds the
+records; the library holds the gate and the register.
+
+*The readings.*
+
+1. One test through a host's own record store and retention sweep.
+2. Two tests over what the library owns: after the withdrawal, the gate still admits
+   the permission serving the legal-obligation purpose and refuses the consent-based
+   one; and the register keeps that purpose's basis and retention period unchanged,
+   with no `ConsentChanged` naming it.
+
+*Chosen: 2.* The library has no host record store or sweep to test, and each half is a
+thing the library decides. The Hosting test fixture gains a `legal-obligation` basis,
+the `document:retain` permission and the purpose "keeping the books" it serves.
+
+*Tests that pin it.*
+`ConsentGateTests.PRIV_SENS_002a_AC3_TheBooksStayVisibleToTheirSubjectAfterAWithdrawalAsync`,
+`ProcessingRecordsTests.PRIV_SENS_002a_AC3_AWithdrawalLeavesTheBooksKeptForTheirPeriodAsync`.
+
+*Chapter text that should change.* PRIV-SENS-002a AC3 could say that "visible" is the
+gate admitting the purpose and "retained" is the period on the register.
+
+---
+
+## 373. "Never renders the hosting unlawful" is read on the register, one test per item
+
+**Phase 10 · 2026-09-25 · Tier 2 · INT-HOST-002 AC2, PRIV-CONS-010 AC2**
+
+*The question.* Both criteria read "Withdrawing any consent never renders (the)
+hosting unlawful". The row for PRIV-CONS-010 AC2 places the lawfulness half in
+Milestone 2, and CONV-TEST-007 maps each criterion to a method carrying its item.
+
+*The readings.*
+
+1. Leave both to Milestone 2 as a legal judgement.
+2. Decide the library's half: with the hosting outside the country and the
+   cross-border basis set, the register generated after a withdrawal still states
+   that basis for the hosting provider and for every recipient outside, and each
+   recipient's name, location, basis and flags are as they were.
+
+*Chosen: 2*, in two methods: the INT-HOST-002 test withdraws one consent; the
+PRIV-CONS-010 test withdraws every consent purpose the deployment declares. Whether the
+basis is lawful stays for the owner to judge.
+
+*Tests that pin it.*
+`ProcessingRecordsTests.INT_HOST_002_AC2_AWithdrawnConsentLeavesTheHostingOnItsBasisAsync`,
+`ProcessingRecordsTests.PRIV_CONS_010_AC2_WithdrawingEveryConsentLeavesTheTransferOnItsBasisAsync`.
+
+*Chapter text that should change.* The row for PRIV-CONS-010 AC2 can move from
+Milestone 2 to covered for its library half.
+
+---
+
+## 374. Continued use is an hour of signed-in requests after a silent registration
+
+**Phase 10 · 2026-09-25 · Tier 2 · PRIV-CONS-003 AC2**
+
+*The question.* PRIV-CONS-003 AC2 says consent cannot be inferred from continued use
+or from silence. No chapter says what continued use is in a test.
+
+*The readings.*
+
+1. Silence at registration and continued use form one scenario.
+2. They are two tests.
+
+*Chosen: 1.* The registration accepts the terms and says nothing of any purpose; six
+signed-in visits follow, ten minutes apart, to `/auth/session` and `/account`; then
+`GET /privacy/consents` answers no consent and the store holds none. The silence is
+the registration's, so the continued use follows it in the same account.
+
+*Tests that pin it.*
+`ConsentEndpointTests.PRIV_CONS_003_AC2_NoConsentIsInferredFromSilenceOrContinuedUseAsync`.
+
+*Chapter text that should change.* None.
+
 
 # Rows for chapter 10
 
