@@ -14924,6 +14924,45 @@ a session it already held or out of band (PRIV-RIGHT-001 to PRIV-RIGHT-004).
 covers and say that the refusal is `authz.restricted`, and say whether the sign-in
 paths admit a restricted account, since the table and the code disagree.
 
+---
+
+## 363. A replacement ends the other sessions when it applies, and the session that completes an identifier change rotates
+
+**Phase 10 · 2026-09-25 · Tier 2 · IDN-LIFE-008 AC1, BFF-SESS-004, REG-IDENT-006 AC4, REG-IDENT-007**
+
+*The question.* IDN-LIFE-008 has the session rotate and every other session end on the
+removal or the replacement of a sign-in identifier. A removal ended the others and
+rotated nothing; a replacement did neither. A replacement is staged by one request and
+applies when its new value is verified, by a code typed under a session, by a link
+pressed in the staging browser, or from an enrolment session with no browser session at
+all, so the request that stages it is often not the one that completes it.
+
+*The readings.*
+
+1. The other sessions end, and the asking session rotates, when the replacement is
+   staged.
+2. The other sessions end when the replacement applies, keeping the session that staged
+   it; the session that completes a change rotates at the boundary that completes it.
+
+*Chosen: 2.* Until the swap applies the old value still signs in, so ending sessions at
+staging would end them for a change that may never happen. When the swap applies, every
+session but the one that staged it ends (all of them where an enrolment session staged
+it). A session can only be rotated where its browser receives the new secret, so the
+endpoints rotate: the removal, and a verification that completes under a live session,
+whether a code was typed or a link was pressed in the same browser. That rotates on the
+completion of an addition too, which is also a change to what signs in to the account
+(BFF-SESS-004's privilege change). A staging session whose change completes elsewhere
+is kept and is not rotated, since its browser is not there to receive a new secret.
+
+*Tests that pin it.*
+`IdentifierServiceTests.IDN_LIFE_008_AC1_EveryOtherSessionEndsWhenAReplacementAppliesAsync`,
+`AccountApplicationTests.BFF_SESS_004_AC2_RemovingAnIdentifierRotatesTheSessionAsync`,
+`IdentifierServiceTests.REG_IDENT_006_AC4_EveryOtherSessionEndsOnRemovalAsync`.
+
+*Chapter text that should change.* IDN-LIFE-008 could say that a replacement ends the
+other sessions when it applies, and that the rotation is of the session that completes
+the change.
+
 
 # Rows for chapter 10
 

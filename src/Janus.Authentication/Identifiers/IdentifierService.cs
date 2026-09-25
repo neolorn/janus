@@ -1305,9 +1305,11 @@ internal sealed class IdentifierService(
             .ConfigureAwait(false);
     }
 
+    // IDN-LIFE-008: the session that made the change is kept, where there is one; a
+    // change made from no browser keeps none.
     private async ValueTask EndOthersAsync(
         SubjectId subject,
-        SessionId keeping,
+        SessionId? keeping,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -1409,6 +1411,11 @@ internal sealed class IdentifierService(
         }
 
         var undo = OpaqueToken.Draw(randomness);
+
+        // IDN-LIFE-008 AC1: the value that signed in is gone, so every session but the
+        // one that staged the change ends with it.
+        await EndOthersAsync(waiting.Subject, waiting.Browser, now, cancellationToken)
+            .ConfigureAwait(false);
 
         await directory
             .ReplaceAsync(

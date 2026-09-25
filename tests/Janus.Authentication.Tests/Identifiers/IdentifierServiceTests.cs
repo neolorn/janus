@@ -467,6 +467,39 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-008 AC1: once a replacement applies, the value that signed in is gone,
+    /// so every other session of the account ends with it and the one that staged the
+    /// change is kept. Until it applies, nothing ends.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_008_AC1_EveryOtherSessionEndsWhenAReplacementAppliesAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(_person, IdentifierKind.Phone, Number);
+
+        SessionId elsewhere = Stepped();
+        SessionId asking = Stepped();
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            asking,
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Null((await _sessions.FindAsync(elsewhere, TestContext.Current.CancellationToken))?.EndedAt);
+
+        await VerifiedAsync(email);
+
+        Assert.Equal(Second, Named(await HeldAsync(), Second).Canonical);
+        Assert.Null((await _sessions.FindAsync(asking, TestContext.Current.CancellationToken))?.EndedAt);
+        Assert.NotNull((await _sessions.FindAsync(elsewhere, TestContext.Current.CancellationToken))?.EndedAt);
+    }
+
+    /// <summary>
     /// IDN-ACCT-007 AC2: a restricted account changes none of its identifiers. Adding,
     /// removing, replacing, promoting and naming a backup are each refused with the
     /// code the gate refuses a modifying action with, and nothing is staged or given up.

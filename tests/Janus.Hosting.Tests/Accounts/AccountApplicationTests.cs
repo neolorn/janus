@@ -12,6 +12,7 @@ using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Http;
 using Xunit;
 
@@ -160,6 +161,34 @@ public sealed class AccountApplicationTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status204NoContent, restored.Status);
         Assert.Equal(2, Emails(await browser.SendAsync("GET", "/account")).GetArrayLength());
+    }
+
+    /// <summary>
+    /// BFF-SESS-004 AC1 and AC2, IDN-LIFE-008: removing a sign-in identifier is a
+    /// privilege change, so the session that made it is given a new secret beside a
+    /// new synchronizer token, the secret it held before resolves nothing, and the
+    /// browser carries on under the new one.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_SESS_004_AC2_RemovingAnIdentifierRotatesTheSessionAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = Registered();
+        Guid going = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, Second).Value;
+
+        string before = browser.Cookies[BrowserCookies.Session];
+        string token = browser.Cookies[BrowserCookies.Csrf];
+
+        Answer removed = await browser.SendAsync("DELETE", "/account/identifiers/" + going);
+
+        Assert.Equal(StatusCodes.Status204NoContent, removed.Status);
+        Assert.NotEqual(before, browser.Cookies[BrowserCookies.Session]);
+        Assert.NotEqual(token, browser.Cookies[BrowserCookies.Csrf]);
+        Assert.Null(await _deployment.Sessions.FindByFingerprintAsync(
+            OpaqueToken.Of(before).Fingerprint(),
+            TestContext.Current.CancellationToken));
+        Assert.Equal(StatusCodes.Status200OK, (await browser.SendAsync("GET", "/account")).Status);
     }
 
     /// <summary>
