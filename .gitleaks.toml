@@ -1,5 +1,6 @@
 # OPS-DEP-004: the default rule set, and allow-list entries only. Each entry names one
-# file and the one value it exempts, both of which must match, and gives the reason.
+# file and the one value it exempts, both of which must match, and gives the reason. The
+# offline leaked-password list's entry names the list's line form instead of a value.
 
 [extend]
 useDefault = true
@@ -9,3 +10,11 @@ description = "an item identifier in a documentation comment"
 condition = "AND"
 paths = ['''^src/Janus\.Core/IAuditTrail\.cs$''']
 regexes = ['''^PRIV-BREACH-002$''']
+
+[[allowlists]]
+description = "SHA-1 hashes of leaked passwords (AUTH-PASS-004)"
+condition = "AND"
+regexTarget = "line"
+paths = ['''^src/Janus\.Hosting/Passwords/leaked-passwords\.txt$''']
+# The scanner's line carries the line break before it, except on a diff's first line.
+regexes = ['''^\n?[0-9A-F]{40}$''']
