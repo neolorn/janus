@@ -23,7 +23,7 @@ namespace Janus.Authentication.Factors;
 /// When the pending loss report against one of them completes, and nothing where
 /// none is pending.
 /// </param>
-/// <remarks>Implements AUTH-STEP-002, AUTH-STEP-006 and AUTH-RECOV-007.</remarks>
+/// <remarks>Implements AUTH-STEP-002, AUTH-STEP-006, AUTH-RECOV-007 and IDN-LIFE-012.</remarks>
 internal sealed record HeldFactors(
     IReadOnlySet<Factor> Usable,
     IReadOnlySet<Factor> Standing,
@@ -61,5 +61,27 @@ internal sealed record HeldFactors(
             authenticators
                 .Where(credential => credential.State is AuthenticatorState.Suspended)
                 .Min(credential => credential.InvalidatesAt));
+    }
+
+    /// <summary>
+    /// Whether the account keeps a way to sign in once one credential is gone: a factor
+    /// that can be presented first still stands without it (IDN-LIFE-012 AC3).
+    /// </summary>
+    /// <param name="authenticators">Every credential of the account, in any state.</param>
+    /// <param name="going">The credential that would be gone.</param>
+    /// <param name="password">Whether the account holds a password.</param>
+    /// <returns>Whether a way in remains.</returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    public static bool KeptWithout(
+        IReadOnlyCollection<Authenticator> authenticators,
+        Authenticator going,
+        bool password)
+    {
+        ArgumentNullException.ThrowIfNull(authenticators);
+        ArgumentNullException.ThrowIfNull(going);
+
+        return Of([.. authenticators.Where(credential => credential.Id != going.Id)], password)
+            .Standing
+            .Any(factor => FactorCatalogue.Of(factor).CanBePrimary);
     }
 }

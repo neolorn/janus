@@ -272,12 +272,7 @@ internal sealed class ProviderEvents(
         bool password = await SecondStep.AvailableAsync(passwords, linked.Subject, cancellationToken)
             .ConfigureAwait(false);
 
-        bool kept = HeldFactors
-            .Of([.. enrolled.Where(credential => credential.Id != linked.Id)], password)
-            .Standing
-            .Any(factor => FactorCatalogue.Of(factor).CanBePrimary);
-
-        if (kept)
+        if (HeldFactors.KeptWithout(enrolled, linked, password))
         {
             await authenticators.RemoveAsync(linked.Id, cancellationToken).ConfigureAwait(false);
 

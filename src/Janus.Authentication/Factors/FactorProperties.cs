@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using Janus.Core;
 
 namespace Janus.Authentication.Factors;
@@ -49,6 +50,15 @@ namespace Janus.Authentication.Factors;
 /// provider operates, which mail reaches only from a sending domain registered with
 /// the relay (INT-MAIL-011, REG-IDENT-008).
 /// </param>
+/// <param name="OperatedDomains">
+/// The mail domains whose mailboxes the provider behind the entry operates, so that
+/// an address it asserts there and calls verified is verified by the sign-in itself
+/// (REG-IDENT-008). Empty for every entry no provider stands behind.
+/// </param>
+/// <param name="OperatesHostedDomain">
+/// Whether the provider also operates the domain an identity token's <c>hd</c> claim
+/// asserts, as Google does for the domain of an organization it hosts (REG-IDENT-008).
+/// </param>
 /// <remarks>
 /// Implements AUTH-FACT-001, AUTH-FACT-003, INT-MAIL-011 and chapter 10 section 5.3. How strong a
 /// factor is has one axis, the tier beside phishing-resistance, so no second axis can
@@ -67,4 +77,6 @@ internal sealed record FactorProperties(
     IdentifierKind? Channel,
     bool Restricted,
     bool SingleUse,
-    bool RelaysAddress);
+    bool RelaysAddress,
+    FrozenSet<string> OperatedDomains,
+    bool OperatesHostedDomain);

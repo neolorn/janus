@@ -451,6 +451,17 @@ internal sealed class Deployment : IAsyncDisposable
     public LogInMemory<SignOn> SignOnLog { get; } = new();
 
     /// <summary>
+    /// What a sign-in at a social provider recorded when it would not carry a round
+    /// trip.
+    /// </summary>
+    public LogInMemory<ProviderSignIn> ProviderLog { get; } = new();
+
+    /// <summary>
+    /// The round trips to social providers browsers have in flight.
+    /// </summary>
+    public ProviderAttemptStoreInMemory ProviderAttempts { get; } = new();
+
+    /// <summary>
     /// Every endpoint the library mounted.
     /// </summary>
     public IReadOnlyList<Endpoint> Endpoints =>
@@ -780,6 +791,10 @@ internal sealed class Deployment : IAsyncDisposable
             .ConfigurePrimaryHttpMessageHandler(() => SocialProviders);
         _ = services.AddScoped<ProviderEvents>();
         _ = services.AddScoped<ProviderEventIntake>();
+        _ = services.AddSingleton<IProviderAttemptStore>(ProviderAttempts);
+        _ = services.AddScoped<ProviderAttempts>();
+        _ = services.AddScoped<ProviderSignIn>();
+        _ = services.AddSingleton<ILogger<ProviderSignIn>>(ProviderLog);
         _ = services.AddScoped<RelayRegistration>();
         _ = services.AddScoped<SendingService>();
         _ = services.AddScoped<INotificationHandler>(
@@ -838,7 +853,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<EnrolmentSessions>();
         _ = services.AddScoped<RecoveryService>();
         _ = services.AddScoped<IRecovery>(provider => provider.GetRequiredService<RecoveryService>());
-        _ = services.AddScoped<ICredentials, CredentialService>();
+        _ = services.AddScoped<CredentialService>();
+        _ = services.AddScoped<ICredentials>(provider => provider.GetRequiredService<CredentialService>());
         _ = services.AddSingleton<ILegalDocumentStore>(Documents);
         _ = services.AddSingleton<IPrivacyAudit, Janus.Privacy.Tests.PrivacyAuditInMemory>();
         _ = services.AddSingleton<Janus.Privacy.Policies.IAdministrativeOrganization>(PrivacyAdministrative);

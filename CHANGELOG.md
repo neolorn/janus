@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- A `SocialProvider` now also names the address of the provider's discovery document,
+  the address the provider returns the browser to, and the client secret, beside its
+  keys document and client identifiers. Startup refuses a discovery address that is
+  not HTTPS, a return address that is not HTTPS or does not end in
+  `/callbacks/providers/{provider}/return` for the provider it is declared for, and an
+  empty secret, with `model.startup.declarationmissing` naming `configuration`,
+  `return` or `secret`.
+
 - A fall back from the configured compromised-password corpus to the offline one is
   raised as `degradation` under the scope `password.blocklist.fallback`, naming both
   corpora, and no longer only logged. Where the alert cannot be raised the password is
@@ -380,6 +388,26 @@ against the public contract of LIB-API-001.
   `model.startup.declarationmissing` naming the key.
 
 ### Added
+
+- A person signs in, registers or links an identity with Google or Apple.
+  `GET /auth/providers/{provider}` with `intent` of `signin`, `register` or `link` and
+  a local `returnTo` sends the browser to the provider with a single-use state and
+  nonce, and a proof key where the provider's document lists `S256`; the provider
+  returns to `/callbacks/providers/{provider}/return` on the machine profile, by
+  `GET` or by a form post, and the browser is sent on to
+  `/auth/providers/{provider}/return` to finish on the browser profile. The state is
+  judged once in fixed time against the round trip the same browser started, and the
+  identity token against the provider's keys, issuer, client and nonce. A linked
+  identity signs in with a delegated session, which never satisfies a step-up gate.
+  Registering takes the address the provider vouches for without a code where the
+  provider operates the mailbox, and sends one code otherwise; an address already
+  registered answers exactly as a new one does. A refusal returns the browser to
+  `returnTo` with the code in `error`.
+
+- `POST /account/link/{provider}` answers `204` where the signed-in account may link
+  the provider, and `DELETE /account/link/{provider}` unlinks it at the provider-unlink
+  step-up. Unlinking the only way left to sign in to the account, here or through the
+  credential endpoint, is refused with `409 identity.link.lastcredential`.
 
 - The library's schema gains the table a round trip to a social provider is kept in
   while the browser is away, one row per browser, so a deployment applies one new

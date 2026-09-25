@@ -16,16 +16,16 @@ using Microsoft.IdentityModel.Tokens;
 namespace Janus.Hosting.Credentials;
 
 /// <summary>
-/// The keys each declared social provider publishes, read from its own documents and
-/// held between events, and what verifies an event against them.
+/// What each declared social provider publishes, read from its own documents and held
+/// between uses, and what verifies an event or an identity token against it.
 /// </summary>
 /// <remarks>
-/// Implements IDN-LIFE-012a and INT-GEN-003. The issuer and the key set are read from
-/// the address the deployment declared and from nothing an event carries; a key the
-/// provider has rotated in is asked for again when an event names it, and the event
-/// that named it is refused meanwhile, for the provider to deliver again. An event's
-/// lifetime is judged where it states one; a security event usually states none, and
-/// is not refused for that.
+/// Implements IDN-LIFE-012, IDN-LIFE-012a, REG-IDENT-008 and INT-GEN-003. The issuer and
+/// the key set are read from the addresses the deployment declared and from nothing a
+/// token carries; a key the provider has rotated in is asked for again when a token
+/// names it, and the token that named it is refused meanwhile. An event's lifetime is
+/// judged where it states one; a security event usually states none, and is not
+/// refused for that. An identity token states its lifetime or is refused.
 /// </remarks>
 internal sealed class ProviderKeys
 {
@@ -68,6 +68,10 @@ internal sealed class ProviderKeys
                     new ConfigurationManager<ProviderMetadata>(
                         provider.Metadata.AbsoluteUri,
                         new ProviderMetadataReading(),
+                        new ProviderDocuments(channel)),
+                    new ConfigurationManager<ProviderMetadata>(
+                        provider.Configuration.AbsoluteUri,
+                        new ProviderMetadataReading(),
                         new ProviderDocuments(channel))));
     }
 
@@ -77,6 +81,88 @@ internal sealed class ProviderKeys
     /// <param name="provider">Which social provider.</param>
     /// <returns>Whether it did.</returns>
     public bool Declares(Factor provider) => _declared.ContainsKey(provider);
+
+    /// <summary>
+    /// What the deployment declared of a provider.
+    /// </summary>
+    /// <param name="provider">Which social provider.</param>
+    /// <returns>The declaration, or nothing where the deployment declared none.</returns>
+    public SocialProvider? Of(Factor provider) =>
+        _declared.TryGetValue(provider, out Declared? declared) ? declared.Provider : null;
+
+    /// <summary>
+    /// Where a person signs in at a provider and how, as its discovery document says.
+    /// </summary>
+    /// <param name="provider">Which social provider.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The document, or nothing where the provider is not declared or its document
+    /// cannot be read or names no endpoint to sign in at.
+    /// </returns>
+    public async ValueTask<ProviderMetadata?> SignInAsync(
+        Factor provider,
+        CancellationToken cancellationToken)
+    {
+        if (!_declared.TryGetValue(provider, out Declared? declared))
+        {
+            return null;
+        }
+
+        return (await ReadAsync(declared, declared.Configuration, cancellationToken).ConfigureAwait(false))
+            .Match<ProviderMetadata?>(read => read, _ => null)
+            is { Authorization: not null, Token: not null } configured
+                ? configured
+                : null;
+    }
+
+    /// <summary>
+    /// Verifies an identity token against the keys its provider's discovery document
+    /// names: signed by one of them with RS256, issued by the provider, addressed to the
+    /// client this application signs people in as, and inside its stated lifetime.
+    /// </summary>
+    /// <param name="provider">Which social provider it claims to come from.</param>
+    /// <param name="token">The identity token the exchange answered with.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The token, or nothing where it does not verify.</returns>
+    /// <exception cref="ArgumentNullException">The token is absent.</exception>
+    public async ValueTask<JsonWebToken?> IdentityAsync(
+        Factor provider,
+        [NeverLogged] string token,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(token);
+
+        if (!_declared.TryGetValue(provider, out Declared? declared)
+            || (await ReadAsync(declared, declared.Configuration, cancellationToken).ConfigureAwait(false))
+                .Match<ProviderMetadata?>(read => read, _ => null) is not ProviderMetadata metadata)
+        {
+            return null;
+        }
+
+        var parameters = new TokenValidationParameters
+        {
+            ValidIssuer = metadata.Issuer,
+            ValidAudience = declared.Provider.ClientIds[0],
+            IssuerSigningKeys = metadata.Keys,
+            ValidAlgorithms = [SecurityAlgorithms.RsaSha256],
+            RequireExpirationTime = true,
+            LifetimeValidator = (before, expires, _, _) =>
+                (before is null || before <= _time.GetUtcNow().UtcDateTime)
+                && expires > _time.GetUtcNow().UtcDateTime,
+            TryAllIssuerSigningKeys = false,
+        };
+
+        TokenValidationResult read = await new JsonWebTokenHandler()
+            .ValidateTokenAsync(token, parameters)
+            .ConfigureAwait(false);
+
+        if (read.Exception is SecurityTokenSignatureKeyNotFoundException)
+        {
+            declared.Configuration.RequestRefresh();
+        }
+
+        return read.IsValid ? read.SecurityToken as JsonWebToken : null;
+    }
 
     /// <summary>
     /// Verifies an event against the keys its provider publishes: signed by one of
@@ -99,7 +185,7 @@ internal sealed class ProviderKeys
             return false;
         }
 
-        if ((await MetadataAsync(declared, cancellationToken).ConfigureAwait(false))
+        if ((await ReadAsync(declared, declared.Metadata, cancellationToken).ConfigureAwait(false))
             .Match<ProviderMetadata?>(read => read, _ => null) is not ProviderMetadata metadata)
         {
             return false;
@@ -131,14 +217,15 @@ internal sealed class ProviderKeys
 
     // The provider's issuer and keys, as held or read again; documents that could not
     // be read verify nothing.
-    private async ValueTask<Result<ProviderMetadata>> MetadataAsync(
+    private async ValueTask<Result<ProviderMetadata>> ReadAsync(
         Declared declared,
+        ConfigurationManager<ProviderMetadata> document,
         CancellationToken cancellationToken)
     {
         try
         {
             return Result.Success(
-                await declared.Metadata.GetConfigurationAsync(cancellationToken).ConfigureAwait(false));
+                await document.GetConfigurationAsync(cancellationToken).ConfigureAwait(false));
         }
         catch (InvalidOperationException)
         {
@@ -149,5 +236,8 @@ internal sealed class ProviderKeys
         }
     }
 
-    private sealed record Declared(SocialProvider Provider, ConfigurationManager<ProviderMetadata> Metadata);
+    private sealed record Declared(
+        SocialProvider Provider,
+        ConfigurationManager<ProviderMetadata> Metadata,
+        ConfigurationManager<ProviderMetadata> Configuration);
 }

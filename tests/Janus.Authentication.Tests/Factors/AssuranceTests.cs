@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -86,7 +87,9 @@ public sealed class AssuranceTests
             Channel: null,
             Restricted: false,
             SingleUse: false,
-            RelaysAddress: false);
+            RelaysAddress: false,
+            OperatedDomains: FrozenSet<string>.Empty,
+            OperatesHostedDomain: false);
 
         Assert.Null(Assurance.Reached([channel]));
         Assert.Equal(
@@ -197,7 +200,9 @@ public sealed class AssuranceTests
             Channel: null,
             Restricted: false,
             SingleUse: false,
-            RelaysAddress: false);
+            RelaysAddress: false,
+            OperatedDomains: FrozenSet<string>.Empty,
+            OperatesHostedDomain: false);
 
         Assert.Equal(
             new Assurance(AssuranceLevel.Aal2, PhishingResistant: true),

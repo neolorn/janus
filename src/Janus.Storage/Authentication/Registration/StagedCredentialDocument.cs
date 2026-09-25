@@ -17,7 +17,11 @@ namespace Janus.Storage.Authentication.Registration;
 /// <param name="Counter">The signature counter, where the authenticator keeps one.</param>
 /// <param name="BackupEligible">Whether the authenticator may back it up.</param>
 /// <param name="BackupState">Whether it is backed up.</param>
-/// <remarks>Implements REG-SESS-006, AUTH-FACT-001 and AUTH-FACT-006.</remarks>
+/// <param name="ProviderSubject">
+/// The provider's own identifier for the person, where it is a social provider's
+/// identity.
+/// </param>
+/// <remarks>Implements REG-SESS-006, REG-IDENT-008, AUTH-FACT-001 and AUTH-FACT-006.</remarks>
 internal sealed record StagedCredentialDocument(
     Guid Id,
     string Factor,
@@ -29,4 +33,5 @@ internal sealed record StagedCredentialDocument(
     string? RelyingPartyId,
     uint? Counter,
     bool BackupEligible,
-    bool BackupState);
+    bool BackupState,
+    string? ProviderSubject);

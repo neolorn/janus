@@ -33,7 +33,7 @@ namespace Janus.Authentication.Tests.Registration;
 /// invitation opens (REG-INV-001, REG-MAIL-001, REG-DOM-001, IDN-LIFE-009a).
 /// </summary>
 [Trait("kind", "unit")]
-public sealed class RegistrationServiceTests : IAsyncDisposable
+public sealed partial class RegistrationServiceTests : IAsyncDisposable
 {
     private const string Client = "web";
     private const string Registered = "https://app.example.test/welcome";

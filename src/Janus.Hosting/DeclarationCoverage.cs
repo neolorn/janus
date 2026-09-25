@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Janus.Authentication.Factors;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Hosting.Credentials;
 
 namespace Janus.Hosting;
 
@@ -140,8 +141,8 @@ internal sealed class DeclarationCoverage(
             "key",
             JsonSerializer.SerializeToElement(key)));
 
-    // IDN-LIFE-012a: the part of a social provider's declaration that does not hold,
-    // or nothing where every one holds.
+    // IDN-LIFE-012, IDN-LIFE-012a: the part of a social provider's declaration that
+    // does not hold, or nothing where every one holds.
     private string? Undeclared()
     {
         var named = new HashSet<Factor>();
@@ -162,6 +163,31 @@ internal sealed class DeclarationCoverage(
             if (declared.ClientIds is not { Count: > 0 } clients || clients.Any(string.IsNullOrWhiteSpace))
             {
                 return "clientIds";
+            }
+
+            // IDN-LIFE-012, REG-IDENT-008: a provider people sign in with is read from
+            // its discovery document, returns them to the library's own route for it,
+            // and is presented a secret at the exchange.
+            if (declared.Configuration is not { IsAbsoluteUri: true } configuration
+                || configuration.Scheme != Uri.UriSchemeHttps)
+            {
+                return "configuration";
+            }
+
+            if (declared.Return is not { IsAbsoluteUri: true } returned
+                || returned.Scheme != Uri.UriSchemeHttps
+                || !ProviderRoutes.Named.Any(route =>
+                    route.Value == declared.Provider
+                    && returned.AbsolutePath.EndsWith(
+                        "/callbacks/providers/" + route.Key + "/return",
+                        StringComparison.Ordinal)))
+            {
+                return "return";
+            }
+
+            if (declared.Secret.IsEmpty)
+            {
+                return "secret";
             }
         }
 

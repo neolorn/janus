@@ -242,6 +242,11 @@ public static class HostingRegistration
         _ = services.AddHttpClient(ProviderKeys.Channel);
         services.AddScoped<ProviderEvents>();
         services.AddScoped<ProviderEventIntake>();
+
+        // IDN-LIFE-012, REG-IDENT-008: this application is the providers' client, on
+        // the same connection their documents are read on.
+        services.AddScoped<ProviderAttempts>();
+        services.AddScoped<ProviderSignIn>();
         services.AddScoped(services => new BotDefence(
             services.GetRequiredService<IConfigurationStore>(),
             services.GetRequiredService<IDatacenterRanges>(),
@@ -407,7 +412,8 @@ public static class HostingRegistration
         services.AddScoped<EnrolmentSessions>();
         services.AddScoped<RecoveryService>();
         services.AddScoped<IRecovery>(provider => provider.GetRequiredService<RecoveryService>());
-        services.AddScoped<ICredentials, CredentialService>();
+        services.AddScoped<CredentialService>();
+        services.AddScoped<ICredentials>(provider => provider.GetRequiredService<CredentialService>());
         services.AddScoped<SigningKeys>();
         services.AddOidc(keyEncryptionKeys);
         services.AddScoped<OidcService>();

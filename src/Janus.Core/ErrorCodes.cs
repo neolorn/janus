@@ -172,6 +172,13 @@ public static class ErrorCodes
     public static ErrorCode StartupSchemaMismatch { get; } = ErrorCode.Parse("model.startup.schemamismatch");
 
     /// <summary>
+    /// The social provider's credential is the account's only remaining way to sign in,
+    /// so it is not unlinked. Enrol a password or a passkey first, then unlink.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-012, chapter 10 section 1.1.</remarks>
+    public static ErrorCode LinkLastCredential { get; } = ErrorCode.Parse("identity.link.lastcredential");
+
+    /// <summary>
     /// The account already holds a membership, and this deployment allows one. Enable
     /// <c>organization.multiplememberships</c>, or end the membership held first. The
     /// details name the organization where the membership offered is of the one the

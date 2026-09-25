@@ -6,7 +6,7 @@ namespace Janus.Hosting.Bff;
 /// The library's own routes that non-browser callers reach.
 /// </summary>
 /// <remarks>
-/// Implements BFF-MACH-001, IDN-LIFE-012a AC3 and OPS-BOOT-002. Which routes these are
+/// Implements BFF-MACH-001, IDN-LIFE-012a AC3, REG-IDENT-008 and OPS-BOOT-002. Which routes these are
 /// is settled here and by nothing a deployment can set, so a browser endpoint cannot be
 /// moved onto the machine profile by configuration and a machine endpoint cannot be
 /// left off it by omission.
@@ -22,14 +22,20 @@ internal static class MachineRoutes
         new("/callbacks/sms/dlr"),
         new("/callbacks/providers/google"),
         new("/callbacks/providers/apple"),
+        new("/callbacks/providers/google/return"),
+        new("/callbacks/providers/apple/return"),
     ];
 
     // Chapter 09 section 8: the emergency credential is presented from a browser that
     // may still hold a stale session for the domain, so the cookie is ignored there
-    // rather than refused.
+    // rather than refused. A provider returns the browser itself, which carries its
+    // lax cookie on a returning read; the return reads no cookie and only sends the
+    // browser on to the browser profile, which judges it.
     private static readonly PathString[] CookieIgnored =
     [
         new("/auth/break-glass"),
+        new("/callbacks/providers/google/return"),
+        new("/callbacks/providers/apple/return"),
     ];
 
     /// <summary>

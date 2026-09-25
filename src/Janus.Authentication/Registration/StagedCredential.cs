@@ -12,14 +12,20 @@ namespace Janus.Authentication.Registration;
 /// <param name="Label">What the person calls it.</param>
 /// <param name="Totp">The shared secret, where it is a code generator.</param>
 /// <param name="WebAuthn">The key material, where it holds a key.</param>
+/// <param name="ProviderSubject">
+/// The provider's own identifier for the person, where it is a social provider's
+/// identity (REG-IDENT-008).
+/// </param>
 /// <remarks>
-/// Implements REG-SESS-001 and REG-SESS-006. A ceremony run against the session uses
-/// the session's provisional user handle, which becomes the subject identifier, so
-/// nothing about the credential changes when the account comes into being.
+/// Implements REG-SESS-001, REG-SESS-006 and REG-IDENT-008. A ceremony run against the
+/// session uses the session's provisional user handle, which becomes the subject
+/// identifier, so nothing about the credential changes when the account comes into
+/// being.
 /// </remarks>
 internal sealed record StagedCredential(
     AuthenticatorId Id,
     Factor Factor,
     CredentialLabel Label,
     TotpMaterial? Totp,
-    WebAuthnMaterial? WebAuthn);
+    WebAuthnMaterial? WebAuthn,
+    [property: NeverLogged] string? ProviderSubject = null);

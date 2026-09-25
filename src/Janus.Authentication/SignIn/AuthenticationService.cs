@@ -239,6 +239,55 @@ internal sealed class AuthenticationService(
         links.AbandonAsync(linkToken, cancellationToken);
 
     /// <summary>
+    /// Signs in the account a social provider's identity is linked to, which the
+    /// provider has just vouched for.
+    /// </summary>
+    /// <param name="provider">Which provider vouched.</param>
+    /// <param name="providerSubject">The provider's own identifier for the person.</param>
+    /// <param name="origin">Where the request came from.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The completed sign-in, or the refusal.</returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    /// <remarks>
+    /// Implements AUTH-FACT-002a and REG-IDENT-008. The provider established who this
+    /// is, so no second step is asked for and the session records <c>delegated</c>. An
+    /// identity linked to no account, a credential that does not stand, and an account
+    /// that is not active are one refusal, as they are for every other factor
+    /// (AUTH-ABUSE-003).
+    /// </remarks>
+    public async ValueTask<Result<SignInOutcome>> DelegatedAsync(
+        Factor provider,
+        [NeverLogged] string providerSubject,
+        SessionOrigin origin,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(providerSubject);
+        ArgumentNullException.ThrowIfNull(origin);
+
+        Authenticator? linked = await authenticators
+            .ByProviderAsync(provider, providerSubject, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (linked is not { IsUsable: true }
+            || await accounts.StateAsync(linked.Subject, cancellationToken).ConfigureAwait(false)
+                is not AccountState.Active)
+        {
+            return Result.Failure<SignInOutcome>(Error.From(ErrorCodes.FactorRejected));
+        }
+
+        return await IssueAsync(
+                linked.Subject,
+                [provider],
+                origin,
+                trustDevice: false,
+                changeRequired: false,
+                remembered: null,
+                trusted: null,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Presents one factor, with what only the browser boundary can act on: the
     /// tokens this browser carries and the secrets a completed sign-in hands back.
     /// </summary>
@@ -1161,6 +1210,37 @@ internal sealed class AuthenticationService(
         string? trusted,
         CancellationToken cancellationToken)
     {
+        Result<SignInOutcome> completed = await IssueAsync(
+                subject,
+                open.Presented,
+                origin,
+                trustDevice,
+                changeRequired,
+                remembered,
+                trusted,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (completed.Match(_ => true, _ => false))
+        {
+            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            await challenges.RemoveAsync(open.Fingerprint, cancellationToken).ConfigureAwait(false);
+            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return completed;
+    }
+
+    private async ValueTask<Result<SignInOutcome>> IssueAsync(
+        SubjectId subject,
+        IReadOnlyCollection<Factor> presented,
+        SessionOrigin origin,
+        bool trustDevice,
+        bool changeRequired,
+        OpaqueToken? remembered,
+        string? trusted,
+        CancellationToken cancellationToken)
+    {
         Error? failure = null;
 
         Policy policy = (await policies.ForAsync(subject, cancellationToken).ConfigureAwait(false))
@@ -1187,10 +1267,10 @@ internal sealed class AuthenticationService(
         // raised floor does not refuse it (AUTH-FACT-017).
         Result<IssuedSession> begun = hold is null
             ? await sessions
-                .BeginAsync(subject, open.Presented, origin, cancellationToken)
+                .BeginAsync(subject, presented, origin, cancellationToken)
                 .ConfigureAwait(false)
             : await sessions
-                .BeginDuringGraceAsync(subject, open.Presented, origin, cancellationToken)
+                .BeginDuringGraceAsync(subject, presented, origin, cancellationToken)
                 .ConfigureAwait(false);
         IssuedSession issued = begun
             .Match(value => value, error => Withheld<IssuedSession>(error, ref failure));
@@ -1200,7 +1280,7 @@ internal sealed class AuthenticationService(
             return Result.Failure<SignInOutcome>(failure);
         }
 
-        Assurance reached = Assurance.Reached(Properties(open.Presented))
+        Assurance reached = Assurance.Reached(Properties(presented))
             ?? new Assurance(AssuranceLevel.Aal1, PhishingResistant: false);
         bool offered = DeviceService.MayTrust(
             policy,
@@ -1220,10 +1300,6 @@ internal sealed class AuthenticationService(
                 return Result.Failure<SignInOutcome>(failure);
             }
         }
-
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-        await challenges.RemoveAsync(open.Fingerprint, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success(new SignInOutcome(
             new SignInProgress(

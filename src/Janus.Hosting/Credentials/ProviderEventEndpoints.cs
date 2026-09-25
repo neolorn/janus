@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Frozen;
-using System.Collections.Generic;
 using Janus.Core;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -21,14 +19,6 @@ internal static class ProviderEventEndpoints
 {
     private const string Prefix = "/callbacks/providers/";
 
-    // The providers, as each route names them.
-    private static readonly FrozenDictionary<string, Factor> Providers =
-        new Dictionary<string, Factor>(StringComparer.Ordinal)
-        {
-            ["google"] = Factor.Google,
-            ["apple"] = Factor.Apple,
-        }.ToFrozenDictionary(StringComparer.Ordinal);
-
     /// <summary>
     /// Mounts them.
     /// </summary>
@@ -39,7 +29,7 @@ internal static class ProviderEventEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        foreach ((string route, Factor provider) in Providers)
+        foreach ((string route, Factor provider) in ProviderRoutes.Named)
         {
             _ = endpoints.MapPost(
                 Prefix + route,

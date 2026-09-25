@@ -92,6 +92,7 @@ public sealed class ErrorCodesTests
         "identity.invitation.expired",
         "identity.invitation.identifiermismatch",
         "identity.invitation.notfound",
+        "identity.link.lastcredential",
         "identity.membership.limitreached",
         "identity.organization.protected",
         "identity.photo.invalid",

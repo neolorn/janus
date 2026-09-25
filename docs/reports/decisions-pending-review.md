@@ -14024,6 +14024,336 @@ channel filter (`sms` · `email` · `any`) beside the purpose, with the shipped 
 filtered by the channel their names give, or say that a restriction applies across
 channels and that the shipped names are names only.
 
+---
+
+## 343. The client a social sign-in is carried by
+
+**Phase 10 · 2026-09-25 · Tier 3 · IDN-LIFE-012, IDN-LIFE-012a, LIB-HOST-001 `SocialProvider`**
+
+*The question.* IDN-LIFE-012 has a person sign in with, register with and link a Google
+or Apple identity, and no chapter says how this application is a client of the
+provider: which client identifier the browser is sent out under, how the code is
+traded, or what the host declares for it. The `SocialProvider` that IDN-LIFE-012a
+brought (entry 283) names the provider's key document and a list of client
+identifiers, which is what an event is checked against, and nothing a sign-in needs:
+no address to send the browser to, no address it comes back to, no secret.
+
+*The readings.* (1) The library is no client of the providers; a host that wants
+social sign-in runs the protocol itself and hands the library the provider's `sub`.
+(2) The library is a confidential client of each declared provider under the first
+client identifier the host lists, with the provider's discovery document, the return
+address and the client secret declared beside it. (3) As (2), under whichever listed
+client the token names.
+
+*Chosen: 2 (Tier 3, the strictest reading).* Under (1) the proof that the person
+controls the identity is the host's word, and REG-IDENT-008's "matched by the
+provider's `sub`" is enforced by nobody the library can see. Under (3) a token minted
+for any of the host's clients (a mobile application's, say) signs a browser in here,
+which is the audience confusion OpenID Connect Core 3.1.3.7 step 3 exists to refuse.
+Under (2) the identity token is accepted only where its `aud` is the client the round
+trip was started under, its issuer is the one the discovery document names, its
+signature verifies under the provider's published keys, it has not expired and its
+nonce is the round trip's; an event (IDN-LIFE-012a) still takes any client listed.
+
+What is built:
+
+- `SocialProvider(Provider, Metadata, Configuration, Return, Secret, ClientIds)`:
+  `Configuration` is the provider's discovery document, `Return` the address the
+  provider sends the browser back to, `Secret` the client secret from the secrets
+  manager (for Apple, the signed secret the host mints, since signing it is the host's
+  key and its rotation the host's calendar), and the first of `ClientIds` the client a
+  sign-in is started under.
+- The discovery document is read through the client `identity-providers` and cached as
+  the key document is (entry 283).
+
+*Tests that pin it.*
+`ProviderSignInTests.IDN_LIFE_012_ALinkedIdentitySignsInOverTheRoundTripAsync`,
+`ProviderSignInTests.IDN_LIFE_012_AnIdentityTokenThatDoesNotHoldUpSignsNobodyInAsync`
+(nonce, audience, expired, forged),
+`ProviderSignInTests.IDN_LIFE_012_AProviderThatCannotBeReadIsNotStartedAsync`.
+
+*Chapter text that should change.* LIB-HOST-001 could give `SocialProvider` the
+discovery address, the return address and the secret, say that the first client
+identifier is the one a sign-in runs under, and say that Apple's signed secret is
+minted by the host; the rows owed for LIB-HOST-001 below carry the three members.
+
+---
+
+## 344. Where a round trip to a provider runs, and what it is bound to
+
+**Phase 10 · 2026-09-25 · Tier 3 · IDN-LIFE-012, REG-IDENT-008, BFF-CSRF-005a, BFF-MACH-001, OPS-SEC-001**
+
+*The question.* `09` lists `POST /account/link/{provider}` and
+`DELETE /account/link/{provider}` and nothing else for social identities: no route
+sends the browser to a provider and none takes it back. BFF-CSRF-005a names the
+pre-authentication session as the binding target of the sign-on's `state`; nothing
+says what a provider round trip is bound to. BFF-MACH-001 AC2 has machine endpoints
+refuse a request carrying a session cookie, with one exception, the break-glass page.
+A provider returns the browser by a top-level `GET` (Google), which carries the
+session cookie of a signed-in browser linking an identity, or by a cross-site form
+post (Apple, `response_mode=form_post`), which carries no cookie and no synchronizer
+token and would be refused by the browser profile.
+
+*The readings.* (1) The provider returns to a browser-profile route; Apple's form post
+is refused, so Apple works only where it offers a query return. (2) The provider
+returns to a machine-profile route that does everything, ignoring cookies; the
+browser's own session is then unknown to the route that acts. (3) The provider returns
+to a machine-profile route that only re-addresses the browser, by `303`, to a
+browser-profile continuation, which reads the binding from what the browser carries
+and does all the work under the browser profile's gates.
+
+*Chosen: 3 (Tier 3, the strictest reading).* Nothing is decided on the machine
+profile: the converter reads `code`, `state` and `error` from the form or the query and
+answers `303` to `/auth/providers/{provider}/return` carrying the three in the query,
+and nothing else. It ignores a cookie rather than refusing it, as the break-glass page
+does, because a browser linking an identity is signed in and its cookie arrives with
+the provider's `GET`; refusing it would make linking impossible. The continuation is a
+browser-profile route like any other; its `state` check is the CSRF defence of the
+round trip.
+
+What is built:
+
+- `GET /auth/providers/{provider}?intent=signin|register|link&returnTo=...` starts a
+  round trip. `returnTo` is sanitised as the sign-on's is: anything but a local path is
+  `/`.
+- `GET|POST /callbacks/providers/{provider}/return` on the machine profile, governed
+  and cookie-ignored, answers only the `303`.
+- `GET /auth/providers/{provider}/return` finishes it on the browser profile.
+- `identity.provider_attempts`: one row per browser, bound to its session where it has
+  one and to its pre-authentication session otherwise, and deleted with it. It holds
+  the provider, the intent, the fingerprints of the `state` and the `nonce`, the return
+  path, and the PKCE verifier wrapped under the key-encryption key (OPS-SEC-001) and
+  re-wrapped at a rotation (OPS-SEC-003). A second start replaces the first. The row is
+  taken, and so forgotten, on the first return whichever way the return goes.
+- A return that finds no row, or a row of another provider, or whose `state` does not
+  match in fixed time, is refused `403 session.csrf.invalid` and logged.
+
+*Residue.* The code travels in the continuation's query for one `303`, so it is in the
+browser's history for as long as it takes the continuation to trade it; it is single
+use and bound to the verifier and the client secret, which never leave the server.
+
+*Tests that pin it.*
+`ProviderSignInTests.BFF_MACH_001_TheProviderReturnSendsTheBrowserOnAsync` (GET, POST),
+`ProviderSignInTests.BFF_CSRF_005a_AProviderReturnWithAnotherStateIsRefusedAsync`,
+`ProviderSignInTests.BFF_CSRF_005a_AProviderReturnIsJudgedOnceAsync`,
+`ProviderSignInTests.IDN_LIFE_012_AReturnAddressOffThisApplicationIsNotFollowedAsync`,
+`ProviderAttemptStoreTests.IDN_LIFE_012_TheProofKeyIsAtRestUnderTheKeyEncryptionKeyAsync`,
+`ProviderAttemptStoreTests.BFF_CSRF_005a_ABrowserHasOneRoundTripInFlightAsync`,
+`ProviderAttemptStoreTests.IDN_LIFE_012_ARoundTripGoesWithWhatItIsBoundToAsync`,
+`KeyRotationTests.OPS_SEC_003_AC3_AProofKeyInFlightIsReWrappedAsync`.
+
+*Chapter text that should change.* `09` could list the three routes. BFF-MACH-001 AC2
+could name the provider return beside the break-glass page as a machine route that
+ignores a cookie, and say it only re-addresses the browser. BFF-CSRF-005a could name
+the provider round trip's `state` beside the sign-on's.
+
+---
+
+## 345. How the code is traded, and what is asked of the provider
+
+**Phase 10 · 2026-09-25 · Tier 2 · IDN-LIFE-012**
+
+*The question.* No chapter says how this client authenticates at a provider's token
+endpoint, whether it uses PKCE, or how it asks for the browser to be returned.
+
+*The readings.* For the client's authentication: (1) `client_secret_post`, the secret
+in the form; (2) `client_secret_basic`; (3) whichever the discovery document lists
+first. For PKCE: (a) always; (b) where the discovery document lists `S256`. For the
+return: (i) always a query; (ii) `form_post` where the document lists it.
+
+*Chosen: 1, b, ii.* Both providers take the secret in the form, and Apple takes it
+nowhere else, so one method serves both and the library holds no negotiation. A
+provider that does not list `S256` may refuse a request carrying a challenge it does
+not know (Apple lists none), so the verifier is drawn only where it will be checked,
+and the `nonce` binds the token to the round trip either way. `form_post` keeps the
+code out of the provider's redirect and is what Apple requires when it is asked for
+the email scope. The scope asked for is `openid email` and nothing else.
+
+*Tests that pin it.*
+`ProviderSignInTests.IDN_LIFE_012_ALinkedIdentitySignsInOverTheRoundTripAsync`,
+`ProviderSignInTests.IDN_LIFE_012_AProviderThatTakesNoProofKeyIsSentNoneAsync`.
+
+*Chapter text that should change.* IDN-LIFE-012 could state the scope, the client
+authentication method, and that PKCE and `form_post` are used where the provider's
+discovery document lists them.
+
+---
+
+## 346. Linking and unlinking, and the order of their refusals
+
+**Phase 10 · 2026-09-25 · Tier 3 · IDN-LIFE-012 AC3, `09` `POST /account/link/{provider}`, `10` section 5a `provider:link` and `provider:unlink`, D-128**
+
+*The question.* `09` gives `POST /account/link/{provider}` a `204` and no body: linking
+needs the provider's round trip, which a single `POST` cannot carry. And AC3 refuses
+unlinking the only remaining credential, while `provider:unlink` asks for step-up; a
+session the provider alone signed in is `delegated` and passes no step-up (D-128), so
+for an account whose only way in is the provider, a gate asked first answers
+`auth.stepup.required` forever and the `409` AC3 names is never reached.
+
+*The readings.* For the `POST`: (1) it starts the round trip itself; (2) it answers
+`204` where the account may link the provider now (a session, the `provider:link`
+step-up passed, the provider in the policy), and the round trip is started by
+`GET /auth/providers/{provider}?intent=link`, which asks the same again and links on
+the return. For the order: (a) the gate first, then the last-credential check; (b) the
+last-credential check first, then the gate.
+
+*Chosen: 2 and b (Tier 3, the strictest reading).* Under (2) the frontend learns
+before it leaves whether a link would be refused, and the link itself is judged again
+when the identity comes back, so the pre-check grants nothing. Under (b) a refusal that
+holds whatever the session could prove is given without asking the session to prove
+anything, and the unlink changes nothing unless the gate passes too; the order only
+changes which refusal a person sees. The credential route (`DELETE
+/account/credentials/{id}`) keeps its gate first, since removing a credential is its
+own gate (`factor:remove`), and so answers `403 auth.stepup.required` to a delegated
+session. Unlinking an identity the account does not hold is `404
+auth.credential.notfound`. An identity linked to another account, or a second identity
+at a provider the account already holds, is refused `auth.factor.rejected`.
+
+*Tests that pin it.*
+`ProviderSignInTests.IDN_LIFE_012_AC1_LinkingChangesNoGrantAndNoMembershipAsync`,
+`ProviderSignInTests.IDN_LIFE_012_AC2_UnlinkingLeavesTheAccountUsableByWhatItKeepsAsync`,
+`ProviderSignInTests.IDN_LIFE_012_AC3_UnlinkingTheOnlyRemainingCredentialIsRefusedAsync`,
+`ProviderSignInTests.IDN_LIFE_012_LinkingAsksForTheStepUpItsGateDeclaresAsync`,
+`ProviderSignInTests.IDN_LIFE_012_UnlinkingWhatIsNotLinkedFindsNothingAsync`,
+`ProviderSignInTests.IDN_ACCT_001_AC1_DeletingTheLinkedCredentialLeavesTheAccountUsableAsync`.
+
+*Chapter text that should change.* `09` could say that the `POST` is the check made
+before the round trip and name the start route, and say that the last-credential
+refusal precedes the step-up.
+
+---
+
+## 347. What a provider's address is taken as at registration
+
+**Phase 10 · 2026-09-25 · Tier 3 · REG-IDENT-008, REG-IDENT-010, IDN-ACCT-001**
+
+*The question.* REG-IDENT-008 names the provider-operated mailboxes and the answers,
+and leaves four things open. (a) AC3 says a linked `sub` signs the person in and "no
+registration session is created", but the registration session exists before the
+email step Continue with Google belongs to. (b) A provider-operated address already on
+another account: vouching for it would verify one address on two accounts. (c)
+`email_verified` is a boolean at Google and has been the string `"true"` at Apple.
+(d) Which addresses are Apple's relay.
+
+*The readings.* (a1) the registration session is left as it was; (a2) it is abandoned
+and the person signed in. (b1) the address is verified as for a fresh one; (b2) it is
+staged as a typed duplicate is: unverified, no code, the holder told. (c1) a boolean
+only; (c2) a boolean, or the string `"true"`. (d) `privaterelay.appleid.com`, beside
+`icloud.com`, `me.com` and `mac.com`, and no subdomain of any.
+
+*Chosen: a2, b2, c2, d (Tier 3, the strictest reading).* (a2) leaves no half-built
+registration behind a person who has signed in instead, so nothing staged in it can be
+completed later by whoever holds the browser. (b2) grants nothing on an address
+another account holds; the answer differs from the fresh provider-operated case, but
+only to the person the provider has just shown controls the mailbox, who is sent the
+notice there anyway, so nobody learns what they could not already. (c2) reads each
+provider's documented form and nothing else: any other value is unverified. An address
+the provider does not call verified is sent a code whoever operates it. The domains are
+carried by each provider's catalogue entry (`FactorProperties.OperatedDomains` and
+`OperatesHostedDomain`), so no rule names a provider (AUTH-FACT-001 AC1).
+
+*Tests that pin it.*
+`RegistrationServiceTests.REG_IDENT_008_AC1_AGmailAddressIsVerifiedByTheSignInAndReachesConfirmAsync`,
+`RegistrationServiceTests.REG_IDENT_008_AWorkspaceDomainTheTokenAssertsIsVerifiedByTheSignInAsync`,
+`RegistrationServiceTests.REG_IDENT_008_AnAppleRelayAddressIsVerifiedByTheSignInAsync`,
+`RegistrationServiceTests.REG_IDENT_008_AC2_AThirdPartyAddressFromAppleIsSentOneCodeAsync`,
+`RegistrationServiceTests.REG_IDENT_008_AnAddressTheProviderDoesNotCallVerifiedIsSentACodeAsync`,
+`RegistrationServiceTests.REG_IDENT_008_AC3_ALinkedIdentityMakesTheAttemptASignInAsync`,
+`RegistrationServiceTests.REG_IDENT_008_AC4_AnAddressAnotherAccountHoldsAnswersAsAFreshOneAsync`,
+`RegistrationServiceTests.REG_IDENT_008_AC4_AProviderOperatedAddressAnotherAccountHoldsIsNotVouchedForAsync`,
+`RegistrationServiceTests.IDN_ACCT_001_AC2_AnAccountRegisteredThroughAProviderHasItsOwnRecordAsync`,
+`FactorCatalogueTests.REG_IDENT_008_TheMailboxesAProviderOperatesAreTheOnesTheItemNames`,
+`ProviderSignInTests.REG_IDENT_008_AC1_ContinueWithGoogleVerifiesAGmailAddressAsync`,
+`ProviderSignInTests.REG_IDENT_008_AnAppleRelayAddressIsVerifiedOverTheRoundTripAsync`,
+`ProviderSignInTests.REG_IDENT_008_AC2_AThirdPartyAddressFromAppleIsSentOneCodeAsync`,
+`ProviderSignInTests.REG_IDENT_008_AC3_ALinkedIdentityOnTheRegistrationSignsInAsync`,
+`ProviderSignInTests.REG_IDENT_008_AC4_AnAddressAnotherAccountHoldsAnswersAsAFreshOneAsync`.
+
+*Chapter text that should change.* REG-IDENT-008 AC3 could read "the registration
+session is abandoned"; the requirement could say a provider-operated address another
+account holds is not verified by the sign-in, name the relay domain, and say how
+`email_verified` is read.
+
+---
+
+## 348. How a refused round trip is answered, and what is logged
+
+**Phase 10 · 2026-09-25 · Tier 2 · IDN-LIFE-012, CONV-CONTENT-001, CONV-LOG-003, BFF-ERR-001**
+
+*The question.* The start and the continuation are navigations, not calls the frontend
+makes, so a JSON refusal would be the page the person sees. And a provider's refusal
+carries `error_description`, text the provider wrote.
+
+*The readings.* (1) Answer every refusal as JSON, as the browser profile does. (2)
+Send the browser back to `returnTo` with the code in `error`, and answer JSON only
+where the round trip itself cannot be trusted. (3) Answer every refusal by a
+redirect.
+
+*Chosen: 2.* A refusal of the person's attempt (the provider refused, the token did not
+hold up, the account may not link, the registration is gone) returns the browser to
+where it started, with `error` set to the code, placed before any fragment; the
+frontend writes the words (CONV-CONTENT-001). A return whose binding or `state` fails
+is answered `403 session.csrf.invalid` as JSON and sent nowhere, since it may not be
+the person's return at all. The log records the provider and the trace, and never the
+code, the `state` or anything the provider wrote.
+
+*Tests that pin it.*
+`ProviderSignInTests.IDN_ACCT_001_AnIdentityLinkedToNoAccountSignsNobodyInAsync`,
+`ProviderSignInTests.IDN_LIFE_012_AnIdentityTokenThatDoesNotHoldUpSignsNobodyInAsync`,
+`ProviderSignInTests.IDN_LIFE_012_AProviderThatCannotBeReadIsNotStartedAsync`,
+`ProviderSignInTests.BFF_CSRF_005a_AProviderReturnWithAnotherStateIsRefusedAsync`.
+
+*Chapter text that should change.* BFF-ERR-001 could say that a navigation route
+answers a refusal by returning the browser with the code in `error`.
+
+---
+
+## 349. What startup asks of a declared social provider
+
+**Phase 10 · 2026-09-25 · Tier 2 · LIB-HOST-001, AUTHZ-MODEL-003, entry 343**
+
+*The question.* Entry 343 adds three members to `SocialProvider`; entry 283's startup
+checks cover the key document and the client identifiers only.
+
+*The readings.* (1) Check nothing more, and let a bad value fail at the first sign-in.
+(2) Refuse at startup what can be judged there.
+
+*Chosen: 2.* Startup refuses, under `model.startup.declarationmissing`, a discovery
+address that is not absolute HTTPS (`configuration`), a return address that is not
+absolute HTTPS or whose path does not end in `/callbacks/providers/{provider}/return`
+for the provider it is declared for (`return`), and an empty secret (`secret`). A
+return address the provider will not accept is not something startup can know.
+
+*Tests that pin it.*
+`StartupValidationTests.IDN_LIFE_012a_ASocialProviderDeclaredShortOfWholeIsRefusedAsync`
+(configuration, return, secret).
+
+*Chapter text that should change.* AUTHZ-MODEL-003's refusals could list the three.
+
+---
+
+## 350. The disclosure at link time
+
+**Phase 10 · 2026-09-25 · Tier 2 · AUTH-FACT-002a AC5, CONV-CONTENT-001, R-A16**
+
+*The question.* AC5 has linking a provider to an account holding a second factor show
+the disclosure. The library writes no sentence (CONV-CONTENT-001), and the round trip
+leaves the application before the provider is asked anything.
+
+*The readings.* (1) The library shows it, which it cannot. (2) The frontend shows it
+before it starts the round trip, knowing from the credentials it already reads whether
+the account holds a second factor.
+
+*Chosen: 2.* AC5 is not decided by a library test; it is named in the phase report as
+verified in the frontend, which reads the account's credentials before it offers the
+link.
+
+*Tests that pin it.* None in the library; the criterion is named in the phase 10
+report under criteria a test cannot decide.
+
+*Chapter text that should change.* AUTH-FACT-002a AC5 could name FE-API-004 or the
+frontend chapter as where the disclosure is verified.
+
 
 # Rows for chapter 10
 
@@ -14075,7 +14405,7 @@ The subsection each row belongs in is named with it.
 | `IDnsResolver` (`TextRecordsAsync`) | optional | No startup refusal. Every verification of a locked domain answers `identity.domain.unverified` and every scheduled check fails and raises `domain-reverification-failed`, so no domain is ever proved. A deployment that locks no domain needs none (REG-DOM-001, entry 212). |
 | `IMailServer` (`ProvisionAsync`, `MailboxesAsync`, `AppPasswordsAsync`, `CreateAppPasswordAsync`, `RevokeAppPasswordAsync`) | optional | No startup refusal. No mailbox is pushed and none is compared; the rows are still written, and the first pass after a registration pushes every state owed. A push carries a key that stays the same until the server confirms it, the address in its canonical form and the state `disabled`, `enabled` or `removed`; the server applies a key once. The listing answers every mailbox the server hosts with whether it is enabled. The three app-password calls carry the person's token and act on the account the server finds in it; the creation answers the server's new secret and its identifier, and a revocation of an identifier the server does not hold for that person answers `auth.credential.notfound`. Without a registration every app-password operation answers `authz.denied`. A deployment whose staff mail is hosted elsewhere needs none (INT-MAIL-006, INT-MAIL-008, INT-MAIL-009, INT-MAIL-010, entries 215, 262 and 263). |
 | `MailServerClient` (`clientId`) | where `IMailServer` is registered, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `mailServerClient.clientId`. The identifier is the registry's `protocol` client the mail server trusts, which the library issues the person's token to for the app-password calls; it presents no secret, since the library issues the token itself (INT-MAIL-010, AUTH-OIDC-001 AC4, entry 262). |
-| `SocialProvider` (`provider`, `metadata`, `clientIds`) | optional, once per social provider | No startup refusal where none is declared: every event of that provider is refused as a rejected callback. One declared twice, naming a factor that is not a social provider, with a `metadata` address that is not absolute HTTPS, or with no client or an empty one stops startup with `model.startup.declarationmissing` and `details.key` naming `socialProvider.provider`, `socialProvider.metadata` or `socialProvider.clientIds`. `metadata` is the provider's document naming `issuer` and `jwks_uri` (Google's Cross-Account Protection configuration, Apple's discovery document); `clientIds` are the audiences an event for the deployment names (IDN-LIFE-012a, entry 283). |
+| `SocialProvider` (`provider`, `metadata`, `configuration`, `return`, `secret`, `clientIds`) | optional, once per social provider | No startup refusal where none is declared: every event of that provider is refused as a rejected callback, and no round trip to it starts. One declared twice, naming a factor that is not a social provider, with a `metadata` or `configuration` address that is not absolute HTTPS, with a `return` address that is not absolute HTTPS or whose path does not end in `/callbacks/providers/{provider}/return` for the provider it declares, with an empty `secret`, or with no client or an empty one stops startup with `model.startup.declarationmissing` and `details.key` naming `socialProvider.provider`, `socialProvider.metadata`, `socialProvider.configuration`, `socialProvider.return`, `socialProvider.secret` or `socialProvider.clientIds`. `metadata` is the provider's document naming `issuer` and `jwks_uri` (Google's Cross-Account Protection configuration, Apple's discovery document); `configuration` is the provider's OpenID Connect discovery document a sign-in reads its endpoints from; `return` is the address registered at the provider that the browser comes back to; `secret` is the client secret from the secrets manager, for Apple the signed secret the host mints. `clientIds` are the audiences an event for the deployment names, and the first is the client a sign-in is started under and the only audience its identity token may name (IDN-LIFE-012, IDN-LIFE-012a, entries 283, 343 and 349). |
 | `ImageCodec` (`Reencode`) | optional, and required while any organization shows photos | Startup fails with `model.startup.declarationmissing` and `details.key` naming `imageCodec` where a `photo.enabled.<organization>` key is on and no codec is registered. The callback is `Func<ReadOnlyMemory<byte>, int, CancellationToken, ValueTask<ReadOnlyMemory<byte>?>>`: the uploaded bytes and the longest side in pixels the stored image is held to, answering the re-encoded JPEG with every metadata segment removed, or nothing where the bytes are not an image the deployment accepts. Nothing it answers chooses a code: a refusal is `identity.photo.invalid` (IDN-ATTR-002, IDN-ATTR-004). |
 
 ## Shipped default declarations

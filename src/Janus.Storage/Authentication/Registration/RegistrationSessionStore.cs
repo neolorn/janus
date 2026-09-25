@@ -193,7 +193,8 @@ internal sealed class RegistrationSessionStore(
             staged.WebAuthn?.RelyingPartyId,
             staged.WebAuthn?.Counter,
             staged.WebAuthn?.BackupEligible ?? false,
-            staged.WebAuthn?.BackupState ?? false);
+            staged.WebAuthn?.BackupState ?? false,
+            staged.ProviderSubject);
 
     private static StagedIdentity Read(StagedIdentityDocument staged) =>
         StagedIdentity.Existing(
@@ -225,7 +226,8 @@ internal sealed class RegistrationSessionStore(
                     staged.RelyingPartyId!,
                     staged.Counter,
                     staged.BackupEligible,
-                    staged.BackupState));
+                    staged.BackupState),
+            staged.ProviderSubject);
 
     // A label this library wrote is a label this library accepts, so a stored value
     // that no longer parses is a corrupted row and not a label to drop quietly.

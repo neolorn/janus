@@ -331,16 +331,27 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     [InlineData("provider")]
     [InlineData("metadata")]
     [InlineData("clientIds")]
+    [InlineData("configuration")]
+    [InlineData("return")]
+    [InlineData("secret")]
     public async Task IDN_LIFE_012a_ASocialProviderDeclaredShortOfWholeIsRefusedAsync(string part)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
-        var metadata = new Uri("https://accounts.google.test/.well-known/risc-configuration");
-        var whole = new SocialProvider(Factor.Google, metadata, ["the-client"]);
+        var whole = new SocialProvider(
+            Factor.Google,
+            new Uri("https://accounts.google.test/.well-known/risc-configuration"),
+            ["the-client"],
+            new Uri("https://accounts.google.test/.well-known/openid-configuration"),
+            new Uri("https://identity.example.test/callbacks/providers/google/return"),
+            "the-client-secret"u8.ToArray());
         SocialProvider[] declared = part switch
         {
             "provider" => [whole, whole with { Provider = Factor.Password }],
             "metadata" => [whole with { Metadata = new Uri("http://accounts.google.test/risc") }],
-            _ => [whole with { ClientIds = [] }],
+            "clientIds" => [whole with { ClientIds = [] }],
+            "configuration" => [whole with { Configuration = new Uri("http://accounts.google.test/openid") }],
+            "return" => [whole with { Return = new Uri("https://identity.example.test/callbacks/providers/apple/return") }],
+            _ => [whole with { Secret = ReadOnlyMemory<byte>.Empty }],
         };
 
         using (IHost refusedHost = Deployed(providers: declared))
