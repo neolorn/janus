@@ -4,7 +4,8 @@
 # over 72 characters, a body line that is prose rather than a dash fragment, and a
 # type outside the list all fail here. A commit with two parents is the merge commit
 # the platform writes, which carries no change of its own and is outside the item, so
-# only single-parent commits are inspected.
+# only single-parent commits are inspected. AC2, the breaking marker on a commit that
+# breaks the contract, is judged in release.sh, which reads the contract.
 
 set -euo pipefail
 

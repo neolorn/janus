@@ -15642,6 +15642,80 @@ failed: `phase-07-privacy` (#15).
 *Chapter text that should change.* CONV-TEST-004 AC2 or CONV-VCS-004 could list what
 permission logic is, and say that the change under review is the unit judged.
 
+---
+
+## 381. A break of the contract is judged by what it takes away, and the marker is checked in the release gate
+
+**Phase 10 · 2026-09-25 · Tier 2 · CONV-VCS-003 AC2, LIB-API-001, CONV-SETUP-003**
+
+*The question.* CONV-VCS-003 wants the marker "for any change that breaks
+LIB-API-001". No shipped file moves between releases (CONV-SETUP-003). So a public
+member removed before a release shows only as a `*REMOVED*` line in an unshipped file.
+The contract also holds lists that no shipped file records: keys, schema, codes, audit
+actions and permissions. And an entry added after the last release and then removed
+broke nothing that was ever released.
+
+*The readings.*
+
+1. The marker is due only where a line of a `PublicAPI.Shipped.txt` is removed or
+   changed.
+2. The marker is due where a commit removes or changes a shipped line, marks one
+   removed in an unshipped file, or takes away a list entry the latest release held.
+   It is not due for an entry that never shipped.
+3. The marker is due for any entry taken away, released or not.
+
+*Chosen: 2.* Reading 1 sees nothing between releases, which is where breaks are
+written. Reading 3 would call breaking something no consumer ever had. The check sits
+in `release.sh`, the one gate that reads the contract, and `commit-message.sh` points
+to it.
+
+*Tests that pin it.* None in the solution; a gate over commits is not built by a test.
+The release gate's scenarios against scratch repositories on markers, `*REMOVED*`
+lines, keys, codes, columns and permissions, listed in the phase 10 report under
+CONV-VCS-003, pin it.
+
+*Chapter text that should change.* CONV-VCS-003 could say that a break is judged
+against the last release.
+
+---
+
+## 382. The contract's lists are read from their contract files and catalogues, and a list read short stops the gate
+
+**Phase 10 · 2026-09-25 · Tier 2 · REF-001 AC2, LIB-API-001 AC2, LIB-VER-001**
+
+*The question.* REF-001 AC2 ties a changed code, key or name to a major version. Only
+the shipped surface was judged, and a code's string value is not part of it. The lists
+have no single file: keys and schema are held by contract files beside their tests,
+and codes, audit actions and permissions are declared in C#.
+
+*The readings.*
+
+1. Build the solution at both releases and read the lists by reflection.
+2. Read the committed files at both release commits. The key file and the schema file
+   are read line by line, with each schema line named for its relation. Each catalogue
+   is read from the literal each declaration parses. A catalogue whose declarations
+   and literals do not number the same fails the run. The previous release is found
+   from the changelog.
+
+*Chosen: 2.*
+
+- Reading 1 needs two builds of old commits, and fails wherever an old commit no
+  longer builds with today's tools.
+- Reading 2 reads what the contract tests already hold. The count check makes a new
+  way of declaring an entry fail, instead of reading the list short.
+- Permissions are included because REF-001 names them among its contract names.
+- HTTP endpoints are not listed. The shipped surface and the contract chapter (`09`)
+  carry them, and no committed file lists them.
+
+*Tests that pin it.* None in the solution; a gate over commits is not built by a test.
+The release gate's scenarios against scratch repositories on the lists, listed in the
+phase 10 report under REF-001, pin it. At `bedbba5` all five lists read whole: 135
+configuration keys, 1051 schema lines, 134 error codes, 75 audit actions and 22
+permissions.
+
+*Chapter text that should change.* REF-001 AC2 could say the bump is judged at the
+release commit, against the previous release, by the contract files.
+
 
 # Rows for chapter 10
 
