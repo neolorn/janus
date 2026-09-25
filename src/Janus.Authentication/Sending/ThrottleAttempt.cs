@@ -8,10 +8,11 @@ namespace Janus.Authentication.Sending;
 /// </summary>
 /// <param name="Source">The address it came from.</param>
 /// <param name="Identifier">
-/// What was typed, whether or not an account holds it.
+/// The keyed hash of the identifier it was made against, whether or not an account
+/// holds it, or nothing where it named none.
 /// </param>
 /// <remarks>Implements AUTH-ABUSE-001 and AUTH-ABUSE-002.</remarks>
-internal sealed record ThrottleAttempt(string Source, string? Identifier)
+internal sealed record ThrottleAttempt(string Source, byte[]? Identifier)
 {
     /// <summary>
     /// The account it was made against, where the identifier resolved to one.

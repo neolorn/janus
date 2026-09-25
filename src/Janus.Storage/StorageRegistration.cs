@@ -227,7 +227,9 @@ internal static class StorageRegistration
         services.AddScoped<IPreAuthenticationStore>(provider => new PreAuthenticationStore(
             provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys));
-        services.AddScoped<IChallengeStore, ChallengeStore>();
+        services.AddScoped<IChallengeStore>(provider => new ChallengeStore(
+            provider.GetRequiredService<StoreContext>(),
+            fingerprintKeys));
         services.AddScoped<IVerificationCodeStore, VerificationCodeStore>();
         services.AddScoped<IKeyCeremonyStore, KeyCeremonyStore>();
         services.AddScoped<IProviderAttemptStore>(provider => new ProviderAttemptStore(

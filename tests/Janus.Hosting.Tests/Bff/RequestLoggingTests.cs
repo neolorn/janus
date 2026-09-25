@@ -444,9 +444,15 @@ public sealed class RequestLoggingTests : IAsyncDisposable
         _ = await BegunAsync(signing, Unheld);
         _ = await BegunAsync(signing, UnheldNumber);
 
+        // The code just sent holds the address's restriction for its interval, and a
+        // link no policy lets out counts as one sent would (AUTH-ABUSE-002 AC3).
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(1));
+
         Answer linked = await signing.SendAsync("POST", "/auth/link", ("identifier", Flow.Address));
 
-        _deployment.Clock.Advance(TimeSpan.FromMinutes(5));
+        // Three sends to the address in a day fill its daily restriction, the link
+        // counted among them, so the recovery asks for it the day after.
+        _deployment.Clock.Advance(TimeSpan.FromDays(1));
 
         Browser recovering = await ArrivedAsync();
 

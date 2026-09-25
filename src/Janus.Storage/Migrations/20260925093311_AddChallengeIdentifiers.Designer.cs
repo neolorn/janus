@@ -3,6 +3,7 @@ using System;
 using Janus.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Janus.Storage.Migrations;
 
 [DbContext(typeof(StoreContext))]
-partial class StoreContextModelSnapshot : ModelSnapshot
+[Migration("20260925093311_AddChallengeIdentifiers")]
+partial class AddChallengeIdentifiers
 {
-    protected override void BuildModel(ModelBuilder modelBuilder)
+    /// <inheritdoc />
+    protected override void BuildTargetModel(ModelBuilder modelBuilder)
     {
 #pragma warning disable 612, 618
         modelBuilder
@@ -1385,8 +1388,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<string>("Domain")
                     .IsRequired()
                     .HasColumnType("text")
-                    .HasColumnName("domain")
-                    .UseCollation("identity_ci");
+                    .HasColumnName("domain");
 
                 b.Property<bool?>("LastCheckPassed")
                     .HasColumnType("boolean")
@@ -3082,10 +3084,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<Guid>("Id")
                     .HasColumnType("uuid")
                     .HasColumnName("id");
-
-                b.Property<string>("CanonicalName")
-                    .HasColumnType("text")
-                    .HasColumnName("canonical_name");
 
                 b.Property<DateTimeOffset>("CreatedAt")
                     .HasColumnType("timestamp with time zone")

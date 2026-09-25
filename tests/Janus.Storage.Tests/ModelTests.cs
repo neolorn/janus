@@ -817,13 +817,16 @@ public sealed class ModelTests
             "settings.value",
 
             // Not an account field: a sign-in in flight, keyed by what the caller's handle
-            // hashes to and carrying what it has presented so far (AUTH-FACT-001), and
-            // the email it was opened with, which a domain lock is judged on
-            // (REG-DOM-001).
+            // hashes to and carrying what it has presented so far (AUTH-FACT-001), the
+            // email it was opened with, which a domain lock is judged on (REG-DOM-001),
+            // and the keyed hash of the identifier it was opened with, with its version,
+            // which a refused factor is counted against (AUTH-ABUSE-001).
             "signin_challenges.created_at",
             "signin_challenges.email",
             "signin_challenges.expires_at",
+            "signin_challenges.fingerprint_version",
             "signin_challenges.handle",
+            "signin_challenges.identifier",
             "signin_challenges.presented",
             "signin_challenges.subject",
             "signin_challenges.webauthn",

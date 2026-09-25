@@ -64,6 +64,8 @@ internal static class AuthenticationEndpoints
         return endpoints;
     }
 
+    // AUTH-ABUSE-001 AC5: the browser's own tokens travel with the sign-in it opens, so
+    // a browser the account knows is not held by an attack on the account.
     private static async Task<IResult> BeginAsync(
         SignInRequest request,
         IAuthentication authentication,
@@ -81,6 +83,8 @@ internal static class AuthenticationEndpoints
                     .BeginAsync(
                         identifier,
                         RequestOrigin.Source(context.Request),
+                        Carried(context.Request, BrowserCookies.Browser),
+                        Carried(context.Request, BrowserCookies.Device),
                         cancellationToken)
                     .ConfigureAwait(false),
                 challenge => TypedResults.Json(

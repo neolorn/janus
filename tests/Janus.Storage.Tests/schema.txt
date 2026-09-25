@@ -974,7 +974,10 @@ table signin_challenges
   column expires_at timestamp with time zone not null
   column presented text[] not null
   column email uuid
+  column fingerprint_version integer
+  column identifier bytea
   constraint ck_signin_challenges_handle CHECK ((octet_length(handle) = 32))
+  constraint ck_signin_challenges_identifier CHECK ((((identifier IS NULL) = (fingerprint_version IS NULL)) AND ((identifier IS NULL) OR (octet_length(identifier) = 32))))
   constraint fk_signin_challenges_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
   constraint pk_signin_challenges PRIMARY KEY (handle)
   index ix_signin_challenges_expires_at using btree (expires_at)

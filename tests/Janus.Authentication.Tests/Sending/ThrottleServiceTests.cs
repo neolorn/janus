@@ -53,7 +53,7 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
     [Fact]
     public async Task AUTH_ABUSE_001_AC1_RepeatedFailuresRaiseTheDelayAndDisableNothingAsync()
     {
-        var attempt = new ThrottleAttempt("198.51.100.7", "someone@example.test");
+        var attempt = new ThrottleAttempt("198.51.100.7", Typed("someone@example.test"));
 
         Assert.Equal(TimeSpan.Zero, await DelayAsync(attempt));
 
@@ -75,7 +75,7 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
     [Fact]
     public async Task AUTH_ABUSE_001_AC2_TheDelayDecaysWithTimeAsync()
     {
-        var attempt = new ThrottleAttempt("198.51.100.7", "someone@example.test");
+        var attempt = new ThrottleAttempt("198.51.100.7", Typed("someone@example.test"));
 
         await FailedAsync(attempt, times: 6);
 
@@ -93,7 +93,7 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
     [Fact]
     public async Task AUTH_ABUSE_001_AC2_AFailureAfterAQuietSpellEarnsLessAsync()
     {
-        var attempt = new ThrottleAttempt("198.51.100.7", "someone@example.test");
+        var attempt = new ThrottleAttempt("198.51.100.7", Typed("someone@example.test"));
 
         await FailedAsync(attempt, times: 6);
         _clock.Advance(TimeSpan.FromMinutes(20));
@@ -110,7 +110,7 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
     [Fact]
     public async Task AUTH_ABUSE_001_AC1_FailuresMadeOneAfterAnotherEscalateTheDelayAsync()
     {
-        var attempt = new ThrottleAttempt("198.51.100.7", "someone@example.test");
+        var attempt = new ThrottleAttempt("198.51.100.7", Typed("someone@example.test"));
         var earned = new List<TimeSpan>();
 
         for (int failure = 0; failure < 6; failure++)
@@ -143,7 +143,7 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
     [Fact]
     public async Task AUTH_ABUSE_001_AC1_TheDelayRunsFromTheFailureThatEarnedItAsync()
     {
-        var attempt = new ThrottleAttempt("198.51.100.7", "someone@example.test");
+        var attempt = new ThrottleAttempt("198.51.100.7", Typed("someone@example.test"));
 
         await FailedAsync(attempt, times: 4);
 
@@ -172,7 +172,7 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
         for (int source = 0; source < 5; source++)
         {
             await FailedAsync(
-                new ThrottleAttempt("198.51.100." + source, "someone@example.test")
+                new ThrottleAttempt("198.51.100." + source, Typed("someone@example.test"))
                 {
                     Account = account,
                 },
@@ -180,7 +180,7 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
         }
 
         TimeSpan held = await DelayAsync(
-            new ThrottleAttempt("203.0.113.9", "someone@example.test") { Account = account });
+            new ThrottleAttempt("203.0.113.9", Typed("someone@example.test")) { Account = account });
 
         Assert.Equal(TimeSpan.FromSeconds(4), held);
     }
@@ -218,7 +218,7 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
         for (int source = 0; source < 30; source++)
         {
             await FailedAsync(
-                new ThrottleAttempt("198.51.100." + source, "someone@example.test")
+                new ThrottleAttempt("198.51.100." + source, Typed("someone@example.test"))
                 {
                     Account = account,
                 },
@@ -226,7 +226,7 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
         }
 
         TimeSpan returning = await DelayAsync(
-            new ThrottleAttempt("203.0.113.9", "someone@example.test")
+            new ThrottleAttempt("203.0.113.9", Typed("someone@example.test"))
             {
                 Account = account,
                 Recognised = true,
@@ -265,8 +265,8 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
     public async Task AUTH_ABUSE_002_AC1_TheDelayIsTheSameWhetherTheAccountExistsOrNotAsync()
     {
         var account = SubjectId.New(_randomness);
-        var held = new ThrottleAttempt("198.51.100.7", "someone@example.test") { Account = account };
-        var unheld = new ThrottleAttempt("198.51.100.8", "nobody@example.test");
+        var held = new ThrottleAttempt("198.51.100.7", Typed("someone@example.test")) { Account = account };
+        var unheld = new ThrottleAttempt("198.51.100.8", Typed("nobody@example.test"));
 
         await FailedAsync(held, times: 5);
         await FailedAsync(unheld, times: 5);
@@ -317,19 +317,50 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// A sign-in that succeeds forgets what the attempt accumulated, so the person
-    /// who got it right is not held by their own earlier typing.
+    /// AUTH-ABUSE-001: a sign-in that succeeds forgets what the account accumulated,
+    /// which is all it proves; the source it came from and the identifier it named
+    /// keep their counts and are held by them until time forgives them.
     /// </summary>
     [Fact]
-    public async Task SucceededAsync_AnAttemptThatSucceeded_ForgetsWhatItAccumulatedAsync()
+    public async Task AUTH_ABUSE_001_ASuccessForgetsTheAccountsCountAndNoOtherAsync()
     {
-        var attempt = new ThrottleAttempt("198.51.100.7", "someone@example.test");
+        var account = SubjectId.New(_randomness);
+        byte[] identifier = Typed("someone@example.test");
+        var attempt = new ThrottleAttempt("198.51.100.7", identifier) { Account = account };
 
         await FailedAsync(attempt, times: 5);
         await Service.SucceededAsync(attempt, TestContext.Current.CancellationToken);
 
-        Assert.Empty(_ledger.Counted);
-        Assert.Equal(TimeSpan.Zero, await DelayAsync(attempt));
+        Assert.Equal(
+            [ThrottleScope.Source, ThrottleScope.Identifier],
+            _ledger.Counted.Select(counted => counted.Scope).Order());
+        Assert.Equal(TimeSpan.FromSeconds(4), await DelayAsync(attempt));
+        Assert.Equal(
+            TimeSpan.FromSeconds(4),
+            await DelayAsync(new ThrottleAttempt("203.0.113.9", identifier) { Account = account }));
+        Assert.Equal(
+            TimeSpan.FromSeconds(4),
+            await DelayAsync(new ThrottleAttempt("198.51.100.7", null)));
+        Assert.Equal(
+            TimeSpan.Zero,
+            await DelayAsync(new ThrottleAttempt("203.0.113.9", null) { Account = account }));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001: the ways one address can be typed are one identifier, so a
+    /// change of case or of spacing does not open a fresh count.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_EveryWayOfTypingOneAddressIsOneCountAsync()
+    {
+        await FailedAsync(new ThrottleAttempt("198.51.100.7", Typed("nobody@example.test")), times: 3);
+
+        Assert.Equal(
+            TimeSpan.FromSeconds(1),
+            await DelayAsync(new ThrottleAttempt("203.0.113.9", Typed("  Nobody@EXAMPLE.test "))));
+        Assert.Equal(
+            TimeSpan.Zero,
+            await DelayAsync(new ThrottleAttempt("203.0.113.9", Typed("somebody@example.test"))));
     }
 
     /// <summary>
@@ -339,7 +370,7 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
     [Fact]
     public async Task DelayAsync_SeveralScopesCounted_AnswersTheLargestAsync()
     {
-        var attempt = new ThrottleAttempt("198.51.100.7", "someone@example.test")
+        var attempt = new ThrottleAttempt("198.51.100.7", Typed("someone@example.test"))
         {
             Account = SubjectId.New(_randomness),
         };
@@ -348,6 +379,9 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
 
         Assert.Equal(TimeSpan.FromSeconds(4), await DelayAsync(attempt));
     }
+
+    // What an identifier as typed is counted under, as every flow that names one asks.
+    private byte[] Typed(string identifier) => Service.Identify(identifier, usernames: false);
 
     private async Task<TimeSpan> DelayAsync(ThrottleAttempt attempt) =>
         (await Service.DelayAsync(attempt, TestContext.Current.CancellationToken)).Match(

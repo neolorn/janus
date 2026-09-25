@@ -37,10 +37,33 @@ public interface IAuthentication
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Opens a sign-in for one identifier, from a browser that carries the tokens a
+    /// remembered or trusted browser holds (AUTH-ABUSE-001 AC5).
+    /// </summary>
+    /// <param name="identifier">The email, phone or username as it was entered.</param>
+    /// <param name="source">
+    /// The address the attempt came from, which the progressive delay counts it
+    /// against.
+    /// </param>
+    /// <param name="remembered">The remembered browser's token, where one was carried.</param>
+    /// <param name="trusted">The trusted device's token, where one was carried.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The challenge, as the overload without the tokens answers it; a token that
+    /// resolves to the account exempts the browser from the account's delays.
+    /// </returns>
+    ValueTask<Result<SignInChallenge>> BeginAsync(
+        string identifier,
+        string source,
+        string? remembered,
+        string? trusted,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Presents one factor against a challenge, until what is presented reaches the
     /// assurance the policy requires.
     /// </summary>
-    /// <param name="challenge">The handle <see cref="BeginAsync"/> returned.</param>
+    /// <param name="challenge">The handle <see cref="BeginAsync(string, string, CancellationToken)"/> returned.</param>
     /// <param name="presented">The factor and what proves it.</param>
     /// <param name="device">What the browser says it is.</param>
     /// <param name="source">The address the attempt came from.</param>
@@ -80,7 +103,7 @@ public interface IAuthentication
     /// <param name="context">Who is asking.</param>
     /// <param name="session">The session the request arrived on.</param>
     /// <param name="challenge">
-    /// The handle <see cref="BeginAsync"/> returned, which a ceremony signs over and
+    /// The handle <see cref="BeginAsync(string, string, CancellationToken)"/> returned, which a ceremony signs over and
     /// which belongs to the asking principal or to nobody.
     /// </param>
     /// <param name="presented">The factor and what proves it.</param>

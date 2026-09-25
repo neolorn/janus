@@ -233,6 +233,10 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
 
         _ = await other.SendAsync("GET", "/auth/session");
 
+        // The link just sent holds the address's restriction for its interval, and a
+        // link the lock withholds counts as one sent would (AUTH-ABUSE-002 AC3).
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(1));
+
         Answer asked = await other.SendAsync("POST", "/auth/link", ("identifier", Flow.Address));
 
         Assert.Equal(ErrorCodes.IdentifierDomainNotAllowed.ToString(), pressed.Text("code"));

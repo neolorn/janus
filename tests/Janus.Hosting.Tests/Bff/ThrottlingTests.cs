@@ -2,10 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Authentication.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Http;
 using Xunit;
 
@@ -26,6 +28,8 @@ public sealed class ThrottlingTests : IAsyncDisposable
 
     private static readonly IPAddress Attacker = IPAddress.Parse("203.0.113.5");
     private static readonly IPAddress Elsewhere = IPAddress.Parse("203.0.113.6");
+    private static readonly IPAddress Fresh = IPAddress.Parse("203.0.113.7");
+    private static readonly IPAddress Owner = IPAddress.Parse("203.0.113.8");
 
     private readonly Deployment _deployment = new();
 
@@ -174,6 +178,117 @@ public sealed class ThrottlingTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// BFF-ABUSE-001 AC1, AUTH-ABUSE-001: failures against an address an account holds
+    /// and the same failures against an address nobody holds hold both addresses alike
+    /// from an address that has failed nothing, byte for byte, and hold no other.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ABUSE_001_AC1_FromAFreshSourceTheThrottledAnswerIsTheSameForAHeldAndAnUnheldAddressAsync()
+    {
+        await RegisteredAsync();
+
+        _ = await FailedAsync(Flow.Address, Attacker);
+        _ = await FailedAsync(Unheld, Elsewhere);
+
+        Answer forHeld = await ArrivedAsync(Fresh, "/auth/begin", Flow.Address);
+        Answer forUnheld = await ArrivedAsync(Fresh, "/auth/begin", Unheld);
+        Answer forOther = await ArrivedAsync(Fresh, "/auth/begin", "somebody@example.test");
+
+        AssertThrottled(forHeld);
+        AssertAlike(forHeld, forUnheld);
+        Assert.Equal(StatusCodes.Status200OK, forOther.Status);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001 AC5: the cookie the account's own sign-in left on a browser spares
+    /// that browser the delay failures elsewhere earned the account and the address; the
+    /// same cookie altered, or none, spares nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_001_AC5_OnlyACookieTheAccountLeftSparesItsBrowserTheDelayAsync()
+    {
+        await RegisteredAsync();
+
+        string remembered = await RememberedAsync();
+
+        _ = await FailedAsync(Flow.Address, Attacker);
+
+        Answer forOwner = await ArrivedAsync(Fresh, "/auth/begin", Flow.Address, remembered);
+        Answer forForged = await ArrivedAsync(Fresh, "/auth/begin", Flow.Address, Altered(remembered));
+        Answer forBare = await ArrivedAsync(Fresh, "/auth/begin", Flow.Address);
+
+        Assert.Equal(StatusCodes.Status200OK, forOwner.Status);
+        AssertThrottled(forForged);
+        AssertThrottled(forBare);
+    }
+
+    /// <summary>
+    /// BFF-ABUSE-002 AC1, BFF-ABUSE-001 AC3: a second sign-in link asked inside the
+    /// restriction's interval is refused alike for an address an account holds and one
+    /// nobody holds, carrying the one <c>retryAt</c>, and the address nobody holds is
+    /// sent nothing but the one notice.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ABUSE_002_AC1_ASecondLinkInsideTheIntervalIsRefusedAlikeForAHeldAndAnUnheldAddressAsync()
+    {
+        await RegisteredAsync();
+
+        _ = await AskedAsync("/auth/link");
+
+        (Answer held, Answer unheld, int sent) = await AskedAsync("/auth/link");
+
+        AssertRestricted(held);
+        AssertAlike(held, unheld);
+        Assert.Equal(0, sent);
+        Assert.Single(_deployment.Mail.Taken, taken => taken.Destination.Value == Unheld);
+    }
+
+    /// <summary>
+    /// BFF-ABUSE-002 AC1, BFF-ABUSE-001 AC3: a second email code asked inside the
+    /// restriction's interval is refused alike for an address an account holds and one
+    /// nobody holds, and the address nobody holds is sent nothing but the one notice.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ABUSE_002_AC1_ASecondEmailCodeInsideTheIntervalIsRefusedAlikeForAHeldAndAnUnheldAddressAsync()
+    {
+        await RegisteredAsync();
+
+        _ = await AskedAsync("/auth/email-otp");
+
+        (Answer held, Answer unheld, int sent) = await AskedAsync("/auth/email-otp");
+
+        AssertRestricted(held);
+        AssertAlike(held, unheld);
+        Assert.Equal(0, sent);
+        Assert.Single(_deployment.Mail.Taken, taken => taken.Destination.Value == Unheld);
+    }
+
+    /// <summary>
+    /// BFF-ABUSE-001 AC3, BFF-ABUSE-002 AC1: a second recovery asked inside the
+    /// restriction's interval is refused alike for an address an account holds and one
+    /// nobody holds, and the address nobody holds is sent nothing but the one notice.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ABUSE_001_AC3_ASecondRecoveryInsideTheIntervalIsRefusedAlikeForAHeldAndAnUnheldAddressAsync()
+    {
+        await RegisteredAsync();
+
+        _ = await AskedAsync("/recovery/begin");
+
+        (Answer held, Answer unheld, int sent) = await AskedAsync("/recovery/begin");
+
+        AssertRestricted(held);
+        AssertAlike(held, unheld);
+        Assert.Equal(0, sent);
+        Assert.Single(_deployment.Mail.Taken, taken => taken.Destination.Value == Unheld);
+    }
+
+    /// <summary>
     /// BFF-ABUSE-002 AC1: a sign-in link asked for an address an account holds and
     /// one asked for an address nobody holds are answered alike: status, body and
     /// every header.
@@ -218,6 +333,10 @@ public sealed class ThrottlingTests : IAsyncDisposable
             held.Headers.OrderBy(header => header.Key, StringComparer.OrdinalIgnoreCase),
             unheld.Headers.OrderBy(header => header.Key, StringComparer.OrdinalIgnoreCase));
     }
+
+    // The same cookie with its first character changed, which stands for nothing.
+    private static string Altered(string value) =>
+        (value[0] == 'A' ? "B" : "A") + value[1..];
 
     private static async Task<string> BegunAsync(Browser browser, string identifier, IPAddress source)
     {
@@ -275,6 +394,71 @@ public sealed class ThrottlingTests : IAsyncDisposable
         }
 
         return (browser, challenge);
+    }
+
+    // A browser that has made first contact from the source, holding the browser
+    // cookie given where there is one, asks once for the identifier.
+    private async Task<Answer> ArrivedAsync(
+        IPAddress source,
+        string path,
+        string identifier,
+        string? remembered = null)
+    {
+        var browser = new Browser(_deployment);
+
+        _ = await browser.SendAsync("GET", "/auth/session", source: source);
+
+        if (remembered is not null)
+        {
+            browser.Hold(BrowserCookies.Browser, remembered);
+        }
+
+        return await browser.SendAsync(source, Trace, "POST", path, ("identifier", identifier));
+    }
+
+    // The account signs in on a browser of its own, which passes the new-device check
+    // by the code sent to its address and is left holding the cookie that says so.
+    private async Task<string> RememberedAsync()
+    {
+        var browser = new Browser(_deployment);
+
+        _ = await browser.SendAsync("GET", "/auth/session", source: Owner);
+
+        string challenge = await BegunAsync(browser, Flow.Address, Owner);
+
+        Answer held = await browser.SendAsync(
+            Owner,
+            Trace,
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "password"),
+            ("value", Flow.Password));
+
+        Assert.Equal("deviceVerificationRequired", held.Text("status"));
+
+        Answer completed = await browser.SendAsync(
+            Owner,
+            Trace,
+            "POST",
+            "/auth/device/verify",
+            ("challengeId", challenge),
+            ("code", Flow.Code(_deployment, IdentifierKind.Email)));
+
+        Assert.Equal("complete", completed.Text("status"));
+
+        return browser.Cookies[BrowserCookies.Browser];
+    }
+
+    // BFF-ABUSE-001 AC3: a send a restriction refused crosses as
+    // auth.restriction.exceeded with the instant it lifts.
+    private static void AssertRestricted(Answer answer)
+    {
+        Assert.Equal(StatusCodes.Status429TooManyRequests, answer.Status);
+        Assert.Equal(ErrorCodes.RestrictionExceeded.ToString(), answer.Text("code"));
+        Assert.Equal(
+            JsonValueKind.String,
+            answer.Json().GetProperty("details").GetProperty("retryAt").ValueKind);
     }
 
     // API-CONV-003: the body names the instant the first delay lifts and the header

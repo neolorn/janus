@@ -815,6 +815,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<SendingService>();
         _ = services.AddScoped<INotificationHandler>(
             provider => provider.GetRequiredService<SendingService>());
+        _ = services.AddScoped<ISendingRestrictions>(
+            provider => provider.GetRequiredService<SendingService>());
         _ = services.AddSingleton<IPhoneSignalAudit, PhoneSignalAuditInMemory>();
         _ = services.AddScoped(provider => new PhoneSignals(
             provider.GetService<PhoneSignalProvider>(),

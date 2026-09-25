@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Organizations;
@@ -36,6 +37,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 {
     private const string Language = "en";
     private const string Source = "198.51.100.7";
+    private const string Fresh = "203.0.113.9";
     private const string Address = "person@example.test";
     private const string Elsewhere = "nobody@example.test";
     private const string Number = "+441632960011";
@@ -44,6 +46,8 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     private static readonly DateTimeOffset Noon = new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly DeviceDescription Browser = new("Firefox", "Fedora");
+
+    private static readonly OrganizationId Locked = new(Guid.NewGuid());
 
     private readonly ChallengeStoreInMemory _challenges = new();
     private readonly PendingSignInStoreInMemory _pending = new();
@@ -70,6 +74,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     private readonly VerificationCodeStoreInMemory _codes = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly SendingRestrictionsInMemory _restrictions = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly PhoneSignalAuditInMemory _considered = new();
@@ -79,12 +84,14 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     private PhoneSignalProvider? _provider;
 
     /// <summary>
-    /// A deployment that has named the one key with no default and holds a template
-    /// for every message a sign-in sends, in the shape the message goes out in.
+    /// A deployment that has named the keys with no default, the languages it writes
+    /// in among them, and holds a template for every message a sign-in sends, in the
+    /// shape the message goes out in.
     /// </summary>
     public AuthenticationServiceTests()
     {
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
+        _configuration.Set(Settings.NotificationLanguages, [Language]);
         _configuration.Set(Settings.WebAuthnRelyingPartyId, "example.test");
         _configuration.Set(Settings.WebAuthnOrigins, ["https://example.test"]);
     }
@@ -142,7 +149,14 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             Policies,
             Lock,
             _notifications,
-            new NonExistenceNotice(_configuration, _notifications, _notices, _work, _events, _clock),
+            new NonExistenceNotice(
+                _configuration,
+                _notifications,
+                _restrictions,
+                _notices,
+                _work,
+                _events,
+                _clock),
             Signals,
             Throttle,
             _configuration,
@@ -353,6 +367,138 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.Throttled, Refused(delayed));
         Assert.Equal(SignInStatus.Complete, Reached(completed).Status);
         Assert.Equal(3, _audit.Failed.Count);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001 AC1, AUTH-ABUSE-003: failures against an identifier no account
+    /// holds are counted against the identifier as failures against one an account
+    /// holds are, so from a source that has failed nothing both are held alike and a
+    /// third identifier is not held at all.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_AC1_AnIdentifierNoAccountHoldsIsHeldFromAFreshSourceAsOneAnAccountHoldsAsync()
+    {
+        await AccountAsync();
+
+        await FailedAsync(Elsewhere, "198.51.100.21", times: 3);
+        await FailedAsync(Address, "198.51.100.22", times: 3);
+
+        Result<SignInChallenge> nobodys = await Service.BeginAsync(Elsewhere, Fresh, TestContext.Current.CancellationToken);
+        Result<SignInChallenge> held = await Service.BeginAsync(Address, Fresh, TestContext.Current.CancellationToken);
+        Result<SignInChallenge> other = await Service.BeginAsync(
+            "somebody@example.test",
+            Fresh,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.Throttled, Delayed(nobodys)?.Code);
+        Assert.Equal(Shape(Delayed(held)), Shape(Delayed(nobodys)));
+        Assert.Null(Delayed(other));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001 AC5: a browser is spared the delay the account and the identifier
+    /// have earned only by a token that stands for this account; a forged token, another
+    /// account's, one of the wrong kind or none at all is held as any browser is, both
+    /// where the sign-in opens and where a factor is presented.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_AC5_OnlyATokenOfTheAccountsOwnSparesItsBrowserTheDelayAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Remembered(subject);
+
+        string remembered = await KnownAsync(subject, trusted: false);
+        string trusted = await KnownAsync(subject, trusted: true);
+        string foreign = await KnownAsync(new SubjectId(Guid.NewGuid()), trusted: false);
+        string forged = OpaqueToken.Draw(_randomness).Value;
+
+        await FailedAsync(Address, "198.51.100.22", times: 3);
+
+        Assert.Equal(ErrorCodes.Throttled, Delayed(await BeganFromAsync(null, null))?.Code);
+        Assert.Equal(ErrorCodes.Throttled, Delayed(await BeganFromAsync(forged, forged))?.Code);
+        Assert.Equal(ErrorCodes.Throttled, Delayed(await BeganFromAsync(foreign, null))?.Code);
+        Assert.Equal(ErrorCodes.Throttled, Delayed(await BeganFromAsync(null, remembered))?.Code);
+        Assert.Null(Delayed(await BeganFromAsync(null, trusted)));
+
+        SignInChallenge began = (await BeganFromAsync(remembered, null)).Match(
+            challenge => challenge,
+            error => throw new InvalidOperationException(error.Code.ToString()));
+
+        Result<SignInOutcome> spoofed = await PresentedFromAsync(began.Challenge, foreign);
+        Result<SignInOutcome> recognised = await PresentedFromAsync(began.Challenge, remembered);
+
+        Assert.Equal(ErrorCodes.Throttled, spoofed.Match(_ => (ErrorCode?)null, error => error.Code));
+        Assert.Equal(
+            SignInStatus.Complete,
+            recognised.Match(
+                outcome => outcome.Progress.Status,
+                error => throw new InvalidOperationException(error.Code.ToString())));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-002 AC3, AUTH-ABUSE-003: an ask that sends no link, because the
+    /// policy has not enabled the channel, because the account is not active, because
+    /// a domain lock refuses the address, or because the window has already told an
+    /// address no account holds, counts against the sending restrictions as the link
+    /// would have, and nothing but the one notice reaches an address no account holds.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_002_AC3_AnAskNoLinkAnswersCountsAsTheLinkWouldAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Assert.True(await AskedLinkAsync(Address));
+
+        Enables(Factor.EmailLink);
+        _accounts.Stands(subject, AccountState.Suspended);
+
+        Assert.True(await AskedLinkAsync(Address));
+
+        _accounts.Stands(subject, AccountState.Active);
+        _memberships.Place(subject, Locked);
+        _configuration.Set(
+            Settings.OrganizationPolicy,
+            Locked.ToString(),
+            PolicyOverride.None with { EmailDomains = ["elsewhere.test"] });
+
+        Assert.True(await AskedLinkAsync(Address));
+        Assert.True(await AskedLinkAsync(Elsewhere));
+        Assert.True(await AskedLinkAsync(Elsewhere));
+
+        Assert.Equal(
+            [Address, Address, Address, Elsewhere],
+            _restrictions.Drawn.Select(drawn => drawn.Destination.Canonical));
+        Assert.All(_restrictions.Drawn, drawn => Assert.Equal(MessageKind.SignInLink, drawn.Message));
+        Assert.All(_restrictions.Drawn, drawn => Assert.Equal(RestrictionPurpose.SignIn, drawn.Purpose));
+
+        SendRequest told = Assert.Single(_notifications.Sent);
+
+        Assert.Equal(Elsewhere, told.Destination.Canonical);
+        Assert.Equal(MessageKind.NoAccount, told.Message);
+        Assert.Empty(told.Values);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-002 AC3, BFF-ABUSE-002 AC1: where the restrictions refuse the send an
+    /// ask stands for, an account the ask cannot reach and an address no account holds
+    /// are refused with the one refusal.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_002_AC3_ARefusalAnswersAnAskNoLinkAnswersAlikeAsync()
+    {
+        await AccountAsync();
+
+        Assert.True(await AskedLinkAsync(Elsewhere));
+
+        var refusal = Error.From(ErrorCodes.RestrictionExceeded);
+        _restrictions.Refusal = refusal;
+
+        Result held = await Service.SendLinkAsync(Address, Language, Source, browser: null, TestContext.Current.CancellationToken);
+        Result nobodys = await Service.SendLinkAsync(Elsewhere, Language, Source, browser: null, TestContext.Current.CancellationToken);
+
+        Assert.Same(refusal, held.Match(() => (Error?)null, error => error));
+        Assert.Same(refusal, nobodys.Match(() => (Error?)null, error => error));
     }
 
     /// <summary>
@@ -1236,4 +1382,69 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
     private static ErrorCode? Refused(Result<SignInProgress> outcome) =>
         outcome.Match(_ => (ErrorCode?)null, error => error.Code);
+
+    private static Error? Delayed(Result<SignInChallenge> began) =>
+        began.Match(_ => (Error?)null, error => error);
+
+    // What the caller of a refused request reads: the code and every detail.
+    private static string Shape(Error? refused) =>
+        refused is null
+            ? string.Empty
+            : refused.Code + JsonSerializer.Serialize(refused.Details);
+
+    // Each time the identifier opens a sign-in from the source and a wrong password
+    // is presented against it.
+    private async ValueTask FailedAsync(string identifier, string source, int times)
+    {
+        for (int attempt = 0; attempt < times; attempt++)
+        {
+            SignInChallenge began = (await Service.BeginAsync(identifier, source, TestContext.Current.CancellationToken))
+                .Match(challenge => challenge, error => throw new InvalidOperationException(error.Code.ToString()));
+
+            Assert.Equal(
+                ErrorCodes.FactorRejected,
+                Refused(await Service.PresentAsync(
+                    began.Challenge,
+                    new FactorPresentation(Factor.Password) { Value = "wrong" + Secret },
+                    Browser,
+                    source,
+                    TestContext.Current.CancellationToken)));
+        }
+    }
+
+    // A browser the account has passed the new-device check on, or trusted, and the
+    // token it carries for it.
+    private async ValueTask<string> KnownAsync(SubjectId subject, bool trusted)
+    {
+        Result<OpaqueToken> known = trusted
+            ? await Devices.TrustAsync(subject, Browser, TestContext.Current.CancellationToken)
+            : await Devices.RememberAsync(subject, Browser, TestContext.Current.CancellationToken);
+
+        await _work.CommitAsync(TestContext.Current.CancellationToken);
+
+        return known.Match(
+            token => token.Value,
+            error => throw new InvalidOperationException(error.Code.ToString()));
+    }
+
+    private ValueTask<Result<SignInChallenge>> BeganFromAsync(string? remembered, string? trusted) =>
+        Service.BeginAsync(Address, Fresh, remembered, trusted, TestContext.Current.CancellationToken);
+
+    private ValueTask<Result<SignInOutcome>> PresentedFromAsync(string challenge, string remembered) =>
+        Service.PresentAsync(
+            challenge,
+            new FactorPresentation(Factor.Password) { Value = Secret },
+            new SessionOrigin(Fresh, Browser),
+            remembered,
+            trusted: null,
+            TestContext.Current.CancellationToken);
+
+    private async ValueTask<bool> AskedLinkAsync(string identifier) =>
+        (await Service.SendLinkAsync(
+            identifier,
+            Language,
+            Source,
+            browser: null,
+            TestContext.Current.CancellationToken))
+        .Match(() => true, _ => false);
 }

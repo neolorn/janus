@@ -83,6 +83,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     private readonly NoticeLedgerInMemory _notices = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly SendingRestrictionsInMemory _restrictions = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
@@ -775,7 +776,14 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             Guard,
             new AdministrativeScope(_gate, _administrative),
             _notifications,
-            new NonExistenceNotice(_configuration, _notifications, _notices, _work, _events, _clock),
+            new NonExistenceNotice(
+                _configuration,
+                _notifications,
+                _restrictions,
+                _notices,
+                _work,
+                _events,
+                _clock),
             Throttle,
             _events,
             _configuration,

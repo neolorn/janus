@@ -28,6 +28,13 @@ internal sealed class ChallengeConfiguration : IEntityTypeConfiguration<Challeng
             table.HasCheckConstraint(
                 "ck_signin_challenges_handle",
                 $"octet_length(handle) = {Fingerprint.Length}");
+
+            // OPS-MIG-005: a row the previous release wrote carries neither, so the two
+            // are absent together and a hash is always a whole one.
+            table.HasCheckConstraint(
+                "ck_signin_challenges_identifier",
+                "(identifier IS NULL) = (fingerprint_version IS NULL) AND "
+                    + $"(identifier IS NULL OR octet_length(identifier) = {Fingerprint.Length})");
         });
 
         builder.HasKey(challenge => challenge.Handle).HasName("pk_signin_challenges");
@@ -43,6 +50,12 @@ internal sealed class ChallengeConfiguration : IEntityTypeConfiguration<Challeng
         builder.Property(challenge => challenge.Email)
             .HasColumnName("email")
             .HasConversion(email => email!.Value.Value, value => new IdentifierId(value));
+
+        builder.Property(challenge => challenge.Identifier)
+            .HasColumnName("identifier")
+            .HasMaxLength(Fingerprint.Length);
+
+        builder.Property(challenge => challenge.FingerprintVersion).HasColumnName("fingerprint_version");
 
         builder.Property(challenge => challenge.WebAuthn).HasColumnName("webauthn");
         builder.Property(challenge => challenge.CreatedAt).HasColumnName("created_at");

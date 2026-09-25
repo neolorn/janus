@@ -1018,6 +1018,14 @@ against the public contract of LIB-API-001.
 - A wrong device verification code, a pressed sign-in link that lands on no sign-in, a
   refused delegated or provider sign-in and an unknown sign-in challenge are recorded as
   `auth.authentication.failed` and held by the progressive delay.
+- A refused sign-in factor counts against the identifier as typed, whether or not an
+  account holds it, so a held and an unheld address are delayed alike from any source;
+  a success clears only the account's count. Only a remembered or trusted browser token
+  that resolves to the account exempts a browser, through `IAuthentication.BeginAsync`,
+  and never from the source's delay. A throttled source reaches no sign-in provider.
+- A sign-in link, email code or recovery ask that sends nothing is judged and counted
+  against the sending restrictions as its message would be, so it is answered as a sent
+  one is, whether or not an account holds the address.
 - Startup refuses a purpose named for the hosting or its cross-border transfer
   (`hosting`, `transfer`, `hosting-transfer`, `cross-border-transfer`) that rests on a
   consent basis, with `model.startup.declarationmissing`.

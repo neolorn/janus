@@ -1175,6 +1175,7 @@ Janus.Core.IAuditTrail.OfSubjectAsync(Janus.Core.AccessContext! context, Janus.C
 Janus.Core.IAuthentication
 Janus.Core.IAuthentication.AbandonLinkAsync(string! linkToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAuthentication.BeginAsync(string! identifier, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.SignInChallenge!>>
+Janus.Core.IAuthentication.BeginAsync(string! identifier, string! source, string? remembered, string? trusted, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.SignInChallenge!>>
 Janus.Core.IAuthentication.ForgetDeviceAsync(Janus.Core.AccessContext! context, Janus.Core.DeviceId device, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAuthentication.LandAsync(string! challenge, string? browser, string! linkToken, bool press, Janus.Core.DeviceDescription! device, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.SignInLanding!>>
 Janus.Core.IAuthentication.ListDevicesAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.DeviceSummary!>!>>

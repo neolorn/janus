@@ -209,6 +209,7 @@ public static class HostingRegistration
         services.AddScoped<SmsBalance>();
         services.AddScoped<RelayRegistration>();
         services.AddScoped<SendingService>();
+        services.AddScoped<ISendingRestrictions>(provider => provider.GetRequiredService<SendingService>());
 
         // LIB-EXT-001: the shipped handler carries email and SMS; a deployment that
         // registers its own before this runs keeps it.

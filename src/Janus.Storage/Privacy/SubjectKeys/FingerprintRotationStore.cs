@@ -82,7 +82,10 @@ internal sealed class FingerprintRotationStore(
         new(AuthenticatorConfiguration.Table, "id", "provider_subject", AuthenticatorConfiguration.ProviderSubjectColumn, "TRUE"),
     ];
 
-    // The ledgers, whose keys are hashed from values the library never holds.
+    // The ledgers, whose keys are hashed from values the library never holds, and the
+    // sign-ins in progress, which carry the hash of the identifier they were opened with
+    // and are forgotten with the version it was computed under. A sign-in the previous
+    // release opened carries no hash and no version, and is left to lapse.
     private static readonly string[] Ledgers =
     [
         "callbacks",
@@ -91,6 +94,7 @@ internal sealed class FingerprintRotationStore(
         "send_counters",
         "send_grants",
         "sends",
+        "signin_challenges",
         "throttle_counters",
     ];
 
@@ -107,7 +111,8 @@ internal sealed class FingerprintRotationStore(
                 .. Subjects.Select(column => column.Versions),
                 "SELECT fingerprint_version FROM identity.mailboxes WHERE fingerprint <> @neutral",
                 "SELECT fingerprint_version FROM identity.username_holds WHERE releases_at > @now",
-                .. Ledgers.Select(ledger => $"SELECT fingerprint_version FROM identity.{ledger}"),
+                .. Ledgers.Select(ledger =>
+                    $"SELECT fingerprint_version FROM identity.{ledger} WHERE fingerprint_version IS NOT NULL"),
             ]);
 
         AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);

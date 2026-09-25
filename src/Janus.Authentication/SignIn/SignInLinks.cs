@@ -26,7 +26,7 @@ namespace Janus.Authentication.SignIn;
 /// <param name="policies">What policy governs the account.</param>
 /// <param name="domainLock">Whether an email address is one a member may sign in with.</param>
 /// <param name="sending">Where a message goes out.</param>
-/// <param name="nonExistence">What answers an address no account holds.</param>
+/// <param name="nonExistence">What answers an ask no message of its own answers.</param>
 /// <param name="signals">What is known about a number before a text leans on it.</param>
 /// <param name="throttle">The progressive delay.</param>
 /// <param name="configuration">Where the lifetimes and the limits come from.</param>
@@ -34,11 +34,13 @@ namespace Janus.Authentication.SignIn;
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where a token and a code are drawn from.</param>
 /// <remarks>
-/// Implements AUTH-FACT-003, AUTH-ABUSE-003, REG-SESS-003 and REG-DOM-001. Asking always
-/// succeeds: an identifier no account holds, an identifier whose channel the policy has
-/// not enabled, an account that cannot be signed into and an address a domain lock
-/// refuses each produce the same answer as one that can, and differ only in what
-/// arrives at the channel.
+/// Implements AUTH-FACT-003, AUTH-ABUSE-002, AUTH-ABUSE-003, AUTH-ABUSE-004,
+/// REG-SESS-003 and REG-DOM-001. Asking always succeeds: an identifier no account holds,
+/// an identifier whose channel the policy has not enabled, an account that cannot be
+/// signed into and an address a domain lock refuses each produce the same answer as one
+/// that can, and differ only in what arrives at the channel. Each counts against the
+/// sending restrictions as the message would, so where a restriction refuses the ask it
+/// refuses all of them alike.
 /// </remarks>
 internal sealed class SignInLinks(
     IPendingSignInStore pending,
@@ -320,7 +322,7 @@ internal sealed class SignInLinks(
 
         TimeSpan delay = (await throttle
                 .DelayAsync(
-                    new ThrottleAttempt(source, identifier) { Account = owner },
+                    new ThrottleAttempt(source, throttle.Identify(identifier, usernames)) { Account = owner },
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<TimeSpan>(error, ref failure));
@@ -355,33 +357,32 @@ internal sealed class SignInLinks(
 
         // Everything from here answers the caller the same way. What differs is what
         // reaches the channel: the message, the non-existence notice, or nothing at
-        // all (AUTH-ABUSE-003).
+        // all (AUTH-ABUSE-003). Each of them counts against the sending restrictions as
+        // the message would, so a restriction refuses alike too (AUTH-ABUSE-002 AC3).
         return holder is { } held
             ? await IssueAsync(held.Subject, held.Identifier, channel, language, source, browser, ask, cancellationToken)
                 .ConfigureAwait(false)
-            : await TellAsync(channel, language, source, cancellationToken).ConfigureAwait(false);
+            : await WithheldAsync(channel, language, source, ask, unheld: true, cancellationToken)
+                .ConfigureAwait(false);
     }
 
-    private async ValueTask<Result> TellAsync(
+    // An ask no message answers, because no account holds the address or the account
+    // cannot be reached by it, is answered as the one and counted as the other.
+    private ValueTask<Result> WithheldAsync(
         Channel channel,
         string language,
         string source,
-        CancellationToken cancellationToken)
-    {
-        if (channel.Kind is not IdentifierKind.Email
-            || !EmailAddress.TryParse(channel.Canonical, out EmailAddress address))
-        {
-            return Result.Success();
-        }
-
-        Error? failure = null;
-
-        _ = (await nonExistence.TellAsync(address, source, language, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(value => value, error => Withheld<bool>(error, ref failure));
-
-        return failure is null ? Result.Success() : Result.Failure(failure);
-    }
+        Ask ask,
+        bool unheld,
+        CancellationToken cancellationToken) =>
+        nonExistence.AnswerAsync(
+            channel.Destination,
+            ask.Message,
+            RestrictionPurpose.SignIn,
+            source,
+            language,
+            unheld,
+            cancellationToken);
 
     private async ValueTask<Result> IssueAsync(
         SubjectId subject,
@@ -414,7 +415,8 @@ internal sealed class SignInLinks(
             || await accounts.StateAsync(subject, cancellationToken).ConfigureAwait(false)
                 is not AccountState.Active)
         {
-            return Result.Success();
+            return await WithheldAsync(channel, language, source, ask, unheld: false, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         IdentifierId? email = channel.Kind is IdentifierKind.Email ? identifier : null;
@@ -427,7 +429,8 @@ internal sealed class SignInLinks(
                 is Error locked)
         {
             return locked.Code == ErrorCodes.IdentifierDomainNotAllowed
-                ? Result.Success()
+                ? await WithheldAsync(channel, language, source, ask, unheld: false, cancellationToken)
+                    .ConfigureAwait(false)
                 : Result.Failure(locked);
         }
 

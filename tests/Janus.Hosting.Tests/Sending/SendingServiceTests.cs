@@ -633,6 +633,61 @@ public sealed class SendingServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-002 AC3: an ask that sends nothing counts as the message it stands for
+    /// would, once for each language the message would have gone out in, and is carried
+    /// by no transport, announced to nobody and written to no outbox; the next send
+    /// inside the minute is refused as it would be after the message, and a draw the
+    /// restrictions refuse is refused in the same bytes as the send.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_002_AC3_ADrawCountsAsTheMessageWouldAndCarriesNothingAsync()
+    {
+        _configuration.Set(Settings.NotificationLanguages, Declared);
+        _templates.Set(MessageKind.VerificationCode, SendKind.Email, "en", new MessageTemplate("code", "english"));
+        _templates.Set(MessageKind.VerificationCode, SendKind.Email, "ar", new MessageTemplate("code", "arabic"));
+        var destination = new RestrictionKey("email.destination", Mailbox.Value);
+
+        Result drawn = await Service.DrawAsync(Mailed() with { Language = null }, TestContext.Current.CancellationToken);
+
+        Assert.True(drawn.Match(() => true, _ => false));
+        Assert.Equal([Noon, Noon], _ledger.Sends(destination));
+        Assert.Empty(_mail.Taken);
+        Assert.Empty(_outbox.Waiting);
+        Assert.Empty(_events.Of<NotificationRequested>());
+
+        _clock.Advance(TimeSpan.FromSeconds(10));
+
+        Result<SendReference> sent = await Service.SendAsync(Mailed(), TestContext.Current.CancellationToken);
+        Result refused = await Service.DrawAsync(Mailed(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.RestrictionExceeded, Refusal(sent));
+        Assert.Equal(
+            Refusal(sent) + Written(sent),
+            refused.Match(
+                () => throw new Xunit.Sdk.XunitException("The draw was not refused."),
+                error => error.Code + JsonSerializer.Serialize(error.Details)));
+        Assert.Empty(_mail.Taken);
+    }
+
+    /// <summary>
+    /// INT-SMS-004 AC2, AUTH-ABUSE-002 AC3: below the floor a draw for a text message
+    /// is refused as the text message would be.
+    /// </summary>
+    [Fact]
+    public async Task INT_SMS_004_AC2_ADrawIsRefusedBelowTheFloorAsTheTextWouldBeAsync()
+    {
+        _configuration.Set(Settings.AbuseSmsBalanceFloor, 50m);
+        _sms.Balance = 40m;
+
+        Result drawn = await Service.DrawAsync(Texted(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ErrorCodes.SmsBalanceFloor,
+            drawn.Match(() => (ErrorCode?)null, error => error.Code));
+        Assert.Empty(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
+    }
+
+    /// <summary>
     /// INT-SMS-004 AC2 and AUTH-ABUSE-006 AC2: an ordinary text message is refused
     /// below the floor, and the refusal names the condition.
     /// </summary>

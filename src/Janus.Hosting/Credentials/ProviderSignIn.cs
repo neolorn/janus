@@ -199,6 +199,16 @@ internal sealed class ProviderSignIn(
             return Back(attempt.ReturnTo, ErrorCodes.FactorRejected);
         }
 
+        // AUTH-ABUSE-001: an address that has earned a delay is sent back before the
+        // code is traded, so this server makes no call to the provider on its behalf.
+        if (await authentication
+                .ExchangeDelayedAsync(RequestOrigin.Source(context.Request), cancellationToken)
+                .ConfigureAwait(false)
+            is Error delayed)
+        {
+            return Back(attempt.ReturnTo, delayed.Code);
+        }
+
         if (await IdentityAsync(provider, attempt, issued, cancellationToken).ConfigureAwait(false)
             is not JsonWebToken identity
             || identity.Subject is not { Length: > 0 } subject)

@@ -255,6 +255,37 @@ public sealed class ProviderSignInTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-001: a return from an address that has earned a delay is sent back
+    /// throttled before its code is traded, so the deployment makes no request of any
+    /// provider on that address's behalf, a genuine identity's included.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_001_AThrottledSourceReachesNoProviderAsync()
+    {
+        var browser = new Browser(_deployment);
+        var forged = new ProviderPerson(GoogleSubject) { Forged = true };
+
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            string refused = Where(await browser.SendAsync("GET", Start("google", "signin")));
+
+            _ = await ReturnedAsync(browser, "google", refused, forged);
+        }
+
+        string authorization = Where(await browser.SendAsync("GET", Start("google", "signin")));
+        int exchanged = _deployment.SocialProviders.Exchanges.Count;
+        int called = _deployment.SocialProviders.Calls;
+
+        Answer landed = await ReturnedAsync(browser, "google", authorization, new ProviderPerson(GoogleSubject));
+
+        Assert.Equal(Page + "?error=" + ErrorCodes.Throttled, landed.Location);
+        Assert.Equal(3, exchanged);
+        Assert.Equal(exchanged, _deployment.SocialProviders.Exchanges.Count);
+        Assert.Equal(called, _deployment.SocialProviders.Calls);
+    }
+
+    /// <summary>
     /// BFF-CSRF-005a: a return presenting a state this browser was not sent out with
     /// establishes nothing and is recorded, and the code is never exchanged.
     /// </summary>

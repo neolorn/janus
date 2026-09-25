@@ -16481,6 +16481,8 @@ exemption for a recognised browser apply?
 step-up is counted with sign-in failures, the account component shared, and that AC5
 does not apply at step-up.
 
+**Revised by entry 420.**
+
 ---
 
 ## 401. The delay runs from the failure that earned it, and the standing count rounds
@@ -16605,6 +16607,8 @@ source address.
 could say "A factor presented at sign-in, device verification, a sign-in link press,
 or a provider's round trip, or the break-glass credential, was refused". CONV-LOG-005
 could name these as failed authentication.
+
+**Revised by entry 422.**
 
 ---
 
@@ -17302,6 +17306,321 @@ compile-time or immediate runtime failure, never a stored row."
 *Chapter text that should change.* CONV-DESIGN-004 AC3 could say that a value type's
 default instance, which the language cannot forbid, gives no text and fails where it is
 first read.
+
+---
+
+## 419. A refused factor is counted against the identifier as entered, whether or not an account holds it
+
+**Phase 10 · 2026-09-25 · Tier 3 · AUTH-ABUSE-001 AC1, AC3, AC6, AUTH-ABUSE-002 AC1, AUTH-ABUSE-003 AC1, BFF-ABUSE-001 AC1, OPS-SEC-003 AC6, OPS-MIG-005**
+
+*The question.*
+
+- AUTH-ABUSE-001 names independent limits on source, account and identifier.
+- The identifier component was read when a sign-in began, but never written. A factor
+  is presented against a challenge handle, and the challenge did not carry the
+  identifier.
+- So from fresh sources only an identifier an account holds was delayed, through the
+  account component. That is an existence oracle, and it breaks BFF-ABUSE-001 AC1
+  across sources.
+- How does the identifier travel from begin to the factor, and in what form is it kept?
+
+*The readings.*
+
+1. Leave it uncounted, as at the base.
+2. Carry the identifier as typed in the challenge row.
+3. Carry the resolved identifier's id.
+4. Carry a keyed hash of the identifier's canonical form, with its key version, and
+   count every refused factor under it.
+
+*Chosen: 4.*
+
+- **Why not 1.** It keeps the oracle.
+- **Why not 2.** It puts a plain identifier into a row that otherwise holds nothing
+  personal.
+- **Why not 3.** Only a held identifier resolves, so the unheld count stays empty and
+  the oracle stays.
+- **Why 4.** The one computation runs before existence is known, identically for held
+  and unheld, so both earn the same delay from any source.
+- **Canonical form.** An identifier that reads as a kind is written in that kind's form
+  (address, number, username), and anything else as its trimmed text. So the ways of
+  typing one address are one count.
+- **Key.** It is the fingerprint key of OPS-SEC-003, the same family the throttle ledger
+  uses. The row keeps the version beside the hash. The rotation forgets challenges
+  opened under a retired version, as it forgets a ledger line.
+- **Migration** (`AddChallengeIdentifiers`). Both columns are nullable and absent
+  together (`ck_signin_challenges_identifier`), because the previous release opens
+  challenges without them (OPS-MIG-005). Such a row counts against source and account
+  only and lapses with its lifetime. The maintenance role gains SELECT on the version
+  column and DELETE on the table, following entry 318's pattern.
+- **Where it is counted.** Every refused factor is counted under it: present, device
+  verification and link landing. The link, email-code and recovery asks are delayed
+  under the same key, so all flows share one identifier count.
+- **Surface.** No public surface changes.
+
+*Tests that pin it.*
+
+- `AuthenticationServiceTests.AUTH_ABUSE_001_AC1_AnIdentifierNoAccountHoldsIsHeldFromAFreshSourceAsOneAnAccountHoldsAsync`
+- `ThrottlingTests.BFF_ABUSE_001_AC1_FromAFreshSourceTheThrottledAnswerIsTheSameForAHeldAndAnUnheldAddressAsync`
+- `ThrottleServiceTests.AUTH_ABUSE_001_EveryWayOfTypingOneAddressIsOneCountAsync`
+- `ChallengeStoreTests.AUTH_ABUSE_001_AC1_TheIdentifierTravelsWithTheSignInAsync`
+- `ChallengeStoreTests.OPS_SEC_003_AnIdentifierIsHeldOnlyBesideItsVersionAsync`
+- `FingerprintRotationTests.OPS_SEC_003_AC6_RetirementForgetsTheSignInsOpenedUnderThePreviousVersionAsync`
+
+*Chapter text that should change.*
+
+- AUTH-ABUSE-001 could say that the identifier component is keyed by the keyed hash of
+  the identifier's canonical form, carried by the sign-in, and counted on every refused
+  factor whether or not an account holds it.
+- OPS-SEC-003 AC6 could list sign-ins in progress among what a retirement forgets.
+
+---
+
+## 420. A success clears the account's count only
+
+**Phase 10 · 2026-09-25 · Tier 3 · AUTH-ABUSE-001, AUTH-ABUSE-003, AUTH-FACT-015 AC6, AUTH-STEP-001**
+
+*The question.*
+
+- `SucceededAsync` cleared every scope of the attempt: source, account and identifier.
+- AUTH-ABUSE-001 says the delay escalates with failures and decays over time. It names
+  no reset.
+- What may a success clear?
+
+*The readings.*
+
+1. Every scope, as at the base.
+2. The account only.
+3. Nothing.
+
+*Chosen: 2.*
+
+- **What a success proves.** It proves the account's credential and nothing about the
+  source or the identifier.
+- **Against 1.**
+  - Clearing the source lets an address that holds an account of its own reset its
+    count between guesses at other accounts, by signing in or stepping up.
+  - Clearing the identifier makes its count drop exactly when an account holds it,
+    which tells the next asker that one does (AUTH-ABUSE-003).
+- **Against 3.** D-079a's reason for capping the account component ("the victim
+  inherits it") argues for letting the holder who proved the credential shed the
+  account delay. Reading 3 would keep the victim held until decay, on every sign-in
+  after an attack.
+- **AUTH-FACT-015 AC6.** It says its count "uses the throttle's existing per-source
+  failure counter ... and resets on a successful sign-in". The code keeps that count on
+  the device record and resets it there, which is untouched. Read literally, AC6 would
+  have a success clear the source count. This decision reads AC6 as the device's count.
+- **Revises entry 400.** It revises the clause "A step-up that succeeds clears the
+  source and account counts, as a sign-in does". A step-up that succeeds now clears the
+  account count only.
+
+*Tests that pin it.*
+
+- `ThrottleServiceTests.AUTH_ABUSE_001_ASuccessForgetsTheAccountsCountAndNoOtherAsync`
+
+*Chapter text that should change.*
+
+- AUTH-ABUSE-001 could say that a successful sign-in or step-up clears the account
+  component only, and that the source and identifier components decay with time alone.
+- AUTH-FACT-015 AC6 could say that the count is kept per trusted device and resets on a
+  successful sign-in on it.
+
+---
+
+## 421. A browser is recognised only by a token that stands for the account
+
+**Phase 10 · 2026-09-25 · Tier 3 · AUTH-ABUSE-001 AC5, D-079a, AUTH-FACT-015, AUTH-FACT-016, CONV-LOG-003**
+
+*The question.*
+
+- `Recognised` (the AC5 exemption) was claimed whenever a remembered or trusted cookie
+  was present, whatever its value, and a client sets any cookie it likes.
+- `BeginAsync` never carried the cookies, so AC5 did not hold at begin.
+- What recognises a browser, and what does recognition exempt?
+
+*The readings.*
+
+1. The token's presence, as at the base.
+2. A token that resolves to a device of this account, of the cookie's own kind,
+   neither lapsed nor revoked, read without changing the device.
+3. As 2, and refresh the device on the read.
+4. No exemption.
+
+*Chosen: 2.*
+
+- **Why not 1.** It exempts anyone.
+- **Why not 3.** A stolen token would be kept alive by being tried, and a throttle read
+  should write nothing.
+- **Why not 4.** AC5 says "SHALL be exempt".
+- **Kind.**
+  - The remembered token is read only from the browser cookie, and the trusted token
+    only from the device cookie.
+  - Another account's token stands for another account, and a forged token resolves
+    to nothing.
+- **What the exemption covers.**
+  - It covers the account and identifier components.
+  - The identifier component is included because an attack raises it with the account
+    component, and AC5 requires that the returning device "is not held by an attack on
+    that account". Recognition is bound to the account the identifier resolves to, so
+    a recognised browser that types an identifier its account does not hold is
+    exempted from nothing.
+  - The source component always counts.
+- **Where it applies.**
+  - At begin, the endpoint passes both cookies.
+  - At present, the tokens are carried as before.
+  - At landing, the remembered token is carried as before.
+  - The public `IAuthentication.BeginAsync` carries none, so a host that calls it
+    directly gets no exemption, which fails closed. Its shape is unchanged.
+- **Asks.** Link, code and recovery asks are never exempt: they send to the channel,
+  and no token is asked of them.
+
+- The tokens travel through `IAuthentication.BeginAsync`, which takes them beside
+  the identifier, so the endpoint calls its contract (entry 408).
+
+*Tests that pin it.*
+
+- `AuthenticationServiceTests.AUTH_ABUSE_001_AC5_OnlyATokenOfTheAccountsOwnSparesItsBrowserTheDelayAsync`
+- `ThrottlingTests.AUTH_ABUSE_001_AC5_OnlyACookieTheAccountLeftSparesItsBrowserTheDelayAsync`
+
+*Chapter text that should change.*
+
+- AUTH-ABUSE-001 could define "recognised device or prior session" as a remembered or
+  trusted token that resolves, stands for the account and has not lapsed or been
+  revoked.
+- It could say the exemption covers the identifier component as well as the account
+  component, and never the source.
+
+---
+
+## 422. A provider's return asks the source delay before the code is traded
+
+**Phase 10 · 2026-09-25 · Tier 3 · AUTH-ABUSE-001, CONV-LOG-005, IDN-ACCT-001 (provider sign-in)**
+
+*The question.*
+
+- `ProviderSignIn` traded the code with the provider before it asked any delay. Only
+  the recording and counting after the exchange were behind the throttle.
+- So a throttled address could keep driving outbound calls from this server.
+
+*The readings.*
+
+1. Ask after the exchange only, as at the base.
+2. Ask the source delay before the exchange, and keep the account check after it.
+3. Ask before the exchange only.
+
+*Chosen: 2.*
+
+- **Why the source only, first.** Before the exchange nothing is known but the source.
+- **Why keep the later check.** The account component can be asked only once the
+  identity is known. Reading 3 would never ask it.
+- **The refusal.** It is the redirect entry 402 gives: `error=auth.throttled`, with
+  nothing recorded.
+- **Revises entry 402.** It revises the "Refused provider sign-in" clause: while a
+  delay stands, the code is not traded and no provider is called.
+
+*Tests that pin it.*
+
+- `ProviderSignInTests.AUTH_ABUSE_001_AThrottledSourceReachesNoProviderAsync`
+
+*Chapter text that should change.*
+
+- AUTH-ABUSE-001 could say that a provider's return asks the source's delay before the
+  code is traded.
+
+---
+
+## 423. An ask that sends nothing draws on the sending restrictions as its message would
+
+**Phase 10 · 2026-09-25 · Tier 3 · AUTH-ABUSE-002 AC3, AUTH-ABUSE-003 AC1, AC3, AC4, AUTH-ABUSE-004, BFF-ABUSE-001 AC1, AC3, BFF-ABUSE-002 AC1, INT-SMS-004 AC2**
+
+*The question.*
+
+- A second link or email code inside the minute was answered differently:
+  - A held address got 429 `auth.restriction.exceeded` with `retryAt`, from
+    `email.destination`.
+  - An unheld address got 202. The window suppressed the second notice, nothing was
+    counted, and a refused notice was swallowed.
+- Recovery behaved the same way.
+- How do the restrictions treat an ask that sends nothing, and how does a restriction
+  treat an address no account holds?
+
+*The readings.*
+
+1. Swallow the held refusal as well, and answer 202 to both.
+2. Count an unheld ask only when a notice goes out.
+3. Every ask whose message does not go out draws on the restrictions as the message
+   would. It is judged, counted where admitted, and carried nowhere, and a refusal
+   answers it.
+
+*Chosen: 3.*
+
+- **Why not 1.** It breaks BFF-ABUSE-001 AC3 and AUTH-ABUSE-002 AC3, which require
+  `retryAt`, and takes the answer away from the address's owner.
+- **Why not 2.** The ask inside the window still differs.
+- **What reading 3 covers.**
+  - an unheld address after the window's notice
+  - an unheld number, always
+  - a held account that policy withholds (channel not enabled, self-service recovery
+    closed)
+  - a held account that state withholds (not active, not recoverable)
+  - a held account that a domain lock withholds
+
+  Before, the held withheld cases also answered 202 without counting, which is the
+  same oracle from the other side.
+- **The draw.** It is made in the ask's destination, message kind, purpose and
+  language:
+  - The purpose is `signin` for links and codes, and `notification` for recovery,
+    which is the purpose the recovery link is sent under.
+  - The language is the request's where it is declared, and every declared language
+    otherwise, as the notice is written.
+- **The notice.**
+  - It is sent as the ask's message under the ask's purpose, where it was
+    `notification`. AUTH-ABUSE-004 puts only "security notices to an existing holder"
+    under `notification.destination`, and an address no account holds has no holder.
+    So a sign-in ask's notice now answers to `email.destination` like the link it
+    stands for.
+  - A refusal of the notice is the answer and leaves the window unmarked.
+- **An address with no account** is judged as any destination:
+  - `destination`, `source` and `global` keys apply.
+  - The `account` key has no account and does not apply.
+  - A `host:` key is asked with a context carrying no subject.
+  - Held withheld asks are drawn the same way, with no subject.
+- **The floor.** A draw for a text is refused below the gateway floor as the text would
+  be (INT-SMS-004 AC2).
+- **Delivery.** A draw is recorded under a reference no delivery report names, so "a
+  failed delivery SHALL NOT count" never releases it. It is kept until its buckets are
+  empty, when the per-destination record is deleted as before.
+- **What reaches an unheld address.** Only the one `NoAccount` mail per window (AUTH-ABUSE-003 AC3
+  and AC4). A draw writes no outbox, raises no event and reaches no transport.
+- **Consequence for held owners.** Repeated asks that policy withholds are now refused
+  by the restrictions like sent ones. Two existing Hosting tests needed the clock
+  advanced for this.
+- **Port.** `ISendingRestrictions` is internal and implemented by `SendingService`
+  (CONV-DESIGN-003).
+
+*Tests that pin it.*
+
+- `NonExistenceNoticeTests.AUTH_ABUSE_002_AC3_AnAskTheWindowAnsweredCountsAsTheMessageWouldAsync`
+- `NonExistenceNoticeTests.AUTH_ABUSE_002_AC3_AnAccountTheAskCannotReachIsToldNothingAndCountedAsync`
+- `NonExistenceNoticeTests.AUTH_ABUSE_002_AC3_ANumberNoAccountHoldsIsToldNothingAndCountedAsync`
+- `NonExistenceNoticeTests.AUTH_ABUSE_002_AC3_ARefusalOfTheRestrictionsIsTheAnswerAsync`
+- `NonExistenceNoticeTests.AUTH_ABUSE_002_AC3_TheNoticeAnswersToTheRestrictionsOfTheAskAsync`
+- `AuthenticationServiceTests.AUTH_ABUSE_002_AC3_AnAskNoLinkAnswersCountsAsTheLinkWouldAsync`
+- `AuthenticationServiceTests.AUTH_ABUSE_002_AC3_ARefusalAnswersAnAskNoLinkAnswersAlikeAsync`
+- `RecoveryServiceTests.AUTH_ABUSE_002_AC3_ARecoveryNoLinkAnswersCountsAsTheLinkWouldAsync`
+- `SendingServiceTests.AUTH_ABUSE_002_AC3_ADrawCountsAsTheMessageWouldAndCarriesNothingAsync`
+- `SendingServiceTests.INT_SMS_004_AC2_ADrawIsRefusedBelowTheFloorAsTheTextWouldBeAsync`
+- `ThrottlingTests.BFF_ABUSE_002_AC1_ASecondLinkInsideTheIntervalIsRefusedAlikeForAHeldAndAnUnheldAddressAsync`
+- `ThrottlingTests.BFF_ABUSE_002_AC1_ASecondEmailCodeInsideTheIntervalIsRefusedAlikeForAHeldAndAnUnheldAddressAsync`
+- `ThrottlingTests.BFF_ABUSE_001_AC3_ASecondRecoveryInsideTheIntervalIsRefusedAlikeForAHeldAndAnUnheldAddressAsync`
+
+*Chapter text that should change.*
+
+- AUTH-ABUSE-004 could say:
+  - A link, email-code or recovery ask that sends nothing, for any reason, counts
+    against the restrictions as its message would, and is refused by them alike.
+  - For an address no account holds, the `account` key does not apply.
+- AUTH-ABUSE-003 could say that the non-existence email is judged under the purpose of
+  the message that was asked for.
 
 
 # Rows for chapter 10

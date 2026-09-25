@@ -34,7 +34,7 @@ namespace Janus.Authentication.Recovery;
 /// <param name="stepUp">What the approver's session has to have proved.</param>
 /// <param name="scope">Whether the approver may approve at all.</param>
 /// <param name="sending">Where a message goes out.</param>
-/// <param name="nonExistence">What answers an address no account holds.</param>
+/// <param name="nonExistence">What answers an ask no link of its own answers.</param>
 /// <param name="throttle">The progressive delay.</param>
 /// <param name="alerts">Where the anomaly alerts go.</param>
 /// <param name="configuration">Where the lifetimes and the limits come from.</param>
@@ -43,10 +43,12 @@ namespace Janus.Authentication.Recovery;
 /// <param name="randomness">Where a token is drawn from.</param>
 /// <remarks>
 /// Implements AUTH-RECOV-002, AUTH-RECOV-002a, AUTH-RECOV-003, AUTH-RECOV-004,
-/// AUTH-RECOV-005 and AUTH-ABUSE-003. Asking always succeeds: an identifier no
-/// account holds, an account whose policy closes the route and an account that has
-/// asked too often today each produce the answer one that can produce, and differ
-/// only in what reaches the channel.
+/// AUTH-RECOV-005, AUTH-ABUSE-002 and AUTH-ABUSE-003. Asking always succeeds: an
+/// identifier no account holds, an account whose policy closes the route and an
+/// account that has asked too often today each produce the answer one that can
+/// produce, and differ only in what reaches the channel. Each counts against the
+/// sending restrictions as the link would, so where a restriction refuses the ask it
+/// refuses all of them alike.
 /// </remarks>
 internal sealed class RecoveryService(
     IRecoveryLinkStore links,
@@ -109,7 +111,7 @@ internal sealed class RecoveryService(
 
         TimeSpan delay = (await throttle
                 .DelayAsync(
-                    new ThrottleAttempt(source, identifier) { Account = owner },
+                    new ThrottleAttempt(source, throttle.Identify(identifier, usernames)) { Account = owner },
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<TimeSpan>(error, ref failure));
@@ -132,7 +134,8 @@ internal sealed class RecoveryService(
         return owner is SubjectId subject
             ? await IssueAsync(subject, channel, language, source, cancellationToken)
                 .ConfigureAwait(false)
-            : await TellAsync(channel, language, source, cancellationToken).ConfigureAwait(false);
+            : await WithheldAsync(channel, language, source, unheld: true, cancellationToken)
+                .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -408,26 +411,23 @@ internal sealed class RecoveryService(
                 .ConfigureAwait(false)
             : null;
 
-    private async ValueTask<Result> TellAsync(
+    // AUTH-ABUSE-002 AC3, AUTH-ABUSE-003: a recovery no link answers, because no
+    // account holds the address or the account cannot be recovered by it, is answered
+    // as the one and counted against the sending restrictions as the link would have.
+    private ValueTask<Result> WithheldAsync(
         Channel channel,
         string language,
         string source,
-        CancellationToken cancellationToken)
-    {
-        if (channel.Kind is not IdentifierKind.Email
-            || !EmailAddress.TryParse(channel.Canonical, out EmailAddress address))
-        {
-            return Result.Success();
-        }
-
-        Error? failure = null;
-
-        _ = (await nonExistence.TellAsync(address, source, language, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(value => value, error => Withheld<bool>(error, ref failure));
-
-        return failure is null ? Result.Success() : Result.Failure(failure);
-    }
+        bool unheld,
+        CancellationToken cancellationToken) =>
+        nonExistence.AnswerAsync(
+            channel.Destination,
+            MessageKind.RecoveryLink,
+            RestrictionPurpose.Notification,
+            source,
+            language,
+            unheld,
+            cancellationToken);
 
     // AUTH-RECOV-004 and AUTH-ABUSE-003: a policy that closes the route and an
     // account that cannot be recovered both end here, and both answer exactly as an
@@ -459,7 +459,8 @@ internal sealed class RecoveryService(
         if (!policy.SelfServiceRecovery
             || !await RecoverableAsync(subject, cancellationToken).ConfigureAwait(false))
         {
-            return Result.Success();
+            return await WithheldAsync(channel, language, source, unheld: false, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         var token = OpaqueToken.Draw(randomness);

@@ -7,11 +7,15 @@ namespace Janus.Storage.Authentication.SignIn;
 /// The <c>signin_challenges</c> row: one sign-in in progress.
 /// </summary>
 /// <remarks>
-/// Implements AUTH-ABUSE-003, AUTH-FACT-014, AUTH-FACT-016 and REG-DOM-001. Nothing here
-/// is a personal field, so no key is unwrapped and none is needed: the row is a
-/// fingerprint, a subject, the identifier of the email it was opened with, the value a
+/// Implements AUTH-ABUSE-001, AUTH-ABUSE-003, AUTH-FACT-014, AUTH-FACT-016,
+/// REG-DOM-001 and OPS-SEC-003. Nothing here is a personal field, so no key is
+/// unwrapped and none is needed: the row is a fingerprint, a subject, the identifier of
+/// the email it was opened with, the keyed hash of the identifier as it was entered and
+/// the version of the fingerprint key that hash was computed under, the value a
 /// ceremony signs over and what has been presented. The subject is absent where the
-/// identifier resolved to no account, because a challenge exists either way.
+/// identifier resolved to no account, because a challenge exists either way. The hash
+/// and its version are absent together, and only on a row written before challenges
+/// carried them (OPS-MIG-005).
 /// </remarks>
 internal sealed class ChallengeRecord
 {
@@ -26,6 +30,18 @@ internal sealed class ChallengeRecord
     /// account holds it.
     /// </summary>
     public IdentifierId? Email { get; set; }
+
+    /// <summary>
+    /// The <c>identifier</c> column: the keyed hash of the identifier the sign-in was
+    /// opened with, which a refused factor is counted against.
+    /// </summary>
+    public byte[]? Identifier { get; set; }
+
+    /// <summary>
+    /// The <c>fingerprint_version</c> column: the version of the fingerprint key the
+    /// identifier's hash was computed under.
+    /// </summary>
+    public int? FingerprintVersion { get; set; }
 
     /// <summary>The <c>webauthn</c> column: what an assertion has to sign over.</summary>
     public string WebAuthn { get; set; } = string.Empty;

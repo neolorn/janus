@@ -76,6 +76,35 @@ internal sealed class ThrottleService(
     }
 
     /// <summary>
+    /// What an identifier as it was entered is counted under: the keyed hash of the
+    /// form its kind writes it in, or of the text itself where it reads as no kind,
+    /// so that the ways one address can be typed are one count, and one no account
+    /// holds is counted exactly as one an account holds (AUTH-ABUSE-001).
+    /// </summary>
+    /// <param name="entered">The identifier as it was entered.</param>
+    /// <param name="usernames">
+    /// Whether the deployment admits usernames (<c>identifiers.username.enabled</c>).
+    /// </param>
+    /// <returns>The hash the identifier component counts it under.</returns>
+    /// <exception cref="ArgumentNullException">The identifier is absent.</exception>
+    public byte[] Identify(string entered, bool usernames)
+    {
+        ArgumentNullException.ThrowIfNull(entered);
+
+        string trimmed = entered.Trim();
+
+        string written = IdentifierKinds.Detect(trimmed, usernames) switch
+        {
+            IdentifierKind.Email when EmailAddress.TryParse(trimmed, out EmailAddress address) => address.Value,
+            IdentifierKind.Phone when PhoneNumber.TryParse(trimmed, out PhoneNumber number) => number.Value,
+            IdentifierKind.Username when Username.TryParse(trimmed, out Username username) => username.Value,
+            _ => trimmed,
+        };
+
+        return ledger.Identify(written);
+    }
+
+    /// <summary>
     /// The refusal a standing delay produces, which says when the next attempt is
     /// looked at and nothing about whether the account exists. Every throttle of the
     /// library answers in this one shape, which the boundary turns into
@@ -151,23 +180,30 @@ internal sealed class ThrottleService(
     }
 
     /// <summary>
-    /// Forgets what an attempt accumulated, which a sign-in that succeeded does.
+    /// Forgets what the account accumulated, which a sign-in that succeeded proves the
+    /// person may: the account's credential was presented and held.
     /// </summary>
     /// <param name="attempt">Who attempted what, from where.</param>
     /// <param name="cancellationToken">Abandons the write.</param>
     /// <returns>The work of forgetting it.</returns>
     /// <exception cref="ArgumentNullException">The attempt is absent.</exception>
+    /// <remarks>
+    /// A success proves nothing about the source or the identifier: one address can
+    /// sign in to an account of its own between guesses at others, and an identifier's
+    /// count dropping when its account signs in would say that an account holds it. So
+    /// both decay as time alone decides (AUTH-ABUSE-001, AUTH-ABUSE-003).
+    /// </remarks>
     public async ValueTask SucceededAsync(ThrottleAttempt attempt, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(attempt);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-
-        foreach ((ThrottleScope scope, string key) in Scopes(attempt))
+        if (attempt.Account is not SubjectId account)
         {
-            await ledger.ClearAsync(scope, key, cancellationToken).ConfigureAwait(false);
+            return;
         }
 
+        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        await ledger.ClearAsync(ThrottleScope.Account, account.ToString(), cancellationToken).ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -194,9 +230,9 @@ internal sealed class ThrottleService(
             yield return (ThrottleScope.Account, account.ToString());
         }
 
-        if (attempt.Identifier is not null)
+        if (attempt.Identifier is byte[] identifier)
         {
-            yield return (ThrottleScope.Identifier, attempt.Identifier);
+            yield return (ThrottleScope.Identifier, Convert.ToHexString(identifier));
         }
     }
 

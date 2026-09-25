@@ -77,6 +77,8 @@ internal sealed class SocialProvidersInMemory : HttpMessageHandler
 
     private readonly List<IReadOnlyDictionary<string, string>> _exchanges = [];
 
+    private int _calls;
+
     /// <summary>
     /// What the deployment declares for Google.
     /// </summary>
@@ -109,6 +111,11 @@ internal sealed class SocialProvidersInMemory : HttpMessageHandler
     /// What each exchange the deployment made presented, in order.
     /// </summary>
     public IReadOnlyList<IReadOnlyDictionary<string, string>> Exchanges => _exchanges;
+
+    /// <summary>
+    /// How many requests the deployment has made of either provider, of any kind.
+    /// </summary>
+    public int Calls => Volatile.Read(ref _calls);
 
     /// <summary>
     /// An event the provider signed, addressed to the deployment's client there.
@@ -190,6 +197,8 @@ internal sealed class SocialProvidersInMemory : HttpMessageHandler
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        _ = Interlocked.Increment(ref _calls);
 
         if (Reachable && request.Method == HttpMethod.Post
             && (request.RequestUri == GoogleToken || request.RequestUri == AppleToken))

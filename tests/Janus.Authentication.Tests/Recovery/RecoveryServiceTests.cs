@@ -73,6 +73,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     private readonly NoticeLedgerInMemory _notices = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly SendingRestrictionsInMemory _restrictions = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
@@ -711,6 +712,45 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
         Assert.Equal(Elsewhere, _notifications.Mail[0].Destination.Canonical);
     }
 
+    /// <summary>
+    /// AUTH-ABUSE-002 AC3, AUTH-ABUSE-003: a recovery no link answers, because the
+    /// policy closes the route or because the window has already told an address no
+    /// account holds, counts against the sending restrictions as the link would have,
+    /// and a refusal of the restrictions answers both with the one refusal.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_002_AC3_ARecoveryNoLinkAnswersCountsAsTheLinkWouldAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        _memberships.Place(subject, Support);
+        _configuration.Set(
+            Settings.OrganizationPolicy,
+            Support.ToString(),
+            new PolicyOverride(null, null, null, null, SelfServiceRecovery: false, null));
+
+        Assert.True(Succeeded(await AskedAsync(Address)));
+        Assert.True(Succeeded(await AskedAsync(Elsewhere)));
+        Assert.True(Succeeded(await AskedAsync(Elsewhere)));
+
+        Assert.Equal(
+            [Address, Elsewhere],
+            _restrictions.Drawn.Select(drawn => drawn.Destination.Canonical));
+        Assert.All(_restrictions.Drawn, drawn => Assert.Equal(MessageKind.RecoveryLink, drawn.Message));
+        Assert.All(_restrictions.Drawn, drawn => Assert.Equal(RestrictionPurpose.Notification, drawn.Purpose));
+        Assert.Equal(MessageKind.NoAccount, Assert.Single(_notifications.Mail).Message);
+
+        var refusal = Error.From(ErrorCodes.RestrictionExceeded);
+        _restrictions.Refusal = refusal;
+
+        Result held = await AskedAsync(Address);
+        Result nobodys = await AskedAsync(Elsewhere);
+
+        Assert.Same(refusal, held.Match(() => (Error?)null, error => error));
+        Assert.Same(refusal, nobodys.Match(() => (Error?)null, error => error));
+    }
+
     private RecoveryService Service =>
         new(
             _links,
@@ -726,7 +766,14 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             new StepUpGuard(_live, _authenticators, _passwords, Policies, _clock),
             new AdministrativeScope(_gate, _administrative),
             _notifications,
-            new NonExistenceNotice(_configuration, _notifications, _notices, _work, _events, _clock),
+            new NonExistenceNotice(
+                _configuration,
+                _notifications,
+                _restrictions,
+                _notices,
+                _work,
+                _events,
+                _clock),
             Throttle,
             _events,
             _configuration,
@@ -881,6 +928,9 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
         await AccountAsync(Address, password);
 
     private static bool Succeeded(Result result) => result.Match(() => true, _ => false);
+
+    private ValueTask<Result> AskedAsync(string identifier) =>
+        Service.BeginAsync(identifier, Language, Source, TestContext.Current.CancellationToken);
 
     private static ErrorCode Refused(Result result) =>
         result.Match(() => default, error => error.Code);

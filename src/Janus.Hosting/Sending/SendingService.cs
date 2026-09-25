@@ -55,10 +55,70 @@ internal sealed class SendingService(
     IEvents events,
     IAlertChannels alerts,
     TimeProvider time,
-    RandomNumberGenerator randomness) : INotificationHandler
+    RandomNumberGenerator randomness) : INotificationHandler, ISendingRestrictions
 {
     // A pass never holds more than this many in memory; the rest wait for the next.
     private const int Batch = 100;
+
+    /// <inheritdoc/>
+    /// <exception cref="ArgumentNullException">The request is absent.</exception>
+    /// <remarks>
+    /// AUTH-ABUSE-002 AC3: the send is judged exactly as <see cref="SendAsync"/> judges
+    /// the message it stands for, the gateway floor included, and counted once for each
+    /// language the message would have gone out in, each under a reference no delivery
+    /// report will ever name, so what it counts is kept until its buckets are empty.
+    /// </remarks>
+    public async ValueTask<Result> DrawAsync(SendRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        DateTimeOffset now = time.GetUtcNow();
+        Error? failure = null;
+
+        if (await FlooredAsync(request, cancellationToken).ConfigureAwait(false) is Error floored)
+        {
+            return Result.Failure(floored);
+        }
+
+        SendPlan plan = (await PlanAsync(request, now, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<SendPlan>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure(failure);
+        }
+
+        if (plan.RetryAt is DateTimeOffset retryAt)
+        {
+            return Result.Failure(Exceeded(retryAt));
+        }
+
+        IReadOnlyList<Worded> worded = (await WordedAsync(request, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<IReadOnlyList<Worded>>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure(failure);
+        }
+
+        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+
+        foreach (Worded _ in worded)
+        {
+            await ledger
+                .RecordAsync(
+                    SendReferences.Of(SendReference.Draw(randomness)),
+                    plan.Counted,
+                    plan.Spent,
+                    now,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        return Result.Success();
+    }
 
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException">The request is absent.</exception>

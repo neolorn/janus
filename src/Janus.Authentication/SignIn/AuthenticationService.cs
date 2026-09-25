@@ -85,21 +85,55 @@ internal sealed class AuthenticationService(
     RandomNumberGenerator randomness) : IAuthentication
 {
     /// <inheritdoc/>
+    public ValueTask<Result<SignInChallenge>> BeginAsync(
+        string identifier,
+        string source,
+        CancellationToken cancellationToken) =>
+        BeginAsync(identifier, source, remembered: null, trusted: null, cancellationToken);
+
+    /// <summary>
+    /// Opens a sign-in for an identifier, with the tokens only the browser boundary
+    /// can read.
+    /// </summary>
+    /// <param name="identifier">The identifier as it was entered.</param>
+    /// <param name="source">The address the request came from.</param>
+    /// <param name="remembered">
+    /// The token saying this browser has passed the new-device check, or nothing.
+    /// </param>
+    /// <param name="trusted">
+    /// The token saying this browser is trusted for the second step, or nothing.
+    /// </param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The challenge, or the delay the attempt has earned.</returns>
+    /// <exception cref="ArgumentNullException">The identifier is absent.</exception>
+    /// <remarks>
+    /// Implements AUTH-ABUSE-001 AC5. A browser the account knows by a token that
+    /// stands for this account is not held by the components an attacker raises from
+    /// anywhere; a token that stands for nothing, or for another account, exempts it
+    /// from nothing.
+    /// </remarks>
     public async ValueTask<Result<SignInChallenge>> BeginAsync(
         string identifier,
         string source,
+        [NeverLogged] string? remembered,
+        [NeverLogged] string? trusted,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(identifier);
 
         Error? failure = null;
 
-        (SubjectId? subject, IdentifierId? email) = await OpenerAsync(identifier, cancellationToken)
+        (SubjectId? subject, IdentifierId? email, byte[] counted) = await OpenerAsync(identifier, cancellationToken)
             .ConfigureAwait(false);
 
-        if (await DelayedAsync(new ThrottleAttempt(source, identifier) { Account = subject }, cancellationToken)
-                .ConfigureAwait(false)
-            is Error held)
+        var attempt = new ThrottleAttempt(source, counted)
+        {
+            Account = subject,
+            Recognised = await RecognisedAsync(subject, remembered, trusted, cancellationToken)
+                .ConfigureAwait(false),
+        };
+
+        if (await DelayedAsync(attempt, cancellationToken).ConfigureAwait(false) is Error held)
         {
             return Result.Failure<SignInChallenge>(held);
         }
@@ -127,7 +161,7 @@ internal sealed class AuthenticationService(
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await challenges
             .AddAsync(
-                Challenge.Open(handle, subject, email, ceremony.Value, time.GetUtcNow(), lifetime),
+                Challenge.Open(handle, subject, email, counted, ceremony.Value, time.GetUtcNow(), lifetime),
                 cancellationToken)
             .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -335,6 +369,25 @@ internal sealed class AuthenticationService(
     }
 
     /// <summary>
+    /// The delay a provider's round trip answers to before its code is traded, which
+    /// only its source can have earned: nothing else about it is known yet.
+    /// </summary>
+    /// <param name="source">The address the browser came back from.</param>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    /// <returns>The refusal where a delay stands, or nothing.</returns>
+    /// <exception cref="ArgumentNullException">The source is absent.</exception>
+    /// <remarks>
+    /// Implements AUTH-ABUSE-001. Asked before the exchange, so an address that has
+    /// earned a delay makes this server call no provider on its behalf.
+    /// </remarks>
+    public ValueTask<Error?> ExchangeDelayedAsync(string source, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+
+        return DelayedAsync(new ThrottleAttempt(source, null), cancellationToken);
+    }
+
+    /// <summary>
     /// Presents one factor, with what only the browser boundary can act on: the
     /// tokens this browser carries and the secrets a completed sign-in hands back.
     /// </summary>
@@ -363,19 +416,21 @@ internal sealed class AuthenticationService(
 
         Challenge? open = await OpenAsync(challenge, cancellationToken).ConfigureAwait(false);
 
+        // AUTH-ABUSE-001 AC5: only a token that stands for this sign-in's account
+        // recognises the browser; carrying one proves nothing.
+        var attempt = new ThrottleAttempt(origin.Address, open?.Identifier)
+        {
+            Account = open?.Subject,
+            Recognised = await RecognisedAsync(open?.Subject, remembered, trusted, cancellationToken)
+                .ConfigureAwait(false),
+        };
+
         // The delay is asked before anything is judged, a handle that opens nothing
         // included, which its source alone answers for (AUTH-ABUSE-001).
-        if (await DelayedAsync(new ThrottleAttempt(origin.Address, null) { Account = open?.Subject }, cancellationToken)
-            .ConfigureAwait(false) is Error held)
+        if (await DelayedAsync(attempt, cancellationToken).ConfigureAwait(false) is Error held)
         {
             return Result.Failure<SignInOutcome>(held);
         }
-
-        var attempt = new ThrottleAttempt(origin.Address, null)
-        {
-            Account = open?.Subject,
-            Recognised = remembered is not null || trusted is not null,
-        };
 
         // An identifier that resolved to nothing, and a handle that opens nothing,
         // reach exactly this point and stop, having been told what an account with the
@@ -441,7 +496,7 @@ internal sealed class AuthenticationService(
         ArgumentNullException.ThrowIfNull(origin);
 
         Challenge? open = await OpenAsync(challenge, cancellationToken).ConfigureAwait(false);
-        var attempt = new ThrottleAttempt(origin.Address, null) { Account = open?.Subject };
+        var attempt = new ThrottleAttempt(origin.Address, open?.Identifier) { Account = open?.Subject };
 
         if (await DelayedAsync(attempt, cancellationToken).ConfigureAwait(false) is Error held)
         {
@@ -656,14 +711,19 @@ internal sealed class AuthenticationService(
                 sameBrowser ? null : VerificationCode.Read(held.Code)));
         }
 
-        var attempt = new ThrottleAttempt(origin.Address, null) { Account = held.Subject };
+        Challenge? open = await OpenAsync(challenge, cancellationToken).ConfigureAwait(false);
+
+        var attempt = new ThrottleAttempt(origin.Address, open?.Identifier)
+        {
+            Account = held.Subject,
+            Recognised = await RecognisedAsync(held.Subject, remembered, trusted: null, cancellationToken)
+                .ConfigureAwait(false),
+        };
 
         if (await DelayedAsync(attempt, cancellationToken).ConfigureAwait(false) is Error delayed)
         {
             return Result.Failure<LandedSignIn>(delayed);
         }
-
-        Challenge? open = await OpenAsync(challenge, cancellationToken).ConfigureAwait(false);
 
         // CONV-LOG-005: a pressed link that lands on no sign-in of its account is a
         // refused factor, recorded and counted as one.
@@ -713,9 +773,11 @@ internal sealed class AuthenticationService(
         return default!;
     }
 
-    // The account an identifier opens a sign-in for, and the identifier itself where it
-    // is an email address, which is what a domain lock is later judged on.
-    private async ValueTask<(SubjectId? Subject, IdentifierId? Email)> OpenerAsync(
+    // The account an identifier opens a sign-in for, the identifier itself where it is
+    // an email address, which is what a domain lock is later judged on, and what the
+    // identifier is counted under, which is worked out alike whether or not an account
+    // holds it (AUTH-ABUSE-001).
+    private async ValueTask<(SubjectId? Subject, IdentifierId? Email, byte[] Counted)> OpenerAsync(
         string identifier,
         CancellationToken cancellationToken)
     {
@@ -727,10 +789,11 @@ internal sealed class AuthenticationService(
             .Match(value => value, error => Withheld<bool>(error, ref failure));
 
         string entered = identifier.Trim();
+        byte[] counted = throttle.Identify(entered, usernames);
 
         if (failure is not null || IdentifierKinds.Detect(entered, usernames) is not { } kind)
         {
-            return (null, null);
+            return (null, null, counted);
         }
 
         string? canonical = kind switch
@@ -748,11 +811,22 @@ internal sealed class AuthenticationService(
             || await identifiers.HolderAsync(kind, canonical, cancellationToken).ConfigureAwait(false)
                 is not { } holder)
         {
-            return (null, null);
+            return (null, null, counted);
         }
 
-        return (holder.Subject, kind is IdentifierKind.Email ? holder.Identifier : null);
+        return (holder.Subject, kind is IdentifierKind.Email ? holder.Identifier : null, counted);
     }
+
+    // AUTH-ABUSE-001 AC5: a browser is recognised by a token that resolves, stands for
+    // the account being signed into and has not lapsed; asking changes nothing about the
+    // token, so a stolen one is not refreshed by being tried.
+    private async ValueTask<bool> RecognisedAsync(
+        SubjectId? subject,
+        [NeverLogged] string? remembered,
+        [NeverLogged] string? trusted,
+        CancellationToken cancellationToken) =>
+        subject is SubjectId account
+            && await devices.RecognisesAsync(account, remembered, trusted, cancellationToken).ConfigureAwait(false);
 
     private async ValueTask<Error?> DelayedAsync(ThrottleAttempt attempt, CancellationToken cancellationToken)
     {

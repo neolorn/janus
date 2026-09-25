@@ -9,11 +9,14 @@ namespace Janus.Authentication.SignIn;
 /// the WebAuthn challenge it issued.
 /// </summary>
 /// <remarks>
-/// Implements AUTH-ABUSE-003, AUTH-FACT-014, AUTH-FACT-016 and REG-DOM-001. A challenge
-/// exists for an identifier that resolves to nothing exactly as for one that resolves
-/// to an account, because the two answers have to be the same; it simply never accepts
-/// a factor. Where it was opened with an email address the account holds, it names that
-/// identifier, which is what a domain lock judges once a factor has succeeded.
+/// Implements AUTH-ABUSE-001, AUTH-ABUSE-003, AUTH-FACT-014, AUTH-FACT-016 and
+/// REG-DOM-001. A challenge exists for an identifier that resolves to nothing exactly as
+/// for one that resolves to an account, because the two answers have to be the same; it
+/// simply never accepts a factor. It carries the keyed hash of the identifier it was
+/// opened with, so that a factor refused against it is counted against that identifier
+/// whether or not an account holds it. Where it was opened with an email address the
+/// account holds, it names that identifier, which is what a domain lock judges once a
+/// factor has succeeded.
 /// </remarks>
 internal sealed class Challenge
 {
@@ -23,6 +26,7 @@ internal sealed class Challenge
         byte[] fingerprint,
         SubjectId? subject,
         IdentifierId? email,
+        byte[]? identifier,
         string webAuthn,
         DateTimeOffset createdAt,
         DateTimeOffset expiresAt,
@@ -31,6 +35,7 @@ internal sealed class Challenge
         Fingerprint = fingerprint;
         Subject = subject;
         Email = email;
+        Identifier = identifier;
         WebAuthn = webAuthn;
         CreatedAt = createdAt;
         ExpiresAt = expiresAt;
@@ -50,6 +55,13 @@ internal sealed class Challenge
     /// </summary>
     public IdentifierId? Email { get; }
 
+    /// <summary>
+    /// The keyed hash of the identifier it was opened with, which the identifier
+    /// component of the delay counts a refused factor against; absent only where it was
+    /// opened before challenges carried it.
+    /// </summary>
+    public byte[]? Identifier { get; }
+
     /// <summary>The value an assertion against this challenge has to sign over.</summary>
     public string WebAuthn { get; }
 
@@ -68,18 +80,25 @@ internal sealed class Challenge
     /// <param name="handle">The secret the caller presents at every later step.</param>
     /// <param name="subject">Whose sign-in, or nothing.</param>
     /// <param name="email">The email it was opened with, where the account holds it.</param>
+    /// <param name="identifier">The keyed hash of the identifier it was opened with.</param>
     /// <param name="webAuthn">The WebAuthn challenge issued with it.</param>
     /// <param name="at">Now.</param>
     /// <param name="lifetime">How long it answers for.</param>
     /// <returns>The challenge.</returns>
+    /// <exception cref="ArgumentNullException">The identifier is absent.</exception>
     public static Challenge Open(
         OpaqueToken handle,
         SubjectId? subject,
         IdentifierId? email,
+        byte[] identifier,
         string webAuthn,
         DateTimeOffset at,
-        TimeSpan lifetime) =>
-        new(handle.Fingerprint(), subject, email, webAuthn, at, at + lifetime, []);
+        TimeSpan lifetime)
+    {
+        ArgumentNullException.ThrowIfNull(identifier);
+
+        return new(handle.Fingerprint(), subject, email, identifier, webAuthn, at, at + lifetime, []);
+    }
 
     /// <summary>
     /// The challenge as the store holds it.
@@ -87,6 +106,9 @@ internal sealed class Challenge
     /// <param name="fingerprint">What the handle hashes to.</param>
     /// <param name="subject">Whose sign-in, or nothing.</param>
     /// <param name="email">The email it was opened with, where the account holds it.</param>
+    /// <param name="identifier">
+    /// The keyed hash of the identifier it was opened with, where the store holds one.
+    /// </param>
     /// <param name="webAuthn">The WebAuthn challenge issued with it.</param>
     /// <param name="createdAt">When it opened.</param>
     /// <param name="expiresAt">When it stops answering.</param>
@@ -97,6 +119,7 @@ internal sealed class Challenge
         byte[] fingerprint,
         SubjectId? subject,
         IdentifierId? email,
+        byte[]? identifier,
         string webAuthn,
         DateTimeOffset createdAt,
         DateTimeOffset expiresAt,
@@ -105,7 +128,15 @@ internal sealed class Challenge
         ArgumentNullException.ThrowIfNull(fingerprint);
         ArgumentNullException.ThrowIfNull(presented);
 
-        return new Challenge(fingerprint, subject, email, webAuthn, createdAt, expiresAt, [.. presented]);
+        return new Challenge(
+            fingerprint,
+            subject,
+            email,
+            identifier,
+            webAuthn,
+            createdAt,
+            expiresAt,
+            [.. presented]);
     }
 
     /// <summary>

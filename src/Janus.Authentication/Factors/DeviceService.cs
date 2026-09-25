@@ -169,6 +169,34 @@ internal sealed class DeviceService(
         StandsAsync(subject, presented, DeviceKind.Remembered, cancellationToken);
 
     /// <summary>
+    /// Whether the browser carrying these tokens is one the account knows: a token of
+    /// either kind that resolves, stands for this account and has not lapsed or been
+    /// revoked. Nothing about either token changes.
+    /// </summary>
+    /// <param name="subject">Whose sign-in.</param>
+    /// <param name="remembered">
+    /// The token saying the browser passed the new-device check, absent where it carried none.
+    /// </param>
+    /// <param name="trusted">
+    /// The token saying the browser is trusted for the second step, absent where it carried none.
+    /// </param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Whether the browser is recognised.</returns>
+    /// <remarks>
+    /// Implements AUTH-ABUSE-001 AC5. A forged token resolves to nothing and another
+    /// account's token stands for another account, so neither recognises anything.
+    /// </remarks>
+    public async ValueTask<bool> RecognisesAsync(
+        SubjectId subject,
+        [NeverLogged] string? remembered,
+        [NeverLogged] string? trusted,
+        CancellationToken cancellationToken) =>
+        await OfAsync(subject, remembered, DeviceKind.Remembered, cancellationToken).ConfigureAwait(false)
+            is not null
+        || await OfAsync(subject, trusted, DeviceKind.Trusted, cancellationToken).ConfigureAwait(false)
+            is not null;
+
+    /// <summary>
     /// Whether this sign-in is held until a code sent to the account's primary email
     /// is entered.
     /// </summary>
