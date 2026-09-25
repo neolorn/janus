@@ -14354,6 +14354,57 @@ report under criteria a test cannot decide.
 *Chapter text that should change.* AUTH-FACT-002a AC5 could name FE-API-004 or the
 frontend chapter as where the disclosure is verified.
 
+---
+
+## 351. The social sign-in is the library's own client, not the handler `08` names
+
+**Phase 10 · 2026-09-25 · Tier 3 · CONV-DESIGN-008, BFF-SESS-002, BFF-CSRF-005 AC3 and AC4, BFF-MACH-001, OPS-SEC-001, entries 163 and 343**
+
+*The question.* CONV-DESIGN-008 names `Microsoft.AspNetCore.Authentication.OpenIdConnect`
+as the OIDC client for Google and Apple. That handler keeps the round trip in the
+browser: a correlation cookie and a nonce cookie of its own naming, and the `state` as
+an encrypted copy of the round trip's properties, the PKCE verifier among them, under
+ASP.NET Core's data-protection keys. Chapter 17 fixes the cookies the library sets at
+three `__Host-identity-*` cookies (BFF-SESS-002, D-153) and issues none with
+`SameSite=None` (BFF-CSRF-005 AC3). A provider that returns by form post (Apple, which
+requires it when the address is asked for) withholds a `Lax` cookie, so the handler's
+correlation cookie would have to be `SameSite=None` for Apple to work at all. The
+handler also takes its callback in middleware ahead of the endpoints, where BFF-MACH-001
+has an endpoint's protection derive from where it is mounted, and its data-protection
+keys are neither under the key-encryption key nor in the secrets manager (OPS-SEC-001).
+
+*The readings.* (1) Use the handler as `08` names it and let chapter 17 give way: two
+more cookies, one of them `SameSite=None`, and the verifier leaving the server under
+keys the envelope does not hold. (2) Use the handler for Google only, where the query
+return lets its cookies be `Lax`, and leave Apple unbuilt. (3) Carry the round trip on
+the pattern the sign-on client already follows (entry 163): the state, the nonce and
+the verifier held on the server, bound to what the browser already carries, the
+provider's return taken on the machine profile and continued as a GET on the browser
+profile (BFF-CSRF-005 AC4), and the identity token validated by
+`Microsoft.IdentityModel`, which the handler itself validates with and which the
+permitted OpenID Connect packages already bring.
+
+*Chosen: 3 (Tier 3, the strictest reading).* It keeps every chapter 17 rule and
+OPS-SEC-001 whole, holds the verifier where the envelope protects it, sets no cookie
+the chapter does not name, and leaves nothing unbuilt; the cryptographic judgement of
+the token is still Microsoft's code, not the library's. What it costs is protocol code
+the handler would have carried: building the authorization request, the form post of
+the exchange, and the checks the handler makes. Each of those checks has a test.
+`Microsoft.AspNetCore.Authentication.OpenIdConnect` stays in `Directory.Packages.props`,
+so CONV-DESIGN-008 AC1 holds, and no project references it.
+
+*Tests that pin it.*
+`ProviderSignInTests.IDN_LIFE_012_ALinkedIdentitySignsInOverTheRoundTripAsync`,
+`ProviderSignInTests.IDN_LIFE_012_AnIdentityTokenThatDoesNotHoldUpSignsNobodyInAsync`,
+`ProviderSignInTests.BFF_MACH_001_TheProviderReturnSendsTheBrowserOnAsync`,
+`ProviderSignInTests.BFF_CSRF_005a_AProviderReturnWithAnotherStateIsRefusedAsync`,
+`ProviderSignInTests.BFF_CSRF_005a_AProviderReturnIsJudgedOnceAsync`,
+`ProviderAttemptStoreTests.IDN_LIFE_012_TheProofKeyIsAtRestUnderTheKeyEncryptionKeyAsync`.
+
+*Chapter text that should change.* CONV-DESIGN-008 could drop the row for the OIDC
+client, or keep it and say the handler is not used because of BFF-SESS-002 and
+BFF-CSRF-005, naming `Microsoft.IdentityModel` as what validates the provider's token.
+
 
 # Rows for chapter 10
 
