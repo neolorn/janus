@@ -15,7 +15,7 @@ namespace Janus.Core.Tests;
 /// (CONV-LAYOUT-001, CONV-LAYOUT-002, CONV-LAYOUT-003, CONV-SETUP-001, CONV-SETUP-002,
 /// CONV-SETUP-004, CONV-DESIGN-001, CONV-DESIGN-003, CONV-DESIGN-004, CONV-DESIGN-007,
 /// CONV-DESIGN-008, CONV-CODE-008, CONV-TEST-002, CONV-VCS-005, LIB-API-002,
-/// LIB-PKG-001, LIB-PKG-002, OPS-DATA-001, OPS-DATA-002).
+/// LIB-PKG-001, LIB-PKG-002, OPS-DATA-001, OPS-DATA-002, OPS-DATA-003).
 /// </summary>
 [Trait("kind", "contract")]
 public sealed class LibraryStructureTests
@@ -60,14 +60,32 @@ public sealed class LibraryStructureTests
     ];
 
     // OPS-DATA-002: the accessor is the one place a connection comes from. These are
-    // the ways a caller could get another one instead.
-    private static readonly string[] DirectConnections =
+    // the ways a caller could get another one instead: the context's own, one a data
+    // source or a factory opens, or one constructed, which names its type whether the
+    // type follows `new` or the declaration it is constructed into.
+    private static readonly Regex DirectConnection = new(
+        @"\b(GetDbConnection|OpenConnection(Async)?|CreateConnection)\s*\(|\bNpgsql(Connection|DataSource)\b",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(5));
+
+    // OPS-DATA-003: the database features direct ADO.NET use is reserved for, in the
+    // item's words.
+    private static readonly string[] DirectFeatures =
     [
-        "GetDbConnection",
-        "new NpgsqlConnection",
-        "OpenConnectionAsync",
-        "OpenConnection(",
+        "binary bulk copy",
+        "advisory locks",
+        "listen/notify",
+        "server-side cursors",
     ];
+
+    // OPS-DATA-003: going below Dapper and EF Core to ADO.NET is naming a provider's
+    // connection, command, batch, reader, data source or copy, or the provider-neutral
+    // command, batch or reader, or calling what makes or runs a command or starts a copy.
+    private static readonly Regex DirectAdoNet = new(
+        @"\b(Npgsql(Connection|Command|Batch|DataReader|DataSource|BinaryImporter|BinaryExporter)|Db(Command|Batch|DataReader))\b"
+            + @"|\b(CreateCommand|ExecuteNonQuery(Async)?|Begin(Binary|Text|RawBinary)(Import|Export|Copy))\s*\(",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(5));
 
     private static readonly string[] Areas =
     [
@@ -346,21 +364,34 @@ public sealed class LibraryStructureTests
 
     /// <summary>
     /// OPS-DATA-002 AC2: nothing but the accessor retrieves a connection, so a
-    /// hand-written query can never run outside the operation's transaction.
+    /// hand-written query can never run outside the operation's transaction. The one
+    /// other connection is the one that listens for registration signals, a
+    /// listen/notify use of OPS-DATA-003: it runs no query, holds no operation's
+    /// transaction, and nothing above the port it implements reaches it.
     /// </summary>
     [Fact]
-    public void OPS_DATA_002_AC2_NoFileButTheAccessorRetrievesAConnection()
-    {
-        IEnumerable<string> reaching = Sources()
-            .Where(file => !string.Equals(
-                Path.GetFileName(file),
-                "DataConnections.cs",
-                StringComparison.Ordinal))
-            .Where(file => DirectConnections.Any(call =>
-                File.ReadAllText(file).Contains(call, StringComparison.Ordinal)));
+    public void OPS_DATA_002_AC2_OnlyTheAccessorAndTheListenerRetrieveAConnection() =>
+        Assert.Equal(
+            ["DataConnections.cs", "RegistrationSignals.cs"],
+            Sources()
+                .Where(file => DirectConnection.IsMatch(File.ReadAllText(file)))
+                .Select(Path.GetFileName)
+                .Select(name => name!)
+                .Order(StringComparer.Ordinal));
 
-        Assert.Empty(reaching);
-    }
+    /// <summary>
+    /// OPS-DATA-003 AC1: every line of the library that goes below Dapper and EF Core to
+    /// ADO.NET has, in the comment nearest above it, the database feature that took it
+    /// there, one of the four the item reserves direct use for.
+    /// </summary>
+    [Fact]
+    public void OPS_DATA_003_AC1_EveryDirectUseNamesTheFeatureRequiringIt() =>
+        Assert.Empty(Sources()
+            .Where(file => file.StartsWith(
+                Path.Combine(Repository.Root, "src") + Path.DirectorySeparatorChar,
+                StringComparison.Ordinal))
+            .SelectMany(file => Unnamed(File.ReadAllLines(file))
+                .Select(line => Path.GetFileName(file) + ":" + line)));
 
     /// <summary>
     /// CONV-DESIGN-001 AC1: no folder of an area, at any depth, is a horizontal layer,
@@ -851,6 +882,45 @@ public sealed class LibraryStructureTests
                 @"\b" + Regex.Escape(held) + @"\s*\." + method + @"\(",
                 RegexOptions.None,
                 TimeSpan.FromSeconds(5)));
+
+    // The numbers of the lines that use ADO.NET directly and whose nearest comment above
+    // names no feature of OPS-DATA-003. The comment is read whole, its documentation
+    // lines among it, so a phrase it wraps across two lines is still one phrase.
+    private static IEnumerable<int> Unnamed(string[] lines)
+    {
+        for (int at = 0; at < lines.Length; at++)
+        {
+            if (IsComment(lines[at]) || !DirectAdoNet.IsMatch(lines[at]))
+            {
+                continue;
+            }
+
+            int last = at - 1;
+
+            while (last >= 0 && !IsComment(lines[last]))
+            {
+                last--;
+            }
+
+            int first = last;
+
+            while (first > 0 && IsComment(lines[first - 1]))
+            {
+                first--;
+            }
+
+            string said = last < 0
+                ? string.Empty
+                : string.Join(' ', lines[first..(last + 1)].Select(line => line.TrimStart().TrimStart('/').Trim()));
+
+            if (!DirectFeatures.Any(feature => said.Contains(feature, StringComparison.OrdinalIgnoreCase)))
+            {
+                yield return at + 1;
+            }
+        }
+    }
+
+    private static bool IsComment(string line) => line.TrimStart().StartsWith("//", StringComparison.Ordinal);
 
     // The files of the library whose text answers yes, by name.
     private static string[] Named(Func<string, bool> answers) =>

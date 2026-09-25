@@ -15557,6 +15557,42 @@ exclusion, the range, the unset and the invalid variable, and the message.
 OPS-DEP-001 beside `ADD CONSTRAINT`, and say which `DROP` forms count. OPS-DEP-001
 could say what an unset variable means.
 
+---
+
+## 379. The registration listener is the one connection besides the accessor, and each direct use is named by the comment above it
+
+**Phase 10 · 2026-09-25 · Tier 2 · OPS-DATA-002 AC2, OPS-DATA-003 AC1**
+
+*The question.* OPS-DATA-002 AC2 has nothing but the accessor retrieve a connection.
+`RegistrationSignals` opens its own connection to `LISTEN` on the registration channel
+(REG-SESS-003). That is the listen/notify use OPS-DATA-003 reserves direct ADO.NET
+for. A listening connection outlives every operation, so the accessor cannot serve it:
+the accessor hands out the operation's connection, inside its transaction.
+OPS-DATA-003 AC1 wants "a comment naming the database feature" on each direct use, but
+does not say where the comment sits.
+
+*The readings.*
+
+1. The listener breaks OPS-DATA-002 AC2 and has to be rebuilt on the accessor.
+2. The listener is admitted by name. OPS-DATA-002 AC2 is about queries escaping the
+   operation's transaction, and the listener runs no query and holds no operation.
+   The OPS-DATA-003 comment is the nearest comment block above each direct line.
+3. As reading 2, but one comment anywhere in the file is enough.
+
+*Chosen: 2.* Reading 1 cannot work: the accessor's connection belongs to one
+operation, and a `LISTEN` must stay open between operations. Reading 3 lets a second
+direct use hide behind the first use's comment. The OPS-DATA-002 test asserts the
+exact set of files (`DataConnections.cs`, `RegistrationSignals.cs`), so a third file
+fails it. The OPS-DATA-003 test checks every direct line.
+
+*Tests that pin it.*
+`LibraryStructureTests.OPS_DATA_002_AC2_OnlyTheAccessorAndTheListenerRetrieveAConnection`,
+`LibraryStructureTests.OPS_DATA_003_AC1_EveryDirectUseNamesTheFeatureRequiringIt`.
+
+*Chapter text that should change.* OPS-DATA-002 could name the listen/notify
+connection of OPS-DATA-003 as its exception. OPS-DATA-003 AC1 could say that the
+comment sits above the use.
+
 
 # Rows for chapter 10
 
