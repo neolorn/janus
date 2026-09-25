@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Core;
@@ -12,7 +13,8 @@ namespace Janus.Hosting.Tests.Authorization;
 /// <summary>
 /// The host's records as the host tells the library about them, through the one seam
 /// it has for that, and the inheritance the gate then reads from them
-/// (AUTHZ-INHERIT-001, AUTHZ-INHERIT-002, AUTHZ-SCOPE-001, AUTHZ-MODEL-003).
+/// (AUTHZ-INHERIT-001, AUTHZ-INHERIT-002, AUTHZ-SCOPE-001, AUTHZ-MODEL-003,
+/// IDN-LIFE-002a).
 /// </summary>
 [Trait("kind", "integration")]
 public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<HostFixture>
@@ -36,7 +38,7 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
         ResourceReference document = Reference(Document);
 
         Ok(await RegisteredAsync(new ResourceRegistration(workspace, written.Organization, null, null)));
-        Ok(await RegisteredAsync(new ResourceRegistration(document, written.Organization, workspace, null)));
+        Ok(await RegisteredAsync(new ResourceRegistration(document, written.Organization, workspace, written.Account)));
 
         Assert.False(await ChecksAsync(written.Account, document));
 
@@ -96,7 +98,7 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
         [
             new ResourceRegistration(before, written.Organization, null, null),
             new ResourceRegistration(after, written.Organization, null, null),
-            new ResourceRegistration(document, written.Organization, before, null),
+            new ResourceRegistration(document, written.Organization, before, written.Account),
         ]));
 
         _ = await written.Deployment.GrantAsync(
@@ -143,12 +145,12 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
         Ok(await RegisteredManyAsync(
         [
             new ResourceRegistration(workspace, written.Organization, null, null),
-            new ResourceRegistration(document, written.Organization, workspace, null),
+            new ResourceRegistration(document, written.Organization, workspace, written.Account),
         ]));
 
         Error refused = Refused(await RegisteredManyAsync(
         [
-            new ResourceRegistration(early, written.Organization, late, null),
+            new ResourceRegistration(early, written.Organization, late, written.Account),
             new ResourceRegistration(late, written.Organization, null, null),
         ]));
 
@@ -176,13 +178,13 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
         [
             new ResourceRegistration(workspace, ours.Organization, null, null),
             new ResourceRegistration(elsewhere, theirs.Organization, null, null),
-            new ResourceRegistration(document, ours.Organization, workspace, null),
+            new ResourceRegistration(document, ours.Organization, workspace, ours.Account),
         ]));
 
         Assert.Equal(
             "containedIn",
             Member(Refused(await RegisteredAsync(
-                new ResourceRegistration(Reference(Document), ours.Organization, elsewhere, null)))));
+                new ResourceRegistration(Reference(Document), ours.Organization, elsewhere, ours.Account)))));
         Assert.Equal("containedIn", Member(Refused(await MovedAsync(document, elsewhere))));
     }
 
@@ -208,11 +210,11 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
         Assert.Equal(
             "containedIn",
             Member(Refused(await RegisteredAsync(
-                new ResourceRegistration(Reference(Document), written.Organization, note, null)))));
+                new ResourceRegistration(Reference(Document), written.Organization, note, written.Account)))));
         Assert.Equal(
             "containedIn",
             Member(Refused(await RegisteredAsync(
-                new ResourceRegistration(Reference(Document), written.Organization, null, null)))));
+                new ResourceRegistration(Reference(Document), written.Organization, null, written.Account)))));
         Assert.Equal(
             "containedIn",
             Member(Refused(await RegisteredAsync(
@@ -245,6 +247,53 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
             Member(Refused(await RegisteredAsync(
                 new ResourceRegistration(workspace, written.Organization, null, null)))));
         Assert.Equal("resourceId", Member(Refused(await MovedAsync(Reference(Document), workspace))));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-002a AC1: a record of a sensitive type is registered only for a subject
+    /// holding an account, so a record naming nobody, one naming a subject the library
+    /// holds no account for, and one naming an account being deleted are each refused,
+    /// and a type that is not sensitive needs no subject.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_LIFE_002a_AC1_ASensitiveRecordIsRegisteredOnlyForAnAccountHolderAsync()
+    {
+        Case written = await BeginAsync();
+        ResourceReference workspace = Reference(Workspace);
+        SubjectId leaving = await written.Deployment.AccountAsync(TestContext.Current.CancellationToken);
+        SubjectId nobody;
+
+        using (var randomness = RandomNumberGenerator.Create())
+        {
+            nobody = SubjectId.New(randomness);
+        }
+
+        await DeletingAsync(leaving);
+
+        Ok(await RegisteredAsync(new ResourceRegistration(workspace, written.Organization, null, null)));
+
+        Assert.Equal(
+            "subject",
+            Member(Refused(await RegisteredAsync(
+                new ResourceRegistration(Reference(Document), written.Organization, workspace, null)))));
+        Assert.Equal(
+            "subject",
+            Member(Refused(await RegisteredAsync(
+                new ResourceRegistration(Reference(Document), written.Organization, workspace, nobody)))));
+        Assert.Equal(
+            "subject",
+            Member(Refused(await RegisteredManyAsync(
+            [
+                new ResourceRegistration(Reference(Document), written.Organization, workspace, written.Account),
+                new ResourceRegistration(Reference(Document), written.Organization, workspace, leaving),
+            ]))));
+
+        ResourceReference held = Reference(Document);
+
+        Ok(await RegisteredAsync(new ResourceRegistration(held, written.Organization, workspace, written.Account)));
+
+        Assert.Equal(1, await RowsOfAsync(held));
     }
 
     private static ResourceReference Reference(ResourceType type) =>
@@ -312,6 +361,20 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
                 TestContext.Current.CancellationToken);
 
         return outcome.Match(() => true, _ => false);
+    }
+
+    // The account's deletion has begun, which leaves no right to hang a record off.
+    private async Task DeletingAsync(SubjectId subject)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        _ = await connection.ExecuteAsync(
+            """
+            UPDATE identity.accounts
+            SET state = 'deleting', deleting_by = 'self', deleting_since = now()
+            WHERE subject = @subject;
+            """,
+            new { subject = subject.Value });
     }
 
     private async Task<int> RowsOfAsync(ResourceReference resource)

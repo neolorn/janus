@@ -15215,6 +15215,43 @@ nothing, so a denial's identifier resolved to no entry of the library's.
 - BFF-LOG-001 could say every refusal is logged by its code, and a fault with its
   details.
 
+---
+
+## 369. A sensitive record is registered only for a subject whose account stands
+
+**Phase 10 · 2026-09-25 · Tier 3 · IDN-LIFE-002a AC1, LIB-HOST-002, PRIV-SENS-002**
+
+*The question.* IDN-LIFE-002a AC1 says no path exists by which a sensitive resource type
+is created without a subject holding an account. The host's records live in the host's
+tables (LIB-HOST-002); the one path by which the library learns of one is
+`IResources.RegisterAsync`, whose registration names an optional subject. Nothing
+refused a record of a sensitive type naming no subject, or naming one without an
+account. No chapter says which account states count as holding one, nor which code the
+refusal carries.
+
+*The readings.*
+
+1. Require a subject on a sensitive type, and any row in `accounts` for it.
+2. As 1, but the account must stand: neither `deleting` nor `deleted`.
+3. Require nothing of the registration and leave the rule to the host.
+
+*Chosen: 2 (Tier 3, strictest reading).* Reading 3 leaves the one path the library
+has open. Data placed under a subject whose erasure has begun, or is done, has no right
+left to hang off and would be destroyed with a key already going; so a `deleting` or
+`deleted` account does not count. A suspended or restricted account still carries every
+right (IDN-ACCT-007), so it counts. The refusal is the one the port already answers,
+`api.request.malformed`, naming `subject`, so no code is added. Which subjects hold an
+account is read once for a whole batch, through a port of the authorization area
+(`IAccountHolders`) that Storage answers from `accounts`.
+
+*Tests that pin it.*
+`ResourceRegistrationTests.IDN_LIFE_002a_AC1_ASensitiveRecordIsRegisteredOnlyForAnAccountHolderAsync`.
+
+*Chapter text that should change.* IDN-LIFE-002a AC1 could say that a record of a
+sensitive type is registered only for a subject whose account is neither being deleted
+nor deleted, and LIB-HOST-002 could name `subject` among the members a registration is
+refused on.
+
 
 # Rows for chapter 10
 
