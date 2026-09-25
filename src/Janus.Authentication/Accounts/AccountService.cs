@@ -676,6 +676,13 @@ internal sealed class AccountService(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
+        // IDN-ACCT-005 AC3: a word that mixes scripts is refused by the code that names
+        // the mixing, before anything else about the username is judged.
+        if (!ScriptMixing.IsSingleScriptPerWord(entered))
+        {
+            return Error.From(ErrorCodes.IdentifierMixedScript);
+        }
+
         if (!Username.TryParse(entered, out Username username))
         {
             return Error.From(ErrorCodes.UsernameInvalid);

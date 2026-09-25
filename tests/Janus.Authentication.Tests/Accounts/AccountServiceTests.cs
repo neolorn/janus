@@ -276,6 +276,50 @@ public sealed class AccountServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-ACCT-005 AC3: a display name whose one word mixes a Cyrillic letter into
+    /// Latin is refused by the code that names the mixing, and the name held stays.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ACCT_005_AC3_AMixedDisplayNameIsRefusedByItsOwnCodeAsync()
+    {
+        _directory.Holds(_person, Profile("Kestrel", null, null));
+
+        Assert.Equal(
+            ErrorCodes.IdentifierMixedScript,
+            Refused(await Service.EditProfileAsync(
+                Acting,
+                Stepped(),
+                new ProfileEdit(DisplayName: "\u0410hmed"),
+                TestContext.Current.CancellationToken)));
+
+        Assert.Equal(
+            "Kestrel",
+            Read(await Service.ReadAsync(Acting, TestContext.Current.CancellationToken))
+                .Profile
+                .DisplayName);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-005 AC3: a username whose one word mixes a Cyrillic letter into Latin
+    /// is refused by the code that names the mixing, and no username is taken.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ACCT_005_AC3_AMixedUsernameIsRefusedByItsOwnCodeAsync()
+    {
+        _configuration.Set(Settings.IdentifiersUsernameEnabled, value: true);
+
+        Assert.Equal(
+            ErrorCodes.IdentifierMixedScript,
+            Refused(await Service.EditProfileAsync(
+                Acting,
+                Stepped(),
+                new ProfileEdit(Username: "k\u0435strel"),
+                TestContext.Current.CancellationToken)));
+
+        Assert.Null(await UsernameAsync());
+    }
+
+    /// <summary>
     /// REG-IDENT-009 AC2: the second change inside the window is refused, and the
     /// refusal carries the instant the next one may be made.
     /// </summary>

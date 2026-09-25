@@ -1492,7 +1492,8 @@ against the public contract of LIB-API-001.
   carried in an answer, and the date of birth is never the person's to change. A
   preference key the host never declared is refused and never returned. A username, once
   chosen, is held against every other account for the cooling-off period after it is
-  given up, and after erasure for the same period.
+  given up, and after erasure for the same period. A username with a word that mixes
+  scripts is refused with `identity.identifier.mixedscript`, as a display name is.
 - The library serves `/.well-known/change-password`, `/.well-known/passkey-endpoints`
   and `/.well-known/webauthn` at the site root, mounted with `MapIdentityWellKnown`. The
   addresses of the frontend's password and passkey pages behind the first two are a
