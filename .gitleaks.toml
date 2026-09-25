@@ -1,5 +1,11 @@
-# OPS-DEP-004: the default rule set, and allow-list entries only. Each entry names the
-# file it exempts and why that file holds what looks like a secret.
+# OPS-DEP-004: the default rule set, and allow-list entries only. Each entry names one
+# file and the one value it exempts, both of which must match, and gives the reason.
 
 [extend]
 useDefault = true
+
+[[allowlists]]
+description = "an item identifier in a documentation comment"
+condition = "AND"
+paths = ['''^src/Janus\.Core/IAuditTrail\.cs$''']
+regexes = ['''^PRIV-BREACH-002$''']
