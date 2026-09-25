@@ -6,7 +6,7 @@ using Janus.Core;
 using Npgsql;
 using Testcontainers.PostgreSql;
 
-namespace Janus.Hosting.Tests.Background;
+namespace Janus.Storage.Tests;
 
 /// <summary>
 /// What a deployment's restore does, over containers: a new PostgreSQL instance of the
@@ -16,7 +16,7 @@ namespace Janus.Hosting.Tests.Background;
 /// <param name="backup">The backup, taken from the running instance before the test.</param>
 /// <param name="database">The database the library's tables live in.</param>
 /// <remarks>Implements CONV-TEST-007: a fake, written by hand, never a mock.</remarks>
-internal sealed class ContainerRestore(byte[] backup, string database) : IRestoreTestInstance, IAsyncDisposable
+public sealed class ContainerRestore(byte[] backup, string database) : IRestoreTestInstance, IAsyncDisposable
 {
     private const string Script = "/tmp/backup.sql";
 

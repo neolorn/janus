@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Core;
 using Janus.Storage.Tests;
 using Npgsql;
 using Xunit;
@@ -13,8 +14,8 @@ namespace Janus.Cli.Tests;
 /// <summary>
 /// What the <c>replay-erasures</c> command does to a database restored to a point before
 /// the erasures its ledger records: every one the restore took away is carried out
-/// again, however old, and a second replay changes nothing more (DR-016 AC3, DR-006a
-/// AC1).
+/// again, however old, and a second replay changes nothing more, a restore from a real
+/// backup included (DR-016 AC3, DR-006a AC1).
 /// </summary>
 /// <remarks>
 /// The cases share one database, so each seeds subjects of its own and reads back only
@@ -94,6 +95,49 @@ public sealed class ErasureReplayTests(DatabaseFixture database) : IClassFixture
             await connection.ExecuteScalarAsync<int>(
                 "SELECT count(*)::int FROM identity.accounts WHERE subject = @unknown",
                 new { unknown }));
+    }
+
+    /// <summary>
+    /// DR-006a AC1: a backup taken before an erasure, restored into a new instance, brings
+    /// the account back live with the key the erasure destroyed; the replay of the ledger
+    /// against the restored database erases it again and destroys that key there too.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task DR_006a_AC1_AnErasureTheRestoreTookBackIsCarriedOutAgainAsync()
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        Guid subject = await AccountAsync(connection, "active");
+        byte[] live = await WrappedAsync(connection, subject);
+
+        await using var restore = new ContainerRestore(
+            await database.BackupAsync(),
+            new NpgsqlConnectionStringBuilder(database.ConnectionString).Database!);
+
+        await WrittenAsync($"2026-09-20T08:00:00Z {subject:D} erasure-request");
+
+        Invocation erased = await Invocation.PipedAsync([Command, _ledger], Invocation.Keys(Application()));
+
+        string restored = (await restore.RestoreAsync(TestContext.Current.CancellationToken)).Match(
+            reached => reached,
+            error => throw new InvalidOperationException(error.Code.ToString()));
+
+        await using var reached = new NpgsqlConnection(restored);
+        await reached.OpenAsync(TestContext.Current.CancellationToken);
+
+        byte[] brought = await WrappedAsync(reached, subject);
+
+        Invocation replayed = await Invocation.PipedAsync([Command, _ledger], Invocation.Keys(Application(restored)));
+
+        Assert.Equal("""{"reapplied":1,"standing":0,"absent":0}""", erased.Output.Trim());
+        Assert.Equal(live, brought);
+        Assert.Equal((0, string.Empty), (replayed.ExitCode, replayed.Error));
+        Assert.Equal("""{"reapplied":1,"standing":0,"absent":0}""", replayed.Output.Trim());
+        Assert.Equal(
+            ("deleted", "oob-request", new DateTime(2026, 9, 20, 8, 0, 0, DateTimeKind.Utc), (short)0),
+            await ErasedAsync(reached, subject));
+        Assert.NotEqual(live, await WrappedAsync(reached, subject));
     }
 
     /// <summary>
@@ -189,13 +233,21 @@ public sealed class ErasureReplayTests(DatabaseFixture database) : IClassFixture
             TestContext.Current.CancellationToken);
 
     // The application's own credential, which holds every right the erasure writes with.
-    private string Application()
+    private static string Application(string connectionString)
     {
-        var connection = new NpgsqlConnectionStringBuilder(database.ConnectionString)
+        var connection = new NpgsqlConnectionStringBuilder(connectionString)
         {
             Options = "-c role=identity_app",
         };
 
         return connection.ConnectionString;
     }
+
+    // The subject's data key as it stands wrapped.
+    private static async Task<byte[]> WrappedAsync(NpgsqlConnection connection, Guid subject) =>
+        await connection.QuerySingleAsync<byte[]>(
+            "SELECT wrapped_key FROM identity.subject_keys WHERE subject = @subject",
+            new { subject });
+
+    private string Application() => Application(database.ConnectionString);
 }

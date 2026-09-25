@@ -322,6 +322,25 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
+    /// DR-006a AC2: no erasure procedure attempts to modify a backup. The library takes
+    /// and writes no backup, and the one port through which it reaches one is the restore
+    /// test's, which restores a copy into a throwaway instance; nothing that erases names
+    /// it.
+    /// </summary>
+    [Fact]
+    public void DR_006a_AC2_NoErasureProcedureReachesABackup()
+    {
+        Assert.Equal(
+            ["HostingRegistration.cs", "IRestoreTestInstance.cs", "RestoreTest.cs"],
+            Named(text => Regex.IsMatch(text, @"\bIRestoreTestInstance\b", RegexOptions.None, TimeSpan.FromSeconds(5))));
+        Assert.Empty(Named(text => Regex.IsMatch(
+            text,
+            @"\bpg_(dump|dumpall|restore|basebackup)\b",
+            RegexOptions.None,
+            TimeSpan.FromSeconds(5))));
+    }
+
+    /// <summary>
     /// OPS-SEC-003 AC1 and AC6, DR-009a AC5: the rotations of the key-encryption key and
     /// of the fingerprint key are run by the command line and by nothing else, so no
     /// endpoint of the management application, no job of the worker and no host reaches

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Dapper;
@@ -39,8 +40,8 @@ namespace Janus.Storage.Tests;
 
 /// <summary>
 /// The erasure: one transaction that leaves a subject's fields unrecoverable and every
-/// row where it was (PRIV-RIGHT-005, PRIV-RIGHT-005a, IDN-LIFE-003a, IDN-LIFE-003b,
-/// IDN-LIFE-014, IDN-ACCT-002, IDN-PRIN-003).
+/// row where it was, a backup taken afterwards included (PRIV-RIGHT-005, PRIV-RIGHT-005a,
+/// IDN-LIFE-003a, IDN-LIFE-003b, IDN-LIFE-014, IDN-ACCT-002, IDN-PRIN-003, DR-006a).
 /// </summary>
 [Trait("kind", "integration")]
 public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture<DatabaseFixture>, IDisposable
@@ -215,6 +216,45 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await Assert.ThrowsAsync<CryptographicException>(async () =>
             await new ProfileStore(reading, _deployment.Keys, _deployment.Randomness)
                 .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// DR-006a AC3: a subject erased before a backup is taken is not recoverable from it.
+    /// The backup holds the subject's fields as they were stored and no longer the key
+    /// they were stored under, so nothing restored from it reads them.
+    /// </summary>
+    [Fact]
+    public async Task DR_006a_AC3_ASubjectErasedBeforeTheBackupIsNotRecoverableFromItAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+
+        await using (StoreContext writing = database.Context())
+        {
+            Assert.True(LegalName.TryParse("Ahmed Hassan", out LegalName legal));
+
+            var profile = Profile.Empty(subject);
+            profile.SetLegalName(legal);
+
+            await new ProfileStore(writing, _deployment.Keys, _deployment.Randomness)
+                .RecordAsync(profile, TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        byte[] key = await connection.QuerySingleAsync<byte[]>(
+            "SELECT wrapped_key FROM identity.subject_keys WHERE subject = @subject",
+            new { subject = subject.Value });
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        byte[] field = await connection.QuerySingleAsync<byte[]>(
+            "SELECT enc_legal_name FROM identity.profiles WHERE subject = @subject",
+            new { subject = subject.Value });
+        string backup = Encoding.UTF8.GetString(await database.BackupAsync());
+
+        Assert.Contains(Convert.ToHexStringLower(field), backup, StringComparison.Ordinal);
+        Assert.DoesNotContain(Convert.ToHexStringLower(key), backup, StringComparison.Ordinal);
     }
 
     /// <summary>

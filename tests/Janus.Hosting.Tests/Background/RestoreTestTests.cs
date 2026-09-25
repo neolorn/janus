@@ -14,6 +14,7 @@ using Janus.Core.Configuration;
 using Janus.Hosting.Background;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Tests.Authorization;
+using Janus.Storage.Tests;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Xunit;
