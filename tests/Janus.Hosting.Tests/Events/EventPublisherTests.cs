@@ -18,6 +18,7 @@ namespace Janus.Hosting.Tests.Events;
 /// The publisher offering each committed event to the consumers the host registered
 /// for its kind (LIB-API-001, CONV-DESIGN-002, IDN-LIFE-003a).
 /// </summary>
+[Trait("kind", "unit")]
 public sealed class EventPublisherTests : IAsyncDisposable
 {
     private static readonly DateTimeOffset Noon = new(2026, 9, 24, 12, 0, 0, TimeSpan.Zero);

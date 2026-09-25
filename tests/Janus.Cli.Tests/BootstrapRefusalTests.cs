@@ -14,6 +14,7 @@ namespace Janus.Cli.Tests;
 /// OPS-SEC-001). The connection each case names leads nowhere, so a case that reached
 /// the database would fail rather than pass.
 /// </summary>
+[Trait("kind", "unit")]
 public sealed class BootstrapRefusalTests
 {
     private const string Nowhere = "Host=nowhere.invalid;Database=identity";

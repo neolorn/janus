@@ -14963,6 +14963,44 @@ is kept and is not rotated, since its browser is not there to receive a new secr
 other sessions when it applies, and that the rotation is of the session that completes
 the change.
 
+---
+
+## 364. A test class uses a container when it takes one as a fixture or constructs one
+
+**Phase 10 · 2026-09-25 · Tier 2 · CONV-TEST-002 AC1**
+
+*The question.* CONV-TEST-002 AC1 says "Unit tests run without containers." The
+exit-sweep row would decide it by refusing any unit or contract class that "uses"
+`DatabaseFixture`, `HostFixture`, `SampleHost`, `ContainerRestore` or
+`BootstrappedDeployment`. `KeyMaterialTests` (unit) names `HostFixture` three times.
+Each time it calls the static `HostFixture.Declaration()`, which builds an
+authorization declaration and starts nothing.
+
+*The readings.*
+
+1. Any mention of a type that starts a container is a use.
+2. A use is anything that makes an instance, and so starts the container: asking the
+   framework for the type as a fixture (`IClassFixture<T>`, `ICollectionFixture<T>`,
+   `AssemblyFixture(typeof(T))`) or constructing it (`new T`, `T x = new(...)`). A
+   static member call is not a use.
+
+*Chosen: 2.* The criterion is about where a container runs, and a static call runs
+none. Reading 1 would fail `KeyMaterialTests` today. Passing it would mean moving
+`Declaration()` off the fixture, a refactor of the tests the criterion does not ask
+for.
+
+The set of types that start a container is not written down; the test derives it.
+It begins with the types that reach the container package, then adds every type that
+makes an instance of one, and repeats until nothing new is found. A new fixture is
+therefore covered without editing the test. Today the derived set is the row's list
+plus `VolumeFixture`.
+
+*Tests that pin it.* `LibraryStructureTests.CONV_TEST_002_AC1_NoUnitOrContractClassUsesAContainer`.
+
+*Chapter text that should change.* CONV-TEST-002 could say that a test class of the
+unit or contract kind neither takes as a fixture nor constructs a type that starts a
+container.
+
 
 # Rows for chapter 10
 

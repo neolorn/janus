@@ -17,6 +17,7 @@ namespace Janus.Core.Tests;
 /// has. A value the key no longer admits comes back as a failure rather than as a
 /// value or an exception.
 /// </remarks>
+[Trait("kind", "unit")]
 public sealed class SettingWrittenFormTests
 {
     /// <summary>

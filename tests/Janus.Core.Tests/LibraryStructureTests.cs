@@ -10,9 +10,11 @@ namespace Janus.Core.Tests;
 
 /// <summary>
 /// The shape of the solution: which project may depend on which, what a project file
-/// may declare, and which packages the build may resolve
+/// and the style configuration may declare, what a folder may be named, which packages
+/// the build may resolve, and which kind each test class is
 /// (CONV-LAYOUT-001, CONV-LAYOUT-002, CONV-LAYOUT-003, CONV-SETUP-001, CONV-SETUP-002,
-/// CONV-DESIGN-003, CONV-DESIGN-004, CONV-DESIGN-008, CONV-CODE-008, LIB-API-002,
+/// CONV-SETUP-004, CONV-DESIGN-001, CONV-DESIGN-003, CONV-DESIGN-004, CONV-DESIGN-007,
+/// CONV-DESIGN-008, CONV-CODE-008, CONV-TEST-002, CONV-VCS-005, LIB-API-002,
 /// LIB-PKG-001, LIB-PKG-002, OPS-DATA-001, OPS-DATA-002).
 /// </summary>
 [Trait("kind", "contract")]
@@ -20,6 +22,12 @@ public sealed class LibraryStructureTests
 {
     // LIB-API-002 AC2: the project the sample host is written in.
     private const string Sample = "Janus.Conformance.Tests";
+
+    // CONV-TEST-002 AC1: what makes an instance of one of the types named, which is
+    // where a container would start: asking the framework for it as a fixture, or
+    // constructing it. A call to one of its static members makes nothing.
+    private const string Creates =
+        @"\bI(?:Class|Collection)Fixture<\s*(?:NAMES)\s*>|\bAssemblyFixture\(\s*typeof\(\s*(?:NAMES)\s*\)\)|\bnew\s+(?:NAMES)\b|\b(?:NAMES)\??\s+\w+\s*=\s*new\s*\(";
 
     private static readonly Dictionary<string, string[]> Dependencies = new(StringComparer.Ordinal)
     {
@@ -138,6 +146,111 @@ public sealed class LibraryStructureTests
         "TreatWarningsAsErrors",
     ];
 
+    // CONV-SETUP-004 AC2: the folders every project lives in. With the root above them
+    // they are every directory the build reads a configuration from.
+    private static readonly string[] Built = ["src", "tests", "tools"];
+
+    // CONV-SETUP-004 AC2: what configures a rule when a project, props or targets file
+    // declares it, as a property, an item or an item's metadata: a rule's severity or
+    // suppression, a rule set, a further configuration file, whether the analysers run,
+    // or a mode or a level for one category of rules.
+    private static readonly Regex RuleConfiguration = new(
+        @"^(NoWarn|WarningsAsErrors|WarningsNotAsErrors|CodeAnalysisRuleSet|GlobalAnalyzerConfigFiles|EditorConfigFiles|RunAnalyzers\w*|Analysis(Mode\w*|Level\w+))$",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(5));
+
+    // CONV-SETUP-004 AC3: a severity the .editorconfig sets, through a rule's own key,
+    // for a category or every rule, for a naming rule, or after a style option's value.
+    private static readonly Regex Severity = new(
+        @"^(?:dotnet_diagnostic\.(?<rule>[^.\s]+)|(?<rule>(?:dotnet_analyzer_diagnostic|dotnet_naming_rule)(?:\.[^.\s]+)?))\.severity\s*=\s*(?<severity>\w+)|^(?<rule>\w+)\s*=\s*[^:\s]+:(?<severity>\w+)",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(5));
+
+    // CONV-VCS-005 AC2: the properties through which a project would state a version
+    // of its own where MinVer derives it from the tag.
+    private static readonly string[] VersionProperties =
+    [
+        "AssemblyVersion",
+        "FileVersion",
+        "InformationalVersion",
+        "MinVerVersionOverride",
+        "PackageVersion",
+        "Version",
+        "VersionPrefix",
+        "VersionSuffix",
+    ];
+
+    // CONV-DESIGN-001: the names of horizontal layers. A feature folder is named for
+    // the feature, and none of these is one.
+    private static readonly string[] TechnicalRoles =
+    [
+        "Abstractions",
+        "Common",
+        "Contracts",
+        "Controllers",
+        "Dtos",
+        "Entities",
+        "Enums",
+        "Exceptions",
+        "Extensions",
+        "Factories",
+        "Handlers",
+        "Helpers",
+        "Infrastructure",
+        "Interfaces",
+        "Managers",
+        "Mappers",
+        "Mappings",
+        "Models",
+        "Repositories",
+        "Services",
+        "Shared",
+        "Utilities",
+        "Utils",
+        "Validators",
+    ];
+
+    // CONV-DESIGN-007 AC2: the wall clock read in place of the TimeProvider a service
+    // is given, and the one random source that is not the RandomNumberGenerator.
+    private static readonly Regex Ambient = new(
+        @"\bDateTime(Offset)?\s*\.\s*(Now|UtcNow|Today)\b|\bRandom\b",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(5));
+
+    // CONV-TEST-002: the four kinds the chapter keeps apart.
+    private static readonly string[] Kinds = ["conformance", "contract", "integration", "unit"];
+
+    // CONV-TEST-002: the kind a test class carries.
+    private static readonly Regex Kind = new(
+        @"\[Trait\(""kind"",\s*""(\w+)""\)\]",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(5));
+
+    // CONV-TEST-002: what makes a type a test class.
+    private static readonly Regex Test = new(
+        @"\[(Fact|Theory)\b",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(5));
+
+    // CONV-TEST-002 AC3: the kind a pipeline job runs.
+    private static readonly Regex Filtered = new(
+        @"--filter-trait\s+""kind=(\w+)""",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(5));
+
+    // CONV-TEST-002 AC1: a reach into the container package, by a using directive or a
+    // qualified name. The package's identifier inside a string names it and uses nothing.
+    private static readonly Regex Container = new(
+        @"(?<![\w"".])(?:DotNet\.)?Testcontainers\.\w",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(5));
+
+    // A comment to the end of its line, which names what it likes and uses nothing.
+    private static readonly Regex Comment = new(
+        @"//.*",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(5));
+
     /// <summary>
     /// CONV-LAYOUT-001 AC3: every project's library dependencies are exactly the ones
     /// the table gives, so a dependency pointing outward does not build.
@@ -247,6 +360,24 @@ public sealed class LibraryStructureTests
                 File.ReadAllText(file).Contains(call, StringComparison.Ordinal)));
 
         Assert.Empty(reaching);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-001 AC1: no folder of an area, at any depth, is a horizontal layer,
+    /// so each is a feature holding its types, its service and its port together.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_001_AC1_NoFolderOfAnAreaIsNamedForATechnicalRole()
+    {
+        IEnumerable<string> horizontal = Areas
+            .SelectMany(area => Directory.EnumerateDirectories(
+                Path.Combine(Repository.Root, "src", area),
+                "*",
+                SearchOption.AllDirectories))
+            .Where(folder => !IsBuildOutput(folder))
+            .Where(folder => TechnicalRoles.Contains(Path.GetFileName(folder), StringComparer.OrdinalIgnoreCase));
+
+        Assert.Empty(horizontal);
     }
 
     /// <summary>
@@ -494,6 +625,20 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
+    /// CONV-DESIGN-007 AC2: nothing outside the tests reads the wall clock or makes a
+    /// <c>Random</c>, so time comes from the injected TimeProvider and randomness from
+    /// the injected RandomNumberGenerator.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_007_AC2_NoFileOutsideTheTestsReadsTheClockOrMakesARandom()
+    {
+        IEnumerable<string> reading = Sources()
+            .Where(file => Ambient.IsMatch(File.ReadAllText(file)));
+
+        Assert.Empty(reading);
+    }
+
+    /// <summary>
     /// CONV-SETUP-001 AC1: no project file sets a target framework or any inherited
     /// property, except the analyser project, which must target netstandard2.0.
     /// </summary>
@@ -523,6 +668,70 @@ public sealed class LibraryStructureTests
                 XDocument.Parse(File.ReadAllText(project)).Descendants("PackageReference"),
                 reference => reference.Attribute("Version") is not null);
         }
+    }
+
+    /// <summary>
+    /// CONV-SETUP-004 AC2: the .editorconfig at the root is the one file that configures
+    /// a rule, and no project, props or targets file configures one beside it.
+    /// </summary>
+    [Fact]
+    public void CONV_SETUP_004_AC2_TheEditorconfigIsTheOnlyPlaceARuleIsConfigured()
+    {
+        string[] configurations =
+        [
+            .. BuildTree()
+                .Where(file => Path.GetExtension(file) is ".editorconfig" or ".globalconfig" or ".ruleset")
+                .Select(file => Path.GetRelativePath(Repository.Root, file)),
+        ];
+        IEnumerable<string> configuring = BuildFiles()
+            .Where(file => XDocument
+                .Parse(File.ReadAllText(file))
+                .Descendants()
+                .SelectMany(element => element
+                    .Attributes()
+                    .Select(attribute => attribute.Name.LocalName)
+                    .Prepend(element.Name.LocalName))
+                .Any(RuleConfiguration.IsMatch));
+
+        Assert.Equal([".editorconfig"], configurations);
+        Assert.Empty(configuring);
+    }
+
+    /// <summary>
+    /// CONV-SETUP-004 AC3, the configuration: the .editorconfig sets below error the five
+    /// rules of the table, each where the table scopes it, and no other rule.
+    /// </summary>
+    [Fact]
+    public void CONV_SETUP_004_AC3_NoRuleButTheFiveOfTheTableIsSetBelowError() =>
+        Assert.Equal(
+            [
+                "*.cs CA1062 none",
+                "src/**.cs CA1812 none",
+                "src/{Janus.Core,Janus.Hosting,Janus.Conformance}/**.cs CA1515 none",
+                "{tests,src/Janus.Hosting,src/Janus.Cli}/**.cs CA2007 none",
+                "tests/**.cs CA1707 none",
+                "tests/**.cs CA1515 none",
+            ],
+            BelowError(Repository.ReadText(".editorconfig")));
+
+    /// <summary>
+    /// CONV-VCS-005 AC2: no project, props or targets file states a version, and the
+    /// version comes from MinVer, which every project inherits.
+    /// </summary>
+    [Fact]
+    public void CONV_VCS_005_AC2_NoProjectFileCarriesAVersion()
+    {
+        IEnumerable<string> versioned = BuildFiles()
+            .Where(file => XDocument
+                .Parse(File.ReadAllText(file))
+                .Descendants("PropertyGroup")
+                .Elements()
+                .Any(property => VersionProperties.Contains(property.Name.LocalName, StringComparer.Ordinal)));
+
+        Assert.Contains(
+            XDocument.Parse(Repository.ReadText("Directory.Build.props")).Descendants("PackageReference"),
+            reference => string.Equals(reference.Attribute("Include")?.Value, "MinVer", StringComparison.Ordinal));
+        Assert.Empty(versioned);
     }
 
     /// <summary>
@@ -558,6 +767,49 @@ public sealed class LibraryStructureTests
             Assert.Equal("Analyzer", reference.Attribute("OutputItemType")?.Value);
             Assert.Equal("false", reference.Attribute("ReferenceOutputAssembly")?.Value);
         }
+    }
+
+    /// <summary>
+    /// CONV-TEST-002 AC1: no test class of the unit or contract kind takes as a fixture,
+    /// or constructs, a type that starts a container, itself or through a type it makes,
+    /// so both kinds run where no container can.
+    /// </summary>
+    [Fact]
+    public void CONV_TEST_002_AC1_NoUnitOrContractClassUsesAContainer()
+    {
+        string[] starting = Starting();
+        Regex starts = Creating(starting);
+
+        IEnumerable<string> contained = TestClasses()
+            .Where(test => test.Kinds.Any(kind => kind is "unit" or "contract"))
+            .Where(test => starts.IsMatch(test.Code))
+            .Select(test => test.Name);
+
+        Assert.NotEmpty(starting);
+        Assert.Empty(contained);
+    }
+
+    /// <summary>
+    /// CONV-TEST-002 AC3: every test class carries one kind of the four, and a job of
+    /// the pipeline runs that kind on its own, so no class goes unrun for carrying no
+    /// kind and none runs with two.
+    /// </summary>
+    [Fact]
+    public void CONV_TEST_002_AC3_EveryTestClassCarriesOneKindThatAJobRunsOnItsOwn()
+    {
+        string[] run =
+        [
+            .. Filtered
+                .Matches(Repository.ReadText(".github/workflows/gates.yml"))
+                .Select(match => match.Groups[1].Value),
+        ];
+
+        IEnumerable<string> unrun = TestClasses()
+            .Where(test => test.Kinds.Length != 1 || !run.Contains(test.Kinds[0], StringComparer.Ordinal))
+            .Select(test => test.Name);
+
+        Assert.Subset(Kinds.ToHashSet(StringComparer.Ordinal), run.ToHashSet(StringComparer.Ordinal));
+        Assert.Empty(unrun);
     }
 
     /// <summary>
@@ -617,8 +869,98 @@ public sealed class LibraryStructureTests
         Roots
             .SelectMany(root =>
                 Directory.EnumerateFiles(Path.Combine(Repository.Root, root), "*.cs", SearchOption.AllDirectories))
-            .Where(file => !file.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar, StringComparison.Ordinal)
-                && !file.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar, StringComparison.Ordinal));
+            .Where(file => !IsBuildOutput(file));
+
+    // A path under a folder a build writes, which holds nothing anyone committed.
+    private static bool IsBuildOutput(string path) =>
+        Path.GetRelativePath(Repository.Root, path)
+            .Split(Path.DirectorySeparatorChar)
+            .Any(segment => segment is "bin" or "obj");
+
+    // Every file of the build: the root's own files and everything under the folders
+    // the projects live in.
+    private static IEnumerable<string> BuildTree() =>
+        Directory
+            .EnumerateFiles(Repository.Root)
+            .Concat(Built.SelectMany(folder =>
+                Directory.EnumerateFiles(Path.Combine(Repository.Root, folder), "*", SearchOption.AllDirectories)))
+            .Where(file => !IsBuildOutput(file));
+
+    private static IEnumerable<string> BuildFiles() =>
+        BuildTree().Where(file => Path.GetExtension(file) is ".csproj" or ".props" or ".targets");
+
+    // What an .editorconfig sets below error, each as its section, the rule and the
+    // severity, in the order the file sets them.
+    private static string[] BelowError(string configuration)
+    {
+        var below = new List<string>();
+        string section = string.Empty;
+
+        foreach (string line in configuration.ReplaceLineEndings("\n").Split('\n').Select(entry => entry.Trim()))
+        {
+            if (line.StartsWith('[') && line.EndsWith(']'))
+            {
+                section = line[1..^1];
+            }
+            else if (Severity.Match(line) is { Success: true } setting
+                && !string.Equals(setting.Groups["severity"].Value, "error", StringComparison.OrdinalIgnoreCase))
+            {
+                below.Add(section + " " + setting.Groups["rule"].Value + " " + setting.Groups["severity"].Value);
+            }
+        }
+
+        return [.. below];
+    }
+
+    // The source files of the test projects, as code with the comments taken out.
+    private static IEnumerable<(string File, string Code)> TestSources() =>
+        Directory
+            .EnumerateFiles(Path.Combine(Repository.Root, "tests"), "*.cs", SearchOption.AllDirectories)
+            .Where(file => !IsBuildOutput(file))
+            .Select(file => (file, Comment.Replace(File.ReadAllText(file), string.Empty)));
+
+    // The type a file declares: its name up to the first dot, which is the whole name
+    // but for the further files of a partial type.
+    private static string TypeOf(string file) => Path.GetFileName(file).Split('.')[0];
+
+    // Every test class, named by its path under the root, with the kinds that all of
+    // its files give it and the code of all of them.
+    private static IEnumerable<(string Name, string[] Kinds, string Code)> TestClasses() =>
+        TestSources()
+            .GroupBy(source => Path.Combine(Path.GetDirectoryName(source.File)!, TypeOf(source.File)))
+            .Where(type => type.Any(source => Test.IsMatch(source.Code)))
+            .Select(type => (
+                Path.GetRelativePath(Repository.Root, type.Key),
+                type.SelectMany(source => Kind.Matches(source.Code).Select(match => match.Groups[1].Value)).ToArray(),
+                string.Join('\n', type.Select(source => source.Code))));
+
+    // The types of the test projects that start a container: those that reach the
+    // container package, then every type that makes an instance of one of those, until
+    // no more are reached. A type is known by its name, which is how the code making
+    // one reads.
+    private static string[] Starting()
+    {
+        ILookup<string, string> code = TestSources()
+            .ToLookup(source => TypeOf(source.File), source => source.Code, StringComparer.Ordinal);
+        HashSet<string> starting = [.. code.Where(type => type.Any(Container.IsMatch)).Select(type => type.Key)];
+        string[] reached = [.. starting];
+
+        while (reached.Length > 0)
+        {
+            Regex creates = Creating(reached);
+
+            reached = [.. code.Where(type => !starting.Contains(type.Key) && type.Any(creates.IsMatch)).Select(type => type.Key)];
+            starting.UnionWith(reached);
+        }
+
+        return [.. starting];
+    }
+
+    private static Regex Creating(string[] types) =>
+        new(
+            Creates.Replace("NAMES", string.Join('|', types.Select(Regex.Escape)), StringComparison.Ordinal),
+            RegexOptions.None,
+            TimeSpan.FromSeconds(5));
 
     private static string RootOf(string file) =>
         Roots
