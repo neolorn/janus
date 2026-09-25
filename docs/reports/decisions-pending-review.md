@@ -15402,6 +15402,69 @@ the registration's, so the continued use follows it in the same account.
 
 *Chapter text that should change.* None.
 
+---
+
+## 375. An organization's owner holds every shipped permission there; protected settings are loosenings
+
+**Phase 10 · 2026-09-25 · Tier 2 · OPS-CFG-006 AC1**
+
+*The question.* OPS-CFG-006 AC1 reads "An organization owner without the grant cannot
+change protected settings." The library has no owner role and no list called
+"protected settings". D-010 says a loosening needs step-up and a reason, and that
+ownership never implies system administration.
+
+*The readings.*
+
+1. "Owner" is a role a host declares, and "protected settings" are the OPS-CFG-004
+   keys.
+2. "Owner" is the strongest position the library can give in an organization: a member
+   holding every permission in `Permissions.All` there, `system:administer` and
+   `config:manage` among them, and nothing in the administrative organization.
+   "Protected settings" are the changes that loosen a control, which need system
+   administration.
+
+*Chosen: 2.* Everyone is refused the OPS-CFG-004 keys, so reading 1 says nothing about
+the grant. Reading 2 builds the strongest owner possible. That owner asks to loosen
+`session.aal2.inactivity`, with step-up met and a reason given, and is answered 403
+`authz.denied`; the setting is unchanged and no change is written.
+
+*Tests that pin it.*
+`ConfigurationEndpointTests.OPS_CFG_006_AC1_AnOrganizationsOwnerWithoutTheGrantChangesNothingAsync`.
+
+*Chapter text that should change.* OPS-CFG-006 AC1 could define "protected settings" as
+the settings whose change loosens a control (D-010).
+
+---
+
+## 376. "Never inherited": neither membership nor a grant beneath the organization confers it
+
+**Phase 10 · 2026-09-25 · Tier 2 · OPS-CFG-006 AC2**
+
+*The question.* OPS-CFG-006 AC2 reads "The permission is granted, never inherited."
+D-010 says it is "never inherited by owners or upper management". Elsewhere the gate
+passes grants down the resource tree.
+
+*The readings.*
+
+1. Only a grant on the administrative organization confers it: membership of that
+   organization confers nothing, and neither does the role granted on a record inside
+   it.
+2. As 1, and inheritance through groups is covered as well.
+
+*Chosen: 1.* The test goes through the real gate: membership alone is refused; the
+role holding `system:administer` and `config:manage`, granted on a workspace inside
+the administrative organization, is refused and changes nothing; the same role
+granted on the organization is allowed, asked through `AllowedAsync` so the shared
+deployment is not changed. Groups are left out: a grant held through a group is still
+an explicit grant on the organization, and OPS-CFG-007 already requires system
+administration to confer it.
+
+*Tests that pin it.*
+`ExplanationTests.OPS_CFG_006_AC2_SystemAdministrationIsGrantedAndNeverInheritedAsync`.
+
+*Chapter text that should change.* OPS-CFG-006 AC2 could name the inheritance it
+excludes: from membership, from position, and from a grant beneath the organization.
+
 
 # Rows for chapter 10
 

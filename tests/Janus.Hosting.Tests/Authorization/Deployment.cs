@@ -262,6 +262,36 @@ internal sealed class Deployment(HostFixture fixture)
     }
 
     /// <summary>
+    /// Makes an account a member of an organization.
+    /// </summary>
+    /// <param name="subject">The account.</param>
+    /// <param name="organization">The organization.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of writing it.</returns>
+    public async Task MemberAsync(
+        SubjectId subject,
+        OrganizationId organization,
+        CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await fixture.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO identity.memberships
+                (id, subject, organization, created_at)
+            VALUES (@id, @subject, @organization, @at);
+            """,
+            new
+            {
+                id = Guid.NewGuid(),
+                subject = subject.Value,
+                organization = organization.Value,
+                at = Noon,
+            },
+            cancellationToken: cancellationToken));
+    }
+
+    /// <summary>
     /// Restricts an account's processing, as a data subject's request does.
     /// </summary>
     /// <param name="subject">The account.</param>
@@ -403,12 +433,14 @@ internal sealed class Deployment(HostFixture fixture)
     /// <param name="containedIn">What contains it, or nothing.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <param name="subject">Whose data the record is, where it is anybody's.</param>
+    /// <param name="organization">The organization it sits in, where it is not the case's own.</param>
     /// <returns>The work of writing it.</returns>
     public async Task RegisterAsync(
         ResourceReference reference,
         ResourceReference? containedIn,
         CancellationToken cancellationToken,
-        SubjectId? subject = null)
+        SubjectId? subject = null,
+        OrganizationId? organization = null)
     {
         await using NpgsqlConnection connection = await fixture.OpenAsync();
 
@@ -431,7 +463,7 @@ internal sealed class Deployment(HostFixture fixture)
             {
                 type = reference.Type.ToString(),
                 id = reference.Id.ToString(),
-                organization = Organization.Value,
+                organization = (organization ?? Organization).Value,
                 subject = subject?.Value,
                 containerType = containedIn?.Type.ToString(),
                 containerId = containedIn?.Id.ToString(),

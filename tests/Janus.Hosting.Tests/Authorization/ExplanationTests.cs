@@ -5,7 +5,10 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Authentication.Configuration;
+using Janus.Authentication.Factors;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -15,7 +18,9 @@ namespace Janus.Hosting.Tests.Authorization;
 
 /// <summary>
 /// What the gate says about a decision, and what a refusal discloses
-/// (AUTHZ-GATE-004, AUTHZ-CONCEAL-001 to AUTHZ-CONCEAL-005, AUTHZ-IMP-001, OPS-OBS-001).
+/// (AUTHZ-GATE-004, AUTHZ-CONCEAL-001 to AUTHZ-CONCEAL-005, AUTHZ-IMP-001, OPS-OBS-001),
+/// and what a grant confers over the organization it is scoped to (AUTHZ-GRANT-001,
+/// OPS-CFG-006).
 /// </summary>
 [Trait("kind", "integration")]
 public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixture>
@@ -26,6 +31,11 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
 
     // The role the host's declaration says a reviewer holds on what they review.
     private static readonly RoleName Reviewer = RoleName.Parse("reviewer");
+
+    // A session that has met every gate, so no step-up stands between a change and the
+    // permission it asks for.
+    private static readonly StepUpChallenge Satisfied =
+        new(StepUpOutcome.Satisfied, AssuranceLevel.Aal2, PhishingResistant: false, [], null);
 
     /// <summary>
     /// AUTHZ-GATE-004 AC1: a refusal names what was asked for and says that no grant
@@ -572,6 +582,77 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
         Assert.False(outcome.Match(() => true, _ => false));
     }
 
+    /// <summary>
+    /// OPS-CFG-006 AC2: system administration is granted, never inherited. A member of
+    /// the administrative organization is refused a loosening, and so is one who holds
+    /// the role allowing it on a workspace of that organization and so on everything
+    /// in it, with nothing written; the same role granted over the organization is
+    /// what would allow it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_CFG_006_AC2_SystemAdministrationIsGrantedAndNeverInheritedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        RoleName administering = await deployment.BeginAsync(
+            [Permissions.SystemAdminister, Permissions.ConfigurationManage],
+            cancellationToken);
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        OrganizationId administrative = await deployment.AdministrativeAsync(cancellationToken);
+        ResourceReference workspace = Reference(Workspace);
+
+        await deployment.MemberAsync(account, administrative, cancellationToken);
+        await deployment.RegisterAsync(
+            workspace,
+            containedIn: null,
+            cancellationToken,
+            organization: administrative);
+
+        ErrorCode? member = await LoosenedAsync(account);
+
+        await deployment.GrantAsync(
+            GrantSubject.Of(account),
+            administering,
+            workspace,
+            false,
+            null,
+            administrative,
+            cancellationToken);
+
+        ErrorCode? onTheWorkspace = await LoosenedAsync(account);
+        TimeSpan inForce = await InForceAsync(Settings.SessionAal2Inactivity);
+
+        await deployment.GrantAsync(
+            GrantSubject.Of(account),
+            administering,
+            null,
+            false,
+            null,
+            administrative,
+            cancellationToken);
+
+        // Asked without making the change, so the case leaves the deployment's
+        // settings as it found them.
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        Result overTheOrganization = await scope.ServiceProvider
+            .GetRequiredService<ConfigurationAdministration>()
+            .AllowedAsync(
+                Settings.SessionAal2Inactivity,
+                TimeSpan.FromHours(2),
+                "a support window",
+                Satisfied,
+                AccessContext.Of(account),
+                cancellationToken);
+
+        Assert.Equal(ErrorCodes.Denied, member);
+        Assert.Equal(ErrorCodes.Denied, onTheWorkspace);
+        Assert.Equal(Settings.SessionAal2Inactivity.Default, inForce);
+        Assert.True(overTheOrganization.Match(() => true, _ => false));
+    }
+
     private static Error Refusal<TValue>(Result<TValue> outcome) => outcome.Match(
         _ => throw new InvalidOperationException("The operation succeeded."),
         error => error);
@@ -582,6 +663,36 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
 
     private static ResourceReference Reference(ResourceType type) =>
         new(type, ResourceId.Parse(Guid.NewGuid().ToString()));
+
+    // OPS-CFG-006: a loosening of a session window with its reason, from a session that
+    // has met the gate, so what decides it is the permission alone.
+    private async Task<ErrorCode?> LoosenedAsync(SubjectId account)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        Result changed = await scope.ServiceProvider
+            .GetRequiredService<ConfigurationAdministration>()
+            .ChangeAsync(
+                Settings.SessionAal2Inactivity,
+                TimeSpan.FromHours(2),
+                "a support window",
+                Satisfied,
+                AccessContext.Of(account),
+                TestContext.Current.CancellationToken);
+
+        return changed.Match(() => (ErrorCode?)null, error => error.Code);
+    }
+
+    private async Task<TValue> InForceAsync<TValue>(Setting<TValue> setting)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        return (await scope.ServiceProvider.GetRequiredService<IConfigurationStore>()
+                .ReadAsync(setting, TestContext.Current.CancellationToken))
+            .Match(
+                value => value,
+                error => throw new InvalidOperationException(error.Code.ToString()));
+    }
 
     private static FilterSources<HostDocument> Sources(HostContext reading) =>
         new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, document => document.Id)
