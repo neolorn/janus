@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using Microsoft.CodeAnalysis;
 using Xunit;
 
 namespace Janus.Analyzers.Tests;
@@ -106,5 +107,37 @@ public sealed class PermittedOutcomeFromCatchAnalyzerTests
             """);
 
         Assert.Empty(reported);
+    }
+
+    /// <summary>
+    /// CONV-ERR-002 AC1: a catch that permits is reported as an error, and the
+    /// repository's .editorconfig does not lower it in any file the build analyses.
+    /// </summary>
+    /// <returns>The running test.</returns>
+    [Fact]
+    public async Task CONV_ERR_002_AC1_APermissionFromACatchIsAnErrorInTheBuildAsync()
+    {
+        (string, ReportDiagnostic)[] reported = await Analysis.AsBuiltAsync<PermittedOutcomeFromCatchAnalyzer>("""
+            namespace Cases;
+
+            internal sealed class Gate
+            {
+                internal static bool Allow()
+                {
+                    try
+                    {
+                        return Decide();
+                    }
+                    catch (System.InvalidOperationException)
+                    {
+                        return true;
+                    }
+                }
+
+                private static bool Decide() => false;
+            }
+            """);
+
+        Assert.Equal([("JAN0001", ReportDiagnostic.Error)], reported);
     }
 }

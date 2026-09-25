@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using Microsoft.CodeAnalysis;
 using Xunit;
 
 namespace Janus.Analyzers.Tests;
@@ -140,5 +141,55 @@ public sealed class SwallowedExceptionAnalyzerTests
             """);
 
         Assert.Empty(reported);
+    }
+
+    /// <summary>
+    /// CONV-ERR-003 AC1: an empty catch and a catch that neither throws, rethrows,
+    /// returns a failure nor logs are each reported as an error, and the repository's
+    /// .editorconfig lowers neither in any file the build analyses.
+    /// </summary>
+    /// <returns>The running test.</returns>
+    [Fact]
+    public async Task CONV_ERR_003_AC1_ASwallowedExceptionIsAnErrorInTheBuildAsync()
+    {
+        (string, ReportDiagnostic)[] reported = await Analysis.AsBuiltAsync<SwallowedExceptionAnalyzer>("""
+            namespace Cases;
+
+            internal sealed class Reader
+            {
+                internal static void Run()
+                {
+                    try
+                    {
+                        Touch();
+                    }
+                    catch (System.IO.IOException)
+                    {
+                    }
+                }
+
+                internal static int Count()
+                {
+                    int count = 0;
+
+                    try
+                    {
+                        Touch();
+                    }
+                    catch (System.IO.IOException)
+                    {
+                        count = 1;
+                    }
+
+                    return count;
+                }
+
+                private static void Touch()
+                {
+                }
+            }
+            """);
+
+        Assert.Equal([("JAN0006", ReportDiagnostic.Error), ("JAN0006", ReportDiagnostic.Error)], reported);
     }
 }
