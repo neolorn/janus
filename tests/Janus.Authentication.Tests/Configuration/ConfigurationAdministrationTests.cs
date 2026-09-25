@@ -16,9 +16,9 @@ namespace Janus.Authentication.Tests.Configuration;
 
 /// <summary>
 /// The one operation a runtime setting changes through: what the direction costs, what
-/// is written down, and how it reads back (OPS-CFG-002, OPS-CFG-005), and what a change
-/// to the sending domain, its relay declaration or the system policy warns of
-/// (INT-MAIL-011).
+/// is written down, and how it reads back (OPS-CFG-002, OPS-CFG-005, OPS-CFG-008), and
+/// what a change to the sending domain, its relay declaration or the system policy
+/// warns of (INT-MAIL-011).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class ConfigurationAdministrationTests : IAsyncDisposable
@@ -86,7 +86,7 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
 
     /// <summary>
     /// OPS-CFG-002 AC1: shortening a session timeout tightens the deployment, so it
-    /// passes with no gate met and no reason written.
+    /// passes with no gate met.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -95,7 +95,7 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
         await ChangedAsync(
             Settings.SessionAal2Inactivity,
             TimeSpan.FromMinutes(30),
-            reason: null,
+            "a shorter window",
             Wanting);
 
         Assert.Equal(TimeSpan.FromMinutes(30), await InForceAsync(Settings.SessionAal2Inactivity));
@@ -183,37 +183,62 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
     [Fact]
     public async Task OPS_CFG_002_AC4_ATighteningAndALooseningAreBothAuditedAsync()
     {
-        await ChangedAsync(Settings.SessionAal2Inactivity, TimeSpan.FromMinutes(30), null, Wanting);
+        await ChangedAsync(Settings.SessionAal2Inactivity, TimeSpan.FromMinutes(30), "a shorter window", Wanting);
         await ChangedAsync(Settings.SessionAal2Inactivity, TimeSpan.FromHours(2), "a support window", Satisfied);
 
         Assert.Equal([false, true], _changes.Written.ConvertAll(change => change.Loosening));
     }
 
     /// <summary>
-    /// OPS-CFG-005 AC1: the record carries who, what, from, to, when and why, with the
-    /// values written as the settings table writes them.
+    /// OPS-CFG-005 AC1: the record names the setting and carries the value before and
+    /// the value after, written as the settings table writes them.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
     public async Task OPS_CFG_005_AC1_TheRecordCarriesBeforeAndAfterAsync()
     {
-        var actor = SubjectId.New(_randomness);
-
-        await ChangedAsync(
-            Settings.SessionAal2Inactivity,
-            TimeSpan.FromHours(2),
-            "a support window",
-            Satisfied,
-            actor);
-
-        ConfigurationChange written = Assert.Single(_changes.Written);
+        ConfigurationChange written = await LengthenedAsync(SubjectId.New(_randomness));
 
         Assert.Equal(Settings.SessionAal2Inactivity.Key, written.Key);
         Assert.Equal(Settings.SessionAal2Inactivity.Write(Settings.SessionAal2Inactivity.Default), written.Before);
         Assert.Equal(Settings.SessionAal2Inactivity.Write(TimeSpan.FromHours(2)), written.After);
-        Assert.Equal("a support window", written.Reason);
+    }
+
+    /// <summary>
+    /// OPS-CFG-008 AC2: the same record carries who made the change, when and why;
+    /// the values before and after are OPS-CFG-005 AC1's, so between them the change
+    /// carries all five.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_CFG_008_AC2_TheRecordCarriesTheActorTheInstantAndTheReasonAsync()
+    {
+        var actor = SubjectId.New(_randomness);
+
+        ConfigurationChange written = await LengthenedAsync(actor);
+
         Assert.Equal(actor, written.Actor);
         Assert.Equal(Noon, written.At);
+        Assert.Equal("a support window", written.Reason);
+    }
+
+    /// <summary>
+    /// OPS-CFG-008 AC2 and chapter 09 section 8: every change to a runtime setting
+    /// carries a reason, the tightening included, so a tightening with none, or with
+    /// nothing but spaces, is refused naming the key and nothing is written.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_CFG_008_AC2_ATighteningWithNoReasonIsRefusedAsync()
+    {
+        Error absent = await RefusedAsync(Settings.SessionAal2Inactivity, TimeSpan.FromMinutes(30), reason: null, Wanting);
+        Error blank = await RefusedAsync(Settings.SessionAal2Inactivity, TimeSpan.FromMinutes(30), "   ", Wanting);
+
+        Assert.Equal(ErrorCodes.RestrictionReasonRequired, absent.Code);
+        Assert.Equal(ErrorCodes.RestrictionReasonRequired, blank.Code);
+        Assert.Equal(Settings.SessionAal2Inactivity.Key.ToString(), absent.Details["key"].GetString());
+        Assert.Empty(_changes.Written);
+        Assert.Equal(Settings.SessionAal2Inactivity.Default, await InForceAsync(Settings.SessionAal2Inactivity));
     }
 
     /// <summary>
@@ -226,8 +251,8 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
         var one = SubjectId.New(_randomness);
         var other = SubjectId.New(_randomness);
 
-        await ChangedAsync(Settings.SessionAal2Inactivity, TimeSpan.FromMinutes(30), null, Wanting, one);
-        await ChangedAsync(Settings.SessionAal2Absolute, TimeSpan.FromHours(12), null, Wanting, other);
+        await ChangedAsync(Settings.SessionAal2Inactivity, TimeSpan.FromMinutes(30), "a shorter window", Wanting, one);
+        await ChangedAsync(Settings.SessionAal2Absolute, TimeSpan.FromHours(12), "a shorter day", Wanting, other);
 
         Assert.Equal(
             [Settings.SessionAal2Inactivity.Key],
@@ -274,7 +299,7 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
         Result changed = await Administration.ChangeAsync(
             Settings.SessionAal2Inactivity,
             TimeSpan.FromMinutes(30),
-            reason: null,
+            "a shorter window",
             Wanting,
             AccessContext.Of(SubjectId.New(_randomness)),
             TestContext.Current.CancellationToken);
@@ -371,7 +396,7 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
         await ChangedAsync(
             Settings.PolicyDefault,
             Gated(StepUpAction.FactorEnrol, enrolling with { PhishingResistant = true }),
-            reason: null,
+            "a phishing campaign",
             Wanting);
 
         Assert.Empty(_events.Of<AlertRaised>());
@@ -392,7 +417,7 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
         await ChangedAsync(
             Settings.PolicyDefault,
             Gated(StepUpAction.FactorEnrol, enrolling with { MaximumAge = enrolling.MaximumAge / 2 }),
-            reason: null,
+            "a phishing campaign",
             Wanting);
 
         Assert.Equal(
@@ -567,6 +592,20 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.Denied, refusal.Code);
         Assert.Empty(_changes.Written);
         Assert.Equal(0, _work.Committed);
+    }
+
+    // The one change OPS-CFG-005 AC1 and OPS-CFG-008 AC2 read the record of: the
+    // actor given lengthens the AAL2 inactivity for a support window, stepped up.
+    private async Task<ConfigurationChange> LengthenedAsync(SubjectId actor)
+    {
+        await ChangedAsync(
+            Settings.SessionAal2Inactivity,
+            TimeSpan.FromHours(2),
+            "a support window",
+            Satisfied,
+            actor);
+
+        return Assert.Single(_changes.Written);
     }
 
     private async Task<TValue> InForceAsync<TValue>(Setting<TValue> setting) =>

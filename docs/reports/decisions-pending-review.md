@@ -16704,6 +16704,52 @@ could name these as failed authentication.
 
 *Chapter text that should change.* INT-HOST-002 AC1 could say that startup refuses a consent-based purpose named for the hosting or its transfer. Chapter 10's AUTHZ-MODEL-003 startup refusals could carry the row proposed above.
 
+---
+
+## 407. Every change to a runtime setting carries a reason, and the rule is the operation's
+
+**Phase 10 · 2026-09-25 · Tier 2 · OPS-CFG-008 AC2, OPS-CFG-008 AC4, OPS-CFG-002 AC1, LIB-API-005 AC1, `09` section 8**
+
+*The question.* The texts differ on when a change needs a reason:
+- OPS-CFG-008 AC2 has every change carry a reason.
+- `09` `PUT /admin/config/{key}` says "`reason` is required on every change", but lists `auth.restriction.reasonrequired` "where a loosening arrives without a reason".
+- OPS-CFG-008's text and `09`'s restriction routes ask a reason of a restriction loosening only.
+- OPS-CFG-002 calls a tightening free.
+
+The code split the rule. `Janus.Hosting.Configuration.ConfigurationService` refused any change without a reason, while `Janus.Authentication.Configuration.ConfigurationAdministration`, the one operation every runtime write goes through, let a tightening through without one. That is logic the endpoint's layer carried and the operation did not (LIB-API-005 AC1).
+
+*The readings.*
+
+1. A reason only for a loosening, everywhere.
+2. AC2 as the runtime settings, a reason on every change including the tightening, and AC4 as the restriction set, a reason for a loosening only, as `09` section 8 asks a reason of every change to a setting and `09`'s restriction set asks one of a loosening only.
+
+*Chosen: 2.* There is then no contradiction. OPS-CFG-002's "free" is read as no step-up and no `system:administer`, which is what `09` section 8 says of a tightening.
+- The rule is in `ConfigurationAdministration.RefusalAsync`, in one helper, and the check in `ConfigurationService` is removed. A setting changed in process meets the same rule as one changed over HTTP.
+- A tightening of any setting other than `restrictions` without a reason, or with white space only, is refused `auth.restriction.reasonrequired` with `details.key` naming the key, as the endpoint did.
+- A loosening keeps its order in the operation: `system:administer`, the `config:loosen` gate, then the reason. This is the gate-then-validate order of CONV-DESIGN-002.
+- The restriction set is exempt from the tightening check: its route, `RestrictionAdministration.EditAsync`, asks a reason of a loosening only, before it calls the operation.
+- Members of the organization and category families change through `ChangeMemberAsync` on their own routes, which already take a reason, and are not touched.
+
+*What changed in precedence.* Over `PUT /admin/config/{key}`, a request with no reason used to be answered `422 reasonrequired` straight after the permission, served-key and protected-key checks. It is now answered by whatever the operation meets first:
+- a value the key does not take (`config.value.*`)
+- a missing `config:loosen` challenge
+- for a loosening, `403` for `system:administer` or the step-up, then `422 reasonrequired`
+- for the alert destinations, the `alerting:destinations` step-up and the last-destination check
+
+Every request that was refused is still refused; only which refusal comes first changed. No existing test asserts the old order.
+
+*Tests that pin it.*
+`ConfigurationAdministrationTests.OPS_CFG_008_AC2_ATighteningWithNoReasonIsRefusedAsync`,
+`ConfigurationAdministrationTests.OPS_CFG_002_AC2_LengtheningOneRequiresAReasonAsync`,
+`ConfigurationAdministrationTests.OPS_CFG_002_AC3_AChangeWithNoDirectionRequiresStepUpAndAReasonAsync`,
+`ConfigurationEndpointTests.OPS_CFG_005_EveryChangeCarriesAReasonAsync`,
+`AlertDestinationChangeTests.ChangeAsync_ADestinationChangeWithNoReason_TellsNobodyAsync`,
+`RestrictionAdministrationTests` (a tightening with no reason passes).
+
+*Chapter text that should change.*
+- `09` section 8's `422` line could read "`auth.restriction.reasonrequired` where a change arrives without a reason", matching its body.
+- OPS-CFG-002 could say that a tightening costs a reason but no step-up.
+
 # Rows for chapter 10
 
 D-162 section E names codes, keys, declarations and vocabularies the library now

@@ -1016,6 +1016,9 @@ against the public contract of LIB-API-001.
 - Startup refuses a purpose named for the hosting or its cross-border transfer
   (`hosting`, `transfer`, `hosting-transfer`, `cross-border-transfer`) that rests on a
   consent basis, with `model.startup.declarationmissing`.
+- A runtime setting changed in process is refused without a reason,
+  `auth.restriction.reasonrequired` naming the key, whichever way it moves, as over
+  HTTP; the named restriction set asks a reason of a loosening only.
 - Under the mount, a path no endpoint serves and a method a path does not take answer
   404 `authz.resource.notfound` in the error envelope, and a fault answers 500
   `system.fault` with the correlation identifier and nothing of what was thrown; the
