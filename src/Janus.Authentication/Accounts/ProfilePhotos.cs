@@ -13,6 +13,7 @@ namespace Janus.Authentication.Accounts;
 /// has to pass to become one, and what is stored when it does.
 /// </summary>
 /// <param name="directory">Where the photo is read and written.</param>
+/// <param name="restriction">Whether the account's processing is restricted, as the gate answers it.</param>
 /// <param name="memberships">Which organizations the account belongs to.</param>
 /// <param name="configuration">Where the bounds and the availability are read.</param>
 /// <param name="audit">Where a change the account made to itself is recorded.</param>
@@ -29,6 +30,7 @@ namespace Janus.Authentication.Accounts;
 /// </remarks>
 internal sealed class ProfilePhotos(
     IAccountDirectory directory,
+    ISettingsRestriction restriction,
     IMembershipLookup memberships,
     IConfigurationStore configuration,
     IAccountAudit audit,
@@ -110,6 +112,13 @@ internal sealed class ProfilePhotos(
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
+        // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
+        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+            is Error restricted)
+        {
+            return Result.Failure(restricted);
+        }
+
         Error? failure = null;
 
         bool shown = (await ShownAsync(subject, cancellationToken).ConfigureAwait(false))
@@ -189,6 +198,13 @@ internal sealed class ProfilePhotos(
         if (context.Effective is not SubjectId subject)
         {
             return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
+        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+            is Error restricted)
+        {
+            return Result.Failure(restricted);
         }
 
         DateTimeOffset now = time.GetUtcNow();

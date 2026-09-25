@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Sessions;
@@ -1235,6 +1236,29 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
+    /// IDN-ACCT-007 AC2, AUTHZ-GATE-006 AC2: the account's own settings are refused
+    /// under restriction by the gate, which the account's operations ask through their
+    /// port, and are open again once the restriction lifts.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_ACCT_007_AC2_TheGateRefusesARestrictedAccountsSettingsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+
+        Assert.Null(await SettingsRefusalAsync(nested.Account));
+
+        await nested.Deployment.RestrictAsync(nested.Account, cancellationToken);
+
+        Assert.Equal(ErrorCodes.Restricted, (await SettingsRefusalAsync(nested.Account))?.Code);
+
+        await nested.Deployment.LiftAsync(nested.Account, cancellationToken);
+
+        Assert.Null(await SettingsRefusalAsync(nested.Account));
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-004 AC2: the restriction suspends action and nothing else, so
     /// lifting it gives back exactly what was there before: the same actions are
     /// admitted and the capability array reads as it read.
@@ -1409,6 +1433,15 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
                 cancellationToken);
 
         return outcome.Match(() => (Error?)null, error => error);
+    }
+
+    private async Task<Error?> SettingsRefusalAsync(SubjectId account)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        return await scope.ServiceProvider
+            .GetRequiredService<ISettingsRestriction>()
+            .RefusedAsync(account, TestContext.Current.CancellationToken);
     }
 
     private async Task<ErrorCode?> RefusalAsync(

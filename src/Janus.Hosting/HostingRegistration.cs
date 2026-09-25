@@ -395,6 +395,7 @@ public static class HostingRegistration
         // so what needs it takes it as it was registered and refuses without it.
         services.AddScoped(provider => new ProfilePhotos(
             provider.GetRequiredService<IAccountDirectory>(),
+            provider.GetRequiredService<ISettingsRestriction>(),
             provider.GetRequiredService<Janus.Authentication.Policies.IMembershipLookup>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<IAccountAudit>(),
@@ -486,7 +487,13 @@ public static class HostingRegistration
         // request, so the two share one holder.
         services.AddScoped<ConcealedRefusals>();
         services.AddScoped<IConcealedRefusals>(provider => provider.GetRequiredService<ConcealedRefusals>());
-        services.AddScoped<IAccessGate, AccessGate>();
+        services.AddScoped<AccessGate>();
+        services.AddScoped<IAccessGate>(provider => provider.GetRequiredService<AccessGate>());
+
+        // IDN-ACCT-007 AC2, AUTHZ-GATE-006: an account's own settings are held under
+        // restriction by the gate, which the account's operations ask through a port.
+        services.AddScoped<ISettingsRestriction>(provider =>
+            new GatedSettings(provider.GetRequiredService<AccessGate>().RequireSettingsChangeAsync));
 
         // AUTHZ-INHERIT-002: the host says where each of its records sits, and the
         // ancestry the gate reads is written from that and nothing else.

@@ -25,6 +25,7 @@ namespace Janus.Authentication.Credentials;
 /// </summary>
 /// <param name="keys">What creates and records a WebAuthn credential.</param>
 /// <param name="accounts">Where the display name a ceremony carries is read.</param>
+/// <param name="restriction">Whether the account's processing is restricted, as the gate answers it.</param>
 /// <param name="generators">What enrols a code generator.</param>
 /// <param name="codes">What issues a set of single-use codes.</param>
 /// <param name="passwords">What sets a password.</param>
@@ -54,6 +55,7 @@ namespace Janus.Authentication.Credentials;
 internal sealed class CredentialService(
     WebAuthnService keys,
     IAccountDirectory accounts,
+    ISettingsRestriction restriction,
     TotpService generators,
     RecoveryCodeService codes,
     PasswordService passwords,
@@ -778,17 +780,33 @@ internal sealed class CredentialService(
     {
         ArgumentNullException.ThrowIfNull(authority);
 
+        Acting acting;
+
         if (authority.Enrolment is EnrolmentSessionId opened)
         {
-            return await enrolments.FindAsync(opened, cancellationToken).ConfigureAwait(false)
-                is EnrolmentSession enrolment
-                ? Result.Success(new Acting(enrolment.Subject, Session: null, opened))
-                : Result.Failure<Acting>(Error.From(ErrorCodes.EnrolmentTokenInvalid));
+            if (await enrolments.FindAsync(opened, cancellationToken).ConfigureAwait(false)
+                is not EnrolmentSession enrolment)
+            {
+                return Result.Failure<Acting>(Error.From(ErrorCodes.EnrolmentTokenInvalid));
+            }
+
+            acting = new Acting(enrolment.Subject, Session: null, opened);
+        }
+        else if (authority.Context?.Effective is SubjectId subject && authority.Session is SessionId live)
+        {
+            acting = new Acting(subject, live, Enrolment: null);
+        }
+        else
+        {
+            return Result.Failure<Acting>(Error.From(ErrorCodes.Denied));
         }
 
-        return authority.Context?.Effective is SubjectId subject && authority.Session is SessionId live
-            ? Result.Success(new Acting(subject, live, Enrolment: null))
-            : Result.Failure<Acting>(Error.From(ErrorCodes.Denied));
+        // IDN-ACCT-007 AC2: a restricted account changes none of its credentials, and
+        // every operation here changes one.
+        return await restriction.RefusedAsync(acting.Subject, cancellationToken)
+                .ConfigureAwait(false) is Error restricted
+            ? Result.Failure<Acting>(restricted)
+            : Result.Success(acting);
     }
 
     // AUTH-STEP-007: the gate applies to a session and is stated as the lower of what

@@ -1144,6 +1144,25 @@ internal sealed class AccessGate(
 
     // AUTHZ-GATE-006: a restriction leaves the account's reading actions and refuses
     // every modifying one, wherever the gate is evaluated (D-160).
+    /// <summary>
+    /// Whether the principal may change its own account's settings.
+    /// </summary>
+    /// <param name="context">Who is acting, and for whom.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Success, or <c>authz.restricted</c> while the account's processing is restricted.</returns>
+    /// <remarks>
+    /// Implements IDN-ACCT-007 AC2 and AUTHZ-GATE-006: a change to the account's own
+    /// settings is a modifying action on the subject's own records, so it is refused
+    /// under restriction as every modifying action is, and here, where every other
+    /// refusal of it is.
+    /// </remarks>
+    internal async ValueTask<Result> RequireSettingsChangeAsync(
+        AccessContext context,
+        CancellationToken cancellationToken) =>
+        (await subjects.OfAsync(context, cancellationToken).ConfigureAwait(false)).Restricted
+            ? Result.Failure(Error.From(ErrorCodes.Restricted))
+            : Result.Success();
+
     private async ValueTask<bool> RestrictedAsync(
         AccessContext context,
         Permission permission,

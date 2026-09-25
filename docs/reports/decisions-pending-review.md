@@ -14866,6 +14866,64 @@ still requires a line from every change to the library's code.
 *Chapter text that should change.* CONV-VCS-005 could say that the first version's
 section records what the version holds rather than its changes.
 
+---
+
+## 362. A processing restriction refuses every change to the account's own settings in the operation that makes it
+
+**Phase 10 · 2026-09-25 · Tier 3 · IDN-ACCT-007 AC2, AUTHZ-GATE-006, PRIV-RIGHT-004, D-162 section D**
+
+*The question.* IDN-ACCT-007 AC2 has a restricted account read its own data and
+exercise its rights, and neither perform host write operations nor change settings.
+The gate refuses the host's modifying actions (AUTHZ-GATE-006), but nothing refused a
+change to the account's own settings: a restricted account holding a session could edit
+its profile, change its identifiers and enrol credentials. D-162 section D retired
+`identity.account.restricted` in favour of `authz.restricted`. Neither chapter lists
+which operations are settings, and the table of IDN-ACCT-007 gives a restricted account
+sign-in, read only, while the sign-in paths (`AuthenticationService`, `SignInLinks`,
+`OidcService.ClaimsAsync`) admit an active account alone.
+
+*The readings.*
+
+1. The refusal is a mark on the account endpoints, asserted by the stage that holds
+   an endpoint to a session.
+2. The refusal is in each operation that changes a setting, so a host calling the
+   same contract in process meets it too.
+3. As 2, and every operation a restricted account performs on itself is refused,
+   rights and sessions included.
+
+*Chosen: 2 (Tier 3).* Reading 1 leaves the in-process contracts (LIB-API-005) open, and
+reading 3 takes away the rights the criterion keeps. AUTHZ-GATE-006 AC2 and
+PRIV-RIGHT-004 AC3 have the restriction enforced through the gate and not by scattered
+checks, so the gate answers it: `AccessGate` refuses a settings change with
+`authz.restricted` (403) beside every other refusal of a restricted subject, and the
+account's operations ask it first through a port of their own (`ISettingsRestriction`),
+bridged where the library is composed (the gate named there alone, LIB-SEAM-001 AC1),
+as the gate asks a session's step-up through `ISessionGates`. The operations that ask are the profile edit, the photo, the preferences, a
+credential's label and the preferred second step (`IAccount`), every identifier change
+made under a session (add, verify, make primary, backup, remove, replace), and every
+credential operation, which `CredentialService` resolves in one place (password,
+passkey, generator, recovery codes, removal, upgrade, provider link and unlink). Left
+open: reading, ending sessions, the privacy rights (consents, objections, requests,
+export, deletion and its cancellation), and the links that undo or abandon an identifier
+change, which carry no session and only restore or drop a change begun before. App
+passwords already answer only an active account. Acknowledging an invitation is
+membership of an organization rather than a setting of the account and is left as it
+is. The sign-in paths are not changed in this phase: admitting a restricted account at
+sign-in widens what an account in that state reaches, and is left for the owner's
+review; until then a restricted account reads its data and exercises its rights through
+a session it already held or out of band (PRIV-RIGHT-001 to PRIV-RIGHT-004).
+
+*Tests that pin it.*
+`GateBehaviourTests.IDN_ACCT_007_AC2_TheGateRefusesARestrictedAccountsSettingsAsync`,
+`AccessSeamTests.AUTHZ_GATE_006_AC2_TheRestrictionIsReadAndRefusedInOnePlace`,
+`AccountServiceTests.IDN_ACCT_007_AC2_ARestrictedAccountReadsAndChangesNoSettingAsync`,
+`IdentifierServiceTests.IDN_ACCT_007_AC2_ARestrictedAccountChangesNoIdentifierAsync`,
+`CredentialServiceTests.IDN_ACCT_007_AC2_ARestrictedAccountChangesNoCredentialAsync`.
+
+*Chapter text that should change.* IDN-ACCT-007 could list what "change settings"
+covers and say that the refusal is `authz.restricted`, and say whether the sign-in
+paths admit a restricted account, since the table and the code disagree.
+
 
 # Rows for chapter 10
 

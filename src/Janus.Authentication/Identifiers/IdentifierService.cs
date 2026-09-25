@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Recovery;
 using Janus.Authentication.Registration;
@@ -18,6 +19,7 @@ namespace Janus.Authentication.Identifiers;
 /// What a live account does with the addresses and numbers it is reached at.
 /// </summary>
 /// <param name="directory">Where the account's identifiers are read and written.</param>
+/// <param name="restriction">Whether the account's processing is restricted, as the gate answers it.</param>
 /// <param name="pending">Where the verifications outstanding are held.</param>
 /// <param name="sending">The one path every message takes.</param>
 /// <param name="notices">What keeps a holder from being told twice in a window.</param>
@@ -39,6 +41,7 @@ namespace Janus.Authentication.Identifiers;
 /// </remarks>
 internal sealed class IdentifierService(
     IIdentifierDirectory directory,
+    ISettingsRestriction restriction,
     IPendingVerificationStore pending,
     INotificationHandler sending,
     INoticeLedger notices,
@@ -70,6 +73,13 @@ internal sealed class IdentifierService(
         if (context.Effective is not SubjectId subject)
         {
             return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
+        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+            is Error restricted)
+        {
+            return Result.Failure(restricted);
         }
 
         // A username is not an address: it is chosen through the profile and reaches
@@ -144,10 +154,20 @@ internal sealed class IdentifierService(
         ArgumentNullException.ThrowIfNull(code);
         ArgumentNullException.ThrowIfNull(source);
 
-        return context.Effective is not SubjectId subject
-            ? Result.Failure(Error.From(ErrorCodes.Denied))
-            : await ProvedAsync(subject, identifier, code, source, cancellationToken)
-                .ConfigureAwait(false);
+        if (context.Effective is not SubjectId subject)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
+        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+            is Error restricted)
+        {
+            return Result.Failure(restricted);
+        }
+
+        return await ProvedAsync(subject, identifier, code, source, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -368,6 +388,13 @@ internal sealed class IdentifierService(
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
+        // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
+        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+            is Error restricted)
+        {
+            return Result.Failure(restricted);
+        }
+
         HeldIdentifiers held = await directory.HeldAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
@@ -435,6 +462,13 @@ internal sealed class IdentifierService(
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
+        // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
+        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+            is Error restricted)
+        {
+            return Result.Failure(restricted);
+        }
+
         HeldIdentifiers held = await directory.HeldAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
@@ -477,6 +511,13 @@ internal sealed class IdentifierService(
         if (context.Effective is not SubjectId subject)
         {
             return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
+        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+            is Error restricted)
+        {
+            return Result.Failure(restricted);
         }
 
         if (await stepUp
@@ -647,6 +688,13 @@ internal sealed class IdentifierService(
         if (context.Effective is not SubjectId subject)
         {
             return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
+        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+            is Error restricted)
+        {
+            return Result.Failure(restricted);
         }
 
         if (await stepUp

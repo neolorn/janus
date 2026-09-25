@@ -64,6 +64,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     private readonly RecoveryAuditInMemory _recorded = new();
     private readonly IdentifierDirectoryInMemory _identifiers = new();
     private readonly AccountDirectoryInMemory _accounts = new(PreferenceDeclarations.None);
+    private readonly SettingsRestrictionInMemory _restriction = new();
     private readonly AuthenticatorStoreInMemory _authenticators = new();
     private readonly PasswordStoreInMemory _passwords = new();
     private readonly LeakedPasswordCorpusInMemory _corpus = new();
@@ -384,6 +385,41 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-ACCT-007 AC2: a restricted account changes none of its credentials: a new
+    /// password, a passkey and a code generator are each refused with the code the gate
+    /// refuses a modifying action with, and nothing is enrolled.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ACCT_007_AC2_ARestrictedAccountChangesNoCredentialAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        _restriction.Restrict(subject);
+
+        Assert.Equal(
+            ErrorCodes.Restricted,
+            Refused(await Service.SetPasswordAsync(
+                Authority(subject, session),
+                Another,
+                Source,
+                TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            ErrorCodes.Restricted,
+            Refused(await Service.BeginKeyAsync(
+                Authority(subject, session),
+                Factor.Passkey,
+                TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            ErrorCodes.Restricted,
+            Refused(await Service.BeginGeneratorAsync(
+                Authority(subject, session),
+                "A generator",
+                TestContext.Current.CancellationToken)));
+
+        Assert.Empty(await _authenticators.OfAsync(subject, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// AUTH-FACT-001: a label outside the length the chapter admits is refused, and no
     /// credential is left behind by the refusal.
     /// </summary>
@@ -655,6 +691,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
         new(
             Keys,
             _accounts,
+            _restriction,
             Totp,
             Codes,
             Passwords,

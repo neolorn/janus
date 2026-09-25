@@ -10,6 +10,7 @@ using Janus.Authentication.Recovery;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
+using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
@@ -44,6 +45,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     private static readonly SessionOrigin Somewhere = new(Source, new DeviceDescription("Firefox", "Fedora"));
 
     private readonly IdentifierDirectoryInMemory _directory = new();
+    private readonly SettingsRestrictionInMemory _restriction = new();
     private readonly PendingVerificationStoreInMemory _pending = new();
     private readonly RecoveryLinkStoreInMemory _links = new();
     private readonly NoticeLedgerInMemory _notices = new();
@@ -76,6 +78,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     private IdentifierService Service =>
         new(
             _directory,
+            _restriction,
             _pending,
             _notifications,
             _notices,
@@ -461,6 +464,58 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
         Assert.NotNull(await _sessions.FindAsync(asking, TestContext.Current.CancellationToken));
         Assert.NotNull((await _sessions.FindAsync(elsewhere, TestContext.Current.CancellationToken))?.EndedAt);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-007 AC2: a restricted account changes none of its identifiers. Adding,
+    /// removing, replacing, promoting and naming a backup are each refused with the
+    /// code the gate refuses a modifying action with, and nothing is staged or given up.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ACCT_007_AC2_ARestrictedAccountChangesNoIdentifierAsync()
+    {
+        IdentifierId primary = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
+        _ = _directory.Verified(_person, IdentifierKind.Phone, Number);
+        _restriction.Restrict(_person);
+
+        SessionId asking = Stepped();
+
+        Assert.Equal(ErrorCodes.Restricted, Refused(await Service.AddAsync(
+            Acting,
+            asking,
+            IdentifierKind.Email,
+            Third,
+            Source,
+            TestContext.Current.CancellationToken)));
+        Assert.Equal(ErrorCodes.Restricted, Refused(await Service.RemoveAsync(
+            Acting,
+            asking,
+            second,
+            Source,
+            TestContext.Current.CancellationToken)));
+        Assert.Equal(ErrorCodes.Restricted, Refused(await Service.ReplaceAsync(
+            Acting,
+            asking,
+            primary,
+            Third,
+            Source,
+            TestContext.Current.CancellationToken)));
+        Assert.Equal(ErrorCodes.Restricted, Refused(await Service.MakePrimaryAsync(
+            Acting,
+            second,
+            Source,
+            TestContext.Current.CancellationToken)));
+        Assert.Equal(ErrorCodes.Restricted, Refused(await Service.SetBackupAsync(
+            Acting,
+            IdentifierKind.Email,
+            BackupChoice.PrimaryOnly,
+            named: null,
+            Source,
+            TestContext.Current.CancellationToken)));
+
+        Assert.Empty(_pending.All);
+        Assert.Equal(3, (await HeldAsync()).Count);
     }
 
     /// <summary>

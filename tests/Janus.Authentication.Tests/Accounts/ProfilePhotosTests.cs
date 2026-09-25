@@ -127,6 +127,7 @@ public sealed class ProfilePhotosTests : IAsyncDisposable
 
         var photos = new ProfilePhotos(
             _directory,
+            new SettingsRestrictionInMemory(),
             _memberships,
             _configuration,
             _audit,
@@ -286,6 +287,7 @@ public sealed class ProfilePhotosTests : IAsyncDisposable
 
     private ProfilePhotos Photos => new(
         _directory,
+        new SettingsRestrictionInMemory(),
         _memberships,
         _configuration,
         _audit,

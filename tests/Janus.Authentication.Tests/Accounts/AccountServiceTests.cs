@@ -47,6 +47,7 @@ public sealed class AccountServiceTests : IAsyncDisposable
     ]);
 
     private readonly AccountDirectoryInMemory _directory = new(Declared);
+    private readonly SettingsRestrictionInMemory _restriction = new();
     private readonly IdentifierDirectoryInMemory _identifiers = new();
     private readonly AuthenticatorStoreInMemory _authenticators = new();
     private readonly RecoveryCodeStoreInMemory _recoveryCodes = new();
@@ -92,6 +93,7 @@ public sealed class AccountServiceTests : IAsyncDisposable
                 _clock,
                 _randomness),
             _directory,
+            _restriction,
             _identifiers,
             _authenticators,
             _recoveryCodes,
@@ -107,6 +109,7 @@ public sealed class AccountServiceTests : IAsyncDisposable
     // The photo has its own tests and its own codec; nothing here reaches one.
     private ProfilePhotos Photos => new(
         _directory,
+        _restriction,
         _memberships,
         _configuration,
         _audit,
@@ -209,6 +212,42 @@ public sealed class AccountServiceTests : IAsyncDisposable
 
         Assert.Null(shown.LegalName);
         Assert.Null(shown.DateOfBirth);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-007 AC2: a restricted account reads its own data and changes none of
+    /// its settings: the profile edit and the second-step preference are refused with
+    /// the code the gate refuses a modifying action with, and the profile is as it was.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ACCT_007_AC2_ARestrictedAccountReadsAndChangesNoSettingAsync()
+    {
+        _directory.Holds(_person, Profile("Kestrel", null, null));
+        _restriction.Restrict(_person);
+
+        Authenticator key = SecondStepKey("The key", Noon);
+
+        _authenticators.Hold(key);
+
+        Assert.Equal(
+            ErrorCodes.Restricted,
+            Refused(await Service.EditProfileAsync(
+                Acting,
+                Stepped(),
+                new ProfileEdit(DisplayName: "Harrier"),
+                TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            ErrorCodes.Restricted,
+            Refused(await Service.PreferSecondStepAsync(
+                Acting,
+                key.Id,
+                TestContext.Current.CancellationToken)));
+
+        Assert.Equal(
+            "Kestrel",
+            Read(await Service.ReadAsync(Acting, TestContext.Current.CancellationToken))
+                .Profile
+                .DisplayName);
     }
 
     /// <summary>

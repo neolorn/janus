@@ -350,6 +350,11 @@ internal sealed class Deployment : IAsyncDisposable
     public AccessGateInMemory Gate { get; } = new();
 
     /// <summary>
+    /// The gate's answer on an account's own settings.
+    /// </summary>
+    public SettingsRestrictionInMemory Restriction { get; } = new();
+
+    /// <summary>
     /// The administrative organization as the authentication area reads it.
     /// </summary>
     private AdministrativeOrganizationInMemory Administrative { get; } = new();
@@ -734,6 +739,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IVerificationCodeStore, VerificationCodeStoreInMemory>();
         _ = services.AddSingleton<IPendingSignInStore, PendingSignInStoreInMemory>();
         _ = services.AddSingleton<IAccessGate>(Gate);
+        _ = services.AddSingleton<ISettingsRestriction>(Restriction);
         _ = services.AddSingleton<IAccountAudit, AccountAuditInMemory>();
         _ = services.AddSingleton<ILifecycleLinkStore, LifecycleLinkStoreInMemory>();
         _ = services.AddSingleton<IRecoveryLinkStore>(Links);
@@ -833,6 +839,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<AccountLifecycle>();
         _ = services.AddScoped(provider => new ProfilePhotos(
             provider.GetRequiredService<IAccountDirectory>(),
+            provider.GetRequiredService<ISettingsRestriction>(),
             provider.GetRequiredService<IMembershipLookup>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<IAccountAudit>(),

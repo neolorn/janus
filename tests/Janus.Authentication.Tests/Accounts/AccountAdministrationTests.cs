@@ -87,7 +87,7 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
             _configuration,
             _events,
             _audit,
-            new ProfilePhotos(_directory, _memberships, _configuration, _audit, _work, codec: null, _clock),
+            new ProfilePhotos(_directory, new SettingsRestrictionInMemory(), _memberships, _configuration, _audit, _work, codec: null, _clock),
             _work,
             _clock);
 

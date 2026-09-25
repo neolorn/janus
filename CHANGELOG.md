@@ -1438,7 +1438,9 @@ against the public contract of LIB-API-001.
   every action that would change anything, with `authz.restricted`, in a check, a
   listing filter and a capability alike. `read`, `list` and `export` are reading by
   name, a host declares which of its own actions are reading, and everything else
-  modifies.
+  modifies. Its own settings are held the same way: an edit of its profile, its photo or
+  its preferences, and a change to one of its identifiers, its credentials or its
+  preferred second step, is refused with `authz.restricted`.
 - Registration is served end to end. A browser that reaches the library is given a
   pre-authentication session, and the registration it starts is bound to that session
   and reachable from no other browser: the age screen, the email and phone steps, the
