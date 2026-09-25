@@ -37,6 +37,11 @@ public sealed record Invocation(int ExitCode, string Output, string Error)
     public const string Phone = "+201000000003";
 
     /// <summary>
+    /// The first administrator's date of birth, an adult's on any day the suite runs.
+    /// </summary>
+    public const string DateOfBirth = "1990-01-01";
+
+    /// <summary>
     /// The corporate address the administrator's mailbox is queued at.
     /// </summary>
     public const string Mailbox = "admin@corp.example.test";
@@ -90,6 +95,7 @@ public sealed record Invocation(int ExitCode, string Output, string Error)
             "--organization", Organization,
             "--email", Email,
             "--phone", Phone,
+            "--dateofbirth", DateOfBirth,
             "--mailbox", Mailbox,
         ];
 

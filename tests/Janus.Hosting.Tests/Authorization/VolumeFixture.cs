@@ -5,7 +5,11 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Authorization.Grants;
 using Janus.Core;
+using Janus.Storage;
+using Janus.Storage.Authorization.Grants;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Xunit;
@@ -13,8 +17,8 @@ using Xunit;
 namespace Janus.Hosting.Tests.Authorization;
 
 /// <summary>
-/// A deployment holding the volumes AUTHZ-TEST-002 names, with the plan of the primary
-/// list query read once over it.
+/// A deployment holding the volumes AUTHZ-TEST-002 names, with the plans of the primary
+/// list query and of the reverse lookup read once over it.
 /// </summary>
 /// <remarks>
 /// Implements CONV-TEST-002. Writing the rows is minutes of work, so the deployment and
@@ -25,6 +29,11 @@ public sealed class VolumeFixture : IAsyncLifetime
     private const int Size = 50;
 
     private static readonly ResourceType Document = ResourceType.Parse("document");
+
+    // The first record of the first container, which the container's grants reach.
+    private static readonly ResourceReference Record = new(Document, ResourceId.Parse("document-0000000"));
+
+    private static readonly DateTimeOffset Now = new(2026, 9, 25, 12, 0, 0, TimeSpan.Zero);
 
     private readonly HostFixture _host = new();
 
@@ -38,6 +47,18 @@ public sealed class VolumeFixture : IAsyncLifetime
     /// The plan of the primary list query, as the database reported it.
     /// </summary>
     public string Plan { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// How many grants the reverse lookup read on the record. A plan over a read that
+    /// finds nothing says nothing, so the record is one the grants reach.
+    /// </summary>
+    public int Reached { get; private set; }
+
+    /// <summary>
+    /// The plan of the statement the reverse lookup reads the grants on one record by,
+    /// as the database reported it for the values the statement was sent with.
+    /// </summary>
+    public string ReversePlan { get; private set; } = string.Empty;
 
     /// <summary>
     /// Opens a connection to the seeded deployment.
@@ -62,6 +83,10 @@ public sealed class VolumeFixture : IAsyncLifetime
 
         Page = await PageAsync(connection, fragment, listing, cancellationToken);
         Plan = await PlanAsync(connection, fragment, listing, cancellationToken);
+
+        CapturedCommand sent = await ReverseLookupAsync(volume, cancellationToken);
+
+        ReversePlan = await ExplainedAsync(connection, sent, cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -122,6 +147,48 @@ public sealed class VolumeFixture : IAsyncLifetime
             cancellationToken: cancellationToken));
 
         return string.Join(Environment.NewLine, lines);
+    }
+
+    // OPS-DB-003 AC2: the statement is the one the store sends, read where it leaves the
+    // context, so the plan is of what the library runs and not of a copy of it.
+    private static async Task<string> ExplainedAsync(
+        NpgsqlConnection connection,
+        CapturedCommand sent,
+        CancellationToken cancellationToken)
+    {
+        var arguments = new DynamicParameters();
+
+        foreach (NpgsqlParameter parameter in sent.Parameters)
+        {
+            arguments.Add(parameter.ParameterName, parameter.Value, parameter.DbType);
+        }
+
+        IEnumerable<string> lines = await connection.QueryAsync<string>(new CommandDefinition(
+            "EXPLAIN (ANALYZE, BUFFERS) " + sent.Text,
+            arguments,
+            commandTimeout: 600,
+            cancellationToken: cancellationToken));
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private async Task<CapturedCommand> ReverseLookupAsync(
+        ProductionVolume volume,
+        CancellationToken cancellationToken)
+    {
+        var sent = new CapturedCommand();
+
+        await using var context = new StoreContext(new DbContextOptionsBuilder<StoreContext>()
+            .UseNpgsql(_host.ConnectionString)
+            .AddInterceptors(sent)
+            .Options);
+
+        IReadOnlyList<Grant> reached = await new GrantStore(context, new DataConnections(context))
+            .OnAsync(Record, volume.Organization, Now, cancellationToken);
+
+        Reached = reached.Count;
+
+        return sent;
     }
 
     private async Task<SqlFilter> FragmentAsync(

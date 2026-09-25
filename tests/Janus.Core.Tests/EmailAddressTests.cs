@@ -5,7 +5,7 @@ namespace Janus.Core.Tests;
 
 /// <summary>
 /// The canonical form of an email address and the limits it is held to
-/// (IDN-ACCT-004, IDN-ACCT-006, REG-IDENT-001).
+/// (IDN-ACCT-004, IDN-ACCT-006, REG-IDENT-001, CONV-DESIGN-004).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class EmailAddressTests
@@ -72,14 +72,17 @@ public sealed class EmailAddressTests
     }
 
     /// <summary>
-    /// An unset value reads as an empty string rather than throwing, as every other
-    /// value type in the library does.
+    /// CONV-DESIGN-004 AC3: an address that was never read has no canonical form, so
+    /// reading one fails where it is read rather than giving the empty text a store
+    /// would write.
     /// </summary>
     [Fact]
-    public void Value_UnsetAddress_IsEmpty()
+    public void CONV_DESIGN_004_AC3_AnUnsetAddressGivesNoText()
     {
-        Assert.Equal(string.Empty, default(EmailAddress).Value);
-        Assert.Equal(string.Empty, default(EmailAddress).ToString());
+        EmailAddress unset = default;
+
+        Assert.Throws<InvalidOperationException>(() => unset.Value);
+        Assert.Throws<InvalidOperationException>(unset.ToString);
     }
 
     /// <summary>

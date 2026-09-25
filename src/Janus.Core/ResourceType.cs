@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
 
 namespace Janus.Core;
@@ -8,7 +9,10 @@ namespace Janus.Core;
 /// them and understands none of them: an enumeration here would make every new kind
 /// of thing a library change.
 /// </summary>
-/// <remarks>Implements AUTHZ-MODEL-002 and CONV-DESIGN-004.</remarks>
+/// <remarks>
+/// Implements AUTHZ-MODEL-002 and CONV-DESIGN-004. A default instance was never read,
+/// so it has no text to give and no row can carry it.
+/// </remarks>
 public readonly partial record struct ResourceType
 {
     private readonly string? _value;
@@ -55,8 +59,13 @@ public readonly partial record struct ResourceType
     /// <summary>
     /// The name as it crosses the boundary.
     /// </summary>
-    /// <returns>The name, or an empty string for an unset type.</returns>
-    public override string ToString() => _value ?? string.Empty;
+    /// <returns>The name.</returns>
+    /// <exception cref="InvalidOperationException">The resource type was never set.</exception>
+    [SuppressMessage(
+        "Design",
+        "CA1065:Do not raise exceptions in unexpected locations",
+        Justification = "CONV-DESIGN-004 AC3: an unset value has no text, and the empty text it would give is what a store writes.")]
+    public override string ToString() => _value ?? throw new InvalidOperationException("The resource type was never set.");
 
     [GeneratedRegex("^[a-z][a-z0-9]*(-[a-z0-9]+)*$", RegexOptions.CultureInvariant)]
     private static partial Regex Shape();

@@ -197,11 +197,16 @@ internal static class PrivacyEndpoints
             return Answers.Malformed("type");
         }
 
+        if (body.Detail is not { Length: > 0 } detail)
+        {
+            return Answers.Malformed("detail");
+        }
+
         AccessContext holder = Asking(browser);
 
         return Answers.Of(
             await requests
-                .SubmitAsync(holder, type, body.Detail ?? string.Empty, cancellationToken)
+                .SubmitAsync(holder, type, detail, cancellationToken)
                 .ConfigureAwait(false),
             Receipted);
     }

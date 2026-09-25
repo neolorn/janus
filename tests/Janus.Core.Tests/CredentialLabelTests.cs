@@ -4,7 +4,8 @@ using Xunit;
 namespace Janus.Core.Tests;
 
 /// <summary>
-/// What a person may call one of their enrolled credentials (AUTH-FACT-001).
+/// What a person may call one of their enrolled credentials (AUTH-FACT-001,
+/// CONV-DESIGN-004).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class CredentialLabelTests
@@ -58,11 +59,17 @@ public sealed class CredentialLabelTests
     }
 
     /// <summary>
-    /// A label that was never read is empty rather than absent, so no caller holds a
-    /// null string.
+    /// CONV-DESIGN-004 AC3: a label that was never read has no text, so reading one fails
+    /// where it is read rather than giving the empty text a store would write.
     /// </summary>
     [Fact]
-    public void Value_ALabelNeverRead_IsEmpty() => Assert.Equal(string.Empty, default(CredentialLabel).Value);
+    public void CONV_DESIGN_004_AC3_AnUnsetLabelGivesNoText()
+    {
+        CredentialLabel unset = default;
+
+        Assert.Throws<InvalidOperationException>(() => unset.Value);
+        Assert.Throws<InvalidOperationException>(unset.ToString);
+    }
 
     /// <summary>
     /// A value that is not a label is refused rather than trimmed to one.

@@ -449,6 +449,33 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
             Assert.Single(_deployment.Changes.Written).Key);
     }
 
+    /// <summary>
+    /// CONV-CODE-006 AC2 and chapter 09 section 8: a change whose body carries no reason
+    /// is refused with the reason code, naming the key, before the service is reached,
+    /// so a caller the service would refuse for want of the permission is answered for
+    /// the body, and the value in force is unchanged.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC2_ABodyMissingItsReasonIsRefusedBeforeTheServiceAsync()
+    {
+        Browser caller = await AuthorisedAsync();
+
+        Answer changed = await caller.SendAsync(
+            "PUT",
+            "/admin/config/session.aal2.inactivity",
+            ("value", "PT30M"),
+            ("reason", null));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, changed.Status);
+        Assert.Equal(ErrorCodes.RestrictionReasonRequired.ToString(), changed.Text("code"));
+        Assert.Equal(
+            Settings.SessionAal2Inactivity.Key.ToString(),
+            changed.Json().GetProperty("details").GetProperty("key").GetString());
+        Assert.Equal(Settings.SessionAal2Inactivity.Default, await InForceAsync(Settings.SessionAal2Inactivity));
+        Assert.Empty(_deployment.Changes.Written);
+    }
+
     private static Task<Answer> TightenedAsync(Browser browser) =>
         browser.SendAsync(
             "PUT",

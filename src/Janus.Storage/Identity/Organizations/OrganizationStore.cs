@@ -43,6 +43,7 @@ internal sealed class OrganizationStore(StoreContext context) : IOrganizationSto
                 {
                     Id = organization.Id,
                     Name = organization.Name,
+                    CanonicalName = organization.CanonicalName,
                     CreatedAt = organization.CreatedAt,
                     IsAdministrative = organization.IsAdministrative,
                     DeletionRequestedAt = organization.DeletionRequestedAt,
@@ -62,8 +63,10 @@ internal sealed class OrganizationStore(StoreContext context) : IOrganizationSto
             ?? throw new InvalidOperationException("The organization has no row to carry the change.");
 
         // IDN-ORG-003: the erasure is the one change that touches the name, which it
-        // replaces with the identifier the row goes on resolving under.
+        // replaces with the identifier the row goes on resolving under. The key follows
+        // the name, and a row written before the key was takes it here (IDN-ACCT-004).
         record.Name = organization.Name;
+        record.CanonicalName = organization.CanonicalName;
         record.DeletionRequestedAt = organization.DeletionRequestedAt;
         record.ErasedAt = organization.ErasedAt;
     }

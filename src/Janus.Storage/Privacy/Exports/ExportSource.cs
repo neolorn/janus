@@ -454,8 +454,16 @@ internal sealed class ExportSource(
             return values;
         }
 
-        values["termsVersion"] = registered.TermsVersion;
-        values["noticeVersion"] = registered.NoticeVersion;
+        if (registered.TermsVersion is string terms)
+        {
+            values["termsVersion"] = terms;
+        }
+
+        if (registered.NoticeVersion is string notice)
+        {
+            values["noticeVersion"] = notice;
+        }
+
         values["answeredAgeAt"] = Moment(registered.AnsweredAgeAt);
 
         if (registered.AdultAffirmed is bool adult)

@@ -6,8 +6,8 @@ using Xunit;
 namespace Janus.Identity.Tests.Organizations;
 
 /// <summary>
-/// An organization and the window its deletion runs through (IDN-ORG-001, IDN-ORG-003,
-/// IDN-ORG-004, IDN-PRIN-003).
+/// An organization, the comparison key of its name and the window its deletion runs
+/// through (IDN-ACCT-004, IDN-ORG-001, IDN-ORG-003, IDN-ORG-004, IDN-PRIN-003).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class OrganizationTests
@@ -102,6 +102,47 @@ public sealed class OrganizationTests
     }
 
     /// <summary>
+    /// IDN-ORG-003: the comparison key is derived from the name, so the erasure that
+    /// replaces the name with the identifier replaces the key with the identifier's, and
+    /// nothing of the name it replaced stays readable.
+    /// </summary>
+    [Fact]
+    public void IDN_ORG_003_TheErasureLeavesNoKeyOfTheNameItReplaced()
+    {
+        var organization = Organization.Create(Acme, "Acme", Noon);
+        organization.RequestDeletion(Noon);
+
+        organization.RecordErasure(Noon + Window, Window);
+
+        Assert.Equal(Acme.ToString(), organization.Name);
+        Assert.Equal(CanonicalForm.Of(Acme.ToString()), organization.CanonicalName);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-004 AC3: normalization is applied on organization creation. Two names
+    /// that differ only in width, in case or in composition are written with one
+    /// comparison key, and each keeps the form it was entered in, which is the one shown
+    /// (AC2).
+    /// </summary>
+    /// <param name="entered">The name as one administrator entered it.</param>
+    /// <param name="other">The same name as another entered it.</param>
+    [Theory]
+    [InlineData("Ａｃｍｅ", "Acme")]
+    [InlineData("ACME TRADING", "acme trading")]
+    [InlineData("Café", "Café")]
+    [InlineData("Ｃａｆｅ́", "café")]
+    public void IDN_ACCT_004_AC3_OrganizationNamesEqualUnderTheCanonicalFormShareOneKey(string entered, string other)
+    {
+        var first = Organization.Create(Acme, entered, Noon);
+        var second = Organization.CreateAdministrative(Acme, other, Noon);
+
+        Assert.Equal(first.CanonicalName, second.CanonicalName);
+        Assert.Equal(CanonicalForm.Of(other), first.CanonicalName);
+        Assert.Equal(entered, first.Name);
+        Assert.Equal(other, second.Name);
+    }
+
+    /// <summary>
     /// An erasure that has executed closes the window: nothing cancels it and no second
     /// deletion is requested.
     /// </summary>
@@ -151,6 +192,17 @@ public sealed class OrganizationTests
     [Fact]
     public void Create_WithoutAName_Throws() =>
         Assert.Throws<ArgumentException>(() => Organization.Create(Acme, "  ", Noon));
+
+    /// <summary>
+    /// IDN-ACCT-004: a name the canonical form reduces to nothing has no comparison key,
+    /// so no organization is made under it, ordinary or administrative.
+    /// </summary>
+    [Fact]
+    public void IDN_ACCT_004_ANameWithAnEmptyKeyMakesNoOrganization()
+    {
+        Assert.Throws<ArgumentException>(() => Organization.Create(Acme, "​‍", Noon));
+        Assert.Throws<ArgumentException>(() => Organization.CreateAdministrative(Acme, "­", Noon));
+    }
 
     /// <summary>
     /// IDN-ORG-004 AC1: a deletion request naming the administrative organization is

@@ -366,6 +366,7 @@ public sealed class SampleHost : IAsyncLifetime
             "--organization", "Sample administration",
             "--email", "administrator@sample.example.test",
             "--phone", "+201000000003",
+            "--dateofbirth", "1990-01-01",
         ];
 
         foreach ((ConfigurationKey key, string value) in new Dictionary<ConfigurationKey, string>

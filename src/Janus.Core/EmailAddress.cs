@@ -11,7 +11,8 @@ namespace Janus.Core;
 /// Implements IDN-ACCT-004, IDN-ACCT-006, REG-IDENT-001 and CONV-DESIGN-004. The
 /// canonical form is <c>NFKC_Casefold</c> over the whole address, so two addresses that
 /// differ only in composition, in width or in case are one address. The form the person
-/// entered is kept beside it for display and is not this type's business.
+/// entered is kept beside it for display and is not this type's business. A default
+/// instance was never read, so it has no canonical form to give and no row can carry it.
 /// </remarks>
 public readonly record struct EmailAddress
 {
@@ -34,7 +35,8 @@ public readonly record struct EmailAddress
     /// <summary>
     /// The canonical form, which is what is fingerprinted and compared.
     /// </summary>
-    public string Value => _value ?? string.Empty;
+    /// <exception cref="InvalidOperationException">The address was never set.</exception>
+    public string Value => _value ?? throw new InvalidOperationException("The address was never set.");
 
     /// <summary>
     /// Reads an address as it was entered and returns its canonical form.
@@ -67,6 +69,7 @@ public readonly record struct EmailAddress
     }
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">The address was never set.</exception>
     public override string ToString() => Value;
 
     // An address carries no space and nothing unprintable. The canonical form has

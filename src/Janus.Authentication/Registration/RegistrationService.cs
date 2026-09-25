@@ -1162,9 +1162,28 @@ internal sealed class RegistrationService(
     private static Result<RegistrationState> OutOfStep() =>
         Result.Failure<RegistrationState>(Error.From(ErrorCodes.RegistrationIncomplete));
 
-    private static AgeGroup Band(bool adult) => adult ? AgeGroup.Adult : AgeGroup.Minor;
+    /// <summary>
+    /// The band a date answers for, where the deployment takes no affirmation.
+    /// </summary>
+    /// <param name="adult">Whether the date made the person an adult.</param>
+    /// <returns>The band.</returns>
+    /// <remarks>
+    /// Bootstrap derives the first administrator's answer by the same rule
+    /// (PRIV-MINOR-001 AC3).
+    /// </remarks>
+    internal static AgeGroup Band(bool adult) => adult ? AgeGroup.Adult : AgeGroup.Minor;
 
-    private static bool IsAdult(DateOnly dateOfBirth, DateOnly today) =>
+    /// <summary>
+    /// Whether a date of birth makes a person an adult on a given day (REG-PROF-002).
+    /// </summary>
+    /// <param name="dateOfBirth">The date entered.</param>
+    /// <param name="today">The day the screen is answered on.</param>
+    /// <returns>Whether the person is eighteen or older that day.</returns>
+    /// <remarks>
+    /// Bootstrap derives the first administrator's affirmation by the same rule
+    /// (PRIV-MINOR-001 AC3).
+    /// </remarks>
+    internal static bool IsAdult(DateOnly dateOfBirth, DateOnly today) =>
         dateOfBirth <= today.AddYears(-Majority);
 
     private static IntegerSetting Maximum(IdentifierKind kind) =>

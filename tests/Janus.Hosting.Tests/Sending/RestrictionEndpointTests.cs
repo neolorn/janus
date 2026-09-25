@@ -367,6 +367,30 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.Denied.ToString(), granted.Text("code"));
     }
 
+    /// <summary>
+    /// CONV-CODE-006 AC2 and AUTH-ABUSE-004 AC4: a grant whose body carries no reason is
+    /// refused with the reason code before the service is reached, so a caller the
+    /// service would refuse for want of the permission is answered for the body, and
+    /// no credit is granted.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC2_AGrantMissingItsReasonIsRefusedBeforeTheServiceAsync()
+    {
+        Browser caller = await AuthorisedAsync();
+
+        Answer unreasoned = await caller.SendAsync(
+            "POST",
+            "/admin/restrictions/sms.destination/grant",
+            ("keyValue", "+201001234567"),
+            ("credit", 3),
+            ("reason", null));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, unreasoned.Status);
+        Assert.Equal(ErrorCodes.RestrictionReasonRequired.ToString(), unreasoned.Text("code"));
+        Assert.Empty(_deployment.Events.Of<SendingRestrictionGranted>());
+    }
+
     private static Task<Answer> EditedAsync(Browser browser, object[] buckets, string? reason) =>
         browser.SendAsync(
             "PUT",

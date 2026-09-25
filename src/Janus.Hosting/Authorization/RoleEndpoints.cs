@@ -17,9 +17,10 @@ namespace Janus.Hosting.Authorization;
 /// one and removing one.
 /// </summary>
 /// <remarks>
-/// Implements AUTHZ-GRANT-004, OPS-CFG-007, LIB-API-005 and CONV-DESIGN-006. Each is
-/// one line to <see cref="IRoles"/>, which judges the permission, the step-up and the
-/// reason.
+/// Implements AUTHZ-GRANT-004, OPS-CFG-007, LIB-API-005, CONV-CODE-006 and
+/// CONV-DESIGN-006. Each is one line to <see cref="IRoles"/>, which judges the
+/// permission, the step-up and what the reason says; a body missing a member it
+/// requires is refused before it is called.
 /// </remarks>
 internal static class RoleEndpoints
 {
@@ -82,13 +83,18 @@ internal static class RoleEndpoints
             return Answers.Malformed(member);
         }
 
+        if (body.Reason is not { Length: > 0 } reason)
+        {
+            return Answers.Malformed("reason");
+        }
+
         return Answers.Of(
             await roles
                 .DefineAsync(
                     AccessContext.Of(browser.Required.Subject),
                     browser.Required.Id,
                     role,
-                    body.Reason ?? string.Empty,
+                    reason,
                     cancellationToken)
                 .ConfigureAwait(false),
             created => created ? Made : Nothing);
@@ -112,13 +118,18 @@ internal static class RoleEndpoints
             return Answers.Malformed("name");
         }
 
+        if (body.Reason is not { Length: > 0 } reason)
+        {
+            return Answers.Malformed("reason");
+        }
+
         return Answers.Of(
             await roles
                 .RemoveAsync(
                     AccessContext.Of(browser.Required.Subject),
                     browser.Required.Id,
                     role,
-                    body.Reason ?? string.Empty,
+                    reason,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);

@@ -59,16 +59,17 @@ public sealed class PermissionTests
     }
 
     /// <summary>
-    /// An unset permission is neither a resource nor an action, and says so rather
-    /// than throwing where it is read.
+    /// CONV-DESIGN-004 AC3: a permission that was never read is neither a resource nor
+    /// an action, so reading one fails where it is read rather than giving the empty
+    /// text a store would write.
     /// </summary>
     [Fact]
-    public void Resource_AnUnsetPermission_IsEmpty()
+    public void CONV_DESIGN_004_AC3_AnUnsetPermissionGivesNoText()
     {
-        Permission permission = default;
+        Permission unset = default;
 
-        Assert.Equal(string.Empty, permission.Resource);
-        Assert.Equal(string.Empty, permission.Action);
-        Assert.Equal(string.Empty, permission.ToString());
+        Assert.Throws<InvalidOperationException>(() => unset.Resource);
+        Assert.Throws<InvalidOperationException>(() => unset.Action);
+        Assert.Throws<InvalidOperationException>(unset.ToString);
     }
 }

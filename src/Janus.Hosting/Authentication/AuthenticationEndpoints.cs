@@ -290,11 +290,11 @@ internal static class AuthenticationEndpoints
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(authentication);
 
-        return Answers.Of(
-            await authentication
-                .AbandonLinkAsync(request.LinkToken ?? string.Empty, cancellationToken)
-                .ConfigureAwait(false),
-            Nothing);
+        return request.LinkToken is not { Length: > 0 } token
+            ? Answers.Malformed("linkToken")
+            : Answers.Of(
+                await authentication.AbandonLinkAsync(token, cancellationToken).ConfigureAwait(false),
+                Nothing);
     }
 
     // AUTH-SESS-008: every session of the account ends, not the calling application's

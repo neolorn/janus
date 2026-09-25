@@ -1034,6 +1034,24 @@ against the public contract of LIB-API-001.
   takes the access context of a browser already signed in: it creates no registration
   session for it, attaches the invitation its link carried to that account, and answers
   `identity.registration.signedin`.
+- An organization's name is judged on its comparison key, the `NFKC_Casefold` form every
+  identifier is compared under, stored beside it in `organizations.canonical_name`; a
+  name mixing scripts within a word is refused as `identity.identifier.mixedscript`, and
+  one the key reduces to nothing as `api.request.malformed`.
+- A management or account request missing a member its body requires is refused before
+  anything else is judged: a missing reason by its own code
+  (`authz.grant.reasonrequired`, `auth.restriction.reasonrequired`,
+  `auth.recovery.reasonrequired`), any other member as `api.request.malformed` naming it.
+- `bootstrap` requires the first administrator's date of birth as `--dateofbirth`
+  (`yyyy-MM-dd`) and refuses an administrator under eighteen as
+  `identity.profile.underage` before anything is written, where
+  `registration.adultaffirmation` is `required`; the emergency account and the restore
+  canary record no answer.
+- Finding who holds access to a record reads the live grants on its ancestors through
+  their index, and `organization_domains.domain` carries the `identity_ci` collation.
+- A value the library reads from text under a rule, left unset (such as its `default`),
+  throws `InvalidOperationException` where its text is read, so no such value reaches a
+  row.
 - Under the mount, a path no endpoint serves and a method a path does not take answer
   404 `authz.resource.notfound` in the error envelope, and a fault answers 500
   `system.fault` with the correlation identifier and nothing of what was thrown; the

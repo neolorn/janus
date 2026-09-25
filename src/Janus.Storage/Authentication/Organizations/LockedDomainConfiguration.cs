@@ -10,9 +10,10 @@ namespace Janus.Storage.Authentication.Organizations;
 /// How a domain in an organization's lock is stored.
 /// </summary>
 /// <remarks>
-/// Implements REG-DOM-001 and IDN-ORG-006. One row stands listed per organization and
-/// domain, which the partial unique index holds; removed rows sit beside it, so the
-/// history of a domain listed, removed and listed again is every token it was drawn.
+/// Implements REG-DOM-001, IDN-ORG-006, OPS-DB-001 and INF-DB-001. One row stands
+/// listed per organization and domain, which the partial unique index holds; removed
+/// rows sit beside it, so the history of a domain listed, removed and listed again is
+/// every token it was drawn.
 /// </remarks>
 internal sealed class LockedDomainConfiguration : IEntityTypeConfiguration<LockedDomainRecord>
 {
@@ -36,7 +37,12 @@ internal sealed class LockedDomainConfiguration : IEntityTypeConfiguration<Locke
             .HasColumnName("organization")
             .HasConversion(organization => organization.Value, value => new OrganizationId(value));
 
-        builder.Property(domain => domain.Domain).HasColumnName("domain");
+        // OPS-DB-001 and INF-DB-001 AC3: the second plaintext column a person spells, so
+        // the unique index compares it without regard to case as the name's does.
+        builder.Property(domain => domain.Domain)
+            .HasColumnName("domain")
+            .UseCollation(StoreContext.CaseInsensitiveCollation);
+
         builder.Property(domain => domain.AddedAt).HasColumnName("added_at");
         builder.Property(domain => domain.VerifiedAt).HasColumnName("verified_at");
         builder.Property(domain => domain.CheckedAt).HasColumnName("checked_at");

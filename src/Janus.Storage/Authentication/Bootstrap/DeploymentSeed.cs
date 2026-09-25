@@ -34,8 +34,8 @@ namespace Janus.Storage.Authentication.Bootstrap;
 /// <param name="roleAudit">Where each role defined is recorded.</param>
 /// <param name="configurationAudit">Where each value set is recorded.</param>
 /// <remarks>
-/// Implements OPS-BOOT-001, OPS-BOOT-002, IDN-ORG-001, IDN-PRIN-001 and chapter 10
-/// section 3. Each
+/// Implements OPS-BOOT-001, OPS-BOOT-002, IDN-ORG-001, IDN-PRIN-001, PRIV-MINOR-001 and
+/// chapter 10 section 3. Each
 /// write is saved in the caller's transaction as it is made, so the stores that read
 /// back what bootstrap wrote before it commits find it.
 /// </remarks>
@@ -134,12 +134,21 @@ internal sealed class DeploymentSeed(
         SubjectId subject,
         IReadOnlyList<NewIdentifier> held,
         DisplayName? name,
+        bool? adultAffirmed,
+        DateOnly? dateOfBirth,
+        AgeGroup? group,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(held);
 
-        await accounts.AddAsync(Account.Create(subject, at), cancellationToken).ConfigureAwait(false);
+        // PRIV-MINOR-001: the answer is the age screen's, taken on the command line; no
+        // terms step ran, so the account names no document it accepted.
+        AccountRegistration? answered = adultAffirmed is null && group is null
+            ? null
+            : new AccountRegistration(adultAffirmed, group, at, TermsVersion: null, NoticeVersion: null);
+
+        await accounts.AddAsync(Account.Create(subject, at, answered), cancellationToken).ConfigureAwait(false);
         await subjectKeys.CreateAsync(subject, cancellationToken).ConfigureAwait(false);
 
         // The rows the account's own stores write are read back through them, so the
@@ -158,10 +167,21 @@ internal sealed class DeploymentSeed(
 
         await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
 
-        if (name is DisplayName shown)
+        if (name is not null || dateOfBirth is not null)
         {
             Profile profile = await profiles.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false);
-            profile.SetDisplayName(shown);
+
+            if (name is DisplayName shown)
+            {
+                profile.SetDisplayName(shown);
+            }
+
+            // PRIV-MINOR-001 AC2: the date is kept only where the deployment keeps it,
+            // as a personal field under the subject key.
+            if (dateOfBirth is DateOnly born)
+            {
+                profile.RecordDateOfBirth(born);
+            }
 
             await profiles.RecordAsync(profile, cancellationToken).ConfigureAwait(false);
         }

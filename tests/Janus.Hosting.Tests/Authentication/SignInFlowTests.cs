@@ -218,6 +218,26 @@ public sealed class SignInFlowTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status401Unauthorized, read.Status);
     }
 
+    /// <summary>
+    /// CONV-CODE-006 AC2: ending a sign-in link with a body that carries no link token
+    /// is refused naming the member before the service is reached, which would answer
+    /// any token it resolves to nothing with no content.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC2_AnAbandonMissingItsTokenIsRefusedBeforeTheServiceAsync()
+    {
+        var browser = new Browser(_deployment);
+
+        _ = await browser.SendAsync("GET", "/auth/session");
+
+        Answer abandoned = await browser.SendAsync("POST", "/auth/link/abandon", "{}");
+
+        Assert.Equal(StatusCodes.Status400BadRequest, abandoned.Status);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), abandoned.Text("code"));
+        Assert.Equal("linkToken", abandoned.Json().GetProperty("details").GetProperty("member").GetString());
+    }
+
     // The code the last message carried, which is the one the step under test sent.
     private string Emailed() => _deployment.Mail.Taken[^1].Body.Split(' ')[0];
 

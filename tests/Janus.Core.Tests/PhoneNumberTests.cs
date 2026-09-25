@@ -4,7 +4,7 @@ using Xunit;
 namespace Janus.Core.Tests;
 
 /// <summary>
-/// The E.164 form of a telephone number (IDN-ACCT-004, REG-IDENT-001).
+/// The E.164 form of a telephone number (IDN-ACCT-004, REG-IDENT-001, CONV-DESIGN-004).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class PhoneNumberTests
@@ -53,13 +53,16 @@ public sealed class PhoneNumberTests
         Assert.False(PhoneNumber.TryParse(entered, out _));
 
     /// <summary>
-    /// An unset value reads as an empty string rather than throwing.
+    /// CONV-DESIGN-004 AC3: a number that was never read has no E.164 form, so reading
+    /// one fails where it is read rather than giving the empty text a store would write.
     /// </summary>
     [Fact]
-    public void Value_UnsetNumber_IsEmpty()
+    public void CONV_DESIGN_004_AC3_AnUnsetNumberGivesNoText()
     {
-        Assert.Equal(string.Empty, default(PhoneNumber).Value);
-        Assert.Equal(string.Empty, default(PhoneNumber).ToString());
+        PhoneNumber unset = default;
+
+        Assert.Throws<InvalidOperationException>(() => unset.Value);
+        Assert.Throws<InvalidOperationException>(unset.ToString);
     }
 
     /// <summary>

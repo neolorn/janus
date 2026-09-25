@@ -6,9 +6,11 @@ namespace Janus.Core;
 /// A telephone number in E.164, which is the only form this library stores.
 /// </summary>
 /// <remarks>
-/// Implements IDN-ACCT-004 and REG-IDENT-001. A number takes no Unicode form: digits of
-/// any script are mapped to their ASCII digits and what remains is the E.164 value, so
-/// a number entered in Arabic-Indic digits is the number entered in ASCII digits.
+/// Implements IDN-ACCT-004, REG-IDENT-001 and CONV-DESIGN-004. A number takes no
+/// Unicode form: digits of any script are mapped to their ASCII digits and what remains
+/// is the E.164 value, so a number entered in Arabic-Indic digits is the number entered
+/// in ASCII digits. A default instance was never read, so it has no E.164 form to give
+/// and no row can carry it.
 /// </remarks>
 public readonly record struct PhoneNumber
 {
@@ -27,7 +29,8 @@ public readonly record struct PhoneNumber
     /// The E.164 form, leading plus included, which is what is fingerprinted and
     /// compared.
     /// </summary>
-    public string Value => _value ?? string.Empty;
+    /// <exception cref="InvalidOperationException">The number was never set.</exception>
+    public string Value => _value ?? throw new InvalidOperationException("The number was never set.");
 
     /// <summary>
     /// Reads a number as it was entered and returns its E.164 form.
@@ -63,5 +66,6 @@ public readonly record struct PhoneNumber
     }
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">The number was never set.</exception>
     public override string ToString() => Value;
 }

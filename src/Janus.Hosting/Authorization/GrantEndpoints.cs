@@ -18,12 +18,17 @@ namespace Janus.Hosting.Authorization;
 /// </summary>
 /// <remarks>
 /// Implements AUTHZ-GRANT-001, AUTHZ-GRANT-003, AUTHZ-GRANT-004, OPS-CFG-007,
-/// LIB-API-005 and CONV-DESIGN-006. Each is one line to <see cref="IGrants"/>, which
-/// judges the permission, the step-up and the reason.
+/// LIB-API-005, CONV-CODE-006 and CONV-DESIGN-006. Each is one line to
+/// <see cref="IGrants"/>, which judges the permission, the step-up and what the reason
+/// says; a body missing a member it requires is refused before it is called.
 /// </remarks>
 internal static class GrantEndpoints
 {
     private static readonly IResult Nothing = TypedResults.NoContent();
+
+    // AUTHZ-GRANT-003: chapter 10 names the refusal of a grant or a revocation
+    // without a reason, so an absent one is answered by it rather than as malformed.
+    private static readonly Error Unreasoned = Error.From(ErrorCodes.GrantReasonRequired);
 
     /// <summary>
     /// Mounts them.
@@ -100,7 +105,12 @@ internal static class GrantEndpoints
         ArgumentNullException.ThrowIfNull(grants);
         ArgumentNullException.ThrowIfNull(browser);
 
-        (GrantRequest? request, string member) = body.Read();
+        if (body.Reason is not { Length: > 0 } reason)
+        {
+            return Answers.Refused(Unreasoned);
+        }
+
+        (GrantRequest? request, string member) = body.Read(reason);
 
         if (request is null)
         {
@@ -135,13 +145,18 @@ internal static class GrantEndpoints
         ArgumentNullException.ThrowIfNull(grants);
         ArgumentNullException.ThrowIfNull(browser);
 
+        if (body.Reason is not { Length: > 0 } reason)
+        {
+            return Answers.Refused(Unreasoned);
+        }
+
         return Answers.Of(
             await grants
                 .RevokeAsync(
                     AccessContext.Of(browser.Required.Subject),
                     browser.Required.Id,
                     new GrantId(id),
-                    body.Reason ?? string.Empty,
+                    reason,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);

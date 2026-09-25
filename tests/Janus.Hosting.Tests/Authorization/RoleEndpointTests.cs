@@ -240,6 +240,32 @@ public sealed class RoleEndpointTests : IAsyncLifetime
         Assert.Single(_deployment.RoleChanges.Changes);
     }
 
+    /// <summary>
+    /// CONV-CODE-006 AC2: a body missing the reason defining or removing a role requires
+    /// is refused naming it before the service is reached, so a caller the service would
+    /// refuse for want of the permission is answered for the body, and nothing changes.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC2_ABodyMissingAMemberIsRefusedBeforeTheServiceAsync()
+    {
+        (Browser caller, _) = await AuthorisedAsync();
+
+        Answer undefined = await caller.SendAsync(
+            "POST",
+            "/admin/roles",
+            ("name", "editor"),
+            ("permissions", Editing));
+        Answer unremoved = await caller.SendAsync("DELETE", "/admin/roles/" + SystemAdministrator, "{}");
+
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), undefined.Text("code"));
+        Assert.Equal("reason", Member(undefined));
+        Assert.Equal("reason", Member(unremoved));
+        Assert.Null(await _deployment.Roles.FindAsync(Editor, CancellationToken.None));
+        Assert.NotNull(await _deployment.Roles.FindAsync(SystemAdministrator, CancellationToken.None));
+        Assert.Empty(_deployment.RoleChanges.Changes);
+    }
+
     private static string Member(Answer answer)
     {
         Assert.Equal(StatusCodes.Status400BadRequest, answer.Status);

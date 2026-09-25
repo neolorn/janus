@@ -5,7 +5,8 @@ namespace Janus.Core.Tests;
 
 /// <summary>
 /// What a username may be: the profile of RFC 8265, narrowed to letters and digits and
-/// held to one script per word (REG-IDENT-001, REG-IDENT-009, IDN-ACCT-005).
+/// held to one script per word (REG-IDENT-001, REG-IDENT-009, IDN-ACCT-005,
+/// CONV-DESIGN-004).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class UsernameTests
@@ -100,13 +101,16 @@ public sealed class UsernameTests
         Assert.Equal(accepted, Username.TryParse(entered, out _));
 
     /// <summary>
-    /// An unset value reads as an empty string rather than throwing.
+    /// CONV-DESIGN-004 AC3: a username that was never read has no form, so reading one
+    /// fails where it is read rather than giving the empty text a store would write.
     /// </summary>
     [Fact]
-    public void Value_UnsetUsername_IsEmpty()
+    public void CONV_DESIGN_004_AC3_AnUnsetUsernameGivesNoText()
     {
-        Assert.Equal(string.Empty, default(Username).Value);
-        Assert.Equal(string.Empty, default(Username).ToString());
+        Username unset = default;
+
+        Assert.Throws<InvalidOperationException>(() => unset.Value);
+        Assert.Throws<InvalidOperationException>(unset.ToString);
     }
 
     /// <summary>

@@ -476,6 +476,31 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
         Assert.Empty(_deployment.Domains.Held);
     }
 
+    /// <summary>
+    /// CONV-CODE-006 AC2: a body missing a member adding, verifying or removing a domain
+    /// requires is refused naming the member before the service is reached, so a caller
+    /// the service would refuse for want of the permission is answered for the body,
+    /// and the lock holds nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC2_ABodyMissingAMemberIsRefusedBeforeTheServiceAsync()
+    {
+        Browser caller = await Flow.SignedInAsync(_deployment);
+
+        Answer unnamed = await caller.SendAsync("POST", PathOf(Branch), ("reason", "Locking the branch."));
+        Answer unreasoned = await caller.SendAsync("POST", PathOf(Branch), ("domain", Domain), ("reason", null));
+        Answer unverified = await caller.SendAsync("POST", PathOf(Branch) + "/" + Domain + "/verify", "{}");
+        Answer unremoved = await caller.SendAsync("DELETE", PathOf(Branch) + "/" + Domain, "{}");
+
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), unnamed.Text("code"));
+        Assert.Equal("domain", Member(unnamed));
+        Assert.Equal("reason", Member(unreasoned));
+        Assert.Equal("reason", Member(unverified));
+        Assert.Equal("reason", Member(unremoved));
+        Assert.Empty(_deployment.Domains.Held);
+    }
+
     private static string PathOf(OrganizationId organization) => "/admin/organizations/" + organization + "/domains";
 
     private static string PolicyOf(OrganizationId organization) => "/admin/organizations/" + organization + "/policy";

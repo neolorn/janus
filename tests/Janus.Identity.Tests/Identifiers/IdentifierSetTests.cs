@@ -9,7 +9,7 @@ namespace Janus.Identity.Tests.Identifiers;
 /// <summary>
 /// The rules that hold across an account's identifiers: one primary per kind, how many
 /// of a kind an account may hold, and who a security notice reaches
-/// (REG-IDENT-001, REG-IDENT-002, REG-IDENT-005).
+/// (REG-IDENT-001, REG-IDENT-002, REG-IDENT-005, CONV-DESIGN-004).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class IdentifierSetTests
@@ -413,6 +413,18 @@ public sealed class IdentifierSetTests
         Assert.Throws<InvalidOperationException>(() => set.Unverify(relayed.Id));
         Assert.Throws<InvalidOperationException>(() => set.Unverify(kept.Id));
         Assert.True(kept is { IsVerified: true, IsPersonal: true });
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-004 AC3: an address, a number or a username that was never read makes
+    /// no identifier, so no identifier a store could write carries one.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_004_AC3_AnUnsetValueMakesNoIdentifier()
+    {
+        Assert.Throws<InvalidOperationException>(() => Identifier.Email(Id(1), Ahmed, default, "ahmed@example.com", Noon));
+        Assert.Throws<InvalidOperationException>(() => Identifier.Phone(Id(2), Ahmed, default, "+201001234567", Noon));
+        Assert.Throws<InvalidOperationException>(() => Identifier.Username(Id(3), Ahmed, default, Noon));
     }
 
     private static IdentifierSet Empty() =>

@@ -555,9 +555,10 @@ public sealed class ModelTests
             "organization_domains.token",
             "organization_domains.verified_at",
 
-            // The organization of IDN-ORG-001, with the mark IDN-ORG-004 reads and
-            // the deletion window of IDN-ORG-003.
+            // The organization of IDN-ORG-001, with the mark IDN-ORG-004 reads, the
+            // deletion window of IDN-ORG-003 and the comparison key of IDN-ACCT-004.
             "organizations.administrative",
+            "organizations.canonical_name",
             "organizations.created_at",
             "organizations.deletion_requested_at",
             "organizations.erased_at",

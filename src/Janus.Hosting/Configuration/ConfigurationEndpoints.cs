@@ -17,9 +17,10 @@ namespace Janus.Hosting.Configuration;
 /// changing it.
 /// </summary>
 /// <remarks>
-/// Implements OPS-CFG-002, OPS-CFG-004, LIB-API-005 and CONV-DESIGN-006. Each is one
-/// line to <see cref="IConfigurationAdministration"/>, which judges the permission,
-/// the direction and the value.
+/// Implements OPS-CFG-002, OPS-CFG-004, LIB-API-005, CONV-CODE-006 and
+/// CONV-DESIGN-006. Each is one line to <see cref="IConfigurationAdministration"/>,
+/// which judges the permission, the direction and the value; a body missing a member
+/// it requires is refused before it is called.
 /// </remarks>
 internal static class ConfigurationEndpoints
 {
@@ -87,8 +88,16 @@ internal static class ConfigurationEndpoints
             return Answers.Malformed("value");
         }
 
-        // A missing reason is the service's to refuse, with the code chapter 09
-        // section 8 names for it rather than as a malformed request.
+        // A missing reason is refused with the code chapter 09 section 8 names for it,
+        // naming the key as the service names it, rather than as a malformed request.
+        if (body.Reason is not { Length: > 0 } reason)
+        {
+            return Answers.Refused(Error.From(
+                ErrorCodes.RestrictionReasonRequired,
+                "key",
+                JsonSerializer.SerializeToElement(known.ToString())));
+        }
+
         return Answers.Of(
             await administration
                 .ChangeAsync(
@@ -96,7 +105,7 @@ internal static class ConfigurationEndpoints
                     browser.Required.Id,
                     known,
                     value,
-                    body.Reason ?? string.Empty,
+                    reason,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);

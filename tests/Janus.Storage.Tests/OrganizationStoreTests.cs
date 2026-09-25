@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Identity.Organizations;
@@ -10,8 +11,8 @@ using Xunit;
 namespace Janus.Storage.Tests;
 
 /// <summary>
-/// Organizations and memberships as their rows carry them (IDN-ORG-001, IDN-ORG-003,
-/// IDN-ORG-004, IDN-MEM-001, IDN-MEM-002, OPS-DB-001).
+/// Organizations and memberships as their rows carry them (IDN-ACCT-004, IDN-ORG-001,
+/// IDN-ORG-003, IDN-ORG-004, IDN-MEM-001, IDN-MEM-002, OPS-DB-001).
 /// </summary>
 /// <remarks>
 /// The port implementations are tested against the aggregates they translate, with the
@@ -146,6 +147,78 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
 
         Assert.NotEqual(shouted, name);
         Assert.Equal(id, found.Id);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-004 AC3: the comparison key is written with the organization. Names that
+    /// differ only in width, in case and in composition are stored under one key, which
+    /// finds both, and each reads back in the form it was entered in (AC2); the chapters
+    /// make the key no uniqueness rule, so both stand.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ACCT_004_AC3_TheCanonicalKeyIsWrittenWithTheOrganizationAsync()
+    {
+        string suffix = Guid.NewGuid().ToString("N");
+        string wide = "Ａｃｍｅ Café " + suffix;
+        string shouted = "ACME CAFÉ " + suffix;
+
+        OrganizationId first = await CreateAsync(wide);
+        OrganizationId second = await CreateAsync(shouted);
+
+        await using StoreContext reading = database.Context();
+        string key = CanonicalForm.Of("acme café " + suffix);
+        List<OrganizationId> keyed = await reading.Organizations
+            .Where(organization => organization.CanonicalName == key)
+            .Select(organization => organization.Id)
+            .ToListAsync(TestContext.Current.CancellationToken);
+        Organization readFirst = Assert.IsType<Organization>(
+            await Store(reading).FindAsync(first, TestContext.Current.CancellationToken));
+        Organization readSecond = Assert.IsType<Organization>(
+            await Store(reading).FindAsync(second, TestContext.Current.CancellationToken));
+
+        Assert.Equal(2, keyed.Count);
+        Assert.Contains(first, keyed);
+        Assert.Contains(second, keyed);
+        Assert.Equal(wide, readFirst.Name);
+        Assert.Equal(shouted, readSecond.Name);
+        Assert.Equal(key, readFirst.CanonicalName);
+        Assert.Equal(key, readSecond.CanonicalName);
+    }
+
+    /// <summary>
+    /// IDN-ORG-003: the erasure writes the key of the identifier that replaces the name,
+    /// so no row keeps a key of the name it replaced.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ORG_003_TheErasureWritesNoKeyOfTheNameItReplacedAsync()
+    {
+        string name = Fresh("Acme Trading");
+        OrganizationId id = await CreateAsync(name);
+
+        await using (StoreContext deleting = database.Context())
+        {
+            OrganizationStore store = Store(deleting);
+            Organization organization = Assert.IsType<Organization>(
+                await store.FindAsync(id, TestContext.Current.CancellationToken));
+            organization.RequestDeletion(Noon);
+            organization.RecordErasure(Noon + Window, Window);
+
+            await store.RecordAsync(organization, TestContext.Current.CancellationToken);
+            await deleting.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        string replaced = CanonicalForm.Of(name);
+
+        await using StoreContext reading = database.Context();
+        OrganizationRecord row = await reading.Organizations
+            .SingleAsync(organization => organization.Id == id, TestContext.Current.CancellationToken);
+
+        Assert.Equal(CanonicalForm.Of(id.ToString()), row.CanonicalName);
+        Assert.False(await reading.Organizations.AnyAsync(
+            organization => organization.CanonicalName == replaced,
+            TestContext.Current.CancellationToken));
     }
 
     /// <summary>

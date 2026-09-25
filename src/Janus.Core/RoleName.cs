@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
 
 namespace Janus.Core;
@@ -7,7 +8,10 @@ namespace Janus.Core;
 /// The name of a role: a bundle of permissions held as data, so that adding one is a
 /// row rather than a deployment.
 /// </summary>
-/// <remarks>Implements AUTHZ-GRANT-004, chapter 10 section 3, CONV-DESIGN-004.</remarks>
+/// <remarks>
+/// Implements AUTHZ-GRANT-004, chapter 10 section 3, CONV-DESIGN-004. A default
+/// instance was never read, so it has no text to give and no row can carry it.
+/// </remarks>
 public readonly partial record struct RoleName
 {
     private readonly string? _value;
@@ -53,8 +57,13 @@ public readonly partial record struct RoleName
     /// <summary>
     /// The name as it crosses the boundary.
     /// </summary>
-    /// <returns>The name, or an empty string for an unset name.</returns>
-    public override string ToString() => _value ?? string.Empty;
+    /// <returns>The name.</returns>
+    /// <exception cref="InvalidOperationException">The role name was never set.</exception>
+    [SuppressMessage(
+        "Design",
+        "CA1065:Do not raise exceptions in unexpected locations",
+        Justification = "CONV-DESIGN-004 AC3: an unset value has no text, and the empty text it would give is what a store writes.")]
+    public override string ToString() => _value ?? throw new InvalidOperationException("The role name was never set.");
 
     [GeneratedRegex("^[a-z][a-z0-9]*(-[a-z0-9]+)*$", RegexOptions.CultureInvariant)]
     private static partial Regex Shape();

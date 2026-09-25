@@ -420,6 +420,50 @@ public sealed class GroupEndpointTests : IAsyncLifetime
         Assert.Empty(await _deployment.Groups.MembersAsync(tellers, CancellationToken.None));
     }
 
+    /// <summary>
+    /// CONV-CODE-006 AC2: a body missing a member creating or removing a group, or
+    /// changing its members, requires is refused naming the member before the service
+    /// is reached, so a caller the service would refuse for want of the permission is
+    /// answered for the body, and nothing changes.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC2_ABodyMissingAMemberIsRefusedBeforeTheServiceAsync()
+    {
+        Group tellers = await HeldAsync(Branch, "tellers");
+        Browser caller = await Flow.SignedInAsync(_deployment);
+        string members = "/admin/groups/" + tellers.Id + "/members";
+
+        Answer unnamed = await caller.SendAsync(
+            "POST",
+            "/admin/groups",
+            ("organization", Branch.Value),
+            ("reason", "Needs it."));
+        Answer unreasoned = await caller.SendAsync(
+            "POST",
+            "/admin/groups",
+            ("organization", Branch.Value),
+            ("name", "cashiers"));
+        Answer unremoved = await caller.SendAsync("DELETE", "/admin/groups/" + tellers.Id, "{}");
+        Answer unjoined = await caller.SendAsync(
+            "POST",
+            members,
+            ("subjectType", "user"),
+            ("subjectId", Holder),
+            ("reason", null));
+        Answer unleft = await caller.SendAsync("DELETE", members, ("subjectType", "user"), ("subjectId", Holder));
+
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), unnamed.Text("code"));
+        Assert.Equal("name", Member(unnamed));
+        Assert.Equal("reason", Member(unreasoned));
+        Assert.Equal("reason", Member(unremoved));
+        Assert.Equal("reason", Member(unjoined));
+        Assert.Equal("reason", Member(unleft));
+        Assert.NotNull(await _deployment.Groups.FindAsync(tellers.Id, CancellationToken.None));
+        Assert.Empty(await _deployment.Groups.MembersAsync(tellers.Id, CancellationToken.None));
+        Assert.Empty(_deployment.GroupChanges.Changes);
+    }
+
     private static GrantSubject User => GrantSubject.Of(new SubjectId(Holder));
 
     private static string Member(Answer answer)

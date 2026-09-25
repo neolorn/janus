@@ -4,6 +4,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Core;
@@ -17,7 +18,7 @@ namespace Janus.Cli.Tests;
 /// What the <c>bootstrap</c> command leaves in a fresh deployment's database: the first
 /// organization and administrator with an enrolment link, the reserved
 /// <c>emergency</c> account, the restore test's canary, and no credential of any kind
-/// (OPS-BOOT-001, OPS-BOOT-002).
+/// (OPS-BOOT-001, OPS-BOOT-002, PRIV-MINOR-001).
 /// </summary>
 [Trait("kind", "integration")]
 public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFixture<BootstrappedDeployment>
@@ -85,6 +86,33 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
         Assert.Equal(ErrorCodes.IdentifierMixedScript.ToString(), Code(refused));
         Assert.Equal("email", Member(refused));
         Assert.Equal(before, await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM identity.accounts"));
+    }
+
+    /// <summary>
+    /// IDN-ACCT-005 AC3 and IDN-ACCT-004: the organization's name is judged on its
+    /// comparison key, so a word that mixes scripts once its circled letters are
+    /// normalized is refused by the code that names the mixing, against the member it
+    /// was given as, and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ACCT_005_AC3_BootstrapRefusesAMixedOrganizationNameByItsOwnCodeAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+        var counted = new CommandDefinition("SELECT count(*) FROM identity.organizations", cancellationToken: cancellationToken);
+        long before = await connection.ExecuteScalarAsync<long>(counted);
+        List<string> arguments = [.. Invocation.Bootstrap()];
+        arguments[arguments.IndexOf("--organization") + 1] = "аⓓⓜⓘⓝ";
+
+        Invocation refused = await Invocation.PipedAsync(arguments, Invocation.Keys(deployment.ConnectionString));
+
+        Assert.Equal(1, refused.ExitCode);
+        Assert.Empty(refused.Output);
+        Assert.Equal(ErrorCodes.IdentifierMixedScript.ToString(), Code(refused));
+        Assert.Equal("organization", Member(refused));
+        Assert.Equal(before, await connection.ExecuteScalarAsync<long>(counted));
     }
 
     /// <summary>
@@ -249,6 +277,68 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
             """,
             new { Subject = canary }));
         Assert.Empty(await RolesAsync(connection, canary));
+    }
+
+    /// <summary>
+    /// PRIV-MINOR-001 AC3: under the default <c>registration.adultaffirmation</c> of
+    /// <c>required</c>, the first administrator is created having affirmed, derived from
+    /// the date the command was given, with no terms step recorded; the only accounts
+    /// that carry no answer are the reserved account and the canary, which no person
+    /// answers for.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_MINOR_001_AC3_TheAdministratorBootstrapCreatesHasAffirmedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        Guid administrator = await connection.QuerySingleAsync<Guid>(new CommandDefinition(
+            "SELECT holder FROM identity.mailboxes",
+            cancellationToken: cancellationToken));
+        Guid emergency = await connection.QuerySingleAsync<Guid>(new CommandDefinition(
+            "SELECT subject FROM identity.accounts WHERE emergency",
+            cancellationToken: cancellationToken));
+        var canary = Guid.Parse(await connection.QuerySingleAsync<string>(new CommandDefinition(
+            "SELECT value FROM identity.settings WHERE key = @Key",
+            new { Key = Settings.BackupRestoreTestCanary.Key.ToString() },
+            cancellationToken: cancellationToken)));
+
+        (bool? Affirmed, string? Group, bool Answered, string? Terms) answer = await connection
+            .QuerySingleAsync<(bool?, string?, bool, string?)>(new CommandDefinition(
+                "SELECT adult_affirmed, age_group, answered_age_at IS NOT NULL, terms_version FROM identity.accounts WHERE subject = @Subject",
+                new { Subject = administrator },
+                cancellationToken: cancellationToken));
+        IReadOnlyList<(Guid Subject, bool Answered)> unaffirmed = [.. await connection.QueryAsync<(Guid, bool)>(new CommandDefinition(
+            "SELECT subject, answered_age_at IS NOT NULL FROM identity.accounts WHERE adult_affirmed IS NOT TRUE",
+            cancellationToken: cancellationToken))];
+
+        Assert.Equal((true, null, true, null), answer);
+        Assert.Equal(2, unaffirmed.Count);
+        Assert.Contains((emergency, false), unaffirmed);
+        Assert.Contains((canary, false), unaffirmed);
+    }
+
+    /// <summary>
+    /// PRIV-MINOR-001 AC2: with <c>profile.dateofbirth</c> off, as a fresh deployment has
+    /// it, the date the command was given is not stored and no record carries one.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_MINOR_001_AC2_WithTheDateOffBootstrapStoresNoDateAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        Assert.Equal(0, await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT count(*) FROM identity.profiles WHERE enc_date_of_birth IS NOT NULL",
+            cancellationToken: cancellationToken)));
+        Assert.Equal(0, await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT count(*) FROM identity.audit_records WHERE details::text LIKE @Date",
+            new { Date = "%" + Invocation.DateOfBirth + "%" },
+            cancellationToken: cancellationToken)));
     }
 
     /// <summary>

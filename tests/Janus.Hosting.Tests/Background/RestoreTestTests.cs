@@ -321,6 +321,9 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
                 canary,
                 [new NewIdentifier(IdentifierId.New(new FixedTime(at)), IdentifierKind.Email, address, parsed.Value, Locked: false, at)],
                 name,
+                adultAffirmed: null,
+                dateOfBirth: null,
+                group: null,
                 at,
                 TestContext.Current.CancellationToken);
         }

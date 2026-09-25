@@ -21,11 +21,11 @@ namespace Janus.Hosting.Organizations;
 /// </summary>
 /// <remarks>
 /// Implements IDN-ORG-002, IDN-ORG-003, IDN-ORG-004, IDN-ORG-006, REG-DOM-001,
-/// IDN-LIFE-009a, IDN-MEM-001, REG-INV-001, REG-MAIL-003, AUTH-STEP-002a, LIB-API-005
-/// and CONV-DESIGN-006.
+/// IDN-LIFE-009a, IDN-MEM-001, REG-INV-001, REG-MAIL-003, AUTH-STEP-002a, LIB-API-005,
+/// CONV-CODE-006 and CONV-DESIGN-006.
 /// Each is one line to <see cref="IOrganizations"/>, <see cref="IOrganizationDomains"/>
-/// or <see cref="IInvitations"/>, which judge the permission, the step-up and the
-/// reason.
+/// or <see cref="IInvitations"/>, which judge the permission, the step-up and what the
+/// reason says; a body missing a member it requires is refused before any is called.
 /// </remarks>
 internal static class OrganizationEndpoints
 {
@@ -75,12 +75,22 @@ internal static class OrganizationEndpoints
         ArgumentNullException.ThrowIfNull(organizations);
         ArgumentNullException.ThrowIfNull(browser);
 
+        if (body.Name is not { Length: > 0 } name)
+        {
+            return Answers.Malformed("name");
+        }
+
+        if (body.Reason is not { Length: > 0 } reason)
+        {
+            return Answers.Malformed("reason");
+        }
+
         return Answers.Of(
             await organizations
                 .CreateAsync(
                     AccessContext.Of(browser.Required.Subject),
-                    body.Name ?? string.Empty,
-                    body.Reason ?? string.Empty,
+                    name,
+                    reason,
                     cancellationToken)
                 .ConfigureAwait(false),
             created => TypedResults.Json(
@@ -101,13 +111,18 @@ internal static class OrganizationEndpoints
         ArgumentNullException.ThrowIfNull(organizations);
         ArgumentNullException.ThrowIfNull(browser);
 
+        if (body.Reason is not { Length: > 0 } reason)
+        {
+            return Answers.Malformed("reason");
+        }
+
         return Answers.Of(
             await organizations
                 .RequestDeletionAsync(
                     AccessContext.Of(browser.Required.Subject),
                     browser.Required.Id,
                     new OrganizationId(id),
-                    body.Reason ?? string.Empty,
+                    reason,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
@@ -124,13 +139,18 @@ internal static class OrganizationEndpoints
         ArgumentNullException.ThrowIfNull(organizations);
         ArgumentNullException.ThrowIfNull(browser);
 
+        if (body.Reason is not { Length: > 0 } reason)
+        {
+            return Answers.Malformed("reason");
+        }
+
         return Answers.Of(
             await organizations
                 .CancelDeletionAsync(
                     AccessContext.Of(browser.Required.Subject),
                     browser.Required.Id,
                     new OrganizationId(id),
-                    body.Reason ?? string.Empty,
+                    reason,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
@@ -223,14 +243,24 @@ internal static class OrganizationEndpoints
         ArgumentNullException.ThrowIfNull(domains);
         ArgumentNullException.ThrowIfNull(browser);
 
+        if (body.Domain is not { Length: > 0 } domain)
+        {
+            return Answers.Malformed("domain");
+        }
+
+        if (body.Reason is not { Length: > 0 } reason)
+        {
+            return Answers.Malformed("reason");
+        }
+
         return Answers.Of(
             await domains
                 .AddDomainAsync(
                     AccessContext.Of(browser.Required.Subject),
                     browser.Required.Id,
                     new OrganizationId(id),
-                    body.Domain ?? string.Empty,
-                    body.Reason ?? string.Empty,
+                    domain,
+                    reason,
                     cancellationToken)
                 .ConfigureAwait(false),
             added => TypedResults.Json(
@@ -252,14 +282,19 @@ internal static class OrganizationEndpoints
         ArgumentNullException.ThrowIfNull(domains);
         ArgumentNullException.ThrowIfNull(browser);
 
+        if (body.Reason is not { Length: > 0 } reason)
+        {
+            return Answers.Malformed("reason");
+        }
+
         return Answers.Of(
             await domains
                 .VerifyDomainAsync(
                     AccessContext.Of(browser.Required.Subject),
                     browser.Required.Id,
                     new OrganizationId(id),
-                    domain ?? string.Empty,
-                    body.Reason ?? string.Empty,
+                    domain,
+                    reason,
                     cancellationToken)
                 .ConfigureAwait(false),
             verified => TypedResults.Json(
@@ -283,14 +318,19 @@ internal static class OrganizationEndpoints
         ArgumentNullException.ThrowIfNull(domains);
         ArgumentNullException.ThrowIfNull(browser);
 
+        if (body.Reason is not { Length: > 0 } reason)
+        {
+            return Answers.Malformed("reason");
+        }
+
         return Answers.Of(
             await domains
                 .RemoveDomainAsync(
                     AccessContext.Of(browser.Required.Subject),
                     browser.Required.Id,
                     new OrganizationId(id),
-                    domain ?? string.Empty,
-                    body.Reason ?? string.Empty,
+                    domain,
+                    reason,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);

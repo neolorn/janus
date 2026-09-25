@@ -629,6 +629,35 @@ public sealed class GrantEndpointTests : IAsyncLifetime
         Assert.Equal("subjectId", Member(unnamed));
     }
 
+    /// <summary>
+    /// CONV-CODE-006 AC2 and AUTHZ-GRANT-003: a grant or a revocation whose body carries
+    /// no reason is refused with the code chapter 10 gives before the service is
+    /// reached, so a caller the service would refuse for want of the permission is
+    /// answered for the body, and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC2_ABodyMissingItsReasonIsRefusedBeforeTheServiceAsync()
+    {
+        (Browser caller, _) = await AuthorisedAsync(Branch);
+
+        Answer ungranted = await caller.SendAsync(
+            "POST",
+            "/admin/grants",
+            ("subjectType", "user"),
+            ("subjectId", Holder),
+            ("resourceType", "document"),
+            ("resourceId", "d-1"),
+            ("role", Reader.ToString()));
+        Answer unrevoked = await caller.SendAsync("DELETE", "/admin/grants/" + Guid.NewGuid(), "{}");
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, ungranted.Status);
+        Assert.Equal(ErrorCodes.GrantReasonRequired.ToString(), ungranted.Text("code"));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, unrevoked.Status);
+        Assert.Equal(ErrorCodes.GrantReasonRequired.ToString(), unrevoked.Text("code"));
+        Assert.Empty(await HeldAsync(Branch));
+    }
+
     private static Task<Answer> ReadAsync(Browser administrator, string subjectType, string subjectId) =>
         administrator.SendAsync(
             "GET",

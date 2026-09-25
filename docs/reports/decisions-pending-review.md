@@ -17023,6 +17023,286 @@ performs the gate call before any load or write, except those that watch or main
 what the gate reads (read-volume counting, derivation refresh) and those whose authority
 is a presented token."
 
+---
+
+## 413. An organization name's comparison key is stored beside it and judged, and makes no uniqueness rule
+
+**Phase 10 · 2026-09-25 · Tier 2 · IDN-ACCT-004 AC3, IDN-ACCT-005 AC3, IDN-ORG-001, OPS-MIG-005 AC1**
+
+*The question.* IDN-ACCT-004 names organization names among what is normalized at write
+time, with `NFKC_Casefold` "as their comparison key", and AC3 lists organization
+creation. The code stored the trimmed name under `identity_ci`, with no key. The
+chapters do not say:
+
+- whether two organizations whose names share a key may coexist;
+- whether IDN-ACCT-005 judges an organization name.
+
+*The readings.*
+
+1. The key is a uniqueness rule: a second organization with the same key is refused.
+2. The key is the comparison key only.
+   - It is stored beside the name, and the entered form is kept for display.
+   - The IDN-ACCT-005 rule is enforced on the key.
+   - No uniqueness follows.
+3. No stored key: the collation stands in for it.
+
+*Chosen: 2.*
+
+- Reading 1 needs a refusal code chapter 10 does not have, and a rule IDN-ORG-001 does
+  not state.
+- Reading 3 leaves AC3 unmet: a collation is not `NFKC_Casefold`. It does not fold
+  width, compatibility forms or default ignorables.
+- Under reading 2:
+  - The entity derives the key from the name, so no path writes a stale key and an
+    erasure replaces both.
+  - The column is added nullable, per OPS-MIG-005 AC1, and the store writes it on every
+    create and record.
+  - The key takes no collation: it is already folded, so code points compare it.
+
+*Tests that pin it.* The eight tests under item 1 above.
+
+*Chapter text that should change.*
+
+- IDN-ACCT-004 could say that an organization name's key is a comparison key, stored
+  beside the name, and implies no uniqueness.
+- IDN-ACCT-005 could list organization names among what it judges.
+- OPS-MIG-005 could name the contract step that makes `canonical_name` not null in a
+  later release.
+
+---
+
+## 414. A missing body member is refused at the endpoint by the code chapter 10 names for it, and three members stay optional
+
+**Phase 10 · 2026-09-25 · Tier 2 · CONV-CODE-006 AC2, API-CONV-002, AUTHZ-GRANT-003, AUTH-RECOV-002, AUTH-ABUSE-004, OPS-CFG-002**
+
+*The question.* CONV-CODE-006 AC2 has every endpoint reject a malformed body with a `10`
+code before calling a service, and API-CONV-002 answers a missing member as
+`api.request.malformed`. But:
+
+- chapter 10 also names a refusal of its own for a missing reason on a grant, a
+  revocation, a recovery approval, a restriction grant and a configuration change, and
+  the services answered with it;
+- some members are not plainly required.
+
+*The readings.*
+
+1. Every missing member is `api.request.malformed`, naming it.
+2. Missing members are answered by kind:
+   - a member whose refusal chapter 10 names is answered at the endpoint by that code,
+     with the details the service gave it;
+   - every other missing member is `api.request.malformed`, naming it;
+   - a member the chapters do not require stays optional.
+
+*Chosen: 2.*
+
+- It keeps the codes clients already receive for a missing reason, and moves the refusal
+  ahead of the permission check, which is what AC2 asks.
+- Three members stay as they were:
+  - the publication `text`, because the service's handling of an empty text is what the
+    PRIV-CONS-006 AC3 alert reads;
+  - the detail of a privacy request an administrator enters, which 09 does not list as
+    required;
+  - the reason on a restriction edit or removal, which AUTH-ABUSE-004 requires only on a
+    loosening, and only the service can tell a loosening.
+
+*Tests that pin it.* The ten tests under item 2 above.
+
+*Chapter text that should change.*
+
+- CONV-CODE-006 or API-CONV-002 could say that a missing member whose refusal `10` names
+  is answered by that code at the endpoint.
+- 09 could mark the three optional members.
+
+---
+
+## 415. Bootstrap asks the first administrator's date of birth and refuses one under age; the reserved accounts carry no answer
+
+**Phase 10 · 2026-09-25 · Tier 3 · PRIV-MINOR-001 AC1 to AC3, REG-PROF-002, OPS-BOOT-001, OPS-BOOT-002, DR-007, REG-SESS-007**
+
+*The question.* PRIV-MINOR-001 AC3 says that under `registration.adultaffirmation` =
+`required`, "no account exists whose subject has not affirmed". Under the default
+`required`, bootstrap made three accounts with `adult_affirmed` null:
+
+- the first administrator;
+- the emergency account (OPS-BOOT-002);
+- the DR-007 canary.
+
+Bootstrap never asks the age question, and the affirmation is derived from a date
+(REG-PROF-002). This is Tier 3 because it touches the age gate.
+
+*The readings.*
+
+1. Record an affirmation for every account bootstrap makes.
+2. Ask only the person:
+   - ask the administrator, a person, the age screen's question on the command line;
+   - derive the affirmation as registration does, and refuse an under-age date under
+     `required`;
+   - give the emergency account and the canary, which no person answers for, no
+     answer.
+3. Leave the accounts as they are, and read AC3 as covering registration only.
+
+*Chosen: 2, the strictest reading that records nothing nobody said.*
+
+- Reading 1 writes an answer nobody gave. Entry 313 refused that for the same reason on
+  invitations.
+- Reading 3 leaves unaffirmed the one person bootstrap creates.
+- How reading 2 is applied:
+  - The argument is required whatever the settings say, so nothing is decided from a
+    default.
+  - An under-age administrator is refused as `identity.profile.underage` before
+    anything is written.
+  - Under `off`, the band is recorded, as the age screen records it.
+  - The date is kept only where `profile.dateofbirth` is on (AC2).
+  - No terms step runs, so the account names no terms or notice version rather than an
+    empty one.
+- The test pins that the emergency account and the canary are the only accounts without
+  an answer, and that neither carries one.
+
+*Tests that pin it.* The seven tests under item 3 above.
+
+*Chapter text that should change.*
+
+- PRIV-MINOR-001 AC3 could except the reserved emergency account and the DR-007 canary.
+- OPS-BOOT-001 could name the date-of-birth argument and its form.
+- REG-SESS-007 could say whether the first administrator is asked to accept the terms at
+  first sign-in.
+
+---
+
+## 416. A full scan includes an index read end to end, and the reverse lookup is rewritten rather than indexed again
+
+**Phase 10 · 2026-09-25 · Tier 2 · OPS-DB-003 AC1, OPS-DB-003 AC2, AUTHZ-TEST-002 AC2**
+
+*The question.* OPS-DB-003 AC2 says: "Reverse lookup completes without a full scan." The
+plan of the old query showed no `Seq Scan`, but it read `ix_grants_live_resource` from
+end to end under a filter. This raises three questions:
+
+- Is that a full scan?
+- If it is, should the query change or an index be added?
+- AUTHZ-TEST-002 AC2 and OPS-DB-003 AC1 were decided by one method. Can the two be
+  split?
+
+*The readings.*
+
+1. A full scan is a `Seq Scan` only. The old plan passes.
+2. A full scan is any read of a table, or of its index, from end to end. Every read of
+   the grants index must carry an `Index Cond`.
+
+*Chosen: 2.*
+
+- An index walked whole under a filter is the table read whole by another name, and its
+  cost grows with the table.
+- The query is rewritten as two disjoint halves, because each half gives the planner a
+  condition. An added index would not have removed the OR.
+- The two criteria are separable, so the method is split:
+  - AUTHZ-TEST-002 AC2 asks for "an index rather than a sequential scan";
+  - OPS-DB-003 AC1 names the partial index over live grants, which is read from the
+    catalogue.
+
+*Tests that pin it.*
+
+- `VolumeTests.OPS_DB_003_AC2_TheReverseLookupReadsNoTableWhole`
+- `VolumeTests.OPS_DB_003_AC1_ThePrimaryPredicateUsesThePartialIndexOverLiveGrantsAsync`
+- `VolumeTests.AUTHZ_TEST_002_AC2_ThePermissionPredicateUsesAnIndex`
+
+*Chapter text that should change.* OPS-DB-003 AC2 could say that an index read end to
+end counts as a full scan.
+
+---
+
+## 417. The case-insensitive collation goes on the two columns OPS-DB-001 names, and the later person-spelled columns are left to the owner
+
+**Phase 10 · 2026-09-25 · Tier 2 · INF-DB-001 AC3, OPS-DB-001, D-155, AUTH-FACT-001 AC5, AUTHZ-GROUP-001**
+
+*The question.* OPS-DB-001's values apply `identity_ci` to "the plaintext text columns a
+person spells and the library compares or sorts: organization names and locked domain
+names today; a column added later that meets that description takes it (D-155)". The
+locked domain had no collation. Two columns added after D-155 also meet that
+description:
+
+- `groups.name`, which is sorted in `GroupStore.InAsync`;
+- `authenticators.label`, which is unique per subject and factor in
+  `ux_authenticators_label`.
+
+*The readings.*
+
+1. Only the two columns the chapter names.
+2. Those two, and every later column that meets the description: today `groups.name`
+   and `authenticators.label`.
+
+*Chosen: 1, with reading 2 put to the owner.*
+
+- On the label, reading 2 is more than a collation change:
+  - `AccountService` and `CredentialService` judge a held label in memory, ordinally,
+    before the database sees it.
+  - A case-insensitive index would turn `Laptop` beside `laptop` into a failed commit
+    instead of `auth.credential.labelinvalid`.
+  - The index rebuild fails the migration on any account that already holds two labels
+    differing only in case.
+  - It needs AUTH-FACT-001 AC5 to say whether a label is held once regardless of case,
+    which the chapter does not say.
+- `groups.name` is only sorted, and the database's ICU locale already sorts it by
+  Unicode rules.
+- The catalogue test pins the list both ways, so either later choice shows up as a
+  deliberate edit.
+
+*Tests that pin it.* The two tests under item 5 above.
+
+*Chapter text that should change.*
+
+- OPS-DB-001's values could name `groups.name` and `authenticators.label`, one way or
+  the other.
+- AUTH-FACT-001 AC5 could say whether a label is unique regardless of case.
+
+---
+
+## 418. A default instance of a value with rules gives no text, and fails where it is first read
+
+**Phase 10 · 2026-09-25 · Tier 2 · CONV-DESIGN-004 AC3, CONV-ERR-002**
+
+*The question.* CONV-DESIGN-004 AC3 says: "Constructing an invalid canonical value is a
+compile-time or immediate runtime failure, never a stored row."
+
+- C# gives every struct a default instance, for which no constructor runs.
+- `default(EmailAddress)` and the others answered `""`, and nothing kept that text out
+  of a row.
+- With the old types, a role named `""` and a resource with identifier `""` were
+  written.
+
+*The readings.*
+
+1. The value type refuses to give text for an unset instance, at every accessor. It
+   then fails at its first read, whatever path is writing.
+2. Each store, or each EF conversion, refuses an empty text.
+3. Database checks (`<> ''`) on the plaintext columns.
+
+*Chosen: 1.*
+
+- A default instance cannot fail at construction. Its first read is the earliest
+  failure there is, and on every path it comes before any write:
+  - EF conversions;
+  - Dapper parameters;
+  - fingerprints and the field cipher;
+  - audit details.
+- Reading 2 has to find every writer. Storage alone has 85 `ToString()` calls in 28
+  files outside the migrations, though not all of them are on these types.
+- Reading 3 cannot see through a fingerprint or a ciphertext, which is where the email,
+  phone and names are kept.
+- The shape is already the library's own: `Result` throws on an outcome never set
+  (CONV-ERR-002).
+- The throw from `ToString()` goes against `CA1065`'s general rule. It is suppressed,
+  with its reason, on seven types.
+- The change is behavioural only. No release is tagged, so no consumer holds the empty
+  reading.
+- `SendReference` and `OpaqueToken` are drawn values, not values with rules, and the
+  `Guid` identifier wrappers lie outside AC3 (finding 10).
+
+*Tests that pin it.* The ten tests under item 6 above.
+
+*Chapter text that should change.* CONV-DESIGN-004 AC3 could say that a value type's
+default instance, which the language cannot forbid, gives no text and fails where it is
+first read.
+
 
 # Rows for chapter 10
 
