@@ -27,7 +27,7 @@ namespace Janus.Authorization.Gate;
 /// <param name="exports">What an export operation asks beyond what the grants allow.</param>
 /// <param name="derived">Which of the host's relationships confer what is being asked.</param>
 /// <param name="lookup">Who can access a record, for the view that asks.</param>
-/// <param name="consents">What the caller has consented to, for the purpose the action serves.</param>
+/// <param name="consents">What a record's data subject consented to, for the purpose the action serves.</param>
 /// <param name="administrative">Which organization a support role resolves a refusal in.</param>
 /// <param name="time">The clock liveness is read against.</param>
 /// <remarks>
@@ -490,8 +490,8 @@ internal sealed class AccessGate(
             await derivedBy(first.Organization, cancellationToken).ConfigureAwait(false);
 
         // AUTHZ-GATE-005 AC1, PRIV-SENS-002 AC1: a consent belongs to the record's data
-        // subject, so it is read once for each subject on the page rather than once per
-        // row, and a record the library holds no row for has no subject to read.
+        // subject, so the consents of every subject on the page are read in one query,
+        // and a record the library holds no row for has no subject to read.
         var whose = new Dictionary<ResourceId, SubjectId?>();
 
         foreach (RegisteredResource row in registered)
@@ -517,16 +517,9 @@ internal sealed class AccessGate(
             }
         }
 
-        var unconsented = new Dictionary<SubjectId, IReadOnlySet<Permission>>();
-
-        foreach (ResourceId resource in resources)
-        {
-            if (Whose(whose, resource) is SubjectId subject && !unconsented.ContainsKey(subject))
-            {
-                unconsented[subject] = await UnconsentedAsync(
-                    subject, permissions, cancellationToken).ConfigureAwait(false);
-            }
-        }
+        IReadOnlyDictionary<SubjectId, IReadOnlySet<Permission>> unconsented = await UnconsentedAsync(
+            [.. whose.Values.OfType<SubjectId>().Distinct()], permissions, cancellationToken)
+            .ConfigureAwait(false);
 
         return Result.Success<IReadOnlyList<Capability>>(
         [
@@ -559,6 +552,51 @@ internal sealed class AccessGate(
             {
                 _ = outstanding.Add(permission);
             }
+        }
+
+        return outstanding;
+    }
+
+    // AUTHZ-GATE-005 AC1: what each subject on a page has not consented to, from one
+    // read of every subject's records for every consent-based purpose asked, decided
+    // as the single check decides it.
+    private async ValueTask<IReadOnlyDictionary<SubjectId, IReadOnlySet<Permission>>> UnconsentedAsync(
+        IReadOnlyCollection<SubjectId> dataSubjects,
+        IReadOnlyList<Permission> permissions,
+        CancellationToken cancellationToken)
+    {
+        var asked = new Dictionary<Permission, (string Purpose, ConsentKind Required)>();
+
+        foreach (Permission permission in permissions)
+        {
+            if (model.PurposeOf(permission) is string purpose
+                && model.Processing.Find(purpose) is { Consent: ConsentKind required })
+            {
+                asked[permission] = (purpose, required);
+            }
+        }
+
+        IReadOnlyDictionary<SubjectId, IReadOnlyList<ConsentRecord>> held =
+            dataSubjects.Count == 0 || asked.Count == 0
+                ? new Dictionary<SubjectId, IReadOnlyList<ConsentRecord>>()
+                : await consents
+                    .OfAsync(dataSubjects, [.. asked.Values.Select(each => each.Purpose).Distinct()], cancellationToken)
+                    .ConfigureAwait(false);
+
+        var outstanding = new Dictionary<SubjectId, IReadOnlySet<Permission>>();
+
+        foreach (SubjectId subject in dataSubjects)
+        {
+            IReadOnlyList<ConsentRecord> records = held.TryGetValue(subject, out IReadOnlyList<ConsentRecord>? found)
+                ? found
+                : [];
+
+            outstanding[subject] = new HashSet<Permission>(
+                asked
+                    .Where(each => Unconsented(
+                        each.Value.Required,
+                        records.FirstOrDefault(record => record.Purpose == each.Value.Purpose)) is not null)
+                    .Select(each => each.Key));
         }
 
         return outstanding;
@@ -879,7 +917,13 @@ internal sealed class AccessGate(
             .OfAsync(subject, purpose, cancellationToken)
             .ConfigureAwait(false);
 
-        return held switch
+        return Unconsented(required, held);
+    }
+
+    // PRIV-SENS-002 AC1, PRIV-CONS-004 AC1, PRIV-CONS-007 AC4: what the subject's record
+    // for the purpose leaves outstanding, if anything.
+    private static ErrorCode? Unconsented(ConsentKind required, ConsentRecord? held) =>
+        held switch
         {
             null or { WithdrawnAt: not null } => ErrorCodes.ConsentRequired,
             { SupersededAt: not null } => ErrorCodes.ConsentSuperseded,
@@ -887,7 +931,6 @@ internal sealed class AccessGate(
                 ErrorCodes.ConsentWrittenRequired,
             _ => null,
         };
-    }
 
     private static Result<IReadOnlyList<Capability>> Nothing(IReadOnlyList<ResourceId> resources) =>
         Result.Success<IReadOnlyList<Capability>>(

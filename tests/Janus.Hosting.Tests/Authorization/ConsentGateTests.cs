@@ -303,6 +303,64 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
         Assert.Null(await RefusalAsync(acting, HostPermissions.Read));
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-005 AC1, PRIV-SENS-002 AC1: a page whose records belong to twelve
+    /// data subjects reads their consents in one query, so it costs the statements a
+    /// page of one record costs, and each record still carries the residual its own
+    /// subject's consent leaves.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_005_AC1_APageReadsTheConsentsOfEverySubjectOnItOnceAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        RoleName role = await deployment.BeginAsync(
+            [HostPermissions.Read, HostPermissions.Recommend],
+            cancellationToken);
+        SubjectId staff = await deployment.AccountAsync(cancellationToken);
+        ResourceReference workspace = Reference(Workspace);
+
+        await deployment.RegisterAsync(workspace, containedIn: null, cancellationToken);
+        await deployment.GrantAsync(
+            GrantSubject.Of(staff),
+            role,
+            workspace,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        List<ResourceId> page = [];
+        HashSet<ResourceId> consented = [];
+
+        for (int each = 0; each < 12; each++)
+        {
+            SubjectId customer = await deployment.AccountAsync(cancellationToken);
+            ResourceReference record = Reference(Document);
+
+            await deployment.RegisterAsync(record, workspace, cancellationToken, customer);
+            page.Add(record.Id);
+
+            if (each % 2 == 0)
+            {
+                await RecordAsync(customer, Held(ConsentKind.Written));
+                _ = consented.Add(record.Id);
+            }
+        }
+
+        (IReadOnlyList<Capability> one, int single) = await CountedPageAsync(staff, [page[0]]);
+        (IReadOnlyList<Capability> twelve, int whole) = await CountedPageAsync(staff, page);
+
+        Assert.Empty(Assert.Single(one).Requires);
+        Assert.Equal(single, whole);
+        Assert.All(twelve, capability => Assert.Equal(
+            !consented.Contains(capability.Resource),
+            capability.Requires.TryGetValue(HostPermissions.Recommend, out IReadOnlySet<CapabilityResidual>? requires)
+                && requires.SetEquals([CapabilityResidual.Consent])));
+    }
+
     private static ConsentRecord Held(ConsentKind kind) =>
         new(
             Recommendations,
@@ -395,6 +453,31 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
         return answered.Match(
             capabilities => capabilities[0].Requires,
             error => throw new InvalidOperationException(error.Code.ToString()));
+    }
+
+    private async Task<(IReadOnlyList<Capability> Page, int Statements)> CountedPageAsync(
+        SubjectId account,
+        IReadOnlyList<ResourceId> page)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+        IAccessGate gate = scope.ServiceProvider.GetRequiredService<IAccessGate>();
+
+        using var traced = new TracedStatements();
+
+        Result<IReadOnlyList<Capability>> answered = await gate.CapabilitiesAsync(
+            AccessContext.Of(account),
+            Document,
+            page,
+            [HostPermissions.Read, HostPermissions.Recommend],
+            Sources(reading),
+            TestContext.Current.CancellationToken);
+
+        return (
+            answered.Match(
+                capabilities => capabilities,
+                error => throw new InvalidOperationException(error.Code.ToString())),
+            traced.Statements);
     }
 
     private static FilterSources<HostDocument> Sources(HostContext reading) =>

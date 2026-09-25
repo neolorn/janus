@@ -748,8 +748,9 @@ against the public contract of LIB-API-001.
   consent. A deployment binding a consent-based purpose to a type whose encrypted fields
   name no one subject column does not start. The capability carries `consent` as
   something the action still requires, so a control prompts rather than failing
-  silently. Consent gates the purpose and not the record, so an action on the same
-  record done for a purpose resting on another basis is untouched.
+  silently. A page reads the consents of every data subject on it in one query. Consent
+  gates the purpose and not the record, so an action on the same record done for a
+  purpose resting on another basis is untouched.
 - The terms step of registration records one consent per control the person ticked,
   naming the purpose, the version presented of the document that governs its consent and
   the registration mechanism. A control left unticked records nothing and holds nothing

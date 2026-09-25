@@ -4500,7 +4500,8 @@ who the subject is when it registers the record; the library holds the value on 
 `resources` row, beside the organization it already holds for the same reason. The gate
 resolves the record, takes the subject from that row and reads that subject's consent.
 A capability page reads one consent per distinct subject on the page rather than one for
-the page. Startup validation refuses a deployment that binds a consent-based purpose to
+the page. **Revised in phase 10:** a page reads the consents of every subject on it in one
+query (AUTHZ-GATE-005 AC1). Startup validation refuses a deployment that binds a consent-based purpose to
 a type whose encrypted fields name no one subject column.
 
 *Two points D-162 does not settle, taken at the strictest reading.* A type whose
