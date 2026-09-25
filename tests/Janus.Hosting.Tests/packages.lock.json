@@ -841,6 +841,22 @@
           "xunit.v3": "[4.0.1, )"
         }
       },
+      "janus.cli": {
+        "type": "Project",
+        "dependencies": {
+          "Janus.Authentication": "[1.0.0, )",
+          "Janus.Core": "[1.0.0, )",
+          "Janus.Identity": "[1.0.0, )",
+          "Janus.Storage": "[1.0.0, )"
+        }
+      },
+      "janus.conformance": {
+        "type": "Project",
+        "dependencies": {
+          "Janus.Core": "[1.0.0, )",
+          "Janus.Hosting": "[1.0.0, )"
+        }
+      },
       "janus.core": {
         "type": "Project"
       },
