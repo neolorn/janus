@@ -111,6 +111,18 @@ internal sealed class PendingEvents(StoreContext context) : IPendingEvents
         Written(record, pending);
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Implements IDN-PRIN-003 AC4: a delivered event is a working artefact once every
+    /// consumer has confirmed it. One whose budget was spent was delivered to nobody,
+    /// so it stays.
+    /// </remarks>
+    public async ValueTask<int> SweepAsync(CancellationToken cancellationToken) =>
+        await context.Events
+            .Where(pending => pending.PublishedAt != null)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
+
     private static void Written(PendingEventRecord record, PendingEvent pending)
     {
         record.Attempts = pending.Attempts;

@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Authentication;
+using Janus.Authentication.Events;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Recovery;
 using Janus.Authentication.Sessions;
@@ -97,6 +98,64 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
                     "SELECT count(*) FROM identity.identifier_removals WHERE subject = @subject",
                     new { subject = subject.Value })));
     }
+
+    /// <summary>
+    /// IDN-PRIN-003 AC4: an event every consumer has taken is a spent working artefact,
+    /// so one pass of the worker, which nobody started, clears it. An event still
+    /// waiting for a consumer, and one whose budget was spent, stay.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_PRIN_003_AC4_AnEventEveryConsumerTookIsClearedWithNobodyAskingAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        DateTimeOffset noon = Authorization.Deployment.Noon;
+        PendingEvent published = Raised(noon, publishedAt: noon, failedAt: null);
+        PendingEvent waiting = Raised(noon, publishedAt: null, failedAt: null);
+        PendingEvent failed = Raised(noon, publishedAt: null, failedAt: noon);
+
+        await using (ServiceProvider seeding = Deployed(noon))
+        {
+            await using AsyncServiceScope scope = seeding.CreateAsyncScope();
+            IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            IPendingEvents events = scope.ServiceProvider.GetRequiredService<IPendingEvents>();
+
+            await work.BeginAsync(cancellationToken);
+
+            foreach (PendingEvent pending in new[] { published, waiting, failed })
+            {
+                await events.AddAsync(pending, cancellationToken);
+            }
+
+            await work.CommitAsync(cancellationToken);
+        }
+
+        await using ServiceProvider services = Deployed(noon.AddDays(1));
+
+        _ = await services.GetServices<IHostedService>().OfType<BackgroundWorker>().Single()
+            .RunDueAsync(cancellationToken);
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        Assert.Equal(
+            new[] { waiting.Id.Value, failed.Id.Value }.Order(),
+            (await connection.QueryAsync<Guid>(
+                "SELECT id FROM identity.events WHERE id = ANY(@ids)",
+                new { ids = new[] { published.Id.Value, waiting.Id.Value, failed.Id.Value } }))
+                .Order());
+    }
+
+    // An event as a pass left it, its next pass a year away so no pass in the test
+    // offers it again.
+    private static PendingEvent Raised(DateTimeOffset at, DateTimeOffset? publishedAt, DateTimeOffset? failedAt) =>
+        PendingEvent.Existing(
+            PendingEventId.Of(at),
+            new AccountSuspended(at, Guid.NewGuid().ToString(), SuspensionOrigin.Administrator),
+            attempts: 1,
+            at.AddYears(1),
+            new HashSet<string>(StringComparer.Ordinal),
+            publishedAt,
+            failedAt);
 
     // One of each thing the sweep clears, written through the deployment's own stores at
     // noon, each lapsing within a few days: the session under its person's key, which an

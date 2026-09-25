@@ -15034,6 +15034,45 @@ changing the test's query is the deliberate step.
 as `timestamp with time zone`, and that a calendar day is stored as a `date` and is
 not an instant.
 
+---
+
+## 366. The delivered rows the sweep removes are the events every consumer took; the outbox rows stay
+
+**Phase 10 · 2026-09-25 · Tier 2 · IDN-PRIN-003 AC4, IDN-LIFE-003a, IDN-LIFE-003b, IDN-LIFE-003**
+
+*The question.* IDN-PRIN-003 has "Delivered outbox records, once every subscriber has
+confirmed" removed when spent, and AC4 has the sweeps of that column run without a
+person. The library holds two such tables. The `events` table carries the events offered
+to the host's consumers; nothing reads a row once every consumer has taken it. The
+`outbox` table carries the erasure and takedown deliveries to the declared subscribers,
+and it is also the erasures table IDN-LIFE-003b describes, whose status `complete` means
+every required subscriber confirmed, read by `GET /admin/erasures/{id}`; and a
+takedown's progress, with the instant its erasure falls due, is read from its row. Neither table was
+ever swept.
+
+*The readings.*
+
+1. Remove both: an `events` row once published, an `outbox` row once `complete`.
+2. Remove the `events` rows once published; keep the `outbox` rows, which are the record
+   of an erasure or a takedown that IDN-LIFE-003b and chapter 09 section 8a read after
+   the subscribers confirmed.
+3. Remove neither.
+
+*Chosen: 2.* Reading 1 would answer `privacy.erasure.notfound` for an erasure that
+completed, and not find a takedown whose window is still open; IDN-LIFE-003b gives the
+erasure row a `complete` status, which only a kept row can carry, so that row is a record
+of something that happened. Reading 3 leaves the spent working artefact the right column
+names. The expiry sweep removes every `events` row whose last consumer took it
+(`published_at` set). A row whose retry budget was spent was delivered to nobody, so it
+stays.
+
+*Tests that pin it.*
+`BackgroundJobsTests.IDN_PRIN_003_AC4_AnEventEveryConsumerTookIsClearedWithNobodyAskingAsync`.
+
+*Chapter text that should change.* IDN-PRIN-003 could name the event rows as the
+delivered outbox records removed when spent, and say that the erasures table
+(IDN-LIFE-003b) is kept.
+
 
 # Rows for chapter 10
 

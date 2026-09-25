@@ -46,4 +46,8 @@ internal sealed class PendingEventsInMemory : IPendingEvents
     /// <inheritdoc/>
     public ValueTask RecordAsync(PendingEvent pending, CancellationToken cancellationToken) =>
         ValueTask.CompletedTask;
+
+    /// <inheritdoc/>
+    public ValueTask<int> SweepAsync(CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_held.RemoveAll(pending => pending.PublishedAt is not null));
 }

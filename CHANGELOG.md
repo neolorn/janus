@@ -158,7 +158,8 @@ against the public contract of LIB-API-001.
   once that transaction has committed, to every `IEventConsumer<TEvent>` the host
   registered for its kind. A consumer that refuses or throws is offered the event again
   under `outbox.retry.*`, the others are not, and once the budget is spent the event is
-  failed and `degradation` is raised. A host need not register an `IEvents`; one that
+  failed and `degradation` is raised. An event every consumer has taken is removed by
+  the expiry sweep; a failed one stays. A host need not register an `IEvents`; one that
   does keeps it, and the library's delivery is bypassed.
 - `configure` changes protected keys from the server, the one way to change a key the
   management application refuses: pipe the key document to it as to `bootstrap` and name

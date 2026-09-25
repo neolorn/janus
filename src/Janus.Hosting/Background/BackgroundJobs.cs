@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.BreakGlass;
 using Janus.Authentication.Credentials;
+using Janus.Authentication.Events;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Invitations;
 using Janus.Authentication.Mailboxes;
@@ -309,8 +310,8 @@ internal static class BackgroundJobs
             (services, _, cancellationToken) => PollBalanceAsync(services, cancellationToken)),
     ];
 
-    // AUTH-KEY-003, OPS-OBS-003: what has expired goes, each kind in a statement of its
-    // own, so one pass leaves nothing half removed.
+    // AUTH-KEY-003, OPS-OBS-003, IDN-PRIN-003 AC4: what has expired or been delivered
+    // goes, each kind in a statement of its own, so one pass leaves nothing half removed.
     private static async ValueTask<Result> SweepExpiredAsync(
         IServiceProvider services,
         CancellationToken cancellationToken)
@@ -333,6 +334,8 @@ internal static class BackgroundJobs
             .SweepAsync(now, cancellationToken).ConfigureAwait(false);
         _ = await services.GetRequiredService<IIdentifierStore>()
             .SweepRemovalsAsync(now, cancellationToken).ConfigureAwait(false);
+        _ = await services.GetRequiredService<IPendingEvents>()
+            .SweepAsync(cancellationToken).ConfigureAwait(false);
         _ = await services.GetRequiredService<BreakGlassService>()
             .SweepAsync(cancellationToken).ConfigureAwait(false);
         _ = await services.GetRequiredService<SigningKeys>()
