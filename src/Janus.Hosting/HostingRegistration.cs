@@ -266,8 +266,11 @@ public static class HostingRegistration
         services.AddScoped<EmergencyCredentialWatch>();
 
         // OPS-MAINT-001: the licences and permits warned of, and the maintenance log.
+        // DR-009a: the annual operation the key-encryption key is rotated in, warned of
+        // from the log.
         services.AddScoped<MaintenanceRecords>();
         services.AddScoped<LicenceExpiry>();
+        services.AddScoped<EnvelopeRotationWatch>();
 
         // INF-HOST-001, INF-TLS-003: the clock and the renewer are the environment's, so
         // what measures them is the deployment's to register, and one it does not

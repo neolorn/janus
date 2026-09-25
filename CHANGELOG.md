@@ -381,6 +381,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The annual operation on the envelope, in which the key-encryption key is rotated, is
+  warned of: a daily job, `envelope-rotation`, raises `expiry-approaching` from
+  `maintenance.expiry.warninglead` before a year has passed since the last
+  `envelope-rotation` entry of the maintenance log, and goes on raising it until the
+  next one is recorded. A log that records none has the operation due now.
 - `janus register-client` registers a client in the provider's registry, or changes a
   registered one, from the server: `--client`, `--name`, `--kind`, `--redirect` and
   `--scopes`, with the secret piped in the key document as `clientSecret`. The registry

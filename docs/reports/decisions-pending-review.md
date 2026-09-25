@@ -13930,6 +13930,59 @@ OPS-SEC-003's values could name the command beside `rotate-kek`. OPS-SEC-002 nee
 owner's answer on AC1 for client secrets. Chapter 10 needs the audit-action row, and
 section 4.9 could say that a replaced client secret keeps the signing keys' overlap.
 
+---
+
+## 341. How the key-encryption key's cryptoperiod is kept
+
+**Phase 9 · 2026-09-25 · Tier 3 · DR-009a AC1, OPS-MAINT-001, OPS-ALERT-001, OPS-ALERT-002**
+
+*The question.* DR-009a AC1 has the cryptoperiod defined and rotation occur at its
+expiry. Chapter 06 section 9 puts the rotation inside the annual operation ("Annual, one
+operation") and names it a maintenance exception, a human step, and OPS-MAINT-001 logs
+it as the task `envelope-rotation`. OPS-MAINT-001 warns ahead of a licence's expiry, but
+nothing warned ahead of the operation, and no chapter says what tells the owner that the
+key's period is ending.
+
+*The readings.* (1) The cryptoperiod is kept by the runbook's calendar (chapter 11's
+schedule) and the library does nothing; AC1 is named as verified by inspection. (2) The
+library warns ahead of the anniversary of the latest operation the maintenance log
+records, as it warns of a licence. (3) The library warns ahead of the anniversary of the
+latest rotation the audit trail records.
+
+*Chosen: 2 (Tier 3, the strictest reading).* Under (1) the key outlives its period
+whenever the owner forgets, which OPS-MAINT-001 AC2 rules out for a licence ("Warning
+does not depend on anyone remembering"). Under (3) the area reads the trail through a
+port it does not hold, and the other four parts of the operation go unwatched; the log
+already records the operation as one task, dated and with its actor.
+
+What is built:
+
+- `EnvelopeRotationWatch`, run daily as the job `envelope-rotation` (reason `DR-009a`,
+  operation `monitoring`). The cryptoperiod is one year from the latest
+  `envelope-rotation` entry of the maintenance log. From `maintenance.expiry.warninglead`
+  before its end, and for as long as no later entry is recorded, each look raises
+  `expiry-approaching` under the scope `envelope-rotation` with `details.task`,
+  `details.performedAt` and `details.dueAt`. A log that records no operation has it due
+  now, both instants null. OPS-ALERT-002 keeps it to one alert a window.
+
+*Residue.* The watch reads the log, not the key: an operation recorded without the
+rotation silences it, and a rotation left unrecorded keeps it raised. The rotation
+stays the human step of chapter 06 section 9, so AC1's "rotation occurs at its expiry"
+is met by the warning and the command together, and is named so in the report. A fresh
+deployment is raised until the first sealing of the envelope is recorded, as it is for a
+missing break-glass credential (entry 331).
+
+*Tests that pin it.*
+`EnvelopeRotationWatchTests.DR_009a_AC1_TheOperationInsideTheLeadIsRaisedAsDueAsync`,
+`EnvelopeRotationWatchTests.DR_009a_AC1_AnOperationWithinItsCryptoperiodRaisesNothingAsync`,
+`EnvelopeRotationWatchTests.DR_009a_AC1_AnOperationUndoneOrNeverRecordedIsRaisedAsync`,
+`EnvelopeRotationWatchTests.DR_009a_AC1_TheLeadIsTheConfiguredOneAsync`.
+
+*Chapter text that should change.* DR-009a could state the cryptoperiod as one year from
+the last annual operation and say it is warned of from the maintenance log.
+OPS-MAINT-001 could list the annual operation beside the licences and permits it warns
+of, under `expiry-approaching` with the scope `envelope-rotation`.
+
 
 # Rows for chapter 10
 

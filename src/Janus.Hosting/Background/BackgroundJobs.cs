@@ -293,6 +293,15 @@ internal static class BackgroundJobs
                     .WarnAsync(cancellationToken)
                     .ConfigureAwait(false))),
         BackgroundJob.Every(
+            "envelope-rotation",
+            "DR-009a",
+            SystemOperation.Monitoring,
+            Daily,
+            async (services, _, cancellationToken) => Done(
+                await services.GetRequiredService<EnvelopeRotationWatch>()
+                    .WatchAsync(cancellationToken)
+                    .ConfigureAwait(false))),
+        BackgroundJob.Every(
             "sms-balance",
             "INT-SMS-004",
             SystemOperation.Monitoring,
