@@ -925,8 +925,10 @@ against the public contract of LIB-API-001.
   longest interval declared, so shortening an interval reaches the sends already
   counted.
 - A deployment whose restriction names a key supplier nothing supplies, or whose
-  `integration.mail.endpoint` or `integration.sms.endpoint` is not an HTTPS address,
-  fails to start, rather than at the moment someone is waiting for a code.
+  `integration.mail.endpoint`, `integration.sms.endpoint` or
+  `password.blocklist.selfhosted.address` is not an HTTPS address, fails to start,
+  rather than at the moment someone is waiting for a code. A corpus address written
+  over plain HTTP after startup is never asked; the offline list answers instead.
 - The message catalogue, the mail and text transports, the recipients a deployment's
   data reaches and the keys a sending restriction counts under are the host's to
   declare, and each is optional: a deployment that declares none of them starts.

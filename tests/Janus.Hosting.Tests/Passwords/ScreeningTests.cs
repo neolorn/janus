@@ -161,6 +161,25 @@ public sealed class ScreeningTests : IDisposable
     }
 
     /// <summary>
+    /// INF-TLS-004 AC1: a self-hosted corpus address written over plain HTTP after
+    /// startup checked it is never asked; the list the package carries answers and the
+    /// fall back is recorded.
+    /// </summary>
+    [Fact]
+    public async Task INF_TLS_004_AC1_APlaintextCorpusAddressIsNeverAskedAsync()
+    {
+        _service.Holds(Prefix(Password), Suffix(Password) + ":3");
+        _configuration.Set(Settings.PasswordBlocklistSource, BlocklistSource.SelfHosted);
+        _configuration.Set(Settings.PasswordBlocklistSelfHostedAddress, "http://corpus.example/range");
+
+        Assert.False(await AcceptedAsync(Listed));
+        Assert.Empty(_service.Asked);
+        Assert.Equal(
+            [(BlocklistSource.SelfHosted, BlocklistSource.Offline)],
+            [.. _log.Entries]);
+    }
+
+    /// <summary>
     /// A corpus older than the deployment admits cannot be screened on, so it answers
     /// nothing and the password is refused rather than judged against stale data.
     /// </summary>

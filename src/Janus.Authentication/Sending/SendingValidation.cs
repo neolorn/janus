@@ -20,7 +20,7 @@ namespace Janus.Authentication.Sending;
 /// </param>
 /// <param name="suppliers">The host-registered key suppliers.</param>
 /// <remarks>
-/// Implements AUTH-ABUSE-005, INT-SMS-003, INT-SMS-005a, INT-GEN-001 and
+/// Implements AUTH-ABUSE-005, INT-SMS-003, INT-SMS-005a, INT-GEN-001, INF-TLS-004 and
 /// LIB-HOST-001. A recipient is never resolved to a language the catalogue cannot
 /// answer in, because startup refuses that deployment. Declaring no catalogue is not
 /// itself a refusal: the library ships one, and what is checked is the catalogue in
@@ -81,13 +81,18 @@ internal sealed class SendingValidation(
             "key",
             JsonSerializer.SerializeToElement(key));
 
-    // INT-GEN-001: the two addresses the library itself calls out to. A deployment
-    // that supplies a transport of its own leaves them empty and calls its provider
-    // wherever it decides; nothing of the host's is registered here.
+    // INT-GEN-001, INF-TLS-004: the addresses the library itself calls out to, the
+    // mail and text endpoints and the corpus a deployment hosts itself. A deployment
+    // that supplies a transport of its own leaves its endpoint empty and calls its
+    // provider wherever it decides; nothing of the host's is registered here.
     private async ValueTask<Error?> InsecureAsync(CancellationToken cancellationToken)
     {
-        foreach (TextSetting key in
-            new[] { Settings.IntegrationMailEndpoint, Settings.IntegrationSmsEndpoint })
+        foreach (TextSetting key in new[]
+        {
+            Settings.IntegrationMailEndpoint,
+            Settings.IntegrationSmsEndpoint,
+            Settings.PasswordBlocklistSelfHostedAddress,
+        })
         {
             string endpoint = (await configuration.ReadAsync(key, cancellationToken)
                 .ConfigureAwait(false))

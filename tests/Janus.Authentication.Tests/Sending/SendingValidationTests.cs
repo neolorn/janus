@@ -209,6 +209,26 @@ public sealed class SendingValidationTests
     }
 
     /// <summary>
+    /// INF-TLS-004 AC1: a self-hosted password corpus named over plain HTTP stops the
+    /// deployment, and the failure names the key it was read from.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INF_TLS_004_AC1_APlaintextCorpusAddressStopsStartupAsync()
+    {
+        _configuration.Set(Settings.PasswordBlocklistSelfHostedAddress, "http://corpus.example.test/range");
+
+        Error refusal = await RefusedAsync();
+
+        Assert.Equal(ErrorCodes.EndpointInsecure, refusal.Code);
+        Assert.Equal("password.blocklist.selfhosted.address", refusal.Details["key"].GetString());
+
+        _configuration.Set(Settings.PasswordBlocklistSelfHostedAddress, "https://corpus.example.test/range");
+
+        await PassedAsync();
+    }
+
+    /// <summary>
     /// INT-GEN-001 AC1: a deployment whose endpoints use TLS starts, and so does one
     /// that names neither because it supplies transports of its own.
     /// </summary>

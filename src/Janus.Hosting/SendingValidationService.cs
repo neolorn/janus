@@ -13,7 +13,7 @@ namespace Janus.Hosting;
 /// </summary>
 /// <param name="scopes">Where the scope the checks read in comes from.</param>
 /// <remarks>
-/// Implements AUTH-ABUSE-005, INT-SMS-003, INT-GEN-001 and D-160. A language the
+/// Implements AUTH-ABUSE-005, INT-SMS-003, INT-GEN-001, INF-TLS-004 and D-160. A language the
 /// catalogue cannot answer in would otherwise surface at the moment a person is
 /// waiting for a code.
 /// </remarks>
