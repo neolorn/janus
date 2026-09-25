@@ -3432,6 +3432,8 @@ register is generated against a configuration read at runtime.
 *Chapter text that should change.* LIB-HOST-001 AC3 should say "only the required
 values and a retention period for each data category it declares".
 
+**Revised by entry 358.**
+
 ---
 
 ## 109. A subject column is one the declared type holds and that holds a subject
@@ -14679,6 +14681,62 @@ either, and the status table holds every code, so both are listed at 500.
 
 *Chapter text that should change.* Chapter 10 section 1 should hold the two rows under
 "Rows for chapter 10"; LIB-API-001 could list the conformance package's surface.
+
+---
+
+## 358. A category's retention floor is declared with its purposes, and its period defaults to the floor
+
+**Phase 10 · 2026-09-25 · Tier 3 · PRIV-RET-001, LIB-HOST-001, `10` section 4.7, D-107, D-152, entries 108 and 180**
+
+*The question.* Chapter 10 section 4.7 gives `retention.<host-category>` the default
+"the floor the host declares for that category (LIB-HOST-001)", fails startup for a
+declared category without one, and enforces the floor; PRIV-RET-001 AC2 rejects
+configuration below the floor at validation. LIB-HOST-001 lists no floor, and entry 108
+built the check as a settings row the deployment has to write before it starts. No
+route writes a member of the family (entry 180) and the bootstrap takes none, so a
+deployment declaring any category had no supported way to start: the sample host of
+LIB-TEST-001 wrote the row by hand.
+
+*The readings.*
+
+1. Entry 108 stands: the row is required, and a way to write it is added (a bootstrap
+   argument or a route).
+2. The floor is part of the declaration, beside the purposes whose categories it
+   bounds. The key defaults to it, a category with no floor is refused when the model
+   is built, and a stated period below the floor is refused at startup.
+
+*Chosen: 2 (Tier 3), revising entry 108.* It is what section 4.7 says, and it is the
+reading that keeps most: a category has a period from the moment it is declared, and
+configuration cannot lower the floor because the floor is not configuration. Reading 1
+needs a write path no chapter names. The builder takes `RetentionFloor(category,
+floor)` and refuses a blank category, one that cannot be the last segment of a key, a
+period that is not positive, and a second floor for one category. Building the model
+refuses a purpose over a category with no floor under `model.startup.declarationmissing`
+naming `retention.<category>` (LIB-HOST-001 AC2), and refuses without a code, as it
+refuses a duplicate, a floor for a category no purpose is over. At startup and in the
+records of processing a category is kept for the period the deployment stated where it
+stated one and for the floor where it did not. A stated period below the floor is
+refused with `config.value.belowfloor` naming the key and the floor: startup stops, and
+the register flags the category `retention-missing` rather than show a period nobody
+may keep it for. Nothing is raised to the floor silently. No route writes a member
+(entry 180 unchanged), so a deployment keeping a category longer than its floor
+declares the longer floor or states the period in the settings table.
+
+*Tests that pin it.*
+`AuthorizationModelTests.PRIV_RET_001_AC1_ACategoryWithNoRetentionFloorFailsStartup`,
+`AuthorizationModelTests.PRIV_RET_001_AC1_AFloorForACategoryNoPurposeIsOverFailsStartup`,
+`AuthorizationModelTests.PRIV_RET_001_AC2_AFloorIsAPositivePeriodDeclaredOnce`,
+`ConfigurationCoverageTests.PRIV_RET_001_AC1_ADeclaredCategoryWithNoFloorFailsStartupAsync`,
+`ConfigurationCoverageTests.PRIV_RET_001_AC1_EveryDeclaredCategoryStartsOnItsFloorAsync`,
+`ConfigurationCoverageTests.PRIV_RET_001_AC2_APeriodStatedBelowTheFloorFailsStartupAsync`,
+`ProcessingRecordsTests.PRIV_RET_001_AC3_TheRetentionOfEachCategoryIsOnTheRowAsync`,
+and the sample host of `ConformanceSuiteTests`, which starts on its floor with no row.
+
+*Chapter text that should change.* LIB-HOST-001's "Processing purposes and lawful
+bases" row could add "and a retention floor for each data category a purpose is
+over"; PRIV-RET-001's row for host-declared categories could say the floor is part of
+the declaration and the key defaults to it; `09` section 8 could say whether a member
+of `retention.<category>` is written at runtime.
 
 
 # Rows for chapter 10

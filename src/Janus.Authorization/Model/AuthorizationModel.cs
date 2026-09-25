@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text.Json;
 using Janus.Core;
+using Janus.Core.Configuration;
 
 namespace Janus.Authorization.Model;
 
@@ -127,7 +128,7 @@ internal sealed class AuthorizationModel
 
         foreach (ResourceTypeDeclaration type in types.Values)
         {
-            Check(type, types, relationships, bases, categories);
+            Check(type, types, relationships, bases, categories, declaration.RetentionFloors);
 
             if (!entities.TryAdd(type.Entity, type))
             {
@@ -136,6 +137,7 @@ internal sealed class AuthorizationModel
         }
 
         var processing = DeclaredProcessing.Of(declaration);
+        CheckFloors(declaration, processing);
 
         return new AuthorizationModel(
             types,
@@ -546,14 +548,33 @@ internal sealed class AuthorizationModel
         Dictionary<ResourceType, ResourceTypeDeclaration> types,
         Dictionary<string, RelationshipDeclaration> relationships,
         Dictionary<string, LawfulBasisDeclaration> bases,
-        IReadOnlyCollection<string> categories)
+        IReadOnlyCollection<string> categories,
+        IReadOnlyDictionary<string, TimeSpan> floors)
     {
         CheckContainment(type, types);
         CheckOrganizationPath(type, types);
         CheckSensitivity(type, categories);
-        CheckPurposes(type, bases);
+        CheckPurposes(type, bases, floors);
         CheckDerivations(type, relationships);
         CheckEncryptedFields(type);
+    }
+
+    // A floor for a category no purpose is over governs nothing, and is most often
+    // the category a purpose names, spelled another way.
+    private static void CheckFloors(AuthorizationDeclaration declaration, DeclaredProcessing processing)
+    {
+        var named = new HashSet<string>(
+            processing.Purposes.SelectMany(purpose => purpose.DataCategories),
+            StringComparer.Ordinal);
+
+        foreach (string category in declaration.RetentionFloors.Keys.Order(StringComparer.Ordinal))
+        {
+            if (!named.Contains(category))
+            {
+                throw Malformed(
+                    "the retention floor of " + category + " is declared for a category no purpose is over");
+            }
+        }
     }
 
     // PRIV-RIGHT-005a: the subject column is how erasure reaches ciphertext sitting in
@@ -659,7 +680,8 @@ internal sealed class AuthorizationModel
 
     private static void CheckPurposes(
         ResourceTypeDeclaration type,
-        Dictionary<string, LawfulBasisDeclaration> bases)
+        Dictionary<string, LawfulBasisDeclaration> bases,
+        IReadOnlyDictionary<string, TimeSpan> floors)
     {
         if (type.Purposes.Count == 0)
         {
@@ -695,6 +717,21 @@ internal sealed class AuthorizationModel
                     "key",
                     purpose.Name,
                     "a purpose is declared with the categories of data it requires");
+            }
+
+            // PRIV-RET-001: a category is kept for its floor until the deployment
+            // states a longer period, so a category with no floor is one with no
+            // period and no end.
+            foreach (string category in purpose.DataCategories)
+            {
+                if (!floors.ContainsKey(category))
+                {
+                    throw Refused(
+                        ErrorCodes.StartupDeclarationMissing,
+                        "key",
+                        Settings.HostCategoryRetention.Prefix + "." + category,
+                        "a category of data is declared with its retention floor");
+                }
             }
 
             // PRIV-SENS-002 AC1: the consent the gate reads is the record's data

@@ -126,6 +126,52 @@ public sealed class AuthorizationModelTests
     }
 
     /// <summary>
+    /// PRIV-RET-001 AC1: a purpose over a category the host declares no retention
+    /// floor for stops the deployment, naming the key that would hold its period.
+    /// </summary>
+    [Fact]
+    public void PRIV_RET_001_AC1_ACategoryWithNoRetentionFloorFailsStartup()
+    {
+        AuthorizationDeclaration declared = HostDomain.Declared()
+            .Resource<HostDomain.Draft>("draft", draft => draft
+                .ContainedIn("folder")
+                .Purpose("collaboration", "contract", data: ["drafts"]))
+            .Build();
+
+        StartupException refused = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(declared));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        Assert.Equal("retention.drafts", refused.Failure!.Details["key"].GetString());
+    }
+
+    /// <summary>
+    /// PRIV-RET-001 AC1: a floor for a category no purpose is over governs nothing,
+    /// so the declaration is refused rather than started with a period nobody reads.
+    /// </summary>
+    [Fact]
+    public void PRIV_RET_001_AC1_AFloorForACategoryNoPurposeIsOverFailsStartup() =>
+        Assert.Throws<StartupException>(() => AuthorizationModel.Of(
+            HostDomain.Declared().RetentionFloor("drafts", TimeSpan.FromDays(30)).Build()));
+
+    /// <summary>
+    /// PRIV-RET-001 AC2: a floor is a positive period, declared once, for a category
+    /// whose name can be the last segment of its key.
+    /// </summary>
+    [Fact]
+    public void PRIV_RET_001_AC2_AFloorIsAPositivePeriodDeclaredOnce()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new AuthorizationDeclarationBuilder().RetentionFloor("drafts", TimeSpan.Zero));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new AuthorizationDeclarationBuilder().RetentionFloor("drafts", TimeSpan.FromDays(-1)));
+        Assert.Throws<ArgumentException>(
+            () => new AuthorizationDeclarationBuilder().RetentionFloor("Drafts and notes", TimeSpan.FromDays(30)));
+        Assert.Throws<ArgumentException>(
+            () => HostDomain.Declared().RetentionFloor("identity", TimeSpan.FromDays(30)));
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-005a AC1: an encrypted field naming no subject column is ciphertext
     /// no erasure could reach, so the deployment stops rather than start with it.
     /// </summary>
@@ -383,6 +429,7 @@ public sealed class AuthorizationModelTests
     private static AuthorizationDeclaration Encrypting(EncryptedFieldDeclaration field)
     {
         AuthorizationDeclaration declared = new AuthorizationDeclarationBuilder()
+            .RetentionFloor("identity", TimeSpan.FromDays(365))
             .LawfulBasis(Contract())
             .Resource<HostDomain.Article>("article", article => article
                 .BelongsToOrganization()
@@ -398,6 +445,7 @@ public sealed class AuthorizationModelTests
     private static AuthorizationDeclaration Malformed(int index) => index switch
     {
         0 => new AuthorizationDeclarationBuilder()
+            .RetentionFloor("identity", TimeSpan.FromDays(365))
             .LawfulBasis(Contract())
             .Resource<HostDomain.Folder>("folder", folder => folder
                 .ContainedIn("article")
@@ -408,12 +456,14 @@ public sealed class AuthorizationModelTests
                 .Purpose("collaboration", "contract", data: ["identity"]))
             .Build(),
         1 => new AuthorizationDeclarationBuilder()
+            .RetentionFloor("identity", TimeSpan.FromDays(365))
             .LawfulBasis(Contract())
             .Resource<HostDomain.Article>("article", article => article
                 .ContainedIn("folder")
                 .Purpose("collaboration", "contract", data: ["identity"]))
             .Build(),
         2 => new AuthorizationDeclarationBuilder()
+            .RetentionFloor("identity", TimeSpan.FromDays(365))
             .LawfulBasis(Contract())
             .Resource<HostDomain.Article>("article", article => article
                 .Purpose("collaboration", "contract", data: ["identity"]))
@@ -425,6 +475,7 @@ public sealed class AuthorizationModelTests
                 .Purpose("fraud-prevention", "interest"))
             .Build(),
         _ => new AuthorizationDeclarationBuilder()
+            .RetentionFloor("identity", TimeSpan.FromDays(365))
             .LawfulBasis(Contract())
             .Resource<HostDomain.Article>("article", article => article
                 .BelongsToOrganization()

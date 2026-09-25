@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- A host declares a retention floor for each data category its purposes are over,
+  with `RetentionFloor` on the declaration builder, and `retention.<category>` defaults
+  to it, so a deployment starts without a stored period for each category. Building the
+  model refuses a category with no floor under `model.startup.declarationmissing`
+  naming `retention.<category>`, and startup refuses a stored period below the floor
+  with `config.value.belowfloor` naming the key and the floor.
 - A `SocialProvider` now also names the address of the provider's discovery document,
   the address the provider returns the browser to, and the client secret, beside its
   keys document and client identifiers. Startup refuses a discovery address that is

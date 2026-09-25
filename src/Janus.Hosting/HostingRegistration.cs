@@ -425,6 +425,7 @@ public static class HostingRegistration
         // the host wrote it and not only as the model rebuilt it.
         services.AddSingleton(declaration);
         services.AddScoped<HandlerCoverage>();
+        services.AddScoped<CategoryRetention>();
         services.AddScoped<ConfigurationCoverage>();
 
         services.AddScoped<IPrivacyAlerts, PrivacyAlerts>();

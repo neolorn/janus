@@ -531,32 +531,38 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
 
     /// <summary>
     /// PRIV-RET-001 AC3, PRIV-ROPA-001: the retention of each category the purpose
-    /// is over is on the row, longest first, and a category the deployment declares
-    /// none for is reported.
+    /// is over is on the row, longest first: the declared floor where the deployment
+    /// states no period, the stated period where it does, and a category whose stated
+    /// period is refused is reported rather than shown.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task PRIV_RET_001_AC3_TheRetentionOfEachCategoryIsOnTheRowAsync()
     {
-        _configuration.Set(Settings.HostCategoryRetention, "identity", TimeSpan.FromDays(365));
-        _configuration.Set(Settings.HostCategoryRetention, "statement", TimeSpan.FromDays(1826));
-
-        ProcessingRegister register = Generated(await Records(Declaration.Declared().Build())
+        ProcessingRegister floors = Generated(await Records(Declaration.Declared().Build())
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
 
-        Assert.Equal(["statement P1826D", "identity P365D"], Row(register, "performance").Retention);
+        Assert.Equal(["statement P1826D", "identity P365D"], Row(floors, "performance").Retention);
         Assert.DoesNotContain(
-            register.Flags,
+            floors.Flags,
             flag => flag.Finding is RegisterFinding.RetentionMissing);
 
-        _configuration.Clear(Settings.HostCategoryRetention.For("statement"));
+        _configuration.Set(Settings.HostCategoryRetention, "identity", TimeSpan.FromDays(730));
 
-        ProcessingRegister missing = Generated(await Records(Declaration.Declared().Build())
+        ProcessingRegister stated = Generated(await Records(Declaration.Declared().Build())
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
 
+        Assert.Equal(["statement P1826D", "identity P730D"], Row(stated, "performance").Retention);
+
+        _configuration.Set(Settings.HostCategoryRetention, "statement", TimeSpan.FromDays(30));
+
+        ProcessingRegister refused = Generated(await Records(Declaration.Declared().Build())
+            .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
+
+        Assert.Equal(["identity P730D"], Row(refused, "performance").Retention);
         Assert.Contains(
             new RegisterFlag(RegisterFinding.RetentionMissing, "statement"),
-            missing.Flags);
+            refused.Flags);
     }
 
     /// <summary>
@@ -646,6 +652,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
         Assert.Equal("agreement", Row(register, "marketing").LawfulBasis);
 
         AuthorizationDeclaration elsewhere = new AuthorizationDeclarationBuilder()
+            .RetentionFloor("identity", TimeSpan.FromDays(365))
             .LawfulBasis(new LawfulBasisDeclaration("art-6-1-b", false, false, false, false))
             .Resource<Declaration.Mailing>("mailing", mailing => mailing
                 .BelongsToOrganization()
@@ -680,16 +687,15 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
     /// <summary>
     /// PRIV-RET-005 AC3: the session location and the sending-restriction record are
     /// in the register under the purposes the host declares for them, with the
-    /// retention it named, because the library keeps no inventory of its own.
+    /// retention it declared, because the library keeps no inventory of its own.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task PRIV_RET_005_AC3_TheTwoRecordsAppearUnderTheDeclaredPurposesAsync()
     {
-        _configuration.Set(Settings.HostCategoryRetention, "session-location", TimeSpan.FromDays(30));
-        _configuration.Set(Settings.HostCategoryRetention, "sending-restriction", TimeSpan.FromDays(1));
-
         AuthorizationDeclaration declared = Declaration.Declared()
+            .RetentionFloor("session-location", TimeSpan.FromDays(30))
+            .RetentionFloor("sending-restriction", TimeSpan.FromDays(1))
             .Resource<Declaration.Mailing>("signing-in", signing => signing
                 .BelongsToOrganization()
                 .Purpose(
@@ -749,6 +755,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
             declaration,
             _compliance,
             _roles,
+            new CategoryRetention(declaration, _configuration),
             _configuration,
             _work,
             _clock);

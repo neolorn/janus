@@ -109,9 +109,9 @@ public sealed class HostFixture : IAsyncLifetime
         await using (NpgsqlConnection connection = await _database.OpenAsync())
         {
             // LIB-HOST-001 and PRIV-RET-001: the deployment names the keys the
-            // library cannot guess, a retention period for each category its purposes
-            // declare among them, and the check that runs before anything is served
-            // reads them.
+            // library cannot guess, and a period longer than the floor for each
+            // category its purposes declare, and the check that runs before anything
+            // is served reads them.
             await connection.ExecuteAsync(
                 "INSERT INTO identity.settings (key, value) VALUES (@Key, @Value)",
                 Named());
@@ -189,6 +189,8 @@ public sealed class HostFixture : IAsyncLifetime
     /// <returns>The declaration.</returns>
     internal static AuthorizationDeclaration Declaration(bool materialised = false) =>
         new AuthorizationDeclarationBuilder()
+            .RetentionFloor("identity", TimeSpan.FromDays(365))
+            .RetentionFloor("history", TimeSpan.FromDays(365))
             .LawfulBasis(new LawfulBasisDeclaration(
                 "contract",
                 IsConsent: false,

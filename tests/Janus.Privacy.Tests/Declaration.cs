@@ -1,3 +1,4 @@
+using System;
 using Janus.Core;
 
 namespace Janus.Privacy.Tests;
@@ -72,6 +73,8 @@ internal static class Declaration
     /// <returns>The builder, so a test may change one thing before building.</returns>
     public static AuthorizationDeclarationBuilder Declared() =>
         new AuthorizationDeclarationBuilder()
+            .RetentionFloor("identity", TimeSpan.FromDays(365))
+            .RetentionFloor("statement", TimeSpan.FromDays(1826))
             .LawfulBasis(new LawfulBasisDeclaration("agreement", true, true, false, false))
             .LawfulBasis(new LawfulBasisDeclaration("contract", false, false, false, false))
             .LawfulBasis(new LawfulBasisDeclaration("interest", false, false, true, true))

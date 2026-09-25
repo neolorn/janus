@@ -91,6 +91,8 @@ public sealed class SerializedModelTests
     // difference a deterministic serialization has to absorb.
     private static AuthorizationDeclarationBuilder Reordered() =>
         new AuthorizationDeclarationBuilder()
+            .RetentionFloor("content", TimeSpan.FromDays(365))
+            .RetentionFloor("identity", TimeSpan.FromDays(365))
             .Permission("article:edit")
             .Permission("article:read")
             .LawfulBasis(new LawfulBasisDeclaration("interest", false, false, true, true))

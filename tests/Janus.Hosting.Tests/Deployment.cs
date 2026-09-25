@@ -884,6 +884,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton(Janus.Privacy.Tests.Declaration.Reaching);
         _ = services.AddSingleton<Janus.Privacy.Records.IComplianceStore>(Compliance);
         _ = services.AddSingleton<Janus.Privacy.Records.IRegisterRoles>(RegisterRoles);
+        _ = services.AddScoped<Janus.Privacy.CategoryRetention>();
         _ = services.AddScoped<IProcessingRecords, ProcessingRecordsService>();
         _ = services.AddSingleton<IAuditTrailStore>(Trail);
         _ = services.AddScoped<IAuditTrail, AuditTrailService>();

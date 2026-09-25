@@ -45,7 +45,8 @@ public enum RegisterFinding
     AgreementMissing = 4,
 
     /// <summary>
-    /// A purpose is over a data category the deployment declares no retention for.
+    /// A purpose is over a data category whose period cannot be read: none is
+    /// declared, or the one the deployment stated is refused.
     /// </summary>
     [JsonStringEnumMemberName("retention-missing")]
     RetentionMissing = 5,

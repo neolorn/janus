@@ -163,6 +163,7 @@ public sealed class SampleHost : IAsyncLifetime
         }
 
         return declaring
+            .RetentionFloor(Records, TimeSpan.FromDays(730))
             .Permission(ReadShelf.ToString())
             .Permission(ReadBinder.ToString())
             .Permission(ReadSheet.ToString())
@@ -242,14 +243,10 @@ public sealed class SampleHost : IAsyncLifetime
 
         await using (DbConnection connection = await ConnectAsync(CancellationToken.None))
         {
-            // PRIV-RET-001: the period the host keeps its one category of data for,
-            // which nothing but the settings row names before the application runs.
-            // The host's own tables follow, with the index each fact a role is derived
-            // from is read through (AUTHZ-DERIVE-004).
+            // The host's own tables, with the index each fact a role is derived from
+            // is read through (AUTHZ-DERIVE-004).
             _ = await connection.ExecuteAsync(
                 """
-                INSERT INTO identity.settings (key, value) VALUES (@key, 'P2Y');
-
                 CREATE SCHEMA sample;
                 CREATE TABLE sample.shelves (
                     id text PRIMARY KEY,
@@ -270,8 +267,7 @@ public sealed class SampleHost : IAsyncLifetime
                     steward uuid NOT NULL,
                     PRIMARY KEY (binder_id, steward));
                 CREATE INDEX ix_stewards_steward ON sample.stewards (steward);
-                """,
-                new { key = Settings.HostCategoryRetention.For(Records).ToString() });
+                """);
         }
 
         // AUTH-OIDC-001: the relying party's client is registered from the server.

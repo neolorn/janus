@@ -167,6 +167,7 @@ public sealed class DeclaredProcessingTests
     {
         var model = AuthorizationModel.Of(
             new AuthorizationDeclarationBuilder()
+                .RetentionFloor("identity", TimeSpan.FromDays(365))
                 .LawfulBasis(new LawfulBasisDeclaration("vital-interests", false, false, false, false))
                 .LawfulBasis(new LawfulBasisDeclaration("public-task", false, false, true, true))
                 .Resource<HostDomain.Workspace>("workspace", workspace => workspace
@@ -187,6 +188,7 @@ public sealed class DeclaredProcessingTests
         StartupException refused = Assert.Throws<StartupException>(
             () => AuthorizationModel.Of(
                 new AuthorizationDeclarationBuilder()
+                    .RetentionFloor("identity", TimeSpan.FromDays(365))
                     .LawfulBasis(new LawfulBasisDeclaration("interest", false, false, true, true))
                     .Resource<HostDomain.Workspace>("workspace", workspace => workspace
                         .BelongsToOrganization()
@@ -305,6 +307,7 @@ public sealed class DeclaredProcessingTests
     // asks.
     private static AuthorizationDeclaration Consenting(bool sensitive, ConsentKind? consent) =>
         new AuthorizationDeclarationBuilder()
+            .RetentionFloor("history", TimeSpan.FromDays(365))
             .LawfulBasis(new LawfulBasisDeclaration("agreement", true, true, false, false))
             .SensitiveCategory("financial")
             .Resource<HostDomain.Workspace>("workspace", workspace =>
@@ -328,6 +331,7 @@ public sealed class DeclaredProcessingTests
     private static AuthorizationDeclaration Declaring(
         Action<ResourceTypeDeclarationBuilder<HostDomain.Article>> declared) =>
         new AuthorizationDeclarationBuilder()
+            .RetentionFloor("identity", TimeSpan.FromDays(365))
             .LawfulBasis(new LawfulBasisDeclaration("contract", false, false, false, false))
             .SensitiveCategory("financial")
             .Resource<HostDomain.Article>("article", article =>

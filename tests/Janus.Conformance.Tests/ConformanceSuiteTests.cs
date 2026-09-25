@@ -310,6 +310,7 @@ public sealed class ConformanceSuiteTests(SampleHost host) : IClassFixture<Sampl
         }
 
         _ = declaring
+            .RetentionFloor("records", TimeSpan.FromDays(730))
             .Permission(SampleHost.ReadShelf.ToString())
             .Resource<Shelf>("shelf", type => Kept(type.BelongsToOrganization()));
 
