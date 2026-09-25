@@ -65,6 +65,29 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
     }
 
     /// <summary>
+    /// IDN-ACCT-005 AC3: an administrator's address whose one word mixes a Cyrillic
+    /// letter into Latin is refused by the code that names the mixing, against the
+    /// member it was given as, and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ACCT_005_AC3_BootstrapRefusesAMixedAddressByItsOwnCodeAsync()
+    {
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+        long before = await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM identity.accounts");
+        List<string> arguments = [.. Invocation.Bootstrap()];
+        arguments[arguments.IndexOf("--email") + 1] = "p\u0430ypal@example.test";
+
+        Invocation refused = await Invocation.PipedAsync(arguments, Invocation.Keys(deployment.ConnectionString));
+
+        Assert.Equal(1, refused.ExitCode);
+        Assert.Empty(refused.Output);
+        Assert.Equal(ErrorCodes.IdentifierMixedScript.ToString(), Code(refused));
+        Assert.Equal("email", Member(refused));
+        Assert.Equal(before, await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM identity.accounts"));
+    }
+
+    /// <summary>
     /// OPS-BOOT-001 AC2: no account bootstrap creates holds a credential of any kind, so
     /// none is known to anybody.
     /// </summary>
@@ -349,5 +372,12 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
         using var refusal = JsonDocument.Parse(run.Error);
 
         return refusal.RootElement.GetProperty("code").GetString();
+    }
+
+    private static string? Member(Invocation run)
+    {
+        using var refusal = JsonDocument.Parse(run.Error);
+
+        return refusal.RootElement.GetProperty("details").GetProperty("member").GetString();
     }
 }

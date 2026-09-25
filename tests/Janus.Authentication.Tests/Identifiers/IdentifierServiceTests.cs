@@ -37,6 +37,9 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     private const string Third = "third@example.test";
     private const string Number = "+441632960011";
 
+    // IDN-ACCT-005: a Cyrillic a inside an otherwise Latin word.
+    private const string Mixed = "p\u0430ypal@example.test";
+
     private static readonly string[] English = ["en"];
 
     private static readonly DateTimeOffset Noon =
@@ -797,6 +800,134 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
                 Second,
                 Source,
                 TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// IDN-ACCT-004 AC3: an address added in fullwidth and mixed case, and a number
+    /// added in Arabic-Indic digits, are held in their canonical forms beside the forms
+    /// the person entered.
+    /// </summary>
+    /// <param name="kind">What is added.</param>
+    /// <param name="entered">The form the person entered.</param>
+    /// <param name="canonical">The form it is held under.</param>
+    [Theory]
+    [InlineData(IdentifierKind.Email, "\uFF33econd@Example.TEST", Second)]
+    [InlineData(
+        IdentifierKind.Phone,
+        "+\u0664\u0664\u0661\u0666\u0663\u0662\u0669\u0666\u0660\u0660\u0661\u0661",
+        Number)]
+    public async Task IDN_ACCT_004_AC3_AnIdentifierAddedInAnotherFormIsHeldCanonicalAsync(
+        IdentifierKind kind,
+        string entered,
+        string canonical)
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        Accepted(await Service.AddAsync(
+            Acting,
+            Stepped(),
+            kind,
+            entered,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        HeldIdentifier added = Named(await HeldAsync(), canonical);
+
+        Assert.Equal(kind, added.Kind);
+        Assert.Equal(entered, added.Entered);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-004 AC3: where one of a kind is all the account may hold, an address
+    /// changed to one entered in fullwidth and mixed case, and a number changed to one
+    /// entered in Arabic-Indic digits, are held in their canonical forms once the
+    /// change applies.
+    /// </summary>
+    /// <param name="kind">What is changed.</param>
+    /// <param name="entered">The form the person entered.</param>
+    /// <param name="canonical">The form it is held under.</param>
+    [Theory]
+    [InlineData(IdentifierKind.Email, "\uFF33econd@Example.TEST", Second)]
+    [InlineData(
+        IdentifierKind.Phone,
+        "+\u0664\u0664\u0661\u0666\u0663\u0662\u0669\u0666\u0660\u0660\u0661\u0662",
+        "+441632960012")]
+    public async Task IDN_ACCT_004_AC3_AChangeEnteredInAnotherFormIsHeldCanonicalAsync(
+        IdentifierKind kind,
+        string entered,
+        string canonical)
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        _configuration.Set(Settings.IdentifiersPhoneMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId phone = _directory.Verified(_person, IdentifierKind.Phone, Number);
+        IdentifierId changing = kind is IdentifierKind.Email ? email : phone;
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            changing,
+            entered,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        await VerifiedAsync(changing);
+
+        HeldIdentifier changed = Named(await HeldAsync(), canonical);
+
+        Assert.Equal(changing, changed.Id);
+        Assert.Equal(entered, changed.Entered);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-005 AC3: an address whose one word mixes a Cyrillic letter into Latin
+    /// is refused as an addition by the code that names the mixing, and nothing waits
+    /// to be verified.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ACCT_005_AC3_AMixedAddressIsRefusedAsAnAdditionByItsOwnCodeAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        Assert.Equal(
+            ErrorCodes.IdentifierMixedScript,
+            Refused(await Service.AddAsync(
+                Acting,
+                Stepped(),
+                IdentifierKind.Email,
+                Mixed,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.Equal(Primary, Assert.Single(await HeldAsync()).Canonical);
+        Assert.Empty(_pending.All);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-005 AC3: where one address is all the account may hold, a change to
+    /// one whose one word mixes a Cyrillic letter into Latin is refused by the code
+    /// that names the mixing, and nothing waits to be verified.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ACCT_005_AC3_AMixedAddressIsRefusedAsAChangeByItsOwnCodeAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId primary = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        Assert.Equal(
+            ErrorCodes.IdentifierMixedScript,
+            Refused(await Service.ReplaceAsync(
+                Acting,
+                Stepped(),
+                primary,
+                Mixed,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.Equal(Primary, Assert.Single(await HeldAsync()).Canonical);
+        Assert.Empty(_pending.All);
     }
 
     /// <summary>

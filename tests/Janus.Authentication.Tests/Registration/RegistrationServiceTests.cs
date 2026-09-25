@@ -1161,6 +1161,84 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-ACCT-004 AC3: an address entered in fullwidth and mixed case and a number
+    /// entered in Arabic-Indic digits are written with the account in their canonical
+    /// forms, beside the forms the person entered.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ACCT_004_AC3_RegistrationStoresTheCanonicalFormsAsync()
+    {
+        const string wideAddress = "\uFF30erson@Example.TEST";
+        const string arabicIndicNumber =
+            "+\u0664\u0664\u0661\u0666\u0663\u0662\u0669\u0666\u0660\u0660\u0661\u0661";
+
+        RegistrationSessionId session = await AgedAsync();
+
+        _ = Ok(await Service.StageAsync(
+            session,
+            IdentifierKind.Email,
+            wideAddress,
+            TestContext.Current.CancellationToken));
+        await VerifiedAsync(session, IdentifierKind.Email);
+        _ = Ok(await Service.StageAsync(
+            session,
+            IdentifierKind.Phone,
+            arabicIndicNumber,
+            TestContext.Current.CancellationToken));
+        await VerifiedAsync(session, IdentifierKind.Phone);
+        _ = Ok(await Service.ConfirmAsync(session, TestContext.Current.CancellationToken));
+        _ = Ok(await Service.SetPasswordAsync(session, Chosen, TestContext.Current.CancellationToken));
+        _ = Ok(await AcceptedAsync(session));
+
+        IReadOnlyList<NewIdentifier> written = Assert.Single(_directory.Created).Identifiers;
+        NewIdentifier email = Assert.Single(written, held => held.Kind is IdentifierKind.Email);
+        NewIdentifier phone = Assert.Single(written, held => held.Kind is IdentifierKind.Phone);
+
+        Assert.Equal(Address, email.Canonical);
+        Assert.Equal(wideAddress, email.Entered);
+        Assert.Equal(Number, phone.Canonical);
+        Assert.Equal(arabicIndicNumber, phone.Entered);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-005 AC3: an address whose one word mixes a Cyrillic letter into Latin
+    /// is refused at the identifier step by the code that names the mixing, whether
+    /// it is typed, typed over a staged one, or supplied by a sign-in provider, and
+    /// nothing is staged from it.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ACCT_005_AC3_TheIdentifierStepRefusesAMixedAddressByItsOwnCodeAsync()
+    {
+        const string mixed = "p\u0430ypal@example.test";
+
+        RegistrationSessionId typed = await AgedAsync();
+        RegistrationSessionId changed = await AwaitingAsync();
+        RegistrationSessionId supplied = await AgedAsync();
+
+        Assert.Equal(
+            ErrorCodes.IdentifierMixedScript,
+            Refused(await Service.StageAsync(
+                typed,
+                IdentifierKind.Email,
+                mixed,
+                TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            ErrorCodes.IdentifierMixedScript,
+            Refused(await Service.ChangeAsync(
+                changed,
+                Identity(changed, IdentifierKind.Email).Id,
+                mixed,
+                TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            ErrorCodes.IdentifierMixedScript,
+            Refused(await ProvidedAsync(supplied, Factor.Google, GoogleSubject, mixed, verified: true)));
+
+        Assert.Empty(Live(typed).Identifiers);
+        Assert.Equal(Address, Identity(changed, IdentifierKind.Email).Canonical);
+        Assert.Empty(Live(supplied).Identifiers);
+    }
+
+    /// <summary>
     /// REG-PROF-002 AC3: the account carries the affirmation and the instant it was
     /// derived; the date itself only where the deployment keeps it.
     /// </summary>
