@@ -22,7 +22,8 @@ internal static class ApiStatus
         // Startup validation never crosses the boundary: a host is refused its model
         // before it serves anything, so arriving here would be a fault. So is a
         // missing policy or a missing derivation source, which 10 calls a fault
-        // rather than a denial.
+        // rather than a denial, and a conformance finding, which a suite the host
+        // runs reports and no request raises.
         [ErrorCodes.StartupGoverningLanguage] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupDeclarationMissing] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupSubscriberName] = StatusCodes.Status500InternalServerError,
@@ -40,6 +41,8 @@ internal static class ApiStatus
         [ErrorCodes.StartupRedirectClient] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupSchemaMismatch] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.PolicyUnregistered] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.TruthTableDisagreement] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.ProviderNonconformant] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.DerivationSourcesMissing] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.SystemFault] = StatusCodes.Status500InternalServerError,
 

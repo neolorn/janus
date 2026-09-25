@@ -741,6 +741,15 @@ public static class ErrorCodes
     public static ErrorCode RestrictionReasonRequired { get; } = ErrorCode.Parse("auth.restriction.reasonrequired");
 
     /// <summary>
+    /// A conformance finding: the provider admitted a request it refuses, or its
+    /// discovery document names a form it retires. The details name the probe, what was
+    /// sent, the refusal expected and what came back; restore the provider to the
+    /// configuration the library gives it.
+    /// </summary>
+    /// <remarks>Implements AUTH-OIDC-006 AC1 and LIB-TEST-001.</remarks>
+    public static ErrorCode ProviderNonconformant { get; } = ErrorCode.Parse("auth.oidc.nonconformant");
+
+    /// <summary>
     /// Permission is absent, on something whose existence is not concealed. Hold the
     /// permission, or ask someone who does.
     /// </summary>
@@ -830,6 +839,15 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements AUTHZ-GRANT-004 and AUTHZ-GRANT-003 AC3.</remarks>
     public static ErrorCode RoleInUse { get; } = ErrorCode.Parse("authz.role.inuse");
+
+    /// <summary>
+    /// A conformance finding: a case of the host's truth table decided otherwise than
+    /// the table states, through the single check, the list filter, or both. The
+    /// details name the case and what each path decided; correct whichever of the
+    /// policy and the table is wrong, the table first.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-TEST-001, AUTHZ-PRIN-001 and LIB-TEST-001 AC2.</remarks>
+    public static ErrorCode TruthTableDisagreement { get; } = ErrorCode.Parse("authz.truthtable.disagreement");
 
     /// <summary>
     /// The change would leave an alert destination list empty. Add a destination

@@ -12,12 +12,15 @@ namespace Janus.Core.Tests;
 /// The shape of the solution: which project may depend on which, what a project file
 /// may declare, and which packages the build may resolve
 /// (CONV-LAYOUT-001, CONV-LAYOUT-002, CONV-LAYOUT-003, CONV-SETUP-001, CONV-SETUP-002,
-/// CONV-DESIGN-003, CONV-DESIGN-004, CONV-DESIGN-008, CONV-CODE-008, LIB-PKG-001,
-/// LIB-PKG-002, OPS-DATA-001, OPS-DATA-002).
+/// CONV-DESIGN-003, CONV-DESIGN-004, CONV-DESIGN-008, CONV-CODE-008, LIB-API-002,
+/// LIB-PKG-001, LIB-PKG-002, OPS-DATA-001, OPS-DATA-002).
 /// </summary>
 [Trait("kind", "contract")]
 public sealed class LibraryStructureTests
 {
+    // LIB-API-002 AC2: the project the sample host is written in.
+    private const string Sample = "Janus.Conformance.Tests";
+
     private static readonly Dictionary<string, string[]> Dependencies = new(StringComparer.Ordinal)
     {
         ["Janus.Core"] = [],
@@ -178,6 +181,20 @@ public sealed class LibraryStructureTests
         foreach (string project in Dependencies.Keys)
         {
             Assert.Equal(PermittedGrants(project), Grants(project));
+        }
+    }
+
+    /// <summary>
+    /// LIB-API-002 AC2: the sample host lives in the conformance package's test project,
+    /// and no project of the library opens its internals to it, so what the sample
+    /// compiles against is the public surface alone.
+    /// </summary>
+    [Fact]
+    public void LIB_API_002_AC2_NoProjectOpensItsInternalsToTheSampleHost()
+    {
+        foreach (string project in Dependencies.Keys)
+        {
+            Assert.DoesNotContain(Sample, Grants(project));
         }
     }
 
@@ -647,8 +664,12 @@ public sealed class LibraryStructureTests
         // CONV-LAYOUT-002 permits a source project other than Core, whose surface is
         // public already, to open its internals to its own test project (CONV-TEST-001).
         // The generator of CONV-LAYOUT-001 is not a source project: it lives outside the
-        // package and the gate that regenerates its output is what covers it.
-        if (!string.Equals(project, "Janus.Core", StringComparison.Ordinal) && IsLibrary(project))
+        // package and the gate that regenerates its output is what covers it. The
+        // conformance package's test project holds the sample host, which reads no
+        // internal type (LIB-API-002 AC2), so that one grant is not made.
+        if (!string.Equals(project, "Janus.Core", StringComparison.Ordinal)
+            && IsLibrary(project)
+            && !string.Equals(project + ".Tests", Sample, StringComparison.Ordinal))
         {
             permitted.Add(project + ".Tests");
         }

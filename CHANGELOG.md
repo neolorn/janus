@@ -389,6 +389,19 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `Janus.Conformance`, the suite a host runs against its own deployment, each call
+  answering a report whose findings are codes with structured data.
+  `ConformanceSuite.Policies` names each entity of the host's context that is not a
+  declared resource type, the rows of a declared relationship or a contract table,
+  under `authz.policy.unregistered`. `ConformanceSuite.Declaration` judges a
+  declaration by the checks startup runs and reports a refusal under its own code.
+  `ConformanceSuite.TruthTableAsync` writes each case of the host's table into the
+  deployment and reports, under `authz.truthtable.disagreement`, each case the single
+  check or the list filter decides otherwise than the table states; it writes into
+  the database, so it runs against a deployment kept for it.
+  `ConformanceSuite.ProviderAsync` asks the provider each form AUTH-OIDC-006 retires
+  and reports, under `auth.oidc.nonconformant`, each one it admits or its discovery
+  document lists.
 - `IResources` in `Janus.Core`: a host registers each record it creates, many at once
   for an import, and moves one, inside its own unit of work, and the ancestry the
   permission filter reads is written in the same transaction. A record is placed only

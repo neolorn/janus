@@ -19,6 +19,7 @@
     <Project Path="tests/Janus.Authentication.Tests/Janus.Authentication.Tests.csproj" />
     <Project Path="tests/Janus.Authorization.Tests/Janus.Authorization.Tests.csproj" />
     <Project Path="tests/Janus.Cli.Tests/Janus.Cli.Tests.csproj" />
+    <Project Path="tests/Janus.Conformance.Tests/Janus.Conformance.Tests.csproj" />
     <Project Path="tests/Janus.Core.Tests/Janus.Core.Tests.csproj" />
     <Project Path="tests/Janus.Hosting.Tests/Janus.Hosting.Tests.csproj" />
     <Project Path="tests/Janus.Identity.Tests/Janus.Identity.Tests.csproj" />

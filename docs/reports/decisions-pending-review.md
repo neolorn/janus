@@ -14461,6 +14461,225 @@ create and move it speaks of, with the refusals above; LIB-API-005 could list it
 the operations contract; chapter 10 section 1 could list `resourceType`, `resourceId`
 and `containedIn` as the members `api.request.malformed` names for it.
 
+---
+
+## 353. The suite judges a declaration by the checks startup runs, and each failure by its own code
+
+**Phase 10 · 2026-09-25 · Tier 2 · LIB-TEST-001 AC3, AUTHZ-MODEL-004**
+
+*The question.* LIB-TEST-001 AC3: the suite "validates the model declaration and
+reports each failure distinctly". The library already refuses a declaration as it
+starts (AUTHZ-MODEL-004), one failure at a time, each under its own code of chapter 10
+section 1.5. The criterion does not say whether "each failure" is every failure of one
+declaration or each kind of failure.
+
+*The readings.*
+
+1. A second validator in the package that carries on past the first failure and
+   reports every failure of the declaration at once.
+2. The suite runs the library's own checks, the registration a host makes, and
+   reports the refusal as a finding carrying the refusal's code and details, so each
+   kind of failure is reported as itself.
+
+*Chosen: 2.* The checks stay in one place: a second copy in the package could pass a
+declaration startup refuses, which is the failure the suite exists to catch. The
+suite calls `AddJanus` on a collection of its own, over key material drawn for the
+check and cleared after it and an address no name resolves to (RFC 2606), so nothing
+is reached. A containment cycle, a reference to an undeclared type, a type with no
+path to an organization, a purpose whose basis needs an assessment and names none, a
+derivation from an undeclared relationship and a purpose with no data category are each
+reported under their own code, naming the value at fault. Like startup, the judgement
+stops at the first failure, so a declaration failing two ways reports the second once
+the first is corrected. A refusal the model raises with no code (a type or
+relationship declared twice, a purpose on a basis the declaration does not name) is
+not a finding, since a finding is a code; it propagates as the `StartupException`. The
+two checks that read the database (a stored role allowing an undeclared permission, a
+derivation column no index reaches) are startup's and not this check's; a host's
+deployment starting is what proves them.
+
+*Tests that pin it.*
+`ConformanceSuiteTests.LIB_TEST_001_AC3_TheSampleDeclarationHoldsTogether`,
+`ConformanceSuiteTests.LIB_TEST_001_AC3_EachMalformedDeclarationIsReportedByItsOwnCode`.
+
+*Chapter text that should change.* LIB-TEST-001 AC3 could read "reports each kind of
+failure under its own code"; chapter 10 section 1.5 could give the two codeless
+refusals a code, so the suite can report them as findings.
+
+---
+
+## 354. An entity has a policy when it is a declared type, a declared relationship's rows or a contract table
+
+**Phase 10 · 2026-09-25 · Tier 3 · LIB-TEST-001 AC1, AUTHZ-GATE-001 AC3, CONV-TEST-003**
+
+*The question.* LIB-TEST-001 AC1: the suite "verifies every entity has a registered
+policy". A host's context maps more than its resource types: the rows of the
+relationships its derivations follow (AUTHZ-DERIVE-004), which the gate reads through
+the declaration, and the library's two contract tables, which `MapAuthorizationTables`
+maps into it. No chapter says which of them has a policy.
+
+*The readings.*
+
+1. Only a declared resource type has a policy; every other mapped entity is a finding.
+2. A declared resource type, the rows of a declared relationship and the two contract
+   tables are covered; an owned type is covered by its owner, since it is read only
+   through it; every other entity is a finding.
+
+*Chosen: 2 (Tier 3).* Reading 1 is stricter but has no conforming configuration any
+chapter describes: a relationship's rows are the gate's own input, registered with it
+by the declaration and read by it, and the gate renders no filter over them, so
+reading 1 would ask a host to declare its facts as resource types with purposes and
+an organization path, which nothing asks. The contract tables are the library's. Each
+entity outside the three is reported under `authz.policy.unregistered` with `entity`
+naming its full type name, in ordinal order. An entity is judged by its type, so one
+type mapped twice is reported once.
+
+*Tests that pin it.*
+`ConformanceSuiteTests.LIB_TEST_001_AC1_EveryEntityTheSampleHostMapsHasAPolicy`,
+`ConformanceSuiteTests.LIB_TEST_001_AC1_AnEntityWithoutAPolicyIsFound`.
+
+*Chapter text that should change.* AUTHZ-GATE-001 AC3 and LIB-TEST-001 AC1 could say
+that a declared relationship's rows and the contract tables count as registered, or
+chapter 03 could give a relationship's rows a read policy of their own.
+
+---
+
+## 355. The host states its truth table in the library's scenarios, and the suite writes each case
+
+**Phase 10 · 2026-09-25 · Tier 2 · LIB-TEST-001 AC2, AUTHZ-TEST-001, AUTHZ-PRIN-001, OPS-DATA-002, LIB-HOST-002**
+
+*The question.* LIB-TEST-001 AC2: the suite "runs the truth table through both check
+and filter and asserts agreement". AUTHZ-TEST-001 has the table enumerate outcomes
+across relationship, permission and condition for each resource type, and AC1 lists
+the situations it covers. No chapter says who writes the table of a host's own types,
+in what terms, or how the state each case needs comes to exist in a deployment whose
+host rows the library never reads (LIB-HOST-002).
+
+*The readings.*
+
+1. The host writes every case's state itself, and the suite only asks the two paths.
+2. The host states each case as a scenario, a permission and the expected outcome,
+   and the suite writes the state the scenario names, with the host writing only its
+   own rows through a seam it implements.
+
+*Chosen: 2.* The table stays a reviewable list of rows in the host's code, which is
+AUTHZ-TEST-001's point, and the scenarios are the library's, so a case means the same
+in every deployment. The seventeen scenarios cover AC1's list (a grant on the record,
+its container, above its container, on the organization; to a group and to a nested
+group; deny over a grant, and deny on the container over a grant on the record; an
+expired grant; a grant in another organization; a derived grant, one on the
+container, and deny over one) and add a grant on a sibling, no grant, a revoked grant
+and a role that does not allow the permission. A scenario the type's declaration
+cannot place (a container case on a type with none, a derived case on a type deriving
+nothing) is refused before anything is written.
+
+Each case is written in an organization of its own: the organization, the granter,
+the person, a role of the case's own allowing the case's permission (allowing nothing
+for the role case), one record at every level of the type's chain and a sibling of
+the record, registered through `IResources` after the host has written its rows for
+them. The library's own rows are written by hand-written statements into the
+library-owned tables, whose structure is public (LIB-API-001), so the gate is asked
+about a database in a stated shape rather than one its own writers produced; a grant
+is dated two hours back, and an expired or revoked one an hour back. A derived case
+has the declared role allow the case's permission, the role being the deployment's
+and so allowing every permission a table has derived it for; the type's first
+derivation is the one used; the host writes the fact through its seam, and a
+materialised derivation is refreshed as the host's own write refreshes it. The filter
+is applied to the host's own rows in the host's own context. The suite writes into the
+database, so it runs against a deployment kept for it. The host opens the connection
+the suite writes through: OPS-DATA-002 has nothing but the accessor retrieve a
+connection, and its gate scans the package, so the strictest reading keeps the package
+from opening one.
+
+*Tests that pin it.*
+`ConformanceSuiteTests.LIB_TEST_001_AC2_EveryShelfCaseAgreesThroughCheckAndFilterAsync`,
+`ConformanceSuiteTests.LIB_TEST_001_AC2_EveryBinderCaseAgreesThroughCheckAndFilterAsync`,
+`ConformanceSuiteTests.LIB_TEST_001_AC2_EverySheetCaseAgreesThroughCheckAndFilterAsync`,
+`ConformanceSuiteTests.LIB_TEST_001_AC2_ACaseDecidedOtherwiseThanTheTableStatesIsReportedAsync`.
+
+*Chapter text that should change.* LIB-TEST-001 AC2 could say the host states the
+table in the library's scenarios, and list them; OPS-DATA-002 could say whether the
+conformance package is the service layer its AC2 speaks of.
+
+---
+
+## 356. The provider probe a host runs asks what a registered client can be refused
+
+**Phase 10 · 2026-09-25 · Tier 2 · AUTH-OIDC-006 AC1, LIB-TEST-001, LIB-HOST-003, entry 280**
+
+*The question.* Entry 280 kept AUTH-OIDC-006 AC1's refusals as the library's own
+tests and had phase 10's host-run suite run the same refusals. Two of them, the
+exact-match rule and the code exchange, need a code, and a code needs a person
+signed in, which a host's deployment kept for the suite has no way to produce without
+the suite holding a credential.
+
+*The readings.*
+
+1. The host-run probe asks every refusal of entry 280, signing a person in through a
+   credential the host hands it.
+2. The host-run probe asks every refusal a registered client can provoke without a
+   person, and the two that need one stay the library's own tests.
+
+*Chosen: 2.* This narrows entry 280. Reading 1 would have a conformance package hold
+a person's credential, which it has no business holding. The probe reads the
+discovery document under the issuer and takes the pushed-request and token endpoints
+from it, so it assumes no path of the deployment's (LIB-HOST-003). It asks for the six
+implicit and hybrid response types (`unsupported_response_type`), the password,
+client-credentials, implicit, device-code and token-exchange grants
+(`unsupported_grant_type`), the plain proof key, a challenge naming no method and no
+challenge (`invalid_request`), and a push without the client's secret
+(`invalid_client`), each with everything else in order so what is refused is the
+form. It checks the document lists `code` alone, `S256` alone, the code and refresh
+grants alone, pushed requests as required, and no unauthenticated method. Each form
+admitted is a finding naming the probe, the field, what was sent, the refusal expected,
+the status and the error that came back; each listing is a finding naming the member
+and what it lists.
+
+*Tests that pin it.*
+`ConformanceSuiteTests.AUTH_OIDC_006_AC1_TheSampleHostsProviderRefusesEveryRetiredFormAsync`,
+`ConformanceSuiteTests.AUTH_OIDC_006_AC1_AProviderAdmittingWhatItShouldRefuseIsReportedAsync`.
+
+*Chapter text that should change.* AUTH-OIDC-006 AC1 could say the exact-match rule
+and the exchange are the library's own tests and the rest the host's; LIB-TEST-001
+could name the provider's refusals among what the host-run suite verifies.
+
+---
+
+## 357. The suite answers reports of findings, each a code, under two new codes
+
+**Phase 10 · 2026-09-25 · Tier 2 · LIB-TEST-001, LIB-API-001, LIB-API-003, CONV-CONTENT-001, CONV-LAYOUT-001**
+
+*The question.* LIB-TEST-001 ships the suite as `Janus.Conformance`, the one further
+project with public types (CONV-LAYOUT-001), and names what it verifies but not what a
+host calls or what comes back. Chapter 10 section 1 has no code for a truth-table case
+decided otherwise than stated, or for a provider admitting a retired form.
+
+*The readings.*
+
+1. The suite is a set of test classes a host inherits, whose assertions fail with a
+   sentence.
+2. The suite is four calls a host makes from its own test, each answering a report
+   whose findings are codes with structured data, and the host's test asserts the
+   report conforms.
+
+*Chosen: 2.* A sentence would be library wording crossing to a host (CONV-CONTENT-001,
+LIB-API-003), and inheriting a test class would tie the package to the host's test
+framework, which no chapter names. The public surface is `ConformanceSuite` with
+`Policies`, `Declaration`, `TruthTableAsync` and `ProviderAsync`;
+`ConformanceReport`, whose `Conforms` is whether it holds no finding;
+`ConformanceFinding`, the check and the failure; `ConformanceCheck`; `TruthTableCase`
+and `TruthTableScenario`; `IConformanceRows<TResource>`, the host's own rows of a type;
+and `ConformanceClient`, the registered client the provider is asked as. A finding
+reuses the code that names its condition where one exists (`authz.policy.unregistered`,
+the model's own startup codes) and otherwise carries one of two new codes,
+`authz.truthtable.disagreement` and `auth.oidc.nonconformant`. No request raises
+either, and the status table holds every code, so both are listed at 500.
+
+*Tests that pin it.* The ten tests of `ConformanceSuiteTests`, and
+`ErrorCodesTests` and `ApiStatusTests` over the two codes.
+
+*Chapter text that should change.* Chapter 10 section 1 should hold the two rows under
+"Rows for chapter 10"; LIB-API-001 could list the conformance package's surface.
+
 
 # Rows for chapter 10
 
@@ -14501,6 +14720,8 @@ The subsection each row belongs in is named with it.
 | `identity.invitation.notfound` | 1.1 | 404 | `GET /account/invitation` or the acknowledgement is asked of an account no standing invitation is attached to: none of its links was opened by it, or each it opened was acknowledged or revoked. (REG-INV-002, entry 242) |
 | `model.startup.subscribername` | 1.5 | 500 | Startup: two subject-event subscribers are registered under one name, or one under `erasure-ledger`, the name the erasure ledger's confirmation is recorded under. `details.handler` names it; nothing starts (IDN-LIFE-003a, DR-016, entry 332). |
 | `authz.resource.notfound` | 1.3 | 404 | The browser profile answers a request in which the gate refused a record of a type that conceals its records, whether or not the record exists, and whatever the endpoint wrote after the refusal. `details.correlation` is the audit record of the refusal; nothing else is carried (AUTHZ-CONCEAL-001, BFF-ERR-003, entry 339). |
+| `authz.truthtable.disagreement` | 1.3 | 500 | A conformance finding, raised by no request: a case of the host's truth table that the single check or the list filter decides otherwise than the table states. `details` carry `type`, `scenario`, `permission`, `expected`, `check` and `filter` (LIB-TEST-001 AC2, entry 355). |
+| `auth.oidc.nonconformant` | 1.2 | 500 | A conformance finding, raised by no request: the provider admitted a form AUTH-OIDC-006 retires, or its discovery document lists one. `details` carry `probe`, `field`, `sent`, `expected`, `status` and `error`, or, for the document, `probe`, `member` and `listed` (AUTH-OIDC-006 AC1, entry 356). |
 
 ## LIB-HOST-001, host declarations
 

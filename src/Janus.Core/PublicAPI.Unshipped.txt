@@ -3741,6 +3741,7 @@ static Janus.Core.ErrorCodes.PreferenceWrongType.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ProfileInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ProfileNotAccepted.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ProfileUnderage.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.ProviderNonconformant.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PurposeNoConsent.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PurposeNotObjectable.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ReactivationTokenInvalid.get -> Janus.Core.ErrorCode
@@ -3788,6 +3789,7 @@ static Janus.Core.ErrorCodes.TakedownActive.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.TakedownNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.TakedownWindowElapsed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.Throttled.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.TruthTableDisagreement.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.UsernameCoolingOff.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.UsernameInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.UsernameReserved.get -> Janus.Core.ErrorCode
