@@ -42,15 +42,16 @@ public sealed class PrivacyContractTests
 
     /// <summary>
     /// PRIV-CONS-010 AC1, AC2: the library declares no purpose at all, so none of its
-    /// source names the hosting transfer as one and a withdrawal reaches nothing the
-    /// permit stands on.
+    /// source names the hosting or its transfer as one and a withdrawal reaches nothing
+    /// the permit stands on. The one file naming them is the model, which names them
+    /// to refuse them on a consent basis (INT-HOST-002 AC1).
     /// </summary>
     [Fact]
     public void PRIV_CONS_010_AC1_NoLibrarySourceNamesATransferPurpose()
     {
-        string[] transfers = ["cross-border-transfer", "hosting-transfer", "transfer"];
+        string[] transfers = ["cross-border-transfer", "hosting", "hosting-transfer", "transfer"];
 
-        Assert.Empty(Naming(transfers));
+        Assert.Equal(["AuthorizationModel.cs"], Naming(transfers));
     }
 
     /// <summary>

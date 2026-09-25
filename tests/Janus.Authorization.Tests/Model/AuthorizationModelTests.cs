@@ -13,7 +13,7 @@ namespace Janus.Authorization.Tests.Model;
 /// <summary>
 /// The model a host declares and what building it refuses
 /// (AUTHZ-MODEL-001 to AUTHZ-MODEL-004, AUTHZ-MODEL-006, AUTHZ-GATE-001,
-/// AUTHZ-CONCEAL-001, PRIV-RIGHT-005a, OPS-ALERT-006).
+/// AUTHZ-CONCEAL-001, PRIV-RIGHT-005a, OPS-ALERT-006, INT-HOST-002).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class AuthorizationModelTests
@@ -169,6 +169,32 @@ public sealed class AuthorizationModelTests
             () => new AuthorizationDeclarationBuilder().RetentionFloor("Drafts and notes", TimeSpan.FromDays(30)));
         Assert.Throws<ArgumentException>(
             () => HostDomain.Declared().RetentionFloor("identity", TimeSpan.FromDays(30)));
+    }
+
+    /// <summary>
+    /// INT-HOST-002 AC1: a purpose for the hosting or its transfer declared on a
+    /// consent basis stops the deployment, naming the type and the purpose, so no
+    /// consent record can ever reference it. The same purpose on another basis builds,
+    /// and so does another purpose on consent, so the refusal is about the two
+    /// together.
+    /// </summary>
+    /// <param name="purpose">The purpose the deployment declares.</param>
+    [Theory]
+    [InlineData("hosting")]
+    [InlineData("Hosting")]
+    [InlineData("transfer")]
+    [InlineData("hosting-transfer")]
+    [InlineData("cross-border-transfer")]
+    public void INT_HOST_002_AC1_AConsentPurposeForTheHostingFailsStartup(string purpose)
+    {
+        StartupException refused = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(Declaring(purpose, "consent")));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        Assert.Equal("article." + purpose, refused.Failure!.Details["key"].GetString());
+
+        Assert.NotNull(AuthorizationModel.Of(Declaring(purpose, "contract")));
+        Assert.NotNull(AuthorizationModel.Of(Declaring("newsletter", "consent")));
     }
 
     /// <summary>
@@ -441,6 +467,20 @@ public sealed class AuthorizationModelTests
             ResourceTypes = [declared.ResourceTypes[0] with { EncryptedFields = [field] }],
         };
     }
+
+    // One purpose on the basis named, over a type whose encrypted field names its
+    // subject, so a consent the purpose rests on has a subject to be read from and
+    // nothing but the purpose and its basis is at issue.
+    private static AuthorizationDeclaration Declaring(string purpose, string basis) =>
+        new AuthorizationDeclarationBuilder()
+            .RetentionFloor("identity", TimeSpan.FromDays(365))
+            .LawfulBasis(Contract())
+            .LawfulBasis(new LawfulBasisDeclaration("consent", true, true, false, false))
+            .Resource<HostDomain.Article>("article", article => article
+                .BelongsToOrganization()
+                .Purpose(purpose, basis, data: ["identity"])
+                .Encrypted(item => item.Body, item => item.Author))
+            .Build();
 
     private static AuthorizationDeclaration Malformed(int index) => index switch
     {

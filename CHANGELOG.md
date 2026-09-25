@@ -1013,6 +1013,9 @@ against the public contract of LIB-API-001.
 - A wrong device verification code, a pressed sign-in link that lands on no sign-in, a
   refused delegated or provider sign-in and an unknown sign-in challenge are recorded as
   `auth.authentication.failed` and held by the progressive delay.
+- Startup refuses a purpose named for the hosting or its cross-border transfer
+  (`hosting`, `transfer`, `hosting-transfer`, `cross-border-transfer`) that rests on a
+  consent basis, with `model.startup.declarationmissing`.
 - Under the mount, a path no endpoint serves and a method a path does not take answer
   404 `authz.resource.notfound` in the error envelope, and a fault answers 500
   `system.fault` with the correlation identifier and nothing of what was thrown; the

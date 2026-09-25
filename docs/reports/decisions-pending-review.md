@@ -16678,6 +16678,32 @@ could name these as failed authentication.
 
 *Chapter text that should change.* None.
 
+---
+
+## 406. Startup refuses a consent-based purpose named for the hosting or its transfer
+
+**Phase 10 · 2026-09-25 · Tier 2 · INT-HOST-002 AC1, PRIV-CONS-010 AC1**
+
+*The question.* INT-HOST-002 AC1 reads "No consent record references hosting as its purpose." The library declares no purpose itself. A host could declare one named for the hosting on a consent basis, and every consent record for it would then reference hosting.
+
+*The readings.*
+
+1. Rely on the library declaring no purpose, as `PRIV_CONS_010_AC1` already did, and leave hosts free.
+2. Refuse at startup any purpose named `hosting`, `transfer`, `hosting-transfer` or `cross-border-transfer`, matched ignoring case, whose basis is consent. Use a new code owed to chapter 10.
+3. As 2, under `model.startup.declarationmissing` with `details.key` `<type>.<purpose>`.
+
+*Chosen: 3.* It fails closed: no consent record of such a purpose can exist, because the deployment does not start.
+- The code is reused, not added. The ledger's AUTHZ-MODEL-003 row and entry 359 already use it for a purpose declaration that cannot stand. This is the smaller public surface.
+- The same purpose on a non-consent basis is allowed, since that is what the permit rests on.
+- The names are the four the PRIV-CONS-010 search already used, with `hosting` added as the task asked.
+- The PRIV-CONS-010 search now pins `AuthorizationModel.cs` as the one file naming them.
+
+*Tests that pin it.*
+`AuthorizationModelTests.INT_HOST_002_AC1_AConsentPurposeForTheHostingFailsStartup`,
+`PrivacyContractTests.PRIV_CONS_010_AC1_NoLibrarySourceNamesATransferPurpose`.
+
+*Chapter text that should change.* INT-HOST-002 AC1 could say that startup refuses a consent-based purpose named for the hosting or its transfer. Chapter 10's AUTHZ-MODEL-003 startup refusals could carry the row proposed above.
+
 # Rows for chapter 10
 
 D-162 section E names codes, keys, declarations and vocabularies the library now

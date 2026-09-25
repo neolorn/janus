@@ -34,6 +34,12 @@ internal sealed class AuthorizationModel
     // unless the host declared it reading (AUTHZ-GATE-006, D-160).
     private static readonly string[] Reading = ["read", "list", Export];
 
+    // INT-HOST-002, PRIV-CONS-010: the hosting and its transfer outside the country
+    // rest on the regulator's permit, since a withdrawal would leave data that cannot
+    // lawfully be hosted, so no purpose by these names may rest on consent.
+    private static readonly string[] Hosting =
+        ["hosting", "transfer", "hosting-transfer", "cross-border-transfer"];
+
     private readonly Dictionary<string, LawfulBasisDeclaration> _bases;
     private readonly Dictionary<Type, ResourceTypeDeclaration> _entities;
     private readonly HashSet<Permission> _permissions;
@@ -699,6 +705,16 @@ internal sealed class AuthorizationModel
                 throw Malformed(
                     "the purpose " + purpose.Name + " rests on " + purpose.Basis
                     + ", which the model does not declare as a lawful basis");
+            }
+
+            if (basis.IsConsent && Hosting.Contains(purpose.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                throw Refused(
+                    ErrorCodes.StartupDeclarationMissing,
+                    "key",
+                    type.Name + "." + purpose.Name,
+                    "the hosting and its transfer rest on the regulator's permit and never "
+                    + "on consent");
             }
 
             if (basis.RequiresAssessment && string.IsNullOrWhiteSpace(purpose.Assessment))
