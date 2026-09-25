@@ -990,6 +990,16 @@ against the public contract of LIB-API-001.
   as every other refusal: `api.request.malformed`, a correlation identifier, and a
   `details.member` naming the member the reader stopped at or the one the endpoint
   required, so a caller traces it as it traces any other.
+- The browser profile admits each source address `abuse.source.ratelimit` requests a
+  minute (300 by default, sliding) and answers the rest 429 `auth.throttled` with
+  `retryAt`, before any session is looked up. Each instance of a deployment counts on
+  its own, by the connection address after the proxies the host trusts, so a
+  deployment of several instances sets the key to each one's share.
+- Under the mount, a path no endpoint serves and a method a path does not take answer
+  404 `authz.resource.notfound` in the error envelope, and a fault answers 500
+  `system.fault` with the correlation identifier and nothing of what was thrown; the
+  log keeps the fault's type under that identifier. The host's routes outside the
+  mount answer as the host has them answer.
 - Every session carries a synchronizer token of its own, bound to that session and to no
   other, and reissued whenever the session's secret is. Neither value is ever read back:
   the record holds only what each fingerprints to.

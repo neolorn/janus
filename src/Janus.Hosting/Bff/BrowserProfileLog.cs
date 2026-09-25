@@ -307,4 +307,17 @@ internal static partial class BrowserProfileLog
         string correlationId,
         ErrorCode code,
         IReadOnlyDictionary<string, JsonElement> details);
+
+    /// <summary>
+    /// A source that went over <c>abuse.source.ratelimit</c>, recorded once for the
+    /// hold rather than for every request the hold refuses (BFF-ORDER-001 stage 4).
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    /// <param name="lifts">When the source is admitted again.</param>
+    [LoggerMessage(
+        EventId = 24,
+        Level = LogLevel.Warning,
+        Message = "A source went over its request limit and is held until {Lifts} ({CorrelationId}).")]
+    public static partial void SourceOverLimit(ILogger log, string correlationId, DateTimeOffset lifts);
 }

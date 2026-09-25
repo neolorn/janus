@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Alerting;
@@ -431,16 +432,25 @@ public sealed class BrowserProfileTests : IDisposable
     /// endpoint carries is read for enforcement in two files and only ever adds a
     /// refusal to it: an endpoint says that it needs a session, and nothing says it
     /// needs less than the stages give it (BFF-STEP-001). The third reader is the
-    /// logging of BFF-LOG-002, which only ever takes a body out of a log.
+    /// logging of BFF-LOG-002, which only ever takes a body out of a log, and the
+    /// fourth is error translation, which asks only whether routing found an endpoint,
+    /// once every stage has run, to answer a path none serves. The one stage that
+    /// reads a key is the flood limit of stage 4, which reads that key alone, runs
+    /// before the token is checked and either refuses the request or hands it on to
+    /// every stage after it.
     /// </summary>
     [Fact]
     public void AUTH_SESS_007_AC2_NoEndpointCanOptOut()
     {
         Assert.Equal(
-            ["SensitiveBodyLogging.cs", "SessionRequired.cs", "SessionRequirement.cs"],
+            ["ErrorTranslation.cs", "SensitiveBodyLogging.cs", "SessionRequired.cs", "SessionRequirement.cs"],
             Reading("GetEndpoint", "Metadata"));
+        Assert.DoesNotContain("Metadata", Repository.Source("ErrorTranslation"), StringComparison.Ordinal);
 
-        Assert.Empty(Reading("IConfigurationStore"));
+        Assert.Equal(["SourceRateLimiting.cs"], Reading("IConfigurationStore", "Settings."));
+        Assert.Equal(
+            ["Settings.AbuseSourceRateLimit"],
+            Regex.Matches(Repository.Source("SourceRateLimiting"), @"Settings\.\w+").Select(read => read.Value));
     }
 
     /// <summary>
@@ -548,14 +558,16 @@ public sealed class BrowserProfileTests : IDisposable
     /// endpoint or its metadata; the one thing a path decides is which profile carries
     /// a request, and that is settled in the one place the library names the routes.
     /// The one other reader of the metadata is the logging of BFF-LOG-002, which
-    /// enforces no token and only ever takes a body out of a log.
+    /// enforces no token and only ever takes a body out of a log; error translation
+    /// reads no metadata, only whether an endpoint was found, after every stage.
     /// </summary>
     [Fact]
     public void BFF_CSRF_001_AC2_NoEndpointCanBeExcludedByConfigurationOrAttribute()
     {
         Assert.Equal(
-            ["SensitiveBodyLogging.cs", "SessionRequired.cs", "SessionRequirement.cs"],
+            ["ErrorTranslation.cs", "SensitiveBodyLogging.cs", "SessionRequired.cs", "SessionRequirement.cs"],
             Reading("GetEndpoint", "Metadata"));
+        Assert.DoesNotContain("Metadata", Repository.Source("ErrorTranslation"), StringComparison.Ordinal);
 
         Assert.Equal(["PipelineProfiles.cs"], Reading("Request.Path"));
     }
@@ -631,29 +643,115 @@ public sealed class BrowserProfileTests : IDisposable
     }
 
     /// <summary>
-    /// BFF-OWN-003 AC1 and AC2: the stages run in the order the contract fixes, so
-    /// the cheapest rejection is the one that answers and nothing later was reached.
+    /// BFF-OWN-003 AC1 and AC2, BFF-ORDER-001 AC1: the stages run in the order the
+    /// contract fixes, so the cheapest rejection is the one that answers and nothing
+    /// later was reached. With a source limit that admits nothing, a request stage 2
+    /// refuses and one stage 3 refuses are answered by those stages and are not
+    /// counted, and one that passes both is answered by stage 4 before stage 5 looks
+    /// for a session, a first contact is given or stage 6 checks a token. Stage 7 is
+    /// carried out by the operations an endpoint calls, where the account a request
+    /// names is known, so a request that reached no endpoint was counted against no
+    /// account either.
     /// </summary>
+    /// <returns>The work of the test.</returns>
     [Fact]
     public async Task BFF_OWN_003_AC2_TheMountedStagesRunInTheContractsOrderAsync()
     {
         var isolation = new LogInMemory<ResourceIsolation>();
         var header = new LogInMemory<CustomRequestHeader>();
         var origin = new LogInMemory<OriginValidation>();
+        var limiting = new LogInMemory<SourceRateLimiting>();
         var token = new LogInMemory<SynchronizerToken>();
+        RequestDelegate pipeline = Mounted(isolation, header, origin, limiting, token);
 
-        HttpContext context = Arriving(
+        _configuration.Set(Settings.AbuseSourceRateLimit, 0);
+
+        HttpContext crossSite = Arriving(
             "POST",
             ("Sec-Fetch-Site", "cross-site"),
             ("Origin", "https://elsewhere.example"));
+        HttpContext elsewhere = Arriving(
+            "POST",
+            ("Sec-Fetch-Site", "same-origin"),
+            (BrowserCookies.RequestHeader, "1"),
+            ("Origin", "https://elsewhere.example"));
+        HttpContext flooding = Arriving(
+            "POST",
+            ("Sec-Fetch-Site", "same-origin"),
+            (BrowserCookies.RequestHeader, "1"),
+            ("Origin", Target));
 
-        await Mounted(isolation, header, origin, token)(context);
+        await pipeline(crossSite);
 
-        await AssertRefusedAsync(context);
+        await AssertRefusedAsync(crossSite);
         Assert.Single(isolation.Entries);
         Assert.Empty(header.Entries);
         Assert.Empty(origin.Entries);
+        Assert.Empty(limiting.Entries);
+
+        await pipeline(elsewhere);
+
+        await AssertRefusedAsync(elsewhere);
+        Assert.Single(origin.Entries);
+        Assert.Empty(limiting.Entries);
+
+        await pipeline(flooding);
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, flooding.Response.StatusCode);
+        Assert.Contains(
+            "\"code\":\"" + ErrorCodes.Throttled + "\"",
+            await AnsweredAsync(flooding),
+            StringComparison.Ordinal);
+        Assert.Single(limiting.Entries);
+        Assert.Empty(header.Entries);
         Assert.Empty(token.Entries);
+        Assert.Empty(_contacts.All);
+        Assert.False(_reached);
+    }
+
+    /// <summary>
+    /// BFF-ORDER-001 AC1: a host has no stage to reorder or to put anything between,
+    /// because it can reach none of them on its own. Every stage is internal to the
+    /// library, and the one way in is the mounting calls, which take no middleware of
+    /// the host's and mount the stages together.
+    /// </summary>
+    [Fact]
+    public void BFF_ORDER_001_AC1_NoHostCanReachAStageOnItsOwn()
+    {
+        Assembly library = typeof(PipelineProfiles).Assembly;
+
+        Type[] stages =
+        [
+            .. library.GetTypes().Where(type => type.GetMethod(
+                "InvokeAsync",
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
+                [typeof(HttpContext), typeof(RequestDelegate)]) is not null),
+        ];
+
+        MethodInfo[] mounting =
+        [
+            .. library.GetExportedTypes()
+                .SelectMany(type => type.GetMethods(BindingFlags.Public | BindingFlags.Static))
+                .Where(method => method.GetParameters() is [{ } first, ..]
+                    && first.ParameterType == typeof(IApplicationBuilder)),
+        ];
+
+        Assert.Contains(typeof(SourceRateLimiting), stages);
+        Assert.Contains(typeof(SignedCallbackGuard), stages);
+        Assert.All(stages, stage => Assert.False(stage.IsVisible, stage.Name));
+        Assert.All(
+            library.GetExportedTypes(),
+            exported => Assert.False(typeof(IMiddleware).IsAssignableFrom(exported), exported.Name));
+
+        Assert.Equal(
+            ["UseBrowserProfile", "UseCallback", "UseCallback", "UseMachineProfile"],
+            mounting.Select(method => method.Name).Order(StringComparer.Ordinal));
+        Assert.All(mounting, method => Assert.Equal(typeof(PipelineProfiles), method.DeclaringType));
+        Assert.All(
+            mounting.SelectMany(method => method.GetParameters()),
+            parameter => Assert.False(
+                typeof(Delegate).IsAssignableFrom(parameter.ParameterType),
+                parameter.Member.Name + " takes " + parameter.Name));
     }
 
     /// <summary>
@@ -979,6 +1077,7 @@ public sealed class BrowserProfileTests : IDisposable
         new LogInMemory<ResourceIsolation>(),
         new LogInMemory<CustomRequestHeader>(),
         new LogInMemory<OriginValidation>(),
+        new LogInMemory<SourceRateLimiting>(),
         new LogInMemory<SynchronizerToken>());
 
     // BFF-ORDER-001 AC2: the host's own middleware, mounted where a host may mount it,
@@ -989,6 +1088,7 @@ public sealed class BrowserProfileTests : IDisposable
         new LogInMemory<ResourceIsolation>(),
         new LogInMemory<CustomRequestHeader>(),
         new LogInMemory<OriginValidation>(),
+        new LogInMemory<SourceRateLimiting>(),
         new LogInMemory<SynchronizerToken>(),
         before,
         after);
@@ -997,6 +1097,7 @@ public sealed class BrowserProfileTests : IDisposable
         ILogger<ResourceIsolation> isolation,
         ILogger<CustomRequestHeader> header,
         ILogger<OriginValidation> origin,
+        ILogger<SourceRateLimiting> limiting,
         ILogger<SynchronizerToken> token,
         Func<RequestDelegate, RequestDelegate>? before = null,
         Func<RequestDelegate, RequestDelegate>? after = null)
@@ -1017,6 +1118,7 @@ public sealed class BrowserProfileTests : IDisposable
         services.AddSingleton(isolation);
         services.AddSingleton(header);
         services.AddSingleton(origin);
+        services.AddSingleton(limiting);
         services.AddSingleton(token);
         services.AddSingleton<ILogger<FirstContact>>(new LogInMemory<FirstContact>());
         services.AddSingleton<ILogger<MalformedRequest>>(new LogInMemory<MalformedRequest>());
@@ -1045,10 +1147,13 @@ public sealed class BrowserProfileTests : IDisposable
         services.AddScoped<SynchronizerTokens>();
         services.AddScoped<ConcealedRefusals>();
         services.AddScoped<Concealment>();
+        services.AddScoped<ErrorTranslation>();
         services.AddScoped<MalformedRequest>();
         services.AddScoped<ResourceIsolation>();
         services.AddScoped<CustomRequestHeader>();
         services.AddScoped<OriginValidation>();
+        services.AddSingleton(new SourceAdmissions(_clock));
+        services.AddScoped<SourceRateLimiting>();
         services.AddScoped<RequestSession>();
         services.AddScoped<SessionResolution>();
         services.AddScoped<FirstContact>();

@@ -174,10 +174,13 @@ public static class HostingRegistration
         services.AddSingleton(new BrowserSessionCookies(application));
         services.AddScoped<SynchronizerTokens>();
         services.AddScoped<Concealment>();
+        services.AddScoped<ErrorTranslation>();
         services.AddScoped<MalformedRequest>();
         services.AddScoped<ResourceIsolation>();
         services.AddScoped<CustomRequestHeader>();
         services.AddScoped<OriginValidation>();
+        services.AddSingleton<SourceAdmissions>();
+        services.AddScoped<SourceRateLimiting>();
         services.AddScoped<RequestSession>();
         services.AddScoped<SessionResolution>();
         services.AddScoped<FirstContact>();

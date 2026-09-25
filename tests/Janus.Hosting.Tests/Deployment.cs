@@ -967,10 +967,13 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<SynchronizerTokens>();
         _ = services.AddScoped<ConcealedRefusals>();
         _ = services.AddScoped<Concealment>();
+        _ = services.AddScoped<ErrorTranslation>();
         _ = services.AddScoped<MalformedRequest>();
         _ = services.AddScoped<ResourceIsolation>();
         _ = services.AddScoped<CustomRequestHeader>();
         _ = services.AddScoped<OriginValidation>();
+        _ = services.AddSingleton<SourceAdmissions>();
+        _ = services.AddScoped<SourceRateLimiting>();
         _ = services.AddScoped<RequestSession>();
         _ = services.AddScoped<SessionResolution>();
         _ = services.AddScoped<FirstContact>();

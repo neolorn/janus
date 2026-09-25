@@ -91,6 +91,8 @@ public sealed class HostCallbackTests : IAsyncDisposable
         // The writer logs every refusal it answers (BFF-LOG-001), through the logging
         // every host registers.
         services.AddLogging();
+        services.AddScoped<ConcealedRefusals>();
+        services.AddScoped<ErrorTranslation>();
         services.AddScoped<MalformedRequest>();
         services.AddScoped<MachineProfile>();
 

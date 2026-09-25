@@ -15947,6 +15947,219 @@ resolves to an audit entry naming the permission, the principal and the grant th
 decided, or none"; OPS-OBS-001 AC1 says "the missing grant" and could add "or the deny
 grant that decided".
 
+---
+
+## 389. Stage 4 counts per source address in each instance's memory, and a deployment of several instances sets its share
+
+**Phase 10 · 2026-09-25 · Tier 3 · BFF-ORDER-001 AC3**
+
+*The question.* Chapter 17 section 10 and the `10` row of `abuse.source.ratelimit` fix
+the limit: 300 requests a minute per source address, sliding, answered with 429
+`auth.throttled`. Neither says what the source address is behind a proxy, where the
+counts are kept, or what a deployment of several instances admits.
+
+*The readings.*
+
+1. Count in PostgreSQL, shared by every instance.
+2. Count in Redis.
+3. Count in each instance's memory, by the address every other per-source count uses,
+   and state to the host that each instance admits the limit.
+4. Count in the throttle ledger of AUTH-ABUSE-001.
+
+*Chosen: 3.*
+
+- Tier 3, since it sets how much an abuse limit admits. Of the readings that keep a
+  flood away from the database, this one admits least, and it says what it admits.
+
+- Reading 1 writes to the database on every request. A flood would then cause the
+  very expense stage 4 exists to spare, and a store would be read before the session
+  lookup the stage must precede. It also needs a migration.
+- Reading 2 needs a client package that nothing in the library references, and the
+  chapter 08 allows no package that is not listed (CONV-DESIGN-008).
+- Reading 4 keeps decaying failure counts that are written per failure and owned by
+  the `abuse` work, and a flood is not a run of failures.
+- The source is `RequestOrigin.Source`: the connection address after the framework's
+  forwarded-headers handling, and the same one AUTH-ABUSE-001 and AUTH-ABUSE-008
+  count by. A connection with no address is the one source `unknown`.
+- A source already held is refused from memory, without the limit being read, so a
+  flood past the limit reaches no store.
+- A limit that cannot be read fails closed, and a limit below 1 admits nothing.
+- The hold is logged once, not for every request it refuses.
+- The deployment is not told silently: the remarks on
+  `PipelineProfiles.UseBrowserProfile` state three things.
+  - Each instance behind one balancer admits the limit, so N instances admit N times
+    the key.
+  - The host sets the key to each instance's share.
+  - A deployment behind a proxy must name the proxies it trusts, or all its traffic
+    counts as one source.
+- The counts are not a cached copy of durable state (INF-CACHE-001), and none of the
+  types AUTH-PRIN-001 AC1 forbids is used.
+
+*Tests that pin it.*
+
+- `SourceRateLimitingTests.BFF_ORDER_001_AC3_AFloodFromOneSourceIsRefusedBeforeSessionLookupAsync`
+- `SourceRateLimitingTests.BFF_ORDER_001_AC3_AnotherSourceIsNotRefusedAsync`
+- `SourceRateLimitingTests.BFF_ORDER_001_AC3_TheWindowResetsAsItsRequestsLeaveItAsync`
+- `SourceRateLimitingTests.AUTH_PRIN_001_AC3_ALimitThatCannotBeReadAdmitsNothingAsync`
+- `BrowserProfileTests.BFF_OWN_003_AC2_TheMountedStagesRunInTheContractsOrderAsync`
+
+*Chapter text that should change.* The `10` row of `abuse.source.ratelimit` and the
+"Values (D-153)" paragraph of 17 section 10 could say two things:
+
+- the count is kept per instance, by connection address after trusted proxies;
+- a deployment of several instances sets its share.
+
+---
+
+## 390. Stage 4 is the one file of the boundary that reads a key, and it reads that key alone
+
+**Phase 10 · 2026-09-25 · Tier 2 · AUTH-SESS-007 AC2, BFF-SESS-002 AC2**
+
+*The question.* Two structure tests held that no file of the boundary reads
+configuration. They stood for two claims:
+
+- no endpoint opts out through a key (AUTH-SESS-007 AC2);
+- no key weakens a cookie attribute (BFF-SESS-002 AC2).
+
+Stage 4 must read `abuse.source.ratelimit`, and the key's row names the stage.
+
+*The readings.*
+
+1. Keep the tests, and have the limit read outside `Bff` and handed to the stage.
+2. Admit the one file by name, and assert that it reads only that key and writes no
+   cookie.
+
+*Chosen: 2.*
+
+- Reading 1 moves the read without changing what reads it.
+- Reading 2 keeps both claims exact. A second file that reads a key fails both tests.
+  A second key read in the stage fails AUTH-SESS-007 AC2, and any mention of a cookie
+  in the stage fails BFF-SESS-002 AC2.
+- The stage only ever refuses, or hands the request on to every stage after it.
+
+*Tests that pin it.* `BrowserProfileTests.AUTH_SESS_007_AC2_NoEndpointCanOptOut`,
+`BrowserCookieTests.BFF_SESS_002_AC2_NoConfigurationKeyWeakensAnAttribute`.
+
+*Chapter text that should change.* None.
+
+---
+
+## 391. Stage 7 is carried out by the operations an endpoint calls, not by a mounted stage
+
+**Phase 10 · 2026-09-25 · Tier 2 · BFF-ORDER-001 AC1, BFF-OWN-003 AC2**
+
+*The question.* The table in 17 section 10 puts account-based throttling at stage 7,
+between stage 6 (the token) and stage 8. Chapter 09 attaches throttling to the
+operations that name an account (sign-in, recovery, break-glass, AUTH-ABUSE-001/002),
+and says the answer is the same whether or not the account exists. No stage in the
+mounted pipeline knows the account a request names before the endpoint reads the
+body.
+
+*The readings.*
+
+1. Mount a stage 7 that reads the body to find the account.
+2. Stage 7 is the throttle the authenticating operations consult, which is
+   `ThrottleService`, called by `AuthenticationService`, `RecoveryService`,
+   `SignInLinks` and `BreakGlassService`. It runs after stage 6 and before any state
+   changes, and the order test asserts that a request refused at stages 2 to 4
+   reaches no endpoint, so no account was counted.
+
+*Chosen: 2.*
+
+- Reading 1 would read the body before `MalformedRequest` and the endpoint.
+  API-CONV-002 has the body fail at the endpoint.
+- Reading 1 would also make the pipeline know each endpoint's shape.
+- The account is known only where the operation reads it, which is where the
+  throttle is.
+
+*Tests that pin it.* `BrowserProfileTests.BFF_OWN_003_AC2_TheMountedStagesRunInTheContractsOrderAsync`
+(its summary states the reading; `_reached` stays false).
+
+*Chapter text that should change.* The stage 7 row of 17 section 10 could say it is
+applied by the operations that name an account, inside the endpoint.
+
+---
+
+## 392. A path under the mount that nothing serves, and a method a path does not take, both answer 404 `authz.resource.notfound`
+
+**Phase 10 · 2026-09-25 · Tier 2 · LIB-API-003 AC4, BFF-ERR-001**
+
+*The question.* Two framework answers leave the library's envelope. For an unmatched
+path the framework writes a bare 404. For a wrong method, routing writes a bare 405
+with `Allow`. Neither code is named. The status table in 09 section 2 has no 405, and
+chapter 10 has no code for either case.
+
+*The readings.*
+
+1. A 404 with `authz.resource.notfound` and empty details for both.
+2. A 404 for the path, and a 405 with a new code and `Allow` for the method.
+3. A 404 with a new code for the path.
+
+*Chosen: 1.*
+
+- Reading 2 adds a status 09 does not list and a code 10 does not hold. RFC 9110
+  section 15.5.6 requires `Allow` on a 405, which discloses the methods a path takes.
+- Reading 3 adds a code where an existing one already means "no such thing here", and
+  09 section 2 reads a 404 as "not found".
+- The empty details keep a path nothing serves apart from a concealed record, which
+  carries `details.correlation`. A route is public, so nothing is concealed by making
+  the two alike.
+- The layer reads `GetEndpoint()` only to tell the framework's answer from an
+  endpoint's own 404 or 405. That is why the structure tests list it (entry 390 did the
+  same).
+- The host's routes outside the mount are untouched, because the layer sits inside
+  the mount.
+
+*Tests that pin it.*
+
+- `ErrorTranslationTests.LIB_API_003_AC4_APathNoEndpointServesAnswersTheEnvelopeAsync`
+- `ErrorTranslationTests.LIB_API_003_AC4_AMethodAPathDoesNotTakeAnswersTheEnvelopeAsync`
+- `ErrorTranslationTests.LIB_API_003_AC4_AMethodAMachineRouteDoesNotTakeAnswersTheEnvelopeAsync`
+- `ErrorTranslationTests.LIB_API_003_AC4_APathOutsideTheMountIsTheHostsAsync`
+
+*Chapter text that should change.* The `authz.resource.notfound` row in the ledger's
+"Rows for chapter 10" (section 1.3) could add "or a path under the mount that no
+endpoint serves, under any method, with empty details".
+
+---
+
+## 393. A fault is answered by a layer inside concealment, and kept by its type alone
+
+**Phase 10 · 2026-09-25 · Tier 2 · BFF-ERR-002 AC1 and AC2, LIB-API-003 AC4**
+
+*The question.* BFF-ERR-002 wants a fault to answer `system.fault`, with the detail
+retrievable from the logs by correlation identifier. CONV-LOG-003 forbids logging
+values, and an exception's message can carry one: the test's message names a host
+and port. The chapter does not say where in the pipeline the fault is caught.
+
+*The readings.*
+
+1. Log the exception with its message and stack.
+2. Log its type name only, under the correlation identifier, as `BackgroundWorker`
+   and `RestoreTest` already do. Catch it inside `Concealment`, outside every stage.
+3. As reading 2, with frames but no message.
+
+*Chosen: 2.*
+
+- Reading 1 can put a connection string or an address in the log.
+- Reading 3 adds a second way of logging a fault that the library does not have.
+- Where the fault is caught:
+  - inside `Concealment`, so a concealed refusal already written keeps the last word;
+  - outside every other stage, so a fault in a stage is answered too;
+  - also in the machine profile after its mark.
+- `Refusal.WriteAsync` logs the failure's details (`fault: <type>`) under the
+  correlation identifier and withholds them from the body. The catch returns a failure
+  result, as JAN0006 and `FailClosedTests.AUTH_PRIN_001_AC3` require.
+- A response that has started is not replaced. A cancellation while the caller has
+  gone is not answered.
+
+*Tests that pin it.*
+
+- `ErrorTranslationTests.LIB_API_003_AC4_AnEndpointThatThrowsAnswersAFaultAsync`
+- `SourceRateLimitingTests.AUTH_PRIN_001_AC3_ALimitThatCannotBeReadAdmitsNothingAsync`
+
+*Chapter text that should change.* BFF-ERR-002 AC2 could say that the detail kept is
+the fault's type, since CONV-LOG-003 keeps its message out of the log.
 
 # Rows for chapter 10
 

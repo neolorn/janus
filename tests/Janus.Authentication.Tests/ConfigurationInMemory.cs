@@ -20,6 +20,12 @@ internal sealed class ConfigurationInMemory : IConfigurationStore
     private readonly Dictionary<ConfigurationKey, object> _values = [];
 
     /// <summary>
+    /// The key whose every read throws, as a store that has gone away does; nothing
+    /// while every key reads.
+    /// </summary>
+    public ConfigurationKey? Unreachable { get; set; }
+
+    /// <summary>
     /// Names a value for a key, as a deployment does.
     /// </summary>
     /// <typeparam name="TValue">The type of the setting's value.</typeparam>
@@ -33,7 +39,9 @@ internal sealed class ConfigurationInMemory : IConfigurationStore
     public ValueTask<Result<TValue>> ReadAsync<TValue>(
         Setting<TValue> setting,
         CancellationToken cancellationToken) =>
-        ValueTask.FromResult(Read(setting));
+        setting.Key.Equals(Unreachable)
+            ? throw new InvalidOperationException("The settings table at db.internal:5432 could not be reached.")
+            : ValueTask.FromResult(Read(setting));
 
     /// <inheritdoc/>
     public ValueTask<Result<TValue>> ReadAsync<TValue>(
