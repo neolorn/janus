@@ -396,10 +396,11 @@ internal sealed class SendingService(
         }
 
         var keyed = new List<(Restriction Restriction, RestrictionKey Key)>(declared.Count);
+        var supplied = new Dictionary<string, string>(StringComparer.Ordinal);
 
         foreach (Restriction restriction in declared.Where(one => Restrictions.Applies(one, request)))
         {
-            string? value = (await KeyOfAsync(restriction, request, cancellationToken).ConfigureAwait(false))
+            string? value = (await KeyOfAsync(restriction, request, supplied, cancellationToken).ConfigureAwait(false))
                 .Match(one => one, error => Held<string?>(error, ref failure));
 
             if (failure is not null)
@@ -455,9 +456,13 @@ internal sealed class SendingService(
         return Result.Success(new SendPlan(counted, spent, lifts.Count == 0 ? null : lifts.Min()));
     }
 
+    // LIB-HOST-001 AC5: a host's key is asked for once in one judgement of a send,
+    // however many of the restrictions that apply count under it, and never where none
+    // that applies does.
     private async ValueTask<Result<string?>> KeyOfAsync(
         Restriction restriction,
         SendRequest request,
+        Dictionary<string, string> supplied,
         CancellationToken cancellationToken)
     {
         switch (restriction.Key)
@@ -485,8 +490,13 @@ internal sealed class SendingService(
                     JsonSerializer.SerializeToElement(restriction.HostKeyName ?? restriction.Name)));
         }
 
-        return Result.Success<string?>(
-            await supplier.Key(request.Context, cancellationToken).ConfigureAwait(false));
+        if (!supplied.TryGetValue(restriction.HostKeyName, out string? key))
+        {
+            key = await supplier.Key(request.Context, cancellationToken).ConfigureAwait(false);
+            supplied[restriction.HostKeyName] = key;
+        }
+
+        return Result.Success<string?>(key);
     }
 
     private async ValueTask<Result<IReadOnlyList<Worded>>> WordedAsync(

@@ -42,8 +42,10 @@ public sealed class SendingServiceTests : IAsyncDisposable
 
     private static readonly string[] Declared = ["en", "ar"];
 
+    private static readonly TimeSpan Recency = TimeSpan.FromMinutes(15);
+
     private static readonly StepUpChallenge Satisfied =
-        new(StepUpOutcome.Satisfied, AssuranceLevel.Aal2, PhishingResistant: false, [], null);
+        new(StepUpOutcome.Satisfied, AssuranceLevel.Aal2, PhishingResistant: false, Recency, [], null);
 
     private readonly ConfigurationInMemory _configuration = new();
     private readonly SendLedgerInMemory _ledger = new();
@@ -550,6 +552,62 @@ public sealed class SendingServiceTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.RestrictionExceeded, Refusal(second));
         Assert.Equal(Noon + TimeSpan.FromHours(1), RetryAt(second));
+    }
+
+    /// <summary>
+    /// LIB-HOST-001 AC5: a host's supplier is asked once for each send a restriction
+    /// counting under its key applies to, however many such restrictions there are,
+    /// and never for a send none of them applies to; what it answers is the key the
+    /// buckets count under.
+    /// </summary>
+    [Fact]
+    public async Task LIB_HOST_001_AC5_TheSupplierIsAskedOncePerSendItsKeyAppliesToAsync()
+    {
+        int asked = 0;
+
+        _suppliers = RestrictionKeySuppliers.Of(
+        [
+            new RestrictionKeySupplier(
+                "tenant",
+                (_, _) =>
+                {
+                    asked++;
+
+                    return ValueTask.FromResult("acme");
+                }),
+        ]);
+
+        _configuration.Set(
+            Settings.Restrictions,
+            [
+                new Restriction(
+                    "tenant.hourly",
+                    RestrictionKeyKind.Host,
+                    "tenant",
+                    RestrictionPurpose.Verification,
+                    [new Bucket(10, TimeSpan.FromHours(1), BucketWindow.Sliding)]),
+                new Restriction(
+                    "tenant.daily",
+                    RestrictionKeyKind.Host,
+                    "tenant",
+                    RestrictionPurpose.Verification,
+                    [new Bucket(20, TimeSpan.FromDays(1), BucketWindow.Sliding)]),
+            ]);
+
+        await SentAsync(Texted());
+
+        Assert.Equal(1, asked);
+
+        await SentAsync(Texted());
+
+        Assert.Equal(2, asked);
+
+        await SentAsync(Link());
+
+        Assert.Equal(2, asked);
+        Assert.Equal(
+            [new RestrictionKey("tenant.daily", "acme"), new RestrictionKey("tenant.hourly", "acme")],
+            _ledger.Keys.OrderBy(key => key.Restriction, StringComparer.Ordinal));
     }
 
     /// <summary>

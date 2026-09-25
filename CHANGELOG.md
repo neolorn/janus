@@ -997,6 +997,8 @@ against the public contract of LIB-API-001.
   deployment of several instances sets the key to each one's share.
 - Capabilities never list a permission the authorization model does not declare,
   whatever a stored role still allows.
+- A host's restriction key supplier is asked once for each key name when a send is
+  judged, however many restrictions count under that key.
 - Under the mount, a path no endpoint serves and a method a path does not take answer
   404 `authz.resource.notfound` in the error envelope, and a fault answers 500
   `system.fault` with the correlation identifier and nothing of what was thrown; the

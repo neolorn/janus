@@ -16282,6 +16282,35 @@ does the answer hold for such a permission: nothing, false, or a refusal?
 *Chapter text that should change.* BFF-CAP-002 AC2 could say "is left out of the
 answer".
 
+---
+
+## 397. "Once per send" is once per key name in one judgement of a send
+
+**Phase 10 · 2026-09-25 · Tier 2 · LIB-HOST-001 AC5**
+
+*The question.* The supplier was asked once per restriction. Two restrictions that
+share a host key name asked it twice for one send. A delivery retry judges the send
+again.
+
+*The readings.*
+
+1. Once per restriction per judgement (as before).
+2. Once per key name per judgement of a send.
+3. Once per send across its retries.
+
+*Chosen: 2.*
+
+- Reading 1 asks twice for one send.
+- Reading 3 would store a host-derived key with the delivery, which is a new column
+  and a new stored value.
+- A retry is judged against the ledger as it stands then, so asking again there is a
+  new judgement.
+
+*Tests that pin it.* `SendingServiceTests.LIB_HOST_001_AC5_TheSupplierIsAskedOncePerSendItsKeyAppliesToAsync`.
+
+*Chapter text that should change.* LIB-HOST-001 AC5 could say "once each time a send
+is judged, however many restrictions share the key".
+
 
 # Rows for chapter 10
 
