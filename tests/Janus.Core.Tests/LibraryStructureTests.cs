@@ -322,6 +322,30 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
+    /// DR-009a AC5: the key-encryption key is rotated through OPS-SEC-003 and by no other
+    /// path. The principal a rotation runs under is made by the rotations alone, and
+    /// nothing the host mounts, the worker runs or the conformance suite drives names a
+    /// rotation at all.
+    /// </summary>
+    [Fact]
+    public void DR_009a_AC5_NoPathButTheCommandRotatesTheKey()
+    {
+        Assert.Equal(
+            ["FingerprintKeyRotation.cs", "KeyRotation.cs"],
+            Named(text => Regex.IsMatch(text, @"\bSystemOperation\.KeyRotation\b", RegexOptions.None, TimeSpan.FromSeconds(5))));
+        Assert.DoesNotContain(
+            Sources(),
+            file => ((string[])["Janus.Hosting", "Janus.Conformance"]).Any(project => file.StartsWith(
+                    Path.Combine(Repository.Root, "src", project) + Path.DirectorySeparatorChar,
+                    StringComparison.Ordinal))
+                && Regex.IsMatch(
+                    File.ReadAllText(file),
+                    @"\b(KeyRotation|FingerprintKeyRotation|IKeyRotationStore|RotateKeyEncryptionKeyCommand)\b",
+                    RegexOptions.None,
+                    TimeSpan.FromSeconds(5)));
+    }
+
+    /// <summary>
     /// DR-006a AC2: no erasure procedure attempts to modify a backup. The library takes
     /// and writes no backup, and the one port through which it reaches one is the restore
     /// test's, which restores a copy into a throwaway instance; nothing that erases names

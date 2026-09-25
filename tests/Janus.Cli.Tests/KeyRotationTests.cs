@@ -18,7 +18,7 @@ namespace Janus.Cli.Tests;
 /// What the <c>rotate-kek</c> command does to a deployment's wrapped keys: every one is
 /// re-wrapped under the new version in batches that survive a killed run, the escrow
 /// copy is printed, and the previous version retires once the copy is sealed
-/// (OPS-SEC-003).
+/// (OPS-SEC-003, DR-009a).
 /// </summary>
 /// <remarks>
 /// The cases share one database and run one after another, so each begins with no
@@ -323,6 +323,118 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
 
         Assert.Equal(1, again.ExitCode);
         Assert.Equal(missing.Error, again.Error);
+    }
+
+    /// <summary>
+    /// DR-009a AC2: the rotation re-wraps key material and never re-encrypts customer
+    /// data. Every encrypted column reads byte for byte as it did before, and what a
+    /// re-wrapped key protects still decrypts under it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task DR_009a_AC2_RotationLeavesEveryCiphertextAsItWasAsync()
+    {
+        await using NpgsqlConnection connection = await ResetAsync();
+        await SeedAsync(connection, 3);
+        byte[] message = RandomNumberGenerator.GetBytes(32);
+        byte[] ciphertext = RandomNumberGenerator.GetBytes(64);
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO identity.send_outbox (id, recorded_at, key_version, wrapped_key, enc_message)
+            VALUES (gen_random_uuid(), now(), 1, @wrapped, @ciphertext);
+            """,
+            new { wrapped = Wrapped(message, Previous), ciphertext });
+
+        IReadOnlyList<(string Column, string? Digest)> before = await CiphertextsAsync(connection);
+
+        Assert.Equal(0, (await Invocation.PipedAsync([Command], Rotating())).ExitCode);
+        Assert.Equal(0, (await Invocation.PipedAsync([Command, Sealed], Rotating())).ExitCode);
+
+        Assert.Equal(before, await CiphertextsAsync(connection));
+        Assert.Equal(ciphertext, await connection.QuerySingleAsync<byte[]>("SELECT enc_message FROM identity.send_outbox"));
+        Assert.Equal(
+            message,
+            Unwrapped(await connection.QuerySingleAsync<byte[]>("SELECT wrapped_key FROM identity.send_outbox"), Next));
+    }
+
+    /// <summary>
+    /// DR-009a AC3: a rotation out of cycle is run on demand. The command waits on no
+    /// calendar, so a rotation started the moment another retired completes as the
+    /// first did.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task DR_009a_AC3_ARotationRunsOnDemandOutOfCycleAsync()
+    {
+        byte[] suspected = RandomNumberGenerator.GetBytes(32);
+
+        await using NpgsqlConnection connection = await ResetAsync();
+        IReadOnlyDictionary<Guid, byte[]> seeded = await SeedAsync(connection, 3);
+
+        Assert.Equal(0, (await Invocation.PipedAsync([Command], Rotating())).ExitCode);
+        Assert.Equal(0, (await Invocation.PipedAsync([Command, Sealed], Rotating())).ExitCode);
+
+        JsonObject outOfCycle = Document(Maintenance, 3, (2, Next), (3, suspected));
+
+        Invocation rotated = await Invocation.PipedAsync([Command], outOfCycle);
+        Invocation retired = await Invocation.PipedAsync([Command, Sealed], outOfCycle);
+
+        Assert.Equal("""{"version":3,"processed":3}""", Lines(rotated)[^1]);
+        Assert.Equal("""{"version":3,"processed":3,"retired":[2]}""", retired.Output.Trim());
+
+        foreach ((Guid subject, byte[] wrapped) in await WrappedUnderAsync(connection, 3))
+        {
+            Assert.Equal(seeded[subject], Unwrapped(wrapped, suspected));
+        }
+    }
+
+    /// <summary>
+    /// DR-009a AC4: the escrowed copy is replaced in the same operation. The run that
+    /// rotates prints the copy of the new version and nothing of the one it replaces, and
+    /// the operation retires the previous version only once that copy is sealed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task DR_009a_AC4_TheOperationThatRotatesReplacesTheEscrowCopyAsync()
+    {
+        await using NpgsqlConnection connection = await ResetAsync();
+        await SeedAsync(connection, 2);
+
+        Invocation rotated = await Invocation.PipedAsync([Command], Rotating());
+        var copy = JsonNode.Parse(Lines(rotated)[0]);
+        Invocation retired = await Invocation.PipedAsync([Command, Sealed], Rotating());
+
+        Assert.Equal(
+            ["2"],
+            copy?["keyEncryptionKeys"]?["versions"]?.AsObject().Select(version => version.Key) ?? []);
+        Assert.DoesNotContain(Convert.ToBase64String(Previous), rotated.Output, StringComparison.Ordinal);
+        Assert.Equal("""{"version":2,"processed":2,"retired":[1]}""", retired.Output.Trim());
+    }
+
+    // A digest of every encrypted column of every table, by its name. The trail is
+    // appended to and never changed, so it is left out.
+    private static async Task<IReadOnlyList<(string Column, string? Digest)>> CiphertextsAsync(NpgsqlConnection connection)
+    {
+        IReadOnlyList<(string Table, string Column)> columns = [.. await connection.QueryAsync<(string, string)>(
+            """
+            SELECT table_name, column_name FROM information_schema.columns
+            WHERE table_schema = 'identity' AND column_name LIKE 'enc\_%'
+              AND table_name NOT LIKE 'audit\_records%'
+            ORDER BY table_name, column_name
+            """)];
+
+        var digests = new List<(string, string?)>(columns.Count);
+
+        foreach ((string table, string column) in columns)
+        {
+            digests.Add((
+                table + "." + column,
+                await connection.ExecuteScalarAsync<string?>(
+                    $"SELECT md5(string_agg(encode({column}, 'hex'), ',' ORDER BY encode({column}, 'hex'))) FROM identity.{table}")));
+        }
+
+        return digests;
     }
 
     private static byte[] Wrapped(byte[] value, byte[] keyEncryptionKey)
