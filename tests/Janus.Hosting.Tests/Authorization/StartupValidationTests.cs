@@ -76,6 +76,38 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// OPS-DB-003 AC3, AUTHZ-DERIVE-004 AC1: what the check reads is the database's own
+    /// catalogue, so with the index on the reviewer column dropped from the host's
+    /// table, the deployment whose derivation names that column is stopped as it
+    /// starts, naming the relationship.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_DB_003_AC3_ADerivationColumnTheCatalogueFindsUnindexedIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await WriteAsync("DROP INDEX host.ix_reviewers_reviewer;", cancellationToken);
+
+        try
+        {
+            using IHost deployment = Deployed();
+
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await deployment.StartAsync(cancellationToken));
+
+            Assert.Equal(ErrorCodes.StartupUnindexedDerivation, refused.Failure?.Code);
+            Assert.Equal("reviewer", refused.Failure?.Details["relationship"].GetString());
+        }
+        finally
+        {
+            await WriteAsync(
+                "CREATE INDEX ix_reviewers_reviewer ON host.reviewers (reviewer);",
+                cancellationToken);
+        }
+    }
+
+    /// <summary>
     /// AUTHZ-MODEL-004 AC1, AC2: a role written into the deployment allowing a
     /// permission the model does not declare stops the deployment as it starts, with
     /// its own code, which the declaration alone could never decide.
