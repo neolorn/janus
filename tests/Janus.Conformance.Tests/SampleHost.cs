@@ -4,7 +4,9 @@ using System.Collections.Generic;
 using System.Data.Common;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -396,6 +398,14 @@ public sealed class SampleHost : IAsyncLifetime
     private static string Dotnet() =>
         Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") is { Length: > 0 } named ? named : "dotnet";
 
+    // The command-line application as its own build laid it out, with the dependencies
+    // resolved for it alone.
+    private static string CommandLineApplication() =>
+        Path.Combine(
+            typeof(SampleHost).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
+                .Single(attribute => attribute.Key == "CommandLineApplicationDirectory").Value!,
+            "Janus.Cli.dll");
+
     // OPS-MIG-003a: the credential the scheduled maintenance runs under, holding the
     // maintenance role's rights and no path to the application's.
     private string Maintenance() =>
@@ -435,7 +445,7 @@ public sealed class SampleHost : IAsyncLifetime
         };
 
         start.ArgumentList.Add("exec");
-        start.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "Janus.Cli.dll"));
+        start.ArgumentList.Add(CommandLineApplication());
 
         foreach (string argument in arguments)
         {
