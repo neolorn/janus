@@ -12,6 +12,12 @@ paths = ['''^\Qsrc/Janus.Core/IAuditTrail.cs\E$''']
 regexes = ['''^PRIV-BREACH-002$''']
 
 [[allowlists]]
+description = "an item identifier the decision log quotes from a documentation comment"
+condition = "AND"
+paths = ['''^\Qdocs/decision-log.md\E$''']
+regexes = ['''^PRIV-BREACH-002$''']
+
+[[allowlists]]
 description = "SHA-1 hashes of leaked passwords (AUTH-PASS-004)"
 condition = "AND"
 regexTarget = "line"
