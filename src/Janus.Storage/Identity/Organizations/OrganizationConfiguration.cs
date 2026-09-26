@@ -9,8 +9,8 @@ namespace Janus.Storage.Identity.Organizations;
 /// How an organization is stored.
 /// </summary>
 /// <remarks>
-/// Implements IDN-ORG-001, IDN-ORG-002, IDN-ORG-003, IDN-ORG-004, OPS-DB-001 and
-/// CONV-DESIGN-003.
+/// Implements IDN-ORG-001, IDN-ORG-002, IDN-ORG-003, IDN-ORG-004, IDN-ACCT-004,
+/// OPS-DB-001 and CONV-DESIGN-003.
 /// The name is the first plaintext column a person spells, so it carries the
 /// case-insensitive collation; no column says what kind of organization the row is.
 /// </remarks>
@@ -37,6 +37,11 @@ internal sealed class OrganizationConfiguration : IEntityTypeConfiguration<Organ
         builder.Property(organization => organization.Name)
             .HasColumnName("name")
             .UseCollation(StoreContext.CaseInsensitiveCollation);
+
+        // IDN-ACCT-004: the key is the canonical form itself, already folded, so it takes
+        // the default collation and compares by code point. OPS-MIG-005 AC1: it is added
+        // nullable, and the constraint is tightened in a later release.
+        builder.Property(organization => organization.CanonicalName).HasColumnName("canonical_name");
 
         builder.Property(organization => organization.CreatedAt).HasColumnName("created_at");
 

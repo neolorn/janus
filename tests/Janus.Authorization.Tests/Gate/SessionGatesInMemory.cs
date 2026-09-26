@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authorization.Gate;
@@ -38,8 +37,6 @@ internal sealed class SessionGatesInMemory(SubjectId holder) : ISessionGates
     {
         Asked.Add(gate);
 
-        return ValueTask.FromResult(_met.Contains(gate)
-            ? null
-            : Error.From(ErrorCodes.StepUpRequired, "action", JsonSerializer.SerializeToElement(gate)));
+        return ValueTask.FromResult(_met.Contains(gate) ? null : Error.From(ErrorCodes.StepUpRequired));
     }
 }

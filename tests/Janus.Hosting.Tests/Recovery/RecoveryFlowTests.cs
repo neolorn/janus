@@ -204,6 +204,30 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status401Unauthorized, refused.Status);
     }
 
+    /// <summary>
+    /// CONV-CODE-006 AC2 and AUTH-RECOV-002: an approval whose body carries no reason is
+    /// refused with the code chapter 10 gives before the service is reached, so a
+    /// caller the service would refuse for want of the permission is answered for the
+    /// body, and no link is sent.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC2_AnApprovalMissingItsReasonIsRefusedBeforeTheServiceAsync()
+    {
+        Browser caller = await RegisteredAsync();
+        int sent = _deployment.Mail.Taken.Count;
+
+        Answer approved = await caller.SendAsync(
+            "POST",
+            "/admin/recovery/approve",
+            ("subject", Guid.NewGuid().ToString()),
+            ("channelUsed", Flow.Address));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, approved.Status);
+        Assert.Equal(ErrorCodes.RecoveryReasonRequired.ToString(), approved.Text("code"));
+        Assert.Equal(sent, _deployment.Mail.Taken.Count);
+    }
+
     // The account the tests recover, signed in, with the clock past the minute the
     // registration's own messages hold the address for (AUTH-ABUSE-004).
     private async Task<Browser> RegisteredAsync()

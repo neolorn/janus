@@ -3,18 +3,26 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Xunit;
 
 namespace Janus.Core.Tests;
 
 /// <summary>
-/// The catalogue of error codes: its documentation and its stability
-/// (CONV-NAME-003, LIB-API-003).
+/// The catalogue of error codes: its documentation, its stability and its rows in
+/// chapter 10 (CONV-NAME-003, LIB-API-003, REF-001, BFF-ERR-001).
 /// </summary>
 [Trait("kind", "contract")]
 public sealed class ErrorCodesTests
 {
+    // A code made from what the parse is given, which is a literal wherever the
+    // library makes one.
+    private static readonly Regex Parsing = new(
+        @"ErrorCode\.Parse\(([^)]*)\)",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(1));
+
     private static readonly string[] Catalogue =
     [
         "api.request.malformed",
@@ -36,6 +44,7 @@ public sealed class ErrorCodesTests
         "auth.factor.required",
         "auth.lossreport.notpermitted",
         "auth.lossreport.pending",
+        "auth.oidc.nonconformant",
         "auth.password.blocklisted",
         "auth.password.toolong",
         "auth.password.tooshort",
@@ -69,6 +78,7 @@ public sealed class ErrorCodesTests
         "authz.resource.notfound",
         "authz.restricted",
         "authz.role.inuse",
+        "authz.truthtable.disagreement",
         "config.change.stepuprequired",
         "config.key.protected",
         "config.policy.belowsystem",
@@ -92,6 +102,7 @@ public sealed class ErrorCodesTests
         "identity.invitation.expired",
         "identity.invitation.identifiermismatch",
         "identity.invitation.notfound",
+        "identity.link.lastcredential",
         "identity.membership.limitreached",
         "identity.organization.protected",
         "identity.photo.invalid",
@@ -178,6 +189,50 @@ public sealed class ErrorCodesTests
         Assert.Equal(Catalogue, declared);
     }
 
+    /// <summary>
+    /// REF-001 AC1: a code the catalogue holds and chapter 10 does not fails here,
+    /// unless the ledger owes chapter 10 its row. A row the ledger owes that names no
+    /// code of the catalogue fails as well, so what is owed cannot outlive the code it
+    /// is owed for.
+    /// </summary>
+    [Fact]
+    public void REF_001_AC1_EveryCodeInTheSourceIsARowOfTheReference()
+    {
+        string[] declared = [.. Codes().Values];
+
+        Assert.Empty(Undocumented(declared));
+        Assert.Empty(ReferenceRows.OwedCodes.Except(declared, StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// BFF-ERR-001 AC3: every code the boundary can answer with is a row of chapter 10
+    /// or one the ledger owes it. A code is made only through
+    /// <see cref="ErrorCode.Parse"/>, since no other constructor is reachable, so the
+    /// codes a response can carry are the literals the library's source parses; no
+    /// source parses a code it computed.
+    /// </summary>
+    [Fact]
+    public void BFF_ERR_001_AC3_EveryCodeTheBoundaryCanAnswerIsInTheReference()
+    {
+        Assert.DoesNotContain(
+            typeof(ErrorCode).GetConstructors(),
+            constructor => constructor.GetParameters().Length > 0);
+
+        string[] arguments =
+        [
+            .. Directory
+                .EnumerateFiles(Path.Combine(Repository.Root, "src"), "*.cs", SearchOption.AllDirectories)
+                .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                    && !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+                .SelectMany(file => Parsing.Matches(File.ReadAllText(file)))
+                .Select(parsed => parsed.Groups[1].Value.Trim()),
+        ];
+
+        Assert.NotEmpty(arguments);
+        Assert.All(arguments, argument => Assert.Matches("^\"[^\"]+\"$", argument));
+        Assert.Empty(Undocumented([.. arguments.Select(argument => argument.Trim('"'))]));
+    }
+
     private static void AssertEveryCodeIsDocumented()
     {
         var documentation = XDocument.Parse(
@@ -197,6 +252,11 @@ public sealed class ErrorCodesTests
                 name + " states a meaning but no remediation.");
         }
     }
+
+    // The codes of those given that chapter 10 holds no live row for and the ledger
+    // does not owe it.
+    private static string[] Undocumented(IReadOnlyList<string> codes) =>
+        [.. codes.Except(ReferenceRows.ChapterCodes.Concat(ReferenceRows.OwedCodes), StringComparer.Ordinal)];
 
     private static Dictionary<string, string> Codes() =>
         typeof(ErrorCodes)

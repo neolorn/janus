@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Storage.Authentication.Registration;
@@ -20,26 +19,34 @@ public sealed class RegistrationSignalsTests(DatabaseFixture database) : IClassF
 
     private static readonly TimeSpan Near = TimeSpan.FromMilliseconds(250);
 
+    private static readonly TimeSpan Tick = TimeSpan.FromTicks(1);
+
     /// <summary>
     /// REG-SESS-003: a wait that nothing signals ends on the interval, which is what a
-    /// stream reads the state back on where the channel is not heard.
+    /// stream reads the state back on where the channel is not heard. The interval is
+    /// taken on the library's clock, so it stands until that clock reaches it, however
+    /// long the machine takes, and ends when it does.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task REG_SESS_003_AWaitNothingSignalsEndsOnTheIntervalAsync()
     {
-        await using var signals = new RegistrationSignals(
-            database.ConnectionString,
-            TimeProvider.System);
+        var time = new ManualTime();
 
-        var waited = Stopwatch.StartNew();
+        await using var signals = new RegistrationSignals(database.ConnectionString, time);
 
-        await signals.WaitAsync(
-            RegistrationSessionId.New(TimeProvider.System),
-            Near,
-            TestContext.Current.CancellationToken);
+        Task waiting = signals
+            .WaitAsync(RegistrationSessionId.New(TimeProvider.System), Near, TestContext.Current.CancellationToken)
+            .AsTask();
 
-        Assert.True(waited.Elapsed >= Near, "The wait ended before the interval: " + waited.Elapsed);
+        await time.PendingAsync().WaitAsync(Far, TestContext.Current.CancellationToken);
+        time.Advance(Near - Tick);
+
+        Assert.NotSame(waiting, await Task.WhenAny(waiting, Task.Delay(Near * 2, TestContext.Current.CancellationToken)));
+
+        time.Advance(Tick);
+
+        Assert.Same(waiting, await Task.WhenAny(waiting, Task.Delay(Far, TestContext.Current.CancellationToken)));
     }
 
     /// <summary>
@@ -51,25 +58,25 @@ public sealed class RegistrationSignalsTests(DatabaseFixture database) : IClassF
     [Fact]
     public async Task REG_SESS_003_AWaitHearsTheCommittedAnnouncementAndNoOtherAsync()
     {
-        await using var signals = new RegistrationSignals(
-            database.ConnectionString,
-            TimeProvider.System);
+        var time = new ManualTime();
+
+        await using var signals = new RegistrationSignals(database.ConnectionString, time);
 
         var session = RegistrationSessionId.New(TimeProvider.System);
 
         // The listening connection is opened by the first wait, so one is made and let
         // go before the announcements, and neither of them races it.
-        await signals.WaitAsync(session, Near, TestContext.Current.CancellationToken);
+        await WaitedOutAsync(time, signals.WaitAsync(session, Near, TestContext.Current.CancellationToken).AsTask());
 
         await RaiseAsync(session, commit: false);
 
-        var abandoned = Stopwatch.StartNew();
+        Task abandoned = signals.WaitAsync(session, Near, TestContext.Current.CancellationToken).AsTask();
 
-        await signals.WaitAsync(session, Near, TestContext.Current.CancellationToken);
+        await time.PendingAsync().WaitAsync(Far, TestContext.Current.CancellationToken);
 
-        Assert.True(
-            abandoned.Elapsed >= Near,
-            "An announcement that rolled back was heard: " + abandoned.Elapsed);
+        Assert.NotSame(abandoned, await Task.WhenAny(abandoned, Task.Delay(Near * 2, TestContext.Current.CancellationToken)));
+
+        await WaitedOutAsync(time, abandoned);
 
         Task waiting = signals
             .WaitAsync(session, Far, TestContext.Current.CancellationToken)
@@ -80,6 +87,17 @@ public sealed class RegistrationSignalsTests(DatabaseFixture database) : IClassF
         Task ended = await Task.WhenAny(waiting, Task.Delay(Far, TestContext.Current.CancellationToken));
 
         Assert.Same(waiting, ended);
+    }
+
+    // A wait the channel does not end, let run on the machine's clock for the interval
+    // and then ended on the library's.
+    private static async Task WaitedOutAsync(ManualTime time, Task waiting)
+    {
+        await time.PendingAsync().WaitAsync(Far, TestContext.Current.CancellationToken);
+        _ = await Task.WhenAny(waiting, Task.Delay(Near, TestContext.Current.CancellationToken));
+        time.Advance(Near);
+
+        Assert.Same(waiting, await Task.WhenAny(waiting, Task.Delay(Far, TestContext.Current.CancellationToken)));
     }
 
     private async Task RaiseAsync(RegistrationSessionId session, bool commit)

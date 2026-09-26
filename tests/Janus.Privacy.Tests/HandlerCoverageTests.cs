@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Janus.Core;
 using Janus.Privacy.Tests.Outbox;
@@ -57,6 +58,7 @@ public sealed class HandlerCoverageTests
     public void PRIV_RIGHT_005b_AC3_ATypeThatIsNotSensitiveNeedsNoHandler()
     {
         AuthorizationDeclaration ordinary = new AuthorizationDeclarationBuilder()
+            .RetentionFloor("identity", TimeSpan.FromDays(365))
             .LawfulBasis(new LawfulBasisDeclaration("agreement", true, true, false, false))
             .Permission("mailing:read")
             .Resource<Declaration.Mailing>("mailing", mailing => mailing

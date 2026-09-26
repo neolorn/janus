@@ -12,8 +12,4 @@
                       ReferenceOutputAssembly="false" />
   </ItemGroup>
 
-  <ItemGroup>
-    <InternalsVisibleTo Include="Janus.Conformance.Tests" />
-  </ItemGroup>
-
 </Project>

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace Janus.Core;
@@ -28,6 +29,11 @@ namespace Janus.Core;
 /// Everyone the deployment's personal data reaches, which the records of processing
 /// report and nothing else reads (PRIV-ROPA-002).
 /// </param>
+/// <param name="RetentionFloors">
+/// The shortest period each category of data a purpose is over is kept, which is also
+/// the period the category is kept for until the deployment states a longer one
+/// (PRIV-RET-001, chapter 10 section 4).
+/// </param>
 /// <remarks>
 /// Implements AUTHZ-MODEL-001 and AUTHZ-MODEL-006. It is what
 /// <see cref="AuthorizationDeclarationBuilder"/> produces and what the model is built
@@ -42,4 +48,5 @@ public sealed record AuthorizationDeclaration(
     IReadOnlyDictionary<Permission, string> ActionPurposes,
     IReadOnlyList<LawfulBasisDeclaration> LawfulBases,
     IReadOnlyList<string> SensitiveCategories,
-    IReadOnlyList<RecipientDeclaration> Recipients);
+    IReadOnlyList<RecipientDeclaration> Recipients,
+    IReadOnlyDictionary<string, TimeSpan> RetentionFloors);

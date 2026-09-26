@@ -797,6 +797,43 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-002 AC3: ending a session asks first whose account is asking, so a
+    /// context naming no account is refused before any session is read, and the
+    /// session it named goes on.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AC3_AnEndForNoAccountReadsNoSessionAsync()
+    {
+        IssuedSession held = await BegunAsync(Subject(), [Factor.Password]);
+        int found = _sessions.Found;
+
+        Result ended = await Service.EndAsync(NoAccount(), held.Id, TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.Denied, Refusal(ended));
+        Assert.Equal(found, _sessions.Found);
+        Assert.Null(await RefusalAsync(held.Secret));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002 AC3: reading a session asks first whose account is asking, so a
+    /// context naming no account is answered as a session that is not there before any
+    /// session is read.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AC3_AReadForNoAccountReadsNoSessionAsync()
+    {
+        IssuedSession held = await BegunAsync(Subject(), [Factor.Password]);
+        int found = _sessions.Found;
+
+        Result<SessionDetail> read = await Service.ReadAsync(NoAccount(), held.Id, TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.SessionExpired, Refusal(read));
+        Assert.Equal(found, _sessions.Found);
+    }
+
+    /// <summary>
     /// AUTH-SESS-011 AC1: revoking one account's sessions leaves every other session
     /// intact.
     /// </summary>
@@ -1211,6 +1248,13 @@ public sealed class SessionServiceTests : IAsyncDisposable
 
     private static ErrorCode? Refusal<TValue>(Result<TValue> result) =>
         result.Match<ErrorCode?>(_ => null, error => error.Code);
+
+    // Work done for an organization by no account, so nobody is the one asking.
+    private static AccessContext NoAccount() =>
+        AccessContext.Of(SystemPrincipal.ForOrganization(
+            "import",
+            "a nightly import",
+            new OrganizationId(Guid.NewGuid())));
 
     private SubjectId Subject() => SubjectId.New(_randomness);
 

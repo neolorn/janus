@@ -317,6 +317,88 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     });
             });
 
+        modelBuilder.Entity("Janus.Storage.Authentication.Credentials.ProviderAttemptRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<DateTimeOffset>("CreatedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("created_at");
+
+                b.Property<string>("Intent")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("intent");
+
+                b.Property<int?>("KeyVersion")
+                    .HasColumnType("integer")
+                    .HasColumnName("key_version");
+
+                b.Property<byte[]>("Nonce")
+                    .IsRequired()
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("nonce");
+
+                b.Property<byte[]>("PreAuthentication")
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("preauthentication");
+
+                b.Property<string>("Provider")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("provider");
+
+                b.Property<string>("ReturnTo")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("return_to");
+
+                b.Property<Guid?>("Session")
+                    .HasColumnType("uuid")
+                    .HasColumnName("session");
+
+                b.Property<byte[]>("State")
+                    .IsRequired()
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("state");
+
+                b.Property<byte[]>("Verifier")
+                    .HasColumnType("bytea")
+                    .HasColumnName("verifier");
+
+                b.HasKey("Id")
+                    .HasName("pk_provider_attempts");
+
+                b.HasIndex("PreAuthentication")
+                    .IsUnique()
+                    .HasDatabaseName("ux_provider_attempts_preauthentication")
+                    .HasFilter("preauthentication IS NOT NULL");
+
+                b.HasIndex("Session")
+                    .IsUnique()
+                    .HasDatabaseName("ux_provider_attempts_session")
+                    .HasFilter("session IS NOT NULL");
+
+                b.ToTable("provider_attempts", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_provider_attempts_binding", "num_nonnulls(preauthentication, session) = 1");
+
+                        t.HasCheckConstraint("ck_provider_attempts_fingerprints", "octet_length(state) = 32 AND octet_length(nonce) = 32");
+
+                        t.HasCheckConstraint("ck_provider_attempts_intent", "intent IN ('link', 'register', 'signin')");
+
+                        t.HasCheckConstraint("ck_provider_attempts_provider", "provider IN ('apple', 'breakGlass', 'emailCode', 'emailLink', 'google', 'passkey', 'password', 'phoneCode', 'phoneLink', 'recoveryCodes', 'securityKey', 'totp')");
+
+                        t.HasCheckConstraint("ck_provider_attempts_verifier", "num_nulls(verifier, key_version) IN (0, 2)");
+                    });
+            });
+
         modelBuilder.Entity("Janus.Storage.Authentication.Events.PendingEventRecord", b =>
             {
                 b.Property<Guid>("Id")
@@ -1303,7 +1385,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<string>("Domain")
                     .IsRequired()
                     .HasColumnType("text")
-                    .HasColumnName("domain");
+                    .HasColumnName("domain")
+                    .UseCollation("identity_ci");
 
                 b.Property<bool?>("LastCheckPassed")
                     .HasColumnType("boolean")
@@ -2079,6 +2162,15 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("expires_at");
 
+                b.Property<int?>("FingerprintVersion")
+                    .HasColumnType("integer")
+                    .HasColumnName("fingerprint_version");
+
+                b.Property<byte[]>("Identifier")
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("identifier");
+
                 b.PrimitiveCollection<string[]>("Presented")
                     .IsRequired()
                     .HasColumnType("text[]")
@@ -2105,6 +2197,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.ToTable("signin_challenges", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_signin_challenges_handle", "octet_length(handle) = 32");
+
+                        t.HasCheckConstraint("ck_signin_challenges_identifier", "(identifier IS NULL) = (fingerprint_version IS NULL) AND (identifier IS NULL OR octet_length(identifier) = 32)");
                     });
             });
 
@@ -2989,6 +3083,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("uuid")
                     .HasColumnName("id");
 
+                b.Property<string>("CanonicalName")
+                    .HasColumnType("text")
+                    .HasColumnName("canonical_name");
+
                 b.Property<DateTimeOffset>("CreatedAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("created_at");
@@ -3658,6 +3756,21 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasForeignKey("Upgrading")
                     .OnDelete(DeleteBehavior.Cascade)
                     .HasConstraintName("fk_key_ceremonies_upgrading");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Credentials.ProviderAttemptRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Authentication.Sessions.PreAuthenticationRecord", null)
+                    .WithMany()
+                    .HasForeignKey("PreAuthentication")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .HasConstraintName("fk_provider_attempts_preauthentication");
+
+                b.HasOne("Janus.Storage.Authentication.Sessions.SessionRecord", null)
+                    .WithMany()
+                    .HasForeignKey("Session")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .HasConstraintName("fk_provider_attempts_session");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Factors.AuthenticatorRecord", b =>

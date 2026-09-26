@@ -41,6 +41,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
 
     private const string Unmigrated = "behind";
 
+    private const string Unserved = "unserved";
+
     private static readonly string Declaring =
         "INSERT INTO identity.settings (key, value) VALUES ('"
         + Settings.NotificationEmailRelayRegistered.Key
@@ -73,6 +75,38 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
 
         await deployment.StartAsync(cancellationToken);
         await deployment.StopAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// OPS-DB-003 AC3, AUTHZ-DERIVE-004 AC1: what the check reads is the database's own
+    /// catalogue, so with the index on the reviewer column dropped from the host's
+    /// table, the deployment whose derivation names that column is stopped as it
+    /// starts, naming the relationship.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_DB_003_AC3_ADerivationColumnTheCatalogueFindsUnindexedIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await WriteAsync("DROP INDEX host.ix_reviewers_reviewer;", cancellationToken);
+
+        try
+        {
+            using IHost deployment = Deployed();
+
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await deployment.StartAsync(cancellationToken));
+
+            Assert.Equal(ErrorCodes.StartupUnindexedDerivation, refused.Failure?.Code);
+            Assert.Equal("reviewer", refused.Failure?.Details["relationship"].GetString());
+        }
+        finally
+        {
+            await WriteAsync(
+                "CREATE INDEX ix_reviewers_reviewer ON host.reviewers (reviewer);",
+                cancellationToken);
+        }
     }
 
     /// <summary>
@@ -331,16 +365,27 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     [InlineData("provider")]
     [InlineData("metadata")]
     [InlineData("clientIds")]
+    [InlineData("configuration")]
+    [InlineData("return")]
+    [InlineData("secret")]
     public async Task IDN_LIFE_012a_ASocialProviderDeclaredShortOfWholeIsRefusedAsync(string part)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
-        var metadata = new Uri("https://accounts.google.test/.well-known/risc-configuration");
-        var whole = new SocialProvider(Factor.Google, metadata, ["the-client"]);
+        var whole = new SocialProvider(
+            Factor.Google,
+            new Uri("https://accounts.google.test/.well-known/risc-configuration"),
+            ["the-client"],
+            new Uri("https://accounts.google.test/.well-known/openid-configuration"),
+            new Uri("https://identity.example.test/callbacks/providers/google/return"),
+            "the-client-secret"u8.ToArray());
         SocialProvider[] declared = part switch
         {
             "provider" => [whole, whole with { Provider = Factor.Password }],
             "metadata" => [whole with { Metadata = new Uri("http://accounts.google.test/risc") }],
-            _ => [whole with { ClientIds = [] }],
+            "clientIds" => [whole with { ClientIds = [] }],
+            "configuration" => [whole with { Configuration = new Uri("http://accounts.google.test/openid") }],
+            "return" => [whole with { Return = new Uri("https://identity.example.test/callbacks/providers/apple/return") }],
+            _ => [whole with { Secret = ReadOnlyMemory<byte>.Empty }],
         };
 
         using (IHost refusedHost = Deployed(providers: declared))
@@ -412,36 +457,34 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
-    /// OPS-MIG-002 AC1, AC2: a deployment pointed at a database the pipeline did not
-    /// migrate is stopped as it starts, by name and before the web server registered
-    /// after the library has served anything.
+    /// OPS-MIG-002 AC1: a deployment pointed at a database the pipeline did not
+    /// migrate is stopped as it starts, with the named error and the migrations it is
+    /// behind by; the fault the start throws is what ends the process with a non-zero
+    /// exit.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
     public async Task OPS_MIG_002_AC1_ADeploymentOnAnUnmigratedDatabaseIsRefusedAsync()
     {
-        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
-
-        await WriteAsync(
-            "CREATE DATABASE " + Unmigrated + " TEMPLATE template0 "
-                + "LOCALE_PROVIDER icu ICU_LOCALE 'und' LC_COLLATE 'C' LC_CTYPE 'C'",
-            cancellationToken);
-
-        var served = new ServerStandIn();
-        using IHost deployment = new HostBuilder()
-            .ConfigureServices(services => Declared(
-                services.AddSingleton<IHostedService>(served),
-                connection: new NpgsqlConnectionStringBuilder(host.ConnectionString)
-                {
-                    Database = Unmigrated,
-                }.ConnectionString))
-            .Build();
-
-        StartupException refused = await Assert.ThrowsAsync<StartupException>(
-            async () => await deployment.StartAsync(cancellationToken));
+        StartupException refused = await UnmigratedAsync(Unmigrated, new ServerStandIn());
 
         Assert.Equal(ErrorCodes.StartupSchemaMismatch, refused.Failure?.Code);
         Assert.NotEqual(0, refused.Failure?.Details["pending"].GetArrayLength());
+    }
+
+    /// <summary>
+    /// OPS-MIG-002 AC2: the web server registered after the library is never started
+    /// over a database the pipeline did not migrate, so nothing is served in the
+    /// mismatched state.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_MIG_002_AC2_NothingIsServedOverAnUnmigratedDatabaseAsync()
+    {
+        var served = new ServerStandIn();
+
+        await UnmigratedAsync(Unserved, served);
+
         Assert.False(served.Started);
     }
 
@@ -711,6 +754,31 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         await WriteAsync(
             "INSERT INTO identity.settings (key, value) VALUES ('" + Showing + "', 'true');",
             cancellationToken);
+
+    // OPS-MIG-002: a deployment over a database created empty under the name given,
+    // with the web server's stand-in registered as the host registers it, and what its
+    // start throws.
+    private async Task<StartupException> UnmigratedAsync(string database, ServerStandIn served)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await WriteAsync(
+            "CREATE DATABASE " + database + " TEMPLATE template0 "
+                + "LOCALE_PROVIDER icu ICU_LOCALE 'und' LC_COLLATE 'C' LC_CTYPE 'C'",
+            cancellationToken);
+
+        using IHost deployment = new HostBuilder()
+            .ConfigureServices(services => Declared(
+                services.AddSingleton<IHostedService>(served),
+                connection: new NpgsqlConnectionStringBuilder(host.ConnectionString)
+                {
+                    Database = database,
+                }.ConnectionString))
+            .Build();
+
+        return await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(cancellationToken));
+    }
 
     private async Task WriteAsync(string statement, CancellationToken cancellationToken)
     {

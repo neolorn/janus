@@ -11,17 +11,23 @@ namespace Janus.Core;
 /// leaves nothing behind.
 /// </summary>
 /// <remarks>
-/// Implements LIB-API-005, REG-SESS-001 to REG-SESS-008, REG-PROF-002 and
-/// REG-IDENT-010. No operation here takes an access context: registration is what
-/// happens before a principal exists, and holding the session is what a caller is
-/// judged on (BFF-CSRF-005b). Nothing accepts a return destination at any step.
+/// Implements LIB-API-005, REG-SESS-001 to REG-SESS-008, REG-PROF-002, REG-IDENT-010
+/// and REG-INV-002. Registration is what happens before a principal exists, and holding
+/// the session is what a caller is judged on (BFF-CSRF-005b): the one access context
+/// taken here is that of a browser signed in already, which is refused. Nothing accepts
+/// a return destination at any step.
 /// </remarks>
 public interface IRegistration
 {
     /// <summary>
     /// Creates a registration session for one browser, recording the application the
-    /// person came from.
+    /// person came from. A person signed in already is refused and no session is
+    /// created for them; an invitation link they pressed attaches to their account,
+    /// whose membership step reads it (REG-SESS-002, REG-INV-002).
     /// </summary>
+    /// <param name="signedIn">
+    /// Who the browser is signed in as, or nothing where it carries no session.
+    /// </param>
     /// <param name="client">The originating application's client identifier.</param>
     /// <param name="language">
     /// The locale of the request, which its messages go out in and which the account
@@ -41,9 +47,11 @@ public interface IRegistration
     /// The session, whose state is read with <see cref="StateAsync"/>, or the refusal:
     /// <c>identity.invitation.expired</c> where the token opens no invitation,
     /// <c>identity.invitation.identifiermismatch</c> where the email it binds is an
-    /// account's already.
+    /// account's already, <c>identity.registration.signedin</c> where the browser is
+    /// signed in, the invitation attached or none presented.
     /// </returns>
     ValueTask<Result<RegistrationSessionId>> BeginAsync(
+        AccessContext? signedIn,
         string client,
         string language,
         string source,

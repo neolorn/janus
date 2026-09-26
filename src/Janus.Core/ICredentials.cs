@@ -5,13 +5,13 @@ namespace Janus.Core;
 
 /// <summary>
 /// The credentials an account holds: setting the password, enrolling a key or a code
-/// generator, upgrading a second-factor key, generating recovery codes and removing
-/// what the person still has.
+/// generator, upgrading a second-factor key, generating recovery codes, removing what
+/// the person still has, and linking and unlinking an identity at a provider.
 /// </summary>
 /// <remarks>
 /// Implements LIB-API-005, AUTH-FACT-001, AUTH-FACT-002b, AUTH-FACT-007,
-/// AUTH-FACT-008, AUTH-STEP-007, AUTH-RECOV-001 and AUTH-RECOV-006. Removing a
-/// credential the person no longer holds is not here: that is a loss report
+/// AUTH-FACT-008, AUTH-STEP-007, AUTH-RECOV-001, AUTH-RECOV-006 and IDN-LIFE-012.
+/// Removing a credential the person no longer holds is not here: that is a loss report
 /// (<see cref="IRecovery.ReportLossAsync"/>), which asks for no gate because the
 /// person has lost what the gate would ask them for.
 /// </remarks>
@@ -154,6 +154,52 @@ public interface ICredentials
     ValueTask<Result> RemoveAsync(
         CredentialAuthority authority,
         AuthenticatorId credential,
+        string source,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Whether the account may link an identity at a provider now: the session has
+    /// passed the step-up the action asks for, and the policy lists the provider. The
+    /// round trip to the provider asks the same again and links on the return.
+    /// </summary>
+    /// <param name="authority">What the request arrived under.</param>
+    /// <param name="provider">Which provider.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Nothing, or <c>auth.stepup.required</c>, or <c>auth.factor.notpermitted</c>
+    /// where the provider is not one the policy lists, or <c>authz.denied</c> for an
+    /// enrolment session, which links nothing: it exists to replace what was lost.
+    /// </returns>
+    /// <remarks>
+    /// Implements IDN-LIFE-012 and <c>10</c> section 5a <c>provider:link</c>.
+    /// </remarks>
+    ValueTask<Result> LinkableAsync(
+        CredentialAuthority authority,
+        Factor provider,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Unlinks the account's identity at a provider. The account stays as it is and is
+    /// reached by what it keeps; where nothing that can be presented first would remain,
+    /// the identity stays linked.
+    /// </summary>
+    /// <param name="authority">What the request arrived under.</param>
+    /// <param name="provider">Which provider.</param>
+    /// <param name="source">The address the request came from.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Nothing, or <c>auth.credential.notfound</c> where no identity at the provider is
+    /// linked, <c>identity.link.lastcredential</c> where it is the last way in, which
+    /// is refused before the step-up is asked for, <c>auth.stepup.required</c>, or
+    /// <c>authz.denied</c> for an enrolment session.
+    /// </returns>
+    /// <remarks>
+    /// Implements IDN-LIFE-012, IDN-ACCT-001 and <c>10</c> section 5a
+    /// <c>provider:unlink</c>.
+    /// </remarks>
+    ValueTask<Result> UnlinkAsync(
+        CredentialAuthority authority,
+        Factor provider,
         string source,
         CancellationToken cancellationToken);
 }

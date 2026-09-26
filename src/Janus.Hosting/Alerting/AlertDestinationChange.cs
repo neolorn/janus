@@ -32,8 +32,6 @@ internal sealed class AlertDestinationChange(
     IEvents events,
     TimeProvider time)
 {
-    private const string Action = "alerting:destinations";
-
     /// <summary>
     /// Replaces the destination list of one channel.
     /// </summary>
@@ -61,7 +59,7 @@ internal sealed class AlertDestinationChange(
 
         if (!StepUpRefusal.Met(challenge))
         {
-            return Result.Failure(StepUpRefusal.Of(Action, challenge));
+            return Result.Failure(StepUpRefusal.Of(challenge));
         }
 
         TextListSetting setting = channel is SendKind.Email

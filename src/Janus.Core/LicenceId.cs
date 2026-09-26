@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 
-namespace Janus.Authentication.Maintenance;
+namespace Janus.Core;
 
 /// <summary>
 /// What one licence or permit is known by. The management application names it, so
@@ -9,7 +9,7 @@ namespace Janus.Authentication.Maintenance;
 /// </summary>
 /// <param name="Value">The identifier.</param>
 /// <remarks>Implements OPS-MAINT-001.</remarks>
-internal readonly record struct LicenceId(Guid Value)
+public readonly record struct LicenceId(Guid Value)
 {
     /// <inheritdoc/>
     public override string ToString() => Value.ToString("D", CultureInfo.InvariantCulture);

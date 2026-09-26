@@ -41,6 +41,14 @@ public static class PipelineProfiles
     /// wants to know what the caller may do, rather than to do it, asks the gate for
     /// capabilities and not for a check whose refusal it goes on past.
     /// </para>
+    /// <para>
+    /// The flood limit of <c>abuse.source.ratelimit</c> is counted by each instance of
+    /// the deployment in its own memory, by the address the connection arrived on. A
+    /// deployment that runs several instances behind one balancer admits a source up to
+    /// the limit at each of them, and sets the key to its share of the limit it wants;
+    /// one behind a proxy names the proxies it trusts to the framework, or every
+    /// request arrives from the proxy's address and counts as one source.
+    /// </para>
     /// </remarks>
     /// <param name="application">The host's pipeline.</param>
     /// <returns>The pipeline, for chaining.</returns>
@@ -162,8 +170,10 @@ public static class PipelineProfiles
         // the way in. Concealment stands outside everything, so nothing inside it has
         // the last word on a concealed refusal (BFF-ERR-003); a body the reader could
         // not parse fails at the endpoint, after every stage before it has run
-        // (API-CONV-002).
+        // (API-CONV-002). What nothing inside answered as the library answers, a fault
+        // or a path no endpoint takes, is answered by the same writer (LIB-API-003).
         _ = application.UseMiddleware<Concealment>();
+        _ = application.UseMiddleware<ErrorTranslation>();
         _ = application.UseMiddleware<MalformedRequest>();
 
         // Stages 2 and 3. The cheap rejections come first, before anything reads the
@@ -171,6 +181,10 @@ public static class PipelineProfiles
         _ = application.UseMiddleware<ResourceIsolation>();
         _ = application.UseMiddleware<CustomRequestHeader>();
         _ = application.UseMiddleware<OriginValidation>();
+
+        // Stage 4, the flood limit per source, before the first stage that reads a
+        // store for the request.
+        _ = application.UseMiddleware<SourceRateLimiting>();
 
         // Stage 5, then stage 6, which needs what stage 5 established. BFF-CSRF-005a:
         // the token's binding target has to exist before the token is checked, so a
@@ -207,7 +221,8 @@ public static class PipelineProfiles
     }
 
     // What a route on the machine profile passes before its cookie is looked at: the
-    // mark that keeps the browser profile off it, then the malformed body.
+    // mark that keeps the browser profile off it, then what answers a fault, a method
+    // the route does not take and a malformed body.
     private static void Marked(IApplicationBuilder branch)
     {
         _ = branch.Use((context, next) =>
@@ -216,6 +231,7 @@ public static class PipelineProfiles
 
             return next(context);
         });
+        _ = branch.UseMiddleware<ErrorTranslation>();
         _ = branch.UseMiddleware<MalformedRequest>();
     }
 

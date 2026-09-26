@@ -20,7 +20,11 @@ if [ -z "$base" ] || [ "$base" = "$empty" ]; then
   base="${head}^"
 fi
 
-if ! git diff --name-only "$base" "$head" | grep -qE '^src/.*\.cs$'; then
+# Each output is read whole before it is searched: a search that stops at its first
+# match would close the pipe on git and fail the pipeline under pipefail.
+changed=$(git diff --name-only "$base" "$head")
+
+if ! grep -qE '^src/.*\.cs$' <<<"$changed"; then
   echo "No change to the library's code; no changelog line is due."
   exit 0
 fi
@@ -30,7 +34,9 @@ if ! grep -qF '## [Unreleased]' CHANGELOG.md; then
   exit 1
 fi
 
-if ! git diff "$base" "$head" -- CHANGELOG.md | grep -qE '^\+[^+]'; then
+lines=$(git diff "$base" "$head" -- CHANGELOG.md)
+
+if ! grep -qE '^\+[^+]' <<<"$lines"; then
   echo "The library's code changed and CHANGELOG.md gained no line."
   exit 1
 fi

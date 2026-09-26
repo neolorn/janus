@@ -35,11 +35,12 @@ namespace Janus.Authentication.Bootstrap;
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements OPS-BOOT-001, OPS-BOOT-002, INT-MAIL-006 AC1a and AC1b, DR-007,
-/// IDN-PRIN-001, chapter 10 sections 3 and 4.1a, and D-133. There is no gate: whoever reaches the database
-/// already holds more than the first account will (D-028), and what stands in for one
-/// is that nothing runs while a system administrator exists. No break-glass credential
-/// is made here; the management application issues it (OPS-BOOT-004), and until it
-/// does the alert raised here keeps saying so.
+/// IDN-PRIN-001, IDN-ACCT-004, IDN-ACCT-005, PRIV-MINOR-001, chapter 10 sections 3 and
+/// 4.1a, and D-133. There is no gate: whoever reaches the database already holds more
+/// than the first account will (D-028), and what stands in for one is that nothing
+/// runs while a system administrator exists. No break-glass credential is made here;
+/// the management application issues it (OPS-BOOT-004), and until it does the alert
+/// raised here keeps saying so.
 /// </remarks>
 internal sealed class DeploymentBootstrap(
     IDeploymentSeed seed,
@@ -101,6 +102,20 @@ internal sealed class DeploymentBootstrap(
             return Result.Failure<BootstrapEnrolment>(Malformed("organization"));
         }
 
+        // IDN-ACCT-004 and IDN-ACCT-005: the name is judged on its comparison key, as
+        // every identifier is, and one the key reduces to nothing is no name.
+        string organizationKey = CanonicalForm.Of(organizationName);
+
+        if (string.IsNullOrWhiteSpace(organizationKey))
+        {
+            return Result.Failure<BootstrapEnrolment>(Malformed("organization"));
+        }
+
+        if (!ScriptMixing.IsSingleScriptPerWord(organizationKey))
+        {
+            return Result.Failure<BootstrapEnrolment>(Named(ErrorCodes.IdentifierMixedScript, "organization"));
+        }
+
         Error? failure = null;
 
         Entered email = Read(IdentifierKind.Email, request.Email, "email")
@@ -152,10 +167,29 @@ internal sealed class DeploymentBootstrap(
             ? (await configuration.ReadAsync(Settings.WebAuthnOrigins, cancellationToken).ConfigureAwait(false))
                 .Match(value => value, error => Withheld<IReadOnlyList<string>>(error, ref failure))
             : [];
+        AttributeRequirement affirmation = failure is null
+            ? (await configuration.ReadAsync(Settings.RegistrationAdultAffirmation, cancellationToken).ConfigureAwait(false))
+                .Match(value => value, error => Withheld<AttributeRequirement>(error, ref failure))
+            : default;
+        AttributeRequirement retention = failure is null
+            ? (await configuration.ReadAsync(Settings.ProfileDateOfBirth, cancellationToken).ConfigureAwait(false))
+                .Match(value => value, error => Withheld<AttributeRequirement>(error, ref failure))
+            : default;
 
         if (failure is not null)
         {
             return Result.Failure<BootstrapEnrolment>(failure);
+        }
+
+        // PRIV-MINOR-001 AC3: the first administrator is a person, so no account is made
+        // for them that has not affirmed; the affirmation is derived from the date as the
+        // age screen derives it (REG-PROF-002), and an under-age date is refused before
+        // anything is written.
+        bool adult = RegistrationService.IsAdult(request.DateOfBirth, DateOnly.FromDateTime(now.UtcDateTime));
+
+        if (affirmation is not AttributeRequirement.Off && !adult)
+        {
+            return Result.Failure<BootstrapEnrolment>(Error.From(ErrorCodes.ProfileUnderage));
         }
 
         if (origins.Count is 0 || !Uri.TryCreate(origins[0], UriKind.Absolute, out Uri? origin))
@@ -194,6 +228,9 @@ internal sealed class DeploymentBootstrap(
                 administrator,
                 [Verified(personal, IdentifierKind.Email, email, now), Verified(IdentifierId.New(time), IdentifierKind.Phone, phone!, now)],
                 name: null,
+                affirmation is AttributeRequirement.Off ? null : adult,
+                retention is AttributeRequirement.Off ? null : request.DateOfBirth,
+                affirmation is AttributeRequirement.Off ? RegistrationService.Band(adult) : null,
                 now,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -239,7 +276,9 @@ internal sealed class DeploymentBootstrap(
         }
 
         // DR-007: one field encrypted under the canary's own subject key and one verified
-        // email found by its fingerprint are what the restore test proves readable.
+        // email found by its fingerprint are what the restore test proves readable. No
+        // person answers the age screen for it, so it records no answer, as the reserved
+        // account records none (PRIV-MINOR-001).
         var canary = SubjectId.New(randomness);
 
         await seed
@@ -247,6 +286,9 @@ internal sealed class DeploymentBootstrap(
                 canary,
                 [Verified(IdentifierId.New(time), IdentifierKind.Email, Canary(), now)],
                 CanaryDisplayName(),
+                adultAffirmed: null,
+                dateOfBirth: null,
+                group: null,
                 now,
                 cancellationToken)
             .ConfigureAwait(false);

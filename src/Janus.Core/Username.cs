@@ -8,12 +8,14 @@ namespace Janus.Core;
 /// A username in the form the profile of RFC 8265 leaves it in.
 /// </summary>
 /// <remarks>
-/// Implements REG-IDENT-001, REG-IDENT-009, IDN-ACCT-004 and IDN-ACCT-005. The profile
+/// Implements REG-IDENT-001, REG-IDENT-009, IDN-ACCT-004, IDN-ACCT-005 and
+/// CONV-DESIGN-004. The profile
 /// is UsernameCaseMapped and nothing else, narrowed to letters and digits: no space, no
 /// punctuation and no symbol. At least one of those characters is a letter, so that no
 /// username is also a phone number under the kind detection of REG-IDENT-003 (D-155).
 /// Whether a well-formed username is free, reserved or held after an erasure is not
-/// this type's business.
+/// this type's business. A default instance was never read, so it has no form to give
+/// and no row can carry it.
 /// </remarks>
 public readonly record struct Username
 {
@@ -35,7 +37,8 @@ public readonly record struct Username
     /// The username in the profile's form, which is what is shown and what is
     /// fingerprinted.
     /// </summary>
-    public string Value => _value ?? string.Empty;
+    /// <exception cref="InvalidOperationException">The username was never set.</exception>
+    public string Value => _value ?? throw new InvalidOperationException("The username was never set.");
 
     /// <summary>
     /// Reads a username as it was entered and returns it in the profile's form.
@@ -76,6 +79,7 @@ public readonly record struct Username
     }
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">The username was never set.</exception>
     public override string ToString() => Value;
 
     // REG-IDENT-009: an all-digit choice is a phone number to the kind detection, so it

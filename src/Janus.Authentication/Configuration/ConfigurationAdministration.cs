@@ -40,15 +40,15 @@ internal sealed class ConfigurationAdministration(
     IUnitOfWork work,
     TimeProvider time)
 {
-    private const string Gate = "config:loosen";
-
     /// <summary>
     /// Puts a value in force for one setting.
     /// </summary>
     /// <typeparam name="TValue">The type of the setting's value.</typeparam>
     /// <param name="setting">The setting, from <see cref="Settings"/>.</param>
     /// <param name="value">What it becomes.</param>
-    /// <param name="reason">Why, which a loosening carries and a tightening need not.</param>
+    /// <param name="reason">
+    /// Why, which every change carries but a tightening of the named restriction set.
+    /// </param>
     /// <param name="challenge">
     /// What the <c>config:loosen</c> gate answered, which a loosening has to have met
     /// and a tightening need not.
@@ -225,7 +225,9 @@ internal sealed class ConfigurationAdministration(
     /// <typeparam name="TValue">The type of the setting's value.</typeparam>
     /// <param name="setting">The setting.</param>
     /// <param name="value">What it would become.</param>
-    /// <param name="reason">Why, which a loosening carries.</param>
+    /// <param name="reason">
+    /// Why, which every change carries but a tightening of the named restriction set.
+    /// </param>
     /// <param name="challenge">What the <c>config:loosen</c> gate answered.</param>
     /// <param name="context">Who is asking.</param>
     /// <param name="cancellationToken">Abandons the read.</param>
@@ -272,9 +274,12 @@ internal sealed class ConfigurationAdministration(
             ? PolicyStrictness.Loosens(was, becomes)
             : setting.Loosens(before, after);
 
-    // A tightening is free; a loosening, and any change to a key with no direction,
-    // costs the permission to loosen, the gate and a written reason (OPS-CFG-002 AC1
-    // to AC3, chapter 10 section 2.1).
+    // A tightening costs a written reason and nothing else; a loosening, and any change
+    // to a key with no direction, costs the permission to loosen, the gate and a written
+    // reason (OPS-CFG-002 AC1 to AC3, chapter 10 section 2.1). Chapter 09 section 8 asks
+    // the reason of every change to a runtime setting, the tightening included
+    // (OPS-CFG-008 AC2); the named restriction set asks it of a loosening only, which
+    // its own route judges before it gets here (OPS-CFG-008 AC4).
     private async ValueTask<Error?> RefusalAsync<TValue>(
         Setting<TValue> setting,
         bool loosening,
@@ -285,7 +290,7 @@ internal sealed class ConfigurationAdministration(
     {
         if (!loosening)
         {
-            return null;
+            return setting.Key == Settings.Restrictions.Key ? null : Unexplained(setting, reason);
         }
 
         if (await scope.RefusedAsync(context, Permissions.SystemAdminister, cancellationToken)
@@ -296,13 +301,14 @@ internal sealed class ConfigurationAdministration(
 
         if (!StepUpRefusal.Met(challenge))
         {
-            return StepUpRefusal.Of(Gate, challenge);
+            return StepUpRefusal.Of(challenge);
         }
 
-        return string.IsNullOrWhiteSpace(reason)
-            ? Named(ErrorCodes.RestrictionReasonRequired, setting)
-            : null;
+        return Unexplained(setting, reason);
     }
+
+    private static Error? Unexplained<TValue>(Setting<TValue> setting, string? reason) =>
+        string.IsNullOrWhiteSpace(reason) ? Named(ErrorCodes.RestrictionReasonRequired, setting) : null;
 
     private static bool Relayed(ConfigurationKey key) =>
         key == Settings.PolicyDefault.Key

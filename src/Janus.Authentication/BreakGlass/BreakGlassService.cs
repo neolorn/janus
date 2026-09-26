@@ -23,6 +23,7 @@ namespace Janus.Authentication.BreakGlass;
 /// <param name="store">Where the issues and the attempts are kept.</param>
 /// <param name="emergency">Which account the session belongs to.</param>
 /// <param name="audit">Where generation and use are written down.</param>
+/// <param name="refusals">Where a refused code is written down.</param>
 /// <param name="alerts">Where generation and use are raised.</param>
 /// <param name="sessions">What opens the session.</param>
 /// <param name="throttle">The progressive delay a source is held to.</param>
@@ -35,15 +36,18 @@ namespace Janus.Authentication.BreakGlass;
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where the code is drawn from.</param>
 /// <remarks>
-/// Implements OPS-BOOT-002, OPS-BOOT-004 and AUTH-STEP-004. Every attempt is counted
-/// against the global limit before anything else is looked at, and in a transaction of
-/// its own, so a refused attempt is counted as surely as one that succeeds. A group
-/// whose check symbol does not hold is refused before any hash is compared.
+/// Implements OPS-BOOT-002, OPS-BOOT-004, AUTH-STEP-004 and CONV-LOG-005. Every attempt
+/// is counted against the global limit before anything else is looked at, and in a
+/// transaction of its own, so a refused attempt is counted as surely as one that
+/// succeeds. A group whose check symbol does not hold is refused before any hash is
+/// compared. A refused code is written to the audit trail as a failed authentication,
+/// which no log level governs.
 /// </remarks>
 internal sealed class BreakGlassService(
     IBreakGlassStore store,
     IEmergencyAccount emergency,
     IBreakGlassAudit audit,
+    ISessionAudit refusals,
     IAlertChannels alerts,
     SessionService sessions,
     ThrottleService throttle,
@@ -100,7 +104,7 @@ internal sealed class BreakGlassService(
         // refused attempt is the earliest the answer promises (OPS-BOOT-004 AC7).
         if (attempted > GlobalAttempts)
         {
-            return Result.Failure<IssuedSession>(Throttled(now + GlobalWindow));
+            return Result.Failure<IssuedSession>(ThrottleService.Refusal(now + GlobalWindow));
         }
 
         var attempt = new ThrottleAttempt(origin.Address, Identifier: null);
@@ -116,13 +120,14 @@ internal sealed class BreakGlassService(
 
         if (delay > TimeSpan.Zero)
         {
-            return Result.Failure<IssuedSession>(Throttled(now + delay));
+            return Result.Failure<IssuedSession>(ThrottleService.Refusal(now + delay));
         }
 
         if (BreakGlassCode.Checked(credential) is not string canonical
             || await emergency.FindAsync(cancellationToken).ConfigureAwait(false) is not SubjectId account)
         {
-            return await RefusedAsync(attempt, ErrorCodes.BreakGlassInvalid, cancellationToken).ConfigureAwait(false);
+            return await RefusedAsync(attempt, ErrorCodes.BreakGlassInvalid, account: null, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         byte[] presented = BreakGlassCode.Presented(canonical);
@@ -149,6 +154,7 @@ internal sealed class BreakGlassService(
             return await RefusedAsync(
                     attempt,
                     spent ? ErrorCodes.BreakGlassConsumed : ErrorCodes.BreakGlassInvalid,
+                    account,
                     cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -273,9 +279,6 @@ internal sealed class BreakGlassService(
             now));
     }
 
-    private static Error Throttled(DateTimeOffset lifts) =>
-        Error.From(ErrorCodes.Throttled, "retryAt", JsonSerializer.SerializeToElement(lifts));
-
     // OPS-ALERT-002: one issue is generated once and used once, and the two are two
     // alerts, so the use of an issue is never folded into the alert its generation
     // raised within the same window.
@@ -347,11 +350,19 @@ internal sealed class BreakGlassService(
         return Result.Success(issued);
     }
 
+    // CONV-LOG-005: a refused code is a failed authentication, written to the trail
+    // against the reserved account where the refusal came after it was looked up, and
+    // never with anything that was typed.
     private async ValueTask<Result<IssuedSession>> RefusedAsync(
         ThrottleAttempt attempt,
         ErrorCode refusal,
+        SubjectId? account,
         CancellationToken cancellationToken)
     {
+        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        await refusals.FailedAsync(account, Factor.BreakGlass, time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
         Result counted = await throttle.FailedAsync(attempt, cancellationToken).ConfigureAwait(false);
 
         return counted.Match(

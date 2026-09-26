@@ -188,6 +188,13 @@ internal static class RecoveryEndpoints
             return Answers.Malformed("subject");
         }
 
+        // AUTH-RECOV-002: chapter 10 names the refusal of an approval without a
+        // written reason, so an absent one is answered by it rather than as malformed.
+        if (request.Reason is not { Length: > 0 } reason)
+        {
+            return Answers.Refused(Error.From(ErrorCodes.RecoveryReasonRequired));
+        }
+
         if (request.ChannelUsed is not { Length: > 0 } channel)
         {
             return Answers.Malformed("channelUsed");
@@ -199,7 +206,7 @@ internal static class RecoveryEndpoints
                         approver,
                         browser.Required.Id,
                         new SubjectId(subject),
-                        request.Reason ?? string.Empty,
+                        reason,
                         channel,
                         RequestOrigin.Source(context.Request),
                         cancellationToken)

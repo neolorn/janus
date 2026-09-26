@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Janus.Authentication.Maintenance;
 using Janus.Core;
 using Janus.Storage.Authentication.Maintenance;
 using Xunit;

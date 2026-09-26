@@ -93,6 +93,14 @@ internal sealed class ThrottleLedger(StoreContext context, FingerprintKeys finge
         }
     }
 
+    /// <inheritdoc/>
+    public byte[] Identify(string identifier)
+    {
+        ArgumentNullException.ThrowIfNull(identifier);
+
+        return Hashed(identifier);
+    }
+
     private byte[] Hashed(string key) =>
         Fingerprint.Compute(Encoding.UTF8.GetBytes(key), fingerprintKeys);
 

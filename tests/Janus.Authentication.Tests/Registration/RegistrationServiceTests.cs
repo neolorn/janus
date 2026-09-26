@@ -33,7 +33,7 @@ namespace Janus.Authentication.Tests.Registration;
 /// invitation opens (REG-INV-001, REG-MAIL-001, REG-DOM-001, IDN-LIFE-009a).
 /// </summary>
 [Trait("kind", "unit")]
-public sealed class RegistrationServiceTests : IAsyncDisposable
+public sealed partial class RegistrationServiceTests : IAsyncDisposable
 {
     private const string Client = "web";
     private const string Registered = "https://app.example.test/welcome";
@@ -126,6 +126,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
             _clients,
             new PolicyResolution(_memberships, _configuration, _raises),
             _invitations,
+            new InvitationOpening(_invitations, _work, _clock),
             new DomainLock(_memberships, _configuration, _domains),
             new SessionService(
                 _live,
@@ -1161,6 +1162,84 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-ACCT-004 AC3: an address entered in fullwidth and mixed case and a number
+    /// entered in Arabic-Indic digits are written with the account in their canonical
+    /// forms, beside the forms the person entered.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ACCT_004_AC3_RegistrationStoresTheCanonicalFormsAsync()
+    {
+        const string wideAddress = "\uFF30erson@Example.TEST";
+        const string arabicIndicNumber =
+            "+\u0664\u0664\u0661\u0666\u0663\u0662\u0669\u0666\u0660\u0660\u0661\u0661";
+
+        RegistrationSessionId session = await AgedAsync();
+
+        _ = Ok(await Service.StageAsync(
+            session,
+            IdentifierKind.Email,
+            wideAddress,
+            TestContext.Current.CancellationToken));
+        await VerifiedAsync(session, IdentifierKind.Email);
+        _ = Ok(await Service.StageAsync(
+            session,
+            IdentifierKind.Phone,
+            arabicIndicNumber,
+            TestContext.Current.CancellationToken));
+        await VerifiedAsync(session, IdentifierKind.Phone);
+        _ = Ok(await Service.ConfirmAsync(session, TestContext.Current.CancellationToken));
+        _ = Ok(await Service.SetPasswordAsync(session, Chosen, TestContext.Current.CancellationToken));
+        _ = Ok(await AcceptedAsync(session));
+
+        IReadOnlyList<NewIdentifier> written = Assert.Single(_directory.Created).Identifiers;
+        NewIdentifier email = Assert.Single(written, held => held.Kind is IdentifierKind.Email);
+        NewIdentifier phone = Assert.Single(written, held => held.Kind is IdentifierKind.Phone);
+
+        Assert.Equal(Address, email.Canonical);
+        Assert.Equal(wideAddress, email.Entered);
+        Assert.Equal(Number, phone.Canonical);
+        Assert.Equal(arabicIndicNumber, phone.Entered);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-005 AC3: an address whose one word mixes a Cyrillic letter into Latin
+    /// is refused at the identifier step by the code that names the mixing, whether
+    /// it is typed, typed over a staged one, or supplied by a sign-in provider, and
+    /// nothing is staged from it.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ACCT_005_AC3_TheIdentifierStepRefusesAMixedAddressByItsOwnCodeAsync()
+    {
+        const string mixed = "p\u0430ypal@example.test";
+
+        RegistrationSessionId typed = await AgedAsync();
+        RegistrationSessionId changed = await AwaitingAsync();
+        RegistrationSessionId supplied = await AgedAsync();
+
+        Assert.Equal(
+            ErrorCodes.IdentifierMixedScript,
+            Refused(await Service.StageAsync(
+                typed,
+                IdentifierKind.Email,
+                mixed,
+                TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            ErrorCodes.IdentifierMixedScript,
+            Refused(await Service.ChangeAsync(
+                changed,
+                Identity(changed, IdentifierKind.Email).Id,
+                mixed,
+                TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            ErrorCodes.IdentifierMixedScript,
+            Refused(await ProvidedAsync(supplied, Factor.Google, GoogleSubject, mixed, verified: true)));
+
+        Assert.Empty(Live(typed).Identifiers);
+        Assert.Equal(Address, Identity(changed, IdentifierKind.Email).Canonical);
+        Assert.Empty(Live(supplied).Identifiers);
+    }
+
+    /// <summary>
     /// REG-PROF-002 AC3: the account carries the affirmation and the instant it was
     /// derived; the date itself only where the deployment keeps it.
     /// </summary>
@@ -1501,6 +1580,42 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-SESS-002 and chapter 09 <c>POST /register</c>: a browser signed in already is
+    /// refused, and no registration session is created for it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_SESS_002_ABrowserSignedInAlreadyIsRefusedAndStagesNothingAsync()
+    {
+        Assert.Equal(
+            ErrorCodes.RegistrationSignedIn,
+            Refused(await SignedInAsync(SubjectId.New(_randomness), invitationToken: null)));
+        Assert.Empty(_sessions.All);
+    }
+
+    /// <summary>
+    /// REG-INV-002 AC1: a link pressed while signed in attaches its invitation to that
+    /// account without a registration session, and the browser is still refused
+    /// registration; a token that opens nothing is refused as such.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_INV_002_AC1_ALinkPressedWhileSignedInAttachesToTheAccountAsync()
+    {
+        var holder = SubjectId.New(_randomness);
+        string token = Issued(email: Address);
+
+        Assert.Equal(ErrorCodes.RegistrationSignedIn, Refused(await SignedInAsync(holder, token)));
+        Assert.Equal(ErrorCodes.InvitationExpired, Refused(await SignedInAsync(holder, "no-such-token")));
+
+        Invitation attached = _invitations.Held.Single();
+
+        Assert.Equal(holder, attached.Invitee);
+        Assert.Null(attached.Session);
+        Assert.Empty(_sessions.All);
+    }
+
+    /// <summary>
     /// REG-DOM-001 AC2: an email the person chooses at an invitation, where the
     /// invitation left the email open, is refused outside the inviting organization's
     /// verified domains.
@@ -1610,7 +1725,16 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
     }
 
     private async Task<Result<RegistrationSessionId>> InvitedAsync(string token) =>
-        await Service.BeginAsync(Client, Language, Source, token, TestContext.Current.CancellationToken);
+        await Service.BeginAsync(signedIn: null, Client, Language, Source, token, TestContext.Current.CancellationToken);
+
+    private async Task<Result<RegistrationSessionId>> SignedInAsync(SubjectId holder, string? invitationToken) =>
+        await Service.BeginAsync(
+            AccessContext.Of(holder),
+            Client,
+            Language,
+            Source,
+            invitationToken,
+            TestContext.Current.CancellationToken);
 
     // An organization locked to one domain, verified.
     private async Task LockedAsync(OrganizationId organization, string domain)
@@ -1640,7 +1764,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
     private async Task<RegistrationSessionId> StartedAsync()
     {
         Result<RegistrationSessionId> begun = await Service
-            .BeginAsync(Client, Language, Source, invitationToken: null, TestContext.Current.CancellationToken);
+            .BeginAsync(signedIn: null, Client, Language, Source, invitationToken: null, TestContext.Current.CancellationToken);
 
         return begun.Match(session => session, Throw<RegistrationSessionId>);
     }

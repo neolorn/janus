@@ -6,9 +6,11 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Authentication;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Sending;
+using Janus.Authentication.SignIn;
 using Janus.Core;
 using Janus.Identity.Identifiers;
 using Janus.Privacy;
@@ -16,6 +18,7 @@ using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Mailboxes;
 using Janus.Storage.Authentication.Sending;
+using Janus.Storage.Authentication.SignIn;
 using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.Extensions.DependencyInjection;
@@ -301,6 +304,52 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// OPS-SEC-003 AC6, AUTH-ABUSE-001: a sign-in in progress carries the hash of the
+    /// identifier it was opened with, so the retirement forgets one opened under the
+    /// previous version as it forgets a ledger line, keeps one opened under the new one,
+    /// and leaves one that carries no hash to lapse.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_003_AC6_RetirementForgetsTheSignInsOpenedUnderThePreviousVersionAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Challenge previous = Opened();
+        Challenge current = Opened();
+        var unhashed = Challenge.Existing(
+            RandomNumberGenerator.GetBytes(32),
+            subject: null,
+            email: null,
+            identifier: null,
+            "a-value-an-assertion-signs",
+            Noon,
+            Noon.AddMinutes(10),
+            []);
+
+        await using (StoreContext opening = database.Context())
+        {
+            await new ChallengeStore(opening, Deployment.FingerprintKeys).AddAsync(previous, cancellationToken);
+            await new ChallengeStore(opening, Rotating).AddAsync(current, cancellationToken);
+            await new ChallengeStore(opening, Rotating).AddAsync(unhashed, cancellationToken);
+            _ = await opening.SaveChangesAsync(cancellationToken);
+        }
+
+        Completed(await RecomputedAsync(new FixedTime(Noon), cancellationToken));
+
+        Assert.Equal([1], Retirement(await RetiredAsync(new FixedTime(Noon), cancellationToken)).Retired);
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        Assert.Equal(
+            new[] { current.Fingerprint, unhashed.Fingerprint }
+                .Select(Convert.ToHexString)
+                .Order(StringComparer.Ordinal),
+            (await connection.QueryAsync<byte[]>("SELECT handle FROM identity.signin_challenges"))
+                .Select(Convert.ToHexString)
+                .Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
     /// OPS-SEC-003 AC6: an address an erased subject gave up stays reserved until its
     /// undo lapses, and no key is left to compute it again under, so the previous
     /// version is not retired until the reservation lapses.
@@ -375,6 +424,17 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
 
     private static byte[] Hashed(string canonical) =>
         Fingerprint.Compute(Encoding.UTF8.GetBytes(canonical), Next);
+
+    // A sign-in opened for an identifier no account holds.
+    private Challenge Opened() =>
+        Challenge.Open(
+            OpaqueToken.Draw(_deployment.Randomness),
+            subject: null,
+            email: null,
+            RandomNumberGenerator.GetBytes(32),
+            "a-value-an-assertion-signs",
+            Noon,
+            TimeSpan.FromMinutes(10));
 
     private static string Fresh(string person) =>
         person + "." + Guid.NewGuid().ToString("N") + "@Example.COM";

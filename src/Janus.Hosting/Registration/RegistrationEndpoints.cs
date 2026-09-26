@@ -65,13 +65,13 @@ internal static class RegistrationEndpoints
         return endpoints;
     }
 
-    // REG-SESS-002: a person already signed in is refused and sent to their account,
-    // and no registration session is created for them. An invitation link they press
-    // attaches to that account, whose membership step reads it (REG-INV-002).
+    // REG-SESS-002: a person already signed in is answered by the operation, which
+    // creates no registration session for them, whatever else the request carries. The
+    // account document is the account application's to fetch behind its own gate; a
+    // registration route does not hand it out.
     private static async Task<IResult> BeginAsync(
         BeginRegistrationRequest request,
         IRegistration registration,
-        IInvitations invitations,
         RequestSession browser,
         PreAuthenticationService contacts,
         HttpContext context,
@@ -79,40 +79,29 @@ internal static class RegistrationEndpoints
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(registration);
-        ArgumentNullException.ThrowIfNull(invitations);
         ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(contacts);
         ArgumentNullException.ThrowIfNull(context);
 
-        if (browser.Context is AccessContext signedIn)
+        if (browser.Context is null)
         {
-            if (request.InvitationToken is string token
-                && (await invitations.OpenAsync(signedIn, token, cancellationToken).ConfigureAwait(false))
-                    .Match(() => (Error?)null, error => error) is Error unopened)
+            if (request.ClientId is not { Length: > 0 })
             {
-                return Answers.Refused(unopened);
+                return Answers.Malformed("clientId");
             }
 
-            // The account document is the account application's to fetch behind its own
-            // gate; a registration route does not hand it out (REG-SESS-002).
-            return Answers.Refused(ErrorCodes.RegistrationSignedIn);
-        }
-
-        if (request.ClientId is not { Length: > 0 } client)
-        {
-            return Answers.Malformed("clientId");
-        }
-
-        if (browser.FirstContact is not PreAuthentication contact)
-        {
-            return Gone();
+            if (browser.FirstContact is null)
+            {
+                return Gone();
+            }
         }
 
         Error? failure = null;
 
         RegistrationSessionId session = (await registration
                 .BeginAsync(
-                    client,
+                    browser.Context,
+                    request.ClientId ?? string.Empty,
                     RequestOrigin.Language(context.Request),
                     RequestOrigin.Source(context.Request),
                     request.InvitationToken,
@@ -138,7 +127,12 @@ internal static class RegistrationEndpoints
         // BFF-CSRF-005b: the cookie is what makes "the browser that started this" a
         // checkable fact rather than a hope.
         await contacts
-            .CarryAsync(contact, session, state.ExpiresAt, cancellationToken)
+            .CarryAsync(
+                browser.FirstContact ?? throw new InvalidOperationException(
+                    "A registration is begun only for a browser that carries its first contact."),
+                session,
+                state.ExpiresAt,
+                cancellationToken)
             .ConfigureAwait(false);
 
         return Shown(state, StatusCodes.Status201Created);

@@ -9,11 +9,13 @@ namespace Janus.Core;
 /// with a declared purpose.
 /// </summary>
 /// <remarks>
-/// Implements REG-PROF-001, IDN-ATTR-007 and IDN-ACCT-005. Identity does no proofing
+/// Implements REG-PROF-001, IDN-ATTR-007, IDN-ACCT-005 and CONV-DESIGN-004. Identity
+/// does no proofing
 /// and needs no name, so nothing here checks a legal name against anything: it is
 /// normalized, bounded and required to be of one script per word, and that is all.
 /// The bound is in Unicode scalar values, counted after the normalization, so the same
-/// name written in two compositions is the same length.
+/// name written in two compositions is the same length. A default instance was never
+/// read, so it has no name to give and no row can carry it.
 /// </remarks>
 public readonly record struct LegalName
 {
@@ -34,7 +36,8 @@ public readonly record struct LegalName
     /// <summary>
     /// The legal name in Normalization Form C, which is what is stored and shown.
     /// </summary>
-    public string Value => _value ?? string.Empty;
+    /// <exception cref="InvalidOperationException">The legal name was never set.</exception>
+    public string Value => _value ?? throw new InvalidOperationException("The legal name was never set.");
 
     /// <summary>
     /// Reads a legal name as it was entered and returns it in Normalization Form C.
@@ -69,5 +72,6 @@ public readonly record struct LegalName
     }
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">The legal name was never set.</exception>
     public override string ToString() => Value;
 }

@@ -32,11 +32,13 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
 {
     private static readonly DateTimeOffset Noon = new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
+    private static readonly TimeSpan Recency = TimeSpan.FromMinutes(15);
+
     private static readonly StepUpChallenge Satisfied =
-        new(StepUpOutcome.Satisfied, AssuranceLevel.Aal2, PhishingResistant: false, [], null);
+        new(StepUpOutcome.Satisfied, AssuranceLevel.Aal2, PhishingResistant: false, Recency, [], null);
 
     private static readonly StepUpChallenge Wanting =
-        new(StepUpOutcome.Present, AssuranceLevel.Aal2, PhishingResistant: false, [[Factor.Totp]], null);
+        new(StepUpOutcome.Present, AssuranceLevel.Aal2, PhishingResistant: false, Recency, [[Factor.Totp]], null);
 
     private static readonly string[] OneLanguage = ["en"];
 
@@ -253,7 +255,8 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
         Error refusal = await RefusedAsync(SendKind.Email, Elsewhere, Wanting);
 
         Assert.Equal(ErrorCodes.StepUpRequired, refusal.Code);
-        Assert.Equal("alerting:destinations", refusal.Details["action"].GetString());
+        Assert.Equal("present", refusal.Details["outcome"].GetString());
+        Assert.Equal(900, refusal.Details["required"].GetProperty("maxAge").GetInt64());
         Assert.Equal(ThreeAddresses, await DestinationsAsync(Settings.AlertingEmailDestinations));
         Assert.Empty(_mail.Taken);
         Assert.Empty(_events.Published);

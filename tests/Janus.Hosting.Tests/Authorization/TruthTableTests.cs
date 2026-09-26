@@ -7,8 +7,10 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Authentication.Accounts;
 using Janus.Core;
 using Janus.Hosting.Bff;
+using Janus.Privacy.Consents;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -31,70 +33,105 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 {
     private static readonly ResourceType Document = ResourceType.Parse("document");
     private static readonly ResourceType Workspace = ResourceType.Parse("workspace");
+    private static readonly ResourceType Undeclared = ResourceType.Parse("ledger");
+
+    private static readonly Dictionary<ErrorCode, Decided> Refusals = new()
+    {
+        [ErrorCodes.Denied] = Decided.Denied,
+        [ErrorCodes.Restricted] = Decided.Restricted,
+        [ErrorCodes.ConsentRequired] = Decided.ConsentRequired,
+    };
 
     // The table itself, stated once. Changing a policy is changing a row here, and both
     // the case-by-case run and the agreement check read it (AUTHZ-TEST-001).
-    private static readonly (string Scenario, bool Allowed)[] Table =
+    private static readonly (string Scenario, Decided Decided)[] Table =
     [
-        ("a grant on the record itself", true),
-        ("a grant on the container", true),
-        ("a grant two containers above", true),
-        ("a grant on the whole organization", true),
-        ("a grant on a sibling", false),
-        ("no grant at all", false),
-        ("a grant to a group the account belongs to", true),
-        ("a grant to a group holding the account's group", true),
-        ("a grant to a group the account left", false),
-        ("a deny on the record over an allow on the container", false),
-        ("a deny on the container over an allow on the record", false),
-        ("a deny to a group over an allow to the account", false),
-        ("a grant that has expired", false),
-        ("a grant that expires later", true),
-        ("a grant that was revoked", false),
-        ("a grant in another organization", false),
-        ("a grant whose role does not allow the permission", false),
-        ("a fact in the host's data conferring a role", true),
-        ("a deny over a fact in the host's data", false),
-        ("a fact in the host's data on a container above", true),
+        ("a grant on the record itself", Decided.Allowed),
+        ("a grant on the container", Decided.Allowed),
+        ("a grant two containers above", Decided.Allowed),
+        ("a grant on the whole organization", Decided.Allowed),
+        ("a grant on a sibling", Decided.Denied),
+        ("no grant at all", Decided.Denied),
+        ("a grant to a group the account belongs to", Decided.Allowed),
+        ("a grant to a group holding the account's group", Decided.Allowed),
+        ("a grant to a group the account left", Decided.Denied),
+        ("a deny on the record over an allow on the container", Decided.Denied),
+        ("a deny on the container over an allow on the record", Decided.Denied),
+        ("a deny to a group over an allow to the account", Decided.Denied),
+        ("a grant that has expired", Decided.Denied),
+        ("a grant that expires later", Decided.Allowed),
+        ("a grant that was revoked", Decided.Denied),
+        ("a grant in another organization", Decided.Denied),
+        ("a grant whose role does not allow the permission", Decided.Denied),
+        ("a fact in the host's data conferring a role", Decided.Allowed),
+        ("a deny over a fact in the host's data", Decided.Denied),
+        ("a fact in the host's data on a container above", Decided.Allowed),
+        ("a grant on the container the record was moved into", Decided.Allowed),
+        ("a grant on the container the record was moved out of", Decided.Denied),
+        ("a record of a type the model does not declare", Decided.Raised),
+    ];
+
+    // The decisions an operation's own gate step makes over what no list shows, each
+    // run through the one path that makes it, and the capability page's decision on
+    // each of its records, which the single check is asked beside it and must match
+    // (CONV-DESIGN-002 AC3, AUTHZ-SCOPE-001, IDN-ACCT-007 AC2, AUTHZ-GATE-005 AC1).
+    private static readonly (string Scenario, Decided Decided)[] Operations =
+    [
+        ("a revocation of a grant no row names, by a caller managing grants", Decided.Denied),
+        ("a revocation of a grant no row names, by a restricted caller", Decided.Restricted),
+        ("a change to a group no row names, by a caller managing groups", Decided.Denied),
+        ("a change to a group no row names, by a restricted caller", Decided.Restricted),
+        ("a grant on a record no registration names, by a caller managing grants", Decided.Denied),
+        ("a change to the account's own settings", Decided.Allowed),
+        ("a change to the account's own settings, by a restricted caller", Decided.Restricted),
+        ("a page's record whose subject gave the consent its purpose asks", Decided.Allowed),
+        ("a page's record whose subject gave no consent to its purpose", Decided.ConsentRequired),
     ];
 
     /// <summary>
     /// The table as the run reads it.
     /// </summary>
-    public static TheoryData<string, bool> Cases
-    {
-        get
-        {
-            var cases = new TheoryData<string, bool>();
+    public static TheoryData<string, Decided> Cases => Read(Table);
 
-            foreach ((string scenario, bool allowed) in Table)
-            {
-                cases.Add(scenario, allowed);
-            }
-
-            return cases;
-        }
-    }
+    /// <summary>
+    /// The operations' table as the run reads it.
+    /// </summary>
+    public static TheoryData<string, Decided> OperationCases => Read(Operations);
 
     /// <summary>
     /// AUTHZ-TEST-001 AC1, AC2, AUTHZ-GATE-002 AC2: every case of the table decides the
     /// way the table says, through the check, the expression and the fragment alike.
     /// </summary>
     /// <param name="scenario">The case.</param>
-    /// <param name="allowed">What it decides.</param>
+    /// <param name="decided">What it decides.</param>
     /// <returns>The work of running it.</returns>
     [Theory]
     [MemberData(nameof(Cases))]
     public async Task AUTHZ_TEST_001_AC2_EveryCaseDecidesTheSameWayThroughBothPathsAsync(
         string scenario,
-        bool allowed)
+        Decided decided)
     {
         Case written = await WriteAsync(scenario);
 
-        Assert.Equal(allowed, await ChecksAsync(written));
-        Assert.Equal(allowed, await ExpressionAdmitsAsync(written));
-        Assert.Equal(allowed, await FragmentAdmitsAsync(written));
+        Assert.Equal(decided, await ChecksAsync(written));
+        Assert.Equal(decided, await ExpressionAdmitsAsync(written));
+        Assert.Equal(decided, await FragmentAdmitsAsync(written));
     }
+
+    /// <summary>
+    /// AUTHZ-TEST-001 AC1, CONV-DESIGN-002 AC3, IDN-ACCT-007 AC2, AUTHZ-GATE-005 AC1:
+    /// every case of the operations' table decides the way the table says, through the
+    /// path that decides it.
+    /// </summary>
+    /// <param name="scenario">The case.</param>
+    /// <param name="decided">What it decides.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [MemberData(nameof(OperationCases))]
+    public async Task AUTHZ_TEST_001_AC1_EveryOperationCaseDecidesTheWayTheTableSaysAsync(
+        string scenario,
+        Decided decided) =>
+        Assert.Equal(decided, await OperationAsync(scenario));
 
     /// <summary>
     /// AUTHZ-PRIN-001 AC1: the single check and the list filter are asked the whole
@@ -104,9 +141,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     [Fact]
     public async Task AUTHZ_PRIN_001_AC1_TheCheckAndTheFilterAgreeOnEveryCaseAsync()
     {
-        List<(bool Check, bool Expression, bool Fragment)> decided = [];
+        List<(Decided Check, Decided Expression, Decided Fragment)> decided = [];
 
-        foreach ((string scenario, bool _) in Table)
+        foreach ((string scenario, Decided _) in Table)
         {
             Case written = await WriteAsync(scenario);
 
@@ -129,9 +166,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     [Fact]
     public async Task AUTHZ_GATE_002_AC2_EveryCaseIsEqualAcrossBothRenderingsAsync()
     {
-        List<(bool Expression, bool Fragment)> rendered = [];
+        List<(Decided Expression, Decided Fragment)> rendered = [];
 
-        foreach ((string scenario, bool _) in Table)
+        foreach ((string scenario, Decided _) in Table)
         {
             Case written = await WriteAsync(scenario);
 
@@ -150,24 +187,24 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     /// the expression and the fragment alike.
     /// </summary>
     /// <param name="scenario">The case.</param>
-    /// <param name="allowed">What it decides.</param>
+    /// <param name="decided">What it decides.</param>
     /// <returns>The work of running it.</returns>
     [Theory]
     [MemberData(nameof(Cases))]
     public async Task AUTHZ_TEST_001_AC3_EveryCaseDecidesTheSameWayMaterialisedAsync(
         string scenario,
-        bool allowed)
+        Decided decided)
     {
         Case written = await WriteAsync(scenario);
 
-        Assert.Equal(allowed, await ChecksAsync(written));
+        Assert.Equal(decided, await ChecksAsync(written));
 
         await using ServiceProvider materialised = Materialised();
         await RefreshAsync(materialised, written);
 
-        Assert.Equal(allowed, await ChecksAsync(written, materialised));
-        Assert.Equal(allowed, await ExpressionAdmitsAsync(written, materialised));
-        Assert.Equal(allowed, await FragmentAdmitsAsync(written, materialised));
+        Assert.Equal(decided, await ChecksAsync(written, materialised));
+        Assert.Equal(decided, await ExpressionAdmitsAsync(written, materialised));
+        Assert.Equal(decided, await FragmentAdmitsAsync(written, materialised));
     }
 
     /// <summary>
@@ -310,10 +347,44 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             .FilterAsync(
                 AccessContext.Of(written.Account),
                 HostPermissions.Read,
-                Document,
+                written.Record.Type,
                 written.Deployment.Organization,
                 Sources(reading),
                 TestContext.Current.CancellationToken));
+    }
+
+    private static TheoryData<string, Decided> Read((string Scenario, Decided Decided)[] table)
+    {
+        var cases = new TheoryData<string, Decided>();
+
+        foreach ((string scenario, Decided decided) in table)
+        {
+            cases.Add(scenario, decided);
+        }
+
+        return cases;
+    }
+
+    // What a refusal decides, by the code it answers; any other code is no decision the
+    // tables state, and fails the case that met it.
+    private static Decided Refused(Error error) =>
+        Refusals.TryGetValue(error.Code, out Decided decided)
+            ? decided
+            : throw new InvalidOperationException(error.Code.ToString());
+
+    // CONV-ERR-001, AUTHZ-PRIN-003: a type the model does not declare is raised by the
+    // gate before anything is read, which is what the case decides; the test's own
+    // failures are never read as one.
+    private static async Task<Decided> RaisedOrAsync(Func<Task<Decided>> asked)
+    {
+        try
+        {
+            return await asked();
+        }
+        catch (InvalidOperationException raised) when (raised.Message.Contains("is not declared", StringComparison.Ordinal))
+        {
+            return Decided.Raised;
+        }
     }
 
     // What the host supplies from its own context, the same object every path on a type
@@ -330,73 +401,80 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     private static ResourceReference Reference(ResourceType type) =>
         new(type, ResourceId.Parse(Guid.NewGuid().ToString()));
 
-    private async Task<bool> ChecksAsync(Case written, IServiceProvider? deployment = null)
-    {
-        await using AsyncServiceScope scope = (deployment ?? host.Services).CreateAsyncScope();
-        await using HostContext reading = host.Context();
-
-        Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
-            .RequireAsync(
-                AccessContext.Of(written.Account),
-                HostPermissions.Read,
-                written.Record,
-                Sources(reading),
-                TestContext.Current.CancellationToken);
-
-        return outcome.Match(() => true, _ => false);
-    }
-
-    private async Task<bool> ExpressionAdmitsAsync(Case written, IServiceProvider? deployment = null)
-    {
-        await using HostContext reading = host.Context();
-
-        return await reading.Documents
-            .Where(await ExpressionAsync(written, reading, deployment))
-            .AnyAsync(
-                document => document.Id == written.Record.Id.ToString(),
-                TestContext.Current.CancellationToken);
-    }
-
-    private async Task<bool> FragmentAdmitsAsync(Case written, IServiceProvider? deployment = null)
-    {
-        SqlFilter fragment;
-
-        await using (AsyncServiceScope scope = (deployment ?? host.Services).CreateAsyncScope())
+    private async Task<Decided> ChecksAsync(Case written, IServiceProvider? deployment = null) =>
+        await RaisedOrAsync(async () =>
         {
-            fragment = Rendered(await scope.ServiceProvider.GetRequiredService<IAccessGate>()
-                .FragmentAsync(
+            await using AsyncServiceScope scope = (deployment ?? host.Services).CreateAsyncScope();
+            await using HostContext reading = host.Context();
+
+            Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .RequireAsync(
                     AccessContext.Of(written.Account),
                     HostPermissions.Read,
-                    Document,
-                    written.Deployment.Organization,
-                    "identity_authz_row",
-                    "id",
-                    TestContext.Current.CancellationToken));
-        }
+                    written.Record,
+                    Sources(reading),
+                    TestContext.Current.CancellationToken);
 
-        var arguments = new DynamicParameters();
+            return outcome.Match(() => Decided.Allowed, Refused);
+        });
 
-        foreach (KeyValuePair<string, object> parameter in fragment.Parameters)
+    private async Task<Decided> ExpressionAdmitsAsync(Case written, IServiceProvider? deployment = null) =>
+        await RaisedOrAsync(async () =>
         {
-            arguments.Add(parameter.Key, parameter.Value);
-        }
+            await using HostContext reading = host.Context();
 
-        arguments.Add("record", written.Record.Id.ToString());
+            return await reading.Documents
+                .Where(await ExpressionAsync(written, reading, deployment))
+                .AnyAsync(
+                    document => document.Id == written.Record.Id.ToString(),
+                    TestContext.Current.CancellationToken)
+                ? Decided.Allowed
+                : Decided.Denied;
+        });
 
-        await using NpgsqlConnection connection = await host.OpenAsync();
+    private async Task<Decided> FragmentAdmitsAsync(Case written, IServiceProvider? deployment = null) =>
+        await RaisedOrAsync(async () =>
+        {
+            SqlFilter fragment;
 
-        return await connection.ExecuteScalarAsync<bool>(new CommandDefinition(
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"""
-                SELECT EXISTS (
-                    SELECT 1
-                    FROM host.documents AS identity_authz_row
-                    WHERE identity_authz_row.id = @record AND {fragment.Text});
-                """),
-            arguments,
-            cancellationToken: TestContext.Current.CancellationToken));
-    }
+            await using (AsyncServiceScope scope = (deployment ?? host.Services).CreateAsyncScope())
+            {
+                fragment = Rendered(await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                    .FragmentAsync(
+                        AccessContext.Of(written.Account),
+                        HostPermissions.Read,
+                        written.Record.Type,
+                        written.Deployment.Organization,
+                        "identity_authz_row",
+                        "id",
+                        TestContext.Current.CancellationToken));
+            }
+
+            var arguments = new DynamicParameters();
+
+            foreach (KeyValuePair<string, object> parameter in fragment.Parameters)
+            {
+                arguments.Add(parameter.Key, parameter.Value);
+            }
+
+            arguments.Add("record", written.Record.Id.ToString());
+
+            await using NpgsqlConnection connection = await host.OpenAsync();
+
+            return await connection.ExecuteScalarAsync<bool>(new CommandDefinition(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"""
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM host.documents AS identity_authz_row
+                        WHERE identity_authz_row.id = @record AND {fragment.Text});
+                    """),
+                arguments,
+                cancellationToken: TestContext.Current.CancellationToken))
+                ? Decided.Allowed
+                : Decided.Denied;
+        });
 
     private async Task<Case> WriteAsync(string scenario)
     {
@@ -412,18 +490,214 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         SubjectId account = await deployment.AccountAsync(cancellationToken);
         ResourceReference outer = Reference(Workspace);
         ResourceReference inner = Reference(Workspace);
-        ResourceReference record = Reference(Document);
+        ResourceReference elsewhere = Reference(Workspace);
+        ResourceReference record = Reference(
+            scenario == "a record of a type the model does not declare" ? Undeclared : Document);
         ResourceReference sibling = Reference(Document);
 
         await deployment.RegisterAsync(outer, containedIn: null, cancellationToken);
         await deployment.RegisterAsync(inner, outer, cancellationToken);
-        await deployment.RegisterAsync(record, inner, cancellationToken);
+        await deployment.RegisterAsync(elsewhere, containedIn: null, cancellationToken);
         await deployment.RegisterAsync(sibling, inner, cancellationToken);
 
-        await GrantAsync(deployment, scenario, role, account, record, inner, outer, sibling);
+        // A type the model does not declare is never registered: the library holds no
+        // row of it, and the gate reads none.
+        if (record.Type == Document)
+        {
+            await deployment.RegisterAsync(record, inner, cancellationToken);
+        }
+
+        await GrantAsync(deployment, scenario, role, account, record, inner, outer, sibling, elsewhere);
         await ReviewAsync(deployment, scenario, account, inner, outer);
+        await MovedAsync(scenario, record, elsewhere);
 
         return new Case(host, deployment, account, record, sibling, inner, outer);
+    }
+
+    // AUTHZ-INHERIT-002: the record is moved by the library, whose rewrite of the
+    // ancestry is what the case decides by, after its grants are written by hand as
+    // every other case's are.
+    private async Task MovedAsync(string scenario, ResourceReference record, ResourceReference elsewhere)
+    {
+        if (scenario is not ("a grant on the container the record was moved into"
+            or "a grant on the container the record was moved out of"))
+        {
+            return;
+        }
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        Result moved = await scope.ServiceProvider.GetRequiredService<IResources>()
+            .MoveAsync(record, elsewhere, TestContext.Current.CancellationToken);
+
+        Assert.True(moved.Match(() => true, _ => false));
+    }
+
+    // Each operation case in a deployment of its own, its caller holding the management
+    // of grants and of groups across the organization, so that what refuses a row no
+    // row names is the row's absence and never the caller's want of a permission.
+    private async Task<Decided> OperationAsync(string scenario)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        RoleName role = await deployment.BeginAsync(
+            [HostPermissions.Read, HostPermissions.Recommend],
+            cancellationToken);
+        RoleName managing = await deployment.RoleAsync(
+            [Permissions.GrantManage, Permissions.GroupManage],
+            cancellationToken);
+        SubjectId caller = await deployment.AccountAsync(cancellationToken);
+
+        await deployment.GrantAsync(
+            GrantSubject.Of(caller), managing, null, false, null, null, cancellationToken);
+
+        if (scenario.EndsWith("by a restricted caller", StringComparison.Ordinal))
+        {
+            await deployment.RestrictAsync(caller, cancellationToken);
+        }
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        var context = AccessContext.Of(caller);
+        var session = SessionId.New(TimeProvider.System);
+
+        switch (scenario)
+        {
+            case "a revocation of a grant no row names, by a caller managing grants":
+            case "a revocation of a grant no row names, by a restricted caller":
+                return (await scope.ServiceProvider.GetRequiredService<IGrants>()
+                        .RevokeAsync(
+                            context,
+                            session,
+                            GrantId.New(TimeProvider.System),
+                            "No longer needed.",
+                            cancellationToken))
+                    .Match(() => Decided.Allowed, Refused);
+
+            case "a change to a group no row names, by a caller managing groups":
+            case "a change to a group no row names, by a restricted caller":
+                return (await scope.ServiceProvider.GetRequiredService<IGroups>()
+                        .RemoveAsync(context, GroupId.New(TimeProvider.System), "No longer used.", cancellationToken))
+                    .Match(() => Decided.Allowed, Refused);
+
+            case "a grant on a record no registration names, by a caller managing grants":
+                return (await scope.ServiceProvider.GetRequiredService<IGrants>()
+                        .GrantAsync(
+                            context,
+                            session,
+                            new GrantRequest(
+                                GrantSubject.Of(caller),
+                                role,
+                                Reference(Document),
+                                Deny: false,
+                                ExpiresAt: null,
+                                "The reason the grant was asked for."),
+                            cancellationToken))
+                    .Match(_ => Decided.Allowed, Refused);
+
+            case "a change to the account's own settings":
+            case "a change to the account's own settings, by a restricted caller":
+                return await scope.ServiceProvider.GetRequiredService<ISettingsRestriction>()
+                    .RefusedAsync(caller, cancellationToken) is Error refused
+                    ? Refused(refused)
+                    : Decided.Allowed;
+
+            case "a page's record whose subject gave the consent its purpose asks":
+            case "a page's record whose subject gave no consent to its purpose":
+                return await PagedAsync(
+                    deployment,
+                    role,
+                    caller,
+                    consented: scenario == "a page's record whose subject gave the consent its purpose asks");
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(scenario), scenario, "No such case.");
+        }
+    }
+
+    // AUTHZ-GATE-005 AC1, PRIV-SENS-002 AC1: one page holding a record of a subject who
+    // consented and one of a subject who did not, the caller granted on the workspace
+    // both sit in; the case's record is decided by the page and by the single check,
+    // which must agree.
+    private async Task<Decided> PagedAsync(
+        Deployment deployment,
+        RoleName role,
+        SubjectId caller,
+        bool consented)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        ResourceReference workspace = Reference(Workspace);
+        ResourceReference given = Reference(Document);
+        ResourceReference withheld = Reference(Document);
+        SubjectId giving = await deployment.AccountAsync(cancellationToken);
+        SubjectId withholding = await deployment.AccountAsync(cancellationToken);
+
+        await deployment.RegisterAsync(workspace, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(given, workspace, cancellationToken, giving);
+        await deployment.RegisterAsync(withheld, workspace, cancellationToken, withholding);
+        await deployment.GrantAsync(
+            GrantSubject.Of(caller), role, workspace, false, null, null, cancellationToken);
+        await ConsentedAsync(giving);
+
+        ResourceReference asked = consented ? given : withheld;
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+        IAccessGate gate = scope.ServiceProvider.GetRequiredService<IAccessGate>();
+
+        Capability paged = Rendered(await gate.CapabilitiesAsync(
+                AccessContext.Of(caller),
+                Document,
+                [given.Id, withheld.Id],
+                [HostPermissions.Recommend],
+                Sources(reading),
+                cancellationToken))
+            .Single(capability => capability.Resource == asked.Id);
+
+        Decided checkedAlone = (await gate.RequireAsync(
+                AccessContext.Of(caller),
+                HostPermissions.Recommend,
+                asked,
+                Sources(reading),
+                cancellationToken))
+            .Match(() => Decided.Allowed, Refused);
+
+        Assert.Equal(checkedAlone, Paged(paged));
+
+        return checkedAlone;
+    }
+
+    // What the page decides on one record: the consent it still requires, the action
+    // it admits, or neither.
+    private static Decided Paged(Capability capability) =>
+        capability.Requires.TryGetValue(HostPermissions.Recommend, out IReadOnlySet<CapabilityResidual>? outstanding)
+            && outstanding.SetEquals([CapabilityResidual.Consent])
+            ? Decided.ConsentRequired
+            : capability.Can.Contains(HostPermissions.Recommend) ? Decided.Allowed : Decided.Denied;
+
+    // PRIV-SENS-002 AC1: the written consent the consent-based purpose asks of a
+    // sensitive type, recorded for its data subject.
+    private async Task ConsentedAsync(SubjectId subject)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+        await work.BeginAsync(cancellationToken);
+        await scope.ServiceProvider.GetRequiredService<IConsentStore>().RecordAsync(
+            subject,
+            new ConsentRecord(
+                "recommendations",
+                "1",
+                ConsentMechanism.Dashboard,
+                ConsentKind.Written,
+                Deployment.Noon,
+                WithdrawnAt: null,
+                SupersededAt: null),
+            cancellationToken);
+        await work.CommitAsync(cancellationToken);
     }
 
     private async Task GrantAsync(
@@ -434,7 +708,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ResourceReference record,
         ResourceReference inner,
         ResourceReference outer,
-        ResourceReference sibling)
+        ResourceReference sibling,
+        ResourceReference elsewhere)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         var holder = GrantSubject.Of(account);
@@ -528,6 +803,23 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             case "a deny over a fact in the host's data":
                 await deployment.GrantAsync(
                     holder, role, record, true, null, null, cancellationToken);
+                break;
+
+            case "a grant on the container the record was moved into":
+                await deployment.GrantAsync(
+                    holder, role, elsewhere, false, null, null, cancellationToken);
+                break;
+
+            case "a grant on the container the record was moved out of":
+                await deployment.GrantAsync(
+                    holder, role, inner, false, null, null, cancellationToken);
+                break;
+
+            // The whole organization is granted, so a type the gate answered rather than
+            // raised would be allowed.
+            case "a record of a type the model does not declare":
+                await deployment.GrantAsync(
+                    holder, role, null, false, null, null, cancellationToken);
                 break;
 
             default:

@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Janus.Conformance\Janus.Conformance.csproj" />
+  </ItemGroup>
+
+  <!-- CONV-TEST-002: the library's own schema is what the sample host's deployment
+       runs on, and the fixture that raises it belongs to the project that owns the
+       schema. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Janus.Storage.Tests\Janus.Storage.Tests.csproj" />
+  </ItemGroup>
+
+  <!-- AUTH-OIDC-001: the sample host's client is registered from the server, by the
+       command an operator runs, so the command is built beside it. It runs from its own
+       build output: this project's output resolves the shared dependencies for the web
+       framework the tests run on, which the command does not run on. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Janus.Cli\Janus.Cli.csproj" />
+    <AssemblyMetadata Include="CommandLineApplicationDirectory" Value="$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', '..', 'src', 'Janus.Cli', 'bin', '$(Configuration)', '$(TargetFramework)'))" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Testcontainers.PostgreSql" />
+  </ItemGroup>
+
+</Project>

@@ -70,6 +70,7 @@ public static class IdentityEndpoints
         _ = library.MapRestrictions();
         _ = library.MapDeliveryReports();
         _ = library.MapProviderEvents();
+        _ = library.MapProviderSignIn();
         _ = library.MapGrants();
         _ = library.MapRoles();
         _ = library.MapGroups();

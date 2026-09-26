@@ -12,7 +12,7 @@ namespace Janus.Storage.Tests.Authorization;
 
 /// <summary>
 /// The ancestry closure as a create, a move and a bulk import leave it
-/// (AUTHZ-INHERIT-002, AUTHZ-INHERIT-003, CONV-TEST-003).
+/// (AUTHZ-INHERIT-002, AUTHZ-INHERIT-003, CONV-TEST-003, CONV-DESIGN-004).
 /// </summary>
 /// <remarks>
 /// The highest-risk area in the design: a wrong row here means someone sees a record
@@ -222,6 +222,29 @@ public sealed class AncestryStoreTests(DatabaseFixture database)
             reading.Resources.Any(resource => resource.Type == row.Type && resource.Id == row.Id)
             && reading.Resources.Any(resource =>
                 resource.Type == row.AncestorType && resource.Id == row.AncestorId)));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-004 AC3: a record whose identifier was never read writes neither the
+    /// record nor its ancestry, on the path that writes the ancestry by statement.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_004_AC3_ARecordIdentifierNeverReadWritesNoRowAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        var unread = new ResourceReference(ResourceType.Parse("workspace"), default);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => RegisterAsync(unread, organization, containedIn: null));
+
+        await using StoreContext reading = database.Context();
+
+        Assert.False(await reading.Resources.AnyAsync(
+            row => row.Organization == organization,
+            TestContext.Current.CancellationToken));
+        Assert.False(await reading.Ancestry.AnyAsync(
+            row => row.Organization == organization,
+            TestContext.Current.CancellationToken));
     }
 
     /// <inheritdoc/>

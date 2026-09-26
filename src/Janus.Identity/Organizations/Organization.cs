@@ -9,8 +9,8 @@ namespace Janus.Identity.Organizations;
 /// boundary.
 /// </summary>
 /// <remarks>
-/// Implements IDN-ORG-001, IDN-ORG-002, IDN-ORG-003, IDN-ORG-004, IDN-ORG-005 and
-/// IDN-PRIN-003.
+/// Implements IDN-ORG-001, IDN-ORG-002, IDN-ORG-003, IDN-ORG-004, IDN-ORG-005,
+/// IDN-ACCT-004 and IDN-PRIN-003.
 /// Deletion is a window, not a removal: the request suspends the organization at once,
 /// the window runs for <c>organization.deletion.grace</c>, a cancellation inside it
 /// restores everything, and its end leaves the row where it was with the identifying
@@ -42,6 +42,14 @@ internal sealed class Organization
     /// collation.
     /// </summary>
     public string Name { get; private set; }
+
+    /// <summary>
+    /// The name's comparison key: its <c>NFKC_Casefold</c> form, written with it and
+    /// never shown (IDN-ACCT-004). Two names that differ only in width, in case or in
+    /// composition share it; the chapters make it no uniqueness rule. It is derived
+    /// from the name, so it follows the name wherever the name changes.
+    /// </summary>
+    public string CanonicalName => CanonicalForm.Of(Name);
 
     /// <summary>
     /// When the organization was created.
@@ -80,13 +88,9 @@ internal sealed class Organization
     /// <param name="name">What it is called.</param>
     /// <param name="createdAt">When it was created.</param>
     /// <returns>The organization.</returns>
-    /// <exception cref="ArgumentException">The name is absent or blank.</exception>
-    public static Organization Create(OrganizationId id, string name, DateTimeOffset createdAt)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
-
-        return new Organization(id, name, createdAt, isAdministrative: false);
-    }
+    /// <exception cref="ArgumentException">The name, or its comparison key, is absent or blank.</exception>
+    public static Organization Create(OrganizationId id, string name, DateTimeOffset createdAt) =>
+        new(id, Keyed(name), createdAt, isAdministrative: false);
 
     /// <summary>
     /// The administrative organization, which bootstrap creates once and which
@@ -96,17 +100,13 @@ internal sealed class Organization
     /// <param name="name">What it is called.</param>
     /// <param name="createdAt">When it was created.</param>
     /// <returns>The organization.</returns>
-    /// <exception cref="ArgumentException">The name is absent or blank.</exception>
+    /// <exception cref="ArgumentException">The name, or its comparison key, is absent or blank.</exception>
     /// <remarks>Implements IDN-ORG-001 and OPS-BOOT-001.</remarks>
     public static Organization CreateAdministrative(
         OrganizationId id,
         string name,
-        DateTimeOffset createdAt)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
-
-        return new Organization(id, name, createdAt, isAdministrative: true);
-    }
+        DateTimeOffset createdAt) =>
+        new(id, Keyed(name), createdAt, isAdministrative: true);
 
     /// <summary>
     /// The organization as it already stands. This is the store's translation of a
@@ -204,7 +204,8 @@ internal sealed class Organization
     /// What the organization was called is the identifying data IDN-ORG-003 renders
     /// unreadable: the row stays, the identifier goes on resolving, and the name
     /// becomes that identifier, which is the pseudonymisation of D-026.1 rather than a
-    /// destruction (IDN-PRIN-003, IDN-ORG-005).
+    /// destruction (IDN-PRIN-003, IDN-ORG-005). The comparison key follows the name, so
+    /// it keeps nothing of the name it replaced.
     /// </remarks>
     public void RecordErasure(DateTimeOffset at, TimeSpan window)
     {
@@ -225,5 +226,15 @@ internal sealed class Organization
 
         ErasedAt = at;
         Name = Id.ToString();
+    }
+
+    // IDN-ACCT-004: a name of nothing but code points the canonical form removes would
+    // compare as nothing, so it is no name.
+    private static string Keyed(string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(CanonicalForm.Of(name), nameof(name));
+
+        return name;
     }
 }

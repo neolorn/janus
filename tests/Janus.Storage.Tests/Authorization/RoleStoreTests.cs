@@ -7,6 +7,7 @@ using Janus.Authorization.Roles;
 using Janus.Core;
 using Janus.Storage.Authorization.Grants;
 using Janus.Storage.Authorization.Roles;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace Janus.Storage.Tests.Authorization;
@@ -14,7 +15,7 @@ namespace Janus.Storage.Tests.Authorization;
 /// <summary>
 /// Roles as the tables hold them: what a role allows is data, edited at runtime, and
 /// read live wherever a grant naming it is evaluated (AUTHZ-GRANT-004, AUTHZ-CACHE-001,
-/// CONV-TEST-003).
+/// CONV-TEST-003, CONV-DESIGN-004).
 /// </summary>
 [Trait("kind", "integration")]
 public sealed class RoleStoreTests(DatabaseFixture database)
@@ -116,6 +117,25 @@ public sealed class RoleStoreTests(DatabaseFixture database)
         Assert.Empty(reading.RolePermissions.Where(row => row.Role == name));
     }
 
+    /// <summary>
+    /// CONV-DESIGN-004 AC3: a role whose name or one of whose permissions was never read
+    /// writes no row through the model's conversions, and takes the rows written beside
+    /// it in the same unit of work with it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_004_AC3_ARoleNameOrPermissionNeverReadWritesNoRowAsync()
+    {
+        (int Roles, int Permissions) before = await CountAsync();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => WriteAsync(
+            Role.Of(default, [Permissions.GrantRead])));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => WriteAsync(
+            Role.Of(RoleName.Parse("role" + Guid.NewGuid().ToString("n")[..8]), [Permissions.GrantRead, default])));
+
+        Assert.Equal(before, await CountAsync());
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
@@ -123,17 +143,28 @@ public sealed class RoleStoreTests(DatabaseFixture database)
     {
         var name = RoleName.Parse("role" + Guid.NewGuid().ToString("n")[..8]);
 
+        await WriteAsync(Role.Of(name, permissions));
+
+        return name;
+    }
+
+    private async Task WriteAsync(Role role)
+    {
         await using StoreContext writing = database.Context();
         await using var transaction = new UnitOfWork(writing);
         await transaction.BeginAsync(TestContext.Current.CancellationToken);
 
-        await new RoleStore(writing).CreateAsync(
-            Role.Of(name, permissions),
-            TestContext.Current.CancellationToken);
-
+        await new RoleStore(writing).CreateAsync(role, TestContext.Current.CancellationToken);
         await transaction.CommitAsync(TestContext.Current.CancellationToken);
+    }
 
-        return name;
+    private async Task<(int Roles, int Permissions)> CountAsync()
+    {
+        await using StoreContext reading = database.Context();
+
+        return (
+            await reading.Roles.CountAsync(TestContext.Current.CancellationToken),
+            await reading.RolePermissions.CountAsync(TestContext.Current.CancellationToken));
     }
 
     private async Task<Role> ReadAsync(RoleName name)

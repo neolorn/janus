@@ -22,6 +22,11 @@ internal sealed class DeviceStoreInMemory : IDeviceStore
     /// </summary>
     public IReadOnlyCollection<Device> All => _devices.Values;
 
+    /// <summary>
+    /// How many times one browser has been read by its identifier.
+    /// </summary>
+    public int Found { get; private set; }
+
     /// <inheritdoc/>
     public ValueTask<Device?> FindByFingerprintAsync(
         byte[] fingerprint,
@@ -30,8 +35,12 @@ internal sealed class DeviceStoreInMemory : IDeviceStore
             _tokens.TryGetValue(Key(fingerprint), out DeviceId id) ? _devices[id] : null);
 
     /// <inheritdoc/>
-    public ValueTask<Device?> FindAsync(DeviceId id, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(_devices.GetValueOrDefault(id));
+    public ValueTask<Device?> FindAsync(DeviceId id, CancellationToken cancellationToken)
+    {
+        Found++;
+
+        return ValueTask.FromResult(_devices.GetValueOrDefault(id));
+    }
 
     /// <inheritdoc/>
     public ValueTask<IReadOnlyList<Device>> StandingOfAsync(

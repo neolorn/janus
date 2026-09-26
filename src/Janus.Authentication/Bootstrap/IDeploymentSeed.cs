@@ -13,9 +13,9 @@ namespace Janus.Authentication.Bootstrap;
 /// its administrative organization and the accounts bootstrap creates in it.
 /// </summary>
 /// <remarks>
-/// Implements OPS-BOOT-001, OPS-BOOT-002, chapter 10 section 3 and IDN-ORG-001. Each
-/// method writes inside the caller's transaction, so a bootstrap that is refused part
-/// of the way leaves nothing behind.
+/// Implements OPS-BOOT-001, OPS-BOOT-002, PRIV-MINOR-001, chapter 10 section 3 and
+/// IDN-ORG-001. Each method writes inside the caller's transaction, so a bootstrap that
+/// is refused part of the way leaves nothing behind.
 /// </remarks>
 internal interface IDeploymentSeed
 {
@@ -74,18 +74,27 @@ internal interface IDeploymentSeed
 
     /// <summary>
     /// Creates an account for a subject, with the subject key its fields are encrypted
-    /// under and the identifiers it holds, each verified.
+    /// under and the identifiers it holds, each verified, and the answer to the age
+    /// screen where a person gave one (PRIV-MINOR-001).
     /// </summary>
     /// <param name="subject">Whose account.</param>
     /// <param name="held">What it holds, the first of each kind primary.</param>
     /// <param name="name">The display name it shows, where it shows one.</param>
-    /// <param name="at">When it was created.</param>
+    /// <param name="adultAffirmed">
+    /// The affirmation derived from the date, where the deployment takes one.
+    /// </param>
+    /// <param name="dateOfBirth">The date itself, where the deployment keeps it.</param>
+    /// <param name="group">The band recorded instead, where it takes no affirmation.</param>
+    /// <param name="at">When it was created, and the age screen answered.</param>
     /// <param name="cancellationToken">Abandons the write.</param>
     /// <returns>The work of creating it.</returns>
     ValueTask CreateAccountAsync(
         SubjectId subject,
         IReadOnlyList<NewIdentifier> held,
         DisplayName? name,
+        bool? adultAffirmed,
+        DateOnly? dateOfBirth,
+        AgeGroup? group,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 

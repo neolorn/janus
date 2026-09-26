@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
@@ -35,8 +36,21 @@ internal static class FactorCatalogue
                 AssuranceLevel.Aal1,
                 IdentifierKind.Phone,
                 restricted: true),
-            [Factor.Google] = Primary(AssuranceLevel.Delegated, phishingResistant: false),
-            [Factor.Apple] = Primary(AssuranceLevel.Delegated, phishingResistant: false, relaysAddress: true),
+            [Factor.Google] = Primary(
+                AssuranceLevel.Delegated,
+                phishingResistant: false,
+                operatedDomains: FrozenSet.Create(StringComparer.Ordinal, "gmail.com"),
+                operatesHostedDomain: true),
+            [Factor.Apple] = Primary(
+                AssuranceLevel.Delegated,
+                phishingResistant: false,
+                relaysAddress: true,
+                operatedDomains: FrozenSet.Create(
+                    StringComparer.Ordinal,
+                    "privaterelay.appleid.com",
+                    "icloud.com",
+                    "me.com",
+                    "mac.com")),
             [Factor.Totp] = Second(phishingResistant: false),
             [Factor.SecurityKey] = Second(phishingResistant: true, webAuthn: true),
             [Factor.PhoneCode] = Second(phishingResistant: false, restricted: true),
@@ -99,7 +113,9 @@ internal static class FactorCatalogue
         bool phishingResistant,
         bool webAuthn = false,
         bool discoverable = false,
-        bool relaysAddress = false) =>
+        bool relaysAddress = false,
+        FrozenSet<string>? operatedDomains = null,
+        bool operatesHostedDomain = false) =>
         new(
             CanBePrimary: true,
             CanBeSecondFactor: false,
@@ -112,7 +128,9 @@ internal static class FactorCatalogue
             Channel: null,
             Restricted: false,
             SingleUse: false,
-            relaysAddress);
+            relaysAddress,
+            operatedDomains ?? FrozenSet<string>.Empty,
+            operatesHostedDomain);
 
     // An entry whose contribution is to a sign-in and to nothing afterwards: the
     // mailbox or the number behind it is also the recovery channel, so counting it
@@ -133,7 +151,9 @@ internal static class FactorCatalogue
             channel,
             restricted,
             SingleUse: false,
-            RelaysAddress: false);
+            RelaysAddress: false,
+            OperatedDomains: FrozenSet<string>.Empty,
+            OperatesHostedDomain: false);
 
     // An entry that is never a first step and lifts a sign-in beside one.
     private static FactorProperties Second(
@@ -153,5 +173,7 @@ internal static class FactorCatalogue
             Channel: null,
             restricted,
             singleUse,
-            RelaysAddress: false);
+            RelaysAddress: false,
+            OperatedDomains: FrozenSet<string>.Empty,
+            OperatesHostedDomain: false);
 }

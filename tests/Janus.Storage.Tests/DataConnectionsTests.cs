@@ -23,38 +23,64 @@ public sealed class DataConnectionsTests(DatabaseFixture database) : IClassFixtu
 {
     private const string Read = "SELECT value FROM identity.settings WHERE key = @key";
 
+    private const string Write = "INSERT INTO identity.settings (key, value) VALUES (@key, @value)";
+
     /// <summary>
-    /// OPS-DATA-002 AC1 and AC3: a value written through the context inside the
-    /// operation's transaction is there for a hand-written query taken through the
-    /// accessor, and is gone once the transaction rolls back.
+    /// OPS-DATA-002 AC1: a hand-written query inside the operation's transaction sees
+    /// what a hand-written statement wrote in it while the write is still uncommitted,
+    /// which a second connection outside the transaction does not see, and the write
+    /// is gone once the transaction rolls back.
     /// </summary>
     [Fact]
     public async Task OPS_DATA_002_AC1_AHandWrittenQuerySeesTheTransactionsOwnWritesAsync()
     {
-        var key = ConfigurationKey.Parse("account.deletion.grace");
+        const string key = "takedown.grace";
         await using StoreContext context = database.Context();
+        await using NpgsqlConnection separate = await database.OpenAsync();
 
         await using (var work = new UnitOfWork(context))
         {
             await work.BeginAsync(TestContext.Current.CancellationToken);
 
-            context.Settings.Add(new SettingRecord { Key = key, Value = "P45D" });
-            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
-
             AmbientConnection ambient = await new DataConnections(context)
                 .UseAsync(TestContext.Current.CancellationToken);
 
-            string? seen = await ambient.Connection.QuerySingleOrDefaultAsync<string>(
-                Read,
-                new { key = key.ToString() },
-                ambient.Transaction);
+            await ambient.Connection.ExecuteAsync(Write, new { key, value = "P20D" }, ambient.Transaction);
 
-            Assert.Equal("P45D", seen);
+            Assert.Equal(
+                "P20D",
+                await ambient.Connection.QuerySingleOrDefaultAsync<string>(Read, new { key }, ambient.Transaction));
+            Assert.Null(await separate.QuerySingleOrDefaultAsync<string>(Read, new { key }));
         }
 
-        await using NpgsqlConnection separate = await database.OpenAsync();
+        Assert.Null(await separate.QuerySingleOrDefaultAsync<string>(Read, new { key }));
+    }
 
-        Assert.Null(await separate.QuerySingleOrDefaultAsync<string>(Read, new { key = key.ToString() }));
+    /// <summary>
+    /// OPS-DATA-002 AC3: visibility across the two tools inside one transaction, on the
+    /// settings row <c>Janus.Storage</c> owns: written through the context, it is read
+    /// back through the accessor before anything commits (D-154).
+    /// </summary>
+    [Fact]
+    public async Task OPS_DATA_002_AC3_AContextWriteIsReadThroughTheAccessorInOneTransactionAsync()
+    {
+        var key = ConfigurationKey.Parse("account.deletion.grace");
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+
+        context.Settings.Add(new SettingRecord { Key = key, Value = "P45D" });
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        AmbientConnection ambient = await new DataConnections(context)
+            .UseAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            "P45D",
+            await ambient.Connection.QuerySingleOrDefaultAsync<string>(
+                Read,
+                new { key = key.ToString() },
+                ambient.Transaction));
     }
 
     /// <summary>

@@ -11,7 +11,7 @@ using Xunit;
 namespace Janus.Storage.Tests;
 
 /// <summary>
-/// What the one context maps (CONV-DESIGN-003).
+/// What the one context maps (CONV-DESIGN-003, OPS-DB-002).
 /// </summary>
 /// <remarks>
 /// The model is built from the design-time factory, which connects to nothing, so this
@@ -35,11 +35,14 @@ public sealed class ModelTests
     }
 
     /// <summary>
-    /// CONV-DESIGN-003: every table the library owns is mapped in the schema the library
-    /// owns, so nothing of the host's is ever read or written through this context.
+    /// OPS-DB-002 AC2: every table the context maps is in the schema the library owns,
+    /// so nothing of the host's is ever read or written through it. A statement written
+    /// by hand naming a relation outside that schema is what
+    /// <c>IntegrationBoundaryTests.INT_MAIL_003_AC1_NoStatementNamesARelationOutsideTheLibrarysSchema</c>
+    /// refuses, over the whole source.
     /// </summary>
     [Fact]
-    public void CONV_DESIGN_003_EveryMappedTableIsInTheLibrarysOwnSchema() =>
+    public void OPS_DB_002_AC2_EveryMappedTableIsInTheLibrarysOwnSchema() =>
         Assert.All(
             Model().GetEntityTypes(),
             entity => Assert.Equal(StoreContext.Schema, entity.GetSchema()));
@@ -552,9 +555,10 @@ public sealed class ModelTests
             "organization_domains.token",
             "organization_domains.verified_at",
 
-            // The organization of IDN-ORG-001, with the mark IDN-ORG-004 reads and
-            // the deletion window of IDN-ORG-003.
+            // The organization of IDN-ORG-001, with the mark IDN-ORG-004 reads, the
+            // deletion window of IDN-ORG-003 and the comparison key of IDN-ACCT-004.
             "organizations.administrative",
+            "organizations.canonical_name",
             "organizations.created_at",
             "organizations.deletion_requested_at",
             "organizations.erased_at",
@@ -642,6 +646,21 @@ public sealed class ModelTests
             "profiles.enc_display_name",
             "profiles.enc_legal_name",
             "profiles.subject",
+
+            // Not an account field: a round trip to a social provider in flight, bound
+            // to what the browser carries, its proof key under the key-encryption key
+            // (IDN-LIFE-012, BFF-CSRF-005a, OPS-SEC-001).
+            "provider_attempts.created_at",
+            "provider_attempts.id",
+            "provider_attempts.intent",
+            "provider_attempts.key_version",
+            "provider_attempts.nonce",
+            "provider_attempts.preauthentication",
+            "provider_attempts.provider",
+            "provider_attempts.return_to",
+            "provider_attempts.session",
+            "provider_attempts.state",
+            "provider_attempts.verifier",
 
             // Not an account field: a raised condition waiting for the alert channels,
             // removed once they carry it (OPS-ALERT-001).
@@ -798,13 +817,16 @@ public sealed class ModelTests
             "settings.value",
 
             // Not an account field: a sign-in in flight, keyed by what the caller's handle
-            // hashes to and carrying what it has presented so far (AUTH-FACT-001), and
-            // the email it was opened with, which a domain lock is judged on
-            // (REG-DOM-001).
+            // hashes to and carrying what it has presented so far (AUTH-FACT-001), the
+            // email it was opened with, which a domain lock is judged on (REG-DOM-001),
+            // and the keyed hash of the identifier it was opened with, with its version,
+            // which a refused factor is counted against (AUTH-ABUSE-001).
             "signin_challenges.created_at",
             "signin_challenges.email",
             "signin_challenges.expires_at",
+            "signin_challenges.fingerprint_version",
             "signin_challenges.handle",
+            "signin_challenges.identifier",
             "signin_challenges.presented",
             "signin_challenges.subject",
             "signin_challenges.webauthn",

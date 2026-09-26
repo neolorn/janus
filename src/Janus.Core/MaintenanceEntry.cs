@@ -1,7 +1,6 @@
 using System;
-using Janus.Core;
 
-namespace Janus.Authentication.Maintenance;
+namespace Janus.Core;
 
 /// <summary>
 /// One dated entry of the maintenance log: a task performed or a review made, and who
@@ -13,7 +12,7 @@ namespace Janus.Authentication.Maintenance;
 /// <param name="Actor">Who performed it.</param>
 /// <param name="Note">What they noted, where they noted anything.</param>
 /// <remarks>Implements OPS-MAINT-001 (D-153).</remarks>
-internal sealed record MaintenanceEntry(
+public sealed record MaintenanceEntry(
     MaintenanceEntryId Id,
     MaintenanceTask Task,
     DateTimeOffset PerformedAt,

@@ -130,6 +130,9 @@ internal sealed class Deployment : IAsyncDisposable
     /// The social providers whose security events the host takes; both, unless it says
     /// otherwise.
     /// </param>
+    /// <param name="logging">
+    /// The least level the host logs at; every level, unless it says otherwise.
+    /// </param>
     public Deployment(
         ApplicationKind application = ApplicationKind.Public,
         PasskeyAddresses? addresses = null,
@@ -137,12 +140,13 @@ internal sealed class Deployment : IAsyncDisposable
         PreferenceDeclarations? preferences = null,
         AuthenticationAddresses? signIn = null,
         SignOnClient? client = null,
-        IReadOnlyList<SocialProvider>? providers = null)
+        IReadOnlyList<SocialProvider>? providers = null,
+        LogLevel logging = LogLevel.Trace)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
         builder.Logging.ClearProviders();
-        builder.Logging.SetMinimumLevel(LogLevel.Trace).AddProvider(Logs);
+        builder.Logging.SetMinimumLevel(logging).AddProvider(Logs);
 
         Signals = new RegistrationSignalsInMemory(Clock);
         Grants = new OidcAuthorizationStoreInMemory(Tokens);
@@ -350,6 +354,11 @@ internal sealed class Deployment : IAsyncDisposable
     public AccessGateInMemory Gate { get; } = new();
 
     /// <summary>
+    /// The gate's answer on an account's own settings.
+    /// </summary>
+    public SettingsRestrictionInMemory Restriction { get; } = new();
+
+    /// <summary>
     /// The administrative organization as the authentication area reads it.
     /// </summary>
     private AdministrativeOrganizationInMemory Administrative { get; } = new();
@@ -441,14 +450,31 @@ internal sealed class Deployment : IAsyncDisposable
     public LogInMemory<RegisteredDestination> OidcLog { get; } = new();
 
     /// <summary>
-    /// Every other line the deployment logged, at every level.
+    /// Every other line the deployment logged, at every level the host logs at.
     /// </summary>
     public LogsInMemory Logs { get; } = new();
+
+    /// <summary>
+    /// What authentication wrote to the audit trail: each combination presented and
+    /// each factor refused (AUTH-SESS-002, CONV-LOG-005).
+    /// </summary>
+    public SessionAuditInMemory SessionAudit { get; } = new();
 
     /// <summary>
     /// What the sign-on recorded when it would not carry a return (BFF-SESS-006 AC3).
     /// </summary>
     public LogInMemory<SignOn> SignOnLog { get; } = new();
+
+    /// <summary>
+    /// What a sign-in at a social provider recorded when it would not carry a round
+    /// trip.
+    /// </summary>
+    public LogInMemory<ProviderSignIn> ProviderLog { get; } = new();
+
+    /// <summary>
+    /// The round trips to social providers browsers have in flight.
+    /// </summary>
+    public ProviderAttemptStoreInMemory ProviderAttempts { get; } = new();
 
     /// <summary>
     /// Every endpoint the library mounted.
@@ -715,7 +741,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IScreeningLog, ScreeningLogInMemory>();
         _ = services.AddSingleton<IRecoveryCodeStore, RecoveryCodeStoreInMemory>();
         _ = services.AddSingleton<IDeviceStore, DeviceStoreInMemory>();
-        _ = services.AddSingleton<ISessionAudit, SessionAuditInMemory>();
+        _ = services.AddSingleton<ISessionAudit>(SessionAudit);
         _ = services.AddSingleton<IMembershipLookup>(Memberships);
         _ = services.AddSingleton(Codec.Declared);
         _ = services.AddSingleton<IPolicyRaiseStore>(Raises);
@@ -723,6 +749,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IVerificationCodeStore, VerificationCodeStoreInMemory>();
         _ = services.AddSingleton<IPendingSignInStore, PendingSignInStoreInMemory>();
         _ = services.AddSingleton<IAccessGate>(Gate);
+        _ = services.AddSingleton<ISettingsRestriction>(Restriction);
         _ = services.AddSingleton<IAccountAudit, AccountAuditInMemory>();
         _ = services.AddSingleton<ILifecycleLinkStore, LifecycleLinkStoreInMemory>();
         _ = services.AddSingleton<IRecoveryLinkStore>(Links);
@@ -780,9 +807,15 @@ internal sealed class Deployment : IAsyncDisposable
             .ConfigurePrimaryHttpMessageHandler(() => SocialProviders);
         _ = services.AddScoped<ProviderEvents>();
         _ = services.AddScoped<ProviderEventIntake>();
+        _ = services.AddSingleton<IProviderAttemptStore>(ProviderAttempts);
+        _ = services.AddScoped<ProviderAttempts>();
+        _ = services.AddScoped<ProviderSignIn>();
+        _ = services.AddSingleton<ILogger<ProviderSignIn>>(ProviderLog);
         _ = services.AddScoped<RelayRegistration>();
         _ = services.AddScoped<SendingService>();
         _ = services.AddScoped<INotificationHandler>(
+            provider => provider.GetRequiredService<SendingService>());
+        _ = services.AddScoped<ISendingRestrictions>(
             provider => provider.GetRequiredService<SendingService>());
         _ = services.AddSingleton<IPhoneSignalAudit, PhoneSignalAuditInMemory>();
         _ = services.AddScoped(provider => new PhoneSignals(
@@ -818,6 +851,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<AccountLifecycle>();
         _ = services.AddScoped(provider => new ProfilePhotos(
             provider.GetRequiredService<IAccountDirectory>(),
+            provider.GetRequiredService<ISettingsRestriction>(),
             provider.GetRequiredService<IMembershipLookup>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<IAccountAudit>(),
@@ -838,7 +872,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<EnrolmentSessions>();
         _ = services.AddScoped<RecoveryService>();
         _ = services.AddScoped<IRecovery>(provider => provider.GetRequiredService<RecoveryService>());
-        _ = services.AddScoped<ICredentials, CredentialService>();
+        _ = services.AddScoped<CredentialService>();
+        _ = services.AddScoped<ICredentials>(provider => provider.GetRequiredService<CredentialService>());
         _ = services.AddSingleton<ILegalDocumentStore>(Documents);
         _ = services.AddSingleton<IPrivacyAudit, Janus.Privacy.Tests.PrivacyAuditInMemory>();
         _ = services.AddSingleton<Janus.Privacy.Policies.IAdministrativeOrganization>(PrivacyAdministrative);
@@ -868,6 +903,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton(Janus.Privacy.Tests.Declaration.Reaching);
         _ = services.AddSingleton<Janus.Privacy.Records.IComplianceStore>(Compliance);
         _ = services.AddSingleton<Janus.Privacy.Records.IRegisterRoles>(RegisterRoles);
+        _ = services.AddScoped<Janus.Privacy.CategoryRetention>();
         _ = services.AddScoped<IProcessingRecords, ProcessingRecordsService>();
         _ = services.AddSingleton<IAuditTrailStore>(Trail);
         _ = services.AddScoped<IAuditTrail, AuditTrailService>();
@@ -899,6 +935,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<Janus.Authorization.Roles.IRoleAudit>(RoleChanges);
         _ = services.AddSingleton<Janus.Authorization.Groups.IGroupAudit>(GroupChanges);
         _ = services.AddScoped<Janus.Authorization.Gate.AdministrativeScope>();
+        _ = services.AddSingleton<Janus.Authorization.Gate.IUnscopedRefusal, Janus.Authorization.Tests.Gate.UnscopedRefusalInMemory>();
         _ = services.AddScoped<IGrants, Janus.Authorization.Grants.GrantService>();
         _ = services.AddScoped<IRoles, Janus.Authorization.Roles.RoleService>();
         _ = services.AddScoped<IGroups, Janus.Authorization.Groups.GroupService>();
@@ -915,12 +952,13 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<Janus.Authentication.Mailboxes.IMailboxStore>(Mailboxes);
         _ = services.AddSingleton<IMailServer>(MailServer);
         _ = services.AddSingleton<Janus.Authentication.Maintenance.IMaintenanceStore>(Maintenance);
-        _ = services.AddScoped<Janus.Authentication.Maintenance.MaintenanceRecords>();
+        _ = services.AddScoped<IMaintenanceRecords, Janus.Authentication.Maintenance.MaintenanceRecords>();
         _ = services.AddScoped<Janus.Authentication.Maintenance.LicenceExpiry>();
         _ = services.AddSingleton<Janus.Authentication.Invitations.IMembershipAttachment>(Attachments);
         _ = services.AddScoped<Janus.Authentication.Invitations.InvitationAcknowledgement>();
         _ = services.AddSingleton<Janus.Authentication.Invitations.IMembershipEnding>(Endings);
         _ = services.AddScoped<Janus.Authentication.Invitations.MembershipEnd>();
+        _ = services.AddScoped<Janus.Authentication.Invitations.InvitationOpening>();
         _ = services.AddScoped<IInvitations, Janus.Authentication.Invitations.InvitationService>();
         _ = services.AddScoped<SigningKeys>();
         _ = services.AddScoped<OidcService>();
@@ -933,10 +971,13 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<SynchronizerTokens>();
         _ = services.AddScoped<ConcealedRefusals>();
         _ = services.AddScoped<Concealment>();
+        _ = services.AddScoped<ErrorTranslation>();
         _ = services.AddScoped<MalformedRequest>();
         _ = services.AddScoped<ResourceIsolation>();
         _ = services.AddScoped<CustomRequestHeader>();
         _ = services.AddScoped<OriginValidation>();
+        _ = services.AddSingleton<SourceAdmissions>();
+        _ = services.AddScoped<SourceRateLimiting>();
         _ = services.AddScoped<RequestSession>();
         _ = services.AddScoped<SessionResolution>();
         _ = services.AddScoped<FirstContact>();

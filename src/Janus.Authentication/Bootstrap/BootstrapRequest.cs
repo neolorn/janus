@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Janus.Core.Configuration;
 
@@ -9,6 +10,10 @@ namespace Janus.Authentication.Bootstrap;
 /// <param name="Organization">The administrative organization's name.</param>
 /// <param name="Email">The first administrator's personal email, as entered.</param>
 /// <param name="Phone">The first administrator's phone number, as entered.</param>
+/// <param name="DateOfBirth">
+/// The first administrator's date of birth, the age screen's one question, which the
+/// affirmation is derived from (PRIV-MINOR-001).
+/// </param>
 /// <param name="Mailbox">
 /// The corporate address the administrator's mailbox is provisioned at, or
 /// <see langword="null"/> where the deployment integrates no mail server.
@@ -17,10 +22,11 @@ namespace Janus.Authentication.Bootstrap;
 /// The written form of every value the deployment names, by its key, each already
 /// read as its key admits.
 /// </param>
-/// <remarks>Implements OPS-BOOT-001 and INT-MAIL-006 AC1a.</remarks>
+/// <remarks>Implements OPS-BOOT-001, PRIV-MINOR-001 and INT-MAIL-006 AC1a.</remarks>
 internal sealed record BootstrapRequest(
     string Organization,
     string Email,
     string Phone,
+    DateOnly DateOfBirth,
     string? Mailbox,
     IReadOnlyDictionary<ConfigurationKey, string> Named);

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Janus.Authentication.Maintenance;
 using Janus.Core;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Builder;
@@ -43,7 +42,7 @@ internal static class MaintenanceEndpoints
     }
 
     private static async Task<IResult> LicencesAsync(
-        MaintenanceRecords records,
+        IMaintenanceRecords records,
         RequestSession browser,
         CancellationToken cancellationToken)
     {
@@ -63,7 +62,7 @@ internal static class MaintenanceEndpoints
 
     private static async Task<IResult> ReplaceAsync(
         LicencesBody body,
-        MaintenanceRecords records,
+        IMaintenanceRecords records,
         RequestSession browser,
         CancellationToken cancellationToken)
     {
@@ -86,7 +85,7 @@ internal static class MaintenanceEndpoints
     }
 
     private static async Task<IResult> LogAsync(
-        MaintenanceRecords records,
+        IMaintenanceRecords records,
         RequestSession browser,
         CancellationToken cancellationToken)
     {
@@ -106,7 +105,7 @@ internal static class MaintenanceEndpoints
 
     private static async Task<IResult> RecordAsync(
         MaintenanceEntryBody body,
-        MaintenanceRecords records,
+        IMaintenanceRecords records,
         RequestSession browser,
         CancellationToken cancellationToken)
     {

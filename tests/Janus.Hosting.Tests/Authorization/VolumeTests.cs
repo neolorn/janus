@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -8,27 +9,33 @@ using Xunit;
 namespace Janus.Hosting.Tests.Authorization;
 
 /// <summary>
-/// What the planner does with the permission predicate once the deployment holds the
-/// volumes AUTHZ-TEST-002 names.
+/// What the planner does with the permission predicate and the reverse lookup once the
+/// deployment holds the volumes AUTHZ-TEST-002 names.
 /// </summary>
-/// <param name="volume">The seeded deployment and the plan read over it.</param>
+/// <param name="volume">The seeded deployment and the plans read over it.</param>
 [Trait("kind", "integration")]
 public sealed class VolumeTests(VolumeFixture volume) : IClassFixture<VolumeFixture>
 {
     private const int Page = 50;
 
+    // What the ancestry is reached by instead of being read whole: its own key.
+    private const string Ancestry = "pk_ancestry";
+
+    // OPS-DB-003: the partial index over a holder's live grants, which the grant lookup
+    // reads by, and the reverse lookup's own over the live grants on a resource.
+    private const string LiveHolder = "ix_grants_live_holder";
+
+    private const string LiveResource = "ix_grants_live_resource";
+
     // The two tables the predicate reads by, and the only two the criterion is about.
     // identity.role_permissions holds three rows here and is correctly read whole; reading
-    // it by index would be the slower plan, so it is not asked for.
+    // it by index would be the slower plan, so it is not asked for. The same holds for the
+    // one organization the reverse lookup reads the standing of.
     private static readonly string[] Scanned =
     [
         "Seq Scan on grants",
         "Seq Scan on ancestry",
     ];
-
-    // What each of the two is reached by instead: the partial index over a holder's
-    // live grants, and the ancestry's own key.
-    private static readonly string[] Indexed = ["ix_grants_live_holder", "pk_ancestry"];
 
     /// <summary>
     /// AUTHZ-TEST-002 AC1: the plan of the primary list query is captured over a
@@ -93,9 +100,57 @@ public sealed class VolumeTests(VolumeFixture volume) : IClassFixture<VolumeFixt
             Scanned,
             whole => Assert.DoesNotContain(whole, volume.Plan, StringComparison.Ordinal));
 
+        Assert.Contains(Ancestry, volume.Plan, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// OPS-DB-003 AC1: at production-scale volume the primary permission predicate reads
+    /// the grants by the partial index the item names, the one that leaves revoked rows
+    /// out, as the catalogue defines it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_DB_003_AC1_ThePrimaryPredicateUsesThePartialIndexOverLiveGrantsAsync()
+    {
+        await using NpgsqlConnection connection = await volume.OpenAsync();
+
+        string defined = await connection.QuerySingleAsync<string>(new CommandDefinition(
+            "SELECT indexdef FROM pg_indexes WHERE schemaname = 'identity' AND indexname = @LiveHolder;",
+            new { LiveHolder },
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        Assert.Contains(LiveHolder, volume.Plan, StringComparison.Ordinal);
+        Assert.EndsWith("WHERE (revoked_at IS NULL)", defined, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// OPS-DB-003 AC2: the reverse lookup reads the grants on one record by its own
+    /// index, and reads neither the grants nor the ancestry whole, at the stated volumes
+    /// and for a record the grants reach. Every read of that index seeks it by a
+    /// condition; an index walked end to end under a filter is the table read whole by
+    /// another name.
+    /// </summary>
+    [Fact]
+    public void OPS_DB_003_AC2_TheReverseLookupReadsNoTableWhole()
+    {
+        TestContext.Current.TestOutputHelper?.WriteLine(volume.ReversePlan);
+
+        string[] lines = volume.ReversePlan.Split(Environment.NewLine);
+        int[] reads = [.. Enumerable.Range(0, lines.Length)
+            .Where(at => lines[at].Contains("using " + LiveResource + " on grants", StringComparison.Ordinal))];
+
+        // Every grant is on a container, one in each ten thousand on the record's own,
+        // and none of those is revoked.
+        Assert.Equal(ProductionVolume.Grants / ProductionVolume.Containers, volume.Reached);
+
         Assert.All(
-            Indexed,
-            index => Assert.Contains(index, volume.Plan, StringComparison.Ordinal));
+            Scanned,
+            whole => Assert.DoesNotContain(whole, volume.ReversePlan, StringComparison.Ordinal));
+
+        Assert.NotEmpty(reads);
+        Assert.All(
+            reads,
+            at => Assert.StartsWith("Index Cond:", lines[at + 1].Trim(), StringComparison.Ordinal));
     }
 
     // What the database holds once the fixture has written it, read back rather than

@@ -35,25 +35,30 @@ internal interface IRecoveryApprovalStore
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// How many approvals one account has drawn since an instant.
+    /// When each approval one account has drawn after an instant was given, which is
+    /// what the account's limit counts and what says when it admits another: one given
+    /// at the instant itself has left the window, so the window's end is exactly when
+    /// the earliest counted stops counting.
     /// </summary>
     /// <param name="subject">Whose account.</param>
-    /// <param name="from">The earliest counted.</param>
+    /// <param name="from">The instant the window opens after.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The count.</returns>
-    ValueTask<int> ForAsync(
+    /// <returns>The instants, earliest first.</returns>
+    ValueTask<IReadOnlyList<DateTimeOffset>> ForAsync(
         SubjectId subject,
         DateTimeOffset from,
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// How many approvals one approver has given since an instant.
+    /// When each approval one approver has given after an instant was given, which is
+    /// what the approver's limit counts and what says when it admits another, the
+    /// instant itself outside the window as it is for an account.
     /// </summary>
     /// <param name="approver">Who approved.</param>
-    /// <param name="from">The earliest counted.</param>
+    /// <param name="from">The instant the window opens after.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The count.</returns>
-    ValueTask<int> ByAsync(
+    /// <returns>The instants, earliest first.</returns>
+    ValueTask<IReadOnlyList<DateTimeOffset>> ByAsync(
         SubjectId approver,
         DateTimeOffset from,
         CancellationToken cancellationToken);

@@ -11,7 +11,8 @@ namespace Janus.Core;
 /// </summary>
 /// <remarks>
 /// Implements CONV-NAME-002 and CONV-DESIGN-004. The library's own are
-/// <see cref="Permissions"/>; a host declares the rest in the model builder.
+/// <see cref="Permissions"/>; a host declares the rest in the model builder. A default
+/// instance was never read, so it has no text to give and no row can carry it.
 /// </remarks>
 [SuppressMessage(
     "Naming",
@@ -28,11 +29,13 @@ public readonly partial record struct Permission
     /// <summary>
     /// The resource half, singular.
     /// </summary>
+    /// <exception cref="InvalidOperationException">The permission was never set.</exception>
     public string Resource => Half(0);
 
     /// <summary>
     /// The action half.
     /// </summary>
+    /// <exception cref="InvalidOperationException">The permission was never set.</exception>
     public string Action => Half(1);
 
     /// <summary>
@@ -74,14 +77,18 @@ public readonly partial record struct Permission
     /// <summary>
     /// The permission as it crosses the boundary.
     /// </summary>
-    /// <returns>The permission string, or an empty string for an unset permission.</returns>
-    public override string ToString() => _value ?? string.Empty;
+    /// <returns>The permission string.</returns>
+    /// <exception cref="InvalidOperationException">The permission was never set.</exception>
+    [SuppressMessage(
+        "Design",
+        "CA1065:Do not raise exceptions in unexpected locations",
+        Justification = "CONV-DESIGN-004 AC3: an unset value has no text, and the empty text it would give is what a store writes.")]
+    public override string ToString() => _value ?? throw new InvalidOperationException("The permission was never set.");
 
     [GeneratedRegex(
         "^[a-z][a-z0-9]*(-[a-z0-9]+)*:[a-z][a-z0-9]*(-[a-z0-9]+)*$",
         RegexOptions.CultureInvariant)]
     private static partial Regex Shape();
 
-    private string Half(int index) =>
-        _value is null ? string.Empty : _value.Split(Separator)[index];
+    private string Half(int index) => ToString().Split(Separator)[index];
 }

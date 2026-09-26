@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Sessions;
@@ -23,7 +24,7 @@ namespace Janus.Hosting.Tests.Authorization;
 /// <summary>
 /// What the gate decides as the rows change under it
 /// (AUTHZ-GRANT-002, AUTHZ-GRANT-004, AUTHZ-INHERIT-001, AUTHZ-SCOPE-001,
-/// AUTHZ-CACHE-001, AUTHZ-GATE-005, AUTHZ-PRIN-003, IDN-ORG-003).
+/// AUTHZ-CACHE-001, AUTHZ-GATE-005, AUTHZ-PRIN-003, IDN-ORG-003, CONV-ERR-001).
 /// </summary>
 [Trait("kind", "integration")]
 public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFixture>
@@ -388,6 +389,51 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
+    /// CONV-ERR-001 AC3, AUTHZ-PRIN-003 AC1: a type the model does not declare, named by
+    /// the calling code at a request, is that code's fault and not the deployment's
+    /// configuration, which startup has already checked whole. It raises at the request
+    /// on every way of asking the gate about a type, before the gate reads anything of
+    /// the caller or records a refusal, so a restricted caller meets the same fault as
+    /// any other.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_ERR_001_AC3_AnUndeclaredTypeRaisesAtTheRequestBeforeTheGateReadsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Edit]);
+        var ledger = ResourceType.Parse("ledger");
+        ResourceReference entry = Reference(ledger);
+        var context = AccessContext.Of(nested.Account);
+        OrganizationId organization = nested.Deployment.Organization;
+
+        await nested.Deployment.RestrictAsync(nested.Account, cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+        IAccessGate gate = scope.ServiceProvider.GetRequiredService<IAccessGate>();
+
+        Func<Task>[] asking =
+        [
+            async () => await gate.RequireAsync(context, HostPermissions.Edit, entry, cancellationToken),
+            async () => await gate.RequireAsync(context, HostPermissions.Edit, entry, Sources(reading), cancellationToken),
+            async () => await gate.FilterAsync(context, HostPermissions.Edit, ledger, organization, Sources(reading), cancellationToken),
+            async () => await gate.FragmentAsync(context, HostPermissions.Edit, ledger, organization, "entry", "id", cancellationToken),
+            async () => await gate.ExplainAsync(context, HostPermissions.Edit, entry, cancellationToken),
+            async () => await gate.ExplainAsync(context, HostPermissions.Edit, entry, Sources(reading), cancellationToken),
+            async () => await gate.CapabilitiesAsync(context, ledger, [entry.Id], [HostPermissions.Edit], cancellationToken),
+            async () => await gate.CapabilitiesAsync(context, ledger, [entry.Id], [HostPermissions.Edit], Sources(reading), cancellationToken),
+        ];
+
+        foreach (Func<Task> asked in asking)
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(asked);
+        }
+
+        Assert.Equal(0, await DenialsRecordedAsync(nested.Account));
+    }
+
+    /// <summary>
     /// AUTHZ-GATE-004, OPS-ALERT-001 AC1: the refusals of one actor inside one fixed
     /// ten-minute window raise <c>denial-spike</c> for that actor once there are more of
     /// them than <c>alerting.denials.threshold</c>, and not before.
@@ -712,6 +758,49 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
+    /// BFF-CAP-002 AC2: a permission the model does not declare, asked for beside one
+    /// it does, is in no capability's <c>can</c> and no <c>requires</c>, even where a
+    /// stored role allows it, and what is declared is answered as it is alone.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task BFF_CAP_002_AC2_AnUndeclaredPermissionAppearsInNoCapabilityAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var undeclared = Permission.Parse("document:share");
+
+        // The role's rows are written directly, as a model that no longer declares a
+        // permission would find them; the startup check refuses such a role, and this
+        // is what stands behind it.
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, undeclared]);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        Capability capability = Assert.Single(Rendered(
+            await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .CapabilitiesAsync(
+                    AccessContext.Of(nested.Account),
+                    Document,
+                    [nested.Record.Id],
+                    [HostPermissions.Read, undeclared],
+                    Sources(reading),
+                    cancellationToken)));
+
+        Assert.Equal([HostPermissions.Read], capability.Can);
+        Assert.Empty(capability.Requires);
+    }
+
+    /// <summary>
     /// LIB-HOST-004 AC2, AUTH-STEP-003 AC1, AC2: with no assurance provider registered,
     /// an action bound to a step-up gate is refused although the grants confer it, and
     /// the refusal is a different code from the one an absent grant carries.
@@ -771,7 +860,12 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
         Error aged = Assert.IsType<Error>(await SteppedUpRefusalAsync(nested, TimeSpan.FromDays(1)));
 
         Assert.Equal(ErrorCodes.StepUpRequired, aged.Code);
-        Assert.Equal(HostPermissions.Publish.ToString(), aged.Details["action"].GetString());
+        Assert.Equal(
+            (long)Settings.SessionStepUpRecency.Default.TotalSeconds,
+            aged.Details["required"].GetProperty("maxAge").GetInt64());
+        Assert.Equal<string>(
+            ["options", "outcome", "pendingUntil", "required"],
+            aged.Details.Keys.Order(StringComparer.Ordinal));
     }
 
     /// <summary>
@@ -1235,6 +1329,29 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
+    /// IDN-ACCT-007 AC2, AUTHZ-GATE-006 AC2: the account's own settings are refused
+    /// under restriction by the gate, which the account's operations ask through their
+    /// port, and are open again once the restriction lifts.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_ACCT_007_AC2_TheGateRefusesARestrictedAccountsSettingsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+
+        Assert.Null(await SettingsRefusalAsync(nested.Account));
+
+        await nested.Deployment.RestrictAsync(nested.Account, cancellationToken);
+
+        Assert.Equal(ErrorCodes.Restricted, (await SettingsRefusalAsync(nested.Account))?.Code);
+
+        await nested.Deployment.LiftAsync(nested.Account, cancellationToken);
+
+        Assert.Null(await SettingsRefusalAsync(nested.Account));
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-004 AC2: the restriction suspends action and nothing else, so
     /// lifting it gives back exactly what was there before: the same actions are
     /// admitted and the capability array reads as it read.
@@ -1411,6 +1528,15 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
         return outcome.Match(() => (Error?)null, error => error);
     }
 
+    private async Task<Error?> SettingsRefusalAsync(SubjectId account)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        return await scope.ServiceProvider
+            .GetRequiredService<ISettingsRestriction>()
+            .RefusedAsync(account, TestContext.Current.CancellationToken);
+    }
+
     private async Task<ErrorCode?> RefusalAsync(
         SubjectId account,
         ResourceReference resource,
@@ -1438,6 +1564,18 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             """
             SELECT count(*)::int FROM identity.audit_records
             WHERE action = 'authz.access.exported' AND acting_subject = @account
+            """,
+            new { account = account.Value });
+    }
+
+    private async Task<int> DenialsRecordedAsync(SubjectId account)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(
+            """
+            SELECT count(*)::int FROM identity.audit_records
+            WHERE action = 'authz.access.denied' AND acting_subject = @account
             """,
             new { account = account.Value });
     }

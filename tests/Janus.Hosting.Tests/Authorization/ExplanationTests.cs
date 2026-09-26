@@ -5,7 +5,10 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Authentication.Configuration;
+using Janus.Authentication.Factors;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -15,7 +18,10 @@ namespace Janus.Hosting.Tests.Authorization;
 
 /// <summary>
 /// What the gate says about a decision, and what a refusal discloses
-/// (AUTHZ-GATE-004, AUTHZ-CONCEAL-001 to AUTHZ-CONCEAL-005, AUTHZ-IMP-001, OPS-OBS-001).
+/// (AUTHZ-GATE-004, AUTHZ-CONCEAL-001 to AUTHZ-CONCEAL-005, AUTHZ-IMP-001, OPS-OBS-001,
+/// CONV-LOG-006),
+/// and what a grant confers over the organization it is scoped to (AUTHZ-GRANT-001,
+/// OPS-CFG-006), and how a change to what no row names is refused (CONV-DESIGN-002).
 /// </summary>
 [Trait("kind", "integration")]
 public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixture>
@@ -26,6 +32,13 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
 
     // The role the host's declaration says a reviewer holds on what they review.
     private static readonly RoleName Reviewer = RoleName.Parse("reviewer");
+
+    private static readonly TimeSpan Recency = TimeSpan.FromMinutes(15);
+
+    // A session that has met every gate, so no step-up stands between a change and the
+    // permission it asks for.
+    private static readonly StepUpChallenge Satisfied =
+        new(StepUpOutcome.Satisfied, AssuranceLevel.Aal2, PhishingResistant: false, Recency, [], null);
 
     /// <summary>
     /// AUTHZ-GATE-004 AC1: a refusal names what was asked for and says that no grant
@@ -303,6 +316,48 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
+    /// CONV-LOG-006 AC1: the refusal the gate records and the explanation it gives live
+    /// derive from one source, so the recorded refusal, read back through the support
+    /// resolution and through the owner's own, is the explanation the gate gave: where
+    /// no grant matched, where a deny grant on the container decided, where a deny grant
+    /// on the record defeated an allow above it, and where the library holds no row for
+    /// the record.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_LOG_006_AC1_ARecordedRefusalResolvesToTheLiveExplanationAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Deployed unmatched = await DeployAsync(granted: false);
+        Deployed deniedAbove = await DeployAsync(granted: false);
+        Deployed deniedOnTheRecord = await DeployAsync(granted: true);
+
+        await deniedAbove.Deployment.GrantAsync(
+            GrantSubject.Of(deniedAbove.Account), deniedAbove.Role, deniedAbove.Container, true, null, null, cancellationToken);
+        await deniedOnTheRecord.Deployment.GrantAsync(
+            GrantSubject.Of(deniedOnTheRecord.Account), deniedOnTheRecord.Role, deniedOnTheRecord.Note, true, null, null, cancellationToken);
+
+        (Deployed Deployed, ResourceReference Asked, bool ByADeny)[] refusals =
+        [
+            (unmatched, unmatched.Note, false),
+            (deniedAbove, deniedAbove.Note, true),
+            (deniedOnTheRecord, deniedOnTheRecord.Note, true),
+            (unmatched, Reference(Note), false),
+        ];
+
+        foreach ((Deployed deployed, ResourceReference asked, bool byADeny) in refusals)
+        {
+            AccessExplanation live = await ExplainedAsync(deployed, asked);
+            AuditRecordId correlation = await RefusedAsync(deployed, asked, HostPermissions.ReadNote);
+
+            Assert.Equal(AccessOutcome.Denied, live.Outcome);
+            Assert.Equal(byADeny, live.Grant is { Deny: true });
+            Assert.Equal(live, await ResolvedAsync(deployed, correlation));
+            Assert.Equal(live, Explained(await ResolvedOwnAsync(deployed.Account, correlation)));
+        }
+    }
+
+    /// <summary>
     /// OPS-OBS-001 AC2: a person holding no grant at all resolves their own refusal,
     /// while the same identifier through the support resolution, which needs
     /// <c>audit:read</c>, is refused to them.
@@ -572,6 +627,152 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
         Assert.False(outcome.Match(() => true, _ => false));
     }
 
+    /// <summary>
+    /// OPS-CFG-006 AC2: system administration is granted, never inherited. A member of
+    /// the administrative organization is refused a loosening, and so is one who holds
+    /// the role allowing it on a workspace of that organization and so on everything
+    /// in it, with nothing written; the same role granted over the organization is
+    /// what would allow it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_CFG_006_AC2_SystemAdministrationIsGrantedAndNeverInheritedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        RoleName administering = await deployment.BeginAsync(
+            [Permissions.SystemAdminister, Permissions.ConfigurationManage],
+            cancellationToken);
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        OrganizationId administrative = await deployment.AdministrativeAsync(cancellationToken);
+        ResourceReference workspace = Reference(Workspace);
+
+        await deployment.MemberAsync(account, administrative, cancellationToken);
+        await deployment.RegisterAsync(
+            workspace,
+            containedIn: null,
+            cancellationToken,
+            organization: administrative);
+
+        ErrorCode? member = await LoosenedAsync(account);
+
+        await deployment.GrantAsync(
+            GrantSubject.Of(account),
+            administering,
+            workspace,
+            false,
+            null,
+            administrative,
+            cancellationToken);
+
+        ErrorCode? onTheWorkspace = await LoosenedAsync(account);
+        TimeSpan inForce = await InForceAsync(Settings.SessionAal2Inactivity);
+
+        await deployment.GrantAsync(
+            GrantSubject.Of(account),
+            administering,
+            null,
+            false,
+            null,
+            administrative,
+            cancellationToken);
+
+        // Asked without making the change, so the case leaves the deployment's
+        // settings as it found them.
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        Result overTheOrganization = await scope.ServiceProvider
+            .GetRequiredService<ConfigurationAdministration>()
+            .AllowedAsync(
+                Settings.SessionAal2Inactivity,
+                TimeSpan.FromHours(2),
+                "a support window",
+                Satisfied,
+                AccessContext.Of(account),
+                cancellationToken);
+
+        Assert.Equal(ErrorCodes.Denied, member);
+        Assert.Equal(ErrorCodes.Denied, onTheWorkspace);
+        Assert.Equal(Settings.SessionAal2Inactivity.Default, inForce);
+        Assert.True(overTheOrganization.Match(() => true, _ => false));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002 AC3, AUTHZ-SCOPE-001 and AUTHZ-CONCEAL-004 AC1: a change to a
+    /// group or a grant the deployment holds no row for meets the gate before anything
+    /// of it is read, and is refused as the gate refuses a caller holding nothing where
+    /// a row is: the same code and the same details, under an identifier the refusal
+    /// was recorded as, against no organization, which the caller can resolve as their
+    /// own.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AC3_AChangeToWhatNoRowNamesIsRefusedAsTheGateRefusesAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Deployed deployed = await DeployAsync(granted: false);
+        GroupId group = await deployed.Deployment.GroupAsync(cancellationToken);
+        GrantId grant = await deployed.Deployment.GrantAsync(
+            GrantSubject.Of(deployed.Support), deployed.Role, null, false, null, null, cancellationToken);
+
+        Error[] present =
+        [
+            await GroupRemovedAsync(deployed.Account, group),
+            await GrantRevokedAsync(deployed.Account, grant),
+        ];
+
+        Error[] absent =
+        [
+            await GroupRemovedAsync(deployed.Account, GroupId.New(TimeProvider.System)),
+            await GrantRevokedAsync(deployed.Account, GrantId.New(TimeProvider.System)),
+        ];
+
+        Assert.All(present.Concat(absent), refusal => Assert.Equal(ErrorCodes.Denied, refusal.Code));
+        Assert.All(absent, refusal => Assert.Equal(
+            present[0].Details.Keys.Order(StringComparer.Ordinal),
+            refusal.Details.Keys.Order(StringComparer.Ordinal)));
+
+        foreach (Error refusal in absent)
+        {
+            var correlation = new AuditRecordId(refusal.Details["correlation"].GetGuid());
+            AccessExplanation explanation = Explained(await ResolvedOwnAsync(deployed.Account, correlation));
+
+            Assert.Equal(1, await RecordedAsync(correlation));
+            Assert.Null(await OrganizationOfAsync(correlation));
+            Assert.Equal(AccessOutcome.Denied, explanation.Outcome);
+            Assert.Null(explanation.Grant);
+        }
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002 AC3 and AUTHZ-GATE-006: a caller whose account is restricted is
+    /// refused a change to a group or a grant as a restriction, whether or not the
+    /// deployment holds a row for it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AC3_ARestrictedCallerIsAnsweredAlikeWhetherOrNotTheRowIsThereAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Deployed deployed = await DeployAsync(granted: false);
+        GroupId group = await deployed.Deployment.GroupAsync(cancellationToken);
+        GrantId grant = await deployed.Deployment.GrantAsync(
+            GrantSubject.Of(deployed.Support), deployed.Role, null, false, null, null, cancellationToken);
+
+        await deployed.Deployment.RestrictAsync(deployed.Account, cancellationToken);
+
+        Error[] refusals =
+        [
+            await GroupRemovedAsync(deployed.Account, group),
+            await GroupRemovedAsync(deployed.Account, GroupId.New(TimeProvider.System)),
+            await GrantRevokedAsync(deployed.Account, grant),
+            await GrantRevokedAsync(deployed.Account, GrantId.New(TimeProvider.System)),
+        ];
+
+        Assert.All(refusals, refusal => Assert.Equal(ErrorCodes.Restricted, refusal.Code));
+    }
+
     private static Error Refusal<TValue>(Result<TValue> outcome) => outcome.Match(
         _ => throw new InvalidOperationException("The operation succeeded."),
         error => error);
@@ -582,6 +783,36 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
 
     private static ResourceReference Reference(ResourceType type) =>
         new(type, ResourceId.Parse(Guid.NewGuid().ToString()));
+
+    // OPS-CFG-006: a loosening of a session window with its reason, from a session that
+    // has met the gate, so what decides it is the permission alone.
+    private async Task<ErrorCode?> LoosenedAsync(SubjectId account)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        Result changed = await scope.ServiceProvider
+            .GetRequiredService<ConfigurationAdministration>()
+            .ChangeAsync(
+                Settings.SessionAal2Inactivity,
+                TimeSpan.FromHours(2),
+                "a support window",
+                Satisfied,
+                AccessContext.Of(account),
+                TestContext.Current.CancellationToken);
+
+        return changed.Match(() => (ErrorCode?)null, error => error.Code);
+    }
+
+    private async Task<TValue> InForceAsync<TValue>(Setting<TValue> setting)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        return (await scope.ServiceProvider.GetRequiredService<IConfigurationStore>()
+                .ReadAsync(setting, TestContext.Current.CancellationToken))
+            .Match(
+                value => value,
+                error => throw new InvalidOperationException(error.Code.ToString()));
+    }
 
     private static FilterSources<HostDocument> Sources(HostContext reading) =>
         new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, document => document.Id)
@@ -683,6 +914,42 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
             "SELECT count(*) FROM identity.audit_records WHERE id = @id AND action = @action;",
             new { id = correlation.Value, action = "authz.access.denied" },
             cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    private async Task<Guid?> OrganizationOfAsync(AuditRecordId correlation)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<Guid?>(new CommandDefinition(
+            "SELECT organization FROM identity.audit_records WHERE id = @id;",
+            new { id = correlation.Value },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    // A group's removal as its endpoint asks it, with the reason its body carries.
+    private async Task<Error> GroupRemovedAsync(SubjectId caller, GroupId group)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        return (await scope.ServiceProvider.GetRequiredService<IGroups>()
+                .RemoveAsync(AccessContext.Of(caller), group, "No longer used.", TestContext.Current.CancellationToken))
+            .Match(() => throw new InvalidOperationException("The removal was not refused."), error => error);
+    }
+
+    // A grant's revocation as its endpoint asks it, from a session the step-up is never
+    // reached for.
+    private async Task<Error> GrantRevokedAsync(SubjectId caller, GrantId grant)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        return (await scope.ServiceProvider.GetRequiredService<IGrants>()
+                .RevokeAsync(
+                    AccessContext.Of(caller),
+                    SessionId.New(TimeProvider.System),
+                    grant,
+                    "No longer needed.",
+                    TestContext.Current.CancellationToken))
+            .Match(() => throw new InvalidOperationException("The revocation was not refused."), error => error);
     }
 
     private async Task<Identified> IdentifiedAsync(AuditRecordId correlation)

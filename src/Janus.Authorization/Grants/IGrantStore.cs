@@ -26,6 +26,19 @@ internal interface IGrantStore
     ValueTask<Grant?> FindAsync(GrantId id, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads which organization one grant is scoped to, and nothing else of it, revoked
+    /// or not.
+    /// </summary>
+    /// <param name="id">Which grant.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The organization, or nothing where no such row exists.</returns>
+    /// <remarks>
+    /// Implements AUTHZ-SCOPE-001 and CONV-DESIGN-002 AC3: the organization is where the
+    /// gate is asked, so it is read before the gate and the rest of the row after.
+    /// </remarks>
+    ValueTask<OrganizationId?> ScopeOfAsync(GrantId id, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Writes a new grant, and bumps the counter of every account it reaches in the
     /// same transaction.
     /// </summary>

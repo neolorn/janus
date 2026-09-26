@@ -17,9 +17,10 @@ namespace Janus.Hosting.Sending;
 /// restriction, creating, replacing and deleting one, and granting credit under one.
 /// </summary>
 /// <remarks>
-/// Implements AUTH-ABUSE-004, OPS-CFG-002, LIB-API-005 and CONV-DESIGN-006. Each is one
-/// line to <see cref="IRestrictionSet"/>, which judges the permission, the step-up and
-/// the reason.
+/// Implements AUTH-ABUSE-004, OPS-CFG-002, LIB-API-005, CONV-CODE-006 and
+/// CONV-DESIGN-006. Each is one line to <see cref="IRestrictionSet"/>, which judges the
+/// permission, the step-up and what the reason says; a body missing a member it
+/// requires is refused before it is called.
 /// </remarks>
 internal static class RestrictionEndpoints
 {
@@ -161,6 +162,13 @@ internal static class RestrictionEndpoints
             return Answers.Malformed("credit");
         }
 
+        // AUTH-ABUSE-004: every grant carries a reason, and chapter 10 names the refusal
+        // of one without, so an absent one is answered by it rather than as malformed.
+        if (body.Reason is not { Length: > 0 } reason)
+        {
+            return Answers.Refused(Error.From(ErrorCodes.RestrictionReasonRequired));
+        }
+
         return Answers.Of(
             await restrictions
                 .GrantAsync(
@@ -169,7 +177,7 @@ internal static class RestrictionEndpoints
                     name,
                     body.KeyValue,
                     credit,
-                    body.Reason,
+                    reason,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);

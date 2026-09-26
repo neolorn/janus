@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Bff;
@@ -68,8 +69,11 @@ public sealed class ApiStatusTests
     [Fact]
     public async Task BFF_ERR_002_AC1_AFaultDisclosesOnlyTheCorrelationIdentifierAsync()
     {
+        await using ServiceProvider logging = new ServiceCollection().AddLogging().BuildServiceProvider();
+
         var context = new DefaultHttpContext
         {
+            RequestServices = logging,
             Response = { Body = new MemoryStream() },
             TraceIdentifier = "0HN7A2",
         };

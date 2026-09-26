@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,8 +14,8 @@ namespace Janus.Storage.Authorization.Gate;
 /// </summary>
 /// <param name="context">The context the row is read on.</param>
 /// <remarks>
-/// Implements PRIV-SENS-002 and CONV-DESIGN-003. It reads the one record the gate
-/// evaluates, by the key the table is held under, and nothing else.
+/// Implements PRIV-SENS-002, AUTHZ-GATE-005 and CONV-DESIGN-003. It reads the records
+/// the gate evaluates, by the key the table is held under, and nothing else.
 /// </remarks>
 internal sealed class RecordedConsents(StoreContext context) : IRecordedConsents
 {
@@ -36,4 +37,35 @@ internal sealed class RecordedConsents(StoreContext context) : IRecordedConsents
                 consent.SupersededAt))
             .SingleOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyDictionary<SubjectId, IReadOnlyList<ConsentRecord>>> OfAsync(
+        IReadOnlyCollection<SubjectId> subjects,
+        IReadOnlyCollection<string> purposes,
+        CancellationToken cancellationToken)
+    {
+        var held = await context.Consents
+            .AsNoTracking()
+            .Where(consent => subjects.Contains(consent.Subject) && purposes.Contains(consent.Purpose))
+            .Select(consent => new
+            {
+                consent.Subject,
+                Record = new ConsentRecord(
+                    consent.Purpose,
+                    consent.NoticeVersion,
+                    consent.Mechanism,
+                    consent.Kind,
+                    consent.GrantedAt,
+                    consent.WithdrawnAt,
+                    consent.SupersededAt),
+            })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return held
+            .GroupBy(consent => consent.Subject)
+            .ToDictionary(
+                subject => subject.Key,
+                IReadOnlyList<ConsentRecord> (subject) => [.. subject.Select(consent => consent.Record)]);
+    }
 }

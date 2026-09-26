@@ -9,7 +9,7 @@ set -euo pipefail
 report=$(dotnet list Janus.slnx package --vulnerable --include-transitive)
 echo "$report"
 
-if echo "$report" | grep -qE '^ +> '; then
+if grep -qE '^ +> ' <<<"$report"; then
   echo "A referenced package has a known vulnerability."
   exit 1
 fi

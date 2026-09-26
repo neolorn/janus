@@ -35,6 +35,7 @@ namespace Janus.Authentication.Registration;
 /// <param name="clients">The registry the originating client is resolved against.</param>
 /// <param name="policies">Where the policy in force is resolved.</param>
 /// <param name="invitations">Where the invitation a registration was opened by is kept.</param>
+/// <param name="opening">What attaches an invitation a signed-in person opens to their account.</param>
 /// <param name="locks">Whether the inviting organization's domain lock admits an address.</param>
 /// <param name="issuing">What issues the session the person is signed in on.</param>
 /// <param name="devices">What remembers the registering browser.</param>
@@ -46,8 +47,8 @@ namespace Janus.Authentication.Registration;
 /// <param name="randomness">Where the codes and the tokens are drawn from.</param>
 /// <remarks>
 /// Implements REG-SESS-001 to REG-SESS-008, REG-PROF-002, REG-IDENT-010, REG-INV-001,
-/// REG-MAIL-001, REG-DOM-001, IDN-LIFE-009a, API-REDIR-002, AUTH-FACT-004 and
-/// AUTH-ABUSE-003. Every answer is the same whether or not the identifier presented
+/// REG-INV-002, REG-MAIL-001, REG-DOM-001, IDN-LIFE-009a, API-REDIR-002, AUTH-FACT-004
+/// and AUTH-ABUSE-003. Every answer is the same whether or not the identifier presented
 /// belongs to an account already: the lookup decides only whether a code goes out and
 /// whether the holder is told. The one exception is the email an invitation binds,
 /// whose link only its mailbox received.
@@ -65,6 +66,7 @@ internal sealed class RegistrationService(
     IOidcClientStore clients,
     PolicyResolution policies,
     IInvitationStore invitations,
+    InvitationOpening opening,
     DomainLock locks,
     SessionService issuing,
     DeviceService devices,
@@ -79,6 +81,7 @@ internal sealed class RegistrationService(
 
     /// <inheritdoc/>
     public async ValueTask<Result<RegistrationSessionId>> BeginAsync(
+        AccessContext? signedIn,
         string client,
         string language,
         string source,
@@ -88,6 +91,11 @@ internal sealed class RegistrationService(
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(language);
         ArgumentNullException.ThrowIfNull(source);
+
+        if (signedIn is not null)
+        {
+            return await SignedInAsync(signedIn, invitationToken, cancellationToken).ConfigureAwait(false);
+        }
 
         Error? failure = null;
 
@@ -143,6 +151,22 @@ internal sealed class RegistrationService(
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success(session.Id);
+    }
+
+    // REG-SESS-002: a person already signed in is refused and sent to their account,
+    // and no registration session is created for them. An invitation link they press
+    // attaches to that account, whose membership step reads it (REG-INV-002).
+    private async ValueTask<Result<RegistrationSessionId>> SignedInAsync(
+        AccessContext signedIn,
+        [NeverLogged] string? invitationToken,
+        CancellationToken cancellationToken)
+    {
+        Error? unopened = invitationToken is null
+            ? null
+            : (await opening.OpenAsync(signedIn, invitationToken, cancellationToken).ConfigureAwait(false))
+                .Match(() => (Error?)null, error => error);
+
+        return Result.Failure<RegistrationSessionId>(unopened ?? Error.From(ErrorCodes.RegistrationSignedIn));
     }
 
     // REG-INV-001 and REG-MAIL-001: the token is single use, so pressing it attaches the
@@ -1045,15 +1069,121 @@ internal sealed class RegistrationService(
         return await SettledAsync(live, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// The email step supplied by a social provider: the identity is staged as a
+    /// credential the account is created with, and the address the provider supplied
+    /// as the step's email.
+    /// </summary>
+    /// <param name="session">Which session.</param>
+    /// <param name="provider">Which provider vouched.</param>
+    /// <param name="providerSubject">The provider's own identifier for the person.</param>
+    /// <param name="address">The address the provider supplied, where it supplied one.</param>
+    /// <param name="label">What the credential is called until the person renames it.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// That the identity is linked to an account already, or the state with the
+    /// identity staged, or the refusal.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    /// <remarks>
+    /// Implements REG-IDENT-008 and REG-IDENT-010. The provider's subject is the key and
+    /// its address never is. An address the provider operates and no account holds is
+    /// verified by the sign-in and locked; any other is staged as a typed one is, so a
+    /// third-party address is sent one code and an address another account holds gets
+    /// the ordinary answer while its holder is told.
+    /// </remarks>
+    public async ValueTask<Result<ProvidedRegistration>> ProvidedAsync(
+        RegistrationSessionId session,
+        Factor provider,
+        [NeverLogged] string providerSubject,
+        ProvidedAddress? address,
+        CredentialLabel label,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(providerSubject);
+
+        // REG-IDENT-008 AC3: an identity already linked makes the attempt a sign-in,
+        // whatever the session holds.
+        if (await authenticators.ByProviderAsync(provider, providerSubject, cancellationToken)
+                .ConfigureAwait(false) is not null)
+        {
+            return Result.Success(new ProvidedRegistration(Linked: true, State: null));
+        }
+
+        RegistrationSession? live =
+            await LiveAsync(session, cancellationToken).ConfigureAwait(false);
+
+        if (live is null)
+        {
+            return Result.Failure<ProvidedRegistration>(Error.From(ErrorCodes.SessionExpired));
+        }
+
+        if (!live.AgeAnswered)
+        {
+            return Result.Failure<ProvidedRegistration>(Error.From(ErrorCodes.AffirmationRequired));
+        }
+
+        if (live.Step is not RegistrationStep.Email)
+        {
+            return Result.Failure<ProvidedRegistration>(Error.From(ErrorCodes.RegistrationIncomplete));
+        }
+
+        var credential = new StagedCredential(
+            AuthenticatorId.New(time),
+            provider,
+            label,
+            Totp: null,
+            WebAuthn: null,
+            providerSubject);
+
+        // REG-IDENT-010: the address an invitation bound stands, and the step goes on
+        // with it; a provider that supplied no address leaves the step to a typed one.
+        if (address is null || live.Bound(IdentifierKind.Email) is not null)
+        {
+            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+
+            live.Link(credential);
+
+            await sessions.RecordAsync(live, cancellationToken).ConfigureAwait(false);
+            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+            return Result.Success(new ProvidedRegistration(Linked: false, State(live)));
+        }
+
+        return (await SuppliedAsync(live, credential, address, cancellationToken).ConfigureAwait(false))
+            .Match(
+                state => Result.Success(new ProvidedRegistration(Linked: false, state)),
+                Result.Failure<ProvidedRegistration>);
+    }
+
     private static Result<RegistrationState> Gone() =>
         Result.Failure<RegistrationState>(Error.From(ErrorCodes.SessionExpired));
 
     private static Result<RegistrationState> OutOfStep() =>
         Result.Failure<RegistrationState>(Error.From(ErrorCodes.RegistrationIncomplete));
 
-    private static AgeGroup Band(bool adult) => adult ? AgeGroup.Adult : AgeGroup.Minor;
+    /// <summary>
+    /// The band a date answers for, where the deployment takes no affirmation.
+    /// </summary>
+    /// <param name="adult">Whether the date made the person an adult.</param>
+    /// <returns>The band.</returns>
+    /// <remarks>
+    /// Bootstrap derives the first administrator's answer by the same rule
+    /// (PRIV-MINOR-001 AC3).
+    /// </remarks>
+    internal static AgeGroup Band(bool adult) => adult ? AgeGroup.Adult : AgeGroup.Minor;
 
-    private static bool IsAdult(DateOnly dateOfBirth, DateOnly today) =>
+    /// <summary>
+    /// Whether a date of birth makes a person an adult on a given day (REG-PROF-002).
+    /// </summary>
+    /// <param name="dateOfBirth">The date entered.</param>
+    /// <param name="today">The day the screen is answered on.</param>
+    /// <returns>Whether the person is eighteen or older that day.</returns>
+    /// <remarks>
+    /// Bootstrap derives the first administrator's affirmation by the same rule
+    /// (PRIV-MINOR-001 AC3).
+    /// </remarks>
+    internal static bool IsAdult(DateOnly dateOfBirth, DateOnly today) =>
         dateOfBirth <= today.AddYears(-Majority);
 
     private static IntegerSetting Maximum(IdentifierKind kind) =>
@@ -1397,6 +1527,67 @@ internal sealed class RegistrationService(
         return Result.Success(State(session));
     }
 
+    // REG-IDENT-008: the address comes from the provider rather than the person, and
+    // is held to every rule a typed one is. Only an address the provider operates and
+    // no account holds is verified by the sign-in; one another account holds takes
+    // the typed path, so nothing is sent here and its holder is told (AC4).
+    private async ValueTask<Result<RegistrationState>> SuppliedAsync(
+        RegistrationSession session,
+        StagedCredential credential,
+        ProvidedAddress address,
+        CancellationToken cancellationToken)
+    {
+        if (Canonical(IdentifierKind.Email, address.Entered) is not (string entered, string canonical))
+        {
+            return Result.Failure<RegistrationState>(Error.From(ErrorCodes.IdentifierInvalid));
+        }
+
+        if (!ScriptMixing.IsSingleScriptPerWord(canonical))
+        {
+            return Result.Failure<RegistrationState>(Error.From(ErrorCodes.IdentifierMixedScript));
+        }
+
+        if (await LockRefusedAsync(session, IdentifierKind.Email, canonical, cancellationToken)
+                .ConfigureAwait(false) is Error outside)
+        {
+            return Result.Failure<RegistrationState>(outside);
+        }
+
+        bool vouched = address.Operated
+            && await directory.OwnerAsync(IdentifierKind.Email, canonical, cancellationToken)
+                .ConfigureAwait(false) is null;
+
+        var staged = StagedIdentity.Of(
+            IdentifierId.New(time),
+            IdentifierKind.Email,
+            entered,
+            canonical,
+            isLocked: vouched,
+            isExtra: false);
+
+        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+
+        session.Link(credential);
+        session.Stage(staged);
+
+        if (vouched)
+        {
+            staged.Verify(time.GetUtcNow());
+        }
+        else if (await DispatchAsync(session, staged, cancellationToken).ConfigureAwait(false)
+                 is Error refused)
+        {
+            return Result.Failure<RegistrationState>(refused);
+        }
+
+        session.Reached(RegistrationStep.Phone);
+
+        await sessions.RecordAsync(session, cancellationToken).ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        return Result.Success(State(session));
+    }
+
     // The two cases are one path: the lookup decides only whether the code goes to
     // the person registering or the holder is told instead, and the caller cannot
     // tell which happened (REG-SESS-005, AUTH-ABUSE-003).
@@ -1532,6 +1723,20 @@ internal sealed class RegistrationService(
 
         foreach (StagedCredential staged in session.Credentials)
         {
+            // REG-IDENT-008: a provider's identity is written with the subject the
+            // provider knows the person by, which is what a later sign-in matches.
+            if (staged.ProviderSubject is string providerSubject)
+            {
+                await authenticators
+                    .LinkAsync(
+                        Authenticator.Linked(staged.Id, session.Provisional, staged.Factor, staged.Label, now),
+                        providerSubject,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+                continue;
+            }
+
             await authenticators
                 .AddAsync(Enrolled(session.Provisional, staged, now), cancellationToken)
                 .ConfigureAwait(false);

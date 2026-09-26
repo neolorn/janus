@@ -82,7 +82,7 @@ internal sealed class RestrictionAdministration(
 
         if (!StepUpRefusal.Met(challenge))
         {
-            return Result.Failure(StepUpRefusal.Of(Edit, challenge));
+            return Result.Failure(StepUpRefusal.Of(challenge));
         }
 
         Error? failure = null;
@@ -208,7 +208,7 @@ internal sealed class RestrictionAdministration(
 
         if (!StepUpRefusal.Met(challenge))
         {
-            return Result.Failure(StepUpRefusal.Of(Grant, challenge));
+            return Result.Failure(StepUpRefusal.Of(challenge));
         }
 
         if (string.IsNullOrWhiteSpace(reason))

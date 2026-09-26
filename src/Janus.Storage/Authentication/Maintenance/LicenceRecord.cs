@@ -1,5 +1,5 @@
 using System;
-using Janus.Authentication.Maintenance;
+using Janus.Core;
 
 namespace Janus.Storage.Authentication.Maintenance;
 

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Sending;
@@ -49,4 +51,7 @@ internal sealed class ThrottleLedgerInMemory : IThrottleLedger
 
         return ValueTask.CompletedTask;
     }
+
+    /// <inheritdoc/>
+    public byte[] Identify(string identifier) => SHA256.HashData(Encoding.UTF8.GetBytes(identifier));
 }

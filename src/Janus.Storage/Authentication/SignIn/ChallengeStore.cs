@@ -12,12 +12,15 @@ namespace Janus.Storage.Authentication.SignIn;
 /// The sign-ins in progress, over the <c>signin_challenges</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
+/// <param name="fingerprintKeys">The version the identifier's hash is computed under.</param>
 /// <remarks>
-/// Implements AUTH-FACT-016 and CONV-DESIGN-003. The catalogue entries accepted so
-/// far are held under the spellings of chapter 10, so the column and the wire cannot
-/// drift apart (CONV-ENUM-001).
+/// Implements AUTH-FACT-016, OPS-SEC-003 and CONV-DESIGN-003. The catalogue entries
+/// accepted so far are held under the spellings of chapter 10, so the column and the
+/// wire cannot drift apart (CONV-ENUM-001). The identifier's hash was computed under
+/// the current version of the fingerprint key, which is the version written beside it,
+/// so the rotation forgets it with the version.
 /// </remarks>
-internal sealed class ChallengeStore(StoreContext context) : IChallengeStore
+internal sealed class ChallengeStore(StoreContext context, FingerprintKeys fingerprintKeys) : IChallengeStore
 {
     /// <inheritdoc/>
     public async ValueTask<Challenge?> FindAsync(
@@ -36,6 +39,7 @@ internal sealed class ChallengeStore(StoreContext context) : IChallengeStore
                 record.Handle,
                 record.Subject,
                 record.Email,
+                record.Identifier,
                 record.WebAuthn,
                 record.CreatedAt,
                 record.ExpiresAt,
@@ -54,6 +58,8 @@ internal sealed class ChallengeStore(StoreContext context) : IChallengeStore
                     Handle = challenge.Fingerprint,
                     Subject = challenge.Subject,
                     Email = challenge.Email,
+                    Identifier = challenge.Identifier,
+                    FingerprintVersion = challenge.Identifier is null ? null : fingerprintKeys.CurrentVersion,
                     WebAuthn = challenge.WebAuthn,
                     CreatedAt = challenge.CreatedAt,
                     ExpiresAt = challenge.ExpiresAt,

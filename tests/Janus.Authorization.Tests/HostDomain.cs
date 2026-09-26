@@ -118,6 +118,8 @@ internal static class HostDomain
     /// <returns>The builder, so a test may change one thing before building.</returns>
     public static AuthorizationDeclarationBuilder Declared() =>
         new AuthorizationDeclarationBuilder()
+            .RetentionFloor("identity", TimeSpan.FromDays(365))
+            .RetentionFloor("content", TimeSpan.FromDays(365))
             .LawfulBasis(new LawfulBasisDeclaration("contract", false, false, false, false))
             .LawfulBasis(new LawfulBasisDeclaration("interest", false, false, true, true))
             .SensitiveCategory("financial")

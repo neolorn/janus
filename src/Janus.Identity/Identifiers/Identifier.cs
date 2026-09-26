@@ -107,6 +107,7 @@ internal sealed class Identifier
     /// <param name="isLocked">Whether it is locked against change.</param>
     /// <returns>The identifier, unverified.</returns>
     /// <exception cref="ArgumentNullException">The entered form is absent.</exception>
+    /// <exception cref="InvalidOperationException">The address was never set.</exception>
     public static Identifier Email(
         IdentifierId id,
         SubjectId subject,
@@ -130,6 +131,7 @@ internal sealed class Identifier
     /// <param name="addedAt">When it was added.</param>
     /// <returns>The identifier, unverified.</returns>
     /// <exception cref="ArgumentNullException">The entered form is absent.</exception>
+    /// <exception cref="InvalidOperationException">The number was never set.</exception>
     public static Identifier Phone(
         IdentifierId id,
         SubjectId subject,
@@ -151,6 +153,7 @@ internal sealed class Identifier
     /// <param name="username">The username in the profile's form.</param>
     /// <param name="chosenAt">When it was chosen.</param>
     /// <returns>The identifier, already counting.</returns>
+    /// <exception cref="InvalidOperationException">The username was never set.</exception>
     public static Identifier Username(
         IdentifierId id,
         SubjectId subject,

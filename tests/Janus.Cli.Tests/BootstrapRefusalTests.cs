@@ -10,10 +10,11 @@ namespace Janus.Cli.Tests;
 
 /// <summary>
 /// What the <c>bootstrap</c> command refuses before it reaches the database: the values
-/// the deployment has to name, and the keys it reads from standard input (OPS-BOOT-001,
-/// OPS-SEC-001). The connection each case names leads nowhere, so a case that reached
+/// the deployment has to name, the administrator's date of birth, and the keys it reads
+/// from standard input (OPS-BOOT-001, PRIV-MINOR-001, OPS-SEC-001). The connection each case names leads nowhere, so a case that reached
 /// the database would fail rather than pass.
 /// </summary>
+[Trait("kind", "unit")]
 public sealed class BootstrapRefusalTests
 {
     private const string Nowhere = "Host=nowhere.invalid;Database=identity";
@@ -117,6 +118,32 @@ public sealed class BootstrapRefusalTests
         Assert.Equal(1, run.ExitCode);
         Assert.Equal(ErrorCodes.RequestMalformed.ToString(), Code(run));
         Assert.Equal("--" + Settings.SessionStepUpRecency.Key, Detail(run, "member"));
+    }
+
+    /// <summary>
+    /// PRIV-MINOR-001 AC3: the first administrator's affirmation is derived from the
+    /// date the age screen asks for, so a bootstrap that names no date, or one that
+    /// does not read as a date, is refused naming it before the database is reached.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_MINOR_001_AC3_BootstrapWithoutADateOfBirthIsRefusedAsync()
+    {
+        List<string> undated = [.. Invocation.Bootstrap()];
+        undated.RemoveRange(undated.IndexOf("--dateofbirth"), 2);
+        List<string> unread = [.. Invocation.Bootstrap()];
+        unread[unread.IndexOf("--dateofbirth") + 1] = "01/01/1990";
+
+        Invocation missing = await Invocation.PipedAsync(undated, Invocation.Keys(Nowhere));
+        Invocation malformed = await Invocation.PipedAsync(unread, Invocation.Keys(Nowhere));
+
+        foreach (Invocation run in (Invocation[])[missing, malformed])
+        {
+            Assert.Equal(1, run.ExitCode);
+            Assert.Empty(run.Output);
+            Assert.Equal(ErrorCodes.RequestMalformed.ToString(), Code(run));
+            Assert.Equal("dateofbirth", Detail(run, "member"));
+        }
     }
 
     /// <summary>

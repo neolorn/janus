@@ -18,6 +18,14 @@
     <ProjectReference Include="..\Janus.Privacy.Tests\Janus.Privacy.Tests.csproj" />
   </ItemGroup>
 
+  <!-- LIB-API-002, CONV-DESIGN-006, CONV-CODE-006: what every shipped assembly exposes,
+       derives from and carries is read from the assemblies themselves, so the two this
+       project's own does not bring are built beside it. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Janus.Cli\Janus.Cli.csproj" />
+    <ProjectReference Include="..\..\src\Janus.Conformance\Janus.Conformance.csproj" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Testcontainers.PostgreSql" />
   </ItemGroup>

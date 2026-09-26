@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -43,6 +44,26 @@ public sealed class FactorCatalogueTests
             FactorCatalogue.Entries
                 .Where(entry => entry.Value.RelaysAddress)
                 .Select(entry => entry.Key));
+
+    /// <summary>
+    /// REG-IDENT-008: the mailboxes a provider operates are the ones the item names,
+    /// Google's on <c>gmail.com</c> and the Workspace domain a token asserts, Apple's on
+    /// its relay and on its three mail domains, and no entry without a provider behind
+    /// it vouches for any mailbox.
+    /// </summary>
+    [Fact]
+    public void REG_IDENT_008_TheMailboxesAProviderOperatesAreTheOnesTheItemNames()
+    {
+        Assert.Equal(["gmail.com"], FactorCatalogue.Of(Factor.Google).OperatedDomains.Order(StringComparer.Ordinal));
+        Assert.True(FactorCatalogue.Of(Factor.Google).OperatesHostedDomain);
+        Assert.Equal(
+            ["icloud.com", "mac.com", "me.com", "privaterelay.appleid.com"],
+            FactorCatalogue.Of(Factor.Apple).OperatedDomains.Order(StringComparer.Ordinal));
+        Assert.False(FactorCatalogue.Of(Factor.Apple).OperatesHostedDomain);
+        Assert.All(
+            FactorCatalogue.Entries.Where(entry => entry.Key is not (Factor.Google or Factor.Apple)),
+            entry => Assert.True(entry.Value.OperatedDomains.Count == 0 && !entry.Value.OperatesHostedDomain));
+    }
 
     /// <summary>
     /// AUTH-STEP-008 invariants 1 and 2: no rule about a step-up gate names a factor,
@@ -115,7 +136,9 @@ public sealed class FactorCatalogueTests
             Channel: null,
             Restricted: false,
             SingleUse: false,
-            RelaysAddress: false);
+            RelaysAddress: false,
+            OperatedDomains: FrozenSet<string>.Empty,
+            OperatesHostedDomain: false);
 
         Assert.Null(Assurance.Reached([code]));
         Assert.Null(Assurance.Proved([code]));

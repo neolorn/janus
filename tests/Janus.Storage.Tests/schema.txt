@@ -1,0 +1,1055 @@
+table __migrations_history
+  column MigrationId character varying(150) not null
+  column ProductVersion character varying(32) not null
+  constraint PK___migrations_history PRIMARY KEY ("MigrationId")
+table account_preferences
+  column subject uuid not null
+  column language text
+  column time_zone text
+  column enc_values bytea
+  constraint fk_account_preferences_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_account_preferences PRIMARY KEY (subject)
+table accounts
+  column subject uuid not null
+  column created_at timestamp with time zone not null
+  column state text not null
+  column suspended_by text
+  column deleting_by text
+  column deleting_since timestamp with time zone
+  column adult_affirmed boolean
+  column age_group text
+  column answered_age_at timestamp with time zone
+  column notice_version character varying(64)
+  column terms_version character varying(64)
+  column restriction_held boolean not null default false
+  column emergency boolean not null default false
+  constraint ck_accounts_age_answer CHECK (((adult_affirmed IS NULL) OR (age_group IS NULL)))
+  constraint ck_accounts_age_group CHECK (((age_group IS NULL) OR (age_group = ANY (ARRAY['adult'::text, 'minor'::text]))))
+  constraint ck_accounts_answered_age_at CHECK (((answered_age_at IS NULL) = ((adult_affirmed IS NULL) AND (age_group IS NULL))))
+  constraint ck_accounts_deleting CHECK (((deleting_by IS NULL) = (deleting_since IS NULL)))
+  constraint ck_accounts_deleting_by CHECK (((deleting_by IS NULL) OR (deleting_by = ANY (ARRAY['oob-request'::text, 'self'::text, 'takedown'::text]))))
+  constraint ck_accounts_documents CHECK (((terms_version IS NULL) = (notice_version IS NULL)))
+  constraint ck_accounts_restriction_held CHECK (((NOT restriction_held) OR (state = ANY (ARRAY['deleting'::text, 'suspended'::text]))))
+  constraint ck_accounts_state CHECK ((state = ANY (ARRAY['active'::text, 'deleted'::text, 'deleting'::text, 'restricted'::text, 'suspended'::text])))
+  constraint ck_accounts_suspended_by CHECK (((suspended_by IS NULL) OR (suspended_by = ANY (ARRAY['administrator'::text, 'self'::text]))))
+  constraint pk_accounts PRIMARY KEY (subject)
+  index ix_accounts_deleting_since using btree (deleting_since) WHERE (deleting_since IS NOT NULL)
+  index ux_accounts_emergency unique using btree (emergency) WHERE emergency
+table alerts
+  column key character varying(256) not null
+  column at timestamp with time zone not null
+  constraint pk_alerts PRIMARY KEY (key)
+table ancestry
+  column resource_type text not null
+  column resource_id text not null
+  column ancestor_type text not null
+  column ancestor_id text not null
+  column depth integer not null
+  column organization uuid not null
+  constraint ck_ancestry_depth CHECK ((depth >= 0))
+  constraint pk_ancestry PRIMARY KEY (resource_type, resource_id, ancestor_type, ancestor_id)
+  index ix_ancestry_ancestor using btree (ancestor_type, ancestor_id)
+table audit_records partitioned by LIST (category)
+  column id uuid not null
+  column category text not null
+  column occurred_at timestamp with time zone not null
+  column action text not null
+  column acting_subject uuid
+  column effective_subject uuid
+  column organization uuid
+  column details jsonb not null
+  column enc_details bytea
+  column principal text
+  column principal_reason text
+  constraint ck_audit_records_identities CHECK (((action = 'authz.access.denied'::text) OR ((acting_subject IS NOT NULL) AND (effective_subject IS NOT NULL))))
+  constraint ck_audit_records_principal CHECK ((((principal IS NULL) AND (principal_reason IS NULL)) OR ((principal IS NOT NULL) AND (principal_reason IS NOT NULL) AND (acting_subject = '00000000-0000-0000-0000-000000000000'::uuid))))
+  constraint pk_audit_records PRIMARY KEY (category, occurred_at, id)
+  index ix_audit_records_acting_subject using btree (acting_subject, occurred_at)
+  index ix_audit_records_configuration_key using gin (details jsonb_path_ops) WHERE (action = 'ops.configuration.changed'::text)
+  index ix_audit_records_effective_subject using btree (effective_subject, occurred_at)
+  index ix_audit_records_id using btree (id)
+table audit_records_routine partition of audit_records FOR VALUES IN ('routine') partitioned by RANGE (occurred_at)
+  column id uuid not null
+  column category text not null
+  column occurred_at timestamp with time zone not null
+  column action text not null
+  column acting_subject uuid
+  column effective_subject uuid
+  column organization uuid
+  column details jsonb not null
+  column enc_details bytea
+  column principal text
+  column principal_reason text
+  constraint audit_records_routine_pkey PRIMARY KEY (category, occurred_at, id)
+  constraint ck_audit_records_identities CHECK (((action = 'authz.access.denied'::text) OR ((acting_subject IS NOT NULL) AND (effective_subject IS NOT NULL))))
+  constraint ck_audit_records_principal CHECK ((((principal IS NULL) AND (principal_reason IS NULL)) OR ((principal IS NOT NULL) AND (principal_reason IS NOT NULL) AND (acting_subject = '00000000-0000-0000-0000-000000000000'::uuid))))
+  index audit_records_routine_acting_subject_occurred_at_idx using btree (acting_subject, occurred_at)
+  index audit_records_routine_details_idx using gin (details jsonb_path_ops) WHERE (action = 'ops.configuration.changed'::text)
+  index audit_records_routine_effective_subject_occurred_at_idx using btree (effective_subject, occurred_at)
+  index audit_records_routine_id_idx using btree (id)
+table audit_records_security partition of audit_records FOR VALUES IN ('security') partitioned by RANGE (occurred_at)
+  column id uuid not null
+  column category text not null
+  column occurred_at timestamp with time zone not null
+  column action text not null
+  column acting_subject uuid
+  column effective_subject uuid
+  column organization uuid
+  column details jsonb not null
+  column enc_details bytea
+  column principal text
+  column principal_reason text
+  constraint audit_records_security_pkey PRIMARY KEY (category, occurred_at, id)
+  constraint ck_audit_records_identities CHECK (((action = 'authz.access.denied'::text) OR ((acting_subject IS NOT NULL) AND (effective_subject IS NOT NULL))))
+  constraint ck_audit_records_principal CHECK ((((principal IS NULL) AND (principal_reason IS NULL)) OR ((principal IS NOT NULL) AND (principal_reason IS NOT NULL) AND (acting_subject = '00000000-0000-0000-0000-000000000000'::uuid))))
+  index audit_records_security_acting_subject_occurred_at_idx using btree (acting_subject, occurred_at)
+  index audit_records_security_details_idx using gin (details jsonb_path_ops) WHERE (action = 'ops.configuration.changed'::text)
+  index audit_records_security_effective_subject_occurred_at_idx using btree (effective_subject, occurred_at)
+  index audit_records_security_id_idx using btree (id)
+table authenticators
+  column id uuid not null
+  column subject uuid not null
+  column factor text not null
+  column label character varying(64) not null
+  column state text not null
+  column added_at timestamp with time zone not null
+  column last_used_at timestamp with time zone
+  column invalidates_at timestamp with time zone
+  column confirmed boolean not null
+  column totp_secret bytea
+  column totp_consumed_step bigint
+  column credential_id bytea
+  column public_key bytea
+  column algorithm integer
+  column relying_party text
+  column counter bigint
+  column backup_eligible boolean
+  column backup_state boolean
+  column is_preferred boolean not null default false
+  column provider_subject bytea
+  column enc_provider_subject bytea
+  column fingerprint_version integer
+  constraint ck_authenticators_factor CHECK ((factor = ANY (ARRAY['apple'::text, 'breakGlass'::text, 'emailCode'::text, 'emailLink'::text, 'google'::text, 'passkey'::text, 'password'::text, 'phoneCode'::text, 'phoneLink'::text, 'recoveryCodes'::text, 'securityKey'::text, 'totp'::text])))
+  constraint ck_authenticators_invalidates_at CHECK (((invalidates_at IS NULL) OR (state = 'suspended'::text)))
+  constraint ck_authenticators_provider_subject CHECK ((((provider_subject IS NULL) <> (factor = ANY (ARRAY['apple'::text, 'google'::text]))) AND ((provider_subject IS NULL) OR (octet_length(provider_subject) = 32)) AND ((provider_subject IS NULL) = (fingerprint_version IS NULL)) AND ((provider_subject IS NULL) = (enc_provider_subject IS NULL))))
+  constraint ck_authenticators_state CHECK ((state = ANY (ARRAY['active'::text, 'invalidated'::text, 'suspended'::text])))
+  constraint ck_authenticators_webauthn CHECK ((((credential_id IS NULL) = (public_key IS NULL)) AND ((credential_id IS NULL) = (algorithm IS NULL)) AND ((credential_id IS NULL) = (relying_party IS NULL)) AND ((credential_id IS NULL) = (backup_eligible IS NULL)) AND ((credential_id IS NULL) = (backup_state IS NULL))))
+  constraint fk_authenticators_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_authenticators PRIMARY KEY (id)
+  index ux_authenticators_credential_id unique using btree (credential_id) WHERE (credential_id IS NOT NULL)
+  index ux_authenticators_label unique using btree (subject, factor, label)
+  index ux_authenticators_preferred unique using btree (subject) WHERE is_preferred
+  index ux_authenticators_provider_subject unique using btree (factor, provider_subject) WHERE ((provider_subject IS NOT NULL) AND (provider_subject <> decode(repeat('00'::text, 32), 'hex'::text)))
+table background_jobs
+  column name text not null
+  column recorded_at timestamp with time zone not null
+  column attempted_at timestamp with time zone not null
+  column succeeded_at timestamp with time zone
+  column lapse_raised_at timestamp with time zone
+  constraint pk_background_jobs PRIMARY KEY (name)
+table break_glass_attempts
+  column id uuid not null
+  column attempted_at timestamp with time zone not null
+  constraint pk_break_glass_attempts PRIMARY KEY (id)
+  index ix_break_glass_attempts_attempted_at using btree (attempted_at)
+table break_glass_credentials
+  column id uuid not null
+  column hash text not null
+  column issued_by uuid not null
+  column issued_at timestamp with time zone not null
+  column consumed_at timestamp with time zone
+  column replaced_at timestamp with time zone
+  constraint ck_break_glass_credentials_ended CHECK (((consumed_at IS NULL) OR (replaced_at IS NULL)))
+  constraint fk_break_glass_credentials_issued_by FOREIGN KEY (issued_by) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_break_glass_credentials PRIMARY KEY (id)
+  index ix_break_glass_credentials_issued_by using btree (issued_by)
+  index ux_break_glass_credentials_standing unique using btree ((true)) WHERE ((consumed_at IS NULL) AND (replaced_at IS NULL))
+table bulk_exports
+  column id uuid not null
+  column actor uuid
+  column principal text
+  column admitted_at timestamp with time zone not null
+  constraint ck_bulk_exports_actor CHECK (((actor IS NULL) <> (principal IS NULL)))
+  constraint pk_bulk_exports PRIMARY KEY (id)
+  index ix_bulk_exports_actor using btree (actor, principal, admitted_at)
+table callback_events
+  column callback text not null
+  column identifier bytea not null
+  column claimed_at timestamp with time zone not null
+  constraint pk_callback_events PRIMARY KEY (callback, identifier)
+table callback_references
+  column reference bytea not null
+  column callback text not null
+  column issued_at timestamp with time zone not null
+  constraint pk_callback_references PRIMARY KEY (reference)
+table callbacks
+  column id uuid not null
+  column source bytea not null
+  column at timestamp with time zone not null
+  column rejected boolean not null
+  column fingerprint_version integer not null
+  constraint pk_callbacks PRIMARY KEY (id)
+  index ix_callbacks_source_at using btree (source, at)
+table compliance_records
+  column id integer not null
+  column data_owner text
+  column organisational_measures text
+  column assessment_links jsonb not null
+  column updated_at timestamp with time zone not null
+  constraint ck_compliance_records_only CHECK ((id = 1))
+  constraint pk_compliance_records PRIMARY KEY (id)
+table consents
+  column subject uuid not null
+  column purpose text not null
+  column notice_version text not null
+  column mechanism text not null
+  column kind text not null
+  column granted_at timestamp with time zone not null
+  column withdrawn_at timestamp with time zone
+  column superseded_at timestamp with time zone
+  constraint ck_consents_kind CHECK ((kind = ANY (ARRAY['ordinary'::text, 'written'::text])))
+  constraint ck_consents_mechanism CHECK ((mechanism = ANY (ARRAY['administrator'::text, 'dashboard'::text, 'reconsent'::text, 'registration'::text])))
+  constraint ck_consents_purpose CHECK ((length(TRIM(BOTH FROM purpose)) > 0))
+  constraint fk_consents_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_consents PRIMARY KEY (subject, purpose)
+  index ix_consents_live using btree (notice_version) WHERE ((withdrawn_at IS NULL) AND (superseded_at IS NULL))
+table devices
+  column id uuid not null
+  column subject uuid not null
+  column kind text not null
+  column label character varying(64) not null
+  column token_fingerprint bytea not null
+  column created_at timestamp with time zone not null
+  column last_used_at timestamp with time zone not null
+  column expires_at timestamp with time zone not null
+  column consecutive_failures integer not null
+  column revoked boolean not null
+  constraint ck_devices_kind CHECK ((kind = ANY (ARRAY['remembered'::text, 'trusted'::text])))
+  constraint fk_devices_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_devices PRIMARY KEY (id)
+  index ix_devices_subject using btree (subject)
+  index ux_devices_token_fingerprint unique using btree (token_fingerprint)
+view effective_grants
+  column grant_id uuid
+  column subject_type text
+  column subject_id uuid
+  column role text
+  column permission text
+  column resource_type text
+  column resource_id text
+  column deny boolean
+  column kind text
+  column organization uuid
+  column expires_at timestamp with time zone
+  column revoked_at timestamp with time zone
+table erasures
+  column subject uuid not null
+  column requested_at timestamp with time zone not null
+  column reason text not null
+  column status text not null
+  column attempts integer not null
+  constraint ck_erasures_attempts CHECK ((attempts >= 0))
+  constraint ck_erasures_reason CHECK ((reason = ANY (ARRAY['erasure-request'::text, 'minor-takedown'::text, 'organization-erasure'::text])))
+  constraint ck_erasures_status CHECK ((status = ANY (ARRAY['awaiting-subscribers'::text, 'complete'::text, 'failed'::text])))
+  constraint fk_erasures_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_erasures PRIMARY KEY (subject)
+  index ix_erasures_outstanding using btree (requested_at) WHERE (status <> 'complete'::text)
+table events
+  column id uuid not null
+  column kind character varying(64) not null
+  column raised_at timestamp with time zone not null
+  column payload jsonb not null
+  column attempts integer not null
+  column next_attempt_at timestamp with time zone not null
+  column taken_by jsonb not null
+  column published_at timestamp with time zone
+  column failed_at timestamp with time zone
+  constraint pk_events PRIMARY KEY (id)
+  index ix_events_due using btree (next_attempt_at) WHERE ((published_at IS NULL) AND (failed_at IS NULL))
+table grant_versions
+  column subject uuid not null
+  column version bigint not null
+  constraint ck_grant_versions_version CHECK ((version >= 0))
+  constraint fk_grant_versions_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE CASCADE
+  constraint pk_grant_versions PRIMARY KEY (subject)
+table grants
+  column id uuid not null
+  column subject_type text not null
+  column subject_id uuid not null
+  column role text not null
+  column organization uuid not null
+  column resource_type text
+  column resource_id text
+  column deny boolean not null
+  column kind text not null
+  column expires_at timestamp with time zone
+  column granted_by uuid not null
+  column granted_at timestamp with time zone not null
+  column reason text not null
+  column revoked_by uuid
+  column revoked_at timestamp with time zone
+  column revocation_reason text
+  constraint ck_grants_kind CHECK ((kind = ANY (ARRAY['derived'::text, 'materialised'::text, 'stored'::text])))
+  constraint ck_grants_reason CHECK (((length(btrim(reason)) >= 1) AND (length(btrim(reason)) <= 1024)))
+  constraint ck_grants_resource CHECK (((resource_type IS NULL) = (resource_id IS NULL)))
+  constraint ck_grants_revocation CHECK ((((revoked_at IS NULL) AND (revoked_by IS NULL) AND (revocation_reason IS NULL)) OR ((revoked_at IS NOT NULL) AND (revoked_by IS NOT NULL) AND ((length(btrim(revocation_reason)) >= 1) AND (length(btrim(revocation_reason)) <= 1024)))))
+  constraint ck_grants_subject_type CHECK ((subject_type = ANY (ARRAY['group'::text, 'user'::text])))
+  constraint fk_grants_organization FOREIGN KEY (organization) REFERENCES identity.organizations(id) ON DELETE RESTRICT
+  constraint fk_grants_role FOREIGN KEY (role) REFERENCES identity.roles(name) ON DELETE RESTRICT
+  constraint pk_grants PRIMARY KEY (id)
+  index ix_grants_live_holder using btree (organization, subject_type, subject_id) WHERE (revoked_at IS NULL)
+  index ix_grants_live_resource using btree (resource_type, resource_id) WHERE (revoked_at IS NULL)
+  index ix_grants_role using btree (role)
+table group_closure
+  column group_id uuid not null
+  column member_type text not null
+  column member_id uuid not null
+  column depth integer not null
+  constraint ck_group_closure_depth CHECK ((depth >= 1))
+  constraint ck_group_closure_member_type CHECK ((member_type = ANY (ARRAY['group'::text, 'user'::text])))
+  constraint fk_group_closure_group FOREIGN KEY (group_id) REFERENCES identity.groups(id) ON DELETE CASCADE
+  constraint pk_group_closure PRIMARY KEY (group_id, member_type, member_id)
+  index ix_group_closure_member using btree (member_type, member_id)
+table group_members
+  column group_id uuid not null
+  column member_type text not null
+  column member_id uuid not null
+  constraint ck_group_members_member_type CHECK ((member_type = ANY (ARRAY['group'::text, 'user'::text])))
+  constraint fk_group_members_group FOREIGN KEY (group_id) REFERENCES identity.groups(id) ON DELETE CASCADE
+  constraint pk_group_members PRIMARY KEY (group_id, member_type, member_id)
+  index ix_group_members_member using btree (member_type, member_id)
+table groups
+  column id uuid not null
+  column organization uuid not null
+  column name text not null
+  constraint fk_groups_organization FOREIGN KEY (organization) REFERENCES identity.organizations(id) ON DELETE RESTRICT
+  constraint pk_groups PRIMARY KEY (id)
+  index ix_groups_organization using btree (organization)
+table identifier_backup_settings
+  column subject uuid not null
+  column kind text not null
+  column rule text
+  column named uuid
+  constraint ck_identifier_backup_settings_kind CHECK ((kind = ANY (ARRAY['email'::text, 'phone'::text, 'username'::text])))
+  constraint ck_identifier_backup_settings_rule CHECK (((rule = ANY (ARRAY['all-verified'::text, 'primary-only'::text])) OR (rule IS NULL)))
+  constraint ck_identifier_backup_settings_setting CHECK (((rule IS NULL) <> (named IS NULL)))
+  constraint fk_identifier_backup_settings_named FOREIGN KEY (named) REFERENCES identity.identifiers(identifier_id) ON DELETE RESTRICT
+  constraint fk_identifier_backup_settings_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_identifier_backup_settings PRIMARY KEY (subject, kind)
+  index ix_identifier_backup_settings_named using btree (named)
+table identifier_removals
+  column identifier_id uuid not null
+  column subject uuid not null
+  column kind text not null
+  column fingerprint bytea not null
+  column enc_entered bytea not null
+  column enc_canonical bytea not null
+  column is_locked boolean not null
+  column added_at timestamp with time zone not null
+  column verified_at timestamp with time zone not null
+  column removed_at timestamp with time zone not null
+  column expires_at timestamp with time zone not null
+  column undo_fingerprint bytea not null
+  column fingerprint_version integer not null
+  constraint ck_identifier_removals_fingerprint CHECK ((octet_length(fingerprint) = 32))
+  constraint ck_identifier_removals_kind CHECK ((kind = ANY (ARRAY['email'::text, 'phone'::text, 'username'::text])))
+  constraint ck_identifier_removals_window CHECK ((expires_at > removed_at))
+  constraint fk_identifier_removals_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_identifier_removals PRIMARY KEY (identifier_id)
+  index ix_identifier_removals_expires_at using btree (expires_at)
+  index ix_identifier_removals_subject using btree (subject)
+  index ux_identifier_removals_fingerprint unique using btree (kind, fingerprint)
+  index ux_identifier_removals_undo unique using btree (undo_fingerprint)
+table identifier_verifications
+  column identifier_id uuid not null
+  column subject uuid not null
+  column browser uuid
+  column is_replacement boolean not null
+  column old_must_confirm boolean not null
+  column old_confirmed_at timestamp with time zone
+  column old_link bytea
+  column link bytea
+  column staged_at timestamp with time zone not null
+  column enc_staged bytea not null
+  constraint ck_identifier_verifications_link CHECK (((link IS NULL) OR (octet_length(link) = 32)))
+  constraint ck_identifier_verifications_old CHECK ((is_replacement OR ((NOT old_must_confirm) AND (old_confirmed_at IS NULL) AND (old_link IS NULL))))
+  constraint ck_identifier_verifications_old_link CHECK (((old_link IS NULL) OR (octet_length(old_link) = 32)))
+  constraint fk_identifier_verifications_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_identifier_verifications PRIMARY KEY (identifier_id)
+  index ix_identifier_verifications_staged_at using btree (staged_at)
+  index ix_identifier_verifications_subject using btree (subject)
+  index ux_identifier_verifications_link unique using btree (link) WHERE (link IS NOT NULL)
+  index ux_identifier_verifications_old_link unique using btree (old_link) WHERE (old_link IS NOT NULL)
+table identifiers
+  column identifier_id uuid not null
+  column subject uuid not null
+  column kind text not null
+  column fingerprint bytea not null
+  column canonicalisation_version text not null
+  column enc_entered bytea not null
+  column enc_canonical bytea not null
+  column added_at timestamp with time zone not null
+  column verified_at timestamp with time zone
+  column is_primary boolean not null
+  column is_locked boolean not null
+  column is_personal boolean not null default false
+  column fingerprint_version integer not null
+  constraint ck_identifiers_fingerprint CHECK ((octet_length(fingerprint) = 32))
+  constraint ck_identifiers_kind CHECK ((kind = ANY (ARRAY['email'::text, 'phone'::text, 'username'::text])))
+  constraint ck_identifiers_personal CHECK (((NOT is_personal) OR ((kind = 'email'::text) AND (verified_at IS NOT NULL) AND (NOT is_primary))))
+  constraint ck_identifiers_primary CHECK (((NOT is_primary) OR (verified_at IS NOT NULL)))
+  constraint fk_identifiers_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_identifiers PRIMARY KEY (identifier_id)
+  index ix_identifiers_subject using btree (subject, kind)
+  index ux_identifiers_fingerprint unique using btree (kind, fingerprint) WHERE (fingerprint <> decode(repeat('00'::text, 32), 'hex'::text))
+table invitations
+  column id uuid not null
+  column organization uuid not null
+  column inviter uuid not null
+  column token bytea not null
+  column key_version integer
+  column wrapped_key bytea
+  column enc_identifiers bytea
+  column roles text[] not null
+  column documents jsonb not null
+  column mailbox uuid
+  column issued_at timestamp with time zone not null
+  column expires_at timestamp with time zone not null
+  column session uuid
+  column invitee uuid
+  column attached_at timestamp with time zone
+  column acknowledged_at timestamp with time zone
+  column revoked_at timestamp with time zone
+  constraint ck_invitations_attached CHECK (((session IS NULL) OR (invitee IS NULL)))
+  constraint ck_invitations_forgotten CHECK (((enc_identifiers IS NULL) OR ((revoked_at IS NULL) AND (acknowledged_at IS NULL))))
+  constraint ck_invitations_key CHECK ((((enc_identifiers IS NULL) = (wrapped_key IS NULL)) AND ((wrapped_key IS NULL) = (key_version IS NULL))))
+  constraint ck_invitations_outcome CHECK (((revoked_at IS NULL) OR (acknowledged_at IS NULL)))
+  constraint fk_invitations_invitee FOREIGN KEY (invitee) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint fk_invitations_inviter FOREIGN KEY (inviter) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint fk_invitations_mailbox FOREIGN KEY (mailbox) REFERENCES identity.mailboxes(id) ON DELETE RESTRICT
+  constraint fk_invitations_organization FOREIGN KEY (organization) REFERENCES identity.organizations(id) ON DELETE RESTRICT
+  constraint pk_invitations PRIMARY KEY (id)
+  index ix_invitations_invitee using btree (invitee)
+  index ix_invitations_inviter using btree (inviter)
+  index ix_invitations_organization using btree (organization)
+  index ux_invitations_mailbox unique using btree (mailbox) WHERE ((mailbox IS NOT NULL) AND (revoked_at IS NULL) AND (acknowledged_at IS NULL))
+  index ux_invitations_token unique using btree (token)
+table key_ceremonies
+  column subject uuid not null
+  column kind text not null
+  column challenge text not null
+  column upgrading uuid
+  column issued_at timestamp with time zone not null
+  column expires_at timestamp with time zone not null
+  constraint ck_key_ceremonies_expiry CHECK ((expires_at > issued_at))
+  constraint ck_key_ceremonies_kind CHECK ((kind = ANY (ARRAY['apple'::text, 'breakGlass'::text, 'emailCode'::text, 'emailLink'::text, 'google'::text, 'passkey'::text, 'password'::text, 'phoneCode'::text, 'phoneLink'::text, 'recoveryCodes'::text, 'securityKey'::text, 'totp'::text])))
+  constraint fk_key_ceremonies_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE CASCADE
+  constraint fk_key_ceremonies_upgrading FOREIGN KEY (upgrading) REFERENCES identity.authenticators(id) ON DELETE CASCADE
+  constraint pk_key_ceremonies PRIMARY KEY (subject)
+  index ix_key_ceremonies_expires_at using btree (expires_at)
+  index ix_key_ceremonies_upgrading using btree (upgrading)
+table key_rotations
+  column kind text not null
+  column version integer not null
+  column last_subject uuid
+  column processed integer not null
+  column started_at timestamp with time zone not null
+  column completed_at timestamp with time zone
+  column retired_at timestamp with time zone
+  constraint ck_key_rotations_kind CHECK ((kind = ANY (ARRAY['fingerprint-key'::text, 'key-encryption-key'::text])))
+  constraint ck_key_rotations_processed CHECK ((processed >= 0))
+  constraint ck_key_rotations_retired CHECK (((retired_at IS NULL) OR (completed_at IS NOT NULL)))
+  constraint ck_key_rotations_version CHECK ((version >= 1))
+  constraint pk_key_rotations PRIMARY KEY (kind, version)
+table legal_document_translations
+  column document text not null
+  column version text not null
+  column language text not null
+  column translated_text text not null
+  constraint ck_legal_document_translations_language CHECK ((length(TRIM(BOTH FROM language)) > 0))
+  constraint fk_legal_document_translations_version FOREIGN KEY (document, version) REFERENCES identity.legal_document_versions(document, version) ON DELETE CASCADE
+  constraint pk_legal_document_translations PRIMARY KEY (document, version, language)
+table legal_document_versions
+  column document text not null
+  column version text not null
+  column governing_language text not null
+  column governing_text text not null
+  column published_at timestamp with time zone not null
+  constraint ck_legal_document_versions_governing_language CHECK ((length(TRIM(BOTH FROM governing_language)) > 0))
+  constraint ck_legal_document_versions_governing_text CHECK ((length(TRIM(BOTH FROM governing_text)) > 0))
+  constraint pk_legal_document_versions PRIMARY KEY (document, version)
+  index ix_legal_document_versions_current using btree (document, published_at)
+table licences
+  column id uuid not null
+  column kind text not null
+  column name text not null
+  column expires_at timestamp with time zone not null
+  column renewed_at timestamp with time zone
+  constraint pk_licences PRIMARY KEY (id)
+table lifecycle_links
+  column token bytea not null
+  column subject uuid not null
+  column kind text not null
+  column issued_at timestamp with time zone not null
+  constraint ck_lifecycle_links_kind CHECK ((kind = ANY (ARRAY['deletion-cancellation'::text, 'reactivation'::text])))
+  constraint ck_lifecycle_links_token CHECK ((octet_length(token) = 32))
+  constraint fk_lifecycle_links_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_lifecycle_links PRIMARY KEY (token)
+  index ux_lifecycle_links_subject unique using btree (subject)
+table loss_reports
+  column credential uuid not null
+  column subject uuid not null
+  column enc_cancel bytea not null
+  column reported_at timestamp with time zone not null
+  column invalidates_at timestamp with time zone not null
+  column notified_at timestamp with time zone not null
+  column any_delivered boolean not null
+  column held_at timestamp with time zone
+  constraint ck_loss_reports_window CHECK ((invalidates_at > reported_at))
+  constraint fk_loss_reports_credential FOREIGN KEY (credential) REFERENCES identity.authenticators(id) ON DELETE CASCADE
+  constraint fk_loss_reports_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_loss_reports PRIMARY KEY (credential)
+  index ix_loss_reports_invalidates_at using btree (invalidates_at)
+  index ix_loss_reports_notified_at using btree (notified_at)
+  index ix_loss_reports_subject using btree (subject)
+table mailboxes
+  column id uuid not null
+  column fingerprint bytea not null
+  column canonicalisation_version text not null
+  column enc_canonical bytea not null
+  column key_version integer
+  column wrapped_key bytea
+  column reserved_at timestamp with time zone not null
+  column holder uuid
+  column retired_at timestamp with time zone
+  column released_at timestamp with time zone
+  column pushed text
+  column pending text
+  column pending_key uuid
+  column attempts integer not null
+  column next_attempt_at timestamp with time zone
+  column failed_at timestamp with time zone
+  column fingerprint_version integer not null
+  constraint ck_mailboxes_key CHECK ((((holder IS NULL) = (wrapped_key IS NOT NULL)) AND ((wrapped_key IS NULL) = (key_version IS NULL))))
+  constraint ck_mailboxes_pending CHECK (((pending IS NULL) OR (pending = ANY (ARRAY['disabled'::text, 'enabled'::text, 'removed'::text]))))
+  constraint ck_mailboxes_pending_key CHECK (((pending IS NULL) = (pending_key IS NULL)))
+  constraint ck_mailboxes_pushed CHECK (((pushed IS NULL) OR (pushed = ANY (ARRAY['disabled'::text, 'enabled'::text, 'removed'::text]))))
+  constraint ck_mailboxes_released CHECK (((released_at IS NULL) OR ((holder IS NULL) AND (retired_at IS NULL))))
+  constraint fk_mailboxes_holder FOREIGN KEY (holder) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_mailboxes PRIMARY KEY (id)
+  index ix_mailboxes_holder using btree (holder)
+  index ux_mailboxes_fingerprint unique using btree (fingerprint) WHERE (fingerprint <> decode(repeat('00'::text, 32), 'hex'::text))
+table maintenance_log
+  column id uuid not null
+  column task text not null
+  column performed_at timestamp with time zone not null
+  column actor uuid not null
+  column note text
+  constraint pk_maintenance_log PRIMARY KEY (id)
+table memberships
+  column id uuid not null
+  column subject uuid not null
+  column organization uuid not null
+  column created_at timestamp with time zone not null
+  column ended_at timestamp with time zone
+  column acknowledged_at timestamp with time zone
+  column acknowledged_documents jsonb
+  constraint ck_memberships_acknowledged CHECK (((acknowledged_at IS NULL) = (acknowledged_documents IS NULL)))
+  constraint ck_memberships_ended CHECK (((ended_at IS NULL) OR (ended_at >= created_at)))
+  constraint fk_memberships_organization FOREIGN KEY (organization) REFERENCES identity.organizations(id) ON DELETE RESTRICT
+  constraint fk_memberships_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_memberships PRIMARY KEY (id)
+  index ix_memberships_organization using btree (organization)
+  index ix_memberships_subject using btree (subject)
+table nonexistence_notices
+  column id uuid not null
+  column destination bytea not null
+  column at timestamp with time zone not null
+  column fingerprint_version integer not null
+  constraint pk_nonexistence_notices PRIMARY KEY (id)
+  index ix_nonexistence_notices_destination_at using btree (destination, at)
+table objections
+  column subject uuid not null
+  column purpose text not null
+  column notice_version text not null
+  column mechanism text not null
+  column recorded_at timestamp with time zone not null
+  column withdrawn_at timestamp with time zone
+  constraint ck_objections_mechanism CHECK ((mechanism = ANY (ARRAY['administrator'::text, 'dashboard'::text, 'reconsent'::text, 'registration'::text])))
+  constraint ck_objections_purpose CHECK ((length(TRIM(BOTH FROM purpose)) > 0))
+  constraint fk_objections_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_objections PRIMARY KEY (subject, purpose)
+table oidc_authorizations
+  column id uuid not null
+  column concurrency_token uuid not null
+  column application_id text not null
+  column subject uuid not null
+  column status text not null
+  column type text not null
+  column scopes text[] not null
+  column created_at timestamp with time zone
+  column properties jsonb not null
+  constraint fk_oidc_authorizations_application_id FOREIGN KEY (application_id) REFERENCES identity.oidc_clients(client_id) ON DELETE CASCADE
+  constraint fk_oidc_authorizations_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE CASCADE
+  constraint pk_oidc_authorizations PRIMARY KEY (id)
+  index ix_oidc_authorizations_application_id using btree (application_id)
+  index ix_oidc_authorizations_created_at using btree (created_at)
+  index ix_oidc_authorizations_subject using btree (subject)
+table oidc_clients
+  column client_id text not null
+  column name text not null
+  column kind text not null
+  column redirect text not null
+  column secret bytea not null
+  column scopes text[] not null
+  column previous_secret bytea
+  column previous_secret_until timestamp with time zone
+  constraint ck_oidc_clients_kind CHECK ((kind = ANY (ARRAY['browser-application'::text, 'protocol'::text])))
+  constraint ck_oidc_clients_previous CHECK (((previous_secret IS NULL) = (previous_secret_until IS NULL)))
+  constraint pk_oidc_clients PRIMARY KEY (client_id)
+table oidc_scopes
+  column id uuid not null
+  column name text not null
+  column display_name text
+  column display_names jsonb not null
+  column description text
+  column descriptions jsonb not null
+  column resources text[] not null
+  column properties jsonb not null
+  constraint pk_oidc_scopes PRIMARY KEY (id)
+  index ux_oidc_scopes_name unique using btree (name)
+table oidc_tokens
+  column id uuid not null
+  column concurrency_token uuid not null
+  column application_id text not null
+  column authorization_id uuid
+  column subject uuid
+  column status text not null
+  column type text not null
+  column reference_id text
+  column payload text
+  column created_at timestamp with time zone
+  column expires_at timestamp with time zone
+  column redeemed_at timestamp with time zone
+  column properties jsonb not null
+  constraint fk_oidc_tokens_application_id FOREIGN KEY (application_id) REFERENCES identity.oidc_clients(client_id) ON DELETE CASCADE
+  constraint fk_oidc_tokens_authorization_id FOREIGN KEY (authorization_id) REFERENCES identity.oidc_authorizations(id) ON DELETE CASCADE
+  constraint fk_oidc_tokens_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE CASCADE
+  constraint pk_oidc_tokens PRIMARY KEY (id)
+  index ix_oidc_tokens_application_id using btree (application_id)
+  index ix_oidc_tokens_authorization_id using btree (authorization_id)
+  index ix_oidc_tokens_expires_at using btree (expires_at)
+  index ix_oidc_tokens_subject using btree (subject)
+  index ux_oidc_tokens_reference_id unique using btree (reference_id)
+table organization_domains
+  column token text not null
+  column organization uuid not null
+  column domain text not null
+  column added_at timestamp with time zone not null
+  column verified_at timestamp with time zone
+  column checked_at timestamp with time zone
+  column last_check_passed boolean
+  column removed_at timestamp with time zone
+  constraint ck_organization_domains_verified CHECK (((verified_at IS NULL) OR (checked_at IS NOT NULL)))
+  constraint fk_organization_domains_organization FOREIGN KEY (organization) REFERENCES identity.organizations(id) ON DELETE RESTRICT
+  constraint pk_organization_domains PRIMARY KEY (token)
+  index ux_organization_domains_organization_domain unique using btree (organization, domain) WHERE (removed_at IS NULL)
+table organizations
+  column id uuid not null
+  column name text not null
+  column created_at timestamp with time zone not null
+  column deletion_requested_at timestamp with time zone
+  column erased_at timestamp with time zone
+  column administrative boolean not null default false
+  column canonical_name text
+  constraint ck_organizations_erased CHECK (((erased_at IS NULL) OR (deletion_requested_at IS NOT NULL)))
+  constraint pk_organizations PRIMARY KEY (id)
+  index ix_organizations_deletion_requested_at using btree (deletion_requested_at) WHERE ((deletion_requested_at IS NOT NULL) AND (erased_at IS NULL))
+  index ux_organizations_administrative unique using btree (administrative) WHERE administrative
+table outbox
+  column id uuid not null
+  column subject uuid not null
+  column kind text not null
+  column raised_at timestamp with time zone not null
+  column restricted boolean not null
+  column reason text not null
+  column status text not null
+  column attempts integer not null
+  column next_attempt_at timestamp with time zone not null
+  constraint ck_outbox_attempts CHECK ((attempts >= 0))
+  constraint ck_outbox_kind CHECK ((kind = ANY (ARRAY['erasure-requested'::text, 'export-requested'::text, 'restriction-changed'::text, 'takedown-executed'::text])))
+  constraint ck_outbox_reason CHECK ((reason = ANY (ARRAY['erasure-request'::text, 'minor-takedown'::text, 'organization-erasure'::text])))
+  constraint ck_outbox_status CHECK ((status = ANY (ARRAY['awaiting-subscribers'::text, 'complete'::text, 'failed'::text])))
+  constraint fk_outbox_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_outbox PRIMARY KEY (id)
+  index ix_outbox_due using btree (next_attempt_at) WHERE (status = 'awaiting-subscribers'::text)
+  index ix_outbox_subject using btree (subject)
+table outbox_confirmations
+  column delivery uuid not null
+  column subscriber text not null
+  column confirmed_at timestamp with time zone not null
+  constraint ck_outbox_confirmations_subscriber CHECK ((length(TRIM(BOTH FROM subscriber)) > 0))
+  constraint fk_outbox_confirmations_delivery FOREIGN KEY (delivery) REFERENCES identity.outbox(id) ON DELETE CASCADE
+  constraint pk_outbox_confirmations PRIMARY KEY (delivery, subscriber)
+table passwords
+  column subject uuid not null
+  column hash text not null
+  column meets_single_factor_floor boolean not null
+  column set_at timestamp with time zone not null
+  column change_required boolean not null default false
+  constraint fk_passwords_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_passwords PRIMARY KEY (subject)
+table policy_raises
+  column id uuid not null
+  column organization uuid
+  column field text not null
+  column value text not null
+  column raised_at timestamp with time zone not null
+  constraint ck_policy_raises_field CHECK ((field = ANY (ARRAY['credentialRedundancy'::text, 'requiredAssurance'::text])))
+  constraint fk_policy_raises_organization FOREIGN KEY (organization) REFERENCES identity.organizations(id) ON DELETE RESTRICT
+  constraint pk_policy_raises PRIMARY KEY (id)
+  index ux_policy_raises_field unique using btree (field) WHERE (organization IS NULL)
+  index ux_policy_raises_organization_field unique using btree (organization, field) WHERE (organization IS NOT NULL)
+table preauthentication_sessions
+  column fingerprint bytea not null
+  column csrf_fingerprint bytea not null
+  column created_at timestamp with time zone not null
+  column expires_at timestamp with time zone not null
+  column registration uuid
+  column enrolment uuid
+  column signon_key_version integer
+  column signon_return text
+  column signon_state bytea
+  column signon_verifier bytea
+  constraint ck_preauthentication_sessions_expires_at CHECK ((expires_at > created_at))
+  constraint ck_preauthentication_sessions_fingerprint CHECK (((octet_length(fingerprint) = 32) AND (octet_length(csrf_fingerprint) = 32)))
+  constraint ck_preauthentication_sessions_signon CHECK ((num_nulls(signon_state, signon_verifier, signon_key_version, signon_return) = ANY (ARRAY[0, 4])))
+  constraint fk_preauthentication_sessions_registration FOREIGN KEY (registration) REFERENCES identity.registration_sessions(id) ON DELETE SET NULL
+  constraint pk_preauthentication_sessions PRIMARY KEY (fingerprint)
+  index ix_preauthentication_sessions_expires_at using btree (expires_at)
+  index ux_preauthentication_sessions_enrolment unique using btree (enrolment) WHERE (enrolment IS NOT NULL)
+  index ux_preauthentication_sessions_registration unique using btree (registration) WHERE (registration IS NOT NULL)
+table privacy_exports
+  column id uuid not null
+  column subject uuid not null
+  column assembled_at timestamp with time zone not null
+  constraint fk_privacy_exports_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_privacy_exports PRIMARY KEY (id)
+  index ix_privacy_exports_subject using btree (subject, assembled_at)
+table privacy_requests
+  column id uuid not null
+  column subject uuid not null
+  column type text not null
+  column detail text not null
+  column received_at date not null
+  column created_at timestamp with time zone not null
+  column decision_due timestamp with time zone not null
+  column warn_at timestamp with time zone not null
+  column escalate_at timestamp with time zone not null
+  column status text not null
+  column decided_at timestamp with time zone
+  column decision_reason text
+  column channel text
+  column identity_confirmation text
+  column warned_at timestamp with time zone
+  column escalated_at timestamp with time zone
+  constraint ck_privacy_requests_status CHECK ((status = ANY (ARRAY['deemed-refused-by-lapse'::text, 'fulfilled'::text, 'granted-by-lapse'::text, 'open'::text, 'refused'::text])))
+  constraint ck_privacy_requests_type CHECK ((type = ANY (ARRAY['erasure'::text, 'rectification'::text, 'restriction'::text])))
+  constraint fk_privacy_requests_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_privacy_requests PRIMARY KEY (id)
+  index ix_privacy_requests_open using btree (warn_at) WHERE (status = 'open'::text)
+  index ix_privacy_requests_subject using btree (subject)
+table profile_photos
+  column subject uuid not null
+  column enc_image bytea not null
+  column updated_at timestamp with time zone not null
+  constraint fk_profile_photos_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_profile_photos PRIMARY KEY (subject)
+table profiles
+  column subject uuid not null
+  column enc_display_name bytea
+  column enc_legal_name bytea
+  column enc_date_of_birth bytea
+  constraint fk_profiles_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_profiles PRIMARY KEY (subject)
+table provider_attempts
+  column id uuid not null
+  column preauthentication bytea
+  column session uuid
+  column provider text not null
+  column intent text not null
+  column state bytea not null
+  column nonce bytea not null
+  column verifier bytea
+  column key_version integer
+  column return_to text not null
+  column created_at timestamp with time zone not null
+  constraint ck_provider_attempts_binding CHECK ((num_nonnulls(preauthentication, session) = 1))
+  constraint ck_provider_attempts_fingerprints CHECK (((octet_length(state) = 32) AND (octet_length(nonce) = 32)))
+  constraint ck_provider_attempts_intent CHECK ((intent = ANY (ARRAY['link'::text, 'register'::text, 'signin'::text])))
+  constraint ck_provider_attempts_provider CHECK ((provider = ANY (ARRAY['apple'::text, 'breakGlass'::text, 'emailCode'::text, 'emailLink'::text, 'google'::text, 'passkey'::text, 'password'::text, 'phoneCode'::text, 'phoneLink'::text, 'recoveryCodes'::text, 'securityKey'::text, 'totp'::text])))
+  constraint ck_provider_attempts_verifier CHECK ((num_nulls(verifier, key_version) = ANY (ARRAY[0, 2])))
+  constraint fk_provider_attempts_preauthentication FOREIGN KEY (preauthentication) REFERENCES identity.preauthentication_sessions(fingerprint) ON DELETE CASCADE
+  constraint fk_provider_attempts_session FOREIGN KEY (session) REFERENCES identity.sessions(id) ON DELETE CASCADE
+  constraint pk_provider_attempts PRIMARY KEY (id)
+  index ux_provider_attempts_preauthentication unique using btree (preauthentication) WHERE (preauthentication IS NOT NULL)
+  index ux_provider_attempts_session unique using btree (session) WHERE (session IS NOT NULL)
+table raised_alerts
+  column id uuid not null
+  column raised_at timestamp with time zone not null
+  column idempotency_key character varying(320) not null
+  column condition text not null
+  column details jsonb not null
+  constraint pk_raised_alerts PRIMARY KEY (id)
+table read_baselines
+  column actor uuid not null
+  column daily_mean numeric not null
+  constraint pk_read_baselines PRIMARY KEY (actor)
+table read_volume
+  column actor uuid not null
+  column day date not null
+  column records bigint not null
+  constraint pk_read_volume PRIMARY KEY (actor, day)
+  index ix_read_volume_day using btree (day)
+table recovery_approvals
+  column subject uuid not null
+  column approver uuid not null
+  column approved_at timestamp with time zone not null
+  column enc_channel bytea not null
+  column spent_at timestamp with time zone
+  constraint fk_recovery_approvals_approver FOREIGN KEY (approver) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint fk_recovery_approvals_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_recovery_approvals PRIMARY KEY (subject, approver, approved_at)
+  index ix_recovery_approvals_approver using btree (approver, approved_at)
+table recovery_code_sets
+  column subject uuid not null
+  column generated_at timestamp with time zone not null
+  column viewed_at timestamp with time zone
+  column exported_at timestamp with time zone
+  column reminded_at timestamp with time zone
+  constraint fk_recovery_code_sets_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_recovery_code_sets PRIMARY KEY (subject)
+table recovery_codes
+  column subject uuid not null
+  column ordinal integer not null
+  column hash text not null
+  column used_at timestamp with time zone
+  constraint fk_recovery_codes_set FOREIGN KEY (subject) REFERENCES identity.recovery_code_sets(subject) ON DELETE CASCADE
+  constraint pk_recovery_codes PRIMARY KEY (subject, ordinal)
+table recovery_links
+  column token bytea not null
+  column subject uuid not null
+  column purpose text not null
+  column issued_at timestamp with time zone not null
+  column expires_at timestamp with time zone not null
+  column approver uuid
+  column mailbox_lost boolean not null
+  column session uuid
+  column spent_at timestamp with time zone
+  constraint ck_recovery_links_expiry CHECK ((expires_at > issued_at))
+  constraint ck_recovery_links_purpose CHECK ((purpose = ANY (ARRAY['enrolment'::text, 'self-service'::text])))
+  constraint ck_recovery_links_session CHECK (((session IS NULL) OR (spent_at IS NOT NULL)))
+  constraint ck_recovery_links_token CHECK ((octet_length(token) = 32))
+  constraint fk_recovery_links_approver FOREIGN KEY (approver) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint fk_recovery_links_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_recovery_links PRIMARY KEY (token)
+  index ix_recovery_links_approver using btree (approver)
+  index ix_recovery_links_expires_at using btree (expires_at)
+  index ux_recovery_links_session unique using btree (session) WHERE (session IS NOT NULL)
+  index ux_recovery_links_subject_purpose unique using btree (subject, purpose) WHERE (spent_at IS NULL)
+table registration_links
+  column fingerprint bytea not null
+  column session uuid not null
+  constraint fk_registration_links_session FOREIGN KEY (session) REFERENCES identity.registration_sessions(id) ON DELETE CASCADE
+  constraint pk_registration_links PRIMARY KEY (fingerprint)
+  index ix_registration_links_session using btree (session)
+table registration_sessions
+  column id uuid not null
+  column provisional_subject uuid not null
+  column expires_at timestamp with time zone not null
+  column key_version integer not null
+  column wrapped_key bytea not null
+  column enc_session bytea not null
+  constraint pk_registration_sessions PRIMARY KEY (id)
+  index ix_registration_sessions_expires_at using btree (expires_at)
+table registration_sources
+  column id uuid not null
+  column source bytea not null
+  column at timestamp with time zone not null
+  column fingerprint_version integer not null
+  constraint pk_registration_sources PRIMARY KEY (id)
+  index ix_registration_sources_source_at using btree (source, at)
+table resources
+  column resource_type text not null
+  column resource_id text not null
+  column organization uuid not null
+  column contained_in_type text
+  column contained_in_id text
+  column subject uuid
+  constraint ck_resources_contained_in CHECK (((contained_in_type IS NULL) = (contained_in_id IS NULL)))
+  constraint fk_resources_organization FOREIGN KEY (organization) REFERENCES identity.organizations(id) ON DELETE RESTRICT
+  constraint pk_resources PRIMARY KEY (resource_type, resource_id)
+  index ix_resources_contained_in using btree (contained_in_type, contained_in_id)
+  index ix_resources_organization using btree (organization)
+table role_permissions
+  column role text not null
+  column permission text not null
+  constraint fk_role_permissions_role FOREIGN KEY (role) REFERENCES identity.roles(name) ON DELETE CASCADE
+  constraint pk_role_permissions PRIMARY KEY (role, permission)
+table roles
+  column name text not null
+  constraint pk_roles PRIMARY KEY (name)
+table send_counters
+  column key bytea not null
+  column sent_at timestamp with time zone[] not null
+  column fingerprint_version integer not null
+  constraint pk_send_counters PRIMARY KEY (key)
+  index ix_send_counters_last_sent_at using btree ((sent_at[((cardinality(sent_at) - 1) + 1)]))
+table send_grants
+  column key bytea not null
+  column credit integer not null
+  column fingerprint_version integer not null
+  constraint ck_send_grants_credit CHECK ((credit > 0))
+  constraint pk_send_grants PRIMARY KEY (key)
+table send_outbox
+  column id uuid not null
+  column recorded_at timestamp with time zone not null
+  column subject uuid
+  column key_version integer not null
+  column wrapped_key bytea not null
+  column enc_message bytea not null
+  column attempts integer not null default 0
+  column next_attempt_at timestamp with time zone not null default '-infinity'::timestamp with time zone
+  column taken_languages jsonb not null default '[]'::jsonb
+  constraint pk_send_outbox PRIMARY KEY (id)
+  index ix_send_outbox_due using btree (next_attempt_at)
+table sends
+  column reference bytea not null
+  column counted bytea[] not null
+  column sent_at timestamp with time zone not null
+  column settles_at timestamp with time zone not null
+  column fingerprint_version integer not null
+  constraint pk_sends PRIMARY KEY (reference)
+  index ix_sends_settles_at using btree (settles_at)
+table sessions
+  column id uuid not null
+  column spine uuid not null
+  column type text not null
+  column subject uuid not null
+  column secret_fingerprint bytea not null
+  column created_at timestamp with time zone not null
+  column last_seen_at timestamp with time zone not null
+  column attained text not null
+  column attained_at timestamp with time zone not null
+  column phishing_resistant boolean not null
+  column phishing_resistant_at timestamp with time zone
+  column origin_browser character varying(64) not null
+  column origin_os character varying(64) not null
+  column origin_place bytea not null
+  column last_seen_browser character varying(64) not null
+  column last_seen_os character varying(64) not null
+  column last_seen_place bytea not null
+  column idle_expiry timestamp with time zone not null
+  column absolute_expiry timestamp with time zone not null
+  column ended_at timestamp with time zone
+  column satisfies_every_gate boolean not null
+  column csrf_fingerprint bytea not null default '\x'::bytea
+  constraint ck_sessions_attained CHECK ((attained = ANY (ARRAY['aal1'::text, 'aal2'::text, 'aal3'::text, 'delegated'::text])))
+  constraint ck_sessions_phishing_resistant CHECK ((phishing_resistant = (phishing_resistant_at IS NOT NULL)))
+  constraint ck_sessions_type CHECK ((type = ANY (ARRAY['auth'::text, 'oidc-token'::text, 'per-app'::text])))
+  constraint fk_sessions_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_sessions PRIMARY KEY (id)
+  index ix_sessions_spine using btree (spine)
+  index ix_sessions_subject using btree (subject, ended_at)
+  index ux_sessions_secret_fingerprint unique using btree (secret_fingerprint)
+table settings
+  column key text not null
+  column value text not null
+  constraint pk_settings PRIMARY KEY (key)
+table signin_challenges
+  column handle bytea not null
+  column subject uuid
+  column webauthn text not null
+  column created_at timestamp with time zone not null
+  column expires_at timestamp with time zone not null
+  column presented text[] not null
+  column email uuid
+  column fingerprint_version integer
+  column identifier bytea
+  constraint ck_signin_challenges_handle CHECK ((octet_length(handle) = 32))
+  constraint ck_signin_challenges_identifier CHECK ((((identifier IS NULL) = (fingerprint_version IS NULL)) AND ((identifier IS NULL) OR (octet_length(identifier) = 32))))
+  constraint fk_signin_challenges_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_signin_challenges PRIMARY KEY (handle)
+  index ix_signin_challenges_expires_at using btree (expires_at)
+  index ix_signin_challenges_subject using btree (subject)
+table signin_links
+  column token bytea not null
+  column subject uuid not null
+  column factor text not null
+  column enc_code bytea not null
+  column browser bytea
+  column issued_at timestamp with time zone not null
+  column expires_at timestamp with time zone not null
+  column wrong_attempts integer not null
+  column email uuid
+  constraint ck_signin_links_browser CHECK (((browser IS NULL) OR (octet_length(browser) = 32)))
+  constraint ck_signin_links_factor CHECK ((factor = ANY (ARRAY['apple'::text, 'breakGlass'::text, 'emailCode'::text, 'emailLink'::text, 'google'::text, 'passkey'::text, 'password'::text, 'phoneCode'::text, 'phoneLink'::text, 'recoveryCodes'::text, 'securityKey'::text, 'totp'::text])))
+  constraint ck_signin_links_token CHECK ((octet_length(token) = 32))
+  constraint ck_signin_links_wrong_attempts CHECK ((wrong_attempts >= 0))
+  constraint fk_signin_links_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
+  constraint pk_signin_links PRIMARY KEY (token)
+  index ix_signin_links_expires_at using btree (expires_at)
+  index ux_signin_links_subject_factor unique using btree (subject, factor)
+table signing_keys
+  column key_id text not null
+  column algorithm text not null
+  column public_key bytea not null
+  column private_key bytea not null
+  column key_version integer not null
+  column created_at timestamp with time zone not null
+  column superseded_at timestamp with time zone
+  column retires_at timestamp with time zone
+  constraint ck_signing_keys_retirement CHECK ((((superseded_at IS NULL) AND (retires_at IS NULL)) OR ((superseded_at IS NOT NULL) AND (retires_at > superseded_at))))
+  constraint ck_signing_keys_version CHECK ((key_version >= 1))
+  constraint pk_signing_keys PRIMARY KEY (key_id)
+  index ix_signing_keys_key_version using btree (key_version)
+  index ix_signing_keys_retires_at using btree (retires_at)
+table sms_balance_readings
+  column read_at timestamp with time zone not null
+  column balance numeric(18,4) not null
+  constraint pk_sms_balance_readings PRIMARY KEY (read_at)
+table subject_keys
+  column subject uuid not null
+  column format_marker smallint not null
+  column key_version integer not null
+  column wrapped_key bytea not null
+  constraint ck_subject_keys_format CHECK ((((format_marker = 1) AND (octet_length(wrapped_key) = 40)) OR ((format_marker = 0) AND (wrapped_key = decode(repeat('00'::text, 32), 'hex'::text)))))
+  constraint ck_subject_keys_version CHECK ((key_version >= 1))
+  constraint pk_subject_keys PRIMARY KEY (subject)
+  index ix_subject_keys_key_version using btree (key_version)
+table throttle_counters
+  column scope text not null
+  column key bytea not null
+  column failures integer not null
+  column at timestamp with time zone not null
+  column fingerprint_version integer not null
+  constraint ck_throttle_counters_scope CHECK ((scope = ANY (ARRAY['account'::text, 'identifier'::text, 'source'::text])))
+  constraint pk_throttle_counters PRIMARY KEY (scope, key)
+table username_holds
+  column fingerprint bytea not null
+  column held_from timestamp with time zone not null
+  column releases_at timestamp with time zone not null
+  column fingerprint_version integer not null
+  constraint ck_username_holds_fingerprint CHECK ((octet_length(fingerprint) = 32))
+  constraint pk_username_holds PRIMARY KEY (fingerprint)
+  index ix_username_holds_releases_at using btree (releases_at)
+table verification_codes
+  column holder bytea not null
+  column code bytea not null
+  column issued_at timestamp with time zone not null
+  column expires_at timestamp with time zone not null
+  column attempts integer not null
+  constraint ck_verification_codes_attempts CHECK ((attempts >= 0))
+  constraint ck_verification_codes_holder CHECK ((octet_length(holder) > 0))
+  constraint pk_verification_codes PRIMARY KEY (holder)
+  index ix_verification_codes_expires_at using btree (expires_at)

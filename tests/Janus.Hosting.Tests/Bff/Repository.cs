@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 
 namespace Janus.Hosting.Tests.Bff;
 
@@ -39,6 +40,18 @@ internal static class Repository
     /// <returns>What it holds.</returns>
     public static string Hosting(string path) => File.ReadAllText(
         Path.Combine(Root(), "src", "Janus.Hosting", Path.Combine(path.Split('/'))));
+
+    /// <summary>
+    /// Every file of one shipped project, leaving out what the build writes.
+    /// </summary>
+    /// <param name="project">The project, named as its assembly is.</param>
+    /// <returns>The paths.</returns>
+    public static string[] Project(string project) =>
+    [
+        .. Directory
+            .GetFiles(Path.Combine(Root(), "src", project), "*.cs", SearchOption.AllDirectories)
+            .Where(path => !path.Split(Path.DirectorySeparatorChar).Any(folder => folder is "bin" or "obj")),
+    ];
 
     private static string Root()
     {

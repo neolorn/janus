@@ -7,12 +7,14 @@ namespace Janus.Core;
 /// The name shown where a human needs to know who an account is.
 /// </summary>
 /// <remarks>
-/// Implements REG-PROF-001, IDN-ATTR-007 and IDN-ACCT-005. The profile is Nickname
+/// Implements REG-PROF-001, IDN-ATTR-007, IDN-ACCT-005 and CONV-DESIGN-004. The
+/// profile is Nickname
 /// (RFC 8266), which settles the spaces and the normalization form and leaves the case
 /// as it was entered, because a display name is shown back as the person wrote it. The
 /// bound is in bytes, not characters: a name in a script that costs three bytes a
 /// character is shorter in characters than one in Latin, which is the point of the
-/// byte bound in the profile.
+/// byte bound in the profile. A default instance was never read, so it has no name to
+/// give and no row can carry it.
 /// </remarks>
 public readonly record struct DisplayName
 {
@@ -33,7 +35,8 @@ public readonly record struct DisplayName
     /// <summary>
     /// The display name in the profile's form, which is what is shown.
     /// </summary>
-    public string Value => _value ?? string.Empty;
+    /// <exception cref="InvalidOperationException">The display name was never set.</exception>
+    public string Value => _value ?? throw new InvalidOperationException("The display name was never set.");
 
     /// <summary>
     /// Reads a display name as it was entered and returns it in the profile's form.
@@ -67,5 +70,6 @@ public readonly record struct DisplayName
     }
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">The display name was never set.</exception>
     public override string ToString() => Value;
 }

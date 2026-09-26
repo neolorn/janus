@@ -58,8 +58,8 @@ public interface IGroups
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Success, or the refusal: <c>authz.group.inuse</c> where anything names it,
-    /// <c>api.request.malformed</c> naming <c>id</c> where the deployment holds no such
-    /// group.
+    /// <c>authz.denied</c> where the caller does not hold <c>group:manage</c> where the
+    /// group belongs, which no caller does where the deployment holds no such group.
     /// </returns>
     ValueTask<Result> RemoveAsync(
         AccessContext context,

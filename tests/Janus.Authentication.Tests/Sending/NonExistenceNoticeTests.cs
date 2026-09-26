@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Janus.Authentication.Sending;
 using Janus.Core;
@@ -8,9 +9,10 @@ using Xunit;
 namespace Janus.Authentication.Tests.Sending;
 
 /// <summary>
-/// The answer to a request made for an address no account holds: the address itself
-/// is told, once per window, in a message that names nobody (AUTH-ABUSE-003,
-/// OPS-ALERT-001).
+/// The answer to a request whose message is not going out: an address no account
+/// holds is told, once per window, in a message that names nobody, and every other
+/// such ask counts against the sending restrictions as the message would have
+/// (AUTH-ABUSE-002, AUTH-ABUSE-003, OPS-ALERT-001).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class NonExistenceNoticeTests : IAsyncDisposable
@@ -22,6 +24,7 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
     private readonly ConfigurationInMemory _configuration = new();
     private readonly NoticeLedgerInMemory _notices = new();
     private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly SendingRestrictionsInMemory _restrictions = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
@@ -37,7 +40,7 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
     }
 
     private NonExistenceNotice Notice =>
-        new(_configuration, _notifications, _notices, _work, _events, _clock);
+        new(_configuration, _notifications, _restrictions, _notices, _work, _events, _clock);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync() => await _work.DisposeAsync();
@@ -101,19 +104,138 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
         Assert.Equal(AlertSeverity.Normal, raised.Severity);
     }
 
-    private async Task<bool> ToldAsync(string address)
+    /// <summary>
+    /// AUTH-ABUSE-002 AC3, BFF-ABUSE-002 AC1: an ask the window has already answered
+    /// sends nothing and still counts against the sending restrictions as the message
+    /// it asked for, from the same source and in the language the notice went in.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_002_AC3_AnAskTheWindowAnsweredCountsAsTheMessageWouldAsync()
     {
-        if (!EmailAddress.TryParse(address, out EmailAddress destination))
+        Assert.True(await ToldAsync("nobody@example.test"));
+        Assert.Empty(_restrictions.Drawn);
+
+        Assert.False(await ToldAsync("nobody@example.test"));
+
+        SendRequest drawn = Assert.Single(_restrictions.Drawn);
+        SendRequest told = Assert.Single(_notifications.Mail);
+
+        Assert.Equal("nobody@example.test", drawn.Destination.Canonical);
+        Assert.Equal(MessageKind.SignInLink, drawn.Message);
+        Assert.Equal(RestrictionPurpose.SignIn, drawn.Purpose);
+        Assert.Equal(Source, drawn.Source);
+        Assert.Equal(told.Language, drawn.Language);
+        Assert.Null(drawn.Subject);
+        Assert.Empty(drawn.Values);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-002 AC3, AUTH-ABUSE-003: an account the ask cannot reach is told
+    /// nothing, leaves the window as it was, and counts as the message would have.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_002_AC3_AnAccountTheAskCannotReachIsToldNothingAndCountedAsync()
+    {
+        Result answered = await AnswerAsync(Address("person@example.test"), unheld: false);
+
+        Assert.True(answered.Match(() => true, _ => false));
+        Assert.Empty(_notifications.Sent);
+        Assert.Empty(_notices.Told);
+        Assert.Equal("person@example.test", Assert.Single(_restrictions.Drawn).Destination.Canonical);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-002 AC3, AUTH-ABUSE-003: a number no account holds is told nothing,
+    /// because the notice is mail's alone, and counts as the text would have.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_002_AC3_ANumberNoAccountHoldsIsToldNothingAndCountedAsync()
+    {
+        if (!PhoneNumber.TryParse("+441632960011", out PhoneNumber number))
         {
-            throw new Xunit.Sdk.XunitException("The address does not parse.");
+            throw new Xunit.Sdk.XunitException("The number does not parse.");
         }
 
-        return (await Notice.TellAsync(
-            destination,
+        Result answered = await AnswerAsync(SendDestination.Of(number), unheld: true);
+
+        Assert.True(answered.Match(() => true, _ => false));
+        Assert.Empty(_notifications.Sent);
+        Assert.Empty(_notices.Told);
+        Assert.Equal(SendKind.Sms, Assert.Single(_restrictions.Drawn).Kind);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-002 AC3, BFF-ABUSE-002 AC1: where the restrictions refuse the send an
+    /// ask stands for, the refusal is the answer, as it is where the message is sent.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_002_AC3_ARefusalOfTheRestrictionsIsTheAnswerAsync()
+    {
+        Assert.True(await ToldAsync("nobody@example.test"));
+
+        var refusal = Error.From(ErrorCodes.RestrictionExceeded);
+        _restrictions.Refusal = refusal;
+
+        Result answered = await AnswerAsync(Address("nobody@example.test"), unheld: true);
+
+        Assert.Same(refusal, answered.Match(() => (Error?)null, error => error));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-002 AC3: the notice is the message the ask asked for, so it answers
+    /// to that message's restrictions and is refused where the message would be.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_002_AC3_TheNoticeAnswersToTheRestrictionsOfTheAskAsync()
+    {
+        Assert.True(await ToldAsync("nobody@example.test"));
+
+        Result recovered = await Notice.AnswerAsync(
+            Address("somebody@example.test"),
+            MessageKind.RecoveryLink,
+            RestrictionPurpose.Notification,
             Source,
             "en",
-            TestContext.Current.CancellationToken)).Match(
-            told => told,
+            unheld: true,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(recovered.Match(() => true, _ => false));
+        Assert.All(_notifications.Mail, told => Assert.Equal(MessageKind.NoAccount, told.Message));
+        Assert.Equal(
+            [RestrictionPurpose.SignIn, RestrictionPurpose.Notification],
+            _notifications.Mail.Select(told => told.Purpose));
+
+        var refusal = Error.From(ErrorCodes.RestrictionExceeded);
+        _notifications.Refusal = refusal;
+
+        Result refused = await AnswerAsync(Address("elsewhere@example.test"), unheld: true);
+
+        Assert.Same(refusal, refused.Match(() => (Error?)null, error => error));
+    }
+
+    private static SendDestination Address(string address) =>
+        EmailAddress.TryParse(address, out EmailAddress destination)
+            ? SendDestination.Of(destination)
+            : throw new Xunit.Sdk.XunitException("The address does not parse.");
+
+    private ValueTask<Result> AnswerAsync(SendDestination destination, bool unheld) =>
+        Notice.AnswerAsync(
+            destination,
+            MessageKind.SignInLink,
+            RestrictionPurpose.SignIn,
+            Source,
+            "en",
+            unheld,
+            TestContext.Current.CancellationToken);
+
+    private async Task<bool> ToldAsync(string address)
+    {
+        int before = _notifications.Mail.Count;
+
+        Result answered = await AnswerAsync(Address(address), unheld: true);
+
+        return answered.Match(
+            () => _notifications.Mail.Count > before,
             error => throw new Xunit.Sdk.XunitException($"The notice was refused: {error.Code}."));
     }
 }

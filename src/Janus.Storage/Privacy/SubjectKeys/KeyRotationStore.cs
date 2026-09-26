@@ -48,7 +48,8 @@ internal sealed class KeyRotationStore(
         UNION SELECT key_version FROM identity.send_outbox
         UNION SELECT key_version FROM identity.signing_keys
         UNION SELECT signon_key_version FROM identity.preauthentication_sessions
-            WHERE signon_key_version IS NOT NULL;
+            WHERE signon_key_version IS NOT NULL
+        UNION SELECT key_version FROM identity.provider_attempts WHERE key_version IS NOT NULL;
         """;
 
     private const string First =
@@ -94,6 +95,7 @@ internal sealed class KeyRotationStore(
         new("send_outbox", "id", "key_version", "wrapped_key"),
         new("signing_keys", "key_id", "key_version", "private_key"),
         new("preauthentication_sessions", "fingerprint", "signon_key_version", "signon_verifier"),
+        new("provider_attempts", "id", "key_version", "verifier"),
     ];
 
     /// <inheritdoc/>

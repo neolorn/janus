@@ -227,9 +227,15 @@ internal static class StorageRegistration
         services.AddScoped<IPreAuthenticationStore>(provider => new PreAuthenticationStore(
             provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys));
-        services.AddScoped<IChallengeStore, ChallengeStore>();
+        services.AddScoped<IChallengeStore>(provider => new ChallengeStore(
+            provider.GetRequiredService<StoreContext>(),
+            fingerprintKeys));
         services.AddScoped<IVerificationCodeStore, VerificationCodeStore>();
         services.AddScoped<IKeyCeremonyStore, KeyCeremonyStore>();
+        services.AddScoped<IProviderAttemptStore>(provider => new ProviderAttemptStore(
+            provider.GetRequiredService<StoreContext>(),
+            keyEncryptionKeys,
+            provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<IPendingSignInStore>(provider => new PendingSignInStore(
             provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
@@ -283,6 +289,7 @@ internal static class StorageRegistration
         services.AddScoped<IMembershipEnding, MembershipEnding>();
         services.AddScoped<IRoleCatalogue, RoleCatalogue>();
         services.AddScoped<IResourceStore, ResourceStore>();
+        services.AddScoped<IAccountHolders, AccountHolders>();
 
         services.AddScoped<IAccessEvaluator, AccessEvaluator>();
         services.AddScoped<IIndexCatalogue, IndexCatalogue>();

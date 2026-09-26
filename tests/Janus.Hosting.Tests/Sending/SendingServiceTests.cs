@@ -42,8 +42,10 @@ public sealed class SendingServiceTests : IAsyncDisposable
 
     private static readonly string[] Declared = ["en", "ar"];
 
+    private static readonly TimeSpan Recency = TimeSpan.FromMinutes(15);
+
     private static readonly StepUpChallenge Satisfied =
-        new(StepUpOutcome.Satisfied, AssuranceLevel.Aal2, PhishingResistant: false, [], null);
+        new(StepUpOutcome.Satisfied, AssuranceLevel.Aal2, PhishingResistant: false, Recency, [], null);
 
     private readonly ConfigurationInMemory _configuration = new();
     private readonly SendLedgerInMemory _ledger = new();
@@ -553,6 +555,62 @@ public sealed class SendingServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// LIB-HOST-001 AC5: a host's supplier is asked once for each send a restriction
+    /// counting under its key applies to, however many such restrictions there are,
+    /// and never for a send none of them applies to; what it answers is the key the
+    /// buckets count under.
+    /// </summary>
+    [Fact]
+    public async Task LIB_HOST_001_AC5_TheSupplierIsAskedOncePerSendItsKeyAppliesToAsync()
+    {
+        int asked = 0;
+
+        _suppliers = RestrictionKeySuppliers.Of(
+        [
+            new RestrictionKeySupplier(
+                "tenant",
+                (_, _) =>
+                {
+                    asked++;
+
+                    return ValueTask.FromResult("acme");
+                }),
+        ]);
+
+        _configuration.Set(
+            Settings.Restrictions,
+            [
+                new Restriction(
+                    "tenant.hourly",
+                    RestrictionKeyKind.Host,
+                    "tenant",
+                    RestrictionPurpose.Verification,
+                    [new Bucket(10, TimeSpan.FromHours(1), BucketWindow.Sliding)]),
+                new Restriction(
+                    "tenant.daily",
+                    RestrictionKeyKind.Host,
+                    "tenant",
+                    RestrictionPurpose.Verification,
+                    [new Bucket(20, TimeSpan.FromDays(1), BucketWindow.Sliding)]),
+            ]);
+
+        await SentAsync(Texted());
+
+        Assert.Equal(1, asked);
+
+        await SentAsync(Texted());
+
+        Assert.Equal(2, asked);
+
+        await SentAsync(Link());
+
+        Assert.Equal(2, asked);
+        Assert.Equal(
+            [new RestrictionKey("tenant.daily", "acme"), new RestrictionKey("tenant.hourly", "acme")],
+            _ledger.Keys.OrderBy(key => key.Restriction, StringComparer.Ordinal));
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-002 AC3: the refusal a restriction produces is the same for an
     /// address an account holds and one it does not, and carries <c>retryAt</c>.
     /// </summary>
@@ -572,6 +630,61 @@ public sealed class SendingServiceTests : IAsyncDisposable
         Assert.Equal(Refusal(unregistered), Refusal(registered));
         Assert.Equal(RetryAt(unregistered), RetryAt(registered));
         Assert.Equal(Written(unregistered), Written(registered));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-002 AC3: an ask that sends nothing counts as the message it stands for
+    /// would, once for each language the message would have gone out in, and is carried
+    /// by no transport, announced to nobody and written to no outbox; the next send
+    /// inside the minute is refused as it would be after the message, and a draw the
+    /// restrictions refuse is refused in the same bytes as the send.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_002_AC3_ADrawCountsAsTheMessageWouldAndCarriesNothingAsync()
+    {
+        _configuration.Set(Settings.NotificationLanguages, Declared);
+        _templates.Set(MessageKind.VerificationCode, SendKind.Email, "en", new MessageTemplate("code", "english"));
+        _templates.Set(MessageKind.VerificationCode, SendKind.Email, "ar", new MessageTemplate("code", "arabic"));
+        var destination = new RestrictionKey("email.destination", Mailbox.Value);
+
+        Result drawn = await Service.DrawAsync(Mailed() with { Language = null }, TestContext.Current.CancellationToken);
+
+        Assert.True(drawn.Match(() => true, _ => false));
+        Assert.Equal([Noon, Noon], _ledger.Sends(destination));
+        Assert.Empty(_mail.Taken);
+        Assert.Empty(_outbox.Waiting);
+        Assert.Empty(_events.Of<NotificationRequested>());
+
+        _clock.Advance(TimeSpan.FromSeconds(10));
+
+        Result<SendReference> sent = await Service.SendAsync(Mailed(), TestContext.Current.CancellationToken);
+        Result refused = await Service.DrawAsync(Mailed(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.RestrictionExceeded, Refusal(sent));
+        Assert.Equal(
+            Refusal(sent) + Written(sent),
+            refused.Match(
+                () => throw new Xunit.Sdk.XunitException("The draw was not refused."),
+                error => error.Code + JsonSerializer.Serialize(error.Details)));
+        Assert.Empty(_mail.Taken);
+    }
+
+    /// <summary>
+    /// INT-SMS-004 AC2, AUTH-ABUSE-002 AC3: below the floor a draw for a text message
+    /// is refused as the text message would be.
+    /// </summary>
+    [Fact]
+    public async Task INT_SMS_004_AC2_ADrawIsRefusedBelowTheFloorAsTheTextWouldBeAsync()
+    {
+        _configuration.Set(Settings.AbuseSmsBalanceFloor, 50m);
+        _sms.Balance = 40m;
+
+        Result drawn = await Service.DrawAsync(Texted(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ErrorCodes.SmsBalanceFloor,
+            drawn.Match(() => (ErrorCode?)null, error => error.Code));
+        Assert.Empty(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
     }
 
     /// <summary>

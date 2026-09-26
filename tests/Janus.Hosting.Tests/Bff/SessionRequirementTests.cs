@@ -25,6 +25,8 @@ public sealed class SessionRequirementTests : IAsyncDisposable
     [
         "DELETE /account/devices/{id:guid}",
         "DELETE /account/identifiers/{id:guid}",
+        "DELETE /account/link/apple",
+        "DELETE /account/link/google",
         "DELETE /account/mail/apppasswords/{id}",
         "DELETE /account/photo",
         "DELETE /account/sessions/{id:guid}",
@@ -75,6 +77,8 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "POST /account/identifiers",
         "POST /account/identifiers/{id:guid}/primary",
         "POST /account/invitation/acknowledge",
+        "POST /account/link/apple",
+        "POST /account/link/google",
         "POST /account/mail/apppasswords/",
         "POST /admin/accounts/{subject:guid}/delete/cancel",
         "POST /admin/accounts/{subject:guid}/reactivate",

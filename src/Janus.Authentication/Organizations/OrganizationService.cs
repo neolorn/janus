@@ -28,10 +28,12 @@ namespace Janus.Authentication.Organizations;
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements LIB-API-005, IDN-ORG-002, IDN-ORG-003, IDN-ORG-004 and OPS-ALERT-001. An organization is
-/// the deployment's, and its own grants confer nothing while it is suspended, so
-/// <c>organization:manage</c> is asked in the administrative organization: that is the
-/// one place a suspended organization can still be restored from.
+/// Implements LIB-API-005, IDN-ACCT-004, IDN-ACCT-005, IDN-ORG-002, IDN-ORG-003,
+/// IDN-ORG-004 and OPS-ALERT-001. An organization is the deployment's, and its own
+/// grants confer nothing while it is suspended, so <c>organization:manage</c> is asked
+/// in the administrative organization: that is the one place a suspended organization
+/// can still be restored from. A name is judged on its comparison key, as every
+/// identifier is.
 /// </remarks>
 internal sealed class OrganizationService(
     AdministrativeScope scope,
@@ -70,6 +72,21 @@ internal sealed class OrganizationService(
         if (Stated(name) is not string named)
         {
             return Result.Failure<OrganizationId>(Malformed("name"));
+        }
+
+        // IDN-ACCT-004 and IDN-ACCT-005: the name is judged on its comparison key, as
+        // every identifier is, and one the key reduces to nothing is no name.
+        string key = CanonicalForm.Of(named);
+
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return Result.Failure<OrganizationId>(Malformed("name"));
+        }
+
+        if (!ScriptMixing.IsSingleScriptPerWord(key))
+        {
+            return Result.Failure<OrganizationId>(
+                Error.From(ErrorCodes.IdentifierMixedScript, "member", JsonSerializer.SerializeToElement("name")));
         }
 
         if (Stated(reason) is not string stated)

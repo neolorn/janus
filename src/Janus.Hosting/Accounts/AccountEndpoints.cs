@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Builder;
@@ -303,6 +304,8 @@ internal static class AccountEndpoints
         Guid id,
         VerifyIdentifierRequest request,
         IIdentifiers identifiers,
+        SessionService sessions,
+        BrowserSessionCookies cookies,
         RequestSession browser,
         HttpContext context,
         CancellationToken cancellationToken)
@@ -318,11 +321,14 @@ internal static class AccountEndpoints
         // nothing and is answered with the code to type instead.
         if (request.LinkToken is { Length: > 0 } token)
         {
-            return Answers.Of(
-                await identifiers
-                    .LandAsync(browser.Live?.Id, token, request.Press, source, cancellationToken)
-                    .ConfigureAwait(false),
-                Landed);
+            Result<LinkLanding> landed = await identifiers
+                .LandAsync(browser.Live?.Id, token, request.Press, source, cancellationToken)
+                .ConfigureAwait(false);
+
+            return browser.Live is Session pressing && landed.Match(landing => landing.Verified, _ => false)
+                ? await RotatedAsync(sessions, cookies, pressing, context, Answers.Of(landed, Landed), cancellationToken)
+                    .ConfigureAwait(false)
+                : Answers.Of(landed, Landed);
         }
 
         if (request.Code is not { Length: > 0 } code)
@@ -341,11 +347,14 @@ internal static class AccountEndpoints
                     Nothing);
         }
 
-        return Answers.Of(
-            await identifiers
-                .VerifyAsync(holder, new IdentifierId(id), code, source, cancellationToken)
-                .ConfigureAwait(false),
-            Nothing);
+        Result verified = await identifiers
+            .VerifyAsync(holder, new IdentifierId(id), code, source, cancellationToken)
+            .ConfigureAwait(false);
+
+        return browser.Live is Session typing && verified.Match(() => true, _ => false)
+            ? await RotatedAsync(sessions, cookies, typing, context, Nothing, cancellationToken)
+                .ConfigureAwait(false)
+            : Answers.Of(verified, Nothing);
     }
 
     private static async Task<IResult> MakePrimaryAsync(
@@ -485,26 +494,52 @@ internal static class AccountEndpoints
     private static async Task<IResult> RemoveIdentifierAsync(
         Guid id,
         IIdentifiers identifiers,
+        SessionService sessions,
+        BrowserSessionCookies cookies,
         RequestSession browser,
         HttpContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(identifiers);
+        ArgumentNullException.ThrowIfNull(sessions);
+        ArgumentNullException.ThrowIfNull(cookies);
         ArgumentNullException.ThrowIfNull(context);
 
         AccessContext holder = Asking(browser);
 
-        return Answers.Of(
-            await identifiers
-                .RemoveAsync(
-                    holder,
-                    browser.Required.Id,
-                    new IdentifierId(id),
-                    RequestOrigin.Source(context.Request),
-                    cancellationToken)
-                .ConfigureAwait(false),
-            Nothing);
+        Result removed = await identifiers
+            .RemoveAsync(
+                holder,
+                browser.Required.Id,
+                new IdentifierId(id),
+                RequestOrigin.Source(context.Request),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return removed.Match(() => true, _ => false)
+            ? await RotatedAsync(sessions, cookies, browser.Required, context, Nothing, cancellationToken)
+                .ConfigureAwait(false)
+            : Answers.Of(removed, Nothing);
     }
+
+    // BFF-SESS-004, IDN-LIFE-008: a change to what signs in to the account is a
+    // privilege change, so the session that made it answers to a new secret from here
+    // on and the one it held before answers nothing.
+    private static async Task<IResult> RotatedAsync(
+        SessionService sessions,
+        BrowserSessionCookies cookies,
+        Session live,
+        HttpContext context,
+        IResult answered,
+        CancellationToken cancellationToken) =>
+        Answers.Of(
+            await sessions.RotateAsync(live, cancellationToken).ConfigureAwait(false),
+            issued =>
+            {
+                cookies.Write(context.Response, issued);
+
+                return answered;
+            });
 
     // REG-IDENT-006: link-borne, because after a hostile removal the account has no
     // session that could reach this on its own.

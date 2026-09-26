@@ -26,6 +26,18 @@ internal interface IGroupStore
     ValueTask<Group?> FindAsync(GroupId id, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads which organization one group belongs to, and nothing else of it.
+    /// </summary>
+    /// <param name="id">Which group.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The organization, or nothing where no such row exists.</returns>
+    /// <remarks>
+    /// Implements AUTHZ-SCOPE-001 and CONV-DESIGN-002 AC3: the organization is where the
+    /// gate is asked, so it is read before the gate and the rest of the row after.
+    /// </remarks>
+    ValueTask<OrganizationId?> ScopeOfAsync(GroupId id, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Writes a new group.
     /// </summary>
     /// <param name="group">The group to create.</param>

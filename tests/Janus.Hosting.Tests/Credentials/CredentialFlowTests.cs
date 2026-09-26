@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Alerting;
@@ -203,6 +206,88 @@ public sealed class CredentialFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// BFF-STEP-001 AC1: a gate the account can meet with what it holds is answered
+    /// with the three values of the gate, the outcome <c>present</c> and the
+    /// combinations that meet it, and no instant a report completes.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_STEP_001_AC1_AGateTheAccountCanMeetNamesWhatMeetsItAsync()
+    {
+        Browser browser = await SignedInAsync();
+
+        Held(AuthenticatorState.Active, invalidatesAt: null);
+
+        Assert.Equal(
+            Written("""{"required":{"level":"aal2","phishingResistant":false,"maxAge":900},"outcome":"present","options":[["password","totp"]],"pendingUntil":null}"""),
+            await RefusedAsync(browser));
+    }
+
+    /// <summary>
+    /// BFF-STEP-001 AC1: a gate above anything the account has ever reached is
+    /// answered with the outcome <c>enrol</c> and no combination.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_STEP_001_AC1_AGateTheAccountNeverReachedAsksForEnrolmentAsync()
+    {
+        _deployment.Configuration.Set(
+            Settings.PolicyDefault,
+            Policies.SystemDefault with
+            {
+                Gates = new Dictionary<StepUpAction, Gate>(Policies.SystemDefault.Gates)
+                {
+                    [StepUpAction.FactorRemove] = new Gate(GateLevel.Aal2, false, TimeSpan.FromMinutes(20)),
+                },
+            });
+
+        Browser browser = await SignedInAsync();
+
+        Assert.Equal(
+            Written("""{"required":{"level":"aal2","phishingResistant":false,"maxAge":1200},"outcome":"enrol","options":[],"pendingUntil":null}"""),
+            await RefusedAsync(browser));
+    }
+
+    /// <summary>
+    /// BFF-STEP-001 AC1: a gate the account reached with a factor it can no longer
+    /// present, and no report running, is answered with the outcome
+    /// <c>report-loss</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_STEP_001_AC1_AGateReachedWithAFactorThatIsGoneAsksForAReportAsync()
+    {
+        Browser browser = await SignedInAsync();
+
+        Held(AuthenticatorState.Suspended, invalidatesAt: null);
+
+        Assert.Equal(
+            Written("""{"required":{"level":"aal2","phishingResistant":false,"maxAge":900},"outcome":"report-loss","options":[],"pendingUntil":null}"""),
+            await RefusedAsync(browser));
+    }
+
+    /// <summary>
+    /// BFF-STEP-001 AC1: a gate met only by a factor a running report is taking away is
+    /// answered with the outcome <c>pending</c> and the instant the report completes.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_STEP_001_AC1_AGateWaitingOnAReportNamesWhenItCompletesAsync()
+    {
+        Browser browser = await SignedInAsync();
+        DateTimeOffset completes = _deployment.Clock.GetUtcNow().AddDays(7);
+
+        Held(AuthenticatorState.Suspended, completes);
+
+        Assert.Equal(
+            Written(
+                """{"required":{"level":"aal2","phishingResistant":false,"maxAge":900},"outcome":"pending","options":[],"pendingUntil":"""
+                    + JsonSerializer.Serialize(completes)
+                    + "}"),
+            await RefusedAsync(browser));
+    }
+
+    /// <summary>
     /// AUTH-RECOV-002 and D-148: the enrolment session reaches the password endpoint
     /// from a browser holding no session at all, and ends when the enrolment completes.
     /// </summary>
@@ -303,6 +388,40 @@ public sealed class CredentialFlowTests : IAsyncDisposable
 
         return browser;
     }
+
+    // What removing a credential is refused with, which is a gate the policy binds and
+    // is judged before the credential is looked for (BFF-STEP-001).
+    private static async Task<string> RefusedAsync(Browser browser)
+    {
+        Answer refused = await browser.SendAsync("DELETE", "/account/credentials/" + Guid.NewGuid());
+
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(ErrorCodes.StepUpRequired.ToString(), refused.Text("code"));
+
+        return Written(refused.Json().GetProperty("details").GetRawText());
+    }
+
+    // JSON as one writer writes it, so that two documents compare member by member
+    // and in order, whatever each escaped.
+    private static string Written(string json) => JsonNode.Parse(json)!.ToJsonString();
+
+    // A code generator beside the password the account registered with, standing as
+    // given; the session the registration opened proved the password alone.
+    private void Held(AuthenticatorState state, DateTimeOffset? invalidatesAt) =>
+        _deployment.Authenticators.Hold(Authenticator.Existing(
+            new AuthenticatorId(Guid.NewGuid()),
+            _deployment.Directory.Created[^1].Subject,
+            Factor.Totp,
+            CredentialLabel.TryParse(Label, out CredentialLabel label)
+                ? label
+                : throw new InvalidOperationException("The label is not one."),
+            state,
+            _deployment.Clock.GetUtcNow(),
+            lastUsedAt: null,
+            invalidatesAt,
+            confirmed: true,
+            totp: null,
+            webAuthn: null));
 
     // A browser that has been to the deployment once, which is what leaves it holding
     // the first contact every state change presents back (BFF-CSRF-005a).

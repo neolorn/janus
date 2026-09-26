@@ -11,11 +11,12 @@ namespace Janus.Privacy;
 
 /// <summary>
 /// What the deployment declared read against what it configured: every data category
-/// a declared purpose is over has a retention period, and a deployment open to minors
-/// has a written-consent basis to hold their data under.
+/// a declared purpose is over is kept for a period no shorter than its floor, and a
+/// deployment open to minors has a written-consent basis to hold their data under.
 /// </summary>
 /// <param name="declaration">What the host declared about its own domain.</param>
 /// <param name="processing">The purposes and the categories each is over.</param>
+/// <param name="retention">How long each category is kept.</param>
 /// <param name="configuration">Where the keys are read.</param>
 /// <remarks>
 /// Implements PRIV-RET-001, PRIV-MINOR-001 and LIB-HOST-001. A category nobody named
@@ -25,24 +26,24 @@ namespace Janus.Privacy;
 internal sealed class ConfigurationCoverage(
     AuthorizationDeclaration declaration,
     DeclaredProcessing processing,
+    CategoryRetention retention,
     IConfigurationStore configuration)
 {
     /// <summary>
     /// Reads the declaration against the configuration.
     /// </summary>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Nothing, or the first omission, named.</returns>
+    /// <returns>Nothing, or the first omission or refused period, named.</returns>
     public async ValueTask<Result> ValidateAsync(CancellationToken cancellationToken)
     {
         foreach (string category in Categories())
         {
-            Result<TimeSpan> kept = await configuration
-                .ReadAsync(Settings.HostCategoryRetention, category, cancellationToken)
-                .ConfigureAwait(false);
+            Result kept = (await retention.ReadAsync(category, cancellationToken).ConfigureAwait(false))
+                .Match(_ => Result.Success(), Result.Failure);
 
-            if (kept.Match(_ => false, _ => true))
+            if (kept.Match(() => false, _ => true))
             {
-                return Missing("key", Settings.HostCategoryRetention.For(category).ToString());
+                return kept;
             }
         }
 

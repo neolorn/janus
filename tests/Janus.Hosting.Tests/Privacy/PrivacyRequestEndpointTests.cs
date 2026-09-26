@@ -191,6 +191,24 @@ public sealed class PrivacyRequestEndpointTests : IAsyncDisposable
             held.GetProperty("decisionReason").GetString());
     }
 
+    /// <summary>
+    /// CONV-CODE-006 AC2: a request whose body carries no detail is refused naming the
+    /// member before the service is reached, and the queue takes nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC2_ARequestMissingItsDetailIsRefusedBeforeTheServiceAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        Answer submitted = await browser.SendAsync("POST", "/privacy/requests", ("type", "restriction"));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, submitted.Status);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), submitted.Text("code"));
+        Assert.Equal("detail", submitted.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Empty(_deployment.Requests.Queue);
+    }
+
     private static JsonElement Single(Answer answer)
     {
         Assert.Equal(StatusCodes.Status200OK, answer.Status);

@@ -177,6 +177,48 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
     }
 
     /// <summary>
+    /// OPS-SEC-003 AC3 and IDN-LIFE-012: the proof key a round trip to a social provider
+    /// holds while the browser is away is wrapped under the key-encryption key too, so
+    /// it is re-wrapped with the rest and reads under the new version as it did before.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_003_AC3_AProofKeyInFlightIsReWrappedAsync()
+    {
+        await using NpgsqlConnection connection = await ResetAsync();
+        byte[] verifier = RandomNumberGenerator.GetBytes(43);
+        byte[] browser = RandomNumberGenerator.GetBytes(32);
+
+        _ = await SeedAsync(connection, 1);
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO identity.preauthentication_sessions (fingerprint, csrf_fingerprint, created_at, expires_at)
+            VALUES (@browser, @csrf, now(), now() + interval '1 hour');
+            INSERT INTO identity.provider_attempts
+                (id, preauthentication, provider, intent, state, nonce, verifier, key_version, return_to, created_at)
+            VALUES (gen_random_uuid(), @browser, 'google', 'signin', @state, @nonce, @wrapped, 1, '/', now());
+            """,
+            new
+            {
+                browser,
+                csrf = RandomNumberGenerator.GetBytes(32),
+                state = RandomNumberGenerator.GetBytes(32),
+                nonce = RandomNumberGenerator.GetBytes(32),
+                wrapped = Wrapped(verifier, Previous),
+            });
+
+        Assert.Equal(0, (await Invocation.PipedAsync([Command], Rotating())).ExitCode);
+        Assert.Equal(0, (await Invocation.PipedAsync([Command, Sealed], Rotating())).ExitCode);
+
+        Assert.Equal(
+            2,
+            await connection.QuerySingleAsync<int>("SELECT key_version FROM identity.provider_attempts"));
+        Assert.Equal(
+            verifier,
+            Unwrapped(await connection.QuerySingleAsync<byte[]>("SELECT verifier FROM identity.provider_attempts"), Next));
+    }
+
+    /// <summary>
     /// OPS-SEC-003 AC4: the command prints the escrow copy of the new version, the
     /// rotation stays unretired until the seal is confirmed, and the confirmation
     /// retires the previous version.
@@ -529,7 +571,8 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
 
         await connection.ExecuteAsync(
             """
-            TRUNCATE identity.key_rotations, identity.subject_keys, identity.signing_keys, identity.send_outbox;
+            TRUNCATE identity.key_rotations, identity.subject_keys, identity.signing_keys, identity.send_outbox,
+                identity.provider_attempts, identity.preauthentication_sessions;
             DELETE FROM identity.audit_records WHERE action LIKE 'ops.keyrotation.%';
             """);
 

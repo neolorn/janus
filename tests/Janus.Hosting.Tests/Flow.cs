@@ -141,11 +141,17 @@ internal static class Flow
         return browser;
     }
 
-    // One table holds the accounts and their identifiers in a deployment; here the
-    // area that created them and the area that reads them keep their own, so what
-    // registration wrote is carried across once.
-    private static void Carried(Deployment deployment)
+    /// <summary>
+    /// Carries the account the last registration created across to the areas that
+    /// read it. One table holds the accounts and their identifiers in a deployment;
+    /// here the area that created them and the area that reads them keep their own, so
+    /// what registration wrote is carried across once.
+    /// </summary>
+    /// <param name="deployment">What it talks to.</param>
+    public static void Carried(Deployment deployment)
     {
+        ArgumentNullException.ThrowIfNull(deployment);
+
         NewAccount created = deployment.Directory.Created[^1];
 
         deployment.Accounts.Stands(created.Subject, AccountState.Active);

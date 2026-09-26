@@ -20,6 +20,9 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
     private static readonly OrganizationId Administration =
         new(Guid.Parse("33333333-3333-4333-8333-333333333333"));
 
+    private static readonly OrganizationId Owned =
+        new(Guid.Parse("44444444-4444-4444-8444-444444444444"));
+
     private static readonly string[] Operations = ["ops@example.test"];
 
     private static readonly string[] OneLanguage = ["en"];
@@ -183,6 +186,34 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status403Forbidden, changed.Status);
         Assert.Equal(ErrorCodes.Denied.ToString(), changed.Text("code"));
         Assert.Equal(Settings.SessionAal2Inactivity.Default, await InForceAsync(Settings.SessionAal2Inactivity));
+    }
+
+    /// <summary>
+    /// OPS-CFG-006 AC1: the owner of an organization, a member of it holding every
+    /// permission the library ships there and nothing in the administrative
+    /// organization, is refused a loosening, and nothing changes.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_CFG_006_AC1_AnOrganizationsOwnerWithoutTheGrantChangesNothingAsync()
+    {
+        Browser owner = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+
+        _deployment.Organizations.Seed(Owned);
+        _deployment.Memberships.Place(subject, Owned);
+
+        foreach (Permission permission in Permissions.All)
+        {
+            _deployment.Gate.Grant(subject, Owned, permission);
+        }
+
+        Answer changed = await LoosenedAsync(owner);
+
+        Assert.Equal(StatusCodes.Status403Forbidden, changed.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), changed.Text("code"));
+        Assert.Equal(Settings.SessionAal2Inactivity.Default, await InForceAsync(Settings.SessionAal2Inactivity));
+        Assert.Empty(_deployment.Changes.Written);
     }
 
     /// <summary>
@@ -416,6 +447,33 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
         Assert.Equal(
             Settings.AlertingEmailDestinations.Key,
             Assert.Single(_deployment.Changes.Written).Key);
+    }
+
+    /// <summary>
+    /// CONV-CODE-006 AC2 and chapter 09 section 8: a change whose body carries no reason
+    /// is refused with the reason code, naming the key, before the service is reached,
+    /// so a caller the service would refuse for want of the permission is answered for
+    /// the body, and the value in force is unchanged.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC2_ABodyMissingItsReasonIsRefusedBeforeTheServiceAsync()
+    {
+        Browser caller = await AuthorisedAsync();
+
+        Answer changed = await caller.SendAsync(
+            "PUT",
+            "/admin/config/session.aal2.inactivity",
+            ("value", "PT30M"),
+            ("reason", null));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, changed.Status);
+        Assert.Equal(ErrorCodes.RestrictionReasonRequired.ToString(), changed.Text("code"));
+        Assert.Equal(
+            Settings.SessionAal2Inactivity.Key.ToString(),
+            changed.Json().GetProperty("details").GetProperty("key").GetString());
+        Assert.Equal(Settings.SessionAal2Inactivity.Default, await InForceAsync(Settings.SessionAal2Inactivity));
+        Assert.Empty(_deployment.Changes.Written);
     }
 
     private static Task<Answer> TightenedAsync(Browser browser) =>

@@ -19,7 +19,7 @@ namespace Janus.Hosting.Passwords;
 /// <param name="time">The clock the corpus age is judged against.</param>
 /// <param name="offline">The list the package carries.</param>
 /// <remarks>
-/// Implements INT-PWD-001, INT-PWD-002 and INT-PWD-003. One prefix goes out and a
+/// Implements INT-PWD-001, INT-PWD-002, INT-PWD-003 and INF-TLS-004. One prefix goes out and a
 /// range comes back, so neither the password nor its full hash leaves the deployment;
 /// a source that cannot answer returns the screening failure, and screening treats
 /// that as a refusal rather than as a pass. The self-hosted corpus answers the same
@@ -68,7 +68,10 @@ internal sealed class LeakedPasswordCorpus(
                 return Result.Failure<IReadOnlySet<string>>(failure);
             }
 
+            // INF-TLS-004: the address can be written after startup has checked it, so
+            // it is held to TLS again where it is asked.
             return Uri.TryCreate(Range(address, prefix), UriKind.Absolute, out Uri? asked)
+                && asked.Scheme == Uri.UriSchemeHttps
                 ? await AskedAsync(asked, cancellationToken).ConfigureAwait(false)
                 : Unavailable();
         }

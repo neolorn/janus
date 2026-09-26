@@ -94,13 +94,6 @@ internal sealed class ConfigurationService(
             return Result.Failure(Named(ErrorCodes.ConfigurationKeyProtected, key));
         }
 
-        // Chapter 09 section 8: the reason is required on every change, the tightening
-        // included, and is what the audit entry answers with.
-        if (string.IsNullOrWhiteSpace(reason))
-        {
-            return Result.Failure(Named(ErrorCodes.RestrictionReasonRequired, key));
-        }
-
         // OPS-CFG-005: a change answers for itself through the person who made it.
         if (context.Acting is not SubjectId actor)
         {

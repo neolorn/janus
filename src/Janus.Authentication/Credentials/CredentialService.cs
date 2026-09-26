@@ -25,6 +25,7 @@ namespace Janus.Authentication.Credentials;
 /// </summary>
 /// <param name="keys">What creates and records a WebAuthn credential.</param>
 /// <param name="accounts">Where the display name a ceremony carries is read.</param>
+/// <param name="restriction">Whether the account's processing is restricted, as the gate answers it.</param>
 /// <param name="generators">What enrols a code generator.</param>
 /// <param name="codes">What issues a set of single-use codes.</param>
 /// <param name="passwords">What sets a password.</param>
@@ -54,6 +55,7 @@ namespace Janus.Authentication.Credentials;
 internal sealed class CredentialService(
     WebAuthnService keys,
     IAccountDirectory accounts,
+    ISettingsRestriction restriction,
     TotpService generators,
     RecoveryCodeService codes,
     PasswordService passwords,
@@ -466,6 +468,13 @@ internal sealed class CredentialService(
         bool password = await SecondStep.AvailableAsync(held, acting.Subject, cancellationToken)
             .ConfigureAwait(false);
 
+        // IDN-LIFE-012 AC3: a provider's identity that is the account's last way in is
+        // not removed by this route either.
+        if (IsLinked(going) && !HeldFactors.KeptWithout(enrolled, going, password))
+        {
+            return Result.Failure(Error.From(ErrorCodes.LinkLastCredential));
+        }
+
         // AUTH-STEP-006, AUTH-RECOV-007: a removal that would leave the account
         // reaching less than it does now runs the notified window instead, so the
         // credential is refused at once and gone only once somebody has been told.
@@ -495,11 +504,216 @@ internal sealed class CredentialService(
         return Result.Success();
     }
 
+    /// <inheritdoc/>
+    /// <exception cref="ArgumentNullException">The authority is absent.</exception>
+    public async ValueTask<Result> LinkableAsync(
+        CredentialAuthority authority,
+        Factor provider,
+        CancellationToken cancellationToken) =>
+        (await LinkingAsync(authority, provider, cancellationToken).ConfigureAwait(false))
+        .Match(_ => Result.Success(), Result.Failure);
+
+    /// <summary>
+    /// Links the identity a provider has just vouched for to the account the session
+    /// is signed in to.
+    /// </summary>
+    /// <param name="authority">The session acting.</param>
+    /// <param name="provider">Which provider vouched.</param>
+    /// <param name="providerSubject">The provider's own identifier for the person.</param>
+    /// <param name="label">What the credential is called until the person renames it.</param>
+    /// <param name="source">Where the request came from.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Nothing, or the refusal.</returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    /// <remarks>
+    /// Implements IDN-LIFE-012 and REG-IDENT-008. Linking attaches a credential and
+    /// nothing else: no grant, membership or identifier changes (AC1). An identity
+    /// linked to another account, or a second identity at a provider the account holds
+    /// one of, is refused; the identity already linked here is linked already.
+    /// </remarks>
+    public async ValueTask<Result> LinkAsync(
+        CredentialAuthority authority,
+        Factor provider,
+        [NeverLogged] string providerSubject,
+        CredentialLabel label,
+        string source,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(providerSubject);
+        ArgumentNullException.ThrowIfNull(source);
+
+        Error? failure = null;
+
+        Acting acting = (await LinkingAsync(authority, provider, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<Acting>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure(failure);
+        }
+
+        if (await authenticators.ByProviderAsync(provider, providerSubject, cancellationToken)
+                .ConfigureAwait(false) is Authenticator existing)
+        {
+            return existing.Subject == acting.Subject
+                ? Result.Success()
+                : Result.Failure(Error.From(ErrorCodes.FactorRejected));
+        }
+
+        IReadOnlyList<Authenticator> enrolled = await authenticators
+            .OfAsync(acting.Subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (enrolled.Any(credential => credential.Factor == provider))
+        {
+            return Result.Failure(Error.From(ErrorCodes.FactorRejected));
+        }
+
+        DateTimeOffset now = time.GetUtcNow();
+        var linked = Authenticator.Linked(AuthenticatorId.New(time), acting.Subject, provider, label, now);
+
+        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        await authenticators.LinkAsync(linked, providerSubject, cancellationToken).ConfigureAwait(false);
+        await audit
+            .RecordedAsync(Enrolled, acting.Subject, linked.Id, now, cancellationToken)
+            .ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        _ = await TellAsync(acting.Subject, MessageKind.CredentialEnrolled, source, cancellationToken)
+            .ConfigureAwait(false);
+
+        return await events
+            .PublishAsync(
+                new CredentialEnrolled(now, Announced + ":" + linked.Id, linked.Id, provider)
+                {
+                    Subject = acting.Subject,
+                    Actor = acting.Subject,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    public async ValueTask<Result> UnlinkAsync(
+        CredentialAuthority authority,
+        Factor provider,
+        string source,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+
+        Error? failure = null;
+
+        Acting acting = (await ActingAsync(authority, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<Acting>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure(failure);
+        }
+
+        if (acting.Session is null)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        IReadOnlyList<Authenticator> enrolled = await authenticators
+            .OfAsync(acting.Subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (enrolled.FirstOrDefault(credential => credential.Factor == provider && IsLinked(credential))
+            is not Authenticator linked)
+        {
+            return Result.Failure(Error.From(ErrorCodes.CredentialNotFound));
+        }
+
+        bool password = await SecondStep.AvailableAsync(held, acting.Subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        // IDN-LIFE-012 AC3: the last way in is refused whatever the session could
+        // prove, so it is refused before the session is asked to prove anything; a
+        // session signed in by the provider alone could never pass the gate to learn it.
+        if (!HeldFactors.KeptWithout(enrolled, linked, password))
+        {
+            return Result.Failure(Error.From(ErrorCodes.LinkLastCredential));
+        }
+
+        if (await GateAsync(acting, StepUpAction.ProviderUnlink, null, cancellationToken)
+                .ConfigureAwait(false)
+            is Error gate)
+        {
+            return Result.Failure(gate);
+        }
+
+        DateTimeOffset now = time.GetUtcNow();
+
+        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        await authenticators.RemoveAsync(linked.Id, cancellationToken).ConfigureAwait(false);
+        await audit
+            .RecordedAsync(Removed, acting.Subject, linked.Id, now, cancellationToken)
+            .ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        _ = await TellAsync(acting.Subject, MessageKind.SecurityNotice, source, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Result.Success();
+    }
+
+    // A provider's identity is the only credential that carries no assurance of its own.
+    private static bool IsLinked(Authenticator credential) =>
+        FactorCatalogue.Of(credential.Factor).AssuranceLevel is AssuranceLevel.Delegated;
+
+    private static bool IsProvider(Factor provider) =>
+        FactorCatalogue.Entries.ContainsKey(provider)
+        && FactorCatalogue.Of(provider).AssuranceLevel is AssuranceLevel.Delegated;
+
     private static TValue Withheld<TValue>(Error error, ref Error? failure)
     {
         failure = error;
 
         return default!;
+    }
+
+    // What linking asks of the session: a session rather than an enrolment, the
+    // step-up the action's gate declares, and a provider the policy lists.
+    private async ValueTask<Result<Acting>> LinkingAsync(
+        CredentialAuthority authority,
+        Factor provider,
+        CancellationToken cancellationToken)
+    {
+        Error? failure = null;
+
+        Acting acting = (await ActingAsync(authority, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<Acting>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<Acting>(failure);
+        }
+
+        if (acting.Session is null)
+        {
+            return Result.Failure<Acting>(Error.From(ErrorCodes.Denied));
+        }
+
+        if (!IsProvider(provider))
+        {
+            return Result.Failure<Acting>(Error.From(ErrorCodes.FactorNotPermitted));
+        }
+
+        if (await GateAsync(acting, StepUpAction.ProviderLink, null, cancellationToken)
+                .ConfigureAwait(false)
+            is Error gate)
+        {
+            return Result.Failure<Acting>(gate);
+        }
+
+        return await AdmitsAsync(acting.Subject, provider, cancellationToken).ConfigureAwait(false)
+            is Error refused
+            ? Result.Failure<Acting>(refused)
+            : Result.Success(acting);
     }
 
     // What the account would reach without this credential, against what it reaches
@@ -542,17 +756,33 @@ internal sealed class CredentialService(
     {
         ArgumentNullException.ThrowIfNull(authority);
 
+        Acting acting;
+
         if (authority.Enrolment is EnrolmentSessionId opened)
         {
-            return await enrolments.FindAsync(opened, cancellationToken).ConfigureAwait(false)
-                is EnrolmentSession enrolment
-                ? Result.Success(new Acting(enrolment.Subject, Session: null, opened))
-                : Result.Failure<Acting>(Error.From(ErrorCodes.EnrolmentTokenInvalid));
+            if (await enrolments.FindAsync(opened, cancellationToken).ConfigureAwait(false)
+                is not EnrolmentSession enrolment)
+            {
+                return Result.Failure<Acting>(Error.From(ErrorCodes.EnrolmentTokenInvalid));
+            }
+
+            acting = new Acting(enrolment.Subject, Session: null, opened);
+        }
+        else if (authority.Context?.Effective is SubjectId subject && authority.Session is SessionId live)
+        {
+            acting = new Acting(subject, live, Enrolment: null);
+        }
+        else
+        {
+            return Result.Failure<Acting>(Error.From(ErrorCodes.Denied));
         }
 
-        return authority.Context?.Effective is SubjectId subject && authority.Session is SessionId live
-            ? Result.Success(new Acting(subject, live, Enrolment: null))
-            : Result.Failure<Acting>(Error.From(ErrorCodes.Denied));
+        // IDN-ACCT-007 AC2: a restricted account changes none of its credentials, and
+        // every operation here changes one.
+        return await restriction.RefusedAsync(acting.Subject, cancellationToken)
+                .ConfigureAwait(false) is Error restricted
+            ? Result.Failure<Acting>(restricted)
+            : Result.Success(acting);
     }
 
     // AUTH-STEP-007: the gate applies to a session and is stated as the lower of what

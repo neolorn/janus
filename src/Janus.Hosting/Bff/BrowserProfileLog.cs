@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Text.Json;
+using Janus.Core;
 using Microsoft.Extensions.Logging;
 
 namespace Janus.Hosting.Bff;
@@ -7,9 +10,9 @@ namespace Janus.Hosting.Bff;
 /// What the browser profile records when it refuses a request.
 /// </summary>
 /// <remarks>
-/// Implements BFF-CSRF-001, BFF-CSRF-004, CONV-LOG-001, CONV-LOG-002 and
-/// CONV-LOG-005. Which layer refused is recorded and never answered, and no entry
-/// carries a cookie, a token or an address.
+/// Implements BFF-CSRF-001, BFF-CSRF-004, BFF-ERR-002, BFF-LOG-001, CONV-LOG-001,
+/// CONV-LOG-002 and CONV-LOG-005. Which layer refused is recorded and never answered,
+/// and no entry carries a cookie, a token or an address.
 /// </remarks>
 internal static partial class BrowserProfileLog
 {
@@ -210,4 +213,111 @@ internal static partial class BrowserProfileLog
         Level = LogLevel.Error,
         Message = "The refusal recorded as {Correlation} came after the answer had begun, so the connection was closed ({CorrelationId}).")]
     public static partial void ConcealedTooLate(ILogger log, string correlationId, Guid correlation);
+
+    /// <summary>
+    /// A round trip to a social provider that could not be bound to what the browser
+    /// carries, or a return that found none bound (BFF-CSRF-005a).
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    [LoggerMessage(
+        EventId = 17,
+        Level = LogLevel.Warning,
+        Message = "A provider return carried no round trip this browser had started ({CorrelationId}).")]
+    public static partial void ProviderUnbound(ILogger log, string correlationId);
+
+    /// <summary>
+    /// A provider return whose state was absent or was not the one this browser was
+    /// sent out with (BFF-CSRF-005a).
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    [LoggerMessage(
+        EventId = 18,
+        Level = LogLevel.Warning,
+        Message = "A provider return presented a state this browser was not sent out with ({CorrelationId}).")]
+    public static partial void ProviderStateRejected(ILogger log, string correlationId);
+
+    /// <summary>
+    /// A provider return that carried a refusal or no code. What the provider said is
+    /// the provider's input and is not recorded.
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    /// <param name="provider">Which provider.</param>
+    [LoggerMessage(
+        EventId = 19,
+        Level = LogLevel.Information,
+        Message = "A sign-in at {Provider} came back without a code ({CorrelationId}).")]
+    public static partial void ProviderRefused(ILogger log, string correlationId, Factor provider);
+
+    /// <summary>
+    /// A code a provider would not exchange, or whose identity token did not hold up
+    /// (IDN-LIFE-012, REG-IDENT-008).
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    /// <param name="provider">Which provider.</param>
+    [LoggerMessage(
+        EventId = 20,
+        Level = LogLevel.Warning,
+        Message = "A code from {Provider} was not exchanged for an identity token that held up ({CorrelationId}).")]
+    public static partial void ProviderExchangeRejected(ILogger log, string correlationId, Factor provider);
+
+    /// <summary>
+    /// A provider the deployment has not declared, or whose discovery document could
+    /// not be read or names nowhere to sign in.
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    /// <param name="provider">Which provider.</param>
+    [LoggerMessage(
+        EventId = 21,
+        Level = LogLevel.Error,
+        Message = "A sign-in at {Provider} could not be started: it is not declared or its discovery document could not be read ({CorrelationId}).")]
+    public static partial void ProviderUnavailable(ILogger log, string correlationId, Factor provider);
+
+    /// <summary>
+    /// A request answered with a refusal, by the code the answer carried
+    /// (BFF-LOG-001).
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    /// <param name="code">The code the answer carried.</param>
+    [LoggerMessage(
+        EventId = 22,
+        Level = LogLevel.Information,
+        Message = "A request was refused with {Code} ({CorrelationId}).")]
+    public static partial void Refused(ILogger log, string correlationId, ErrorCode code);
+
+    /// <summary>
+    /// A fault, by the code and the context the answer withheld, which are recorded
+    /// here and nowhere else (BFF-ERR-002).
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    /// <param name="code">The code behind the fault.</param>
+    /// <param name="details">The fault's structured context.</param>
+    [LoggerMessage(
+        EventId = 23,
+        Level = LogLevel.Error,
+        Message = "A fault {Code} with {Details} was answered with neither ({CorrelationId}).")]
+    public static partial void Faulted(
+        ILogger log,
+        string correlationId,
+        ErrorCode code,
+        IReadOnlyDictionary<string, JsonElement> details);
+
+    /// <summary>
+    /// A source that went over <c>abuse.source.ratelimit</c>, recorded once for the
+    /// hold rather than for every request the hold refuses (BFF-ORDER-001 stage 4).
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    /// <param name="lifts">When the source is admitted again.</param>
+    [LoggerMessage(
+        EventId = 24,
+        Level = LogLevel.Warning,
+        Message = "A source went over its request limit and is held until {Lifts} ({CorrelationId}).")]
+    public static partial void SourceOverLimit(ILogger log, string correlationId, DateTimeOffset lifts);
 }

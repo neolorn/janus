@@ -11,7 +11,8 @@ namespace Janus.Core.Tests;
 /// The line between the library and the systems it talks to: no gateway or mail
 /// server is named in the source, an outbound payload is built in one place, and the
 /// one database the library reaches is its own (INT-SMS-006, INT-GEN-005,
-/// CONV-DESIGN-002, INT-MAIL-001, INT-MAIL-003, INT-MAIL-008, INT-MAIL-009).
+/// CONV-DESIGN-002, INT-MAIL-001, INT-MAIL-003, INT-MAIL-008, INT-MAIL-009,
+/// LIB-EXT-001).
 /// </summary>
 [Trait("kind", "contract")]
 public sealed class IntegrationBoundaryTests
@@ -50,6 +51,46 @@ public sealed class IntegrationBoundaryTests
         "Mailcow",
     ];
 
+    // The caches a deployment might put behind the cache extension point, and the
+    // clients that reach them. Chapter 07 ships one of them by default, and the core
+    // contract still names none.
+    private static readonly string[] Caches =
+    [
+        "Redis",
+        "StackExchange",
+        "Valkey",
+        "Memcached",
+        "Garnet",
+        "KeyDB",
+        "Dragonfly",
+        "Hazelcast",
+    ];
+
+    // The secrets managers a deployment might read its keys and the maintenance
+    // credential from through the secret source. "AWS" is left out because it is in
+    // "draws" and "withdraws", and the vendor's other names stand for it.
+    private static readonly string[] SecretSources =
+    [
+        "HashiCorp",
+        "OpenBao",
+        "KeyVault",
+        "Key Vault",
+        "Azure",
+        "Amazon",
+        "AWSSDK",
+        "Google.Cloud",
+        "GoogleCloud",
+        "SecretManager",
+        "Infisical",
+        "Doppler",
+        "1Password",
+        "Bitwarden",
+        "CyberArk",
+        "Akeyless",
+        "Delinea",
+        "Thycotic",
+    ];
+
     // The one schema the library owns, and the catalogue PostgreSQL answers its own
     // questions from.
     private static readonly string[] OwnSchemas = ["identity", "pg_catalog"];
@@ -77,6 +118,34 @@ public sealed class IntegrationBoundaryTests
             .Where(file => Gateways.Any(gateway =>
                 File.ReadAllText(file).Contains(gateway, StringComparison.OrdinalIgnoreCase)));
 
+        Assert.Empty(naming);
+    }
+
+    /// <summary>
+    /// LIB-EXT-001 AC3: no product of any extension point is named in the core
+    /// contract: no gateway or mail transport, no mail server, no cache and no secrets
+    /// manager. Google and Apple are not searched for, since they are factors of the
+    /// catalogue chapter 02 fixes rather than a product behind an extension point, and
+    /// neither is PostgreSQL, which LIB-API-004 has the contract name.
+    /// </summary>
+    [Fact]
+    public void LIB_EXT_001_AC3_NoProviderNameAppearsInTheCoreNamespace()
+    {
+        string[] products = [.. Gateways, .. MailServers, .. Caches, .. SecretSources];
+        string[] core =
+        [
+            .. Sources().Where(file => file.Contains(
+                Path.DirectorySeparatorChar + "Janus.Core" + Path.DirectorySeparatorChar,
+                StringComparison.Ordinal)),
+        ];
+
+        IEnumerable<string> naming = core
+            .Where(file => products.Any(product =>
+                File.ReadAllText(file).Contains(product, StringComparison.OrdinalIgnoreCase)))
+            .Select(Path.GetFileName)
+            .Select(name => name!);
+
+        Assert.NotEmpty(core);
         Assert.Empty(naming);
     }
 

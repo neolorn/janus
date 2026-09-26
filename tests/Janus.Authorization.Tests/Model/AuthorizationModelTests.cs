@@ -13,7 +13,7 @@ namespace Janus.Authorization.Tests.Model;
 /// <summary>
 /// The model a host declares and what building it refuses
 /// (AUTHZ-MODEL-001 to AUTHZ-MODEL-004, AUTHZ-MODEL-006, AUTHZ-GATE-001,
-/// AUTHZ-CONCEAL-001, PRIV-RIGHT-005a, OPS-ALERT-006).
+/// AUTHZ-CONCEAL-001, PRIV-RIGHT-005a, OPS-ALERT-006, INT-HOST-002).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class AuthorizationModelTests
@@ -123,6 +123,78 @@ public sealed class AuthorizationModelTests
             () => AuthorizationModel.Of(declared));
 
         Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+    }
+
+    /// <summary>
+    /// PRIV-RET-001 AC1: a purpose over a category the host declares no retention
+    /// floor for stops the deployment, naming the key that would hold its period.
+    /// </summary>
+    [Fact]
+    public void PRIV_RET_001_AC1_ACategoryWithNoRetentionFloorFailsStartup()
+    {
+        AuthorizationDeclaration declared = HostDomain.Declared()
+            .Resource<HostDomain.Draft>("draft", draft => draft
+                .ContainedIn("folder")
+                .Purpose("collaboration", "contract", data: ["drafts"]))
+            .Build();
+
+        StartupException refused = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(declared));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        Assert.Equal("retention.drafts", refused.Failure!.Details["key"].GetString());
+    }
+
+    /// <summary>
+    /// PRIV-RET-001 AC1: a floor for a category no purpose is over governs nothing,
+    /// so the declaration is refused rather than started with a period nobody reads.
+    /// </summary>
+    [Fact]
+    public void PRIV_RET_001_AC1_AFloorForACategoryNoPurposeIsOverFailsStartup() =>
+        Assert.Throws<StartupException>(() => AuthorizationModel.Of(
+            HostDomain.Declared().RetentionFloor("drafts", TimeSpan.FromDays(30)).Build()));
+
+    /// <summary>
+    /// PRIV-RET-001 AC2: a floor is a positive period, declared once, for a category
+    /// whose name can be the last segment of its key.
+    /// </summary>
+    [Fact]
+    public void PRIV_RET_001_AC2_AFloorIsAPositivePeriodDeclaredOnce()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new AuthorizationDeclarationBuilder().RetentionFloor("drafts", TimeSpan.Zero));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new AuthorizationDeclarationBuilder().RetentionFloor("drafts", TimeSpan.FromDays(-1)));
+        Assert.Throws<ArgumentException>(
+            () => new AuthorizationDeclarationBuilder().RetentionFloor("Drafts and notes", TimeSpan.FromDays(30)));
+        Assert.Throws<ArgumentException>(
+            () => HostDomain.Declared().RetentionFloor("identity", TimeSpan.FromDays(30)));
+    }
+
+    /// <summary>
+    /// INT-HOST-002 AC1: a purpose for the hosting or its transfer declared on a
+    /// consent basis stops the deployment, naming the type and the purpose, so no
+    /// consent record can ever reference it. The same purpose on another basis builds,
+    /// and so does another purpose on consent, so the refusal is about the two
+    /// together.
+    /// </summary>
+    /// <param name="purpose">The purpose the deployment declares.</param>
+    [Theory]
+    [InlineData("hosting")]
+    [InlineData("Hosting")]
+    [InlineData("transfer")]
+    [InlineData("hosting-transfer")]
+    [InlineData("cross-border-transfer")]
+    public void INT_HOST_002_AC1_AConsentPurposeForTheHostingFailsStartup(string purpose)
+    {
+        StartupException refused = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(Declaring(purpose, "consent")));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        Assert.Equal("article." + purpose, refused.Failure!.Details["key"].GetString());
+
+        Assert.NotNull(AuthorizationModel.Of(Declaring(purpose, "contract")));
+        Assert.NotNull(AuthorizationModel.Of(Declaring("newsletter", "consent")));
     }
 
     /// <summary>
@@ -383,6 +455,7 @@ public sealed class AuthorizationModelTests
     private static AuthorizationDeclaration Encrypting(EncryptedFieldDeclaration field)
     {
         AuthorizationDeclaration declared = new AuthorizationDeclarationBuilder()
+            .RetentionFloor("identity", TimeSpan.FromDays(365))
             .LawfulBasis(Contract())
             .Resource<HostDomain.Article>("article", article => article
                 .BelongsToOrganization()
@@ -395,9 +468,24 @@ public sealed class AuthorizationModelTests
         };
     }
 
+    // One purpose on the basis named, over a type whose encrypted field names its
+    // subject, so a consent the purpose rests on has a subject to be read from and
+    // nothing but the purpose and its basis is at issue.
+    private static AuthorizationDeclaration Declaring(string purpose, string basis) =>
+        new AuthorizationDeclarationBuilder()
+            .RetentionFloor("identity", TimeSpan.FromDays(365))
+            .LawfulBasis(Contract())
+            .LawfulBasis(new LawfulBasisDeclaration("consent", true, true, false, false))
+            .Resource<HostDomain.Article>("article", article => article
+                .BelongsToOrganization()
+                .Purpose(purpose, basis, data: ["identity"])
+                .Encrypted(item => item.Body, item => item.Author))
+            .Build();
+
     private static AuthorizationDeclaration Malformed(int index) => index switch
     {
         0 => new AuthorizationDeclarationBuilder()
+            .RetentionFloor("identity", TimeSpan.FromDays(365))
             .LawfulBasis(Contract())
             .Resource<HostDomain.Folder>("folder", folder => folder
                 .ContainedIn("article")
@@ -408,12 +496,14 @@ public sealed class AuthorizationModelTests
                 .Purpose("collaboration", "contract", data: ["identity"]))
             .Build(),
         1 => new AuthorizationDeclarationBuilder()
+            .RetentionFloor("identity", TimeSpan.FromDays(365))
             .LawfulBasis(Contract())
             .Resource<HostDomain.Article>("article", article => article
                 .ContainedIn("folder")
                 .Purpose("collaboration", "contract", data: ["identity"]))
             .Build(),
         2 => new AuthorizationDeclarationBuilder()
+            .RetentionFloor("identity", TimeSpan.FromDays(365))
             .LawfulBasis(Contract())
             .Resource<HostDomain.Article>("article", article => article
                 .Purpose("collaboration", "contract", data: ["identity"]))
@@ -425,6 +515,7 @@ public sealed class AuthorizationModelTests
                 .Purpose("fraud-prevention", "interest"))
             .Build(),
         _ => new AuthorizationDeclarationBuilder()
+            .RetentionFloor("identity", TimeSpan.FromDays(365))
             .LawfulBasis(Contract())
             .Resource<HostDomain.Article>("article", article => article
                 .BelongsToOrganization()

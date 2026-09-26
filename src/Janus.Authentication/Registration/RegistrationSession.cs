@@ -481,6 +481,20 @@ internal sealed class RegistrationSession
     }
 
     /// <summary>
+    /// Stages a social provider's identity, in place of any identity of the same
+    /// provider staged before, since an account holds one of each (IDN-LIFE-012).
+    /// </summary>
+    /// <param name="credential">The identity, carrying the provider's subject.</param>
+    /// <exception cref="ArgumentNullException">It is absent.</exception>
+    public void Link(StagedCredential credential)
+    {
+        ArgumentNullException.ThrowIfNull(credential);
+
+        _ = _credentials.RemoveAll(staged => staged.Factor == credential.Factor);
+        _credentials.Add(credential);
+    }
+
+    /// <summary>
     /// Stages the set of recovery codes the security step drew, replacing whatever
     /// was staged.
     /// </summary>

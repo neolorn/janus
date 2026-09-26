@@ -30,6 +30,7 @@ using Janus.Authorization.Gate;
 using Janus.Authorization.Grants;
 using Janus.Authorization.Groups;
 using Janus.Authorization.Model;
+using Janus.Authorization.Resources;
 using Janus.Authorization.Roles;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -173,10 +174,13 @@ public static class HostingRegistration
         services.AddSingleton(new BrowserSessionCookies(application));
         services.AddScoped<SynchronizerTokens>();
         services.AddScoped<Concealment>();
+        services.AddScoped<ErrorTranslation>();
         services.AddScoped<MalformedRequest>();
         services.AddScoped<ResourceIsolation>();
         services.AddScoped<CustomRequestHeader>();
         services.AddScoped<OriginValidation>();
+        services.AddSingleton<SourceAdmissions>();
+        services.AddScoped<SourceRateLimiting>();
         services.AddScoped<RequestSession>();
         services.AddScoped<SessionResolution>();
         services.AddScoped<FirstContact>();
@@ -205,6 +209,7 @@ public static class HostingRegistration
         services.AddScoped<SmsBalance>();
         services.AddScoped<RelayRegistration>();
         services.AddScoped<SendingService>();
+        services.AddScoped<ISendingRestrictions>(provider => provider.GetRequiredService<SendingService>());
 
         // LIB-EXT-001: the shipped handler carries email and SMS; a deployment that
         // registers its own before this runs keeps it.
@@ -242,6 +247,11 @@ public static class HostingRegistration
         _ = services.AddHttpClient(ProviderKeys.Channel);
         services.AddScoped<ProviderEvents>();
         services.AddScoped<ProviderEventIntake>();
+
+        // IDN-LIFE-012, REG-IDENT-008: this application is the providers' client, on
+        // the same connection their documents are read on.
+        services.AddScoped<ProviderAttempts>();
+        services.AddScoped<ProviderSignIn>();
         services.AddScoped(services => new BotDefence(
             services.GetRequiredService<IConfigurationStore>(),
             services.GetRequiredService<IDatacenterRanges>(),
@@ -268,7 +278,7 @@ public static class HostingRegistration
         // OPS-MAINT-001: the licences and permits warned of, and the maintenance log.
         // DR-009a: the annual operation the key-encryption key is rotated in, warned of
         // from the log.
-        services.AddScoped<MaintenanceRecords>();
+        services.AddScoped<IMaintenanceRecords, MaintenanceRecords>();
         services.AddScoped<LicenceExpiry>();
         services.AddScoped<EnvelopeRotationWatch>();
 
@@ -389,6 +399,7 @@ public static class HostingRegistration
         // so what needs it takes it as it was registered and refuses without it.
         services.AddScoped(provider => new ProfilePhotos(
             provider.GetRequiredService<IAccountDirectory>(),
+            provider.GetRequiredService<ISettingsRestriction>(),
             provider.GetRequiredService<Janus.Authentication.Policies.IMembershipLookup>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<IAccountAudit>(),
@@ -407,7 +418,8 @@ public static class HostingRegistration
         services.AddScoped<EnrolmentSessions>();
         services.AddScoped<RecoveryService>();
         services.AddScoped<IRecovery>(provider => provider.GetRequiredService<RecoveryService>());
-        services.AddScoped<ICredentials, CredentialService>();
+        services.AddScoped<CredentialService>();
+        services.AddScoped<ICredentials>(provider => provider.GetRequiredService<CredentialService>());
         services.AddScoped<SigningKeys>();
         services.AddOidc(keyEncryptionKeys);
         services.AddScoped<OidcService>();
@@ -418,6 +430,7 @@ public static class HostingRegistration
         // the host wrote it and not only as the model rebuilt it.
         services.AddSingleton(declaration);
         services.AddScoped<HandlerCoverage>();
+        services.AddScoped<CategoryRetention>();
         services.AddScoped<ConfigurationCoverage>();
 
         services.AddScoped<IPrivacyAlerts, PrivacyAlerts>();
@@ -478,7 +491,22 @@ public static class HostingRegistration
         // request, so the two share one holder.
         services.AddScoped<ConcealedRefusals>();
         services.AddScoped<IConcealedRefusals>(provider => provider.GetRequiredService<ConcealedRefusals>());
-        services.AddScoped<IAccessGate, AccessGate>();
+        services.AddScoped<AccessGate>();
+        services.AddScoped<IAccessGate>(provider => provider.GetRequiredService<AccessGate>());
+
+        // IDN-ACCT-007 AC2, AUTHZ-GATE-006: an account's own settings are held under
+        // restriction by the gate, which the account's operations ask through a port.
+        services.AddScoped<ISettingsRestriction>(provider =>
+            new GatedSettings(provider.GetRequiredService<AccessGate>().RequireSettingsChangeAsync));
+
+        // CONV-DESIGN-002 AC3, AUTHZ-SCOPE-001: a group or a grant the deployment holds no
+        // row for is refused by the gate, which its operations ask through a port.
+        services.AddScoped<IUnscopedRefusal>(provider =>
+            new GatedUnscopedRefusal(provider.GetRequiredService<AccessGate>().RefuseUnscopedAsync));
+
+        // AUTHZ-INHERIT-002: the host says where each of its records sits, and the
+        // ancestry the gate reads is written from that and nothing else.
+        services.AddScoped<IResources, ResourceService>();
 
         // OPS-ALERT-005: the host says how many records a filtered query of its own
         // returned, and the library counts them against the person given them.
@@ -555,6 +583,7 @@ public static class HostingRegistration
 
         services.AddScoped<InvitationAcknowledgement>();
         services.AddScoped<MembershipEnd>();
+        services.AddScoped<InvitationOpening>();
 
         // REG-MAIL-001: an invitation reserves a mailbox only where there is a mail
         // server to create it on.

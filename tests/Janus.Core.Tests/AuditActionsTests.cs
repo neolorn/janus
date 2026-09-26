@@ -18,6 +18,7 @@ public sealed class AuditActionsTests
 {
     private static readonly string[] Catalogue =
     [
+        "auth.authentication.failed",
         "auth.botdefence.signalled",
         "auth.breakglass.generated",
         "auth.breakglass.used",
@@ -40,6 +41,7 @@ public sealed class AuditActionsTests
         "auth.restriction.edited",
         "auth.restriction.granted",
         "auth.session.presented",
+        "auth.stepup.failed",
         "authz.access.denied",
         "authz.access.exported",
         "authz.group.created",

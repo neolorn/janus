@@ -36,6 +36,12 @@ internal static class HostPermissions
     public static Permission Export { get; } = Permission.Parse("document:export");
 
     /// <summary>
+    /// Reading one of the host's records as part of the books the law has it keep,
+    /// which the host binds to a purpose resting on a legal obligation.
+    /// </summary>
+    public static Permission Retain { get; } = Permission.Parse("document:retain");
+
+    /// <summary>
     /// Reading one of the host's records of the type that discloses.
     /// </summary>
     public static Permission ReadNote { get; } = Permission.Parse("note:read");

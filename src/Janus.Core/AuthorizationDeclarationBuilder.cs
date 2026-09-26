@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
+using Janus.Core.Configuration;
 
 namespace Janus.Core;
 
@@ -27,6 +28,7 @@ public sealed class AuthorizationDeclarationBuilder
     private readonly List<RecipientDeclaration> _recipients = [];
     private readonly Dictionary<Permission, string> _stepUpGates = [];
     private readonly Dictionary<Permission, string> _actionPurposes = [];
+    private readonly Dictionary<string, TimeSpan> _retentionFloors = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Declares one of the host's kinds of thing.
@@ -239,6 +241,36 @@ public sealed class AuthorizationDeclarationBuilder
     }
 
     /// <summary>
+    /// Declares the shortest period a category of data is kept. The category is kept
+    /// for that period until the deployment states a longer one, and a stated period
+    /// below it stops the deployment at startup.
+    /// </summary>
+    /// <param name="category">The category, as a purpose names it.</param>
+    /// <param name="floor">The period.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentException">
+    /// The category is absent, blank or cannot name a configuration key, or its floor
+    /// is already declared.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">The period is not positive.</exception>
+    /// <remarks>Implements PRIV-RET-001 and LIB-HOST-001.</remarks>
+    public AuthorizationDeclarationBuilder RetentionFloor(string category, TimeSpan floor)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(category);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(floor, TimeSpan.Zero);
+        _ = Settings.HostCategoryRetention.For(category);
+
+        if (!_retentionFloors.TryAdd(category, floor))
+        {
+            throw new ArgumentException(
+                "The category " + category + " is given a retention floor twice.",
+                nameof(category));
+        }
+
+        return this;
+    }
+
+    /// <summary>
     /// Closes the declaration.
     /// </summary>
     /// <returns>What the host declared.</returns>
@@ -252,5 +284,6 @@ public sealed class AuthorizationDeclarationBuilder
             new Dictionary<Permission, string>(_actionPurposes),
             [.. _bases],
             [.. _sensitiveCategories],
-            [.. _recipients]);
+            [.. _recipients],
+            new Dictionary<string, TimeSpan>(_retentionFloors, StringComparer.Ordinal));
 }

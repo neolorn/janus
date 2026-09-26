@@ -19,7 +19,8 @@ namespace Janus.Hosting.Tests.Organizations;
 /// <summary>
 /// The organization lifecycle over <c>/admin/organizations</c> of chapter 09 section 8a,
 /// behind <c>organization:manage</c> in the administrative organization, with a deletion
-/// request stepped up and ending every member session (IDN-ORG-002 to IDN-ORG-004).
+/// request stepped up and ending every member session (IDN-ORG-002 to IDN-ORG-004), and
+/// a name judged on its comparison key (IDN-ACCT-004, IDN-ACCT-005).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class OrganizationEndpointTests : IAsyncDisposable
@@ -279,6 +280,102 @@ public sealed class OrganizationEndpointTests : IAsyncDisposable
         Assert.Equal("reason", Member(silent));
         Assert.Equal("id", Member(unheld));
         Assert.Equal("id", Member(unknown));
+        Assert.Empty(_deployment.OrganizationChanges.Changes);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-005 AC3 and IDN-ACCT-004 AC3: an organization name is judged on its
+    /// comparison key, so a word that mixes scripts once its circled letters are
+    /// normalized is refused by the named code naming the field, as a plainly mixed one
+    /// is, and nothing is created; whole words of separate scripts are accepted.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ACCT_005_AC3_AnOrganizationNameMixingScriptsInAWordIsRefusedByItsCodeAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Administration);
+
+        Answer mixed = await administrator.SendAsync(
+            "POST",
+            "/admin/organizations",
+            ("name", "Аcme branch"),
+            ("reason", "Opening a branch."));
+        Answer normalized = await administrator.SendAsync(
+            "POST",
+            "/admin/organizations",
+            ("name", "аⓒⓜⓔ branch"),
+            ("reason", "Opening a branch."));
+        Answer separate = await administrator.SendAsync(
+            "POST",
+            "/admin/organizations",
+            ("name", "فرع Acme"),
+            ("reason", "Opening a branch."));
+
+        Assert.All(
+            [mixed, normalized],
+            refused =>
+            {
+                Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+                Assert.Equal(ErrorCodes.IdentifierMixedScript.ToString(), refused.Text("code"));
+                Assert.Equal("name", refused.Json().GetProperty("details").GetProperty("member").GetString());
+            });
+        Assert.Equal(StatusCodes.Status201Created, separate.Status);
+        Assert.Equal(
+            [AuditActions.OrganizationCreated],
+            _deployment.OrganizationChanges.Changes.Select(change => change.Action));
+    }
+
+    /// <summary>
+    /// IDN-ACCT-004 AC3: a name made of nothing but code points the canonical form
+    /// removes would be written with an empty comparison key, so it is refused as a
+    /// malformed name and nothing is created.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ACCT_004_AC3_ANameTheCanonicalFormReducesToNothingIsRefusedAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Administration);
+
+        Answer invisible = await administrator.SendAsync(
+            "POST",
+            "/admin/organizations",
+            ("name", "​‍"),
+            ("reason", "Opening a branch."));
+
+        Assert.Equal("name", Member(invisible));
+        Assert.Empty(_deployment.OrganizationChanges.Changes);
+    }
+
+    /// <summary>
+    /// CONV-CODE-006 AC2: a body missing a member the creation, the deletion request or
+    /// its cancellation requires is refused naming the member before the service is
+    /// reached, so a caller the service would refuse for want of the permission is
+    /// answered for the body, and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC2_ABodyMissingAMemberIsRefusedBeforeTheServiceAsync()
+    {
+        (Browser caller, _) = await SignedInAsync();
+
+        Answer unnamed = await caller.SendAsync("POST", "/admin/organizations", ("reason", "Opening a branch."));
+        Answer unreasoned = await caller.SendAsync(
+            "POST",
+            "/admin/organizations",
+            ("name", "Southern branch"),
+            ("reason", null));
+        Answer unrequested = await caller.SendAsync("POST", "/admin/organizations/" + Branch + "/delete", "{}");
+        Answer uncancelled = await caller.SendAsync(
+            "POST",
+            "/admin/organizations/" + Branch + "/delete/cancel",
+            "{}");
+
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), unnamed.Text("code"));
+        Assert.Equal("name", Member(unnamed));
+        Assert.Equal("reason", Member(unreasoned));
+        Assert.Equal("reason", Member(unrequested));
+        Assert.Equal("reason", Member(uncancelled));
+        Assert.Null((await StandingAsync(Branch)).DeletionRequestedAt);
         Assert.Empty(_deployment.OrganizationChanges.Changes);
     }
 

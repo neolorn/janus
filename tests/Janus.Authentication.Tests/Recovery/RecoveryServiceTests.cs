@@ -73,6 +73,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     private readonly NoticeLedgerInMemory _notices = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly SendingRestrictionsInMemory _restrictions = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
@@ -382,6 +383,78 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// BFF-ABUSE-001 AC2 and AUTH-RECOV-002: an approval past the account's cap for the
+    /// day is refused with the instant the earliest approval still counted leaves the
+    /// day, which is when the cap admits the next, to the tick.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ABUSE_001_AC2_TheAccountCapLiftsWhenItsEarliestCountedApprovalLeavesTheDayAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        (SubjectId approver, SessionId session) = await ApproverAsync();
+        var given = new List<DateTimeOffset>();
+
+        for (int approval = 0; approval < 3; approval++)
+        {
+            given.Add(_clock.GetUtcNow());
+
+            Assert.NotNull(Value(await Approving(approver, session, subject, Reason)));
+
+            _clock.Advance(TimeSpan.FromMinutes(1));
+        }
+
+        _configuration.Set(Settings.RecoveryRateLimitAccount, 2);
+
+        Result<ApprovedRecovery> capped = await Approving(approver, session, subject, Reason);
+
+        Assert.Equal(ErrorCodes.Throttled, Refused(capped));
+        Assert.Equal(given[1].AddDays(1), Lifts(capped));
+
+        _clock.Advance(given[1].AddDays(1) - _clock.GetUtcNow() - TimeSpan.FromTicks(1));
+
+        (SubjectId early, SessionId opened) = await ApproverAsync();
+
+        Assert.Equal(ErrorCodes.Throttled, Refused(await Approving(early, opened, subject, Reason)));
+
+        _clock.Advance(TimeSpan.FromTicks(1));
+
+        Assert.NotNull(Value(await Approving(early, opened, subject, Reason)));
+    }
+
+    /// <summary>
+    /// BFF-ABUSE-001 AC2 and AUTH-RECOV-002: where the account's cap and the
+    /// approver's are both reached, the refusal names the later of the two instants,
+    /// since only then does neither hold the approval.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ABUSE_001_AC2_TwoCapsReachedLiftAtTheLaterOfThemAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        (SubjectId first, SessionId opened) = await ApproverAsync();
+        (SubjectId second, SessionId another) = await ApproverAsync();
+
+        _configuration.Set(Settings.RecoveryRateLimitAccount, 2);
+        _configuration.Set(Settings.RecoveryRateLimitApprover, 1);
+
+        _ = await Approving(first, opened, subject, Reason);
+
+        _clock.Advance(TimeSpan.FromMinutes(1));
+
+        DateTimeOffset latest = _clock.GetUtcNow();
+
+        _ = await Approving(second, another, subject, Reason);
+
+        _clock.Advance(TimeSpan.FromMinutes(1));
+
+        Result<ApprovedRecovery> capped = await Approving(second, another, subject, Reason);
+
+        Assert.Equal(ErrorCodes.Throttled, Refused(capped));
+        Assert.Equal(latest.AddDays(1), Lifts(capped));
+    }
+
+    /// <summary>
     /// OPS-ALERT-001 and AUTH-RECOV-002: recovery approvals clustering on one account
     /// raise the alert under that account once they reach the threshold, and not before.
     /// </summary>
@@ -639,6 +712,45 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
         Assert.Equal(Elsewhere, _notifications.Mail[0].Destination.Canonical);
     }
 
+    /// <summary>
+    /// AUTH-ABUSE-002 AC3, AUTH-ABUSE-003: a recovery no link answers, because the
+    /// policy closes the route or because the window has already told an address no
+    /// account holds, counts against the sending restrictions as the link would have,
+    /// and a refusal of the restrictions answers both with the one refusal.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_002_AC3_ARecoveryNoLinkAnswersCountsAsTheLinkWouldAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        _memberships.Place(subject, Support);
+        _configuration.Set(
+            Settings.OrganizationPolicy,
+            Support.ToString(),
+            new PolicyOverride(null, null, null, null, SelfServiceRecovery: false, null));
+
+        Assert.True(Succeeded(await AskedAsync(Address)));
+        Assert.True(Succeeded(await AskedAsync(Elsewhere)));
+        Assert.True(Succeeded(await AskedAsync(Elsewhere)));
+
+        Assert.Equal(
+            [Address, Elsewhere],
+            _restrictions.Drawn.Select(drawn => drawn.Destination.Canonical));
+        Assert.All(_restrictions.Drawn, drawn => Assert.Equal(MessageKind.RecoveryLink, drawn.Message));
+        Assert.All(_restrictions.Drawn, drawn => Assert.Equal(RestrictionPurpose.Notification, drawn.Purpose));
+        Assert.Equal(MessageKind.NoAccount, Assert.Single(_notifications.Mail).Message);
+
+        var refusal = Error.From(ErrorCodes.RestrictionExceeded);
+        _restrictions.Refusal = refusal;
+
+        Result held = await AskedAsync(Address);
+        Result nobodys = await AskedAsync(Elsewhere);
+
+        Assert.Same(refusal, held.Match(() => (Error?)null, error => error));
+        Assert.Same(refusal, nobodys.Match(() => (Error?)null, error => error));
+    }
+
     private RecoveryService Service =>
         new(
             _links,
@@ -654,7 +766,14 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             new StepUpGuard(_live, _authenticators, _passwords, Policies, _clock),
             new AdministrativeScope(_gate, _administrative),
             _notifications,
-            new NonExistenceNotice(_configuration, _notifications, _notices, _work, _events, _clock),
+            new NonExistenceNotice(
+                _configuration,
+                _notifications,
+                _restrictions,
+                _notices,
+                _work,
+                _events,
+                _clock),
             Throttle,
             _events,
             _configuration,
@@ -810,6 +929,9 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
 
     private static bool Succeeded(Result result) => result.Match(() => true, _ => false);
 
+    private ValueTask<Result> AskedAsync(string identifier) =>
+        Service.BeginAsync(identifier, Language, Source, TestContext.Current.CancellationToken);
+
     private static ErrorCode Refused(Result result) =>
         result.Match(() => default, error => error.Code);
 
@@ -819,4 +941,8 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     private static TValue? Value<TValue>(Result<TValue> result)
         where TValue : class =>
         result.Match<TValue?>(value => value, _ => null);
+
+    // The instant a throttled refusal says it lifts (API-CONV-003).
+    private static DateTimeOffset? Lifts<TValue>(Result<TValue> result) =>
+        result.Match<DateTimeOffset?>(_ => null, error => error.Details["retryAt"].GetDateTimeOffset());
 }

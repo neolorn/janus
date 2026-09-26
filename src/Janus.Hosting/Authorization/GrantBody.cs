@@ -28,8 +28,12 @@ internal sealed record GrantBody(
     /// <summary>
     /// The grant the body describes, or the member it cannot be read at.
     /// </summary>
+    /// <param name="reason">
+    /// The body's reason, which the endpoint has found present, since chapter 10 names
+    /// its own refusal for a grant without one.
+    /// </param>
     /// <returns>The grant, or nothing and the member that stopped it.</returns>
-    public (GrantRequest? Request, string Member) Read()
+    public (GrantRequest? Request, string Member) Read(string reason)
     {
         if (SubjectType is not Core.SubjectType type)
         {
@@ -63,7 +67,7 @@ internal sealed record GrantBody(
                 new ResourceReference(on, Core.ResourceId.Parse(ResourceId)),
                 Deny ?? false,
                 ExpiresAt,
-                Reason ?? string.Empty),
+                reason),
             string.Empty);
     }
 }

@@ -114,8 +114,8 @@ internal sealed class AccountStore(StoreContext context) : IAccountStore
                 record.AdultAffirmed,
                 record.AgeGroup,
                 answered,
-                record.TermsVersion ?? string.Empty,
-                record.NoticeVersion ?? string.Empty)
+                record.TermsVersion,
+                record.NoticeVersion)
             : null;
 
     private async ValueTask<AccountRecord?> FindAsync(

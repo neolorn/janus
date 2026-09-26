@@ -1,6 +1,6 @@
 using System;
 
-namespace Janus.Authentication.Maintenance;
+namespace Janus.Core;
 
 /// <summary>
 /// One licence or permit whose expiry the system warns of.
@@ -11,7 +11,7 @@ namespace Janus.Authentication.Maintenance;
 /// <param name="ExpiresAt">When it lapses.</param>
 /// <param name="RenewedAt">When it was last renewed, where it has been.</param>
 /// <remarks>Implements OPS-MAINT-001 (D-153).</remarks>
-internal sealed record Licence(
+public sealed record Licence(
     LicenceId Id,
     LicenceKind Kind,
     string Name,

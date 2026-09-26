@@ -17,6 +17,7 @@ namespace Janus.Authorization.Grants;
 /// <c>grant:read</c>.
 /// </summary>
 /// <param name="gate">Whether the caller may manage grants where the grant is scoped.</param>
+/// <param name="unscoped">The refusal of a grant or a record the deployment holds no row for.</param>
 /// <param name="scope">Whether the caller holds system administration.</param>
 /// <param name="stepUp">What granting and revoking ask of the caller's session.</param>
 /// <param name="grants">Where grants are read and written.</param>
@@ -35,6 +36,7 @@ namespace Janus.Authorization.Grants;
 /// </remarks>
 internal sealed class GrantService(
     IAccessGate gate,
+    IUnscopedRefusal unscoped,
     AdministrativeScope scope,
     IStepUpGate stepUp,
     IGrantStore grants,
@@ -64,10 +66,20 @@ internal sealed class GrantService(
             return Result.Failure<GrantId>(Error.From(ErrorCodes.Denied));
         }
 
-        if (await ScopeAsync(request.On, cancellationToken).ConfigureAwait(false)
-            is not OrganizationId organization)
+        OrganizationId? scoped = await ScopeOfAsync(request.On, cancellationToken).ConfigureAwait(false);
+
+        if (scoped is null && request.On.Type == OrganizationWide)
         {
             return Result.Failure<GrantId>(Malformed("resourceId"));
+        }
+
+        // AUTHZ-SCOPE-001, CONV-DESIGN-002 AC3: a record the deployment holds no
+        // registration for belongs to no organization, and the gate refuses it as it
+        // refuses a caller managing nothing where a record is.
+        if (scoped is not OrganizationId organization)
+        {
+            return Result.Failure<GrantId>(
+                await unscoped.RefusedAsync(context, Permissions.GrantManage, cancellationToken).ConfigureAwait(false));
         }
 
         if (await ManagingRefusedAsync(context, organization, cancellationToken).ConfigureAwait(false)
@@ -155,18 +167,17 @@ internal sealed class GrantService(
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
+        if (await RevokingRefusedAsync(context, grant, cancellationToken).ConfigureAwait(false) is Error denied)
+        {
+            return Result.Failure(denied);
+        }
+
         // A derived or materialised grant is the host's data speaking, and a refresh
         // would write it back; only a row someone wrote is revoked by someone.
         if (await grants.FindAsync(grant, cancellationToken).ConfigureAwait(false)
             is not { Kind: GrantKind.Stored, RevokedAt: null } held)
         {
             return Result.Failure(Error.From(ErrorCodes.GrantNotFound));
-        }
-
-        if (await ManagingRefusedAsync(context, held.Organization, cancellationToken).ConfigureAwait(false)
-            is Error denied)
-        {
-            return Result.Failure(denied);
         }
 
         if (await AdministeringRefusedAsync(
@@ -260,7 +271,7 @@ internal sealed class GrantService(
 
     // AUTHZ-GRANT-001 AC2: the whole organization is named by its identifier; a record
     // is scoped to the organization it was registered in.
-    private async ValueTask<OrganizationId?> ScopeAsync(
+    private async ValueTask<OrganizationId?> ScopeOfAsync(
         ResourceReference on,
         CancellationToken cancellationToken)
     {
@@ -282,6 +293,18 @@ internal sealed class GrantService(
         subject.Type != SubjectType.Group
             || (await groups.FindAsync(new GroupId(subject.Value), cancellationToken).ConfigureAwait(false))
                 ?.Organization == organization;
+
+    // AUTHZ-SCOPE-001, CONV-DESIGN-002 AC3: a revocation is judged in the organization
+    // the grant is scoped to, and that alone is read of it before the gate. A grant the
+    // deployment holds no row for is scoped to none, and the gate refuses it as it
+    // refuses a caller managing nothing where a grant is.
+    private async ValueTask<Error?> RevokingRefusedAsync(
+        AccessContext context,
+        GrantId grant,
+        CancellationToken cancellationToken) =>
+        await grants.ScopeOfAsync(grant, cancellationToken).ConfigureAwait(false) is OrganizationId organization
+            ? await ManagingRefusedAsync(context, organization, cancellationToken).ConfigureAwait(false)
+            : await unscoped.RefusedAsync(context, Permissions.GrantManage, cancellationToken).ConfigureAwait(false);
 
     private async ValueTask<Error?> ManagingRefusedAsync(
         AccessContext context,

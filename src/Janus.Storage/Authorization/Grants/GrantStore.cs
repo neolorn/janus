@@ -54,6 +54,18 @@ internal sealed class GrantStore(StoreContext context, DataConnections connectio
     }
 
     /// <inheritdoc/>
+    public async ValueTask<OrganizationId?> ScopeOfAsync(GrantId id, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<OrganizationId> scoped = await context.Grants
+            .Where(row => row.Id == id)
+            .Select(row => row.Organization)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return scoped is [OrganizationId organization] ? organization : null;
+    }
+
+    /// <inheritdoc/>
     public async ValueTask CreateAsync(Grant grant, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(grant);
@@ -183,18 +195,24 @@ internal sealed class GrantStore(StoreContext context, DataConnections connectio
     {
         // IDN-ORG-003 AC1, entry 196: what the view confers, which leaves out a
         // suspended organization's grants and a role that allows nothing.
-        List<GrantRecord> records = await context.Grants
+        IQueryable<GrantRecord> live = context.Grants
             .Where(row => row.Organization == organization
                 && row.RevokedAt == null
                 && (row.ExpiresAt == null || row.ExpiresAt > at)
                 && context.Organizations.Any(held => held.Id == row.Organization
                     && held.DeletionRequestedAt == null)
-                && context.RolePermissions.Any(allowed => allowed.Role == row.Role)
-                && (row.ResourceType == null
-                    || context.Ancestry.Any(entry => entry.Type == reference.Type
-                        && entry.Id == reference.Id
-                        && entry.AncestorType == row.ResourceType
-                        && entry.AncestorId == row.ResourceId)))
+                && context.RolePermissions.Any(allowed => allowed.Role == row.Role));
+
+        // OPS-DB-003 AC2: the organization-wide grants and the grants on the record's
+        // ancestors are read as two halves, which share no row. Joined by an OR, the
+        // halves leave the planner no condition to seek the live grants on a resource
+        // by, and it reads that index whole.
+        List<GrantRecord> records = await live
+            .Where(row => row.ResourceType == null)
+            .Concat(live.Where(row => context.Ancestry.Any(entry => entry.Type == reference.Type
+                && entry.Id == reference.Id
+                && entry.AncestorType == row.ResourceType
+                && entry.AncestorId == row.ResourceId)))
             .OrderBy(row => row.GrantedAt)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);

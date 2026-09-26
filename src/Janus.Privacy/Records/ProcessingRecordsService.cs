@@ -21,7 +21,8 @@ namespace Janus.Privacy.Records;
 /// <param name="declaration">What the deployment declared about its own domain.</param>
 /// <param name="compliance">Where the three supplied fields are.</param>
 /// <param name="roles">Where the roles holding a permission are read.</param>
-/// <param name="configuration">Where the hosting and retention keys are read.</param>
+/// <param name="retention">How long each category is kept.</param>
+/// <param name="configuration">Where the hosting keys are read.</param>
 /// <param name="work">The one transaction what a person supplies is written in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -35,6 +36,7 @@ internal sealed class ProcessingRecordsService(
     AuthorizationDeclaration declaration,
     IComplianceStore compliance,
     IRegisterRoles roles,
+    CategoryRetention retention,
     IConfigurationStore configuration,
     IUnitOfWork work,
     TimeProvider time) : IProcessingRecords
@@ -336,8 +338,8 @@ internal sealed class ProcessingRecordsService(
 
         foreach (string category in purpose.DataCategories)
         {
-            Result<TimeSpan> declared = await configuration
-                .ReadAsync(Settings.HostCategoryRetention, category, cancellationToken)
+            Result<TimeSpan> declared = await retention
+                .ReadAsync(category, cancellationToken)
                 .ConfigureAwait(false);
 
             declared.Switch(

@@ -64,6 +64,8 @@ internal static class AuthenticationEndpoints
         return endpoints;
     }
 
+    // AUTH-ABUSE-001 AC5: the browser's own tokens travel with the sign-in it opens, so
+    // a browser the account knows is not held by an attack on the account.
     private static async Task<IResult> BeginAsync(
         SignInRequest request,
         IAuthentication authentication,
@@ -81,6 +83,8 @@ internal static class AuthenticationEndpoints
                     .BeginAsync(
                         identifier,
                         RequestOrigin.Source(context.Request),
+                        Carried(context.Request, BrowserCookies.Browser),
+                        Carried(context.Request, BrowserCookies.Device),
                         cancellationToken)
                     .ConfigureAwait(false),
                 challenge => TypedResults.Json(
@@ -220,6 +224,7 @@ internal static class AuthenticationEndpoints
                         browser.Required.Id,
                         challenge,
                         Presented(request),
+                        RequestOrigin.Source(context.Request),
                         cancellationToken)
                     .ConfigureAwait(false),
                 cookies,
@@ -289,11 +294,11 @@ internal static class AuthenticationEndpoints
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(authentication);
 
-        return Answers.Of(
-            await authentication
-                .AbandonLinkAsync(request.LinkToken ?? string.Empty, cancellationToken)
-                .ConfigureAwait(false),
-            Nothing);
+        return request.LinkToken is not { Length: > 0 } token
+            ? Answers.Malformed("linkToken")
+            : Answers.Of(
+                await authentication.AbandonLinkAsync(token, cancellationToken).ConfigureAwait(false),
+                Nothing);
     }
 
     // AUTH-SESS-008: every session of the account ends, not the calling application's

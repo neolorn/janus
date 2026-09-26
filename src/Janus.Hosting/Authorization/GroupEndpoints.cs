@@ -17,9 +17,10 @@ namespace Janus.Hosting.Authorization;
 /// creating and removing one, and changing its members.
 /// </summary>
 /// <remarks>
-/// Implements AUTHZ-GROUP-001, OPS-CFG-007, LIB-API-005 and CONV-DESIGN-006. Each is
-/// one line to <see cref="IGroups"/>, which judges the permission, the step-up and the
-/// reason.
+/// Implements AUTHZ-GROUP-001, OPS-CFG-007, LIB-API-005, CONV-CODE-006 and
+/// CONV-DESIGN-006. Each is one line to <see cref="IGroups"/>, which judges the
+/// permission, the step-up and what the reason says; a body missing a member it
+/// requires is refused before it is called.
 /// </remarks>
 internal static class GroupEndpoints
 {
@@ -87,13 +88,23 @@ internal static class GroupEndpoints
             return Answers.Malformed("organization");
         }
 
+        if (body.Name is not { Length: > 0 } name)
+        {
+            return Answers.Malformed("name");
+        }
+
+        if (body.Reason is not { Length: > 0 } reason)
+        {
+            return Answers.Malformed("reason");
+        }
+
         return Answers.Of(
             await groups
                 .CreateAsync(
                     AccessContext.Of(browser.Required.Subject),
                     new OrganizationId(organization),
-                    body.Name ?? string.Empty,
-                    body.Reason ?? string.Empty,
+                    name,
+                    reason,
                     cancellationToken)
                 .ConfigureAwait(false),
             created => TypedResults.Json(
@@ -116,12 +127,17 @@ internal static class GroupEndpoints
         ArgumentNullException.ThrowIfNull(groups);
         ArgumentNullException.ThrowIfNull(browser);
 
+        if (body.Reason is not { Length: > 0 } reason)
+        {
+            return Answers.Malformed("reason");
+        }
+
         return Answers.Of(
             await groups
                 .RemoveAsync(
                     AccessContext.Of(browser.Required.Subject),
                     new GroupId(id),
-                    body.Reason ?? string.Empty,
+                    reason,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
@@ -145,6 +161,11 @@ internal static class GroupEndpoints
             return Answers.Malformed(member);
         }
 
+        if (body.Reason is not { Length: > 0 } reason)
+        {
+            return Answers.Malformed("reason");
+        }
+
         return Answers.Of(
             await groups
                 .AddMemberAsync(
@@ -152,7 +173,7 @@ internal static class GroupEndpoints
                     browser.Required.Id,
                     new GroupId(id),
                     joining,
-                    body.Reason ?? string.Empty,
+                    reason,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
@@ -178,6 +199,11 @@ internal static class GroupEndpoints
             return Answers.Malformed(member);
         }
 
+        if (body.Reason is not { Length: > 0 } reason)
+        {
+            return Answers.Malformed("reason");
+        }
+
         return Answers.Of(
             await groups
                 .RemoveMemberAsync(
@@ -185,7 +211,7 @@ internal static class GroupEndpoints
                     browser.Required.Id,
                     new GroupId(id),
                     leaving,
-                    body.Reason ?? string.Empty,
+                    reason,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);

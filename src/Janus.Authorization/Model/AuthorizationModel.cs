@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text.Json;
 using Janus.Core;
+using Janus.Core.Configuration;
 
 namespace Janus.Authorization.Model;
 
@@ -32,6 +33,12 @@ internal sealed class AuthorizationModel
     // The three actions that read by their name alone; every other action modifies
     // unless the host declared it reading (AUTHZ-GATE-006, D-160).
     private static readonly string[] Reading = ["read", "list", Export];
+
+    // INT-HOST-002, PRIV-CONS-010: the hosting and its transfer outside the country
+    // rest on the regulator's permit, since a withdrawal would leave data that cannot
+    // lawfully be hosted, so no purpose by these names may rest on consent.
+    private static readonly string[] Hosting =
+        ["hosting", "transfer", "hosting-transfer", "cross-border-transfer"];
 
     private readonly Dictionary<string, LawfulBasisDeclaration> _bases;
     private readonly Dictionary<Type, ResourceTypeDeclaration> _entities;
@@ -127,7 +134,7 @@ internal sealed class AuthorizationModel
 
         foreach (ResourceTypeDeclaration type in types.Values)
         {
-            Check(type, types, relationships, bases, categories);
+            Check(type, types, relationships, bases, categories, declaration.RetentionFloors);
 
             if (!entities.TryAdd(type.Entity, type))
             {
@@ -136,6 +143,7 @@ internal sealed class AuthorizationModel
         }
 
         var processing = DeclaredProcessing.Of(declaration);
+        CheckFloors(declaration, processing);
 
         return new AuthorizationModel(
             types,
@@ -381,6 +389,11 @@ internal sealed class AuthorizationModel
         new("COLUMN identity.preauthentication_sessions.signon_key_version", "UPDATE"),
         new("COLUMN identity.preauthentication_sessions.signon_verifier", "SELECT"),
         new("COLUMN identity.preauthentication_sessions.signon_verifier", "UPDATE"),
+        new("COLUMN identity.provider_attempts.id", "SELECT"),
+        new("COLUMN identity.provider_attempts.key_version", "SELECT"),
+        new("COLUMN identity.provider_attempts.key_version", "UPDATE"),
+        new("COLUMN identity.provider_attempts.verifier", "SELECT"),
+        new("COLUMN identity.provider_attempts.verifier", "UPDATE"),
         new("COLUMN identity.registration_sessions.id", "SELECT"),
         new("COLUMN identity.registration_sessions.key_version", "SELECT"),
         new("COLUMN identity.registration_sessions.key_version", "UPDATE"),
@@ -395,6 +408,7 @@ internal sealed class AuthorizationModel
         new("COLUMN identity.send_outbox.wrapped_key", "SELECT"),
         new("COLUMN identity.send_outbox.wrapped_key", "UPDATE"),
         new("COLUMN identity.sends.fingerprint_version", "SELECT"),
+        new("COLUMN identity.signin_challenges.fingerprint_version", "SELECT"),
         new("COLUMN identity.signing_keys.key_id", "SELECT"),
         new("COLUMN identity.signing_keys.key_version", "SELECT"),
         new("COLUMN identity.signing_keys.key_version", "UPDATE"),
@@ -419,6 +433,7 @@ internal sealed class AuthorizationModel
         new("TABLE identity.send_counters", "DELETE"),
         new("TABLE identity.send_grants", "DELETE"),
         new("TABLE identity.sends", "DELETE"),
+        new("TABLE identity.signin_challenges", "DELETE"),
         new("TABLE identity.subject_keys", "SELECT"),
         new("TABLE identity.subject_keys", "UPDATE"),
         new("TABLE identity.throttle_counters", "DELETE"),
@@ -541,14 +556,33 @@ internal sealed class AuthorizationModel
         Dictionary<ResourceType, ResourceTypeDeclaration> types,
         Dictionary<string, RelationshipDeclaration> relationships,
         Dictionary<string, LawfulBasisDeclaration> bases,
-        IReadOnlyCollection<string> categories)
+        IReadOnlyCollection<string> categories,
+        IReadOnlyDictionary<string, TimeSpan> floors)
     {
         CheckContainment(type, types);
         CheckOrganizationPath(type, types);
         CheckSensitivity(type, categories);
-        CheckPurposes(type, bases);
+        CheckPurposes(type, bases, floors);
         CheckDerivations(type, relationships);
         CheckEncryptedFields(type);
+    }
+
+    // A floor for a category no purpose is over governs nothing, and is most often
+    // the category a purpose names, spelled another way.
+    private static void CheckFloors(AuthorizationDeclaration declaration, DeclaredProcessing processing)
+    {
+        var named = new HashSet<string>(
+            processing.Purposes.SelectMany(purpose => purpose.DataCategories),
+            StringComparer.Ordinal);
+
+        foreach (string category in declaration.RetentionFloors.Keys.Order(StringComparer.Ordinal))
+        {
+            if (!named.Contains(category))
+            {
+                throw Malformed(
+                    "the retention floor of " + category + " is declared for a category no purpose is over");
+            }
+        }
     }
 
     // PRIV-RIGHT-005a: the subject column is how erasure reaches ciphertext sitting in
@@ -654,7 +688,8 @@ internal sealed class AuthorizationModel
 
     private static void CheckPurposes(
         ResourceTypeDeclaration type,
-        Dictionary<string, LawfulBasisDeclaration> bases)
+        Dictionary<string, LawfulBasisDeclaration> bases,
+        IReadOnlyDictionary<string, TimeSpan> floors)
     {
         if (type.Purposes.Count == 0)
         {
@@ -674,6 +709,16 @@ internal sealed class AuthorizationModel
                     + ", which the model does not declare as a lawful basis");
             }
 
+            if (basis.IsConsent && Hosting.Contains(purpose.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                throw Refused(
+                    ErrorCodes.StartupDeclarationMissing,
+                    "key",
+                    type.Name + "." + purpose.Name,
+                    "the hosting and its transfer rest on the regulator's permit and never "
+                    + "on consent");
+            }
+
             if (basis.RequiresAssessment && string.IsNullOrWhiteSpace(purpose.Assessment))
             {
                 throw Refused(
@@ -690,6 +735,21 @@ internal sealed class AuthorizationModel
                     "key",
                     purpose.Name,
                     "a purpose is declared with the categories of data it requires");
+            }
+
+            // PRIV-RET-001: a category is kept for its floor until the deployment
+            // states a longer period, so a category with no floor is one with no
+            // period and no end.
+            foreach (string category in purpose.DataCategories)
+            {
+                if (!floors.ContainsKey(category))
+                {
+                    throw Refused(
+                        ErrorCodes.StartupDeclarationMissing,
+                        "key",
+                        Settings.HostCategoryRetention.Prefix + "." + category,
+                        "a category of data is declared with its retention floor");
+                }
             }
 
             // PRIV-SENS-002 AC1: the consent the gate reads is the record's data

@@ -7,11 +7,13 @@ namespace Janus.Core;
 /// passkeys says which is which.
 /// </summary>
 /// <remarks>
-/// Implements AUTH-FACT-001. One to sixty-four characters, unique per kind per
+/// Implements AUTH-FACT-001 and CONV-DESIGN-004. One to sixty-four characters, unique
+/// per kind per
 /// account, defaulting to the client's description of the device
 /// (<see cref="DeviceDescription"/>) and editable afterwards. The profile is
 /// Nickname (RFC 8266), as a display name's is: a label is shown back as the person
-/// wrote it, with the spaces and the normalization form settled.
+/// wrote it, with the spaces and the normalization form settled. A default instance
+/// was never read, so it has no label to give and no row can carry it.
 /// </remarks>
 public readonly record struct CredentialLabel
 {
@@ -32,7 +34,8 @@ public readonly record struct CredentialLabel
     /// <summary>
     /// The label in the profile's form, which is what is shown.
     /// </summary>
-    public string Value => _value ?? string.Empty;
+    /// <exception cref="InvalidOperationException">The label was never set.</exception>
+    public string Value => _value ?? throw new InvalidOperationException("The label was never set.");
 
     /// <summary>
     /// Reads a label as it was entered and returns it in the profile's form.
@@ -80,5 +83,6 @@ public readonly record struct CredentialLabel
     }
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">The label was never set.</exception>
     public override string ToString() => Value;
 }

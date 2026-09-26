@@ -84,25 +84,27 @@ internal sealed class RecoveryApprovalStore(
     }
 
     /// <inheritdoc/>
-    public async ValueTask<int> ForAsync(
+    public async ValueTask<IReadOnlyList<DateTimeOffset>> ForAsync(
         SubjectId subject,
         DateTimeOffset from,
         CancellationToken cancellationToken) =>
         await context.RecoveryApprovals
-            .CountAsync(
-                approval => approval.Subject == subject && approval.At >= from,
-                cancellationToken)
+            .Where(approval => approval.Subject == subject && approval.At > from)
+            .OrderBy(approval => approval.At)
+            .Select(approval => approval.At)
+            .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
     /// <inheritdoc/>
-    public async ValueTask<int> ByAsync(
+    public async ValueTask<IReadOnlyList<DateTimeOffset>> ByAsync(
         SubjectId approver,
         DateTimeOffset from,
         CancellationToken cancellationToken) =>
         await context.RecoveryApprovals
-            .CountAsync(
-                approval => approval.Approver == approver && approval.At >= from,
-                cancellationToken)
+            .Where(approval => approval.Approver == approver && approval.At > from)
+            .OrderBy(approval => approval.At)
+            .Select(approval => approval.At)
+            .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
     /// <inheritdoc/>

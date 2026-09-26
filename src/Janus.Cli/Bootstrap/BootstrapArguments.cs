@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text.Json;
 using Janus.Authentication.Bootstrap;
@@ -10,14 +11,15 @@ namespace Janus.Cli.Bootstrap;
 
 /// <summary>
 /// Reads what the <c>bootstrap</c> command is given: the organization's name, the first
-/// administrator's email and phone, optionally the address of their mailbox, and every
-/// value the deployment names, each as <c>--name value</c>.
+/// administrator's email, phone and date of birth, optionally the address of their
+/// mailbox, and every value the deployment names, each as <c>--name value</c>.
 /// </summary>
 /// <remarks>
-/// Implements OPS-BOOT-001, LIB-HOST-001 and chapter 10 section 4. Every value is read
-/// as its key admits it and the set is checked complete before the database is
-/// reached, by the same rule the host's startup applies, so a deployment bootstrap
-/// accepts is one that starts.
+/// Implements OPS-BOOT-001, LIB-HOST-001, PRIV-MINOR-001 and chapter 10 section 4. The
+/// date of birth is the age screen's question, asked of the one person bootstrap
+/// creates an account for. Every value is read as its key admits it and the set is
+/// checked complete before the database is reached, by the same rule the host's
+/// startup applies, so a deployment bootstrap accepts is one that starts.
 /// </remarks>
 internal static class BootstrapArguments
 {
@@ -30,6 +32,11 @@ internal static class BootstrapArguments
     private const string Phone = "phone";
 
     private const string Mailbox = "mailbox";
+
+    private const string DateOfBirth = "dateofbirth";
+
+    // The form the age screen takes the date in (09, PUT /register/age).
+    private const string DateForm = "yyyy-MM-dd";
 
     /// <summary>
     /// Reads the arguments that follow the command's name.
@@ -58,7 +65,7 @@ internal static class BootstrapArguments
             }
         }
 
-        foreach (string member in (string[])[Organization, Email, Phone])
+        foreach (string member in (string[])[Organization, Email, Phone, DateOfBirth])
         {
             if (!given.ContainsKey(member))
             {
@@ -70,7 +77,7 @@ internal static class BootstrapArguments
 
         foreach ((string name, string value) in given)
         {
-            if (name is Organization or Email or Phone or Mailbox)
+            if (name is Organization or Email or Phone or DateOfBirth or Mailbox)
             {
                 continue;
             }
@@ -98,10 +105,16 @@ internal static class BootstrapArguments
             return Result.Failure<BootstrapRequest>(unnamed);
         }
 
+        if (!DateOnly.TryParseExact(given[DateOfBirth], DateForm, CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly born))
+        {
+            return Result.Failure<BootstrapRequest>(Malformed(DateOfBirth));
+        }
+
         return Result.Success(new BootstrapRequest(
             given[Organization],
             given[Email],
             given[Phone],
+            born,
             given.GetValueOrDefault(Mailbox),
             named));
     }

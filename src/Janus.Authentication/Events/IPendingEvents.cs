@@ -42,4 +42,11 @@ internal interface IPendingEvents
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of writing it.</returns>
     ValueTask RecordAsync(PendingEvent pending, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Clears the events every consumer has taken, which nothing offers or reads again.
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>How many were cleared.</returns>
+    ValueTask<int> SweepAsync(CancellationToken cancellationToken);
 }

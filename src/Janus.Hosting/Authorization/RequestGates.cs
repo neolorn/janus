@@ -63,7 +63,7 @@ internal sealed class RequestGates(RequestSession request, StepUpGuard guard) : 
                 .ChallengeAsync(live.Subject, live.Id, gate, cancellationToken)
                 .ConfigureAwait(false))
             .Match(
-                challenge => StepUpRefusal.Met(challenge) ? null : StepUpRefusal.Of(gate, challenge),
+                challenge => StepUpRefusal.Met(challenge) ? null : StepUpRefusal.Of(challenge),
                 error => error);
 
         _judged[gate] = outstanding;

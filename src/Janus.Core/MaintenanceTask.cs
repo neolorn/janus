@@ -1,13 +1,13 @@
 using System.Text.Json.Serialization;
 
-namespace Janus.Authentication.Maintenance;
+namespace Janus.Core;
 
 /// <summary>
 /// The recurring human tasks and reviews of chapter 06 section 9 that the maintenance
 /// log records.
 /// </summary>
 /// <remarks>Implements OPS-MAINT-001 (D-153).</remarks>
-internal enum MaintenanceTask
+public enum MaintenanceTask
 {
     /// <summary>
     /// The annual operation: the break-glass credential regenerated and resealed, the

@@ -193,7 +193,8 @@ internal sealed class RegistrationSessionStore(
             staged.WebAuthn?.RelyingPartyId,
             staged.WebAuthn?.Counter,
             staged.WebAuthn?.BackupEligible ?? false,
-            staged.WebAuthn?.BackupState ?? false);
+            staged.WebAuthn?.BackupState ?? false,
+            staged.ProviderSubject);
 
     private static StagedIdentity Read(StagedIdentityDocument staged) =>
         StagedIdentity.Existing(
@@ -225,7 +226,8 @@ internal sealed class RegistrationSessionStore(
                     staged.RelyingPartyId!,
                     staged.Counter,
                     staged.BackupEligible,
-                    staged.BackupState));
+                    staged.BackupState),
+            staged.ProviderSubject);
 
     // A label this library wrote is a label this library accepts, so a stored value
     // that no longer parses is a corrupted row and not a label to drop quietly.
@@ -328,7 +330,7 @@ internal sealed class RegistrationSessionStore(
 
         foreach (RegistrationLinkRecord link in held)
         {
-            if (!Array.Exists(outstanding, fingerprint => fingerprint.SequenceEqual(link.Fingerprint)))
+            if (!Array.Exists(outstanding, fingerprint => CryptographicOperations.FixedTimeEquals(fingerprint, link.Fingerprint)))
             {
                 context.RegistrationLinks.Remove(link);
             }
@@ -336,7 +338,7 @@ internal sealed class RegistrationSessionStore(
 
         foreach (byte[] fingerprint in outstanding)
         {
-            if (!held.Exists(link => link.Fingerprint.SequenceEqual(fingerprint)))
+            if (!held.Exists(link => CryptographicOperations.FixedTimeEquals(link.Fingerprint, fingerprint)))
             {
                 context.RegistrationLinks.Add(
                     new RegistrationLinkRecord { Fingerprint = fingerprint, Session = session.Id });

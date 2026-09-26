@@ -10,6 +10,7 @@ using Janus.Authentication.Recovery;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
+using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
@@ -36,6 +37,9 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     private const string Third = "third@example.test";
     private const string Number = "+441632960011";
 
+    // IDN-ACCT-005: a Cyrillic a inside an otherwise Latin word.
+    private const string Mixed = "p\u0430ypal@example.test";
+
     private static readonly string[] English = ["en"];
 
     private static readonly DateTimeOffset Noon =
@@ -44,6 +48,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     private static readonly SessionOrigin Somewhere = new(Source, new DeviceDescription("Firefox", "Fedora"));
 
     private readonly IdentifierDirectoryInMemory _directory = new();
+    private readonly SettingsRestrictionInMemory _restriction = new();
     private readonly PendingVerificationStoreInMemory _pending = new();
     private readonly RecoveryLinkStoreInMemory _links = new();
     private readonly NoticeLedgerInMemory _notices = new();
@@ -76,6 +81,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     private IdentifierService Service =>
         new(
             _directory,
+            _restriction,
             _pending,
             _notifications,
             _notices,
@@ -464,6 +470,91 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-008 AC1: once a replacement applies, the value that signed in is gone,
+    /// so every other session of the account ends with it and the one that staged the
+    /// change is kept. Until it applies, nothing ends.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_008_AC1_EveryOtherSessionEndsWhenAReplacementAppliesAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(_person, IdentifierKind.Phone, Number);
+
+        SessionId elsewhere = Stepped();
+        SessionId asking = Stepped();
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            asking,
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Null((await _sessions.FindAsync(elsewhere, TestContext.Current.CancellationToken))?.EndedAt);
+
+        await VerifiedAsync(email);
+
+        Assert.Equal(Second, Named(await HeldAsync(), Second).Canonical);
+        Assert.Null((await _sessions.FindAsync(asking, TestContext.Current.CancellationToken))?.EndedAt);
+        Assert.NotNull((await _sessions.FindAsync(elsewhere, TestContext.Current.CancellationToken))?.EndedAt);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-007 AC2: a restricted account changes none of its identifiers. Adding,
+    /// removing, replacing, promoting and naming a backup are each refused with the
+    /// code the gate refuses a modifying action with, and nothing is staged or given up.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ACCT_007_AC2_ARestrictedAccountChangesNoIdentifierAsync()
+    {
+        IdentifierId primary = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
+        _ = _directory.Verified(_person, IdentifierKind.Phone, Number);
+        _restriction.Restrict(_person);
+
+        SessionId asking = Stepped();
+
+        Assert.Equal(ErrorCodes.Restricted, Refused(await Service.AddAsync(
+            Acting,
+            asking,
+            IdentifierKind.Email,
+            Third,
+            Source,
+            TestContext.Current.CancellationToken)));
+        Assert.Equal(ErrorCodes.Restricted, Refused(await Service.RemoveAsync(
+            Acting,
+            asking,
+            second,
+            Source,
+            TestContext.Current.CancellationToken)));
+        Assert.Equal(ErrorCodes.Restricted, Refused(await Service.ReplaceAsync(
+            Acting,
+            asking,
+            primary,
+            Third,
+            Source,
+            TestContext.Current.CancellationToken)));
+        Assert.Equal(ErrorCodes.Restricted, Refused(await Service.MakePrimaryAsync(
+            Acting,
+            second,
+            Source,
+            TestContext.Current.CancellationToken)));
+        Assert.Equal(ErrorCodes.Restricted, Refused(await Service.SetBackupAsync(
+            Acting,
+            IdentifierKind.Email,
+            BackupChoice.PrimaryOnly,
+            named: null,
+            Source,
+            TestContext.Current.CancellationToken)));
+
+        Assert.Empty(_pending.All);
+        Assert.Equal(3, (await HeldAsync()).Count);
+    }
+
+    /// <summary>
     /// REG-IDENT-001 AC1: the one verified email an account holds is its primary,
     /// and no removal takes it away.
     /// </summary>
@@ -709,6 +800,134 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
                 Second,
                 Source,
                 TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// IDN-ACCT-004 AC3: an address added in fullwidth and mixed case, and a number
+    /// added in Arabic-Indic digits, are held in their canonical forms beside the forms
+    /// the person entered.
+    /// </summary>
+    /// <param name="kind">What is added.</param>
+    /// <param name="entered">The form the person entered.</param>
+    /// <param name="canonical">The form it is held under.</param>
+    [Theory]
+    [InlineData(IdentifierKind.Email, "\uFF33econd@Example.TEST", Second)]
+    [InlineData(
+        IdentifierKind.Phone,
+        "+\u0664\u0664\u0661\u0666\u0663\u0662\u0669\u0666\u0660\u0660\u0661\u0661",
+        Number)]
+    public async Task IDN_ACCT_004_AC3_AnIdentifierAddedInAnotherFormIsHeldCanonicalAsync(
+        IdentifierKind kind,
+        string entered,
+        string canonical)
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        Accepted(await Service.AddAsync(
+            Acting,
+            Stepped(),
+            kind,
+            entered,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        HeldIdentifier added = Named(await HeldAsync(), canonical);
+
+        Assert.Equal(kind, added.Kind);
+        Assert.Equal(entered, added.Entered);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-004 AC3: where one of a kind is all the account may hold, an address
+    /// changed to one entered in fullwidth and mixed case, and a number changed to one
+    /// entered in Arabic-Indic digits, are held in their canonical forms once the
+    /// change applies.
+    /// </summary>
+    /// <param name="kind">What is changed.</param>
+    /// <param name="entered">The form the person entered.</param>
+    /// <param name="canonical">The form it is held under.</param>
+    [Theory]
+    [InlineData(IdentifierKind.Email, "\uFF33econd@Example.TEST", Second)]
+    [InlineData(
+        IdentifierKind.Phone,
+        "+\u0664\u0664\u0661\u0666\u0663\u0662\u0669\u0666\u0660\u0660\u0661\u0662",
+        "+441632960012")]
+    public async Task IDN_ACCT_004_AC3_AChangeEnteredInAnotherFormIsHeldCanonicalAsync(
+        IdentifierKind kind,
+        string entered,
+        string canonical)
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        _configuration.Set(Settings.IdentifiersPhoneMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId phone = _directory.Verified(_person, IdentifierKind.Phone, Number);
+        IdentifierId changing = kind is IdentifierKind.Email ? email : phone;
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            changing,
+            entered,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        await VerifiedAsync(changing);
+
+        HeldIdentifier changed = Named(await HeldAsync(), canonical);
+
+        Assert.Equal(changing, changed.Id);
+        Assert.Equal(entered, changed.Entered);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-005 AC3: an address whose one word mixes a Cyrillic letter into Latin
+    /// is refused as an addition by the code that names the mixing, and nothing waits
+    /// to be verified.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ACCT_005_AC3_AMixedAddressIsRefusedAsAnAdditionByItsOwnCodeAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        Assert.Equal(
+            ErrorCodes.IdentifierMixedScript,
+            Refused(await Service.AddAsync(
+                Acting,
+                Stepped(),
+                IdentifierKind.Email,
+                Mixed,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.Equal(Primary, Assert.Single(await HeldAsync()).Canonical);
+        Assert.Empty(_pending.All);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-005 AC3: where one address is all the account may hold, a change to
+    /// one whose one word mixes a Cyrillic letter into Latin is refused by the code
+    /// that names the mixing, and nothing waits to be verified.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ACCT_005_AC3_AMixedAddressIsRefusedAsAChangeByItsOwnCodeAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId primary = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        Assert.Equal(
+            ErrorCodes.IdentifierMixedScript,
+            Refused(await Service.ReplaceAsync(
+                Acting,
+                Stepped(),
+                primary,
+                Mixed,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.Equal(Primary, Assert.Single(await HeldAsync()).Canonical);
+        Assert.Empty(_pending.All);
     }
 
     /// <summary>

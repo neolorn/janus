@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using Microsoft.CodeAnalysis;
 using Xunit;
 
 namespace Janus.Analyzers.Tests;
@@ -87,5 +88,39 @@ public sealed class BlockingAndCancellationAnalyzerTests
             """);
 
         Assert.Empty(reported);
+    }
+
+    /// <summary>
+    /// CONV-CODE-002 AC1: blocking on a task and an asynchronous method without a
+    /// cancellation token are each reported as an error, and the repository's
+    /// .editorconfig lowers neither in any file the build analyses.
+    /// </summary>
+    /// <returns>The running test.</returns>
+    [Fact]
+    public async Task CONV_CODE_002_AC1_BlockingAndAMissingTokenAreErrorsInTheBuildAsync()
+    {
+        (string, ReportDiagnostic)[] reported = await Analysis.AsBuiltAsync<BlockingAndCancellationAnalyzer>("""
+            using System.Threading.Tasks;
+
+            namespace Cases;
+
+            internal sealed class Work
+            {
+                internal static int Now()
+                {
+                    return Later().Result;
+                }
+
+                internal static async Task<int> LaterAsync()
+                {
+                    await Task.Yield();
+                    return 1;
+                }
+
+                private static Task<int> Later() => Task.FromResult(1);
+            }
+            """);
+
+        Assert.Equal([("JAN0004", ReportDiagnostic.Error), ("JAN0004", ReportDiagnostic.Error)], reported);
     }
 }

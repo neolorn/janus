@@ -183,9 +183,8 @@ public sealed class SendingValidationTests
     }
 
     /// <summary>
-    /// INT-GEN-001 AC1 and AC2: an endpoint reached over plain HTTP stops the
-    /// deployment, and the failure names the key it was read from, which is the key
-    /// of the integration it belongs to.
+    /// INT-GEN-001 AC1: an endpoint reached over plain HTTP stops the deployment with
+    /// the error the chapter names for it.
     /// </summary>
     /// <param name="key">The endpoint that is not over TLS.</param>
     /// <returns>The work of running it.</returns>
@@ -194,18 +193,46 @@ public sealed class SendingValidationTests
     [InlineData("integration.sms.endpoint")]
     public async Task INT_GEN_001_AC1_APlaintextEndpointStopsStartupAsync(string key)
     {
-        _configuration.Set(Settings.IntegrationMailEndpoint, "https://mail.example.test");
-        _configuration.Set(Settings.IntegrationSmsEndpoint, "https://sms.example.test");
-        _configuration.Set(
-            key.Contains("mail", StringComparison.Ordinal)
-                ? Settings.IntegrationMailEndpoint
-                : Settings.IntegrationSmsEndpoint,
-            "http://plain.example.test");
+        Error refusal = await PlaintextAsync(key);
+
+        Assert.Equal(ErrorCodes.EndpointInsecure, refusal.Code);
+    }
+
+    /// <summary>
+    /// INT-GEN-001 AC2: the failure names the key the endpoint was read from, which
+    /// is at once the setting and the integration it belongs to, and the other
+    /// integration's key, over TLS, is not the one named.
+    /// </summary>
+    /// <param name="key">The endpoint that is not over TLS.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("integration.mail.endpoint")]
+    [InlineData("integration.sms.endpoint")]
+    public async Task INT_GEN_001_AC2_TheFailureNamesTheIntegrationAndTheSettingAsync(string key)
+    {
+        Error refusal = await PlaintextAsync(key);
+
+        Assert.Equal(key, refusal.Details["key"].GetString());
+    }
+
+    /// <summary>
+    /// INF-TLS-004 AC1: a self-hosted password corpus named over plain HTTP stops the
+    /// deployment, and the failure names the key it was read from.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INF_TLS_004_AC1_APlaintextCorpusAddressStopsStartupAsync()
+    {
+        _configuration.Set(Settings.PasswordBlocklistSelfHostedAddress, "http://corpus.example.test/range");
 
         Error refusal = await RefusedAsync();
 
         Assert.Equal(ErrorCodes.EndpointInsecure, refusal.Code);
-        Assert.Equal(key, refusal.Details["key"].GetString());
+        Assert.Equal("password.blocklist.selfhosted.address", refusal.Details["key"].GetString());
+
+        _configuration.Set(Settings.PasswordBlocklistSelfHostedAddress, "https://corpus.example.test/range");
+
+        await PassedAsync();
     }
 
     /// <summary>
@@ -253,6 +280,21 @@ public sealed class SendingValidationTests
         ]);
 
         await PassedAsync();
+    }
+
+    // Both endpoints are named over TLS, and then the one given over plain HTTP, so
+    // the refusal can only be about that one.
+    private async Task<Error> PlaintextAsync(string key)
+    {
+        _configuration.Set(Settings.IntegrationMailEndpoint, "https://mail.example.test");
+        _configuration.Set(Settings.IntegrationSmsEndpoint, "https://sms.example.test");
+        _configuration.Set(
+            key.Contains("mail", StringComparison.Ordinal)
+                ? Settings.IntegrationMailEndpoint
+                : Settings.IntegrationSmsEndpoint,
+            "http://plain.example.test");
+
+        return await RefusedAsync();
     }
 
     private async Task PassedAsync() =>

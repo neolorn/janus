@@ -15,6 +15,7 @@ namespace Janus.Authentication.Accounts;
 /// </summary>
 /// <param name="lifecycle">What the account does to its own standing.</param>
 /// <param name="directory">Where the standing, the profile and the preferences are.</param>
+/// <param name="restriction">Whether the account's processing is restricted, as the gate answers it.</param>
 /// <param name="identifiers">Where the account's identifiers are.</param>
 /// <param name="authenticators">Where the account's credentials are.</param>
 /// <param name="recoveryCodes">Where the account's single-use codes are.</param>
@@ -34,6 +35,7 @@ namespace Janus.Authentication.Accounts;
 internal sealed class AccountService(
     AccountLifecycle lifecycle,
     IAccountDirectory directory,
+    ISettingsRestriction restriction,
     IIdentifierDirectory identifiers,
     IAuthenticatorStore authenticators,
     IRecoveryCodeStore recoveryCodes,
@@ -132,6 +134,13 @@ internal sealed class AccountService(
         if (context.Effective is not SubjectId subject)
         {
             return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
+        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+            is Error restricted)
+        {
+            return Result.Failure(restricted);
         }
 
         // The date is the one entered at the age step and is corrected through
@@ -249,6 +258,13 @@ internal sealed class AccountService(
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
+        // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
+        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+            is Error restricted)
+        {
+            return Result.Failure(restricted);
+        }
+
         Error? failure = null;
 
         int maximumSize = (await configuration
@@ -328,6 +344,13 @@ internal sealed class AccountService(
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
+        // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
+        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+            is Error restricted)
+        {
+            return Result.Failure(restricted);
+        }
+
         if (!CredentialLabel.TryParse(label, out CredentialLabel named))
         {
             return Result.Failure(Error.From(ErrorCodes.CredentialLabelInvalid));
@@ -392,6 +415,13 @@ internal sealed class AccountService(
         if (context.Effective is not SubjectId subject)
         {
             return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
+        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+            is Error restricted)
+        {
+            return Result.Failure(restricted);
         }
 
         IReadOnlyList<Authenticator> enrolled = await authenticators
@@ -646,6 +676,13 @@ internal sealed class AccountService(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
+        // IDN-ACCT-005 AC3: a word that mixes scripts is refused by the code that names
+        // the mixing, before anything else about the username is judged.
+        if (!ScriptMixing.IsSingleScriptPerWord(entered))
+        {
+            return Error.From(ErrorCodes.IdentifierMixedScript);
+        }
+
         if (!Username.TryParse(entered, out Username username))
         {
             return Error.From(ErrorCodes.UsernameInvalid);

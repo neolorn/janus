@@ -26,9 +26,22 @@ internal sealed class GroupsInMemory : IGroupStore
     /// </summary>
     public int Reads { get; private set; }
 
+    /// <summary>
+    /// How many times one group's row has been read by its identifier.
+    /// </summary>
+    public int Found { get; private set; }
+
     /// <inheritdoc/>
-    public ValueTask<Group?> FindAsync(GroupId id, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(_groups.GetValueOrDefault(id));
+    public ValueTask<Group?> FindAsync(GroupId id, CancellationToken cancellationToken)
+    {
+        Found++;
+
+        return ValueTask.FromResult(_groups.GetValueOrDefault(id));
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<OrganizationId?> ScopeOfAsync(GroupId id, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_groups.TryGetValue(id, out Group? group) ? group.Organization : (OrganizationId?)null);
 
     /// <inheritdoc/>
     public ValueTask CreateAsync(Group group, CancellationToken cancellationToken)

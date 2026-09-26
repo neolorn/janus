@@ -100,6 +100,9 @@ internal sealed class RegistrationSignals(string connectionString, TimeProvider 
 
     private async Task ListenAsync(CancellationToken cancellationToken)
     {
+        // OPS-DATA-003: listen/notify has no abstraction above ADO.NET, and a listening
+        // connection outlives every operation, so it is opened here rather than taken
+        // from the accessor, and it runs nothing but the LISTEN.
         NpgsqlConnection connection = new(connectionString);
 
         await using (connection.ConfigureAwait(false))
