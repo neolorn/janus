@@ -254,20 +254,18 @@ jobs:
 
   secret-scanning:
     name: Secret scanning
-    # OPS-DEP-004 defines the scan as the full history on every push. On a pull
-    # request the action scans that request's commits instead, which is the smaller
-    # scan the item does not ask for.
+    # OPS-DEP-004 scans the full history on every push. The version is raised only in a
+    # commit of its own, with the SHA-256 the release publishes for its linux_x64 archive.
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: .gitleaks.toml
-          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
+      - run: ./.github/gates/secret-scanning.sh
 
   forbidden-markers:
     name: Forbidden markers and commented-out code
