@@ -446,6 +446,26 @@ public sealed class LibraryStructureTests
         TimeSpan.FromSeconds(5));
 
     /// <summary>
+    /// AUTH-PASS-004: the notice names the source the offline leaked-password list was
+    /// drawn from, and the date the list itself carries.
+    /// </summary>
+    [Fact]
+    public void AUTH_PASS_004_TheNoticeNamesTheLeakedListsSource()
+    {
+        string notice = string.Join(
+            ' ',
+            File.ReadAllText(Path.Combine(Repository.Root, "NOTICE"))
+                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        string drawn = File
+            .ReadLines(Path.Combine(Repository.Root, "src", "Janus.Hosting", "Passwords", "leaked-passwords.txt"))
+            .First()[2..];
+
+        Assert.Contains("Have I Been Pwned", notice, StringComparison.Ordinal);
+        Assert.Contains("Pwned Passwords", notice, StringComparison.Ordinal);
+        Assert.Contains("drawn on " + drawn, notice, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// CONV-LAYOUT-001 AC3: every project's library dependencies are exactly the ones
     /// the table gives, so a dependency pointing outward does not build.
     /// </summary>

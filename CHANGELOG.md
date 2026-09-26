@@ -1081,6 +1081,8 @@ against the public contract of LIB-API-001.
   no address does not start. The offline leaked-password list travels in the package and
   is refreshed with each release rather than by the operator, so a deployment that holds
   no corpus file of its own falls back to a dated list when the range API cannot answer.
+  The list is the 100,000 most prevalent hashes of Pwned Passwords, drawn from Have I
+  Been Pwned over the range API and dated on its first line.
   A fall back from the configured corpus to the offline one is raised as `degradation`
   under the scope `password.blocklist.fallback`, naming both corpora. Where the alert
   cannot be raised, where neither corpus can answer, or where the corpus is older than
