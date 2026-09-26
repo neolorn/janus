@@ -138,17 +138,17 @@ a restore to a point **before** it recovers the key as it then was. The ledger (
 re-applies erasures after such a restore; otherwise erasure of pre-erasure backups
 completes when they expire.
 
-*Source: D-068, D-082*
+*Source: D-068, D-082, D-166*
 
 Backups are immutable, so an erasure cannot alter them; without this the subject's
 data would remain readable in every archived copy. Destroying the subject key renders
 it unreadable everywhere, live and archived, with no backup file touched.
 
 **Acceptance criteria**
-1. After a restore to a point before an erasure, the restore procedure (§4)
-   **re-applies every erasure recorded in the erasures table** that post-dates the
-   restore point where that table survives the restore; where it does not (Phase 1,
-   until the ledger DR-016 exists), the residual is R-A13 and the procedure says so.
+1. After a restore to a point before an erasure, the restore procedure (§5) replays
+   the off-host ledger (DR-016), which re-applies every erasure the restored database
+   does not hold; where no ledger is registered, the residual is R-A13 and the
+   procedure says so.
 2. No erasure procedure attempts to modify a backup.
 3. A subject erased before the backup was taken is not recoverable from it.
 
@@ -206,14 +206,17 @@ the **break-glass credential on paper only** (OPS-BOOT-004, D-133):
 | Backup private key | Decrypts the backups themselves (DR-010) |
 | Deployment credentials | Redeploy to a new host from the committed infrastructure definition (DR-017): the envelope names the repository that holds it |
 
-*Source: D-148; D-069, D-084, D-103, D-147*
+*Source: D-148; D-069, D-084, D-103, D-147, D-166*
 
 **Recovery order:** the secrets manager first as the fast path; the envelope as the
 **standalone** fallback. The envelope must therefore be sufficient **without** the
 secrets manager, since a lost or unavailable account takes its contents with it.
 
 **Previous backup private keys** stay in the envelope and the secrets manager until
-every backup encrypted under them has expired (D-103).
+every backup encrypted under them has expired (D-103). Previous key-encryption and
+fingerprint key versions stay likewise until every backup taken before their rotation
+completed has expired: the rotation reports the date (`keepUntil`, OPS-SEC-003), and
+a retired version leaves the application's key document at once (D-166).
 
 **Acceptance criteria**
 1. The envelope contains all five items above.
@@ -228,7 +231,7 @@ every backup encrypted under them has expired (D-103).
 **DR-009a** — The key-encryption key SHALL have a **defined cryptoperiod** and SHALL
 be rotated at its expiry, and immediately on any suspicion of exposure.
 
-*Source: D-084*
+*Source: D-084, D-166*
 
 **Rotation is the control, not custody.** An escrowed key can be copied without being
 used and without detection; what bounds that risk is that an undetected copy stops
@@ -242,10 +245,19 @@ response is rotation before a copied key could be used.
 
 **Rotation is cheap** — the key-encryption key wraps other key material rather than
 encrypting data, so rotating it re-wraps and never touches customer data. The
-operation is OPS-SEC-003 (D-147): a resumable `Janus.Cli` command under the
-maintenance credential that introduces the new version, re-wraps every subject key
-in a batch job, retires the previous version when the job reports complete and
-produces the escrow copy.
+operation is OPS-SEC-003 (D-147): the operator adds the new version to the secrets
+manager and restarts the application on it; `rotate-kek`, a resumable `Janus.Cli`
+command under the maintenance credential, re-wraps every row of the subject-key table
+in a batch job and prints the escrow copy; `rotate-kek --sealed` retires the previous
+version once the copy is sealed.
+
+**Values (D-166).** The cryptoperiod is one year from the completion of the rotation
+that introduced the current version (`ops.keyrotation.completed` with `kind`
+`key-encryption-key`, OPS-SEC-003 AC5), or from bootstrap for the version the
+deployment started on. From `maintenance.expiry.warninglead` before its end, until a
+rotation completes, a daily look raises `expiry-approaching` under the scope
+`kek-cryptoperiod` with `details.version`, `details.rotatedAt` and `details.dueAt`; a
+maintenance log entry does not silence it.
 
 **Acceptance criteria**
 1. The cryptoperiod is defined and rotation occurs at its expiry.
@@ -253,6 +265,8 @@ produces the escrow copy.
 3. An out-of-cycle rotation can be performed on demand.
 4. The escrowed copy is replaced in the same operation.
 5. The rotation is performed through OPS-SEC-003 and by no other path.
+6. The warning of criterion 1 follows the key's own rotation record; no maintenance
+   log entry ends it, and a rotation of the fingerprint key does not end it.
 
 ---
 
@@ -273,7 +287,7 @@ procedure. An untested escrow is a hypothesis, exactly as an untested backup is.
 **DR-010** — Backups SHALL be encrypted under a **dedicated asymmetric backup key**.
 The public half MAY reside on the host; the private half SHALL NOT.
 
-*Source: D-069, D-103*
+*Source: D-069, D-103, D-166*
 
 Otherwise losing the host loses both the data and the means to read it. Backups will
 hold personal data, including any the host declares sensitive, and will move to
@@ -292,9 +306,10 @@ under them has expired.
 
 **Acceptance criteria**
 1. A backup file obtained without the private key yields nothing.
-2. No private key material is present on the host filesystem. The automated restore
-   test (DR-007) fetches the backup private key from the secrets manager at run time,
-   holds it in memory only, and writes it nowhere (D-140).
+2. No private key material is present on the host filesystem. The deployment's
+   restore-test instance (DR-007, `IRestoreTestInstance`) fetches the backup private
+   key from the secrets manager at run time, holds it in memory only, and writes it
+   nowhere (D-140).
 3. A backup encrypted under a retired key remains restorable until that backup
    expires.
 
@@ -303,11 +318,23 @@ under them has expired.
 **DR-016** — Completed erasures SHALL be appended to an **off-host ledger**, and the
 restore procedure SHALL replay it.
 
-**Values (D-153).** One line per erasure: the RFC 3339 UTC instant to the second, one space,
+**Values (D-153, D-166).** One line per erasure: the RFC 3339 UTC instant to the second, one space,
 the full subject identifier, one space, the reason (`10` section 5.12a); UTF-8, no
-header. The replay is `janus replay-erasures <ledger path>`, idempotent over every line.
+header. The subject identifier is written in its lower-case hyphenated form; the
+instant is the instant the erasure was recorded. The replay is the
+`replay-erasures <ledger path>` command of `Janus.Cli`, idempotent over every line.
 
-*Source: D-096*
+The deployment registers the ledger through `IErasureLedger` (LIB-HOST-001). The line is
+a required confirmation on the erasure's outbox record (IDN-LIFE-003a), offered before
+the host's subscribers and recorded under the name `erasure-ledger`, so the record and
+its erasures row stay `awaiting-subscribers` until the line is durable and fail,
+raising `erasure-delivery-exhausted`, when the retry budget is spent. The manual
+completion path appends a line that is not yet durable before it closes anything, and
+never vouches for it. When a ledger is registered, every erasure completed before it
+is appended too, once. A line may be appended twice; a replay reads a repeat as one
+erasure.
+
+*Source: D-096, D-166*
 
 **Deferred until the tier upgrade**, when object storage becomes available (DR-005). Until
 then the exposure is accepted — see R-A13.
@@ -323,13 +350,14 @@ survives.
 **Contents — one line per erasure:**
 
 ```
-2026-08-14T09:22Z  a4f2c81e-…  erasure-request
-2026-08-19T16:04Z  b8c13d70-…  minor-takedown
+2026-08-14T09:22:05Z a4f2c81e-… erasure-request
+2026-08-19T16:04:41Z b8c13d70-… minor-takedown
 ```
 
 Timestamp, subject identifier, reason. The reason is one of `erasure-request` ·
-`minor-takedown` · `organization-erasure` (`10` section 5.12a, D-147), the same
-spellings as the erasures table (IDN-LIFE-003b).
+`minor-takedown` (`10` section 5.12a, D-147), the same spellings as the erasures table
+(IDN-LIFE-003b). An organization erasure erases no account (IDN-ORG-003), so it writes
+no line.
 
 **No encryption is required, and none is specified.** The subject identifier is an opaque
 value derived from nothing about the person (IDN-ACCT-002); without the database it
@@ -339,15 +367,29 @@ erasure.
 
 **Size:** a handful of lines a year. Kilobytes for the life of the system.
 
-**Replay after restore:** for every identifier in the ledger, confirm the key is destroyed
-and the erasure recorded; complete anything the restore forgot. Idempotent, so replaying
-the whole ledger is always safe.
+**Replay after restore.** The `replay-erasures <ledger path>` command reads the whole
+ledger before it writes anything, and refuses it whole where the file cannot be opened
+or decoded as UTF-8 (`api.request.malformed`, `details.member` `ledger`) or any line is
+not in the written form (`details.line` its number). A line whose erasures row the
+restored database holds, a repeated line included, or one naming an account the
+restored database does not hold, is left. Every other line is carried out again in one
+transaction: the account enters `deleting` where it was not already, with `deletingBy`
+`takedown` for `minor-takedown` and `oob-request` otherwise, at the line's instant, and
+is erased by the writes the sweep uses; `ErasureRequested` is written to the outbox
+again with the line's instant and reason, so the host redoes its half; and
+`privacy.erasure.executed` is recorded under the deployment-scoped principal
+`replay-erasures`, reason `DR-016`, operation `erasure-replay`, with `details.reason` in
+the spelling of `10` section 5.12a and `details.erasedAt`. The command runs under the
+application's own credential and prints `{"reapplied": n, "standing": n, "absent": n}`
+and nothing of a subject. Idempotent, so replaying the whole ledger is always safe.
 
 **Acceptance criteria**
 1. The ledger is written to storage that does not share fate with the database host.
 2. An erasure is not reported complete until its ledger line is durable.
 3. Replay is idempotent and covers the whole ledger, not only recent lines.
 4. The ledger contains no name, address, email, phone or fingerprint.
+5. An erasure completed before the ledger was registered is appended once the ledger
+   is registered.
 
 ---
 
@@ -457,12 +499,31 @@ values (INF-HOST-003) by name only.
 **timed**, with the measured recovery time recorded. The test SHALL **decrypt
 something and prove it**, and SHALL alert on failure.
 
-**Values (D-153).** The test runs every `backup.restoretest.interval` and fails when it exceeds
-`backup.restoretest.objective`. The canary is the subject bootstrap seeds
-(`backup.restoretest.canary`, OPS-BOOT-001): the job decrypts its one encrypted field
-and resolves its verified email's fingerprint.
+**Values (D-153, D-166).** The test runs every `backup.restoretest.interval` (default
+and ceiling `P90D`, a day count, so no gap between runs exceeds the shortest calendar
+quarter) and fails when it exceeds `backup.restoretest.objective`. A run holds no other
+job's turn in its process (INF-BG-001). The canary is the account bootstrap seeds
+(`backup.restoretest.canary`, OPS-BOOT-001): a member of the administrative
+organization holding no role and no credential, whose display name `Restore canary` is
+its one encrypted field and whose verified email is `canary@restore-test.invalid`,
+under the name RFC 2606 reserves for what never resolves. The job decrypts the display
+name and resolves the email's fingerprint to the canary.
 
-*Source: D-148; D-044, D-069, D-110, D-147*
+The deployment supplies the throwaway instance through `IRestoreTestInstance`
+(LIB-HOST-001): `RestoreAsync` builds an instance from the committed infrastructure
+definition (DR-017), never over the running database, restores the latest base backup
+and the logs after it and answers how to reach the restored database; `TearDownAsync`
+tears down whatever the last restore built. The job `restore-test` is abandoned at
+`backup.restoretest.objective`. It opens the restored database under the keys the
+process runs on, decrypts the canary's display name, and resolves the canary's verified
+email to its account as sign-in does, by the fingerprint of its canonical form. Each run
+is recorded as `ops.restoretest.completed` with `outcome` (`passed` · `unrestored` ·
+`undecrypted` · `unresolved` · `overrun`), `elapsedSeconds`, `objectiveSeconds` and
+`outlived`; a run short of `passed`, or whose instance may have outlived it, raises
+`restore-test-failed` with the same details. A deployment that registers no instance
+fails every run as `unrestored`.
+
+*Source: D-148; D-044, D-069, D-110, D-147, D-166*
 
 A restore that brings back rows and not keys looks successful and is not. Verifying a
 row count proves the data arrived; decrypting a subject's personal field proves it is
@@ -487,7 +548,8 @@ objective into a number that is known rather than assumed.
 2. The measured time is recorded and compared against the objective.
 3. A failed test, or one exceeding the objective, raises an alert and is treated as
    an incident.
-4. The test proves a personal field decrypts and a known account can sign in.
+4. The test proves the canary's personal field decrypts and its verified email's
+   fingerprint resolves to its account.
 5. The test instance is built from the committed infrastructure definition (DR-017),
    so each run proves current the parts of the definition the phase exercises.
 
@@ -497,11 +559,14 @@ objective into a number that is known rather than assumed.
 the running database. In Phase 1 that instance MAY be a throwaway container on the
 same host; it is torn down after the test.
 
-*Source: D-044, D-110*
+*Source: D-044, D-110, D-166*
 
 **Acceptance criteria**
 1. The procedure does not touch production.
 2. The test instance does not outlive the test.
+3. The teardown is asked after every restore attempted, whatever became of the test,
+   the worker stopping included; a teardown that fails raises `restore-test-failed`
+   with `outlived` true.
 
 ---
 
@@ -524,13 +589,19 @@ chapter.
 5. **Replay logs** to the target timestamp.
 6. **Verify** before cutting over: row counts against expectation, most recent
    records present, permission and ancestry integrity intact.
+6a. **Replay the erasure ledger** where one is registered: copy it from its storage
+   and run the `replay-erasures <ledger path>` command of `Janus.Cli` under the
+   application's credential before cutting over (DR-016). Where none is registered,
+   the residual is R-A13.
 7. **Cut over** and record the timeline.
 
 **Key material must be restored too**, and it comes from a different place. The
 **backup private key** opens the backup (DR-010); the database restore then brings
 back ciphertext **and** the wrapped subject keys; the **key-encryption key** unwraps
 them and the **fingerprint key** makes sign-in possible. All three come from the
-secrets manager, or from the sealed envelope (DR-009). Verify that a subject's
+secrets manager, or from the sealed envelope (DR-009). A backup taken before a key
+rotation completed needs the version it was taken under, which stays in both until
+that backup has expired (DR-009, D-166). Verify that a subject's
 personal field decrypts **and that a known account can sign in** before cutting over
 — a restore that brings back rows without working keys looks successful and is not.
 
@@ -539,8 +610,8 @@ overwrote the wrapped key in the database and the restore reproduces that write.
 
 **A restore to a point _before_ an erasure recovers the wrapped key as it then was**, so
 that subject's fields decrypt again. This is ordinary point-in-time behaviour, not a
-disagreement between stores — there is one store. **Replay the ledger** (DR-016) after
-any restore preceding a completed erasure.
+disagreement between stores — there is one store. **Replay the ledger** (DR-016, step
+6a) after any restore preceding a completed erasure.
 
 **Ancestry verification matters specifically.** The closure table (AUTHZ-INHERIT-002)
 is maintained transactionally, so a correct restore restores it consistently — but a

@@ -175,7 +175,6 @@ procedure exists and is executed on any credible indication.
 
 ---
 
-
 ### R-A07 · Staff step up once per recency window, not per action
 
 | | |
@@ -222,7 +221,7 @@ regardless.
 | **Likelihood** | Very low |
 | **Impact** | Severe — a copy plus a stolen backup reads all personal data offline |
 | **Decision** | Accepted, with rotation as the compensating control |
-| **Source** | D-084, D-069 |
+| **Source** | D-084, D-069, D-166 |
 
 Unlike the break-glass credential it shares the envelope with, the key can be copied
 without being consumed and its use is undetectable — it works offline against a
@@ -244,6 +243,12 @@ inspected at each reseal; annual test that escrow recovery works.
 weak — it is that an **undetected** copy stays valid indefinitely. Rotation bounds
 that however the leak occurred.
 
+**What a rotation does not end at once (D-166).** A retired version stays in the envelope
+and the secrets manager until `backup.retention` (35 days by default) has passed since its
+rotation completed, because every backup taken before the rotation needs it (OPS-SEC-003).
+A copy of the retired version therefore still reads those backups until they expire. The
+bound is the rotation plus `backup.retention`, not the rotation alone.
+
 **Trigger to revisit:** a third trustworthy custodian existing, which would make
 splitting the key worthwhile.
 
@@ -256,15 +261,15 @@ splitting the key worthwhile.
 | **Likelihood** | Very low — requires an erasure, a total host loss, and the erasure falling inside the backup gap |
 | **Impact** | High — a fulfilled legal obligation is undone, and the person has no reason to ask again |
 | **Decision** | Accepted until the tier upgrade, then closed by DR-016 |
-| **Source** | D-096, D-097, DR-016 |
+| **Source** | D-096, D-097, DR-016, D-166 |
 
 Restoring the database to a point before an erasure recovers the wrapped subject key
 and the erasure record together, so the database **agrees with itself** that the
 subject was never erased. There is one store (D-097), so there is no disagreement to
 find. Every trace lived in the database and was restored away with it.
 
-**Why it is not detectable.** Unlike other data loss, nothing surfaces it — a missing
-order gets chased by the customer; a reversed erasure does not, because the person was
+**Why it is not detectable.** Unlike other data loss, nothing surfaces it. Lost data is
+missed by the person who relied on it; a reversed erasure is not, because the person was
 told it completed and has no reason to check.
 
 **Why accepted for now.** Closing it requires an **append-only, replayable record** on
@@ -277,7 +282,12 @@ replayable.
 
 **Bounded by** the interval between backups.
 
-**Closed at** the tier upgrade, by DR-016.
+**Closed at** the tier upgrade, by DR-016. The deployment registers the ledger on the new
+storage (`IErasureLedger`, `07` LIB-HOST-001). From then every erasure is appended before
+its outbox record completes, every erasure completed before the registration is appended
+too, and a restore replays the ledger, so no erasure the deployment has completed stays
+outside it (D-166). Until a ledger is registered, erasures complete without a line: that
+is the residual accepted here.
 
 ---
 
@@ -298,10 +308,6 @@ risk lapses entirely.
 
 **If not:** the single path is exempt, with compensating controls — an unguessable
 reference, rate limiting, and no authoritative state advanced by the callback.
-
----
-
-
 
 ---
 
@@ -346,10 +352,6 @@ minimum accepted AAL for a customer session is **`delegated`**, with no asserted
 social-only session is admitted to the customer's own account and records; sensitive
 actions are gated by step-up, not by the sign-in's assurance. The administrative
 organization's minimum is AAL2 (AUTH-SESS-005b) (D-140, D-141).
-
----
-
-
 
 ---
 
@@ -416,7 +418,7 @@ written; the switch is configuration, not a redeploy.
 | **Likelihood** | Low (off by default; a host must enable `phoneLink` or `phoneCode` by policy) |
 | **Impact** | Medium (SIM swap or number porting yields a sign-in, or the second step beside a password) |
 | **Decision** | Accepted as a restricted factor, off by default |
-| **Source** | D-146, AUTH-FACT-002, AUTH-FACT-002b, AUTH-FACT-003 |
+| **Source** | D-146, AUTH-FACT-002, AUTH-FACT-002b, AUTH-FACT-003, D-162, D-166 |
 
 A sign-in link by SMS (`phoneLink`) and an SMS code as a second step (`phoneCode`)
 exist in the factor catalogue and are off in `loginFactors` by default. A text reaches a
@@ -427,9 +429,13 @@ channel, and so does Janus.
 **Mitigations:** off by default; the limitation is shown at enrolment; `phoneCode` is
 flagged less secure wherever it is listed; neither is ever phishing-resistant and
 neither passes a gate that asks for phishing resistance; a link is AAL1 and never a
-second step (AUTH-FACT-003); SIM-change and porting risk signals are evaluated before a
-send where the gateway supplies them, and their absence is recorded; every send is
-governed by the restrictions of AUTH-ABUSE-004.
+second step (AUTH-FACT-003); SIM-change and porting risk signals, where the deployment
+supplies them, are considered before an SMS factor is used and before a recovery link is
+sent by text (AUTH-FACT-002b), and their absence is recorded; on a `risk` answer nothing
+is sent to the number: a sign-in offers the account's other factors, a step-up drops the
+entry, and a request for a sign-in link or a recovery link by text is answered 202, as
+every such request is, so no caller learns the carrier's signal about a number (D-162,
+D-166); every send is governed by the restrictions of AUTH-ABUSE-004.
 
 **Would change if:** the standard withdraws the channel entirely, or the host's
 population loses the need for it.
@@ -491,16 +497,19 @@ language.
 | | |
 |---|---|
 | **Likelihood** | Certain (the record exists whenever a send has happened) |
-| **Impact** | Low (an HMAC and timestamps; no address, no account, no content) |
+| **Impact** | Low (an HMAC, its key version and timestamps; no address, no account, no content) |
 | **Decision** | Accepted; retention bounded by the restriction itself |
-| **Source** | D-146, AUTH-ABUSE-004 |
+| **Source** | D-146, AUTH-ABUSE-004, PRIV-RET-005, D-162, D-166 |
 
 Per-destination restrictions need to remember that a send happened to an address, and
 the address may belong to nobody registered: a mistyped number, an attacker's target, a
 registration that was abandoned. The record holds an HMAC of the canonical address under
-a key the deployment holds, and the send timestamps, and nothing else. It is deleted as
-soon as every bucket for that key is empty, so its life is at most the longest bucket
-interval of any restriction that applies to it (24 hours under the shipped defaults).
+a key the deployment holds, the version of that key, and the send timestamps, and nothing
+else. It is deleted once the longest interval of the current destination restrictions has
+passed since its newest send, when the next send's counters are read or at the next run
+of the expiry sweep, whichever comes first. Its life is therefore at most that interval
+(24 hours under the shipped defaults) plus one `sweep.interval`, whether or not another
+send is made; a restriction on another key kind does not lengthen it.
 
 **Why accepted.** Without the record, an attacker exhausts the prepaid gateway against
 one number or one address at will; with it, the cost is a keyed pseudonym that says
@@ -525,22 +534,25 @@ Risks addressed by design rather than accepted.
 | R-M08 | Credential stuffing | Progressive delay per account and per source; blocklist screening; new-device check on single-factor accounts (a code to the primary email from an unrecognised browser) | D-011, D-013, D-146, AUTH-FACT-016 |
 | R-M09 | Cloned authenticator | Signature counter verified where provided | AUTH-FACT-014 |
 | R-M10 | Lookalike identifiers defeating human identity checks | Unicode normalization; mixed-script rejection | D-040 |
-| R-M11 | Forged provider callbacks | Signature verification where supported; verification-against-provider where not; never advance state alone | INT-GEN-003, D-070 |
+| R-M11 | Forged provider callbacks | Signature verification where supported; verification-against-provider where not; an unsigned callback never advances an authoritative state by itself, and a verified, signed provider security event acts only as IDN-LIFE-012a states | INT-GEN-003, IDN-LIFE-012a, D-070, D-166 |
 | R-M12 | Unencrypted personal data to a processor | TLS enforced at startup; plaintext endpoints rejected | INT-GEN-001 |
 | R-M13 | Permission drift between check and list | One rule, two renderings, asserted equal in tests | AUTHZ-PRIN-001 |
 | R-M14 | Admin console as a privilege escalation path | Protected-settings list unreachable from the application; direction-based friction | D-010, D-071 |
 | R-M15 | Stale permissions after revocation | Version counter bumped in the same transaction | AUTHZ-CACHE-001 |
-| R-M16 | Offboarded staff still reading mail | Lifecycle push with idempotency; daily reconciliation flagging drift | INT-MAIL-007 |
+| R-M16 | Offboarded staff still reading mail | The state each mailbox is owed follows its holder's account state and membership and is pushed under a stable idempotency key; daily reconciliation flagging drift | INT-MAIL-006, INT-MAIL-007, D-166 |
 | R-M17 | Sensitive data disclosed in logs | Bodies of host-marked sensitive endpoints never logged; analyzer-enforced | CONV-LOG-003, BFF-LOG-002 |
 | R-M18 | Fail-open from a defensive catch block | Analyzer rule; no catch returns a permitted outcome | CONV-ERR-002 |
 | R-M19 | Insider bulk exfiltration | Per-actor baselined volume alerting; exports enumerated, gated, audited, rate-limited | OPS-ALERT-005, OPS-ALERT-006 |
 | R-M20 | Compromised dependency | Lockfile pinning; automated vulnerability alerting; deliberate additions | D-046 |
 | R-M21 | Operator machine compromise yielding production credentials | All credentials in a vault behind a security key; none in files | D-047 |
-| R-M22 | Attacks proceeding undetected | Alert conditions with dedup; email all, SMS high severity; out-of-band routing for mail failures; **off-host reachability check, since on-host alerting shares fate with the host** | OPS-ALERT-001 to 004, INF-OBS-003 |
-| R-M23 | Access surviving a staff departure | Eight-step offboarding checklist with separate verification | D-050 |
+| R-M22 | Attacks proceeding undetected | Alert conditions with dedup; email all, SMS high severity; out-of-band routing for mail failures; **off-host reachability check, since on-host alerting shares fate with the host**; alerts are outside every sending restriction and answer to the deduplication of OPS-ALERT-002 alone, so exhausting a limit cannot silence one | OPS-ALERT-001 to 004, INF-OBS-003, AUTH-ABUSE-004, D-166 |
+| R-M23 | Access surviving a staff departure | Eight-step offboarding checklist with separate verification; a grant in the administrative organization confers only while its holder holds a current membership there, so ending the membership stops staff access before the grants are revoked | D-050, IDN-MEM-001, D-166 |
 | R-M24 | Shared logins destroying attribution | Prohibited; passkeys make it structurally hard; implausible concurrent sessions alert | OPS-ALERT-007 |
 | R-M25 | Registration pre-hijack: an attacker starts a registration with the victim's address and the victim's click verifies it | A verification link completes only in the browser that started the flow and only on a press; opened anywhere else it shows the code and a control that ends the session; a plain open changes nothing; the same rule governs adding an identifier and sign-in links | D-146, REG-SESS-003 |
-| R-M26 | Draining an address's sending allowance to silence its owner | Security notices to an existing holder are outside destination restrictions and governed by `notification.destination` only | D-146, AUTH-ABUSE-004 |
+| R-M26 | Draining an address's sending allowance to silence its owner | Security notices to an existing holder answer only to restrictions whose purpose is `notification` (shipped: `notification.destination`); no restriction whose purpose is `any` counts or refuses one, whatever its key, so neither a destination's nor a source's allowance can be drained to silence them | D-146, AUTH-ABUSE-004, D-166 |
+| R-M27 | A former holder's mail read by the next holder of a corporate address | An invitation of a corporate address whose mailbox anyone has held before, its last holder and an erased holder included, is refused (`identity.invitation.mailboxheld`) unless it names `formerMailbox`: `transfer` gives the invitee the mailbox and its mail, `replace` removes the old mailbox and reserves a new one; either is stepped up with the invitation, carries a reason and is audited. The refusal does not depend on who is invited, so issuing an invitation tells nothing about accounts and the choice always rests with the administrator. The mail server adapter adopts an existing server account only where it carries the library's mailbox identifier; otherwise it refuses and raises `degradation` at once, naming the mailbox identifier | D-166, REG-MAIL-003, INT-MAIL-006 |
+| R-M28 | A link's token read from a server log, a proxy or the `Referer` header | Every link the library sends carries its token in the address fragment (`<origin>/link#<kind>.<token>`), which a browser never sends to a server; the landing page removes it from the address bar once read and is served with `Referrer-Policy: no-referrer` | D-166, FE-VER-001 |
+| R-M29 | Per-source limits evaded by rotating IPv6 addresses | Every per-source count takes an IPv4 address, or an IPv6 address by its /64 prefix (an IPv4-mapped address as its IPv4 address), as one source; the edge also counts each IPv6 /48 (`abuse.source.sitelimit`), so walking a site's /64s is bounded | D-166, AUTH-ABUSE-001, BFF-ORDER-001 |
 
 ---
 
@@ -574,16 +586,26 @@ without the developer. D-065 makes it functional — its own endpoint, step-up
 satisfied for the session lifetime, the system-administrator role, self-regeneration,
 and alerting that reaches the owner rather than only the absent operator.
 
-*Source: D-029, D-065*
+**Kept whole (D-166).** Nothing done in the application can quietly empty that session's
+reach: the reserved account's `system-administrator` grant cannot be revoked, and that
+role cannot lose a library permission while the account holds it (OPS-BOOT-002).
+Generating a credential raises `breakglass-generated` to the owner whatever
+`alerting.owner.enabled` says, and the owner states a reason with the credential, which
+every audit record of the session carries.
+
+*Source: D-029, D-065, D-166*
 
 ---
 
 ### R-O04 · The secrets manager is a boot dependency
 
-The key-encryption key and the fingerprint key are fetched from the off-host secrets
-manager at startup, and startup fails closed without them (INF-HOST-003). A restart
-while the secrets manager is unreachable therefore keeps every application down until
-it returns.
+Every secret the library needs is read through the host's secret source (`ISecretSource`,
+LIB-EXT-001) from the off-host secrets manager at startup, before the server serves: the
+key-encryption keys, the fingerprint keys, the maintenance credential, the mail server's
+secret where a mail server is integrated, and each social provider's credentials.
+Startup fails closed without any of them (`model.startup.secretunavailable`,
+INF-HOST-003, D-166). A restart while the secrets manager is unreachable therefore keeps
+every application down until it returns.
 
 **Accepted.** The alternative — caching the KEK on the host to survive an outage —
 would put the master key on the disk the design keeps it off. A running application
@@ -592,7 +614,7 @@ is unaffected; only a restart during the outage is.
 **Mitigation:** the envelope holds the same keys (DR-009), so a prolonged outage has a
 manual path; the secrets manager's own availability is the provider's, not ours.
 
-*Source: D-105*
+*Source: D-105, D-166*
 
 ---
 
@@ -613,7 +635,8 @@ system's part is OPS-MAINT-001's expiry tracking once the licence exists.
 2. Cross-border transfer permit, while hosting outside Egypt.
 3. DPO appointment.
 4. **A written processor agreement between the company and the developer** — the
-   developer is a processor (D-029) and PRIV-ROPA-002 flags every generated RoPA until
+   developer is a processor (D-029), a recipient the host declares (LIB-HOST-001; the
+   library ships no such row, D-166), and PRIV-ROPA-002 flags every generated RoPA until
    an agreement reference exists.
 5. **Counsel question (D-145):** whether processing a host record that implies a
    sensitive category may rest on the contract basis (D-089's position) or whether
@@ -626,9 +649,10 @@ system's part is OPS-MAINT-001's expiry tracking once the licence exists.
    fraud, security and abuse controls only, and PRIV-CONS-002 advises consent for
    per-person analytics over sensitive types.
 7. **The sending-restriction record (D-146, R-A21):** confirm that holding an HMAC of a
-   destination address and send timestamps, for at most the longest bucket interval and
-   for addresses that may belong to no account, rests on security necessity as its
-   basis, and whether it needs a line in the records of processing.
+   destination address and send timestamps, for at most the longest interval of the
+   destination restrictions and for addresses that may belong to no account, rests on
+   security necessity as its basis, and whether it needs a line in the records of
+   processing.
 
 ---
 
@@ -649,8 +673,9 @@ on a calendar rather than waited for (D-147).
 | R-A04 | Downtime cost exceeds a second server; or more than half of a calendar month's business arrives through the system, measured quarterly by the operator from the host's own records |
 | R-A08 | A second person holds deploy access |
 | R-A09 | Optimisation ladder exhausted; or reverse lookup for the administrative view exceeds `authz.reverselookup.budget` (2 s) at production volume |
-| R-A10 | The SMS gateway adds callback signing support (D-148) |
 | R-A11 | A third trustworthy custodian exists, making a split of the escrowed key worthwhile (D-148) |
+| R-A12 | The SMS gateway adds callback signing or an HTTPS callback (D-148, D-166) |
+| R-A13 | The VPS tier upgrade, at which the erasure ledger is registered on the new storage (DR-016, D-166) |
 | R-A17 | A host or regulator requires the NIST blocklist sources as written |
 | R-A20 | A second market whose law names another governing language is served |
 

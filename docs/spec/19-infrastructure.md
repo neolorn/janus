@@ -94,17 +94,27 @@ there is no migration from an existing manually-issued certificate.
 **INF-TLS-003** — Certificate expiry SHALL be monitored **independently of whatever
 performs renewal**, and renewal failure SHALL alert through the D-048 channels.
 
-*Source: D-063*
+*Source: D-063, D-166*
 
 These are two different checks catching two different failures. Expiry monitoring sees
 the consequence, weeks late. Renewal-failure monitoring sees the cause, the same day.
 Neither substitutes for the other, and **they must not share a component** — asking a
 broken renewer whether renewal is working returns a confident wrong answer.
 
+**The library's part (D-166).** The outcome of the latest renewal SHALL reach the
+library through `ICertificateRenewal` (LIB-HOST-001). The job `certificate-renewal`
+reads it hourly and raises `certificate-renewal-failed` with `details.failedAt` while
+the latest attempt failed; a deployment that registers none, or whose seam cannot
+answer, raises `degradation` under `certificate.renewal.absent` or
+`certificate.renewal.unread`. Expiry is read from the served certificate by the off-host
+check of INF-OBS-003, which shares no component with the renewer or with the library.
+
 **Acceptance criteria**
 1. Expiry is determined from the **served certificate**, not from renewal state.
 2. A renewal failure raises an alert without anyone checking.
 3. The two checks share no component.
+4. A deployment with no renewal outcome, or one that cannot answer, raises
+   `degradation`.
 
 ---
 
@@ -123,14 +133,15 @@ The report carries a delivery status against an opaque reference and no personal
 
 *Source: D-092*
 
-*Source: INT-GEN-001*
+*Source: INT-GEN-001, D-162, D-166*
 
 Already required; restated here because it is an environment property. A provider's
 published sample configuration can specify a plaintext base URL, which would send
 personal data unencrypted if copied unexamined.
 
 **Acceptance criteria**
-1. A configured endpoint with a plaintext scheme fails startup with a named error.
+1. A configured endpoint with a plaintext scheme fails startup with
+   `integration.endpoint.insecure`, `details.key` naming the setting (INT-GEN-001).
 
 ---
 
@@ -145,14 +156,25 @@ generated records reads accordingly, and the cross-border basis field is require
 
 **INF-HOST-001** — The environment SHALL provide clock synchronisation.
 
-*Source: AUTH-FACT-005, AUTH-SESS-005*
+*Source: AUTH-FACT-005, AUTH-SESS-005, D-166*
 
 Time-based codes fail silently against a drifting clock — valid codes rejected, users
 told they are wrong. Absolute session expiry and grant expiry depend on it equally.
 
+**The library's part (D-166).** The environment SHALL report the offset it measured to
+the library through `IClockReference` (LIB-HOST-001), positive where the host is ahead.
+The job `clock-drift` reads it hourly and raises `clock-drift` where its magnitude
+exceeds `factor.totp.drift` steps of 30 seconds, with `details.offsetSeconds` and
+`details.toleranceSeconds`; an offset at the tolerance is within it. A stored
+`factor.totp.drift` that cannot be read fails the run (OPS-CFG-008). A deployment that
+registers no reference, or whose reference cannot answer, raises `degradation` under
+`clock.reference.absent` or `clock.reference.unread`.
+
 **Acceptance criteria**
 1. Host clock drift stays within the TOTP drift tolerance.
 2. Drift beyond tolerance raises an alert.
+3. A deployment with no clock reference, or one that cannot answer, raises
+   `degradation`.
 
 ---
 
@@ -187,7 +209,7 @@ it, as deployment-injected configuration: the **database connection** and the
 **secrets-manager access credential**. No other secret SHALL be present in files,
 images, environment variables, or the repository.
 
-*Source: D-148; OPS-SEC-001, D-047, D-105*
+*Source: D-148, D-166; OPS-SEC-001, D-047, D-105*
 
 **Why two, and why these.** The application must prove who it is to the secrets
 manager before it can fetch anything, and that proof has to live somewhere — this is
@@ -196,14 +218,29 @@ settings table can be read (OPS-CFG-008). Both are injected at deployment, never
 committed and never baked into an image. The backup public key may also sit on the
 host; it is not a secret (DR-010).
 
+**How the library reads it (D-166).** The application reads every secret it needs
+through the host's secret source (`ISecretSource`, LIB-EXT-001), in the startup hosted
+service, before the server serves; no secret is an argument of `AddJanus`. Those
+secrets are the key-encryption key versions, the fingerprint key versions, the
+maintenance credential, the mail server's management key where the shipped adapter is
+used (INT-MAIL-001), and each declared social provider's credential by the provider's
+name (INT-GEN-002); a refusal names them in `details.key` as OPS-SEC-001 lists. A
+`Janus.Cli` command reads its database connection and every key
+version and credential it needs from one JSON document the operator pipes to its
+standard input from the secrets manager's own client, never from an argument, a file or
+an environment variable (OPS-SEC-001). The secrets of the
+provider's client registry are none of these: the library generates and rotates them
+itself and no deployment supplies one (OPS-SEC-002).
+
 **The secrets manager SHALL:**
 
 | Property | Why |
 |---|---|
 | Be **off-host** | Losing the host must not lose the keys (DR-009) |
-| Be **reachable at boot** | The KEK and the fingerprint key are fetched at startup; nothing serves without them |
-| Hold the **KEK, the fingerprint key and the backup private key** | The three keys a restore needs, also escrowed in the envelope (DR-009) |
-| Hold the **maintenance database credential** | Fetched by the worker for the audit partition drop and by the `Janus.Cli` key-rotation command for the subject-key re-wrap (OPS-MIG-003a, OPS-SEC-003, D-148); not escrowed, recreated by migration |
+| Be **reachable at boot** | Every secret above is read at startup; nothing serves without them |
+| Hold **every version of the KEK and of the fingerprint key** the deployment holds, and the **backup private key** | The keys a restore needs, also escrowed in the envelope (DR-009). Each key is a set of versions with one current; a version a rotation retires stays until every backup taken before that rotation completed has expired (OPS-SEC-003, DR-009) |
+| Hold the **maintenance database credential** | Read by the application at startup for the audit partition job, and by the `Janus.Cli` key-rotation commands from the document piped to them (OPS-MIG-003a, OPS-SEC-003, D-148); not escrowed, recreated by migration |
+| Hold the **mail server's management key**, where the shipped adapter is used, and **each social provider's credential** the deployment declares | Read at startup (INT-MAIL-001, INT-GEN-002, IDN-LIFE-012) |
 | Authenticate the application by a **scoped credential**, revocable and rotatable without a code change | A leaked secret zero is contained and replaced, not redeployed around |
 | Protect its own access by hardware-backed multi-factor authentication | D-084 |
 
@@ -215,13 +252,17 @@ Platform secret scanning is unavailable on the current plan, so nothing catches 
 mistake automatically. The pipeline check in OPS-DEP-004 is the compensating control.
 
 **Acceptance criteria**
-1. Startup fails with a named error when the key-encryption key or the fingerprint
-   key is unavailable.
+1. Startup fails with `model.startup.secretunavailable`, `details.key` naming the
+   secret, when any secret the application reads through the secret source is
+   unavailable, and the server serves nothing before every one is read.
 2. No secret value other than the two bootstrap values appears on the host, and
    neither appears in any repository file or image layer.
 3. Rotating any secret, including the secrets-manager credential, requires no code
    change.
-4. The fingerprint key is never written to the database.
+4. The fingerprint key is never written to the database: after bootstrap, both key
+   rotations, and a write through every store that computes a fingerprint, no column of
+   the library's schema holds any version of the key, as bytes or in any text
+   encoding.
 
 ---
 
@@ -259,11 +300,13 @@ only.
 
 **INF-DB-004** — Continuous archiving SHALL be enabled, per `12-disaster-recovery.md`.
 
+*Source: DR-007, DR-008, D-166*
+
 **Acceptance criteria**
 1. Point-in-time restore to an arbitrary timestamp in the retention window succeeds.
 2. Restore is tested at least quarterly by an automated, timed job that alerts on
-   failure (DR-007); the environment can host the throwaway instance it needs
-   (DR-008).
+   failure (DR-007); the environment can host the throwaway instance it needs and
+   supplies it to the library through `IRestoreTestInstance` (DR-008, LIB-HOST-001).
 
 ---
 
@@ -286,39 +329,64 @@ PostgreSQL holds the durable copy. Losing the cache costs latency, not access.
 
 **INF-BG-001** — The environment SHALL support scheduled and queued background work.
 
-Required by: notification delivery with retry (D-022), Stalwart reconciliation
-(INT-MAIL-007), expired-session and consumed-token sweeps (AUTH-KEY-003), organization
-deletion grace windows (IDN-ORG-003), authenticator invalidation windows (AUTH-RECOV-007), gateway
-balance polling (INT-SMS-004), licence expiry warnings (OPS-MAINT-001), the
-automated restore test (DR-007), the audit partition drop (PRIV-RET-002,
-OPS-MIG-003a), the registration-session sweep (REG-SESS-001), domain-lock
-re-verification (REG-DOM-001), the IP-to-city database refresh (INT-GEN-006), the
-recovery-code reminder (AUTH-FACT-008), the account deletion grace window
-(`account.deletion.grace`, IDN-ACCT-007), the takedown window (`takedown.grace`,
-IDN-LIFE-003), the transactional outbox publisher (IDN-LIFE-003a), the privacy-request
-deadline alerts (PRIV-RIGHT-002) and the read-volume baseline (OPS-ALERT-005) (D-148).
+Required by: notification delivery with retry (D-022): an admitted send writes its
+outbox row in the transaction that undertakes it, one immediate attempt runs after the
+outermost transaction commits and never inside an open one, and the worker carries
+whatever that attempt did not (AUTH-ABUSE-004); Stalwart reconciliation
+(INT-MAIL-007); mailbox provisioning, which pushes the state each mailbox is owed
+(INT-MAIL-006, INT-MAIL-006a); expired-session and consumed-token sweeps
+(AUTH-KEY-003); the sending-restriction record sweep (PRIV-RET-005); organization
+deletion grace windows (IDN-ORG-003); authenticator invalidation windows
+(AUTH-RECOV-007); gateway balance polling (INT-SMS-004); licence expiry warnings and
+the annual envelope operation (OPS-MAINT-001); the key-encryption key's cryptoperiod
+(DR-009a); the automated restore test (DR-007); the audit partition job, which creates
+the months ahead and drops expired partitions (PRIV-RET-002, OPS-MIG-003a); the
+registration-session sweep (REG-SESS-001); the invitation sweep, which forgets what an
+expired invitation bound (PRIV-RIGHT-005a); domain-lock re-verification (REG-DOM-001);
+the IP-to-city database refresh (INT-GEN-006); the recovery-code reminder
+(AUTH-FACT-008); the account deletion grace window (`account.deletion.grace`,
+IDN-ACCT-007); the takedown window (`takedown.grace`, IDN-LIFE-003); the transactional
+outbox publisher (IDN-LIFE-003a); the event publisher, which carries each event from
+the row written in the transaction that made its fact true (CONV-DESIGN-002,
+LIB-API-001); the daily drift check of materialised derivations over the declared
+relationship sources (`derivation.materialised.driftcheck`, AUTHZ-DERIVE-005), under
+the principal `derivation-driftcheck`; the carrying of
+raised alerts to their channels every `outbox.poll.interval` (OPS-ALERT-001); the
+watches of the host clock (INF-HOST-001), of certificate renewal (INF-TLS-003) and of
+the emergency credential (OPS-BOOT-001); the privacy-request deadline alerts and the
+holiday-list look (PRIV-RIGHT-002); and the read-volume baseline (OPS-ALERT-005)
+(D-148, D-166). Each runs as the system principal `10` names for it (INF-BG-002).
 The key-encryption-key re-wrap (OPS-SEC-003)
 is not background work of the worker: it runs inside the command-line process so that
 it does not depend on the application being up (D-147).
 
-*Source: D-148; D-147, the items named above*
+*Source: D-148, D-166; D-147, the items named above*
 
 **Acceptance criteria**
 1. Scheduled work runs without a person triggering it.
 2. Failure to run raises an alert rather than passing unnoticed: a job whose last
    successful run is older than twice its interval raises `background-job-failed`
-   (D-153).
+   (D-153). The lapse of the job that carries raised alerts is delivered by the alert
+   router directly from the worker, so a stalled carrier still reports itself
+   (OPS-ALERT-001).
+3. No job's run delays another job's turn in the same process.
 
 ---
 
-**INF-BG-002** — Background work SHALL run as a named principal with a real
-organization scope, never as an absent user.
+**INF-BG-002** — Background work SHALL run as a named principal with a stated reason,
+never as an absent user: organization-scoped where it acts for one organization, and
+deployment-scoped, restricted to one named operation, where it is pool-wide
+(IDN-PRIN-001). Each scheduled job of INF-BG-001 runs as a principal of its own (`10`,
+system principals) and SHALL refuse to run under a principal that may not run its
+operation.
 
-*Source: IDN-PRIN-001*
+*Source: IDN-PRIN-001, D-166*
 
 **Acceptance criteria**
 1. A background job cannot query without a principal.
-2. Its actions are audited with the stated reason.
+2. Its actions are audited with the principal's name and the stated reason
+   (IDN-AUD-001).
+3. A job run under a principal of another operation is refused.
 
 ---
 

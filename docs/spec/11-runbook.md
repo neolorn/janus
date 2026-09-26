@@ -48,10 +48,16 @@ Fix forward. Do not attempt a manual migration against production.
 While the gate is disabled, destructive migrations deploy automatically. Detection
 still reports them on every deploy (OPS-DEP-002) — **read that report.**
 
-Once the gate is enabled, the automatic deploy fails when destructive operations are
-present, naming the manual workflow to dispatch.
+Once the gate is enabled, the automatic deploy fails when the migrations pending on the
+target hold a destructive operation (OPS-DEP-001: data loss, or a constraint that can
+fail against existing rows), naming the manual workflow to dispatch. Every other match
+is reported and does not stop the deploy.
 
-*Source: D-042.1*
+The repository variable `DESTRUCTIVE_DDL_GATE` must hold `enabled` or `disabled`. A run
+that finds it unset, empty or holding anything else prints its report and fails; set
+the variable and run again.
+
+*Source: D-042.1, D-166*
 
 ### 2.3 Rollback
 
@@ -81,15 +87,19 @@ You do not need technical knowledge for this. Read it through once before starti
 1. **Get the sealed envelope.** It holds five printed items (DR-009). You only need
    the first one, the **emergency code**; the other four are for a technical helper
    restoring the system after a disaster, and you can leave them in the envelope.
-2. **Open the address printed on the envelope** in any web browser. You will see one
-   box and one button.
-3. **Type or paste the emergency code and press the button.** The code works once;
-   after this it is spent. If the page says the code is invalid or already used, stop
-   and call the person named on the envelope.
+2. **Open the address printed on the envelope** in any web browser. You will see two
+   boxes and one button.
+3. **Type or paste the emergency code into the first box, write in the second box why
+   you are using it, and press the button.** The reason is required; the system keeps
+   it with every action you take in the session. The code works once; after this it is
+   spent. If the page says the code is invalid or already used, stop and call the
+   person named on the envelope. If it asks you to wait, wait until the time it shows.
 4. **You are now signed in with full administrative access for a fixed period**
    (`breakglass.session.lifetime`, 4 hours unless the operator has changed it; the
    page shows when it ends), and the management application opens. At that moment an alert goes to the operator and to
-   you, by email and SMS — that is expected.
+   you, by email and SMS; that is expected. The session also ends if you leave it
+   unused for an hour (`session.aal2.inactivity`, unless the operator has changed it),
+   and an ended session cannot be resumed: do step 6 before you step away.
 5. **Do what the emergency needs.** Usually one of: approve the pending recovery so
    the operator (or a staff member) can get back in; or give administrative access to
    someone you trust who can reach the system.
@@ -97,14 +107,15 @@ You do not need technical knowledge for this. Read it through once before starti
    open the emergency-access page and use the control that generates a replacement
    credential (OPS-BOOT-004; the labels shown there are illustrative). Print it, seal it in a new
    tamper-evident envelope with the four other items from the old one, and keep it.
-   Without this step there is no emergency code until the operator returns.
+   Without this step there is no emergency code until the operator returns. Making
+   the new code sends you and the operator an alert as well; that is expected.
 7. **Write down what you did and when.** The system records every action taken in the
    session; your note is for the review afterwards.
 
 The session ends on its own when that period is over (`breakglass.session.lifetime`,
-default 4 hours). Nothing you did is undone by that.
+default 4 hours), or after an hour unused. Nothing you did is undone by that.
 
-*Source: OPS-BOOT-002, OPS-BOOT-004, D-010, D-103, D-129, D-147*
+*Source: OPS-BOOT-002, OPS-BOOT-004, D-010, D-103, D-129, D-147, D-166*
 
 ### 3.3 Annual reseal — five things in one operation
 
@@ -117,12 +128,15 @@ and regeneration are one action.
    opened, treat it as a compromise: rotate everything immediately, do not simply
    reseal.
 2. **Regenerate the break-glass credential.**
-3. **Rotate the key-encryption key** (DR-009a) with the `Janus.Cli` command of
-   OPS-SEC-003, run under the maintenance credential: it introduces the new key
-   version, re-wraps every subject key in a resumable batch job, retires the previous
-   version when the job reports complete, and produces the escrow copy for the new
-   envelope. Cheap in effect: it re-wraps key material and never touches customer
-   data (D-147).
+3. **Rotate the key-encryption key** (DR-009a) with the `rotate-kek` command of
+   `Janus.Cli` (OPS-SEC-003), run under the maintenance credential: add the new
+   version to the secrets manager as current and keep the previous; restart the
+   application; run `rotate-kek`, which re-wraps and prints the escrow copy; seal the
+   copy; run `rotate-kek --sealed`; remove the retired version from the application's
+   key document, and from the envelope and the secrets manager once the date the
+   command prints (`keepUntil`) has passed, so every backup taken under it stays
+   readable until it expires. Cheap in effect: it re-wraps key material and never
+   touches customer data (D-147).
 4. **Rotate the backup key** (DR-010). New backups encrypt to the new public key;
    keep the previous private key in the envelope until every backup made under it has
    expired, then remove it.
@@ -134,8 +148,15 @@ and regeneration are one action.
 Then reseal in tamper-evident packaging and update the secrets-manager copies of the
 four keys and credentials — never of the break-glass code, which exists only on the
 sheet you just printed (OPS-BOOT-004).
-The fingerprint key is printed but not rotated — its rotation is a bulk re-derivation
-(PRIV-RIGHT-005c) and is expected never to run.
+The fingerprint key is printed but not rotated at the reseal; on suspected exposure it
+is rotated with `rotate-fingerprint-key` (OPS-SEC-003), a bulk re-derivation
+(PRIV-RIGHT-005c) expected never to run.
+
+The system warns ahead of this operation: `expiry-approaching` is raised
+`maintenance.expiry.warninglead` before a year has passed since the last
+`envelope-rotation` entry in the maintenance log, and, separately, before the
+key-encryption key's cryptoperiod ends, counted from its last completed rotation
+(OPS-MAINT-001, DR-009a). Record the operation in the maintenance log.
 
 **Rotate out of cycle** on any intrusion, alarm, or incident touching the secrets
 manager — before a copied key could be used.
@@ -189,8 +210,9 @@ name, a purchase, or a writing style.
 
 **Phase one, when you trigger it**: the identity system, in one transaction:
 suspends the account and ends its sessions; records the event with the reason and
-trigger; publishes the `TakedownExecuted` outbox record on which the host stops
-whatever processing it holds for the subject. That outbox record is the completion
+trigger; publishes `AccountSuspended`, whatever state the account held, since it
+announces that access stopped, and the `TakedownExecuted` outbox record on which the
+host stops whatever processing it holds for the subject. That outbox record is the completion
 record of the host's step from this moment (IDN-LIFE-003, D-148): the host confirms
 against it moments later, and until it does the takedown screen shows the host's step
 as still outstanding (any label is illustrative). No deletion email and no cancel link
@@ -198,24 +220,38 @@ go to the subject.
 
 **Phase two, seven days later, automatically** — the identity system erases:
 destroys the subject's key and neutralises the fingerprint (PRIV-RIGHT-005). The
-account becomes `deleted`. The audit trail survives.
+account becomes `deleted`. The audit trail survives. Where the account was already in
+its own deletion window when you triggered the takedown, the erasure falls due at the
+earlier of that window's end and the seven days; the subject cannot cancel it from
+their inbox.
 
-**Inside the seven days** a misjudged adult is restored with the reverse-takedown
+A takedown can be triggered on an account that is `active`, `restricted`, `suspended`,
+or already deleting at the subject's own request or an out-of-band request; the
+account holds the state it was in.
+
+**Inside the window** a misjudged adult is restored with the reverse-takedown
 control on the account's admin page (`POST /admin/accounts/{subject}/takedown/reverse`,
-`takedown:execute`, reason required; the label is illustrative). The library publishes
+permission `takedown:execute`, step-up `account:takedownreverse`, reason required; the
+label is illustrative). The account returns to
+the state it held when you triggered the takedown: `active`, `restricted`, its own
+suspension, or its own deletion window with its original clock. The library publishes
 `TakedownReversed`; whether the host restores anything it stopped is the host's rule.
 After the window there is nothing to reverse.
 
 **Do not record the takedown as finished** until the host's step shows complete
 against its outbox record and, after the window, the erasure shows complete. A
-permanent failure alerts you immediately.
+permanent failure alerts you immediately (`erasure-delivery-exhausted`). Once the
+host's step is done by other means, close the failed delivery by hand with the manual
+completion control (`POST /admin/erasures/{id}/complete`, naming the takedown's
+identifier, step-up `erasure:complete`); the completion is itself recorded
+(IDN-LIFE-003a).
 
 **Do not** ask for proof of age. The date of birth entered at registration is retained
 only where `profile.dateofbirth` is on (REG-PROF-002, PRIV-MINOR-001); by default only
 the derived affirmation is held, and collecting a date to resolve a takedown would
 create the data the policy exists to avoid.
 
-*Source: D-039, IDN-LIFE-003, PRIV-MINOR-002*
+*Source: D-039, IDN-LIFE-003, PRIV-MINOR-002, D-166*
 
 ---
 
@@ -236,7 +272,11 @@ is faster and loses nothing.
 4. **Verify before cutting over** — row counts, most recent records present, and the
    ancestry integrity check (a restore is exactly when an ancestry inconsistency
    would be invisible and consequential).
-5. Cut over. Record the timeline.
+5. **Replay the erasure ledger** where one is registered: copy it from its storage and
+   run the `replay-erasures <ledger path>` command of `Janus.Cli` under the
+   application's credential before cutting over, so no erasure the restore reversed
+   stays reversed (DR-016). Where none is registered, the residual is R-A13.
+6. Cut over. Record the timeline.
 
 **Expect 4–8 hours.** This is the accepted objective, not a failure. There is no
 standby to fail over to; that was declined on cost.
@@ -315,7 +355,10 @@ control now that composition rules are gone.
 
 Use the explicit revocation operation (AUTH-SESS-009). This is distinct from the
 automatic downgrade that follows a policy change — revocation is immediate and
-total.
+total. Ending another person's sessions
+(`POST /admin/accounts/{subject}/sessions/revoke`) asks for step-up
+(`account:sessionsrevoke`), and so does ending every session of the deployment
+(`POST /admin/sessions/revoke-all`, `session:revokeall`).
 
 ### 8.2 Suspected credential compromise
 
@@ -349,16 +392,22 @@ what is known.
 
 ## 9. Configuration changes
 
-**Tightening** a security control is free.
+**Tightening** a security control needs no step-up, but like every change it carries a
+written reason and produces an audit entry (OPS-CFG-002, OPS-CFG-008).
 
-**Loosening** requires step-up, a written reason, and produces an audit entry
-(OPS-CFG-002).
+**Loosening** requires step-up, `system:administer`, a written reason, and produces an
+audit entry (OPS-CFG-002).
 
 **Protected settings** (`10-reference`, section 4.8) cannot be changed through the
-application at all — they require access the application does not have. If an incident appears to require disabling audit logging, rate limiting, or
-step-up enforcement — that is the moment those restrictions exist for. They are on
-the list precisely because turning them off would blind the system to whoever turned
-them off.
+application at all: they require access the application does not have. They are
+changed from the server with the `configure` command of `Janus.Cli`, which takes a
+reason and raises a High alert for each key (OPS-CFG-004). Audit logging, token
+signature verification and step-up enforcement have no switch at all. If an incident
+appears to require disabling rate limiting or export auditing, that is the moment
+those protections exist for. They are on the list precisely because turning them off
+would blind the system to whoever turned them off.
+
+*Source: OPS-CFG-002, OPS-CFG-004, OPS-CFG-008, D-166*
 
 ---
 
@@ -371,9 +420,9 @@ The second accepted recurring human task.
 | Controller licence renewal | Three years | System tracks and warns (OPS-MAINT-001) |
 | Cross-border permit renewal | Shorter than the licence | Required while hosting outside Egypt |
 | DPO registration | Per the regulator's terms | Company action |
-| Break-glass reseal | Annual | Section 3.3 |
+| Break-glass reseal | Annual | Section 3.3; the system warns ahead of it (OPS-MAINT-001, DR-009a) |
 
-*Source: D-041, D-023*
+*Source: D-041, D-023, D-166*
 
 ---
 

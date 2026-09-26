@@ -22,7 +22,7 @@ here as the worked example a threat model needs; a host substitutes its own.
 | **Staff credentials** | Access to everything above |
 | **System availability** | Downtime blocks the host's business; confirmed, with the nuance in §7 |
 | **Registration session store** | Staged identifiers, verification state, a password hash and enrolled authenticators for accounts that do not yet exist; bound to one browser, swept at `registration.session.lifetime` (REG-SESS-001) |
-| **Restriction records** | An HMAC of a destination address and send timestamps, for addresses that may belong to no account; deleted when the buckets empty (AUTH-ABUSE-004, R-A21) |
+| **Restriction records** | An HMAC of a destination address, its key version and send timestamps, for addresses that may belong to no account; deleted once the longest destination interval has passed since the newest send, whether or not another send is made (AUTH-ABUSE-004, R-A21, D-166) |
 | **Session location** | A city-level location per live session, resolved from a local IP database and kept only with the session record (AUTH-SESS-013) |
 | **Preference store** | Host-declared typed values under the subject key; the library never reads their meaning (REG-PREF-001) |
 
@@ -83,7 +83,7 @@ successful lookup.
 | Probe registration to confirm the person is a customer | Covered: enumeration resistance |
 | Recover the person's account via email | **Partially covered.** Recovery restores the password only and never removes MFA, but MFA is advisory for customers, so for a customer without it, a mailbox compromise yields the host's records about them directly. Where MFA is enrolled, the recovered password can only *report* the second factor lost (AUTH-RECOV-007): the account keeps AAL2 for seven days, every gate stays closed, and the owner is warned on every channel, the phone included, with a one-click cancel (D-141) |
 | Compromise the person's mailbox | Partial — email is the recovery channel by design |
-| Swap or port the person's SIM, where the host has enabled `phoneLink` or `phoneCode` | Partial. Both are off by default and flagged as restricted factors (AUTH-FACT-002b): a link is AAL1 and never a second step, an SMS code is never phishing-resistant and never passes a gate that asks for it, and SIM-change and porting signals are evaluated before a send where the gateway supplies them. The carrier-side attack itself is outside the boundary (R-A18) |
+| Swap or port the person's SIM, to receive a recovery link by text, or a sign-in link or code where the host has enabled `phoneLink` or `phoneCode` | Partial. Both factors are off by default and flagged as restricted (AUTH-FACT-002b): a link is AAL1 and never a second step, an SMS code is never phishing-resistant and never passes a gate that asks for it. SIM-change and porting signals, where the deployment supplies them, are considered before an SMS factor is used and before a recovery link is sent by text; on a `risk` answer nothing is sent to the number: a sign-in or a step-up offers the account's other factors, and a request for a link by text is answered as every such request is (D-162, D-166). The carrier-side attack itself is outside the boundary (R-A18) |
 | Observe the person in the physical world | Not covered: physical, outside the boundary |
 
 **Assessment.** This is the threat the concealment and enumeration rules were written
@@ -101,7 +101,7 @@ pedantry.
 | Method | Covered? |
 |---|---|
 | Bulk fake accounts | Covered: mandatory phone verification |
-| SMS pumping to drain prepaid balance | Covered: named restrictions per destination and per source (AUTH-ABUSE-004), failed deliveries not counted, balance floor |
+| SMS pumping to drain prepaid balance | Covered: named restrictions per destination and per source (AUTH-ABUSE-004), an IPv6 source counted by its /64 so that rotating addresses gains nothing (AUTH-ABUSE-001, D-166), failed deliveries not counted, balance floor |
 | Abuse of the host's own commercial flow by a legitimately verified account | Out of scope: owned by the host (D-049); the library contributes the stable subject identifier |
 | Account takeover of a real customer | Covered: the authentication controls |
 
@@ -137,7 +137,7 @@ turnover**. This is a materially higher insider risk than a stable, known team.
 | Staff browsing customer health data out of curiosity | Partial — permissions limit reach; volume alerting detects patterns (D-045) |
 | Exporting the customer list before leaving | Covered — exports gated and audited (D-045) |
 | Approving their own recovery | Covered — self-approval blocked; but see R-A03 |
-| **Access surviving departure** | Covered — offboarding procedure (D-050) |
+| **Access surviving departure** | Covered — offboarding procedure (D-050); a grant in the administrative organization confers only while its holder holds a current membership there (IDN-MEM-001, D-166) |
 | **Shared logins destroying attribution** | Covered — prohibited and detected (D-051) |
 
 ---
@@ -192,7 +192,7 @@ control, or the owner's identifier detached from the owner.
 | Registering with an address that already belongs to an account, to learn that it does | Covered (REG-SESS-005). The response is identical to the fresh case, no code is sent to the address and its owner is notified without a link or code |
 | **Removed-address undo**: an attacker who holds a compromised mailbox waits for the owner to remove it, then uses an undo to re-attach it | Covered (REG-IDENT-006). The undo goes to the remaining members of the security-notice set and never to the removed address, which receives a notice with no link and no powers and behaves as unknown at every recovery path afterwards |
 | **Stolen-session identifier removal**: a stolen session removes the owner's address and adds the attacker's | Covered (REG-IDENT-004, REG-IDENT-006). Both are step-up actions; removal is immediate and every other session ends, but the owner's remaining addresses hold a one-click undo for `identifier.change.coolingoff`, and the addition is notified to the whole security-notice set. In single-address mode with no other channel at all, the old address confirms before a swap (REG-IDENT-007) |
-| **Restriction bypass to silence the owner**: the attacker drains a number's or an address's sending allowance so that the notice of a hostile change cannot be delivered | Covered (AUTH-ABUSE-004). Security notices to an existing holder are outside destination restrictions and governed by `notification.destination` only; exhausting `sms.destination` or `email.destination` refuses further codes and links, not the notice |
+| **Restriction bypass to silence the owner**: the attacker drains a number's, an address's or a source's sending allowance so that the notice of a hostile change cannot be delivered | Covered (AUTH-ABUSE-004). Security notices to an existing holder answer only to restrictions whose purpose is `notification` (shipped: `notification.destination`); exhausting `sms.destination`, `email.destination` or `sms.source` refuses further codes and links, not the notice (D-166) |
 | Provider address collision: signing in with a provider whose email is already on another account | Covered (REG-IDENT-008). The provider identity stays a credential matched by `sub`; the address is never a key; the owner is notified and no code is sent |
 | SIM swap against `phoneLink` or `phoneCode` | Partial, see section 3.2 and R-A18: off by default, restricted, never phishing-resistant, risk signals where available |
 
@@ -210,9 +210,9 @@ let a compromised mailbox veto its own removal.
 | Public application | Public internet | Authentication, throttling, enumeration resistance |
 | Management app | Public internet, staff only | Passkeys, step-up, organization policy |
 | Auth endpoints | Public | Throttling, uniform responses, CSRF |
-| Registration session and link landings | Public | Registration session bound to the pre-authentication cookie; links complete only in the originating browser on a press (REG-SESS-003); server-sent events on the session cookie with no token in any URL (`17`) |
-| Send paths (SMS, email) | Public, prepaid | Named restrictions per destination, source and account; security notices outside destination restrictions (AUTH-ABUSE-004) |
-| Provider callbacks | Public, weakly authenticated | Unguessable references, rate limits, never advance state alone |
+| Registration session and link landings | Public | Registration session bound to the pre-authentication cookie; verification and sign-in links complete only in the originating browser (REG-SESS-003), and a link of every kind acts only on a press, never on load, so a mail scanner's prefetch changes nothing (FE-VER-001, D-166); server-sent events on the session cookie with no token in any URL (`17`); a link carries its token in the address fragment, which never reaches a server, and the landing page sends no referrer (FE-VER-001, D-166) |
+| Send paths (SMS, email) | Public, prepaid | Named restrictions per destination, source and account, each on its channel; security notices answer only to `notification` restrictions and alerts to none (AUTH-ABUSE-004, D-166) |
+| Provider callbacks | Public, weakly authenticated | Unguessable references, rate limits; an unsigned callback never advances an authoritative state by itself, and a verified, signed provider security event acts only as IDN-LIFE-012a states (INT-GEN-003, D-166) |
 | Mail (IMAP/SMTP) | Public | App passwords — **weakest credential** (R-A02) |
 | Database | Private network | Application credential cannot alter schema |
 | CI/CD pipeline | GitHub | One person's account |
@@ -237,7 +237,7 @@ Stated so effort is not spent re-solving these.
 - **Audit integrity** — append-only at the database level, queryable by subject
 - **Identifier lifecycle** (D-146): verification links bound to the originating
   browser, removal undone only from the remaining channels, security notices outside
-  destination restrictions (section 3.8)
+  every restriction but those whose purpose is `notification` (section 3.8, D-166)
 
 ---
 
@@ -263,7 +263,17 @@ would then export.
 
 ---
 
+### 6.2 Abuse of the host's commercial flow by a verified account
 
+A verified account holder exercising permissions they properly hold can abuse the
+host's own commercial flow. Nothing in authentication or authorization is circumvented,
+so no control in this library prevents it.
+
+**Handed to the host (D-049).** The controls that work are commercial and are the
+host's. The library contributes a stable subject identifier that survives account
+changes (IDN-ACCT-002), so the host's own history attaches to a person rather than an
+address, and audit records queryable by subject (PRIV-BREACH-002). The first host's
+business case moved to the host with D-165.
 
 ---
 
@@ -310,7 +320,9 @@ requirement elsewhere that says "alert" has a row there. Email for all, SMS
 additionally for high severity, both with delivery confirmation. Alerts are
 deduplicated per condition per window so alert flooding cannot be used to drain the
 prepaid SMS balance; **all alert-class sends** are exempt from the send hard-stop
-(OPS-ALERT-003); mail-system alerts are SMS-first.
+(OPS-ALERT-003) and are outside every sending restriction (AUTH-ABUSE-004), so an
+attacker cannot silence an alert by exhausting a limit (D-166); mail-system alerts are
+SMS-first.
 
 ---
 

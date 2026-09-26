@@ -70,12 +70,14 @@ stored and compared; the original SHALL be retained for display.
 Applies to: email addresses, phone numbers, organization names, display names,
 usernames.
 
-*Source: D-040, D-115, D-146*
+*Source: D-040, D-115, D-146, D-166*
 
 **The canonical form is `NFKC_Casefold`** (Unicode Standard §3.13, the `NFKC_CF`
 property): compatibility normalisation, full case folding and removal of
 default-ignorable code points as one named operation. It applies to the whole of an
-email address, and to organization and display names as their comparison key. Phone
+email address, and to organization and display names as their comparison key. An
+organization name's comparison key SHALL be stored beside the entered name, derived from
+it on every write, and SHALL NOT be null. It implies no uniqueness (D-166). Phone
 numbers take no Unicode form: digits of any script (Arabic-Indic included) are
 mapped to ASCII and the result is stored as E.164. The **Unicode version** of the
 implementing library is pinned in the build and recorded as the canonicalisation
@@ -93,6 +95,10 @@ The pinned version is a constant beside the tables and is the canonicalisation v
 recorded with every fingerprint. The public types are `CanonicalForm` (`NFKC_Casefold`,
 E.164 digit mapping), `Precis` (the two profiles below) and `ScriptMixing` (IDN-ACCT-005)
 in `Janus.Core`, because Identity and Authentication both canonicalise. No package.
+The ASCII form of a domain (REG-DOM-001) is the library's own in the same way: UTS #46
+processing over the IDNA mapping table of the pinned version (`IdnaMappingTable.txt`,
+carried beside the Unicode Character Database files), with RFC 3492 Punycode, never the
+machine's ICU (D-166).
 
 **Usernames** take the PRECIS UsernameCaseMapped profile (RFC 8265) and nothing else:
 letters and digits, no spaces, case-folded, NFC, 3 to 32 characters, checked against
@@ -138,7 +144,7 @@ precisely the attack that defeats a human check.
 **IDN-ACCT-005** — Identifiers mixing scripts **within a single word** SHALL be
 rejected. Whole-word Arabic and whole-word Latin are both permitted.
 
-*Source: D-040, D-115*
+*Source: D-040, D-115, D-166*
 
 "Single script" is as defined by **UTS #39 §5.1** (mixed-script detection using
 `Script_Extensions`): characters of script `Common` or `Inherited` — digits,
@@ -150,6 +156,8 @@ therefore never a foreign script.
 2. A display name of `أحمد Ahmed` is accepted — separate words, each single-script.
 3. Rejection returns a named error code, not a generic validation failure.
 4. `O'Brien`, `Jean-Luc` and `محمد2` are each accepted.
+5. An organization name mixing scripts within a single word, judged on its comparison
+   key, is refused with `identity.identifier.mixedscript` at creation and at bootstrap.
 
 ---
 
@@ -182,7 +190,7 @@ typed a capital.
 | `deleting` | Deletion requested, grace window (`account.deletion.grace`, default 30 days) running — **cancellable until it elapses** | No |
 | `deleted` | Personal data removed or key-destroyed, anonymised record retained | No |
 
-*Source: D-006, D-037, D-026.1, D-113, D-146*
+*Source: D-006, D-037, D-026.1, D-113, D-146, D-166*
 
 Entering `deleting` is the customer's exercise of the erasure right (PRIV-RIGHT-001);
 no separate privacy request is created for it. There is no `pending` state: an account
@@ -192,17 +200,47 @@ is created `active` in one transaction at the end of the registration session
 **IDN-ACCT-007a** — *Retired by D-146. See REG-SESS-001.*
 
 `restricted` exists because the right to restrict processing requires a state in
-which the account still exists but cannot be acted upon (`04-privacy`).
+which the account still exists but cannot be acted upon (`04-privacy`). A `restricted`
+account signs in and reads, as the table states; every modifying action stays refused
+through the gate (AUTHZ-GATE-006). While restricted, rectification of the account's own
+fields is a request (`POST /privacy/requests`, type `rectification`); ending sessions,
+reporting a credential lost, listing and revoking app passwords, the link-borne undo
+of an identifier change, and a credential set by recovery or enrolled where a policy hold
+stops its sign-in (AUTH-FACT-017) stay available, since each grants nothing or restores
+the sign-in the table grants (D-166). A restriction
+the person asked for does not cut them off from their mail: a mailbox is owed `enabled`
+while its holder is `active` or `restricted` (INT-MAIL-006), and a `restricted` account
+keeps its app passwords but cannot create one (D-166).
+
+**An operation the state does not admit (D-166).** An operation that does not apply to
+the state an account is in SHALL be refused with `identity.account.stateconflict` (409),
+`details.state` naming the state and, where it is `suspended`, `details.suspendedBy` its
+origin, wherever `10` section 1.1 holds no code of its own for the case (as
+`identity.takedown.active` and `identity.account.adminsuspended` are). An administrative
+operation naming a subject no account bears SHALL be refused with
+`identity.account.notfound` (404).
 
 **Acceptance criteria**
 1. Every account row has a state; none is null.
-2. A `restricted` account can read its own data and exercise data subject rights,
-   and cannot perform host write operations or change settings.
+2. A `restricted` account signs in by any factor its policy allows, reads its own data
+   and exercises data subject rights; every modifying action it asks of the gate, every
+   change to its identifiers, credentials, profile and preferences (REG-ACCT-001) and
+   every invitation acknowledgement is refused with `authz.restricted`
+   (AUTHZ-GATE-006). A credential set by recovery, or enrolled where a policy hold
+   (AUTH-FACT-017) stops its sign-in, is admitted.
 3. Transitioning to `deleted` leaves the subject identifier resolvable and removes
    personal attributes.
-4. `deleting` is cancellable throughout its window, restoring the account to `active`,
-   matching organization deletion (IDN-ORG-003), which was cancellable while this
-   was not.
+4. `deleting` begun by `self` or `oob-request` is cancellable throughout its window,
+   restoring the state the account left: `active`; `restricted` where a restriction is
+   held (PRIV-RIGHT-004); or `suspended` with its origin where an out-of-band erasure
+   began the window on a suspended account (IDN-LIFE-003). This matches organization
+   deletion (IDN-ORG-003), which was cancellable while this was not. A takedown's
+   `deleting` is not cancelled but reversed (IDN-LIFE-003).
+5. Restricting an account ends its sessions (AUTH-SESS-010); it signs in again,
+   `GET /account` answers, and `PUT /account/profile` answers 403 `authz.restricted`.
+6. An administrator's suspension of a `deleted` account is refused with
+   `identity.account.stateconflict` and `details.state` `deleted`; the same operation
+   naming a subject no account bears is refused with `identity.account.notfound`.
 
 ---
 
@@ -257,12 +295,22 @@ physically deleted (IDN-PRIN-003).
 
 | Stage | Effect |
 |---|---|
-| Deletion requested | Organization suspends immediately; access stops |
+| Deletion requested | Organization suspends immediately: every session of every current member ends in the same transaction, and no grant of the organization, stored, materialised or derived, confers anything until the request is cancelled (every evaluation reads the request live, AUTHZ-CACHE-001); no invitation is issued into it and none is acknowledged. A member may still sign in to their own account |
 | Grace window | Configurable, default **30 days** |
-| Cancelled | Full restoration, no data loss |
-| Window elapsed | **Erasure executes** — the record persists and its identifying data is rendered unreadable. **No row is removed** (IDN-PRIN-003) |
+| Cancelled | Memberships and grants restored in full, no data loss; the sessions the request ended stay ended |
+| Window elapsed | **Erasure executes**: every current membership ends; the organization's name, and every domain it listed, is replaced by its identifier and each domain is marked removed; the grants scoped to it stay unrevoked and confer nothing, as from the request; no account is erased. **No row is removed** (IDN-PRIN-003) |
 
-*Source: D-038, D-090*
+*Source: D-038, D-090, D-166*
+
+A deletion request and its cancellation SHALL be asked of `organization:manage` in the
+administrative organization, SHALL be the `organization:delete` step-up action, and SHALL
+carry a `reason` (a free-text member, API-CONV-002); each, and the creation of an
+organization, SHALL be recorded under the organization. A request for an organization
+already being deleted, and a cancellation where none is pending, SHALL change and record
+nothing. A cancellation at or after `organization.deletion.grace` from the request, or
+after the erasure, SHALL be refused with `identity.deletion.windowelapsed`. A request or
+cancellation whose path names no organization the deployment holds SHALL be refused with
+404 `identity.organization.notfound` (D-166).
 
 **Acceptance criteria**
 1. Requesting deletion halts member access within one request cycle: the first request
@@ -271,6 +319,24 @@ physically deleted (IDN-PRIN-003).
 3. Erasure does not execute before the configured window elapses.
 4. The window is runtime-configurable with an enforced minimum.
 5. After erasure the organization row still exists and its identifier still resolves.
+6. The erasure, its audit record and its `MembershipChanged` and `OrganizationErased`
+   events commit together or not at all.
+7. A pass that cannot read `organization.deletion.grace` erases nothing.
+8. The request ends every session of every current member in the transaction that
+   suspends the organization; a member can sign in again and holds nothing through the
+   organization while it is suspended.
+9. A cancellation restores no ended session.
+10. A cancellation at or after the window's end is refused with
+    `identity.deletion.windowelapsed`, whether or not the erasure has run.
+11. While deletion is requested, a derivation reaching a record of the organization
+    admits no one through the check, the filter, the capability page or the
+    explanation, materialised or not; cancelling restores the access the host's facts
+    then give.
+12. While deletion is requested, issuing an invitation into the organization answers
+    403 `authz.denied`, since its grants confer nothing, and acknowledging one answers
+    `identity.invitation.expired`.
+13. A deletion request or cancellation naming an organization the deployment does not
+    hold is refused with `identity.organization.notfound` and changes nothing.
 
 ---
 
@@ -290,14 +356,15 @@ Deleting it would leave a system nobody can administer.
 **IDN-ORG-005** — Data owned by a deleted organization SHALL be anonymised, not
 destroyed.
 
-*Source: D-026.1, D-038*
+*Source: D-026.1, D-038, D-166*
 
 Audit history survives the organization.
 
 **Acceptance criteria**
 1. After erasure, audit records referencing the organization remain queryable.
-2. Personal attributes within those records are rendered unreadable, not removed
-   (PRIV-RIGHT-005a).
+2. Personal attributes within those records are held under their subjects' keys and
+   become unreadable when each subject is erased (PRIV-RIGHT-005a); the organization's
+   own name and domains are replaced at erasure (IDN-ORG-003).
 
 ---
 
@@ -308,7 +375,7 @@ of domains it has verified by DNS, through the policy field `emailDomains`, off 
 default. The rules for verification, scheduled re-verification, alerts and removal are
 REG-DOM-001.
 
-*Source: D-146*
+*Source: D-146, D-166*
 
 Domain lock is a property of the organization because it is the organization that
 owns the domains and the policy that names them (IDN-ORG-002). It changes nothing
@@ -316,7 +383,9 @@ about the identity pool (IDN-ORG-001): a member's address is checked against the
 not partitioned by it.
 
 **Acceptance criteria**
-1. With `emailDomains` off, no address is refused on grounds of its domain.
+1. With `emailDomains` off, no address is refused on grounds of its domain, except an
+   address in a domain removed from the organization's lock and not listed anew
+   (REG-DOM-001).
 2. With the lock on, a member's sign-in email outside the verified list is refused
    with `identity.identifier.domainnotallowed` (REG-DOM-001 criteria).
 3. The lock is a policy value of the organization, inherited from the system policy,
@@ -327,21 +396,39 @@ not partitioned by it.
 ## 3. Membership
 
 **IDN-MEM-001** — Membership SHALL be a first-class record linking an account to an
-organization, carrying its own lifecycle independent of both.
+organization, carrying its own lifecycle independent of both. Ending a membership SHALL
+NOT revoke the account's grants in the organization; they are transferred or revoked as
+their own step (`16` section 3 step 4), and no grant row is removed (IDN-PRIN-003). A
+grant in the administrative organization SHALL confer only while its holder holds a
+current membership of that organization.
 
-*Source: D-002, D-003*
+*Source: D-002, D-003, D-166*
+
+An administrator ends a membership under `membership:manage` in the organization, as the
+`membership:end` step-up action; where the path names no organization the deployment
+holds, the request is refused with `identity.organization.notfound` (404), and where the
+account holds no current membership of the organization, with
+`identity.membership.notfound` (404), each before anything is written (`09` section 8a).
 
 **Acceptance criteria**
 1. Ending a membership leaves both the account and the organization intact.
 2. Membership records carry created and ended timestamps.
+3. After a membership ends, the account's grants in the organization are still held
+   and revocable.
+4. After a membership of the administrative organization ends, no grant the account
+   holds there confers.
+5. Ending a membership without the `membership:end` step-up is refused with
+   `auth.stepup.required`, and the membership stays current.
 
 ---
 
 **IDN-MEM-002** — The data model SHALL support an account holding zero or more
 memberships. Policy SHALL forbid more than one by default; enabling multiple
-memberships SHALL be configuration.
+memberships SHALL be configuration. The memberships counted are the account's current
+ones; one that has ended is not counted. A second current membership of an organization
+the account already holds a current membership of SHALL be refused whatever the setting.
 
-*Source: D-003*
+*Source: D-003, D-166*
 
 Cheap to build now, expensive to retrofit. Forbidding is a validation rule; allowing
 later would be a model change to something that assumed one-to-one.
@@ -350,6 +437,13 @@ later would be a model change to something that assumed one-to-one.
 1. The schema permits multiple membership rows per account.
 2. With the default setting, creating a second membership is rejected.
 3. Enabling the setting permits it without a schema change or deploy.
+4. An account whose only membership has ended joins another organization under the
+   default setting.
+5. With `organization.multiplememberships` on, a second current membership of the same
+   organization is refused with `identity.membership.limitreached`, and the refusal's
+   `details.organization` names it.
+6. Two memberships attached to one account together, where the setting admits one,
+   leave one current membership.
 
 ---
 
@@ -385,7 +479,7 @@ notified without a code).*
 **IDN-LIFE-002a** — Where a host processes **sensitive personal data** about a
 subject, that subject SHALL hold an account.
 
-*Source: D-073, D-091*
+*Source: D-073, D-091, D-166*
 
 Every rights mechanism hangs off an account — consent records, the dashboard, erasure,
 restriction, takedown. Sensitive data about an identifiable person, attached to no
@@ -406,7 +500,10 @@ right (keys, consent and rights for people who never touched the system) is reje
 
 **Acceptance criteria**
 1. No path exists by which a sensitive resource type is created without a subject
-   holding an account.
+   holding an account: the registration of a record of a sensitive type
+   (AUTHZ-INHERIT-002) that names no subject is refused with `api.request.malformed`
+   naming `subject`, and one naming a subject that holds no account, or whose account
+   is `deleting` or `deleted`, with `api.request.invalid` naming `subject`.
 2. A third party's fields on a host record are encrypted under the key of the subject
    who entered them and become unrecoverable when that subject is erased.
 3. A subject with sensitive data held about them has an account, a history and a
@@ -426,11 +523,11 @@ the single point at which the adult affirmation is collected.
 any credible indication that a customer is under 18: account suspended, host-side
 processing for the subject stopped, personal data removed, event recorded.
 
-*Source: D-148; D-039, D-127, D-147*
+*Source: D-148; D-039, D-127, D-147, D-166*
 
 **Two phases, one operation.** Triggering the takedown does, in one transaction:
 suspend the account, terminate its sessions (AUTH-SESS-010), record the event with
-its trigger and reason, and publish the outbox record that tells the host to stop its
+its trigger and reason, and write the outbox record that tells the host to stop its
 own processing for the subject. That outbox record is the per-subscriber completion
 record of that host-side work: it is written in the trigger transaction, the worker
 delivers it and each
@@ -438,33 +535,69 @@ required subscriber confirms against it (IDN-LIFE-003a), and it is what the take
 screen reads during the window (D-148). No erasures row exists yet: the erasures table
 (IDN-LIFE-003b) describes an erasure, and none has happened. Access and processing stop
 **now**. Erasure (key destruction and
-fingerprint neutralisation) runs when `takedown.grace` (default **7 days**) elapses,
-through the ordinary erasure transaction (IDN-LIFE-003a), after which the account is
-`deleted`. During the window the takedown can be **reversed** by a holder of
-`takedown:execute`, for the case where an adult was misjudged, restoring `active`
-and re-enabling sign-in; host-side actions already taken on `TakedownExecuted` are not
-undone by the library. State sequence:
+fingerprint neutralisation) runs when the takedown's window closes: `takedown.grace`
+(default **7 days**) after the trigger, or earlier for an account already `deleting`
+(below). It runs through the ordinary erasure transaction (IDN-LIFE-003a), after which
+the account is `deleted`. During the window the takedown can be **reversed** by a
+holder of `takedown:execute`, for the case where an adult was misjudged, restoring the
+state the account held at the trigger (below); host-side actions already taken on
+`TakedownExecuted` are not undone by the library. From `active` the state sequence is
 `active → suspended → deleting → deleted`, the first two transitions in the trigger
 transaction; the account sits in **`deleting`** for the window.
+
+**Where a takedown starts, and what a reversal restores (D-166).** A takedown SHALL be
+triggered on an account that is `active`, `restricted`, `suspended`, or `deleting` by
+`self` or `oob-request`. The account holds the state it was in (`10` section 5.12b:
+`suspensionHeld` for a suspension with its origin, `restrictionHeld` for a restriction,
+`deletionHeld` and `deletionHeldSince` for a running deletion's origin and start), and
+a reversal SHALL restore it: `active`; `restricted` where a restriction is held
+(PRIV-RIGHT-004); `suspended` with its `suspendedBy`, so that an administrator's
+suspension is still lifted only under `account:manage` and an owner's deactivation only
+by its owner (IDN-LIFE-013); or the deletion it was in, with its `deletingBy` and its
+start. Where the account was
+already `deleting`, the takedown's erasure falls due at the earlier of that window's end
+and the trigger plus `takedown.grace`, so the takedown never erases later than the
+subject's own request would have. The reversal and the erasure each read the account
+under a lock in their transaction, so of a reversal and an erasure at the window's end
+only one commits. A second trigger on a takedown-originated `deleting` is refused with
+`identity.takedown.active`; a trigger on a `deleted` account with
+`identity.account.stateconflict`; a trigger, a read of its progress or a reversal naming
+a subject no account bears with `identity.account.notfound`; and a read or a reversal of
+an account holding no takedown with `identity.takedown.notfound`.
 
 **The takedown borrows the deletion timer, not the deletion's emails or buttons.**
 The `deleting` state records **why it was entered** (`deletingBy`: `self` ·
 `takedown` · `oob-request`), mirroring `suspendedBy` (IDN-LIFE-013); both
 enumerations are fixed in `10` section 5.12b (D-147). For `oob-request` (an erasure
 request received out of band and entered through the privacy-request queue,
-PRIV-RIGHT-002): the subject is sent the deletion notice **with no cancel link**,
+PRIV-RIGHT-002): the subject's security-notice set is sent the out-of-band deletion
+notice (`oob-deletion-notice`), which carries **no cancel link**,
 because the requester may not control the subject's addresses; cancellation is
 through the privacy-request queue only, by the administrator handling the request
-(`POST /admin/accounts/{subject}/delete/cancel` during the window, recorded against
-the request), and the link-borne `POST /account/delete/cancel` has nothing to consume
-(D-147). For
+(`POST /admin/accounts/{subject}/delete/cancel` during the window, the
+`account:deletioncancel` step-up action, recorded against the request: the audit record
+of the cancellation names the fulfilled erasure request whose decision began the
+window), and the link-borne `POST /account/delete/cancel` has nothing to consume
+(D-147). Fulfilling the request is the `privacyrequest:fulfil` step-up action
+(PRIV-RIGHT-001). What a fulfilled out-of-band erasure does depends on the state it
+finds (D-166): an account `active` or `restricted` enters `deleting` by `oob-request`,
+holding a restriction where one is in force; an account `suspended` SHALL begin its
+deletion all the same, holding the suspension with its origin (`suspensionHeld`), so
+that a cancellation returns the account to `suspended` with its `suspendedBy`; an
+account already `deleting`, by any origin, has the request recorded fulfilled against
+the running window, and nothing restarts; an account `deleted` has the request recorded
+fulfilled, and nothing further happens. For
 `takedown`: **no deletion notification and no cancellation link are sent to the
 subject**; `POST /account/delete/cancel` and `POST /admin/accounts/{subject}/delete/cancel`
 refuse with `identity.takedown.active`; the only way back is
 `POST /admin/accounts/{subject}/takedown/reverse` under `takedown:execute`, with a
 reason. A takedown the subject could cancel from their inbox would not be a takedown
-(D-137). `AccountSuspended` and `TakedownExecuted` fire at trigger; no
-`AccountDeletionRequested` fires.
+(D-137). `AccountSuspended` and `TakedownExecuted` fire at every trigger, whatever state
+the account held: `AccountSuspended` announces that access stopped (D-166). No
+`AccountDeletionRequested` fires. `TakedownExecuted` is the trigger's outbox record
+(IDN-LIFE-003a); `AccountSuspended` is written as an event row in the same transaction.
+The reversal writes `TakedownReversed` in its own transaction the same way. Neither is
+delivered before its transaction commits (CONV-DESIGN-002).
 
 **Why a window.** Immediate key destruction would make a mistaken takedown
 unfixable and would leave nothing for the host's follow-up and reporting steps in
@@ -481,16 +614,34 @@ on the spot.
 2. The system provides an operation performing all four steps **reliably, with
    per-subscriber completion visible**, not atomically (IDN-LIFE-003a): the
    host-side work's completion is read from its outbox record from the moment of
-   trigger, the erasure's from the erasures row once phase two has run.
+   trigger, the erasure's from the erasures row once phase two has run. The progress is
+   read at `GET /admin/accounts/{subject}/takedown`.
 3. Execution is recorded in the audit trail with the reason.
-4. On trigger, in one transaction, the account passes through `suspended` into
-   `deleting` with `deletingBy = takedown`, its sessions are ended and `TakedownExecuted`
-   is published as an outbox record carrying per-subscriber confirmation;
-   no personal field is destroyed yet and no erasures row is written.
-5. When `takedown.grace` elapses without reversal, the erasure transaction runs and
-   the account is `deleted`; reversal inside the window restores `active`.
+4. On a trigger on an `active` account, in one transaction, the account passes through
+   `suspended` into `deleting` with `deletingBy = takedown`, its sessions are ended,
+   `TakedownExecuted` is written as an outbox record carrying per-subscriber
+   confirmation and `AccountSuspended` as an event row; no personal field is destroyed
+   yet and no erasures row is written.
+5. When the takedown's window elapses without reversal, the erasure transaction runs and
+   the account is `deleted`; reversal inside the window restores the state the account
+   held at the trigger. The window closes at its end whether or not the sweep has
+   reached the account; a reversal after it, or of an erased account, is refused with
+   `identity.takedown.windowelapsed`.
 6. No deletion notification reaches the subject; both `delete/cancel` endpoints refuse
    a takedown-originated `deleting` with `identity.takedown.active`.
+7. A trigger on an account `deleting` by `self` or `oob-request` takes it into the
+   takedown's window; its erasure falls due no later than its own window's end, both
+   `delete/cancel` endpoints then refuse with `identity.takedown.active`, and a reversal
+   returns it to its own deletion with its origin and its start.
+8. A takedown of an account an administrator suspended, reversed inside its window,
+   returns it to `suspended` by `administrator`; an out-of-band erasure fulfilled on a
+   `suspended` account begins its window, and cancelling it returns the account to
+   `suspended` with its origin.
+9. A trigger on an account that is `restricted`, `suspended` or `deleting` writes
+   `AccountSuspended` as an event row, as a trigger on an `active` account does.
+10. An out-of-band erasure fulfilled on an account already `deleting` leaves its window's
+    end unchanged, and one fulfilled on a `deleted` account changes nothing but the
+    request, which reads `fulfilled`.
 
 **Atomicity was claimed and is unachievable.** Two steps are library work; two belong
 to the host application, in tables the library never touches (LIB-HOST-002). An
@@ -503,13 +654,13 @@ minor's personal data was still present.
 **IDN-LIFE-003b** — Erasure progress SHALL be tracked in a **dedicated erasures table**,
 not in the account record.
 
-*Source: D-094, D-102, D-147*
+*Source: D-094, D-102, D-147, D-166*
 
 | Column | Purpose |
 |---|---|
 | Subject reference | Whose erasure this is |
 | Requested at | When |
-| Reason | `erasure-request` · `minor-takedown` · `organization-erasure` (`10` section 5.12a, D-147) |
+| Reason | `erasure-request` · `minor-takedown` (`10` section 5.12a, D-147); an organization erasure erases no account (IDN-ORG-003) |
 | Status | `awaiting-subscribers` · `complete` · `failed` |
 | Attempts | Retry count across subscribers |
 
@@ -527,8 +678,8 @@ for it would oblige every reader of an account to handle a value that describes 
 rather than a person.
 
 **Access has already stopped** before any row appears here: the account entered
-`deleting` when its grace window began — for a customer's own deletion from `active`,
-for a takedown from `suspended` (IDN-LIFE-003).
+`deleting` when its grace window began, by its own request, by an out-of-band request or
+by a takedown (IDN-LIFE-003).
 
 **Status is a constrained column, not a lookup table.** The code branches on each value —
 *failed* means manual completion, *complete* means stop — so a value added without code
@@ -550,7 +701,7 @@ changes freely.
 **transactional outbox**, and SHALL be **generic** — the library publishes facts about
 identity and knows nothing of who consumes them.
 
-*Source: D-148; D-090, D-102*
+*Source: D-148; D-090, D-102, D-166*
 
 **The flow:**
 
@@ -560,7 +711,7 @@ identity and knows nothing of who consumes them.
    overwritten and the fingerprint neutralised **in that same transaction**
    (PRIV-RIGHT-005a, PRIV-RIGHT-005c). None can exist without the others. A takedown
    runs this step twice: at trigger, with `TakedownExecuted` as the outbox
-   record and no erasures row; and at the end of `takedown.grace`, as an ordinary
+   record and no erasures row; and when the takedown's window closes, as an ordinary
    erasure (IDN-LIFE-003, D-148). The outbox record carries each required
    subscriber's confirmation, so the completion of the host-side work is visible from
    the trigger onward
@@ -576,6 +727,14 @@ subscriber and the library changes not at all.
 **Requirements on the mechanism:**
 - **Subscribers SHALL be idempotent.** Delivery is at-least-once; a retry may arrive
   after a successful attempt. Built from the start rather than retro-fitted
+- **A subscriber that faults SHALL be treated as one that did not confirm.** The
+  publisher catches the fault, counts the attempt and schedules the next under the
+  backoff below, exactly as for a subscriber that answered failure; the fault ends
+  nothing for another subscriber or another delivery
+- **Subscriber names SHALL be distinct**, each following the name rule of INT-SMS-003
+  (a name that breaks it is refused at startup with `model.startup.declarationinvalid`),
+  and `erasure-ledger` is the library's own (DR-016): startup refuses two subscribers
+  under one name, or one under `erasure-ledger`, with `model.startup.subscribername`
 - **Retries SHALL use exponential backoff with jitter**, bounded — not indefinite. A
   request failing from a defect fails identically at every interval. The publisher runs
   every `outbox.poll.interval`; the schedule is `outbox.retry.initial` multiplied by
@@ -583,7 +742,8 @@ subscriber and the library changes not at all.
   attempts, after which the record is `failed` (D-153)
 - **Exhausted retries SHALL alert immediately.** The failed record is a diagnostic
   signal, not somewhere failures go quietly
-- **A manual completion path SHALL exist** for permanent failure, itself recorded
+- **A manual completion path SHALL exist** for the permanent failure of an erasure,
+  restriction or takedown delivery, itself recorded
 - **Subscribers SHALL be marked required or optional.** An optional subscriber failing
   does not hold a takedown open
 - **Key destruction and fingerprint neutralisation are inline, never subscribers.**
@@ -599,7 +759,7 @@ only, so both are in scope by having been considered rather than by assumption.
 **Acceptance criteria**
 1. The identity change and the outbox record share one transaction, and the erasures
    row shares it wherever the operation erases; a takedown trigger writes no erasures
-   row, its erasure seven days later does.
+   row, its erasure, when the takedown's window closes, does.
 2. No event names a consumer or a consumer's domain.
 3. A subscriber handling the same event twice produces the same result.
 4. A request outstanding beyond its retry budget alerts immediately.
@@ -609,6 +769,11 @@ only, so both are in scope by having been considered rather than by assumption.
    decrypts.
 6. Adding a subscriber requires no library change; a missing handler fails startup
    (PRIV-RIGHT-005b).
+7. Two subscribers under one name, or one named `erasure-ledger`, fail startup.
+8. A subscriber that throws is counted as an attempt and retried under the backoff;
+   the other subscribers' deliveries go on.
+9. A takedown or restriction delivery whose retries are spent is closed by the manual
+   completion path, and the takedown's progress then reads complete.
 
 ---
 
@@ -631,13 +796,20 @@ only, so both are in scope by having been considered rather than by assumption.
 ---
 
 **IDN-LIFE-008** — On removal or replacement of a sign-in identifier (REG-IDENT-006,
-REG-IDENT-007), the session SHALL rotate and all other sessions SHALL terminate.
+REG-IDENT-007), the session under which the change completes SHALL rotate and every
+other session SHALL terminate; a replacement (REG-IDENT-007) completes when its swap
+applies, and one that completes under no session (the old address's confirmation, an
+enrolment session) terminates every session.
 
-*Source: D-035, D-033.4, D-146*
+*Source: D-035, D-033.4, D-146, D-166*
 
 **Acceptance criteria**
 1. Sessions on other devices are invalidated within one request cycle: the first request
    on any of them that reaches the session record after the commit is refused.
+2. A replacement staged in one session and completed by a code typed in another leaves
+   only the completing session live, under a new secret.
+3. A replacement completed by the old address's confirmation ends every session of the
+   account.
 
 ---
 
@@ -661,7 +833,7 @@ REG-IDENT-007), the session SHALL rotate and all other sessions SHALL terminate.
 **invitation flow** issuing a time-boxed enrolment link, not by public registration
 followed by a grant.
 
-*Source: D-148; D-079a, D-146*
+*Source: D-148; D-079a, D-146, D-166*
 
 The only account-creation path was public registration, so a staff member would
 register as a customer (the public application's client identifier, marketing consent,
@@ -669,8 +841,9 @@ a password) and be granted membership afterwards, with nothing saying when the
 organization's policy began to apply to the credentials they already held.
 
 An invitation MAY bind the email, the phone, both or neither; a bound identifier is
-pre-filled and locked during registration. Where the organization's mail server is
-integrated the invitation names a personal email beside the asserted corporate address;
+pre-filled and locked during registration. Where the organization is the administrative
+organization and the deployment has a mail server registered (REG-MAIL-001), the
+invitation names a personal email beside the asserted corporate address;
 the account is not created until that personal email is verified by the press on the
 invitation link, and it stays on the account as a verified non-primary email in the
 security-notice set for the whole membership, becoming primary automatically when the
@@ -680,22 +853,31 @@ versions, timestamp) is recorded on the membership (REG-INV-001). A person who a
 holds an account accepts by signing in; no second account is created (REG-INV-002).
 
 **IDN-LIFE-009b** — On gaining membership of an organization, any factor that
-organization's policy does not permit SHALL be **disabled for interactive use**.
+organization's policy does not permit SHALL be **disabled for interactive use**. Every
+live session of the account SHALL be downgraded when the membership attaches
+(AUTH-SESS-009), and a factor the policy does not permit SHALL satisfy no step-up.
 
 *The criteria below cover IDN-LIFE-009a and IDN-LIFE-009b together.*
 
-*Source: D-079a*
+*Source: D-079a, D-166*
 
 A password that was valid for a customer is not valid for an administrative-
 organization member under a passkeys-only policy. It stops being usable to sign in;
 it is not deleted, since membership may end.
 
 **Acceptance criteria**
-1. Staff membership originates from an invitation, never from a bare grant.
-2. The enrolment link is time-boxed and single-use.
+1. Staff membership originates from an invitation, never from a bare grant. The one
+   exception is the three memberships bootstrap attaches (the first administrator,
+   `emergency` and the restore-test canary, OPS-BOOT-001).
+2. The enrolment link is time-boxed and single-use: the press that opens it (a
+   registration begun with its token, or a signed-in `POST /register` carrying it)
+   spends it, and a registration abandoned or expired does not give it back.
 3. A password held before membership no longer authenticates after it.
 4. The mailbox is provisioned disabled at invitation and enabled by the membership
    (INT-MAIL-006, REG-MAIL-001), never by registration.
+5. After the membership attaches, a session the account held before it passes no
+   step-up gate until a factor the organization's policy permits is presented, and a
+   factor it does not permit is refused at step-up (`auth.factor.notpermitted`).
 
 ---
 
@@ -704,17 +886,47 @@ it is not deleted, since membership may end.
 **IDN-LIFE-012** — Linking a Google or Apple identity SHALL attach a credential and
 SHALL have no effect on permissions or identity.
 
-*Source: D-005, original spec, D-146*
+*Source: D-005, original spec, D-146, D-166*
 
 The provider's email is never a key. It counts as verified by the sign-in only where
 the provider operates the mailbox; any other provider-supplied address is verified by
-one code like a typed address (REG-IDENT-008).
+one code like a typed address (REG-IDENT-008). The provider's subject identifier of a
+linked identity is held on the linked credential as a keyed fingerprint, unique per
+provider, beside that subject encrypted under the account's key (PRIV-RIGHT-005c); a
+provider's event finds the credential by it, and it is never shown.
+
+**Values (D-166).** The round trip is the library's own (`09`,
+`GET /auth/providers/{provider}`). The library is a confidential client of each provider
+the deployment declares (LIB-HOST-001), under the first declared client identifier, and
+reads the provider's credential through the secret source (LIB-EXT-001) by the
+provider's name when the application starts; a credential the secret source does not
+give, or gives empty or unusable, stops the start with `model.startup.secretunavailable`,
+`details.key` `socialProvider.<provider>`. Where the credential is a signing credential
+(issuer, key identifier and a P-256 private key), the client secret is minted at each
+exchange: header `alg` `ES256` and `kid`; claims `iss` the credential's issuer, `iat` now, `exp` 5 minutes later, `aud` the issuer the provider's discovery
+document names, `sub` the client identifier; it is never stored. The round trip asks
+for the scope `openid email` and nothing else, authenticates at the provider's token
+endpoint with `client_secret_post`, asks for `response_mode=form_post` where the
+discovery document lists it, and sends a PKCE `S256` challenge where the document lists
+`S256` in `code_challenge_methods_supported`; otherwise it relies on the `nonce`,
+validated in the identity token from the token endpoint before anything the token says
+is used (RFC 9700 sections 2.1.1 and 4.5.3.2). The identity token is accepted only
+where its signature verifies under the provider's published keys, its `iss` is the
+issuer the discovery document names, its `aud` is the client the round trip was started
+under, it has not expired and its `nonce` is the round trip's.
 
 **Acceptance criteria**
 1. Linking changes no grant and no membership.
 2. Unlinking leaves the account usable via its remaining credentials.
 3. Unlinking the only remaining credential is rejected.
+4. An identity token whose `iss`, `aud` or `nonce` is not the one this item names, or
+   whose signature the provider's published keys do not verify, signs in and links
+   nothing.
+5. With a signing credential supplied, every code exchange presents a client secret
+   minted for it that expires 5 minutes after it is made, and exchanges a year apart
+   both succeed with no redeclaration and no restart.
 
+---
 
 **IDN-LIFE-012a** — The library SHALL consume the security events the social providers
 send about a linked identity: Google's Cross-Account Protection (RISC, Security Event
@@ -724,14 +936,45 @@ of the linked account SHALL end and the linked credential SHALL be `suspended` u
 the person signs in by another factor; on consent revoked or account deleted at the
 provider, the credential SHALL be unlinked (IDN-LIFE-012 AC3 still refuses to remove
 the last credential, in which case the account is `suspended` with a security notice
-to the security-notice set); on an email change or disable, the provider-verified
-identifier SHALL drop to unverified. Every event is verified against the provider's
+to the security-notice set); on an email disable, the provider-verified identifier
+SHALL drop to unverified. Every event is verified against the provider's
 published keys, is idempotent by its `jti`, and is audited.
 
-*Source: D-164*
+*Source: D-164, D-166*
 
 A person's Google account is taken over and Google tells every relying party within
 seconds. A system that ignores that is choosing to keep the attacker signed in.
+
+**Event types (D-164).** End every session and hold the credential: Google
+`sessions-revoked`, `account-disabled` (any reason), `account-credential-change-required`
+and `tokens-revoked`. Unlink, or suspend where the credential is the last: Apple
+`consent-revoked` and `account-delete` (also delivered as `account-deleted`). Drop the
+named address to unverified: Apple `email-disabled`. Every other type, `account-enabled`
+included, is recorded and changes nothing; neither provider sends an event for an email
+change.
+
+**What each outcome does (D-166).** The credential is the last where no other usable
+credential the account holds, the password included, may begin a sign-in. The account's
+suspension is then recorded with `suspendedBy` `administrator`, ends every session in
+the same transaction (AUTH-SESS-010) and announces `AccountSuspended`; an account its
+owner deactivated is taken over without a new announcement, and one an administrator
+suspended, one in its deletion window and one erased are left as they are. The personal
+email a membership keeps (REG-MAIL-001, REG-MAIL-003) stays verified, and the event is
+recorded. Where the address that drops held the primary role, the role passes to the
+earliest verified email that may hold it, and stays vacant where none may. A held
+credential is in the `suspended` state with no invalidation instant, which the
+loss-report sweep never reaches. The first session begun for the account on factors that
+exclude the held credential's restores it in that transaction, recorded as
+`auth.credential.restored`; a credential suspended by a loss report is not restored this
+way.
+
+**How an event is taken (D-166).** An event is claimed by its `jti` under its
+provider's callback name, in the transaction its work runs in; an event that carries no
+`jti` is refused as unreadable (RFC 8417 section 2.2). A carried event is recorded as
+`auth.providerevent.taken`; a replayed one as `auth.providerevent.rejected` and answered
+as a carried one is; one the provider's keys do not verify as
+`auth.providerevent.rejected` against the account its unverified claims name, where they
+name one, and refused. The provider's subject identifier is never recorded or logged.
 
 **Acceptance criteria**
 1. A signed `sessions-revoked` or `account-disabled` event ends every session of the
@@ -740,40 +983,65 @@ seconds. A system that ignores that is choosing to keep the attacker signed in.
 2. An Apple `consent-revoked` or `account-delete` event unlinks the credential, or
    suspends the account with a notice when it is the last one.
 3. The endpoint `POST /callbacks/providers/{provider}` is on the machine profile
-   (BFF-MACH-001) and rate-limited like every callback.
+   (BFF-MACH-001) and rate-limited like every callback; it answers as `09` section 10
+   states for each provider.
+4. A `consent-revoked` event on an account whose only other credential is one a
+   provider's event already holds suspends the account and leaves the credential linked.
+5. An `email-disabled` event naming the personal email a membership keeps leaves it
+   verified, and the event is recorded.
+6. A credential held by a provider's event stands again at the first session begun on
+   other factors, recorded as `auth.credential.restored`.
+7. An event carrying no `jti` changes nothing and is refused.
 
 ---
 
 ### 4.5 Deactivation and deletion
 
 **IDN-LIFE-013** — Deactivation SHALL suspend all grants without removing them.
-Deactivation is the account's own entry into the `suspended` state (IDN-ACCT-007),
-the same state administrative suspension produces. **The account records who
-suspended it** (`suspendedBy`: `self` · `administrator`, `10` section 5.12b), because the two are
-reversed differently: a self-deactivated account is reactivated by its owner through
-a **link token in the deactivation notice** (the same shape as deletion
-cancellation, since a suspended account cannot sign in); an administratively
-suspended account is reactivated only by an administrator (`account:manage`). Where
-the deactivation notice is lost, the owner uses ordinary recovery (`/recovery/begin`),
-which is available to a self-suspended account and restores `active` on completion
-(D-140).
+Deactivation is the account's own entry into the `suspended` state (IDN-ACCT-007), the
+same state administrative suspension produces. **The account records who suspended it**
+(`suspendedBy`: `self` · `administrator`, `10` section 5.12b), because the two are
+reversed differently: a self-deactivated account is reactivated by its owner through a
+**link token in the deactivation notice** (link kind `reactivation`, `10` section 5.43,
+which acts only on the person's press and never on the page's load; the same shape as
+deletion cancellation, since a suspended account cannot sign in); an administratively
+suspended account is reactivated only by an administrator (`account:manage`). An
+administrator's suspension of an account its owner deactivated SHALL make it an
+administrator's suspension (`suspendedBy = administrator`), which the deactivation link
+and recovery no longer reverse. An administrator SHALL NOT reactivate an account its owner deactivated
+(`identity.account.stateconflict`). An administrator's suspension of an account that is
+`deleting` or `deleted` SHALL be refused with `identity.account.stateconflict`;
+suspending an account an administrator already suspended changes nothing. Where the
+deactivation notice is lost, the owner uses ordinary recovery (`/recovery/begin`), which
+is available to a self-suspended account and reactivates it on completion (D-140).
+Reactivation, by the link, by recovery or by an administrator, SHALL return an account
+that holds a restriction (`restrictionHeld`) to `restricted`, and any other to `active`
+(PRIV-RIGHT-004).
 
 The reactivation link in the deactivation notice is valid for as long as the account
 is `suspended` with a `self` origin; it has no separate lifetime, as the deletion-cancel
 link lives the whole grace window (D-153).
 
-*Source: D-006, D-125, D-135, D-147*
+*Source: D-006, D-125, D-135, D-147, D-166*
 
 **Acceptance criteria**
 1. Reactivation restores prior access exactly.
+2. After an administrator suspends a deactivated account, the deactivation link
+   answers `identity.account.adminsuspended` and recovery does not restore it.
+3. An administrator's reactivation of an account its owner deactivated is refused and
+   changes nothing.
+4. An account restricted, suspended by an administrator and reactivated is
+   `restricted`, and no `RestrictionChanged` is emitted on either side.
 
 ---
 
 **IDN-LIFE-014** — Deletion SHALL remove personal attributes, retain the
-anonymised audit trail, and remove all grants. It SHALL execute when the grace
-window (`account.deletion.grace`) elapses without cancellation.
+anonymised audit trail, and revoke all grants, whose rows are kept (IDN-PRIN-003). It
+SHALL execute when the grace window (`account.deletion.grace`) elapses without
+cancellation. An erasure request fulfilled out of band begins this window, or is
+recorded against one already running, as IDN-LIFE-003 states.
 
-*Source: D-026.1, D-006, D-113*
+*Source: D-026.1, D-006, D-113, D-166*
 
 **Acceptance criteria**
 1. After deletion, no personal attribute is retrievable.
@@ -782,17 +1050,18 @@ window (`account.deletion.grace`) elapses without cancellation.
 
 ---
 
-**IDN-LIFE-015** — Account lifecycle events SHALL propagate to Stalwart with a
-stable idempotency key, and reconciliation SHALL run daily, flagging drift without
-auto-correcting.
+**IDN-LIFE-015** — Account state SHALL propagate to Stalwart with a stable idempotency
+key, and reconciliation SHALL run daily, flagging drift without auto-correcting. Mail
+provisioning follows the state each mailbox is owed, read from its holder's account
+state and memberships, and consumes no event (INT-MAIL-006, INT-MAIL-007).
 
-*Source: D-006, D-041*
+*Source: D-006, D-041, D-166*
 
 A failed suspension leaves a person reading mail after offboarding. Silent
 auto-correction conceals a broken pipeline.
 
 **Acceptance criteria**
-1. Replaying a lifecycle event produces no duplicate in Stalwart.
+1. Pushing the same owed state again produces no duplicate in Stalwart.
 2. Reconciliation reports a discrepancy without changing either side.
 3. A propagation failure is visible in monitoring, not silent.
 
@@ -802,14 +1071,14 @@ auto-correction conceals a broken pipeline.
 removed.** Transient working artefacts SHALL be removed once they have served their
 purpose.
 
-*Source: D-090*
+*Source: D-090, D-166*
 
 | Never removed | Removed when spent |
 |---|---|
 | Accounts, organizations, memberships | Expired sessions |
 | Grants, including revoked ones | Consumed tokens and one-time codes |
 | The host's own records of what happened (the host applies this rule to its tables) | Elapsed grace windows |
-| Audit records, within retention | Delivered outbox records, once every subscriber has confirmed |
+| Audit records, within retention | Delivered event records, once every consumer has taken them (the erasure and takedown deliveries are records, IDN-LIFE-003b, and stay) |
 | Consent and notice-presentation records — rows kept; personal content key-destroyed at the end of `retention.consent` (PRIV-RET-001, D-135) | Cache entries |
 | | Expired audit partitions (PRIV-RET-002) |
 
@@ -842,7 +1111,7 @@ remains and its identifying fields become unreadable (PRIV-RIGHT-005a).
 **IDN-ATTR-001** — The account SHALL carry a **language preference**, user-changeable
 and visible to the person.
 
-*Source: D-055, D-146*
+*Source: D-055, D-146, D-166*
 
 A notification sent by a background job has no request context, so something must
 answer what language the person reads. A preference belongs to a person, and people
@@ -855,32 +1124,75 @@ branching on a value (REG-PREF-001).
 
 **Resolution order for any outbound message:**
 
-1. Stored account preference, where set
-2. The current request's locale, where a request exists
+1. Stored account preference, where set and where it finds a declared language
+2. The locale of the current request, where the request is the recipient's own:
+   registration, a sign-in, a sign-in link or code, a recovery request, or any request
+   the signed-in person makes about their own account; a request made by anyone else is
+   never read
 3. **Every language in `notification.languages`** (the deployment declares them,
-   D-153), only when there is neither
+   D-153), only when neither finds one
 
-**Registration SHALL set the preference from the request locale**, so the verification
-message matches the language in use and case 3 becomes nearly unreachable.
+A preference, or the request's `Accept-Language` priority list, SHALL be matched against
+`notification.languages` by the lookup of RFC 4647 section 3.4, each range in priority
+order, a range with `q=0` left out; what is found is always a declared tag.
+
+**Every declared language (D-166).** An email resolved to every declared language SHALL
+be one message carrying them all, composed by the library from each language's rendered
+template in `notification.languages` order, the subject lines joined; no rule for
+composing several languages enters the message catalogue. An SMS resolved to every
+declared language SHALL be one message per declared language. How each is judged and
+counted against the sending restrictions is AUTH-ABUSE-004.
+
+**Registration SHALL set the preference to the declared language the request locale
+finds, and to none where it finds none**, so the verification message matches the
+language in use and case 3 becomes nearly unreachable.
 
 **Acceptance criteria**
 1. The preference is editable by the person and appears in the subject access export.
 2. A background-triggered notification resolves language without a request.
-3. An account with no preference and no request receives every declared language.
+3. An account with no preference and no request receives every declared language: one
+   email carrying them all, or one SMS for each.
+4. A request whose `Accept-Language` is `fr-CH, en;q=0.8`, on a deployment declaring
+   `ar` and `en`, resolves to `en`; an administrator's request never decides the
+   language of a message to someone else.
 
 ---
 
 ### 5.2 Profile photo
 
 **IDN-ATTR-002** — A profile photo SHALL be supported for all accounts, with
-**availability controlled by organization policy**. Enabled for the administrative
-organization; disabled elsewhere until a feature makes it meaningful.
+**availability controlled by organization policy**. Disabled for every organization
+until enabled, the administrative organization included; available to enable once the
+deployment declares an image codec (LIB-HOST-001).
 
-*Source: D-060, D-002*
+*Source: D-060, D-002, D-162, D-166*
+
+**Values (D-166).** Availability is the policy field `photos` (`10` section 4.1a), a
+boolean whose system default is `false`; setting it to `true` is a loosening
+(OPS-CFG-002). It is resolved as AUTH-PRIN-002 resolves every field: an account holding
+no membership follows the system policy, and an account of several organizations follows
+the strictest, so it shows a photo only where every organization it belongs to enables
+photos. The rule governs every read of the photo, an administrator's included; a read
+where no photo is shown, because none is set or the policy withholds it, is answered
+404 `identity.photo.notfound` alike. Bootstrap cannot see the host's declarations, so it
+writes the administrative organization's `photos` as `false` (OPS-BOOT-001); enabling
+photos is an administrator's policy change. A change that sets `photos` to `true` in
+any policy while the deployment declares no image codec is refused with
+`config.value.notallowed`, `details.field` `photos` and `details.requires` `imageCodec`,
+and changes nothing. While any stored policy enables photos and no image codec is
+declared, startup fails with `model.startup.declarationmissing`, `details.key`
+`imageCodec`.
 
 **Acceptance criteria**
 1. Availability is a policy value, not a user-type branch.
 2. Enabling it for another organization requires no code change.
+3. After bootstrap the administrative organization's `photos` is `false`, and a
+   deployment that declares no image codec starts.
+4. With no image codec declared, a policy change setting `photos` to `true` is refused
+   with `config.value.notallowed` and changes nothing.
+5. An account of two organizations, one of which does not enable photos, shows no
+   photo: `GET /account/photo` and `GET /admin/accounts/{subject}/photo` answer 404
+   `identity.photo.notfound`, as for an account with no photo set.
 
 ---
 
@@ -911,11 +1223,18 @@ which an unencrypted image would have failed.
 **IDN-ATTR-004** — Uploads SHALL be validated by **content**, size- and
 dimension-limited server-side, and **re-encoded on upload**.
 
-**Values (D-153).** JPEG, PNG and WebP are accepted, recognised by content and never by
-extension or declared type. The stored image is JPEG at quality 85 with every metadata
-segment removed, and `GET /account/photo` serves `image/jpeg`.
+**Values (D-153, D-166).** The decoding and re-encoding are the host's (D-162): the
+image codec the deployment declares (LIB-HOST-001) receives the uploaded bytes and
+`photo.maxdimension`. The formats and the quality are that codec's contract, which it
+SHALL meet: it accepts JPEG, PNG and WebP, recognised by content and never by extension
+or declared type, and answers the image re-encoded as JPEG at quality 85 with every
+metadata segment removed, or nothing for bytes it does not accept. The library stores
+what it answers, encrypted, refuses the upload with `identity.photo.invalid` where it
+answers nothing, and serves the stored image at `GET /account/photo` as `image/jpeg`. An
+upload longer than `photo.maxbytes` is refused with `identity.photo.toolarge` before the
+codec reads it.
 
-*Source: D-060, D-153*
+*Source: D-060, D-153, D-162, D-166*
 
 Re-encoding strips metadata. Photographs carry location and device information by
 default; a photo with coordinates is an exposure nobody intended.
@@ -981,7 +1300,7 @@ by the person from the second factors enrolled on the account
 second factor and SHALL be the method offered first at a second-step challenge, with
 the other enrolled methods reachable from it.
 
-*Source: D-146*
+*Source: D-146, D-166*
 
 The preference is a convenience, not a restriction: every enrolled method remains
 usable at the challenge, and the person is never held to a method they can no longer
@@ -990,7 +1309,8 @@ reach.
 **Acceptance criteria**
 1. Enrolling a second factor on an account with none, or with a preference unset,
    makes it the preferred method.
-2. Setting a method that is not enrolled on the account is refused.
+2. Setting a method that is not enrolled on the account is refused with
+   `api.request.invalid`, `details.member` `method`, and changes nothing.
 3. Removing the preferred method moves the preference to the most recently enrolled
    remaining second factor, or clears it when none remains.
 4. A second-step challenge presents the preferred method first and offers the others.
@@ -1010,11 +1330,18 @@ no code review catches because it looks sensible.
 
 **Two principal scopes exist.** An **organization-scoped** system principal acts for
 one organization and cannot read across them. A **deployment-scoped** system principal
-exists for work that is inherently pool-wide — reconciliation, retention purging,
-records-of-processing generation, expiry sweeps — and is restricted to those named
-operations.
+exists for work that is inherently pool-wide: reconciliation, retention purging,
+records-of-processing generation, expiry sweeps, delivery (carrying what has committed
+to where it goes: the outboxes, mailbox provisioning and raised alerts), monitoring
+(reading the state of something the deployment depends on and raising what the reading
+calls for), bootstrap (OPS-BOOT-001), key rotation (OPS-SEC-003), configuration from
+the server (a protected key, OPS-CFG-004, or the provider's client registry,
+AUTH-OIDC-001) and the replay of the erasure ledger after a restore (DR-016). It is
+restricted to the operations of `10` section 5.28. Each scheduled job of INF-BG-001 and
+each server command runs as a principal of its own (`10` section 5.29), naming exactly
+one of those operations and stating as its reason the item that requires it.
 
-*Source: D-079b*
+*Source: D-079b, D-166*
 
 **Acceptance criteria**
 1. Constructing a system context without a reason throws.
@@ -1022,6 +1349,7 @@ operations.
 3. A deployment-scoped principal is restricted to an enumerated set of operations and
    cannot serve a request.
 4. Actions taken by either are audited with the reason.
+5. Every scheduled job refuses to run under a principal that may not run its operation.
 
 ---
 
@@ -1032,16 +1360,36 @@ identity, effective identity, event time, and organization — **where one appli
 Events on a principal holding no membership (a customer) carry no organization; the
 field is nullable and its absence is the recorded fact, not an omission.
 
-*Source: D-014, D-026.2, D-125*
+*Source: D-014, D-026.2, D-125, D-166*
 
 Acting and effective identity are separate values, identical in every current path.
 This is the impersonation seam — two fields where one would do, defensible on its
 own terms because it makes "who did this" unambiguous.
 
+**The subject of a record (D-166).** A record SHALL also name the data subject it
+concerns, where it concerns one (`subject`, nullable): the account an action was taken
+on, whoever took it. The effective identity SHALL equal the acting identity on every
+record (AUTHZ-IMP-001); an action on another person's account names that person as the
+subject, never as the effective identity. The trail by subject (PRIV-BREACH-002) reads
+the records naming the subject as the acting identity or as `subject`.
+
+An action a system principal took (IDN-PRIN-001) SHALL be recorded with the nil subject
+as acting and effective identity and with the principal's name and its stated reason; a
+record SHALL carry both the name and the reason or neither, and neither where a person
+acted. Every read of the trail SHALL return them. A failed authentication establishes no
+actor: its acting and effective identity are the nil subject, and its subject is the
+account attempted, where one was resolved.
+
 **Acceptance criteria**
-1. Both identity fields are populated on every event.
+1. Both identity fields are populated on every event; an event of background work
+   carries the nil subject in both, and the principal's name and reason.
 2. The recorded time is the instant the event occurred, not the instant it was
    written.
+3. A record of background work reads back through `GET /admin/audit?subject=` with its
+   principal and reason.
+4. An administrator's suspension of another account is recorded with the administrator
+   as acting and effective identity and the account as `subject`, and is returned by the
+   trail of either.
 
 ---
 

@@ -38,17 +38,19 @@ an application identity, or the resource acted on:
 
 Today the only organization is the administrative organization (D-001).
 
-**"Policy" is one object with six fields** (`requiredAssurance`, `loginFactors`,
-`gates`, `credentialRedundancy`, `selfServiceRecovery`, `emailDomains`) defined in
-`10` §4.1a and carried by `PUT /admin/organizations/{id}/policy`. The system policy is
+**"Policy" is one object with seven fields** (`requiredAssurance`, `loginFactors`,
+`gates`, `credentialRedundancy`, `selfServiceRecovery`, `emailDomains`, `photos`)
+defined in `10` §4.1a and carried by `PUT /admin/organizations/{id}/policy`. The system policy is
 `policy.default`; an organization's policy stores only the fields it overrides.
 Every rule in this document that says "where the policy requires AAL2" reads
 `requiredAssurance`; nothing is inferred from which factors happen to be enabled.
 
-*Source: D-148; D-002, D-020.1, D-086, D-116, D-143*
+*Source: D-148; D-002, D-020.1, D-086, D-116, D-143, D-166*
 
 **Acceptance criteria**
-1. No enum, flag or claim distinguishes staff from customers.
+1. No enum, flag or claim distinguishes staff from customers as a property of a
+   principal. The takedown trigger of `10` section 5.12d, which records who raised a
+   report, is not such a property.
 2. Two organizations with differing policies are enforced independently in one
    deployment.
 3. A principal with no membership is unaffected by any organization's overrides.
@@ -72,26 +74,28 @@ Registered properties:
 | `IsPhishingResistant` | Resists credential relay |
 | `AssuranceLevel` | Highest AAL this factor can contribute to |
 | `VerificationOnly` | Proves control of a channel; never authenticates |
+| `Restricted` | Rides a channel that AUTH-FACT-002b restricts; the library's own rules for restricted factors read it |
 
 **Values (D-153).** The device description a credential or session records is derived
 server side from the `User-Agent` header as `{ browser, os }`, each at most 64
 characters; the default credential label is the two joined by a space. The frontend
 renders it; nothing else is read from the header.
 
-*Source: D-012, D-141, D-146*
+*Source: D-012, D-141, D-146, D-166*
 
 There is no separate "may satisfy step-up" property. Whether a factor, alone or in a
 combination, can pass a step-up gate follows from `AssuranceLevel` and
 `IsPhishingResistant` against the level the gate declares (AUTH-STEP-002); a second
 axis would let two rules disagree about the same factor.
 
-Fourteen catalogue entries at launch make per-factor branching untenable. The property model is
+Twelve catalogue entries at launch make per-factor branching untenable. The property model is
 what keeps a tenth factor a registration entry rather than an edit to every step-up
 rule, recovery flow, and policy check.
 
 **Credential records.** Every enrolled credential SHALL carry `backupEligible` and
 `backupState` (AUTH-FACT-013), `addedAt`, `lastUsedAt` and a **label** of 1 to 64
-characters, unique per kind per account, defaulting to the client's description of
+characters, unique per kind per account under the case-insensitive comparison of
+OPS-DB-001, defaulting to the client's description of
 the device and editable through `PATCH /account/credentials/{id}`. The account's
 credential list (`18` FE-ACCT-001) renders these fields; nothing else about a
 credential is shown to the person (D-146).
@@ -105,7 +109,8 @@ credential is shown to the person (D-146).
 4. A credential record persists `backupEligible`, `backupState`, `addedAt`,
    `lastUsedAt` and `label`; `lastUsedAt` advances on every successful use.
 5. A label of 0 or of 65 characters is refused; a label already held by another
-   credential of the same kind on the account is refused.
+   credential of the same kind on the account, in any capitalisation, is refused with
+   `auth.credential.labelinvalid`.
 6. A WebAuthn or TOTP enrolment that supplies no label receives the client's device
    description; `PATCH /account/credentials/{id}` changes the label and nothing else.
 
@@ -138,7 +143,7 @@ The identifier is the value used in `loginFactors` (`10` section 4.1a), in `/aut
 requests and in credential records; eleven identifiers may appear in `loginFactors`
 (D-151).
 
-*Source: D-151; D-148, D-012, D-009, D-013, D-141, D-146, D-147*
+*Source: D-151; D-148, D-012, D-009, D-013, D-141, D-146, D-147, D-166*
 
 Conditional UI (autofill) is a presentation mode of passkey sign-in, not a separate
 factor. A hardware security key is one way to hold a WebAuthn credential, appearing
@@ -170,6 +175,10 @@ NIST SP 800-63B-4 section 3.1.3.3 (AUTH-FACT-002b).
    as a second step is one issued for `phoneCode` on that sign-in.
 5. A sign-in by `phoneLink` alone records AAL1; password plus `phoneCode` records
    AAL2 and not phishing-resistant (AUTH-SESS-005a).
+6. A second-step challenge that offers `phoneCode` sends its code to the number as the
+   message kind `secondstep-code` under the purpose `secondfactor` (AUTH-ABUSE-004),
+   an authentication code under AUTH-FACT-004, and that code, presented, completes the
+   sign-in.
 
 ---
 
@@ -183,16 +192,20 @@ step. A second-factor security key MAY be **upgraded to a passkey** by re-regist
 (`POST /account/credentials/{id}/upgrade`); on success the second-factor entry SHALL
 be retired. Each account SHALL carry a **preferred second-step method**
 (IDN-ATTR-008). `phoneLink` and `phoneCode` SHALL be treated as **restricted
-factors**: the limitation SHALL be shown at enrolment, `phoneCode` SHALL be flagged
+factors**: their catalogue entries carry `Restricted` (AUTH-FACT-001), which criterion
+6 reads; the limitation SHALL be shown at enrolment, `phoneCode` SHALL be flagged
 less secure wherever it is listed, and SIM-change and porting risk signals, where
-available, SHALL be considered before an SMS factor is used.
+available, SHALL be considered before an SMS factor is used and before a recovery link
+is sent by text.
 
 **Values (D-153).** The SIM-change or porting signal reaches the library through an
 optional host callback declared on the model builder (LIB-HOST-001), returning `none`
 · `clear` · `risk` for a number; where no callback is declared the record says
-`unavailable` and the rule of criterion 6 does not apply.
+`unavailable` and the rule of criterion 6 does not apply. The less-secure marker the
+person sees is the frontend's, keyed on the catalogue identifier (`18` FE-SEC-001); no
+response of `09` carries a marker field.
 
-*Source: D-146; NIST SP 800-63B-4 section 3.1.3.3; IDN-ATTR-008; `18` FE-SEC-001*
+*Source: D-146; NIST SP 800-63B-4 section 3.1.3.3; IDN-ATTR-008; `18` FE-SEC-001; D-166*
 
 Two-step is a second factor *beside a password*; without a password there is nothing
 for it to be second to, and a passkey is already two factors (AUTH-SESS-005a). The
@@ -214,8 +227,16 @@ person who bought one for two-step should not have to buy another to go password
    confirmed; `phoneCode` carries a less-secure marker in the enrolment list, the
    credential list and the challenge.
 6. Where a SIM-change or porting signal is available for the number, it is evaluated
-   before an SMS factor is sent and the outcome is audited; where none is available,
-   the absence is recorded.
+   before an SMS factor is sent and before a recovery link is sent by text, and the
+   outcome is audited; where none is available, the absence is recorded. On `risk`: at
+   a sign-in the restricted entries are withheld and the challenge offers the
+   account's other factors, and a sign-in with none left is refused with
+   `auth.factor.rejected`; a sign-in link asked for by text is not sent, and
+   `POST /auth/link` answers 202 as it always does; at a step-up the restricted entries
+   are withheld from the combinations offered (AUTH-STEP-002); a recovery link is not
+   sent to the number, and `/recovery/begin` answers 202 as it always does. The signal
+   is asked of the number, so every answer is the same whether or not an account holds
+   it (AUTH-ABUSE-003 AC1).
 
 ---
 
@@ -244,7 +265,7 @@ account security protects them there. Recorded as accepted position R-A16.
 Administrative-organization members are unaffected: their policy does not permit
 social sign-in.
 
-*Source: D-086, D-128*
+*Source: D-086, D-128, D-166*
 
 **Acceptance criteria**
 1. Completing a social sign-in yields a usable session with no further challenge.
@@ -253,7 +274,9 @@ social sign-in.
 4. The step-up prompt on that session offers only combinations of the account's own
    factors that reach the level the gate declares; the social credential contributes
    nothing to them.
-5. Linking a provider to an account holding a second factor shows the disclosure.
+5. Linking a provider to an account holding a credential that is a second step in the
+   catalogue (AUTH-FACT-002) shows the disclosure before the round trip starts; the
+   frontend renders it from the credential list (FE-ACCT-001 AC6).
 
 ---
 
@@ -263,9 +286,20 @@ SMS, SHALL ever count as a second step.** Neither SHALL be offered as a second-s
 option in enrolment. A sign-in link SHALL be requested through `POST /auth/link`,
 SHALL live `link.magic.lifetime`, and SHALL complete **only in the browser that
 requested it and only on a press**; opened anywhere else it SHALL show a code to
-type where the sign-in began, and a plain open SHALL change nothing (REG-SESS-003).
+type where the sign-in began, an authentication code under AUTH-FACT-004, and a plain
+open SHALL change nothing (REG-SESS-003).
 
-*Source: D-009, D-146*
+**Values (D-166).** A sign-in link is the authentication application's landing origin,
+`LandingOrigins.Authentication` (LIB-HOST-001), followed by `/link#sign-in.<token>`. The
+other links this chapter sends take the same form with a kind of their own (API-LAND-001,
+the link kinds of `10`): the recovery link a person asks for, `recovery`
+(AUTH-RECOV-005), and the admin-assisted enrolment link, `enrolment` (AUTH-RECOV-002), on
+the authentication application; the cancel link of a loss notification, `loss-report`
+(AUTH-RECOV-007), on the account application's origin, `LandingOrigins.Account`. The
+token travels in the fragment, so it never reaches a server in an address. Every link
+acts only on a press, never on load, so a mail scanner's prefetch changes nothing.
+
+*Source: D-009, D-146, D-166*
 
 Password plus email OTP, where email is also the recovery channel, is single-factor
 wearing an MFA badge: one mailbox compromise yields both the reset link and the
@@ -291,11 +325,28 @@ second step (AUTH-FACT-002, `phoneCode`).
 **AUTH-FACT-004** — Channel verification codes and authentication codes SHALL be
 modelled as distinct concepts with independent lifetimes, storage, and validation
 rules. A verification code SHALL NEVER be usable as an authentication credential.
-A code SHALL live `code.verification.lifetime` and SHALL be invalidated after
-`code.verification.attempts` (default **5**) wrong tries; a replacement code draws on
-the sending restrictions (AUTH-ABUSE-004).
+A verification code SHALL live `code.verification.lifetime` and SHALL be invalidated
+after `code.verification.attempts` (default **5**) wrong tries; a replacement code
+draws on the sending restrictions (AUTH-ABUSE-004). A code SHALL validate once: the
+correct code, once accepted, is refused if presented again. Every channel verification
+code (a registration's, an identifier's, the new-device check's) SHALL be issued and
+answered through one verification-code record, in a table of its own that no
+credential is reachable through. A wrong try and the spending of the right code SHALL
+be decided under a lock on that record, so that concurrent tries count as the same
+number of sequential ones and the right code answers once.
 
-*Source: D-034, D-146*
+**Authentication codes.** The `emailCode` sign-in code, the code of a `phoneCode`
+second step (AUTH-FACT-002), and the code a sign-in link shows where it is opened in
+another browser (AUTH-FACT-003) are authentication codes, held apart from verification
+codes. The `emailCode` and `phoneCode` codes SHALL live `code.signin.lifetime` (default
+**10 minutes**, ceiling 30 minutes); the code a sign-in link shows SHALL live as long as
+its link, `link.magic.lifetime`. Every authentication code SHALL be invalidated after
+`code.signin.attempts` (default **5**, ceiling 10) wrong tries, SHALL validate once, and
+SHALL be decided under a lock as a verification code is. The `emailCode` code SHALL be
+sent as the message kind `sign-in-code` and the `phoneCode` code as `secondstep-code`,
+never as a verification code.
+
+*Source: D-034, D-146, D-166*
 
 Collapsing them is a common source of bugs in which a verification code becomes a
 login credential. The attempt cap makes a six-digit code unguessable within its
@@ -305,9 +356,20 @@ restrictions bound how many they can ask for.
 **Acceptance criteria**
 1. A verification code presented at a sign-in endpoint is rejected.
 2. The two use separate storage and separate expiry policies.
-3. The sixth wrong attempt is refused and so is the correct code entered after it; a
-   new code can be requested within the restrictions and the old one never validates
-   again.
+3. With the attempt cap at 5, each of five wrong attempts is refused with
+   `auth.code.invalid`; a sixth attempt is refused with `auth.code.expired`, the
+   correct code included, as is a code past its lifetime. A new code can be requested
+   within the restrictions and the old one never validates again. An authentication
+   code behaves alike under `code.signin.attempts`.
+4. Ten wrong codes presented concurrently against one code, with
+   `code.verification.attempts` at 5, end it, and the correct code is refused after
+   them; two concurrent presentations of the correct code succeed once.
+5. A code accepted once is refused when presented a second time.
+6. An `emailCode` sign-in code and a `phoneCode` second-step code live
+   `code.signin.lifetime`, and the code a sign-in link shows elsewhere lives
+   `link.magic.lifetime`; each dies after `code.signin.attempts` wrong tries, whatever
+   `code.verification.lifetime` and `code.verification.attempts` hold. The `emailCode`
+   code is sent as `sign-in-code`.
 
 ---
 
@@ -329,13 +391,15 @@ has up to 30 seconds to reuse an observed code.
 
 ---
 
-**AUTH-FACT-006** — TOTP secrets SHALL be encrypted at rest under the key-encryption
-key (`06-operations`).
+**AUTH-FACT-006** — A TOTP secret is the account's credential secret: it SHALL be
+encrypted at rest under the account's subject key (PRIV-RIGHT-005a) and SHALL be
+destroyed with that key.
 
-*Source: D-034, D-026.3*
+*Source: D-034, D-026.3, D-166*
 
 **Acceptance criteria**
 1. Secrets are not readable from a database dump alone.
+2. Once the account's subject key is destroyed, its TOTP secret cannot be read.
 
 ---
 
@@ -354,15 +418,25 @@ Prevents lockout from a mis-scanned QR code.
 ### 2.4 Recovery codes
 
 **AUTH-FACT-008** — Recovery codes SHALL be issued in sets of 10, single-use,
-displayed once at generation, and stored hashed. The set SHALL record `viewedAt` and
-`exportedAt` (set by copy, download or print), and a **reminder** SHALL be sent
-through the account and as a notice when `recovery.codes.reminder` (default **365
-days**) has elapsed since the set was generated.
+displayed once at generation, and stored hashed. The set SHALL record `viewedAt`, set
+when the response that returns it is produced, and `exportedAt`, set when the frontend
+reports a copy, download or print (`POST /account/recoverycodes/exported`), and a
+**reminder** SHALL be sent through the account and as a notice when
+`recovery.codes.reminder` (default **365 days**) has elapsed since the set was
+generated.
 
 **Values (D-153).** A recovery code is 10 symbols from the Crockford base32 alphabet
 (about 50 bits), shown as two groups of five and hashed as a password is.
 
-*Source: D-034, D-146*
+The reminder is the message kind `recovery-codes-reminder`, carrying no link, sent by a
+daily pass to every channel of the security-notice set of an **active** account. The
+set records `remindedAt` once at least one channel took the reminder, or where the set
+holds no channel it can reach; a set whose every notice was refused stays owed and is
+reminded at a later pass. A set of an account that is not active stays owed and is
+reminded if the account becomes active again. `remindedAt` is shown in the account and
+carried in the export.
+
+*Source: D-034, D-146, D-166*
 
 Hashed as passwords are: verifiable, never recoverable. The timestamps let the
 account say whether the person ever saved the codes; the reminder exists because a set
@@ -372,8 +446,9 @@ saved a year ago is often on a device or a sheet of paper the person no longer h
 1. A used code is rejected on second presentation.
 2. Codes are not retrievable after the generation screen.
 3. A database dump does not yield usable codes.
-4. `viewedAt` is set when the codes are displayed; `exportedAt` is set by copy,
-   download or print and stays unset otherwise; both are visible in the account.
+4. `viewedAt` is set when the response that returns the set is produced; `exportedAt`
+   is set by `POST /account/recoverycodes/exported` and stays unset otherwise; both are
+   visible in the account.
 5. A set older than `recovery.codes.reminder` produces one reminder in the account
    and one notice to the security-notice set, and no further reminder until the set
    is regenerated.
@@ -398,11 +473,24 @@ validated at startup as a registrable suffix of every configured origin. Where u
 the library SHALL derive the common registrable parent domain rather than defaulting
 to the first origin.
 
-*Source: D-004*
+**Values (D-166).** Registrable suffixes and labels are judged against the Public
+Suffix List, its ICANN and its private sections alike, as browsers apply them. The list
+ships unmodified, with its header, as a resource embedded in the package and dated,
+downloaded from publicsuffix.org when each release is built (CONV-VCS-005); NOTICE
+names the list, its licence (Mozilla Public License 2.0) and its source address. The
+library uses it only to validate the deployment's own configured origins (this item and
+AUTH-FACT-012 AC2).
+
+*Source: D-004, D-166*
 
 A passkey created for `example.com` works across its subdomains; the reverse does
 not. The parent domain is the widest door and keeps a future mobile app usable with
 existing credentials.
+
+A copy of the list that has aged cannot weaken WebAuthn: the browser applies its own
+current list to every ceremony, so the worst case is a disagreement about the
+deployment's own domains, and it surfaces at startup. That is why a refresh at each
+release is the proportionate update.
 
 **Acceptance criteria**
 1. A relying party identifier that is not a registrable suffix of a configured
@@ -432,13 +520,14 @@ rather than sign-in failing with no explanation.
 **AUTH-FACT-012** — The library SHALL serve a related-origins allowlist from
 configured additional origins.
 
-*Source: D-004*
+*Source: D-004, D-166*
 
 **Acceptance criteria**
 1. The well-known document lists exactly the configured origins.
 2. Exceeding the browser limit of **five distinct labels** — the name immediately
    before the public suffix, so `shop.com` and `shop.co.uk` count once — fails
-   validation at startup (WebAuthn Level 3, Related Origin Requests).
+   validation at startup (WebAuthn Level 3, Related Origin Requests). The public suffix
+   is read from the list of AUTH-FACT-010.
 
 ---
 
@@ -490,7 +579,7 @@ second factor SHALL then be skipped on that browser for `factor.trusteddevice.li
 **Values (D-153).** The trust token lives in `__Host-identity-device`: 32 random bytes,
 base64url, stored server side against the account.
 
-*Source: D-124*
+*Source: D-124, D-166*
 
 **Mechanics.** A separate, opaque, single-purpose device token in its own `__Host-`
 cookie, stored server-side against the account with created-at, last-used, and a
@@ -508,6 +597,10 @@ their members hold passkeys, which need no second factor to skip, and the floor
 **A trusted device writes exactly what it presented.** The session records AAL1 —
 the password — and nothing downstream assumes more (D-141).
 
+**Not offered to a `restricted` account** (IDN-ACCT-007): a trusted device is a
+credential of the account (REG-ACCT-001), which a restricted account does not change,
+so its sign-in is not offered the option and records no trusted device (D-166).
+
 **Acceptance criteria**
 1. A customer signing in with password + TOTP on a trusted device is asked for the
    password only.
@@ -519,13 +612,15 @@ the password — and nothing downstream assumes more (D-141).
    second factor again.
 6. **Three consecutive wrong passwords on a trusted device revoke that device's
    trust** (`factor.trusteddevice.failurelimit`, default 3); the next sign-in on it
-   requires the second factor. The count uses the throttle's existing per-source
-   failure counter (AUTH-ABUSE-001) and resets on a successful sign-in.
+   requires the second factor. The count is kept per trusted device and resets on a
+   successful sign-in on it.
 7. The offer is **withheld while the account's password is below the single-factor
    floor** (AUTH-PASS-001a): on a trusted device that password would complete a
    sign-in alone. The offer appears once the password meets the floor; an existing
    trust is revoked if the password is later changed to one below it. R-A14 records
    that this exposure no longer exists.
+8. A `restricted` account's sign-in is not offered the option, and a request to trust
+   the browser on it records no trusted device.
 
 ---
 
@@ -541,14 +636,14 @@ period, so the sign-in that registration performs and the next one from that bro
 are not held for a code. A passkey sign-in and a
 completed two-step sign-in SHALL never trigger the check. The send SHALL be subject to
 the email destination restriction (AUTH-ABUSE-004). The pending state SHALL be
-reported as `auth.device.verificationrequired`; completion SHALL raise
-`DeviceVerified`.
+reported as the sign-in status `deviceVerificationRequired` of `POST /auth/factor`,
+answered 200 and not a refusal; completion SHALL raise `DeviceVerified`.
 
 **Values (D-153).** A browser that passed the check is remembered by a
 `__Host-identity-browser` cookie: 32 random bytes, base64url, stored server side, valid
 for `device.verification.lifetime`.
 
-*Source: D-148; D-146; AUTH-FACT-004, AUTH-ABUSE-004*
+*Source: D-148; D-146; AUTH-FACT-004, AUTH-ABUSE-004; D-166*
 
 A single-factor account's only protection against a leaked password is that the
 attacker is usually somewhere else. The check turns that into a rule without making
@@ -556,9 +651,9 @@ email a second factor: the session that results still records AAL1 (AUTH-FACT-00
 and the code is a verification code (AUTH-FACT-004), not a credential.
 
 **Acceptance criteria**
-1. A password-only sign-in from an unrecognised browser returns
-   `auth.device.verificationrequired` and no session until the emailed code is
-   entered; the resulting session records AAL1.
+1. A password-only sign-in from an unrecognised browser answers 200 with `status`
+   `deviceVerificationRequired` and no session until the emailed code is entered; the
+   resulting session records AAL1.
 2. The same browser signs in without the check inside
    `device.verification.lifetime` and is asked again after it.
 3. A passkey sign-in, and a password plus second-step sign-in, from an unrecognised
@@ -586,9 +681,11 @@ at once. Live sessions SHALL be handled by AUTH-SESS-009.
 
 **Values (D-153).** `policyRequirement` is `{ field, value, deadline }` with `field`
 one of `requiredAssurance` · `credentialRedundancy` (the two policy fields that can be
-raised), `value` the new requirement and `deadline` the instant the grace ends.
+raised), `value` the new requirement and `deadline` the instant the grace ends. At an
+invitation's acknowledgement, where no grace applies to the joining account, it
+carries no `deadline` (REG-INV-002, D-166).
 
-*Source: D-146; AUTH-SESS-009, AUTH-STEP-002*
+*Source: D-146; AUTH-SESS-009, AUTH-STEP-002; D-166*
 
 A default of zero is the safe default for a generic library: an organization that
 raises its floor gets the floor at once unless it asks for a run-up. The run-up exists
@@ -612,7 +709,7 @@ their own schedule rather than on their next morning's sign-in.
 password is the only factor and **10 characters** where combined with MFA. Up to
 **128** characters (`password.maximum`) SHALL be supported.
 
-*Source: D-011, D-146*
+*Source: D-011, D-146, D-166*
 
 10 rather than the standard's 8: at that length the blocklist does the real work,
 and pushing floors higher drives pattern reuse.
@@ -621,7 +718,7 @@ and pushing floors higher drives pattern reuse.
 1. A 14-character password is rejected for a single-factor account.
 2. A 10-character password is accepted where MFA is enrolled.
 3. A 128-character password is accepted and not truncated; a 129-character one is
-   refused with a named error.
+   refused with `auth.password.toolong`, and nothing is truncated.
 
 ---
 
@@ -696,16 +793,40 @@ prompt to change, never a lockout.
 
 **Values (D-153).** The offline leaked list is the 100,000 most prevalent SHA-1 hashes
 of the Pwned Passwords downloadable corpus (the range API's provider), refreshed at
-each release and dated so `password.blocklist.corpusmaxage` can judge it; its licence
-is verified from the provider's published terms before the file is added, and the
-NOTICE file carries the attribution. The `dictionary` source is a public-domain
-English word list of at least 10,000 entries plus an Arabic transliteration list; a
-host may extend either by declaration. The `context` source reads the service name
-from `service.name` and the person's own identifiers and display name. A sign-in that
+each release (CONV-VCS-005) and dated so `password.blocklist.corpusmaxage` can judge
+it. The provider's published terms set no licensing or attribution requirement on the
+Pwned Passwords API and welcome attribution; the NOTICE file names the source (Have I
+Been Pwned, Pwned Passwords) and the date the list was drawn. The draw is taken through
+the range API and identifies itself with an accurate user agent, as the provider's
+acceptable use requires; so does every range request made at screening, naming the
+library and its version (INT-PWD-001). The `context` source reads the service name from
+`service.name` and the person's own identifiers and display name. A sign-in that
 completes on an account whose password now fails `context` (criterion 5) returns
 `passwordChangeRequired: true` beside `status: complete` (AUTH-RECOV-007a).
 
-*Source: D-011, D-041, D-146*
+**Values (D-166).** The leaked list is a resource embedded in the package, its first
+line the date it was drawn; a deployment holds no file of its own. A list older than
+`password.blocklist.corpusmaxage`, or whose date cannot be read, SHALL NOT answer a
+screening; screening then proceeds as with the list unavailable (criterion 3). The
+self-hosted corpus answers the range protocol of INT-PWD-001 at
+`password.blocklist.selfhosted.address`, over TLS; where it cannot answer, the
+package's list answers and the degradation is raised, as for the range API.
+
+The `dictionary` source ships two lists embedded in the package. The English list is
+Alan Beale's 3esl list from the 12dicts 6.0.2 package, which its author releases to the
+public domain with acknowledgment requested (one NOTICE line), filtered when the
+package is built to single lower-case words of four letters or more; the build counts
+the result and refuses fewer than 10,000. The Arabic transliteration list is the
+library's own work: about 2,500 to 4,000 lower-case entries (given names, Coptic names
+included; family names; religious and everyday words; slang and profanity; football
+clubs and players; places; and Egyptian Arabizi forms written with the digits 2, 3, 5
+and 7), its variants generated by rules when the package is built; like the default
+message texts, it is reviewed by the owner before release. A host may extend either
+list by declaration. The matcher keeps digits, so an Arabizi entry matches; it counts
+every character, digits included, toward the four-character minimum a match needs; and
+it never echoes the word it matched.
+
+*Source: D-011, D-041, D-146, D-166*
 
 **A recorded deviation.** NIST SP 800-63B-4 section 3.1.1.2 lists dictionary words
 and context-specific words in the blocklist as a SHALL. Janus rejects on the leaked
@@ -717,8 +838,8 @@ list exists to catch. The deviation is recorded in `13-risk-register`.
 
 **Acceptance criteria**
 1. A known-breached password is rejected regardless of length.
-2. With the API unreachable, the offline fallback runs and the degradation is
-   logged.
+2. With the API unreachable, the offline fallback runs and the degradation is logged
+   and raised (OPS-OBS-002).
 3. With both unavailable, the operation fails rather than accepting unscreened.
 4. With `password.blocklist.sources` at its default, a password containing the
    person's own email local part or a dictionary word, meeting the floor and absent
@@ -726,6 +847,13 @@ list exists to catch. The deviation is recorded in `13-risk-register`.
 5. With `context` enabled, that password is refused at set and at change; a display
    name later set to match an existing password produces a prompt to change at the
    next sign-in, and the sign-in completes.
+6. The package's leaked list holds the 100,000 hashes of highest count in the corpus,
+   dated on its first line, and NOTICE names its source.
+7. An offline list with no readable date answers no screening: with the range API
+   unreachable, the operation fails as in criterion 3.
+8. The package's English word list holds at least 10,000 entries, each a single
+   lower-case word of four letters or more; no feedback, log entry or refusal for a
+   `dictionary` match carries the word matched.
 
 ---
 
@@ -867,16 +995,17 @@ same session record.
 the **OIDC authorization code flow with PKCE**, with each browser application's BFF a
 **confidential client** in the client registry. The BFF SHALL retain no token.
 
-*Source: D-104, D-007, D-033.3, D-147*
+*Source: D-104, D-007, D-033.3, D-147, D-166*
 
-**The flow.** A BFF holding no session redirects the browser to `/oidc/authorize`
-with `prompt=none`. The authentication application answers from its auth-session
-cookie: a one-time authorization code where a session exists, `login_required` where
-none does, in which case the BFF redirects again without `prompt=none` and the person
-signs in. The BFF exchanges the code **back-channel** on the machine profile
-(BFF-MACH-001) with its client secret and PKCE verifier, reads the `sid` claim that
-names the session record, creates its per-app session bound to that record, and
-discards the ID token. The per-app session inherits the record's assurance properties
+**The flow.** A BFF holding no session pushes an authorization request with
+`prompt=none` to `POST /oidc/par` over the back channel and redirects the browser to
+`/oidc/authorize` with the returned `request_uri` alone (AUTH-OIDC-006, BFF-SESS-006).
+The authentication application answers from its auth-session cookie: a one-time
+authorization code where a session exists, `login_required` where none does, in which
+case the BFF pushes again without `prompt=none` and the person signs in. The BFF
+exchanges the code **back-channel** on the machine profile (BFF-MACH-001) with its
+client secret and PKCE verifier, reads the `sid` claim that names the session record,
+creates its per-app session bound to that record, and discards the ID token. The per-app session inherits the record's assurance properties
 (AUTH-SESS-002).
 
 **What this reuses rather than invents:** the client registry (AUTH-OIDC-001,
@@ -889,11 +1018,17 @@ Every one is a standard requirement restated, not a mechanism designed here.
    `redirect_uri`; an unregistered client cannot obtain a code.
 2. With a live auth session, navigation to a second application completes without
    any user interaction.
-3. Without one, `prompt=none` yields `login_required` and the person is sent to sign
-   in, never silently issued a session.
+3. Without one, `prompt=none` yields `login_required`, and only `prompt=none` does; a
+   request that is not silent is forwarded to the sign-in address the host declared
+   (LIB-HOST-001, `AuthenticationAddresses.signIn`) and never silently issued a
+   session. Startup fails with `model.startup.declarationmissing` naming
+   `authenticationAddresses.signIn` where it is absent or empty.
 4. A code is single-use, expires within `oidc.code.lifetime` (`10` section 4.9;
-   default 60 seconds), and is rejected when presented by a client other than the one
-   it was issued to or without the matching PKCE verifier.
+   default 60 seconds), and is rejected with 400 and no token when presented again,
+   after its lifetime, by a client other than the one it was issued to, or without the
+   matching PKCE verifier: a spent, lapsed or foreign code and a verifier that does not
+   match are answered `invalid_grant` (RFC 7636 section 4.6); a missing verifier is
+   answered `invalid_request`.
 5. The code is exchanged back-channel; no token ever travels through the browser.
 6. No refresh token is issued to a browser-application client, and the BFF stores no
    access or ID token after the exchange.
@@ -974,7 +1109,12 @@ provider for sign-in itself is the federation model, not a departure from it
 assurance floor of AAL2** — the policy's `requiredAssurance` field (AUTH-PRIN-002,
 `10` §4.1a), set to `aal2` at bootstrap — independent of factor arithmetic.
 
-*Source: D-089, D-143*
+No change of the administrative organization's policy SHALL leave its members
+resolving `requiredAssurance` below `aal2`; a replacement that would is refused with
+`config.value.belowfloor`, `details.field` `requiredAssurance`, before any step-up, and
+changes nothing.
+
+*Source: D-089, D-143, D-166*
 
 AUTH-SESS-005's guard — that an organization's configured values SHALL NOT exceed the
 table — does not catch this on its own: for an AAL1 session "the table" permits 365
@@ -999,6 +1139,9 @@ alerting**, as it is for step-up.
 2. Enabling a further primary factor for that organization does not lower the floor.
 3. **A break-glass session is established successfully despite the floor**, and is
    audited and alerted as such.
+4. A replacement of the administrative organization's policy that states `aal1`, or
+   omits `requiredAssurance` while the system policy's is `aal1`, is refused with
+   `config.value.belowfloor` and changes nothing.
 
 ---
 
@@ -1125,14 +1268,17 @@ with, per session, the time of sign-in, the time of last use, the device descrip
 a **city-level location** resolved at sign-in and at last use from a **local IP
 database** (no external lookup), and a marker on the **current session**. Any listed
 session SHALL be revocable on its own (`DELETE /account/sessions/{id}`). The location
-SHALL be stored under the person's key and retained with the session record, no
-longer.
+SHALL be stored under the person's key (with the coordinates of the city from the
+location file, never shown or exported, used only by OPS-ALERT-007) and retained with
+the session record, no longer. The library SHALL resolve the location itself, from the
+whole client address the session records (not the coarser source AUTH-ABUSE-001 counts
+by); no operation SHALL take a location from its caller.
 
 **Values (D-153).** `location` is `{ city, country }` with `country` an ISO 3166-1 alpha-2
 code, both nullable and absent when INT-GEN-006 degrades; the device description is
 that of AUTH-FACT-001.
 
-*Source: D-146; AUTH-SESS-001, AUTH-SESS-008, AUTH-SESS-011, PRIV-RIGHT-005a*
+*Source: D-146; AUTH-SESS-001, AUTH-SESS-008, AUTH-SESS-011, PRIV-RIGHT-005a; D-166*
 
 Per-account revocation of everything is AUTH-SESS-011 and "sign out everywhere" is
 AUTH-SESS-008; this item is the finer grain that lets a person end the one session
@@ -1149,9 +1295,13 @@ addresses the person signs in from.
    no finer than city; the location is resolved without a network call.
 3. `DELETE /account/sessions/{id}` ends that session and its derived tokens within one
    request cycle and leaves the others intact; deleting the current session behaves as
-   logout.
+   logout. An `{id}` naming no session of the account's, another account's included, is
+   answered 404 `authz.resource.notfound`.
 4. The location fields are unreadable after erasure and are gone when the session
    record is swept (AUTH-KEY-003).
+5. No operation of the public contract takes a location as a parameter; a listed
+   location is the local database's reading of the address the session was used from.
+6. A session opened from an IPv6 address records the whole address.
 
 ---
 
@@ -1161,7 +1311,7 @@ addresses the person signs in from.
 deactivation, SHALL terminate **all sessions and derived tokens for that account** in
 the same operation.
 
-*Source: D-077*
+*Source: D-077, D-166*
 
 Previously unstated. Suspension, deactivation and the transition to `deleting` said
 nothing about sessions, so a suspended account retained a live session for up to its
@@ -1174,13 +1324,17 @@ stops immediately" was false.
 2. The minor takedown ends sessions **in the same transaction as suspension** — both
    are library work, so this part genuinely is atomic.
 3. Deletion ends sessions before personal data is removed.
+4. Restricting an account ends its sessions and derived tokens in the operation that
+   restricts it.
 
 ---
 
 **AUTH-SESS-011** — Per-account session revocation SHALL exist as an operation
-distinct from system-wide revocation.
+distinct from system-wide revocation. It is
+`POST /admin/accounts/{subject}/sessions/revoke`, the step-up action
+`account:sessionsrevoke`, since it ends another person's sessions.
 
-*Source: D-077*
+*Source: D-077, D-166*
 
 **Acceptance criteria**
 1. Revoking one account's sessions leaves every other session intact.
@@ -1193,7 +1347,13 @@ sessions SHALL be re-evaluated on next use and **downgraded**, not terminated. A
 downgraded session retains read access; any step-up-requiring action forces
 re-authentication under the new policy.
 
-A separate explicit "revoke all sessions now" operation SHALL exist.
+Gaining a membership tightens the policy in force for that principal (AUTH-PRIN-002):
+every live session of the account SHALL be downgraded in the operation that attaches
+the membership, and a factor the organization's policy does not permit SHALL satisfy
+no step-up (IDN-LIFE-009b, AUTH-STEP-002).
+
+A separate explicit "revoke all sessions now" operation SHALL exist:
+`POST /admin/sessions/revoke-all`, the step-up action `session:revokeall`.
 
 Where the tightening raises `requiredAssurance` or `credentialRedundancy` and
 `policy.enforcement.grace` is non-zero (AUTH-FACT-017), a downgraded session's
@@ -1201,7 +1361,7 @@ step-up during the grace SHALL be told the requirement and the deadline and SHAL
 offered enrolment; the expiry of the grace SHALL end no live session, and the hold
 applies at the account's next sign-in.
 
-*Source: D-026.5, D-146*
+*Source: D-026.5, D-146, D-166*
 
 Terminating outright logs everyone out mid-work for a non-emergency, training users
 to expect random logouts.
@@ -1213,6 +1373,8 @@ to expect random logouts.
 3. The explicit revocation operation terminates all sessions immediately.
 4. The end of a grace period ends no session; the next sign-in of a non-compliant
    account is held at enrolment (AUTH-FACT-017).
+5. A session the account held before a membership attaches keeps read access and passes
+   no step-up gate until a factor the organization's policy permits is presented.
 
 ---
 
@@ -1242,17 +1404,19 @@ split across two apps or folded into another.
 (AUTH-SESS-001) and the account's reachable assurance (AUTH-STEP-006) only; it SHALL
 NOT read the account's list of enrolled factors, and no rule text SHALL name a factor.
 
-*Source: D-148; D-020.2, D-067, D-086, D-125, D-141, D-146*
+*Source: D-148; D-020.2, D-067, D-086, D-125, D-141, D-146, D-166*
 
 **Evaluation order:**
 1. **Check what the session already proved.** If the attained level and
    phishing-resistance meet the gate and were earned within the maximum age,
    **require nothing**.
 2. **Otherwise offer every combination of the account's usable factors** (state
-   `active`, AUTH-RECOV-007) whose contribution (AUTH-SESS-005a) lifts the session
-   to the gate, and let the subject **choose among them**. A password alone reaches
-   AAL1; a passkey alone reaches AAL2 phishing-resistant; password + non-discoverable
-   WebAuthn credential (a security key as second factor) reaches AAL2
+   `active`, AUTH-RECOV-007, of a factor the policy in force permits in
+   `loginFactors`, and not a restricted entry withheld because its number's signal
+   answers `risk`, AUTH-FACT-002b AC6) whose contribution (AUTH-SESS-005a) lifts the
+   session to the gate, and let the subject **choose among them**. A password alone
+   reaches AAL1; a passkey alone reaches AAL2 phishing-resistant; password +
+   non-discoverable WebAuthn credential (a security key as second factor) reaches AAL2
    phishing-resistant, because WebAuthn is phishing-resistant whether or not the
    credential is discoverable (AUTH-FACT-002, D-148); password + TOTP and
    password + recovery code reach AAL2 without phishing resistance; password + SMS
@@ -1270,6 +1434,18 @@ NOT read the account's list of enrolled factors, and no rule text SHALL name a f
      no longer in the subject's hands → **report a loss** (AUTH-RECOV-007);
    - a loss report is already pending → **say so**, with the completion time and
      the cancel option; the gate stays closed until invalidation completes.
+
+A factor the policy in force does not permit in `loginFactors` is never offered, and
+presenting it at step-up is refused with `auth.factor.notpermitted`, as at sign-in
+(IDN-LIFE-009b).
+
+A gate bound to a host's action (AUTHZ-GATE-005) is judged against the library's
+session the request carries, where that session is the acting person's own; a
+host-named gate that no policy states values for costs the strictest of the policy's
+gates, field by field. Where no session of the library carries the request, the host's
+assurance provider (LIB-HOST-004) reports the attained level, whether it was
+phishing-resistant, when it was attained and the account's reachable assurance, and the
+gate is judged from those.
 
 **Why "reaches the level", not "strongest held".** A person who enrolled a second
 factor did so to protect exactly these actions. That protection is expressed by the
@@ -1306,6 +1482,8 @@ this design's own extension, recorded as a choice (D-125).
 7. A subject with no usable combination is told to enrol or to report a loss; a
    pending loss report is shown with its completion time; nothing is a bare refusal.
 8. Registering a new factor type changes no gate.
+9. A factor the policy's `loginFactors` does not permit is not offered at a gate, and
+   presenting it is refused with `auth.factor.notpermitted`.
 
 ---
 
@@ -1390,7 +1568,7 @@ the enrolling session. Recovery (AUTH-RECOV-002, AUTH-RECOV-005) is the enrolmen
 a password under this rule, with the recovery artefact standing in for the session;
 it SHALL NOT change the state of any other authenticator.
 
-*Source: NIST SP 800-63B-4 §4.1.2.1, D-141*
+*Source: NIST SP 800-63B-4 §4.1.2.1, D-141, D-166*
 
 A password-only customer adds a passkey after a fresh password. A customer holding
 password + TOTP adds a passkey with password + TOTP. A social-only customer sets a
@@ -1405,6 +1583,9 @@ re-enrolment link stands in for the first credential.
 2. A password-only customer enrols a passkey after presenting the password; a
    customer reaching AAL2 must present AAL2.
 3. A recovered password never alters another authenticator's state.
+4. Setting a password on an existing account, by the person, by recovery or by an
+   invitation, raises `CredentialEnrolled` with the catalogue entry `password` and no
+   credential identifier.
 
 ---
 
@@ -1428,9 +1609,12 @@ tests; a spec change that breaks one is a defect in the change.
 ---
 
 **AUTH-STEP-004** — A **break-glass session SHALL satisfy the step-up requirement**
-for the duration of its lifetime.
+for the duration of its lifetime. It satisfies gates only: the step-up actions
+OPS-BOOT-002 refuses from the break-glass session (giving the reserved account a
+sign-in method among them) stay refused with `authz.denied`, whatever the reserved
+account's policy lists.
 
-*Source: D-065*
+*Source: D-065, D-166*
 
 A printed single-use secret is not phishing-resistant, so under the ordinary rule a
 break-glass session could perform none of the actions it exists for — approving a
@@ -1445,7 +1629,8 @@ audited.
 **Acceptance criteria**
 1. A break-glass session can approve a recovery, grant `system:administer`, and
    change alert destinations.
-2. Every action in the session is audited as break-glass-originated.
+2. Every action in the session is audited as break-glass-originated, carrying the
+   reason given with the credential at its use (OPS-BOOT-002).
 3. The exception applies only for the session lifetime and does not persist.
 
 ---
@@ -1529,16 +1714,20 @@ recovery.
 
 **AUTH-RECOV-002** — Admin-assisted re-enrolment SHALL be available to **every
 human account** (`emergency` has no channel and no enrollable factor, REG-IDENT-001), SHALL issue a time-boxed enrolment link following out-of-band identity
-confirmation, require one approver (configurable upward), require a written reason,
-notify the account owner on a channel separate from the recovery flow, and be subject
+confirmation, require one approver (configurable upward), require a written reason
+(API-CONV-002), notify the account owner on a channel separate from the recovery flow, and be subject
 to rate limiting and anomaly detection **per account and per approver**.
 
-**Values (D-153).** Rate limiting is `recovery.ratelimit.account` requests per account per
-day and `recovery.ratelimit.approver` approvals per approver per day, refused with
-`auth.throttled` beyond; the anomaly alerts fire at `alerting.recovery.accountthreshold`
-and `alerting.recovery.approverthreshold` (OPS-ALERT-001).
+**Values (D-153).** Rate limiting is `recovery.ratelimit.account` approvals per account
+and `recovery.ratelimit.approver` approvals per approver, each counted over the day
+before the moment of asking (sliding), refused with `auth.throttled` beyond; the
+refusal carries `retryAt`, the instant the `limit`-th most recent counted approval is a
+day old, the later of the two where both limits are reached, and a day from the moment
+of asking where a limit is 0; the anomaly alerts fire at
+`alerting.recovery.accountthreshold` and `alerting.recovery.approverthreshold`
+(OPS-ALERT-001).
 
-*Source: D-008, D-041, D-111*
+*Source: D-008, D-041, D-111, D-166*
 
 **Where the link goes.** To a channel **already recorded on the account** and chosen by
 the approver — for a customer whose mailbox is gone, the phone. Delivering the link by
@@ -1554,7 +1743,9 @@ old one. The remaining security-notice set is still notified and receives the un
 
 **Acceptance criteria**
 1. The link expires and cannot be reused.
-2. The reason is mandatory and recorded.
+2. The reason is mandatory and recorded: an absent or blank reason is refused with
+   `auth.recovery.reasonrequired`, and one over the free-text bound with
+   `api.request.malformed` (API-CONV-002).
 3. Approver count is configurable without a deploy.
 4. Unusual approval frequency by one approver is surfaced without human monitoring.
 5. A customer with an unreachable mailbox can regain access and move their account
@@ -1618,7 +1809,12 @@ passkey policy.
 **AUTH-RECOV-005** — Recovery SHALL **set or reset the password** only. It SHALL NOT
 remove an enrolled second factor.
 
-*Source: D-009, D-111*
+**Values (D-166).** The recovery link a person asks for at `POST /recovery/begin` is of
+the link kind `recovery` on the authentication application (AUTH-FACT-003 Values), sent
+as the message kind `recovery-link` under the purpose `signin` (AUTH-ABUSE-004), and
+consumed only by `POST /recovery/complete`.
+
+*Source: D-009, D-111, D-166*
 
 Otherwise every strong factor is defeatable by mailbox access. A customer whose only
 primary factor was a device-bound passkey, now lost, recovers by **setting** a
@@ -1635,6 +1831,9 @@ gone after a notified window — never remove one outright.
    not removed.
 3. From the recovered session the person can report the lost passkey with the new
    password alone.
+4. A recovery link is `<origin>/link#recovery.<token>` with the authentication
+   application's landing origin; opening it changes nothing until a press presents its
+   token, with the new password, to `POST /recovery/complete`.
 
 ---
 
@@ -1675,9 +1874,11 @@ configurable) and SHALL NOT complete if none of the notifications delivered. Onl
 invalidation is the account's reachable assurance recomputed (AUTH-STEP-006).
 
 **Values (D-153).** "Repeatedly" is once at the report, once every
-`recovery.invalidation.noticeinterval`, and once 24 hours before invalidation.
+`recovery.invalidation.noticeinterval`, and once 24 hours before invalidation. Each
+notification is the message kind `credential-suspended`, carrying the cancel link
+(D-166).
 
-*Source: D-009, D-022, D-141*
+*Source: D-009, D-022, D-141, D-166*
 
 **The waiting period is the control** — long enough that a real owner notices, short
 enough that a locked-out customer does not give up. During it the account still
@@ -1747,17 +1948,62 @@ account and per source, escalating with failures and decaying over time. Fixed-c
 lockout SHALL NOT be used.
 
 Independent limits on source address, account, and identifier. Applied to sign-in,
-registration, and recovery alike.
+registration, recovery and step-up alike. A factor refused at step-up, including one
+presented against a challenge that is unknown or not the asker's, SHALL be counted
+against the source and against the session's account in the one account count sign-in
+failures are counted in, and the delay SHALL be asked before the challenge is opened. A
+verification refused in a registration session (a wrong email or phone code, or a link
+token that opens nothing) SHALL be counted against the source and the identifier, and
+each ask of a code or a link in a registration session SHALL ask the delay first.
 
-*Source: D-013*
+The identifier component SHALL be keyed by the keyed hash, under the fingerprint key
+(OPS-SEC-001), of the identifier's canonical form (an address, a number or a username
+in its kind's form, anything else trimmed), computed for every identifier whether or
+not an account holds it. A sign-in carries it with its key version from begin, and
+every refused factor of that sign-in counts under it; every ask of a link, an email
+code or a recovery is delayed under it.
+
+**Values (D-166).** A **source** is the address the connection arrived on, after the
+proxies the host names to the framework as trusted: an IPv4 address; an IPv4-mapped
+IPv6 address, read as its IPv4 address; the /64 prefix of any other IPv6 address; or
+the whole address of an IPv6 address whose first three bits are 000. A connection with
+no address is the one source `unknown`. Every per-source count uses this source: this
+item, AUTH-ABUSE-008, the restriction key `source` (AUTH-ABUSE-004), INT-GEN-003 and
+BFF-ORDER-001 stage 4, which also counts each IPv6 source's enclosing /48 under
+`abuse.source.sitelimit`. A session records the whole address (AUTH-SESS-013).
+
+A failure SHALL be written as the count standing at that moment plus one, the standing
+count being the count last written halved once per `abuse.throttle.decay` since it was
+written and rounded to the nearest whole failure, half away from zero. The delay a
+failure earns is the one the count it wrote earns under `abuse.throttle.threshold`,
+`abuse.throttle.delay.initial`, `abuse.throttle.delay.factor` and the component's cap,
+and it SHALL run from that failure: an attempt is looked at once the failure's instant
+plus that delay has passed, and a refusal carries that instant as `retryAt`.
+
+*Source: D-013, D-166*
 
 Lockout is a denial-of-service weapon usable by anyone who knows a user's email, at
 no cost to the attacker.
 
 **The per-account component SHALL be capped**, and a source presenting a recognised
-device or prior session SHALL be exempt from it.
+device or prior session SHALL be exempt from it. The exemption applies at sign-in; it
+SHALL NOT apply at step-up. A successful sign-in or step-up SHALL clear the account
+component only; the source and identifier components decay with time alone.
 
-*Source: D-079a*
+A recognised device or prior session is a remembered token read from its browser
+cookie, or a trusted token read from its device cookie, that resolves to a device of
+the account the identifier resolves to, of the cookie's kind, neither lapsed nor
+revoked; resolving it changes nothing about the device, and it is resolved alike
+whether or not the identifier resolves. Recognition exempts the browser from being held
+by the account and identifier components, never by the source component; its failures
+are counted against every component. Asks of a link, a code or a recovery are never
+exempt.
+
+A provider's return SHALL ask the source component's delay before the code is traded;
+while a delay stands no provider is called, and the browser is returned to its
+destination with `error=auth.throttled` and `retryAt` (AUTH-ABUSE-002).
+
+*Source: D-079a, D-166*
 
 Otherwise the per-account limit is a milder form of the denial-of-service the
 fixed-count lockout was rejected for: an attacker who knows an address drives the
@@ -1772,6 +2018,22 @@ the control without handing over the lever.
 5. A returning legitimate device is not held by an attack on that account.
 6. The identifier component uses the same threshold, delays, decay and cap as the
    account component (`abuse.throttle.account.cap`); it has no keys of its own (D-153).
+7. Sign-in and step-up failures raise one account delay; a correct factor presented
+   at step-up inside it is refused unchecked with 429 `auth.throttled` carrying
+   `retryAt`.
+8. Failures made as each delay runs out escalate the delay; after a quiet spell the
+   next failure earns less.
+9. From a fresh source, an identifier no account holds earns the same delay for the
+   same failures as one an account holds.
+10. Failures from a recognised browser count towards the account's
+    `auth-failures-sustained` condition (OPS-ALERT-002) and hold other sources, and do
+    not hold that browser.
+11. Wrong codes presented in a registration session are counted and held by the delay
+    as refused factors at sign-in are.
+12. A provider's return from a source under a delay calls no provider and returns the
+    browser with `error=auth.throttled` and `retryAt`.
+13. Two addresses within one IPv6 /64 share one source delay, and an IPv4-mapped
+    address shares its IPv4 address's.
 
 ---
 
@@ -1781,7 +2043,7 @@ a **send** is refused by a restriction (AUTH-ABUSE-004), the message SHALL state
 **when the next send is possible** (`retryAt`) and **how to reach support**, and
 SHALL be identical whether or not the address is registered.
 
-*Source: D-013, D-146*
+*Source: D-013, D-146, D-166*
 
 Silent failure produces retry storms; a differentiated message makes the throttle an
 enumeration oracle. This item is one of the three exceptions to the content rule
@@ -1792,7 +2054,8 @@ enumeration oracle. This item is one of the three exceptions to the content rule
    responses and identical timing.
 2. The remaining delay is communicated.
 3. A refused send for a registered and for an unregistered address produces identical
-   responses carrying `retryAt` and the support route.
+   responses whose `details` carry `retryAt` and nothing else; the frontend shows the
+   route to support (FE-API-005).
 
 ---
 
@@ -1814,8 +2077,12 @@ they do not control the mailbox.
 **The non-existence email SHALL be limited to one per destination address per
 window**, the window being `abuse.nonexistent.window` (`10` section 4.3; the same key
 bounds the duplicate-owner notice of REG-SESS-005), and the rate SHALL be alerted on.
+The non-existence email is judged under the purpose of the message that was asked for,
+and a refusal of it by a restriction is the answer to the ask. An ask of recovery, a
+sign-in link or an email code SHALL be answered before any transport is called, whether
+its message is sent or not (AUTH-ABUSE-004).
 
-*Source: D-148; D-079b*
+*Source: D-148; D-079b; D-166*
 
 Without a per-destination limit, a distributed attacker makes the mail server send
 "you have no account here" to arbitrary addresses at scale — damaging the deliverability
@@ -1835,64 +2102,141 @@ identifier, neither of which constrains this.
 6. The "someone tried to register or change to this address — nothing has changed"
    notification points the recipient to sign-in and to recovery, so a forgetful
    returning customer is not left at a dead end (D-140).
+7. With the mail transport blocked, an ask for an existing address and one for a
+   non-existent address are both answered 202 without waiting for it; with a transport
+   that refuses everything, both answer the same bytes.
 
 ---
 
 **AUTH-ABUSE-004** — Every send of every kind (verification code, sign-in link,
-second-step code, notice) SHALL be governed by **named restrictions**. A restriction
-SHALL have a **key** (`destination`: an HMAC of the canonical address; `account`;
-`source`; `global`; or `host:<name>` supplied by the host), an optional **purpose**
-filter (`verification` · `signin` · `secondfactor` · `notification` · `any`), and
-one or more **buckets** of (max, interval, `sliding` | `fixed`). Every send SHALL
-evaluate every applicable restriction; any exceeded bucket SHALL refuse with
+second-step code, notice) SHALL be governed by **named restrictions**, except an alert
+(OPS-ALERT-001), which is outside every restriction and governed by the deduplication
+of OPS-ALERT-002 alone. A restriction SHALL have a **key** (`destination`: an HMAC of
+the canonical address; `account`; `source`: the source of AUTH-ABUSE-001 of the request
+that asked for the send; `global`; or `host:<name>` supplied by the host), an optional
+**purpose** filter (`verification` · `signin` · `secondfactor` · `notification` ·
+`any`), an optional **channel** filter (`sms` · `email` · `any`, default `any`), and
+one or more **buckets** of (max, interval, `sliding` | `fixed`); its name follows the
+rule of INT-SMS-003. A send no request asked for (a background job's) carries no
+source, and no `source` restriction counts it. Every send SHALL evaluate every
+applicable restriction; any exceeded bucket SHALL refuse with
 `auth.restriction.exceeded` carrying `retryAt`, the earliest time a bucket lifts. A
 **failed delivery SHALL NOT count**. Restrictions SHALL be **runtime configuration**
 edited through `GET/PUT/DELETE /admin/restrictions/{name}` (step-up action
-`restriction:edit`, audited, `SendingRestrictionChanged`); a loosening SHALL raise a Normal
-alert. Support MAY **grant** credit to a key (`POST /admin/restrictions/{name}/grant`,
-step-up action `restriction:grant`, support role, audited with a reason,
-`SendingRestrictionGranted`); a grant is credit, never a bypass. **Security notices to an
-existing holder** SHALL be outside destination restrictions and governed by
-`notification.destination` only. The per-destination record SHALL hold the HMAC and
-send timestamps only and SHALL be deleted when its buckets are empty.
+`restriction:edit`, audited, `SendingRestrictionChanged`); every edit SHALL carry a
+reason (OPS-CFG-008, API-CONV-002), a loosening SHALL also require `system:administer`
+in the administrative organization (OPS-CFG-002) and SHALL raise a Normal alert, and a
+name the set does not hold is answered 404 `auth.restriction.notfound`. Support MAY
+**grant** credit to a key (`POST /admin/restrictions/{name}/grant`, step-up action
+`restriction:grant`, support role, audited with a reason (API-CONV-002),
+`SendingRestrictionGranted`); a grant is credit, never a bypass. **Security notices to
+an existing holder** SHALL be governed only by restrictions whose purpose is
+`notification` (the shipped one is `notification.destination`); no restriction whose
+purpose is `any` counts or refuses one, whatever its key. No link or code a person or an
+administrator asked for carries the purpose `notification`: a recovery link and an
+invitation link carry `signin`, as a sign-in link does (REG-IDENT-002, `10` section
+5.15). `notification` and `notification.destination` therefore count security notices
+and other notices only. The per-destination record
+SHALL hold the HMAC, the fingerprint key version it was computed under (OPS-SEC-003)
+and the send timestamps only, kept apart from the records of the other key kinds.
+Before a send's counters are read, and on every run of the expiry sweep, every
+destination record whose newest timestamp is older than the longest interval the
+current destination restrictions declare SHALL be deleted.
+
+**Sending order.** The restrictions and the gateway floor (AUTH-ABUSE-006) SHALL be
+judged inside the transaction of the operation that undertakes the send, and a refusal
+SHALL return before anything is written. An admitted send SHALL write its row to the
+library's own outbox in that transaction. One immediate attempt SHALL run after the
+outermost transaction commits, and SHALL be discarded if it rolls back; whatever that
+attempt does not carry is the outbox publisher's, under `outbox.retry.*` (D-022,
+INF-BG-001). No transport SHALL be called inside an open transaction, and an operation
+that rolls back SHALL send nothing. A retried send SHALL be judged by the restrictions
+as they stand when it is retried. A row SHALL be removed once every language it owes is
+taken (IDN-PRIN-003); a send whose attempts are exhausted raises the `degradation`
+condition. This holds on every send path: invitations, recovery, sign-in and notices.
+
+**Every declared language.** A send resolved to every declared language (IDN-ATTR-001
+step 3) SHALL be judged exactly, with no bucket overrun. By email it SHALL be one
+message carrying every declared language, which the library composes from each
+language's rendered template in the order of `notification.languages`, their subject
+lines joined in the same order; it is judged and counted once. By SMS it SHALL be one
+message per declared language, admitted only where every applicable bucket has room for
+all of them (judged once, with the weight of their number), and each SHALL count. No
+multilingual rule enters the catalogue: it holds one text per language.
+
+**An ask that sends nothing.** An ask of a sign-in link, an email code or a recovery
+that sends nothing, for any reason, SHALL be judged and counted against the
+restrictions as its message would be, in the message's destination, kind, purpose and
+language, and SHALL be refused by them alike. For an address no account holds, the
+`account` key does not apply. The ask is answered before any transport is called
+(AUTH-ABUSE-003).
 
 *Source: D-146; replaces the fixed window of D-013, INT-SMS-002 and IDN-LIFE-011;
-OPS-CFG-002; D-142 for the editing model*
+OPS-CFG-002; D-142 for the editing model; D-166*
 
 Shipped defaults:
 
-| Restriction | Key | Purpose | Buckets |
-|---|---|---|---|
-| `sms.destination` | `destination` | `any` | 3 per 24 h, sliding |
-| `sms.source` | `source` | `any` | 10 per 1 h, sliding |
-| `email.destination` | `destination` | `any` | 5 per 1 h, sliding; 1 per 60 s, fixed |
-| `notification.destination` | `destination` | `notification` | 5 per 24 h, sliding |
+| Restriction | Key | Purpose | Channel | Buckets |
+|---|---|---|---|---|
+| `sms.destination` | `destination` | `any` | `sms` | 3 per 24 h, sliding |
+| `sms.source` | `source` | `any` | `sms` | 10 per 1 h, sliding |
+| `email.destination` | `destination` | `any` | `email` | 5 per 1 h, sliding; 1 per 60 s, fixed |
+| `notification.destination` | `destination` | `notification` | `any` | 5 per 24 h, sliding |
 
 The gateway account is prepaid, so looped sends drain money directly without any
 registration completing; a fixed one-per-window rule stranded a person whose carrier
 dropped the message and could not express a per-account or budget-shaped limit without
 a redeploy. Restrictions are edited like the holiday list (D-142): the change applies
-at once, is audited, and a loosening alerts. Security notices sit outside destination
-restrictions because an attacker who could exhaust an address's bucket would otherwise
-silence the notice that tells its owner something is wrong.
+at once, is audited, and a loosening alerts. Security notices answer only to
+restrictions whose purpose is `notification`, and alerts to none, because an attacker
+who could exhaust an address's bucket, or any limit, would otherwise silence the notice
+or the alert that tells someone something is wrong.
 
 **Acceptance criteria**
 1. A fourth SMS to one number inside 24 hours is refused with
    `auth.restriction.exceeded` and a `retryAt` equal to the earliest bucket lift; a
-   second email to one address inside 60 seconds is refused likewise.
+   second email to one address inside 60 seconds is refused likewise. A send in every
+   declared language is judged once: by email it is one message and counts once; by
+   SMS, with two declared languages and two of `sms.destination`'s three sends spent
+   inside 24 hours, it is refused whole, and otherwise each language counts.
 2. A send whose delivery report indicates failure does not count against any bucket.
 3. `PUT /admin/restrictions/{name}` without `restriction:edit` step-up returns the
-   step-up code; a successful edit applies to the next send without a restart, is
-   audited and emits `SendingRestrictionChanged`; raising a max, shortening an interval,
-   removing a bucket or deleting a restriction raises a Normal alert.
-4. A grant without a reason is refused; a grant adds credit to the named key and is
-   audited and emitted as `SendingRestrictionGranted`; a granted key is still refused once
-   the credit is spent.
+   step-up code; an edit without a reason is refused with
+   `config.change.reasonrequired`, and a loosening by a caller without
+   `system:administer` with `authz.denied`; a successful edit applies to the next send
+   without a restart, is audited and emits `SendingRestrictionChanged`; raising a max,
+   shortening an interval, removing a bucket, narrowing a channel or deleting a
+   restriction raises a Normal alert. `GET` or `DELETE` of a name the set does not
+   hold answers 404 `auth.restriction.notfound`.
+4. A grant without a reason is refused with `config.change.reasonrequired`, and one
+   naming a restriction the set does not hold with 404 `auth.restriction.notfound`; a
+   grant adds credit to the named key and is audited and emitted as
+   `SendingRestrictionGranted`; a granted key is still refused once the credit is spent.
 5. A security notice to an existing holder is sent when `sms.destination` or
    `email.destination` is exhausted and is refused only by `notification.destination`.
-6. The destination record contains an HMAC and timestamps and nothing else, and is
-   absent once every bucket for that key is empty.
+6. The destination record contains an HMAC, the fingerprint key version it was
+   computed under and timestamps, and nothing else, and is kept apart from the records
+   of the other key kinds. Before a send's counters are read, and on every run of the
+   expiry sweep, every destination record whose newest timestamp is older than the
+   longest interval the current destination restrictions declare is deleted, so a
+   shortened interval reaches sends already counted and no record outlives that
+   interval without a further send.
 7. A host-supplied `host:<name>` key is evaluated like the built-in keys.
+8. A send undertaken inside an operation that then rolls back reaches no transport and
+   leaves no row; one undertaken inside an operation that commits is carried after the
+   commit, and no transport is called while its transaction is open.
+9. A retried send is judged by the restrictions as they stand when it is retried.
+10. A fourth mail to one address inside 24 hours is sent where only `sms.destination`
+    would have counted it.
+11. A security notice to an existing holder is neither counted nor refused by
+    `sms.source`.
+12. A send no request asked for is counted under no `source` key.
+13. An alert is sent whatever the buckets of every restriction hold; only the
+    deduplication of OPS-ALERT-002 limits it.
+14. An ask of a sign-in link, an email code or a recovery that sends nothing is counted
+    against the restrictions as its message would be, and is refused by them alike.
+15. A recovery link and an invitation link are counted under the purpose `signin`, and
+    neither is counted or refused by `notification.destination`.
 
 ---
 
@@ -1901,7 +2245,15 @@ tested, with Arabic binding.
 
 **Values (D-153).** "Every configured language" is the set `notification.languages`.
 
-*Source: D-013, D-031*
+**Values (D-166).** A text message that carries a link is budgeted at two segments of
+its alphabet: 306 characters of the GSM 7-bit default alphabet, or 134 otherwise. Every
+other text message is budgeted at one: 160 or 70. Each place the library fills is
+measured at its defined width, and `{link}` at its composed width: the landing origin
+declared for the link's application, `/link#`, the link's kind, `.` and a drawn token,
+of the one token size every channel uses (INT-SMS-003). A text-message template naming a place with no defined
+width is refused at startup with `model.startup.declarationinvalid`.
+
+*Source: D-013, D-031, D-166*
 
 Unicode messages are 70 characters for a single SMS and 67 per part concatenated;
 Latin gets 160 and 153. An Arabic message one character over 70 costs double.
@@ -1911,10 +2263,14 @@ budgets **cannot** be validated per template in isolation. Every template is val
 in **every configured language** at startup — any of them might be the one sent.
 
 **Acceptance criteria**
-1. A test fails if any rendered template exceeds its language's single-message
-   budget.
+1. A test fails if any rendered template exceeds its budget: one segment of its
+   alphabet, or two where it carries a link.
 2. The test covers every template in every supported language.
-3. Validation runs at startup, not at send.
+3. Validation runs at startup, not at send, over the catalogue in force: the
+   deployment's where it registered one, the shipped one otherwise. Startup refuses
+   only a message with no text in a declared language, a text message over budget, or
+   a text message naming a place with no defined width; declaring no catalogue is not a
+   refusal.
 
 ---
 
@@ -1936,11 +2292,12 @@ alerting, and sends hard-stopped below a configured floor.
 input: correlation references unguessable, endpoint rate-limited, and a callback
 SHALL NEVER by itself advance a verification state.
 
-**Values (D-153).** The callback endpoints accept `integration.callback.ratelimit` requests
-per source per minute; a correlation reference is 128 random bits, base64url, compared
-in fixed time.
+**Values (D-153, D-166).** The callback endpoints accept `integration.callback.ratelimit`
+requests per source (AUTH-ABUSE-001) per minute; a correlation reference is 128 random
+bits, base64url, held only as its SHA-256 and looked up by it (INT-GEN-003,
+BFF-MACH-003).
 
-*Source: D-013*
+*Source: D-013, D-166*
 
 The gateway calls over plain HTTP with parameters in the query string,
 unauthenticated.
@@ -1979,15 +2336,26 @@ friction without proportionate benefit.
 first-party, manually registered clients.
 
 **In scope:** authorization code with PKCE, discovery document, JWKS, userinfo, a
-manually managed client registry. The registry SHALL include a **first-party client
-for the mail server**, through which the library obtains a token for the signed-in
-person to manage mail app passwords (REG-MAIL-002); the library stores no app
-password.
+manually managed client registry. Where a mail server is integrated, the registry SHALL
+include a **first-party client for the mail server**, through which the library obtains
+a token for the signed-in person to manage mail app passwords (REG-MAIL-002); the
+library stores no app password.
 
 **Out of scope:** consent screens, dynamic client registration, public client
 self-service, developer portal, **token introspection**.
 
-*Source: D-005, D-041, D-146*
+**Values (D-166).** A client is registered or changed from the server with the
+`register-client` command of `Janus.Cli`, taking `--client <id>`, `--name <name>`,
+`--kind protocol|browser-application`, `--redirect <address>` and
+`--scopes "<scope> ..."`, which prints `{"registered":"<id>"}` and is audited as
+`auth.oidc.clientregistered`; it takes no secret. The library generates each client's
+secret when the client is first registered (32 random bytes, base64url), holds it
+under the deployment's data key (AUTH-KEY-002) and rotates it with the signing keys
+(AUTH-KEY-001, OPS-SEC-002); a registration that changes a client leaves its secret
+alone. A running host takes a changed destination at its next start (API-REDIR-001
+AC3).
+
+*Source: D-005, D-041, D-146, D-166*
 
 Introspection is excluded because Stalwart validates offline via JWKS and does not
 use it; an endpoint nothing calls is attack surface for no benefit.
@@ -1996,22 +2364,30 @@ use it; an endpoint nothing calls is attack surface for no benefit.
 1. The discovery document is served and is valid.
 2. A client not in the registry cannot obtain a token.
 3. No dynamic registration endpoint exists.
-4. The mail-server client is registered at bootstrap where the mail integration is
-   enabled; the token it obtains is scoped to the signed-in person and no app-password
-   secret is persisted by the library.
+4. Where a mail server is integrated, its client is registered with the
+   `register-client` command as the deployment is stood up and declared to the library
+   as `MailServerClient` (LIB-HOST-001); its secret is generated by the library and
+   presented by no party; the token the library issues to it in process for the
+   signed-in person is scoped to that person and names that client as `aud`
+   (AUTH-OIDC-006), and no app-password secret is persisted by the library.
 
 ---
 
 **AUTH-OIDC-002** — The browser SHALL never receive a token. First-party browser
 applications use the cookie session of AUTH-SESS-003; their BFFs use the
 authorization code flow **once**, to establish that session (AUTH-SESS-012), and
-store no token afterwards.
+store no token afterwards. A pushed authorization request (AUTH-OIDC-006) from a
+`browser-application` client that asks for `offline_access` SHALL be refused at
+`POST /oidc/par` with `invalid_request`; only a `protocol` client holds the refresh
+grant (`09` section 9).
 
-*Source: D-007, D-104*
+*Source: D-007, D-104, D-166*
 
 **Acceptance criteria**
 1. No browser application receives an access token.
 2. No BFF holds an access, ID or refresh token beyond the code exchange.
+3. A browser application's pushed request asking for `offline_access` is refused with
+   `invalid_request` and no `request_uri` is issued.
 
 ---
 
@@ -2059,20 +2435,28 @@ towards the ceiling accepts a longer one.
 3. A relying party validating offline rejects the token no later than its expiry; the
    documented revocation latency for that party equals the configured lifetime.
 
+---
 
 **AUTH-OIDC-006** — The provider SHALL conform to the OAuth 2.0 Security Best Current
 Practice (RFC 9700) and to OAuth 2.1 semantics, and SHALL prove it: only the
 authorization code grant with PKCE `S256` and the refresh grant exist; the implicit,
-password and plain-PKCE forms are refused; every redirect is an exact registered match;
-no public client receives a refresh token. **Every authorization request SHALL be a
-Pushed Authorization Request (RFC 9126):** the client posts the parameters to
+password and plain-PKCE forms are refused; every redirect is an exact registered match
+(a pushed request naming another `redirect_uri` is refused with `invalid_request`, and
+every registered return address is `https` except on a loopback IP literal); no public
+client receives a refresh token. The implicit forms are every `response_type` but
+`code`; the password form covers every grant but `authorization_code` and
+`refresh_token`; a challenge that names no method is plain (RFC 7636 section 4.3) and is
+refused with it, as is a request with no challenge. **Every authorization request SHALL
+be a Pushed Authorization Request (RFC 9126):** the client posts the parameters to
 `POST /oidc/par` over the back channel and the browser carries only the returned
 `request_uri`; a direct `/oidc/authorize` with parameters is refused with
 `invalid_request`. **Access tokens SHALL follow RFC 9068**: header `typ: at+jwt`, claims
-`iss`, `exp`, `aud`, `sub`, `client_id`, `iat`, `jti`, and the mail server adapter
-verifies `aud` as well as the signature.
+`iss`, `exp`, `aud`, `sub`, `client_id`, `iat`, `jti`; `aud` is the identifier of the
+client the token was issued to (the default resource indicator of RFC 9068 section 3),
+and the mail server verifies `aud` as well as the signature (INT-MAIL-004). No error
+the provider answers carries `error_description` or `error_uri` (LIB-API-003).
 
-*Source: D-164*
+*Source: D-164, D-166*
 
 Janus owns both ends of every flow, so a pushed request costs no interoperability and
 removes the authorization parameters from the browser entirely rather than protecting
@@ -2080,11 +2464,22 @@ them one by one. RFC 9068 makes an access token unmistakable for an ID token and
 it to its audience, which convention alone does not.
 
 **Acceptance criteria**
-1. A conformance suite asserts each refusal named above and the exact-match rule.
+1. The conformance suite of LIB-TEST-001 asserts, against the host's deployment, each
+   refusal named above that a registered client can provoke without a signed-in
+   person, the refusal of a mismatched destination at the push included; the
+   library's own integration tests assert the same refusals, the exact-match rule, and
+   that a code is exchanged only by naming its destination exactly.
 2. `/oidc/authorize` without a `request_uri` from `/oidc/par` is refused; the
-   `request_uri` is single use and expires in 60 seconds.
-3. Every access token carries `typ: at+jwt` and the seven claims; a token whose
-   `aud` is not the mail server's client identifier is rejected by the adapter.
+   `request_uri` expires 60 seconds after issue and is spent by the first answer
+   `/oidc/authorize` gives it (a code, a refusal or a forward to sign in); presented
+   again it is refused and forwards nowhere. A push whose `redirect_uri` is not exactly
+   the client's registered destination is refused with `invalid_request` and issues no
+   `request_uri`.
+3. Every access token, on a code and on a refresh, carries `typ: at+jwt` and the seven
+   claims, with `aud` the client it was issued to; a verifier configured as the mail
+   server is (issuer and keys from discovery, type `at+jwt`, audience the mail server's
+   client identifier, lifetime) takes the mail server's token and refuses one issued
+   to any other client.
 4. Discovery advertises `pushed_authorization_request_endpoint` and
    `require_pushed_authorization_requests: true`.
 
@@ -2097,9 +2492,11 @@ new key begins signing, the previous remains published in JWKS until outstanding
 tokens expire, then is retired. No human step SHALL be involved. The cadence SHALL be
 `token.signing.rotation` (`10` section 4.9; default 90 days); the overlap SHALL be the
 access-token lifetime (`oidc.accesstoken.lifetime`) plus 5 minutes. The algorithm
-SHALL be `token.signing.algorithm` (default ES256, protected).
+SHALL be `token.signing.algorithm` (default ES256, protected). The secret of every
+client in the registry rotates on the same cadence with the same overlap (AUTH-OIDC-001,
+OPS-SEC-002).
 
-*Source: D-148; D-007, D-147*
+*Source: D-148; D-007, D-147, D-166*
 
 ES256 was verified against the mail server's source, which accepts P-256 keys from a
 JWKS as ES256 and refuses symmetric keys: the file
@@ -2122,22 +2519,57 @@ token any key may have signed, plus a margin for clock skew and JWKS caching.
 **AUTH-KEY-002** — Secrets SHALL NOT reside in configuration files or environment
 variables in production, except the two deployment-injected bootstrap values named
 in INF-HOST-003. The key-encryption key and the fingerprint key SHALL come from a
-secrets manager at startup; all other secrets SHALL be encrypted at rest under the
-key-encryption key.
+secrets manager at startup; both are versioned, a set of versions with one current.
+Every other secret the library holds (the signing keys, the registry's client secrets,
+and any value that belongs to no subject) SHALL be encrypted at rest under the
+deployment's data key, which the key-encryption key wraps as a row of the subject-key
+table (PRIV-RIGHT-005a). The provider's authorization codes and refresh tokens are
+encrypted under the key derived below, and a TOTP secret under its account's subject
+key (AUTH-FACT-006).
 
-*Source: D-026.3, D-105*
+**Values (D-166).** The library reads every secret it needs through the host's
+`ISecretSource` (LIB-EXT-001), asynchronously, in its startup hosted service before the
+server serves: the versions of the key-encryption key, the versions of the fingerprint
+key, the maintenance credential (OPS-MIG-003a), the mail server's secret where a mail
+server is integrated, and each social provider's credential by provider name. No
+secret is an argument of `AddJanus`. A `Janus.Cli` command reads the same values from
+one JSON document on standard input (OPS-SEC-001). A secret that cannot be read stops
+startup with `model.startup.secretunavailable`, `details.key` naming the secret:
+`keyEncryptionKeys`, `fingerprintKeys`, `maintenanceCredential`, `mailServerSecret` or
+`socialProvider.<provider>`, and `input` where a `Janus.Cli` command cannot read its
+document. Every version of the fingerprint key SHALL be at least 32 bytes; a shorter
+one SHALL be refused, never padded.
+
+The key the provider encrypts its authorization codes and refresh tokens under SHALL be
+derived from each held version of the key-encryption key by HKDF-SHA256 with the info
+string `identity:oidc:token-protection:v1`, the current version encrypting; no key of
+its own SHALL be created or stored. A code or refresh token encrypted under a version
+that has been retired (OPS-SEC-003) is refused.
+
+*Source: D-026.3, D-105, D-166*
 
 **Acceptance criteria**
 1. No secret value appears in any configuration file in the repository.
-2. Startup fails with a named error if the key-encryption key or the fingerprint key
-   is unavailable.
+2. Startup fails with `model.startup.secretunavailable`, `details.key` naming the
+   secret, where a secret the deployment needs cannot be read, or where any version of
+   the fingerprint key is shorter than 32 bytes; the server serves no request before
+   every secret is read.
+3. A refresh token issued before a rotation of the key-encryption key is honoured
+   across restarts until the version it was encrypted under is retired.
+4. No secret is taken as an argument of `AddJanus`, and no value that belongs to no
+   subject is wrapped directly under the key-encryption key.
 
 ---
 
 **AUTH-KEY-003** — Expired sessions, consumed refresh tokens, and used one-time
 codes SHALL be swept by a background job.
 
-*Source: D-007*
+*Source: D-007, D-166*
+
+A consumed refresh token SHALL be kept until no session it could derive from can still
+exist, which is the ceiling of `session.default.absolute`, so that a second
+presentation is caught (AUTH-OIDC-003 AC1). Every other expired or consumed token and
+code SHALL be swept once it is past its own expiry.
 
 **Acceptance criteria**
 1. No recurring human task is required for cleanup.

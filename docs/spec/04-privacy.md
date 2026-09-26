@@ -20,11 +20,22 @@ supplied as source material. Confirm with counsel.
 the function requires, and where a design works without identity, do not attach
 identity.
 
-*Source: D-030, P-003*
+**Values (D-166).** A purpose is declared with two lists beside its basis: the data
+categories it requires and the categories of subject it is about. A purpose declared
+with no data category fails startup with `model.startup.declarationmissing`,
+`details.key` naming the purpose. Each encrypted field (PRIV-RIGHT-005a) names the data
+category it holds; a field whose category no purpose declared on its type names fails
+startup with `model.startup.declarationinvalid`, `details` naming the type and the
+field. The records of processing print both lists per purpose (PRIV-ROPA-001).
+
+*Source: D-030, P-003, D-162, D-166*
 
 **Acceptance criteria**
-1. Each declared purpose names the specific data categories it requires.
-2. A field held by no declared purpose fails model validation.
+1. Each declared purpose names the specific data categories it requires and the
+   categories of subject it is about; a purpose naming no data category fails startup
+   validation.
+2. An encrypted field whose data category no purpose declared on its type names fails
+   startup with `model.startup.declarationinvalid`.
 
 ---
 
@@ -47,7 +58,9 @@ it is a query.
 
 **PRIV-BASIS-001** — Every processing purpose SHALL declare a lawful basis from a
 **closed list the host declares at startup**, each basis carrying the properties the
-library branches on. Egypt's six SHALL ship as the default declaration.
+library branches on. Egypt's six SHALL ship as a declaration the host passes to the
+builder, `LawfulBases.Default`; the library SHALL apply no basis the host did not
+declare.
 
 | # | Basis | `IsConsent` | Written for sensitive | `RequiresAssessment` | `IsObjectable` | Typical use |
 |---|---|---|---|---|---|---|
@@ -58,7 +71,7 @@ library branches on. Egypt's six SHALL ship as the default declaration.
 | 5 | Claim or Defence of a Legal Right | no | — | no | no | Retaining evidence for a dispute |
 | 6 | Execution of Court Judgments or Orders from Competent Investigative Authorities | no | — | no | no | Responding to a court order |
 
-*Source: D-032, D-091, D-108*
+*Source: D-032, D-091, D-108, D-162, D-166*
 
 **The code reads the properties, never the name** — the same rule factors follow
 (AUTH-FACT-001). Whether a purpose is withdrawable, shows a dashboard control, runs the
@@ -66,9 +79,11 @@ capture path, needs a linked assessment, or can be objected to is answered by th
 flags on its basis. A project in another jurisdiction declares a different list with
 its own flags and the library changes not at all (D-091).
 
-**Storage is a library table seeded from the declaration.** It carries the properties
-the code reads, which is what makes it a genuine table rather than a constrained column
-(CONV-ENUM-001). Purposes reference a basis by key; generated records emit its label.
+**Storage is a library table seeded from the declaration.** At startup each declared
+basis is written as one row: its key, its label and its four flags. It carries the
+properties the code reads, which is what makes it a genuine table rather than a
+constrained column (CONV-ENUM-001). Purposes reference a basis by key; generated
+records emit its label.
 
 This is Egypt's list, not the European one. There is **no vital-interests basis and
 no public-task basis**; bases 5 and 6 are Egypt-specific. An implementer defaulting
@@ -105,7 +120,13 @@ documented rather than implicit.
 `RequiresWrittenConsentForSensitive`, a purpose over sensitive data SHALL use the
 written path.
 
-*Source: D-032, D-030, D-108*
+**Values (D-166).** The path is derived, not declared: a consent-based purpose takes
+the written path where its basis carries `RequiresWrittenConsentForSensitive` and a type
+it is declared on is declared sensitive, and the ordinary path otherwise (`10` section
+5.10). A purpose declaration MAY name the written path where the ordinary one is
+derived; one naming the ordinary path where the written one is derived fails startup.
+
+*Source: D-032, D-030, D-108, D-166*
 
 **Acceptance criteria**
 1. A purpose over sensitive data declaring ordinary consent, on a basis that requires
@@ -131,18 +152,22 @@ They are cited when circumstances arise, not implemented.
 **PRIV-SENS-001** — Sensitivity SHALL be a declared property of a resource type in
 the model builder, naming its category from a **list the host declares at startup**.
 
-Egypt's list ships as the default (Law 151/2020 Article 1): health, **genetic**,
-biometric information, financial details, religious beliefs, political views,
-criminal records, and children's data. Nothing in
-the library branches on a category — it is a label for the records of processing — so
-another jurisdiction declares its own list and changes no code (D-091, D-108).
+Egypt's list ships as a declaration the host passes to the builder,
+`SensitiveCategories.Default` (Law 151/2020 Article 1): health, **genetic**, biometric
+information, financial details, religious beliefs, political views, criminal records,
+and children's data. The library reads one category by name, `children`, which sets the
+children's column of the records of processing (PRIV-ROPA-001, D-162); nothing else
+branches on a category. Every other category is a label for the records of processing,
+so another jurisdiction declares its own list and changes no code; a list that names no
+`children` category reports no children's processing (D-091, D-108).
 
-*Source: D-030, D-108*
+*Source: D-030, D-108, D-162, D-166*
 
 **Acceptance criteria**
 1. A type declared sensitive derives every behaviour in PRIV-SENS-002 without
    further configuration.
 2. Sensitivity appears as a distinct column in generated records.
+3. The library applies no category the host did not declare.
 
 ---
 
@@ -209,15 +234,21 @@ automated routine can be built later without first auditing the schema cold.
 
 **Building that routine is the user's decision**, not a threshold that fires on its own.
 
-*Source: D-078, D-098*
+*Source: D-078, D-098, D-162, D-166*
 
 **Acceptance criteria**
-1. Processing a sensitive type **for a consent-based purpose** without recorded
-   written consent is refused.
+1. Processing a sensitive type **for a consent-based purpose** without the data
+   subject's recorded written consent, whoever the caller is, is refused.
 2. A database dump yields no personal field for any subject.
 3. Fields declared for filtering remain queryable.
 4. Generated records state the measures accurately for each threat, not "encrypted at
    rest" alone.
+5. A list filter or SQL fragment for a permission bound to a consent-based purpose
+   admits no record whose data subject holds no live consent of the required kind for
+   that purpose; a consent that is withdrawn, superseded, or recorded against a
+   document other than the one the purpose now names is not live.
+6. A check that names no record, or a record the library holds no subject for, is
+   refused for a consent-based purpose.
 
 ---
 
@@ -225,7 +256,7 @@ automated routine can be built later without first auditing the schema cold.
 several purposes on several bases SHALL continue to be processed under its
 non-consent bases when a consent-based purpose is withdrawn.
 
-*Source: D-066*
+*Source: D-066, D-166*
 
 A host's business record commonly carries several purposes at once: performing the
 contract (contractual obligation), retention (legal obligation), and a personalisation
@@ -243,8 +274,10 @@ under the contract when a subject withdraws mid-way, or a gate that does nothing
    non-consent purpose interrupts no processing under that purpose and invokes no
    `ConsentChanged` handler registered for it.
 2. Withdrawing consent stops processing for the withdrawn purpose on the next request.
-3. The subject's own records held under a legal-obligation purpose remain visible to
-   them and retained for that purpose's period.
+3. After the subject withdraws a consent-based purpose, the gate still admits the
+   permissions serving a legal-obligation purpose on the subject's own records, the
+   generated records state that purpose's basis and retention unchanged, and no
+   `ConsentChanged` names that purpose.
 4. Each declared purpose names its basis; a purpose without one fails validation.
 
 ---
@@ -256,18 +289,33 @@ under the contract when a subject withdraws mid-way, or a gate that does nothing
 ### 4.1 Capture
 
 **PRIV-CONS-001** — Consent SHALL be recorded, never a boolean. Each record SHALL
-carry: the specific purpose, the **version of the notice displayed**, timestamp,
+carry: the specific purpose, the **document and version displayed** (the document the
+purpose's declaration names, the privacy notice where it names none), timestamp,
 mechanism, and withdrawal timestamp where applicable.
 
 **Values (D-153).** `mechanism` is one of `10` section 5.21: `registration` · `dashboard`
 · `reconsent` · `administrator`.
 
-*Source: D-024*
+**Values (D-166).** A grant named `dashboard` over a superseded, unwithdrawn consent for
+the purpose is recorded `reconsent`, by the operation and whoever calls it; any other
+mechanism is recorded as named.
+
+**Every grant is a record of its own.** A grant SHALL add a record. A withdrawal or a
+supersession SHALL stamp the live record and never overwrite or remove it. A subject
+holds at most one live record (neither withdrawn nor superseded) per purpose, and every
+earlier record stays, with its document, version and instants, for `retention.consent`
+(PRIV-RET-001).
+
+*Source: D-024, D-162, D-166*
 
 **Acceptance criteria**
 1. Consent for two purposes produces two records.
-2. The notice version is resolvable to the exact text shown.
+2. The document and version recorded resolve to the exact text shown.
 3. Withdrawal sets a timestamp rather than deleting the record.
+4. A grant after a withdrawal or a supersession adds a record and leaves the earlier one
+   as it was; at most one live record per subject and purpose exists.
+5. A dashboard grant over a superseded, unwithdrawn consent is recorded `reconsent`; a
+   grant an administrator makes over one is recorded `administrator`.
 
 ---
 
@@ -337,11 +385,11 @@ Wherever a document is shown, the reader SHALL be able to view the governing tex
 any attached translation **without changing the interface language**. Where a
 translation and the governing text diverge, the governing text governs.
 
-*Source: D-146; amends D-031*
+*Source: D-146, D-166; amends D-031*
 
 `legal.governinglanguage` is required at install (OPS-BOOT-001, LIB-HOST-001),
-protected (OPS-CFG-004: a restart to change) and raises a Normal alert when it changes
-(OPS-ALERT-001). The governing language of each version is exposed through the
+protected (OPS-CFG-004: changed from the server or by redeployment, never through the
+application) and raises a Normal alert when it changes (OPS-ALERT-001). The governing language of each version is exposed through the
 compliance-text endpoints (`09`) and the host contract (LIB-HOST-001). For the default
 (Egyptian) deployment the governing language is Arabic (D-031); a host in another
 jurisdiction declares its own. How the reader reaches the governing text and a
@@ -349,6 +397,11 @@ translation from the screen is the frontend's choice (`18-frontend-integration`)
 item requires only that both are reachable in place. Several governing languages on
 one deployment (a multi-market document set) are deferred (`00` section 7.3,
 `13-risk-register`).
+
+**Values (D-166).** The library numbers a version; the publisher names none. A
+version's number is the count of versions of that document published before it plus
+one, written in decimal, counted per document; the highest is the current version. It
+crosses the wire as the string `version` (`09` section 7).
 
 **Acceptance criteria**
 1. Every published document version carries exactly one governing language; a version
@@ -370,7 +423,7 @@ version; attaching or correcting a translation SHALL NOT. A version whose
 governing-language text is absent SHALL NOT publish, and the condition SHALL be
 surfaced as **governing-language text missing** (OPS-ALERT-001).
 
-*Source: D-041, D-031, D-146*
+*Source: D-041, D-031, D-146, D-166*
 
 Consent validity depends on which notice version was displayed, so the notice needs
 a version of its own. The version follows the governing text because that is the text
@@ -380,7 +433,8 @@ about what was shown as authoritative.
 **Acceptance criteria**
 1. Changing the governing text creates a new version; attaching a translation to a
    published version does not.
-2. A consent record resolves to the governing text of the version shown at the time.
+2. A consent record resolves, through the document and version it names
+   (PRIV-CONS-001), to the governing text shown at the time.
 3. Publishing a version without governing-language text is refused and the condition
    is raised on OPS-ALERT-001.
 
@@ -416,12 +470,17 @@ contractual or legal obligation SHALL be unaffected.
 
 **Values (D-153).** Whether a version is material is decided by the person publishing it:
 `POST /admin/documents/{document}/versions` takes a required boolean `material`. `true`
-supersedes every live consent on the purposes the document covers
+supersedes every live consent recorded against an earlier version of that document
 (`privacy.consent.superseded`) and the frontend re-asks; `false` publishes the version
 and touches no consent. The audit record carries the answer. Code does not judge
 materiality.
 
-*Source: D-024, D-066*
+**Values (D-166).** A purpose governs its consent by the document its declaration names,
+the privacy notice where it names none (D-162). A consent recorded against a document
+other than the one its purpose now names is superseded, and the subject is asked again
+(AC4).
+
+*Source: D-024, D-066, D-162, D-166*
 
 Without this, publishing a revised notice (a text edit) would mark every live consent
 superseded and refuse processing of every record it covers until each subject
@@ -442,7 +501,7 @@ re-consented. A service-wide outage caused by editing a paragraph.
 steps, no retention flow, no hidden settings, ideally through the same mechanism by
 which consent was given.
 
-*Source: D-024*
+*Source: D-024, D-166*
 
 **Withdrawal ends the purpose, not only the activity.** Any data held *solely* for the
 withdrawn purpose SHALL be erased on withdrawal, in the library and by every
@@ -456,6 +515,8 @@ retained for `retention.consent` as the evidence Law 151/2020 Art. 18 requires
 3. Withdrawal takes effect without human approval.
 4. Data held solely for the withdrawn purpose no longer exists after the handlers
    complete; the consent record does.
+5. Withdrawing a consent the subject does not hold changes nothing and is answered as a
+   withdrawal.
 
 ---
 
@@ -493,14 +554,18 @@ at or before the time consent is obtained.
 **PRIV-CONS-010** — The cross-border transfer SHALL NOT rely on consent as its lawful
 basis.
 
-*Source: D-024, D-023*
+*Source: D-024, D-023, D-166*
 
 Consent is available as a narrow exception, but a withdrawal would leave data that
 cannot lawfully be hosted. The transfer stands on the regulator's permit instead.
 
 **Acceptance criteria**
-1. No consent record references the hosting transfer as its purpose.
-2. Withdrawing any consent never renders the hosting unlawful.
+1. No consent record references the hosting transfer as its purpose: a consent-based
+   purpose named for the hosting or its transfer fails startup with
+   `model.purpose.hostingconsent` (INT-HOST-002).
+2. After every consent-based purpose the deployment declares is withdrawn, the
+   generated records state the same cross-border basis for the hosting provider and for
+   every recipient outside Egypt, and add no finding.
 
 ---
 
@@ -538,10 +603,10 @@ distinct rights — a superset of the statute, never less (D-135).
 | Restrict processing | Request path; account state `restricted`; may also be requested out of band |
 | Data portability | Same export, machine-readable format |
 | Object | Dashboard — one switch per purpose on an objectable basis (PRIV-RIGHT-001a) |
-| Rectification | Account editing, plus a route for non-editable data |
+| Rectification | Account editing, plus a request for non-editable data and, while the account is `restricted`, for any of its own fields (IDN-ACCT-007) |
 | Be notified of a breach | Section 7 |
 
-*Source: D-037, D-113*
+*Source: D-037, D-113, D-166*
 
 Self-service deletion **is** the exercise of the erasure right — the customer is
 identified by their session, the grace window (`account.deletion.grace`) gives the
@@ -551,6 +616,18 @@ guardian — where a human confirms the requester's identity and enters the requ
 the subject's behalf; the six-working-day clock (PRIV-RIGHT-002) applies to those.
 Restriction stays on the queue because it requires a human to decide the dispute.
 
+**Values (D-166).** Fulfilling an out-of-band erasure request SHALL begin the account's
+deletion window (`deletingBy` `oob-request`, IDN-LIFE-003) where the account is
+`active`; where it is `restricted`, holding the restriction (`restrictionHeld`,
+PRIV-RIGHT-004); and where it is `suspended`, holding the suspension with its origin
+(`suspensionHeld`, `10` section 5.12b), so that a cancelled deletion returns the account
+to the state it was in. A fulfilment that begins the window sends the subject's
+security-notice set `oob-deletion-notice`, which carries no cancel link (IDN-LIFE-003).
+Where the account is already `deleting`, whatever its origin, the request is recorded
+`fulfilled` against the running window and nothing restarts; where it is `deleted`, the
+request is recorded `fulfilled` and nothing further happens. Fulfilling a request of any
+type is a step-up action (`privacyrequest:fulfil`, `10` section 5a); refusing one is not.
+
 **Objection is self-service and immediate** (PRIV-RIGHT-001a): the twin of consent
 withdrawal for purposes the person was never asked about.
 
@@ -559,6 +636,13 @@ withdrawal for purposes the person was never asked about.
 2. Erasure and restriction can additionally be entered on the queue by an authorised
    human for an out-of-band request, with identity confirmation recorded.
 3. Each exercise is audited.
+4. An out-of-band erasure request fulfilled while the account is `suspended` begins its
+   deletion window; cancelling that deletion returns the account to `suspended` with its
+   origin. One fulfilled while the account is `deleting` leaves the running window, its
+   origin and its start as they were, and one fulfilled while it is `deleted` changes no
+   account; both are recorded `fulfilled`.
+5. Fulfilling a request of any type without step-up is refused with
+   `auth.stepup.required` and changes nothing; refusing a request asks for none.
 
 ---
 
@@ -566,13 +650,14 @@ withdrawal for purposes the person was never asked about.
 (PRIV-BASIS-001), the subject SHALL be able to **object**, and to withdraw the
 objection, from the dashboard and through `POST` / `DELETE
 /privacy/objections/{purpose}`, with no human approval and no grounds required. An
-objection SHALL be recorded as a consent record is (purpose, notice version,
-timestamp, mechanism, withdrawal timestamp) and SHALL raise `ObjectionChanged`, whose
+objection SHALL be recorded as a consent record is (PRIV-CONS-001: purpose, document and
+version, which for an objection is always the privacy notice, timestamp, mechanism,
+withdrawal timestamp) and SHALL raise `ObjectionChanged`, whose
 handlers are **required** for every objectable purpose: processing of that subject for
 that purpose stops when the event is handled. An objection is **always honoured**;
 the library offers no "compelling grounds" refusal.
 
-*Source: Law 151/2020 Art. 2, Decree 816/2025 Art. 3(5), D-145*
+*Source: Law 151/2020 Art. 2, Decree 816/2025 Art. 3(5), D-145, D-166*
 
 Consent means the person was asked and said yes, so they *withdraw*. An objectable
 basis means the controller proceeded on its own recorded justification, so the person
@@ -590,6 +675,9 @@ is a fact about its declaration, never assumed either way.
    fails startup, as for erasure and restriction (PRIV-RIGHT-005b).
 4. Objection and its withdrawal take effect without human approval.
 5. A purpose whose basis is not objectable returns `privacy.purpose.notobjectable`.
+6. An objection before any version of the privacy notice is published is refused with
+   `privacy.notice.unpublished`; withdrawing an objection the subject has not made
+   changes nothing and is answered as a withdrawal.
 
 ---
 
@@ -620,7 +708,8 @@ is adjusted accordingly by the administrator entering it (D-147). The system SHA
 
 - send the subject an automatic **receipt** the moment the request enters the queue:
   at submission in the application, at entry for out-of-band requests a human
-  types in. A receipt is not a decision; it starts nothing and stops nothing
+  types in. The receipt is the message `privacy-request-received` (`10` section 5). A
+  receipt is not a decision; it starts nothing and stops nothing
 - raise a **Normal** alert `privacy.request.warninglead` (default **2 working days**)
   before the deadline, and a **High** alert on the deadline day (OPS-ALERT-001)
 - for a **restriction** request undecided at the deadline, **apply the restriction
@@ -628,10 +717,13 @@ is adjusted accordingly by the administrator entering it (D-147). The system SHA
   action, never visibility or data (PRIV-RIGHT-004), so granting it is always safe,
   and it turns a deemed rejection into a granted request
 - for an out-of-band **erasure** request undecided at the deadline, record the
-  request as *deemed refused by lapse*, notify the subject honestly (that the
-  deadline passed without a decision, that they may resubmit, and of their right to
-  complain to the Centre) and keep the record. Erasure cannot run without a human
-  confirming identity, so the system never erases on its own
+  request as *deemed refused by lapse*, notify the subject honestly with the message
+  `privacy-request-lapsed` (that the deadline passed without a decision, that they may
+  resubmit, and of their right to complain to the Centre) and keep the record. Erasure
+  cannot run without a human confirming identity, so the system never erases on its own
+- for a **rectification** request undecided at the deadline, in-app or out of band,
+  record the request as *deemed refused by lapse*, notify the subject as for erasure
+  and keep the record; nothing recorded about the subject changes
 
 **Values (D-153).** Calendar days, working days and holidays are determined in
 `privacy.calendar.timezone` (a required, protected deployment value). The six working
@@ -639,9 +731,12 @@ days are the six that follow the submission's calendar day in that zone; `decisi
 is the end (23:59:59) of the sixth; the warning fires `privacy.request.warninglead`
 before it and the High alert at 00:00 of the deadline day. `receivedAt` is a calendar
 date (`YYYY-MM-DD`) in that zone, refused with `privacy.request.receivedfuture` when
-later than today there; the clock runs from the end of that date.
+later than today there; the clock runs from the end of that date. The two alerts, the
+grant by lapse and the deemed refusals are taken by a pass of the one sweep of
+OPS-OBS-003, every `sweep.interval`; each takes effect within that interval of its
+instant.
 
-*Source: D-148; D-037, D-122, D-126, D-147*
+*Source: D-148; D-037, D-122, D-126, D-147, D-166*
 
 With one operator, any deadline that depends on a human click is a deadline missed by
 an absence. **Residual, honestly stated:** a paper letter arriving while nobody is
@@ -654,20 +749,33 @@ business-availability matter the library cannot control.
 2. The Normal alert fires `privacy.request.warninglead` before the deadline and the
    High alert on the deadline day, without human monitoring.
 3. A restriction request undecided at the deadline moves the account to
-   `restricted` and is recorded *granted by lapse*.
-4. An erasure request undecided at the deadline is recorded *deemed refused by
-   lapse*, the subject is notified, and the record persists.
+   `restricted`, or holds the restriction where the account is `suspended` or
+   `deleting` (PRIV-RIGHT-004), and is recorded *granted by lapse*.
+4. An erasure or rectification request undecided at the deadline is recorded *deemed
+   refused by lapse*, the subject is notified, and the record persists.
 5. A decision made before the deadline (fulfil or refuse) cancels both alerts.
 
 ---
 
 **PRIV-RIGHT-003** — Access and portability SHALL derive from **one export routine
-in two formats**, human-readable and machine-readable. The export SHALL include the
-host-declared preferences (REG-PREF-001), the list of the account's identifiers with
-their roles and verification state (REG-IDENT-002), and the location records held on
-the account's live sessions (AUTH-SESS-013).
+in two formats**, human-readable and machine-readable. The export SHALL carry every
+group of REG-ACCT-001 that `GET /account` returns and the whole Standing group, in these
+sections and this order: `account` (state, registration instant, terms version accepted,
+notice version presented, the instant the age screen was answered and the affirmation or
+age group it recorded), `profile`, `identifiers` (each with its kind, role, verification
+state and whether it is in the security-notice set, REG-IDENT-002), `identifier-backup`,
+`credentials` (the password and every enrolled credential, by property and label),
+`recovery-codes` (how the set stands), `devices`, `preferences` (the value in force of
+every host-declared preference, REG-PREF-001), `memberships` (every membership, one that
+has ended included, with the instant it ended), `membership-acknowledgements`,
+`group-memberships`, `grants` (every grant naming the account, in every organization,
+live, expired or revoked, with the instant it stopped), `assurance` (the reachable
+assurance and whether it resists relay), `sessions` (the location records held on the
+account's live sessions, AUTH-SESS-013), `consents` and `objections` (every record,
+PRIV-CONS-001). No section SHALL carry secret material: no password hash, TOTP secret,
+public key, WebAuthn credential identifier, recovery code or device token fingerprint.
 
-*Source: D-148; D-037, D-146*
+*Source: D-148; D-037, D-146, D-162, D-166*
 
 **Acceptance criteria**
 1. Both formats contain the same data.
@@ -675,15 +783,29 @@ the account's live sessions (AUTH-SESS-013).
 3. The export of an account with declared preferences, several identifiers and a live
    session contains the preference values, every identifier with its role and state,
    and each session's location record.
+4. The export of an account holding a revoked grant, a grant in an organization it holds
+   no membership of, a group membership and an ended membership carries all four, each
+   ended one with the instant it ended.
 
 ---
 
 **PRIV-RIGHT-004** — Restriction SHALL **suspend action, not visibility**. Restricted
 records remain visible and continue to count in aggregates; what stops is acting on
 them (contacting the subject, and whatever the host does on its own records about
-them, through `RestrictionChanged`) until the restriction lifts.
+them, through `RestrictionChanged`) until the restriction lifts. A restriction in force
+when the account enters `suspended` or `deleting`, or decided while it is in either,
+SHALL be held (`restrictionHeld`, `10` section 5.12b) and in force when the account
+returns; `RestrictionChanged` is emitted when the restriction is decided and not again
+on the return. A restriction is lifted by
+an administrator (`POST /admin/accounts/{subject}/restriction/lift`), a step-up action
+(`account:restrictionlift`); one held while the account is `suspended` or `deleting`
+SHALL be lifted only once the account is `restricted` again.
 
-*Source: D-037, D-068, AUTHZ-GATE-006*
+Restriction is not a sanction on the person: a `restricted` account signs in, reads its
+own data and exercises its rights; the changes IDN-ACCT-007 lists are refused with
+`authz.restricted` (AUTHZ-GATE-006).
+
+*Source: D-037, D-068, AUTHZ-GATE-006, D-166*
 
 Restriction is temporary, pending a dispute. It is not deletion and not concealment;
 removing restricted records from staff views would corrupt historical and analytical
@@ -693,6 +815,12 @@ totals for a condition that is meant to be reversible.
 1. Restriction suspends processing without deleting anything.
 2. Lifting it restores prior behaviour exactly.
 3. Enforcement is through the gate, not scattered checks.
+4. An account restricted and then taken through a cancelled deletion window, a
+   reversed takedown or a reactivated suspension returns `restricted`, and a
+   restriction decided while it was away is in force on its return.
+5. Lifting a restriction without step-up is refused and changes nothing; a lift of an
+   account that is not `restricted`, one holding a restriction while `suspended` or
+   `deleting` included, is refused with `identity.account.stateconflict`.
 
 ---
 
@@ -700,7 +828,7 @@ totals for a condition that is meant to be reversible.
 remains, and every personal field is rendered unrecoverable by **destroying the
 subject's key** (PRIV-RIGHT-005a). It SHALL NOT merely pseudonymise.
 
-*Source: D-148; D-026.1, D-037, D-068, D-117, D-147*
+*Source: D-148; D-026.1, D-037, D-068, D-117, D-147, D-166*
 
 **The distinction is decisive.** Pseudonymised data is still personal data, and
 controls preventing further processing combined with pseudonymisation are not
@@ -715,7 +843,13 @@ REG-PROF-001) are personal fields under the subject key and become unreadable wi
 rest. A username freed by erasure is **held** for `retention.consent` and released
 afterwards (REG-IDENT-009): it is public by nature and is not personal data under the
 key, and the hold stops an erased person being impersonated at once under their former
-name.
+name. The address of a corporate mailbox (INT-MAIL-006) is a personal field of the
+account that holds or last held it, under that account's key, and under a key of the
+mailbox's own (PRIV-RIGHT-005a) while nobody holds it. Erasure neutralises the
+fingerprint of every mailbox the subject holds or last held and leaves the row; the mail
+server's own account is outside the library (D-101), reconciliation reports it as an
+address the library does not hold, and no invitation gives the mailbox out again, to
+anyone, without an administrator's choice (`formerMailbox`, REG-MAIL-003).
 
 **The host's business records are outside the erasure right.** A record the host keeps
 under a declared lawful basis (a financial record, say: what was transacted, when and
@@ -744,6 +878,8 @@ singling-out test applies to these records.
 6. Declared preferences and declared profile values are unreadable after erasure.
 7. A username freed by erasure cannot be claimed until `retention.consent` has elapsed
    and is claimable afterwards.
+8. After erasure, the fingerprint of every mailbox the subject holds or last held is
+   neutralised and the mailbox row remains.
 
 ---
 
@@ -757,7 +893,7 @@ with AES key wrap with padding (RFC 5649). The format marker is one byte, `0x01`
 this scheme. An erased wrapped key is 32 zero bytes under marker `0x00`; every decrypt
 refuses it, and the DR-016 ledger and a restore recognise it as erased.
 
-*Source: D-097, D-099, D-100, D-147*
+*Source: D-097, D-099, D-100, D-147, D-166*
 
 **Per column, not per row.** Name and phone on a host record are encrypted; its
 non-personal columns (dates, amounts, quantities, references) are not. Aggregates and
@@ -776,6 +912,10 @@ reports are unaffected because they never read encrypted columns.
 library's table; the ciphertext lives wherever it was written, including host tables the
 library never touches. Overwriting the wrapped key makes **all of it** unrecoverable —
 so erasure of encrypted fields requires no participation from any application.
+
+**A credential secret goes with the key too.** A TOTP secret (AUTH-FACT-006) is the
+account's credential secret: it SHALL be encrypted under the account's subject key, and
+erasure destroys it with the key.
 
 **Which key encrypts a field is declared, not stored again.**
 
@@ -815,8 +955,18 @@ foreign key does that today.
   subject identifier, table, column, **and the format marker below**. Without it
   ciphertext can be **moved between rows or between subjects**; with it, decryption
   fails when moved
-- **The KEK SHALL be versioned**, with prior versions retained until re-wrapping
-  completes. Rotation otherwise strands everything encrypted under the old version
+- **The KEK SHALL be versioned**, with prior versions held by the application until
+  re-wrapping completes. Rotation otherwise strands everything encrypted under the old
+  version. A retired version leaves the application at once and stays in the secrets
+  manager and the envelope until every backup taken before the rotation completed has
+  expired (OPS-SEC-003, DR-009)
+- **Everything under the key-encryption key is a row of the subject-key table.** A value
+  the library encrypts that belongs to no subject (a secret of the deployment, or data
+  held for a person who is not yet a subject) SHALL be encrypted, or its own data key
+  wrapped, under the **deployment's data key**: a row of the subject-key table under a
+  reserved identifier that no subject is issued and that erasure never touches, wrapped
+  under the key-encryption key like any subject key. A rotation of the key-encryption key
+  therefore re-wraps rows of that table and nothing else (OPS-SEC-003)
 - **Each stored value SHALL carry a format marker and its initialisation vector**:
 
   ```
@@ -841,8 +991,9 @@ foreign key does that today.
   **It cannot be added retrospectively:** existing values would carry no marker, so the
   problem it solves would already exist.
 
-  There is **no key version in the marker.** Rotating the KEK re-wraps subject keys and
-  leaves ciphertext untouched, so nothing about a stored value changes.
+  There is **no key version in the marker.** Rotating the KEK re-wraps the rows of the
+  subject-key table and leaves ciphertext untouched, so nothing about a stored value
+  changes.
 - **A plaintext data key SHALL NOT be logged**, nor retained beyond request scope
 - **Primitives SHALL come from a maintained cryptographic library**, not be
   hand-written. The pattern is standardised — authenticated encryption for data, key
@@ -853,11 +1004,31 @@ key as it then was. Anyone holding both that backup and the KEK can recover the
 subject's fields. Erasure of pre-erasure backups therefore completes when those backups
 expire — bounded by retention, and stated rather than implied.
 
+**Before any account exists.** The identifiers an invitation binds (REG-INV-001) SHALL be
+encrypted as one value under a data key of the invitation's own, wrapped under the
+deployment's data key and bound by the additional authenticated data to the invitation's
+identifier, in the place a subject identifier takes. The value and its wrapped key SHALL
+be overwritten when the invitation is revoked, acknowledged or found expired by the
+sweep, and an erasure SHALL overwrite them, in the erasure transaction, for every
+invitation attached to the subject. The invitation link's token SHALL be stored only as a one-way
+hash, and an invitation's audit records SHALL name the invitation and nothing it binds.
+
+**The send outbox.** A send may name no subject, or a subject that holds no key yet, so
+an outbox row holds the whole message (destination, source address and values) in one
+column under a data key of the row's own, wrapped under the deployment's data key, beside
+the subject it names. Erasure SHALL overwrite the wrapped key of every outstanding row
+naming the subject with the erased value (marker `0x00`, **Values** above), in the
+erasure transaction, and a row whose key is erased SHALL be removed without being
+carried.
+
 **Acceptance criteria**
 1. Every encrypted field declares the column identifying its subject; startup fails
-   otherwise.
-2. A declared subject column that does not exist, or does not reference a subject,
-   fails startup.
+   otherwise with `model.startup.declarationmissing`, `details.key` naming
+   `<type>.<field>`.
+2. An encrypted field or its declared subject column that is not a member of the
+   declared type, or a subject column whose type is not the library's subject identifier
+   (nullable or not), fails startup with `model.startup.declarationinvalid`, `details`
+   naming the type, the field and the column.
 3. Two encrypted fields on one row may name different subject columns.
 4. No plaintext key material is present in the database.
 5. Two subjects with the same plaintext value produce different ciphertext.
@@ -871,8 +1042,18 @@ expire — bounded by retention, and stated rather than implied.
 10. Ciphertext moved to another row or subject fails to decrypt.
 11. Aggregate queries over non-encrypted columns are unaffected.
 12. Displaying one subject's details performs one unwrap, not one per field.
-13. A KEK rotation (the `Janus.Cli` operation OPS-SEC-003, D-147) re-wraps subject
-    keys without re-encrypting any data.
+13. A KEK rotation (the `Janus.Cli` operation OPS-SEC-003, D-147) re-wraps the rows of
+    the subject-key table, the deployment's data key among them, without re-encrypting
+    any data.
+14. An invitation revoked, acknowledged or swept after expiry, and every invitation
+    attached to an erased subject, holds no readable identifier and no wrapped key.
+15. After erasure, an outstanding outbox message naming the subject cannot be decrypted
+    and is never carried.
+16. No value other than a row of the subject-key table is wrapped directly under the
+    key-encryption key; after a rotation completes and the previous version is retired,
+    every value the library encrypted, a subject's or not, still decrypts.
+17. An account's TOTP secret is encrypted under its subject key, and after erasure it
+    cannot be decrypted.
 
 ---
 
@@ -880,7 +1061,8 @@ expire — bounded by retention, and stated rather than implied.
 — an HMAC or equivalent keyed pseudorandom function under a **dedicated secret held
 outside the database** — alongside their encrypted form. Erasure SHALL **neutralise**
 the fingerprint, overwriting it with an irreversible value, never removing the row
-(IDN-PRIN-003).
+(IDN-PRIN-003). The fingerprints erasure neutralises include the provider subject of
+every linked identity (IDN-LIFE-012).
 
 **Keyed is not optional, and that one word carries the whole control.** An unkeyed hash
 satisfies "one-way" and is reversible in practice: national mobile numbers occupy a few
@@ -893,8 +1075,10 @@ encrypted column becomes decorative.
 **The fingerprint SHALL be computed over a pinned, versioned canonical form** —
 `NFKC_Casefold` for email addresses and names, E.164 for phone numbers (IDN-ACCT-004,
 D-115) — applied before the keyed function, with the canonicalisation version (the
-pinned Unicode version) stored alongside. Case-insensitive matching cannot be performed
-by the database on a fingerprint, so it moves entirely here and becomes load-bearing;
+pinned Unicode version) stored alongside, and the fingerprint key version it was
+computed under; a lookup matches under the current version first, then each other
+version held. Case-insensitive matching cannot be performed by the database on a
+fingerprint, so it moves entirely here and becomes load-bearing;
 pinning the version means a future normalization change re-derives rather than silently
 stranding every existing fingerprint.
 
@@ -906,13 +1090,15 @@ sign in to.
 **Rotation is possible and expensive.** Re-deriving requires the plaintext identifier,
 recoverable by decrypting the subject's own encrypted column — so rotation is a batch
 operation across every live subject. Erased subjects need none; their fingerprints are
-already neutralised.
+already neutralised. What no value stands behind (a held username, an erased subject's
+reservation, the lines of the abuse ledgers) is read under its version until it lapses,
+and the previous version is retired only then (OPS-SEC-003).
 
 **Values (D-153).** The keyed function is HMAC-SHA-256 over the canonical UTF-8 bytes
 (IDN-ACCT-004), 32 byte output. The neutralised value is 32 zero bytes, and no lookup
 path may match it.
 
-*Source: D-082, D-093*
+*Source: D-082, D-093, D-166*
 
 Email and phone must be matchable for sign-in lookup and duplicate detection, and
 anything searchable cannot be encrypted. This is inherent, not a gap.
@@ -922,7 +1108,8 @@ fingerprint — **both at known locations, neither removing a row.**
 
 **Both are writes to the same database, in one transaction.**
 
-1. Overwrite the subject's **wrapped data key**
+1. Overwrite the subject's **wrapped data key**, and the wrapped keys of its outstanding
+   outbox rows and of every invitation attached to it (PRIV-RIGHT-005a)
 2. Neutralise the **fingerprint**
 3. Record the erasure — the erasures row (IDN-LIFE-003b) and the outbox record for
    the host-side work (IDN-LIFE-003a) — in the same transaction
@@ -959,6 +1146,8 @@ pre-erasure backups completes when they expire.
 5. Erasure neutralises the fingerprint in the same operation as key destruction, and
    the row persists.
 6. No requirement obliges an application to maintain a per-schema redaction routine.
+7. Each fingerprint is stored with the key version it was computed under, and a lookup
+   finds a value fingerprinted under any version the deployment holds.
 
 ---
 
@@ -1017,10 +1206,10 @@ Fields, and their source:
 
 | Field | Derived from |
 |---|---|
-| Purpose, data categories, subject categories | Model declaration |
+| Purpose, data categories, subject categories | Model declaration: each purpose's own two lists (PRIV-PRIN-001) |
 | Lawful basis | PRIV-BASIS-001 |
-| Non-sensitive / sensitive / children's columns | PRIV-SENS-001 |
-| Retention period or criteria | Section 8 |
+| Non-sensitive / sensitive / children's columns | PRIV-SENS-001; the children's column is true for a purpose exactly where a type it is declared on carries the `children` category |
+| Retention period or criteria | Section 8: one entry per data category the purpose requires, written `<category> <period>` with the period as an ISO 8601 duration, longest first; a category whose period cannot be read is given none and flagged `retention-missing` against it |
 | Recipients and their legal characterisation | Declared per recipient |
 | Data Protection Agreement links | Declared per recipient |
 | **Data Hosting Environment** | Configuration: `hosting.environment` (free text) and `hosting.location` (D-153) |
@@ -1033,12 +1222,16 @@ Fields, and their source:
 | **Implemented Organisational Security Measures** | **Declared — human input** |
 | **Links to LIA, DPIA, TIA** | **Declared — human input** |
 
-*Source: D-036*
+*Source: D-036, D-162, D-166*
 
 **Acceptance criteria**
 1. Generated output matches the template's field set and ordering.
-2. Three fields are declared rather than derived, and absence is flagged.
-3. A purpose lacking a required assessment reference is reported.
+2. Three fields are declared rather than derived, and absence is flagged
+   (`data-owner-missing`, `organizational-measures-missing`, `assessment-links-missing`).
+3. A purpose lacking a required assessment reference is reported (`assessment-missing`).
+4. With `registration.adultaffirmation` = `off` and no resource type declaring the
+   `children` category, the register carries the finding `children-undeclared`
+   (PRIV-MINOR-001).
 
 ---
 
@@ -1053,14 +1246,19 @@ the host's own business is the host's declaration.
 (LIB-HOST-001): each entry `{ name, characterisation: processor · recipient,
 dataReceived: [category labels], location: inside · outside, agreementReference
 (optional), callback: boolean }`, the six columns of `05` section 6. The library ships
-that section's rows as defaults, applied only while the integration they describe is
-configured (D-162 C.103); the host adds its own.
+that section's four rows as defaults (D-162 C.103, D-165): the hosting provider and the
+SMS gateway rows on every deployment, since every deployment holds data and declares
+SMS alert destinations (LIB-HOST-001); the mail server row where a mail server is
+integrated (`IMailServer` registered or `integration.mailserver.endpoint` set) or the
+default mail transport is in use; the password-screening row while online screening is
+configured. The host adds its own; a person or firm that administers the deployment for
+the controller (D-029) is a processor the host declares.
 
-*Source: D-036, D-041, D-029*
+*Source: D-036, D-041, D-029, D-166*
 
 **Acceptance criteria**
 1. Each processor appears with characterisation and agreement reference.
-2. A processor without an agreement reference is flagged.
+2. A processor without an agreement reference is flagged (`agreement-missing`).
 
 ---
 
@@ -1109,14 +1307,29 @@ is already running.
 **PRIV-BREACH-002** — Audit records SHALL be **queryable by data subject**, not only
 chronologically.
 
-*Source: D-025*
+**Values (D-166).** Every audit record SHALL carry a nullable `subject`: the data subject
+the record concerns, where it concerns one. The acting and effective identities name who
+acted and are the same on every record (AUTHZ-IMP-001); they do not name whom the action
+concerns. The query by data subject reads, through an index, the records naming the
+person as `subject` or as acting identity (`GET /admin/audit?subject=`, `09` section
+8a). It returns each record's codes, instants, identifiers and plain details, and never a
+value held under a subject's key (PRIV-RET-002), so it reads the same before and after
+an erasure.
+
+*Source: D-025, D-166*
 
 Answering "who was affected" fast is what makes the 72-hour clock achievable. An
 indexing decision made now or a painful one made during an incident.
 
 **Acceptance criteria**
 1. Retrieving all audit records for one subject completes without a full scan.
-2. The query works after erasure, returning anonymised records.
+2. The query works after erasure, returning anonymised records: a record concerning a
+   subject whose key carries the erased marker (`0x00`, PRIV-RIGHT-005a) is returned
+   with its codes, instants and identifiers, as before the erasure.
+3. The query returns no value a record holds under a subject's key.
+4. An action taken on another person's account, from a break-glass session included, is
+   returned by the query for that person through `subject`, and names the actor as both
+   acting and effective identity.
 
 ---
 
@@ -1146,12 +1359,12 @@ and a financial record ("long"), with no rule saying which governs.
 
 | Category | Retention (default · floor) |
 |---|---|
-| Security events, permission changes, financial actions | **7 years · 5 years** (`retention.audit.security`) |
+| Security events, permission changes, financial actions, privacy actions (PRIV-RET-002) | **7 years · 5 years** (`retention.audit.security`) |
 | Routine access logging | **90 days · 30 days** (`retention.audit.routine`) |
 | Consent records | **Life of the processing + 3 years · + 1 year** (`retention.consent`) |
-| Host-declared categories | Declared by the host with a floor (`retention.<category>`) |
+| Host-declared categories | The floor declared with the category (LIB-HOST-001) · that floor; a stated period below it fails startup with `config.value.belowfloor` (`retention.<category>`) |
 
-*Source: D-026.1, D-132*
+*Source: D-026.1, D-132, D-166*
 
 **Acceptance criteria**
 1. Each category has a declared period or criteria.
@@ -1163,7 +1376,7 @@ and a financial record ("long"), with no rule saying which governs.
 **PRIV-RET-002** — Audit records SHALL be **append-only from the application** — no
 update path, no delete path reachable by application code.
 
-*Source: D-026.1, D-075*
+*Source: D-026.1, D-075, D-166*
 
 **Audit rows hold identifiers and codes, never personal attributes.** This is what
 makes append-only compatible with erasure: there is nothing personal in an audit row
@@ -1172,22 +1385,32 @@ email change, the origin address on a sign-in — that attribute is written to a
 **per-subject-encrypted column**, and erasure destroys the key (PRIV-RIGHT-005a)
 rather than editing the row.
 
+**Two categories.** Every audit record is `security` or `routine`, the two whose
+periods `retention.audit.security` and `retention.audit.routine` set (PRIV-RET-001) and
+`audit_drop_expired_partitions` takes. A record of a privacy action (consent,
+objection, legal document, data subject request, erasure, export) is `security`.
+
 **Retention purging happens by partition.** Audit tables are partitioned by calendar
-month on the occurrence instant, two months created ahead by the sweep, a partition
-dropped when its end is older than the category's retention (D-153);
-expired partitions are dropped by a scheduled background job (INF-BG-001) calling a
-single `SECURITY DEFINER` function, `audit_drop_expired_partitions()`, created by the
+month on the occurrence instant, two months created ahead by the partition job, a
+partition dropped when its end is older than the category's retention (D-153); the
+months ahead are created and expired partitions dropped by one daily background job
+(INF-BG-001, `audit-partitions`) calling two `SECURITY DEFINER` functions,
+`audit_ensure_partitions()` and `audit_drop_expired_partitions()`, created by the
 migration step and executable only by a dedicated **maintenance role** whose
-credential the worker fetches from the secrets manager (OPS-MIG-003a, D-118). The
-function takes the two effective retention periods as arguments,
+credential the library reads through the host's `ISecretSource` at startup
+(LIB-EXT-001, OPS-MIG-003a, D-118). The drop function takes the two effective retention
+periods as arguments,
 `audit_drop_expired_partitions(security_retention interval, routine_retention interval)`,
 because a key at its default has no settings row the database could read; the worker
 passes the catalogue's effective values, and the function refuses an argument below the
 PRIV-RET-001 floor (five years, thirty days), written into it by the migration, so the
-caller cannot shorten retention by argument (D-157). The
-drop is itself audited as the job's action (INF-BG-002). The application cannot
-delete rows, and no credential with schema rights leaves the pipeline; the function
-can do exactly one thing.
+caller cannot shorten retention by argument (D-157). Each completed run is audited as
+the job's action (INF-BG-002): `ops.auditpartitions.maintained`, with `created`,
+`dropped`, `securityRetentionDays` and `routineRetentionDays`. A run under a credential
+that is not the maintenance credential is refused before either function is asked, and a
+retention that cannot be read drops nothing. The application cannot delete rows, and no
+credential with schema rights leaves the pipeline; each function can do exactly one
+thing.
 
 Without this, three requirements were mutually unbuildable: short retention requires
 deleting expired rows, the database refuses deletes, and the application holds no
@@ -1199,23 +1422,28 @@ immutability, or never purge, breaking retention.
 2. No audit row contains a personal attribute in plaintext.
 3. Expired partitions are dropped on schedule without application involvement, and
    a missed run alerts (INF-BG-001).
-4. Erasure renders encrypted audit attributes unreadable without modifying any row.
-5. The maintenance role can execute `audit_drop_expired_partitions()` and nothing
-   else that alters schema; the application role cannot execute it.
+4. Erasure renders encrypted audit attributes unreadable without modifying any row; a
+   read of such a row returns the attributes empty and does not refuse the row, and a
+   subject key that is present and cannot be unwrapped fails the read.
+5. The maintenance role can execute `audit_ensure_partitions()` and
+   `audit_drop_expired_partitions()` and nothing else that alters schema; the
+   application role can execute neither.
 
 ---
 
 **PRIV-RET-003** — Every audit and financial record SHALL carry the instant the
 event **occurred**, not the instant it was written, stored in UTC.
 
-*Source: D-026.2*
+*Source: D-026.2, D-166*
 
 These diverge under retry and queueing, and reconstructing a timeline from write
 times is how audit trails end up lying.
 
 **Acceptance criteria**
 1. An event queued and written later records the original instant.
-2. All stored timestamps are UTC; conversion happens at display.
+2. All stored timestamps are UTC: every column that carries a time of day is
+   `timestamp with time zone`; a calendar day is a `date` and is not an instant;
+   conversion happens at display.
 
 ---
 
@@ -1236,26 +1464,30 @@ same thing to two readers.
 **PRIV-RET-005** — Two records introduced by D-146 SHALL be treated as personal data
 with the following retention. The **session location** (city-level, resolved from a
 local IP database, AUTH-SESS-013) SHALL be stored under the subject key and retained
-with the session record, no longer. The **sending-restriction record** (the HMAC of a
-destination and its send timestamps, AUTH-ABUSE-004) SHALL be deleted when every
-bucket for that key is empty, so it lives at most the longest bucket interval of any
-restriction that applies to it.
+with the session record, no longer. The **sending-restriction record** of a destination
+(its HMAC, the fingerprint key version the HMAC was computed under and its send
+timestamps, AUTH-ABUSE-004) SHALL be deleted once the longest interval the current
+destination restrictions declare has passed since its newest send: before a send's
+counters are read, and on every run of the expiry sweep (`sweep.interval`,
+OPS-OBS-003), whether or not another send is made. A restriction on another key kind
+does not lengthen it, since the records of the other key kinds are kept apart.
 
-*Source: D-146; AUTH-SESS-013, AUTH-ABUSE-004*
+*Source: D-146; AUTH-SESS-013, AUTH-ABUSE-004, D-162, D-166*
 
 Guidance for the default (Egyptian) declaration, as PRIV-CONS-002 gives for fraud
 controls (D-145): the restriction record exists for security necessity and rests, like
 the other abuse controls, on legitimate interest (basis 4) with its assessment
 (PRIV-BASIS-002). The session location is part of the session record and rests on the
 basis the host declares for sessions. A destination HMAC is keyed (PRIV-RIGHT-005c) and
-carries no account reference, so an empty record leaves nothing to erase; a live one
-disappears on its own within the interval.
+carries no account reference, so an expired record leaves nothing to erase; a live one
+disappears on its own once the interval has passed since its newest send.
 
 **Acceptance criteria**
 1. A session location is unreadable after erasure and absent once the session record
    is swept.
-2. No restriction record exists for a destination whose buckets are all empty, and
-   none is older than the longest applicable bucket interval.
+2. No restriction record exists for a destination once the longest interval of the
+   destination restrictions as they now stand has passed since its newest send, whether
+   or not another send is made; a restriction on another key kind does not lengthen it.
 3. Both records appear in the generated records of processing under the purposes the
    host declares for them.
 
@@ -1271,8 +1503,8 @@ minors (`registration.adultaffirmation` = `off`) SHALL declare a written-consent
 for minors' data (PRIV-BASIS-003; children's data is a sensitive category,
 PRIV-SENS-001).
 
-*Source: D-148; D-027, D-073, D-146; supersedes IDN-LIFE-002 and the earlier "date of birth
-SHALL NOT be collected"*
+*Source: D-148; D-027, D-073, D-146, D-166; supersedes IDN-LIFE-002 and the earlier "date
+of birth SHALL NOT be collected"*
 
 Every subject holds an account (IDN-LIFE-002a): there is no anonymous path into the
 host's records, so registration is the only collection path and the only place the
@@ -1284,8 +1516,9 @@ affirmation is needed.
 2. With `profile.dateofbirth` off, no date of birth is stored and no record carries
    one after the age step; with it on, the date is a personal field under the subject
    key.
-3. With `registration.adultaffirmation` = `required`, no account exists whose subject
-   has not affirmed.
+3. With `registration.adultaffirmation` = `required`, no account of a person exists
+   whose subject has not affirmed; the reserved `emergency` account (OPS-BOOT-002) and
+   the restore-test canary (DR-007), which no person answers for, carry no answer.
 4. A deployment with `registration.adultaffirmation` = `off` and no written-consent
    basis declared for minors' data fails startup validation.
 

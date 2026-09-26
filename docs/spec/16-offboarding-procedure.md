@@ -60,7 +60,9 @@ if the departure is temporary or disputed. (D-148)
 **3 — End organization membership.**
 
 The account may hold membership beyond the one being left. Ending membership is
-distinct from suspending the account (IDN-MEM-001).
+distinct from suspending the account (IDN-MEM-001). It revokes none of their grants;
+those in the administrative organization confer nothing from this step until step 4
+transfers or revokes them (D-166).
 
 Ending membership is also what retires the corporate address (REG-MAIL-003). The
 address stops resolving to the account and the mailbox is disabled, and the address
@@ -70,11 +72,18 @@ organization's domain lock no longer applies to it. Ending the membership change
 nothing about the account's state: it stays suspended because of step 2, and if step 2
 is later reversed it continues as an ordinary account on its personal email. (D-148)
 
-**4 — Remove or transfer their grants.**
+Their mailbox and its mail are never handed on silently. Any later invitation of the
+address, one to the same person included, is refused unless the administrator chooses,
+with a reason, whether the invitee receives the mailbox and its mail (`formerMailbox`
+`transfer`) or the old mailbox is removed and a new one reserved (`replace`)
+(REG-MAIL-003, D-166).
 
-Anything granted directly to them rather than through a group. If they were the sole
-holder of a permission, transfer it before removing — otherwise something quietly
-stops working and nobody knows why.
+**4 — Revoke or transfer their grants.**
+
+Anything granted directly to them rather than through a group. `GET /admin/grants`
+lists them for the person and for a group, per organization (D-166). A revoked grant
+stays on record (IDN-PRIN-003). If they were the sole holder of a permission, transfer
+it before revoking — otherwise something quietly stops working and nobody knows why.
 
 **5 — Check what they approved.**
 
@@ -84,19 +93,22 @@ who granted access shortly before leaving is worth a second look.
 **6 — Revoke the mail app passwords.**
 
 **Belt-and-braces, and still worth doing.** App passwords live on the mail server, not
-in the library (REG-MAIL-002), and they die with the mailbox: the lifecycle push
-disables the mail account on deactivation and at the end of membership, and
-app-password authentication stops with it (INT-MAIL-006a, REG-MAIL-003). But a
-**failed push leaves a former employee reading mail**, and the push is not verified until
-step 7. Revoking each one directly, from the mail server's side, closes that window. An
+in the library (REG-MAIL-002), and they die with the mailbox. A mailbox is owed
+`enabled` only while its holder's account is `active` or `restricted` and holds a
+current membership of the administrative organization, so it is owed `disabled` from
+step 2 and again from step 3; the push carries that state to the mail server, and
+app-password authentication stops with it (INT-MAIL-006, INT-MAIL-006a, REG-MAIL-003,
+D-166). But a **failed push leaves a former employee reading mail**, and the push is
+not verified until step 7. Revoking each one directly, from the mail server's side, closes that window. An
 app password is a long-lived bearer secret and the weakest credential in the system
 (R-A02).
 
 **7 — Verify propagation.**
 
-Account lifecycle pushes to the mail server (INT-MAIL-007, IDN-LIFE-015), but the reconciliation
-job **flags drift without correcting it** (INT-MAIL-007). Read the report. Do not
-assume the push succeeded.
+The state each mailbox is owed, read from its holder's account state and memberships, is
+pushed to the mail server (INT-MAIL-006, INT-MAIL-007, IDN-LIFE-015, D-166), but the
+reconciliation job **flags drift without correcting it** (INT-MAIL-007). Read the
+report. Do not assume the push succeeded.
 
 **8 — Record it.**
 
